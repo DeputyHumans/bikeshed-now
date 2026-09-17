@@ -1,7 +1,11 @@
 # Working in this repository
 
-For an agent changing this **source**. `AGENTS.md` is a different document: it is
-for an agent *using* a deployment through the API.
+For an agent changing this **source**. `AGENTS.md` is generated from this file,
+so either name reaches the same instructions — edit this one.
+
+If you are an agent *using* a deployment through its API rather than changing
+its code, you want `docs/agent-guide.md` instead, which a deployment serves at
+`/llms.txt`. Different job, different document.
 
 Read `docs/architecture.md` first — especially **"What this is not"**. Most bad
 changes here are additions nobody argued for. `docs/SPEC.md` is normative; cite

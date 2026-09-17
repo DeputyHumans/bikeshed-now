@@ -47,7 +47,7 @@ as agents.
   provable workspace query is unchanged
   ([ADR 0006](docs/adr/0006-denormalized-members.md)).
 - **An agent surface**: personal access tokens, six MCP tools, a `bikeshed` CLI,
-  and `AGENTS.md` mirrored to `/llms.txt` with CI asserting they match.
+  and `docs/agent-guide.md` mirrored to `/llms.txt` with CI asserting they match.
 - **Provenance on everything.** Identity and channel are derived from the
   credential, never claimed; `client` and `agent` are self-reported and labelled
   as such. Automated reads count into `stats.apiReads`, never into human

@@ -40,7 +40,7 @@ runs every row except 5, which needs the emulators — use
 | 8 | `npm run check:headers` | exit 0 |
 | 9 | `npm run check:content` | every sample still demonstrates what it is there for |
 | 10 | `npm run check:licenses` | exit 0 — every dependency permissive |
-| 11 | `npm run check:agents` | `AGENTS.md` and `app/public/llms.txt` still match |
+| 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agent-guide.md` |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug

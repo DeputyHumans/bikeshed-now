@@ -1149,7 +1149,7 @@ Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
 
 ### Universal agent instructions
 
-`AGENTS.md` at the repo root is the source of truth. A build step copies it to
+`docs/agent-guide.md` is the source of truth. A build step copies it to
 `app/public/llms.txt` and **CI asserts the two match**, so hosted instructions
 can never drift from the repo's. `/.well-known/mcp.json` advertises the endpoint.
 

@@ -1,8 +1,12 @@
 # Publishing to Bikeshed
 
-Instructions for an agent publishing documents and reading review feedback.
-This file is the source of truth; it is copied verbatim to `/llms.txt` on every
-deployment, and CI asserts the two match.
+Instructions for an agent publishing documents and reading review feedback on a
+Bikeshed deployment.
+
+This file is the source of truth for what a deployment serves at `/llms.txt`; a
+build step copies it verbatim and CI asserts the two match. If you are an agent
+**changing this repository's source** rather than using a deployment, you want
+`CLAUDE.md` (mirrored to `AGENTS.md`) instead — a different job entirely.
 
 ## What this is for
 

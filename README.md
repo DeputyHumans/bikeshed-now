@@ -81,7 +81,8 @@ and spends most of its length on **what this is not**.
 | [`docs/CONFIG.md`](docs/CONFIG.md) | Every setting, and what it changes |
 | [`docs/verification.md`](docs/verification.md) | The emulator walkthrough: what to observe, and what it proves |
 | [`docs/adr/`](docs/adr/) | Nine decisions, ~30 lines each, so nobody re-argues them in a pull request |
-| [`AGENTS.md`](AGENTS.md) | Instructions for an agent. Served as `/llms.txt` |
+| [`docs/agent-guide.md`](docs/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
+| [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |
 
 ---
