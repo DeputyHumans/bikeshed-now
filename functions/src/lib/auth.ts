@@ -59,8 +59,15 @@ export async function verifyIdToken(idToken: string): Promise<GateResult> {
   }
   let decoded: admin.auth.DecodedIdToken;
   try {
+    // `true` is checkRevoked, which costs an extra call to the Auth backend.
+    // That call can fail for reasons that have nothing to do with the token —
+    // a missing permission on the runtime service account, for one — so the
+    // error is logged rather than collapsed into "invalid". The CALLER is still
+    // told only "invalid": which of the two it was is the operator's business,
+    // not an anonymous client's.
     decoded = await admin.auth().verifyIdToken(idToken, true);
-  } catch {
+  } catch (err) {
+    console.error("verifyIdToken failed:", (err as Error)?.message ?? err);
     return { ok: false, reason: "invalid" };
   }
   const rawEmail = decoded.email;
