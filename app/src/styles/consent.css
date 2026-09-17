@@ -1,47 +1,186 @@
 /* SPDX-License-Identifier: Apache-2.0
- * The cookie-consent strip (SPEC §15).
+ * The cookie-consent card (SPEC §15).
  *
- * A strip at the bottom rather than a modal: it must not block reading a public
- * document, which is the whole reason an anonymous visitor is here. Declining is
- * one click and the banner is gone for good.
+ * WHY IT IS NO LONGER A STRIP. A full-bleed bar with `justify-content:
+ * space-between` hands the MONITOR the job of deciding how far the question sits
+ * from its two answers: a few hundred pixels at 1100, most of a metre at 1920.
+ * That is the reported "buttons on the right too far", and it has the same cause
+ * as the reported cropping — a box whose geometry was defined by its two far
+ * edges, with nothing anchoring the middle and invented --space-N tokens
+ * collapsing the padding to zero. A bounded card fixes both: at a constant
+ * width there is no free space left to distribute, so the distance from the
+ * sentence to the buttons is byte-identical at 1920, 1100 and 860. Two of this
+ * app's four breakpoints therefore have nothing to say about this component.
+ *
+ * WHY THE BOTTOM-INLINE-END CORNER. The inline-START edge is structurally
+ * spoken for: `.folder-rail[data-drawer="open"]` (workspace.css) and
+ * `.slide-rail` (slides.css) are both fixed, full-height, z-index 45 and
+ * anchored there below 860px. Sitting under one of them would hide a focusable
+ * button behind author chrome — WCAG 2.2 SC 2.4.11 — and sitting over one would
+ * put a cookie card on top of a drawer the reader deliberately opened. The end
+ * edge has exactly one fixed neighbour, `.present-exit`, and it is mutually
+ * exclusive with this card by a rule that already exists and is already tested
+ * (see below). In LTR prose the bottom-end of a column is ragged line-ENDS,
+ * which a reader can reconstruct; the bottom-start is line beginnings, which
+ * they cannot.
+ *
+ * WHAT IT STILL COSTS, stated rather than hidden. Above 860px with the comments
+ * panel open it overlaps that panel's bottom edge, where an anonymous reader is
+ * offered "Sign in to comment". And `.toast-stack` is centred at `bottom:
+ * var(--s-4)` with `width: min(420px, …)`, so below roughly 1220px a toast and
+ * this card share horizontal space; the toast is z-index 60 and wins, which is
+ * right, because a toast is a response to something the reader just did. Both
+ * are bounded by the fact that one click ends this card for good.
+ *
+ * PRESENTATION MODE is NOT handled here. viewer.css:166 already lists `.consent`
+ * beside `.app-header` and `.viewer-toolbar` under `.is-presenting`, the class
+ * now lives on <body> (DocViewer), and app/src/viewer/presenting.test.ts pins
+ * it. Restating it here would be a second copy of a rule that is already
+ * correct, in a file that does not own it.
+ *
+ * STACKING: 42. Above the sticky header (40) so its order is defined without
+ * anyone having to reason about it, and below every surface the reader asked
+ * for — drawers 45, present-exit and the modal scrim 50, menus 55, toasts 60.
+ * There is no free multiple of five in that gap. This is the one fixed thing on
+ * the page nobody requested, so it yields to all of them, and a dialog's scrim
+ * dimming it is correct.
+ *
+ * `position: fixed` resolves against the viewport here only because nothing on
+ * body > .app-shell > .main sets transform, filter or containment. Adding one
+ * re-anchors this card silently, with no error anywhere.
  */
 
 .consent {
   position: fixed;
-  inset-inline: 0;
-  bottom: 0;
-  z-index: 60;
+  /* env() is inert until app/index.html gains `viewport-fit=cover`, and it is
+     NOT what was cropping the card. It is here so that adding viewport-fit
+     later cannot drop these buttons under an iPhone home indicator. */
+  inset-block-end: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  inset-inline-end: var(--s-3);
+  z-index: 42;
+
+  /* The calc branch is not dead code: it is the text-zoom guard. At 200% zoom
+     1rem is 32px, so 24rem asks for 768px and would run off a 700px window.
+     `100%` and not `100vw`, because for a fixed box 100% is the initial
+     containing block, which excludes the classic scrollbar that
+     `scrollbar-gutter: stable` reserves in base.css. */
+  width: min(24rem, calc(100% - var(--s-3) * 2));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+
+  /* --color-bg, not --color-surface: .btn REST is --color-bg and .btn HOVER is
+     --color-surface, so a surface-tinted card would dissolve both buttons'
+     hover state into their own container. The border and shadow separate it
+     from the page instead. Opaque, because it floats over an arbitrary
+     document: an opaque token background is the only thing that makes any
+     contrast ratio below knowable at all. */
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+
+  /* No overflow, no contain. The rounded corner invites `overflow: hidden`, and
+     base.css draws the focus ring 2px OUTSIDE its target — clipping is how a
+     visible ring becomes an invisible one. */
+  animation: consent-in var(--t-base) var(--ease-out) both;
+}
+
+/* It arrives rather than having always been there: 8px up, once.
+
+   There is no opacity hold here any more. That existed to swallow a first-render
+   flash caused by starting at "unset" and correcting in an effect; the component
+   now reads the stored answer during the first render, so there is no frame to
+   hide. Fixing the cause beat timing around the symptom. */
+@keyframes consent-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--s-2));
+  }
+}
+
+/* Not `animation: none`: base.css already collapses the duration under this
+   preference. All that is left to remove is the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .consent {
+    animation-name: consent-appear;
+  }
+}
+@keyframes consent-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+.consent-text {
+  margin: 0; /* base.css gives every <p> a bottom margin; the flex gap owns it */
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--color-ink-muted); /* 7.49:1 on --color-bg */
+  text-wrap: pretty;
+}
+
+/**
+ * Two answers, one geometry.
+ *
+ * The answers sit BENEATH the question at every width, because the two are a
+ * sequence — here is the claim, here are the answers — not a pair. Beside
+ * implies simultaneity and costs a horizontal saccade whose length the display
+ * sets. Beneath costs one line break and is the same everywhere.
+ *
+ * Equality is computed, not asserted. `flex: 1 1 0` makes the two hit areas
+ * exactly equal halves at every viewport, decline is first in the DOM so it is
+ * the first of the two to take focus, and neither carries .btn-primary: the
+ * accent means "the primary action of this surface", and a consent card has no
+ * primary action. (The markup previously said `btn--primary`, which is not a
+ * class this system defines, so the accent never painted anyway.)
+ *
+ * `flex-wrap` is the text-zoom escape hatch: .btn is `white-space: nowrap` and
+ * a flex item's min-width is auto, so at large zoom two labels cannot shrink to
+ * fit and would otherwise spill out of a card that deliberately does not clip.
+ * Wrapped, each button is alone on its line at flex-basis 0, i.e. full width.
+ *
+ * --tap on EVERY pointer. base.css:126 guarantees 44px only under
+ * `(hover: none), (pointer: coarse)`, which would leave a trackpad user a 36px
+ * target for a privacy decision they make once and cannot see they got wrong.
+ */
+.consent-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-line);
-  box-shadow: 0 -2px 12px rgba(26, 26, 38, 0.08);
+  gap: var(--s-2);
+}
+.consent-actions .btn {
+  flex: 1 1 0;
+  min-height: var(--tap);
+  /* The one place this card does not inherit .btn wholesale. --color-line over
+     --color-bg composites to 1.33:1, which is below the 3:1 that WCAG 2.2 SC
+     1.4.11 requires of the boundary that identifies a control — tolerable in a
+     toolbar full of other affordances, not on a floating card where the border
+     is the ONLY thing saying "this is a button". 0.48 composites to 3.10:1 on
+     the rest fill and 3.06:1 on the --color-surface hover fill. It is applied
+     to BOTH, so raising the floor costs nothing in symmetry; the feature layer
+     outranks .btn:hover's own border-color, so it holds in every state. */
+  border-color: rgba(var(--ink-rgb), 0.48);
 }
 
-.consent__text {
-  margin: 0;
-  max-width: 68ch;
-  font-size: var(--fs-caption);
-  color: var(--color-ink-muted);
-}
-
-.consent__actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-/* Stack on a phone, with the actions full width so neither is a 20px target. */
+/* Below 600px the card rests on the bottom edge as a sheet: the gutter shrinks
+   and the padding tightens, but the arrangement a phone reader sees is the one
+   a desktop reader sees. No direction flip, no reflow. */
 @media (max-width: 600px) {
   .consent {
-    flex-direction: column;
-    align-items: stretch;
+    inset-inline: var(--s-3);
+    width: auto;
+    padding: var(--s-3);
+    gap: var(--s-2);
   }
-  .consent__actions .btn {
-    flex: 1;
+}
+
+/* Nobody's printed copy of somebody else's document should carry our cookie
+   notice. */
+@media print {
+  .consent {
+    display: none;
   }
 }

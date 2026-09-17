@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The one consent this product asks for, and only when it has something to ask (SPEC §15).
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { analyticsConfigured, initAnalytics } from "../analytics";
 import { readConsent, writeConsent, type Consent } from "../consent";
@@ -23,11 +23,16 @@ import { readConsent, writeConsent, type Consent } from "../consent";
  * click Accept without reading.
  */
 export function CookieConsent() {
-  const [consent, setConsent] = useState<Consent>("unset");
-
-  useEffect(() => {
-    setConsent(readConsent());
-  }, []);
+  /**
+   * Read the stored answer DURING the first render, not in an effect.
+   *
+   * Starting at "unset" and correcting in an effect paints the card once for
+   * every returning visitor who settled this months ago — a real flash, not a
+   * theoretical one. `readConsent()` is synchronous and already swallows a
+   * throwing store, so there is nothing to defer. There is no server render
+   * here to disagree with.
+   */
+  const [consent, setConsent] = useState<Consent>(readConsent);
 
   if (!analyticsConfigured() || consent !== "unset") return null;
 
@@ -38,17 +43,21 @@ export function CookieConsent() {
   };
 
   return (
-    <aside className="consent" role="region" aria-label="Cookie choices">
-      <p className="consent__text">
-        We would like to count page views to see which parts of Bikeshed get
-        used. No document titles, addresses or contents are ever sent — see the{" "}
-        <Link to="/privacy">privacy policy</Link>. Documents work either way.
+    <aside className="consent" aria-label="Cookie choices">
+      <p className="consent-text">
+        We would like to count page views, to see which parts of Bikeshed get
+        used. No document titles, addresses or contents are ever sent, and
+        documents work either way. See the{" "}
+        <Link to="/privacy">privacy policy</Link>.
       </p>
-      <div className="consent__actions">
+      {/* Decline first, so it is the first of the two to take focus. Neither
+          carries .btn-primary: the accent means "the primary action of this
+          surface", and this surface has no preferred answer. */}
+      <div className="consent-actions">
         <button type="button" className="btn" onClick={() => answer("denied")}>
           No thanks
         </button>
-        <button type="button" className="btn btn--primary" onClick={() => answer("granted")}>
+        <button type="button" className="btn" onClick={() => answer("granted")}>
           Allow
         </button>
       </div>
