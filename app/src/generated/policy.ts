@@ -3,15 +3,13 @@
 // Rendered by tools/build-policy.mjs from config/access-policy.json.
 // Edit the source and run `npm run build:policy`; CI byte-compares this file.
 // source sha256: 309f8413ff70f3c681cc9cc5f947062d3ecdce61128e827ebc23152f4ee6b40c
-// The client's half of the identity policy (SPEC §1).
+// The client's half of the identity policy (SPEC §1.2).
 //
 // Deliberately list-free: Vite inlines this module into the public bundle, so
 // the allowlist itself must never appear here. The client gets the shape rules
-// (so a sign-up form can validate before a round trip) and one boolean.
-//
-// The validator body below is emitted from config/policy.mjs' own function, not
-// retyped — one implementation, rendered twice, so client and server cannot
-// disagree about which addresses exist.
+// (so a sign-up form can validate before a round trip) and one boolean. It
+// learns policy OUTCOMES from POST /session, which returns a typed status
+// rather than an explanation.
 
 export const POLICY_IS_OPEN = true;
 
@@ -20,7 +18,7 @@ const CONTROL_CHARS = new RegExp("[\\u0000-\\u001f\\u007f]");
 const LOCAL_OK = /^[a-z0-9!%&'*+=?^_`{|}~.-]+$/;
 const DOMAIN_OK = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
-/** Structural validity — the same rule the server applies (SPEC §1). */
+/** Structural validity: the shapes this system can store and key on (SPEC §1.3). */
 export function isEmailShapeValid(email: string): boolean {
   const e = email.trim().toLowerCase();
   if (e.length === 0 || e.length > 254) return false;

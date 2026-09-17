@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: Apache-2.0
+// The serializer is the single most valuable test in this app (SPEC §6a).
+
+import { describe, expect, it } from "vitest";
+import {
+  captureAssetTags,
+  clearHighlights,
+  ensureHighlightStyles,
+  highlightRange,
+  serializeCleanHtml,
+  assertNoDecoration,
+} from "./highlighter";
+import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, OWN_ATTR } from "../brand/dom";
+
+/**
+ * Everything this app injects passes through serializeCleanHtml on its way to a
+ * published version. A bug here does not throw and does not look wrong: it
+ * writes corrupted bytes, and nobody notices until the document is.
+ */
+
+function makeDoc(body: string, head = ""): Document {
+  return new DOMParser().parseFromString(
+    `<!DOCTYPE html><html><head>${head}</head><body>${body}</body></html>`,
+    "text/html",
+  );
+}
+
+function rangeOver(doc: Document, selector: string): Range {
+  const el = doc.querySelector(selector)!;
+  const range = doc.createRange();
+  range.selectNodeContents(el);
+  return range;
+}
+
+describe("serializeCleanHtml", () => {
+  it("is the identity on a document nothing has touched", () => {
+    const doc = makeDoc("<section id=s1><p>Hello <em>there</em></p></section>");
+    const out = serializeCleanHtml(doc);
+    expect(out).toContain("<section id=\"s1\">");
+    expect(out).toContain("<em>there</em>");
+    expect(out.startsWith("<!DOCTYPE html>")).toBe(true);
+  });
+
+  it("preserves the doctype, which outerHTML drops", () => {
+    // A document that loses its doctype renders in quirks mode forever after.
+    const doc = makeDoc("<p>x</p>");
+    expect(serializeCleanHtml(doc)).toMatch(/^<!DOCTYPE html>\n<html/);
+  });
+
+  it("unwraps highlights, keeping their text and their structure", () => {
+    const doc = makeDoc("<section id=s1><p>alpha <b>beta</b> gamma</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    expect(doc.querySelectorAll(`mark.${HL_CLASS}`).length).toBeGreaterThan(0);
+
+    const out = serializeCleanHtml(doc);
+    expect(out).not.toContain(HL_CLASS);
+    expect(out).not.toContain(ANN_ATTR);
+    expect(out).toContain("alpha");
+    expect(out).toContain("<b>beta</b>");
+    expect(out).toContain("gamma");
+  });
+
+  it("does not re-parent nested elements while unwrapping", () => {
+    const doc = makeDoc("<section id=s1><p>one <b>two <i>three</i></b> four</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    const out = serializeCleanHtml(doc);
+    // The <i> must still be inside the <b>: a highlight is presentational and
+    // must never change the document's structure.
+    expect(out).toMatch(/<b>two <i>three<\/i><\/b>/);
+  });
+
+  it("strips the injected stylesheet", () => {
+    const doc = makeDoc("<p>x</p>");
+    ensureHighlightStyles(doc);
+    expect(doc.querySelector(`[${OWN_ATTR}]`)).not.toBeNull();
+    expect(serializeCleanHtml(doc)).not.toContain(OWN_ATTR);
+  });
+
+  it("KEEPS a node that uses our attribute with a value we never write", () => {
+    // The whole point of the value check. Removing on attribute presence alone
+    // would silently delete an author's own markup.
+    const doc = makeDoc(`<div ${OWN_ATTR}="something-else">theirs</div><p>x</p>`);
+    const out = serializeCleanHtml(doc);
+    expect(out).toContain("something-else");
+    expect(out).toContain("theirs");
+  });
+
+  it("removes placeholder marking as an ATTRIBUTE, leaving the element", () => {
+    const doc = makeDoc(`<div id="chart" ${EMPTY_ATTR}="#chart"></div>`);
+    const out = serializeCleanHtml(doc);
+    expect(out).not.toContain(EMPTY_ATTR);
+    expect(out).toContain('<div id="chart"></div>');
+  });
+
+  it("removes contenteditable, which is an affordance and not content", () => {
+    const doc = makeDoc('<body><p contenteditable="true">x</p>');
+    expect(serializeCleanHtml(doc)).not.toContain("contenteditable");
+  });
+
+  it("does not mutate the live document", () => {
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    ensureHighlightStyles(doc);
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    const before = doc.documentElement.outerHTML;
+    serializeCleanHtml(doc);
+    // Stripping in place would make the editor's own view flicker and could
+    // move the caret mid-keystroke.
+    expect(doc.documentElement.outerHTML).toBe(before);
+  });
+
+  describe("the authored-asset budget", () => {
+    it("drops an asset tag that appeared after load", () => {
+      const doc = makeDoc("<p>x</p>", "<style>body{}</style>");
+      const authored = captureAssetTags(doc);
+
+      const extension = doc.createElement("style");
+      extension.id = "some-extension-preloader";
+      extension.textContent = ".x{}";
+      doc.head.appendChild(extension);
+
+      const out = serializeCleanHtml(doc, { authoredAssets: authored });
+      expect(out).toContain("body{}");
+      expect(out).not.toContain("some-extension-preloader");
+    });
+
+    it("is a multiset: a duplicate of an authored tag is dropped, the original survives", () => {
+      const doc = makeDoc("<p>x</p>", "<style>body{}</style>");
+      const authored = captureAssetTags(doc);
+      const duplicate = doc.createElement("style");
+      duplicate.textContent = "body{}";
+      doc.head.appendChild(duplicate);
+
+      const out = serializeCleanHtml(doc, { authoredAssets: authored });
+      expect(out.match(/body\{\}/g)).toHaveLength(1);
+    });
+
+    it("keeps BOTH when the author genuinely wrote the same tag twice", () => {
+      const doc = makeDoc("<p>x</p>", "<style>body{}</style><style>body{}</style>");
+      const authored = captureAssetTags(doc);
+      const out = serializeCleanHtml(doc, { authoredAssets: authored });
+      expect(out.match(/body\{\}/g)).toHaveLength(2);
+    });
+
+    it("leaves script-injected assets alone when no inventory is supplied", () => {
+      // The export path snapshots a POST-script DOM, where a stylesheet the
+      // document's own script injected is load-bearing rather than contamination.
+      const doc = makeDoc("<p>x</p>");
+      const injected = doc.createElement("style");
+      injected.textContent = ".generated{}";
+      doc.head.appendChild(injected);
+      expect(serializeCleanHtml(doc)).toContain(".generated{}");
+    });
+  });
+});
+
+describe("assertNoDecoration", () => {
+  it("throws when a highlight survived into edit mode", () => {
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    expect(() => assertNoDecoration(doc, "edit mode")).toThrow(/decoration survived/);
+  });
+
+  it("throws when the injected stylesheet survived", () => {
+    const doc = makeDoc("<p>x</p>");
+    ensureHighlightStyles(doc);
+    expect(() => assertNoDecoration(doc, "edit mode")).toThrow();
+  });
+
+  it("is silent on a clean document", () => {
+    const doc = makeDoc("<p>x</p>");
+    expect(() => assertNoDecoration(doc, "edit mode")).not.toThrow();
+  });
+
+  it("is silent after the strip that edit mode performs", () => {
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    ensureHighlightStyles(doc);
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    clearHighlights(doc);
+    doc.querySelector(`[${OWN_ATTR}]`)?.remove();
+    expect(() => assertNoDecoration(doc, "edit mode")).not.toThrow();
+  });
+});
+
+describe("highlightRange", () => {
+  it("opens a collapsed <details> so the highlight is visible", () => {
+    // Rehydrating into a folded section and leaving it folded means the reader
+    // sees a comment about text that is not on screen.
+    const doc = makeDoc(
+      "<section id=s1><details><summary>More</summary><p>hidden text</p></details></section>",
+    );
+    const details = doc.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    highlightRange(doc, rangeOver(doc, "details p"), "a1", { resolved: false });
+    expect(details.open).toBe(true);
+  });
+
+  it("opens NESTED details, not just the nearest one", () => {
+    const doc = makeDoc(
+      "<section id=s1><details><summary>Outer</summary><details><summary>Inner</summary><p>deep</p></details></details></section>",
+    );
+    highlightRange(doc, rangeOver(doc, "details details p"), "a1", { resolved: false });
+    for (const d of Array.from(doc.querySelectorAll("details"))) {
+      expect((d as HTMLDetailsElement).open).toBe(true);
+    }
+  });
+
+  it("marks resolved by class, so it can differ by border style not colour", () => {
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: true });
+    expect(doc.querySelector("mark")?.className).toContain("--resolved");
+  });
+
+  it("carries the author's colour, so a highlight traces to a person", () => {
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", {
+      resolved: false,
+      authorEmail: "ana@example.com",
+    });
+    const mark = doc.querySelector("mark") as HTMLElement;
+    expect(mark.style.cssText).toContain("--bshd-author");
+  });
+});
+
+describe("selection and clicks", () => {
+  it("marks exactly one thread as selected", async () => {
+    const { setSelectedHighlight } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p><p>beta</p></section>");
+    highlightRange(doc, rangeOver(doc, "p:first-child"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p:last-child"), "a2", { resolved: false });
+
+    setSelectedHighlight(doc, "a2");
+    expect(doc.querySelector(`[${ANN_ATTR}="a1"]`)?.getAttribute("data-selected")).toBeNull();
+    expect(doc.querySelector(`[${ANN_ATTR}="a2"]`)?.getAttribute("data-selected")).toBe("true");
+
+    setSelectedHighlight(doc, null);
+    expect(doc.querySelector("[data-selected]")).toBeNull();
+  });
+
+  it("reports a click on a highlight, and detaches cleanly", async () => {
+    const { attachHighlightClick } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+
+    const seen: string[] = [];
+    const detach = attachHighlightClick(doc, (id) => seen.push(id));
+    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(seen).toEqual(["a1"]);
+
+    detach();
+    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(seen).toEqual(["a1"]);
+  });
+
+  it("ignores a click that is not on a highlight", async () => {
+    const { attachHighlightClick } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    const seen: string[] = [];
+    attachHighlightClick(doc, (id) => seen.push(id));
+    doc.querySelector("p")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(seen).toEqual([]);
+  });
+
+  it("reports an anchor it cannot resolve as orphaned rather than dropping it", async () => {
+    const { redrawHighlights } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    const result = redrawHighlights(
+      doc,
+      [
+        {
+          annId: "gone",
+          anchor: {
+            elementId: "missing-section",
+            exact: "x",
+            prefix: "",
+            suffix: "",
+            start: 0,
+            end: 1,
+          },
+        } as never,
+      ],
+      () => null,
+    );
+    // A comment whose passage was edited away still has to be readable, or the
+    // feedback is simply lost.
+    expect(result.orphaned).toEqual(["gone"]);
+    expect(result.drawn).toEqual([]);
+  });
+
+  it("clearHighlights is safe on a document with none", () => {
+    const doc = makeDoc("<p>x</p>");
+    expect(() => clearHighlights(doc)).not.toThrow();
+  });
+
+  it("captures an empty inventory for a document with no asset tags", () => {
+    expect(captureAssetTags(makeDoc("<p>x</p>")).size).toBe(0);
+  });
+});

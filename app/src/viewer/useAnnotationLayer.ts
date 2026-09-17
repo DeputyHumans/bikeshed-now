@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Draws highlights, and stops the moment editing begins (SPEC §6, §6a).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
 import {
   attachHighlightClick,
@@ -26,7 +26,7 @@ import type { FrameMode } from "./frameMode";
  * order before any setup. This hook must therefore be declared BEFORE
  * useInlineEditor, so its cleanup — which strips every highlight — has already
  * run by the time the editor attaches. Changing the declaration order in
- * DocViewer silently breaks that, which is why it is stated here as well.
+ * DocViewer silently breaks that, which is why it is stated at both ends.
  */
 export function useAnnotationLayer(options: {
   mode: FrameMode;
@@ -40,19 +40,32 @@ export function useAnnotationLayer(options: {
   const enabled = mode.kind === "reading";
   const [orphaned, setOrphaned] = useState<string[]>([]);
 
+  /**
+   * The callback is held in a REF rather than depended on, and that is a
+   * correctness fix rather than an optimization.
+   *
+   * The attach effect's cleanup strips every highlight. If the callback were a
+   * dependency, a caller passing an inline arrow — which is the normal thing to
+   * write — would change its identity on every render, re-running that cleanup
+   * without re-running the redraw below, and the document would silently lose
+   * its highlights. That happened, and this is the fix.
+   */
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
   useEffect(() => {
     if (!enabled || !doc) return;
     ensureHighlightStyles(doc);
-    const detach = attachHighlightClick(doc, onSelect);
+    const detach = attachHighlightClick(doc, (annId) => onSelectRef.current(annId));
     return () => {
       detach();
       // Both, and in this order: unwrap the marks, then remove the stylesheet.
-      // Removing the stylesheet first would leave unstyled <mark> elements
-      // visible for a frame.
+      // Removing the stylesheet first leaves unstyled <mark> elements visible
+      // for a frame.
       clearHighlights(doc);
       removeHighlightStyles(doc);
     };
-  }, [enabled, doc, epoch, onSelect]);
+  }, [enabled, doc, epoch]);
 
   useEffect(() => {
     if (!enabled || !doc) return;
@@ -67,7 +80,7 @@ export function useAnnotationLayer(options: {
   useEffect(() => {
     if (!enabled || !doc) return;
     setSelectedHighlight(doc, selectedId);
-  }, [enabled, doc, epoch, selectedId]);
+  }, [enabled, doc, epoch, selectedId, annotations]);
 
   return { orphaned };
 }

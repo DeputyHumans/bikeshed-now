@@ -91,8 +91,11 @@ export function useInlineEditor(options: {
 
     const body = doc.body;
     if (!body) return;
-    body.contentEditable = "true";
-    body.spellcheck = true;
+    // setAttribute rather than the property: the ATTRIBUTE is what the
+    // serializer strips and what a test can observe, and jsdom does not reflect
+    // the property onto it.
+    body.setAttribute("contenteditable", "true");
+    body.setAttribute("spellcheck", "true");
     markGeneratedContainers(doc);
 
     const onInput = () => {
@@ -111,6 +114,7 @@ export function useInlineEditor(options: {
       if (timer.current) clearTimeout(timer.current);
       clearGeneratedContainers(doc);
       body.removeAttribute("contenteditable");
+      body.removeAttribute("spellcheck");
     };
   }, [editing, doc, epoch, flush]);
 

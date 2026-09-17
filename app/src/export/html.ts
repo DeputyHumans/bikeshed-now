@@ -19,8 +19,20 @@ function saveBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * A filename derived from a title the user chose.
+ *
+ * Separators are replaced rather than removed, so a title reads the same in the
+ * download. Leading dots and dashes are then stripped too: a file called
+ * `..-..-etc-passwd` is hidden on Unix, confusing everywhere, and tells the
+ * reader nothing about what they downloaded.
+ */
 function safeFilename(name: string): string {
-  return (name || "document").replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "");
+  const cleaned = (name || "document")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  return cleaned || "document";
 }
 
 /** Download the entry file, named from the document's title. */

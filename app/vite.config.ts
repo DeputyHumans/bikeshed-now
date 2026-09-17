@@ -61,6 +61,32 @@ export default defineConfig({
         "src/brand/**",
         "src/stats.ts",
       ],
+      /**
+       * Excluded because jsdom cannot exercise them, not because they do not
+       * matter. Each is named rather than covered by a wildcard, so adding one
+       * is a decision somebody makes on purpose:
+       *
+       *   peers.ts   needs Range.getClientRects(), which returns nothing here
+       *   image.ts   needs a canvas
+       *   Sidebar    a React component over live Firestore subscriptions
+       *   Mark, Wordmark  presentational SVG with no logic to assert
+       *
+       * They are covered instead by the emulator walkthrough in
+       * docs/operations.md. src/test/README.md explains each limitation.
+       */
+      exclude: [
+        // The tests themselves are not the subject. Counting them inflates the
+        // figure and hides which source is actually exercised.
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "src/annotation/peers.ts",
+        "src/annotation/Sidebar.tsx",
+        "src/export/image.ts",
+        "src/brand/Mark.tsx",
+        "src/brand/Wordmark.tsx",
+      ],
+      // Set just under the current figures, so an ordinary change does not
+      // fail the build, and a real drop does.
       thresholds: { lines: 90, functions: 90, statements: 90, branches: 80 },
     },
   },
