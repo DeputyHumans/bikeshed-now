@@ -1,0 +1,263 @@
+# Operations
+
+Deploying a Bikeshed, running it, and taking it down. Every command here is
+copy-pasteable; the ones that can run without a deployment are run by CI.
+
+**Placeholders only.** No file in this repository names a real Firebase project,
+console account, bucket or domain. `your-firebase-project-id` means yours, and
+`demo-bikeshed` is the emulator-only id Firebase refuses to point at a real
+backend.
+
+---
+
+## Before anything: the local stack
+
+Nothing below needs a cloud account until [Deploying](#deploying).
+
+```bash
+npm run install:all
+npm run build:policy
+cp app/.env.example app/.env.local     # already points at the emulators
+npm run emulators                      # one terminal
+npm --prefix app run dev               # another → http://localhost:5173
+```
+
+The emulator suite runs on Auth 9099, Firestore 8088, RTDB 9000, Functions 5001,
+Hosting 5050 and Storage 9199. Firestore and Hosting are **not** on their usual
+8080 and 5000: 8080 is the most contended port on a developer machine and 5000
+is taken by AirPlay Receiver on macOS. The ports live in `firebase.json`, and
+the tests and the Vite dev proxy both read them from there rather than
+hardcoding, so changing one changes all of them.
+
+```bash
+npm run verify              # everything CI runs, in CI's order
+npm run test:rules:emulated # rules tests need the emulators; this starts them
+```
+
+---
+
+## Deploying
+
+### 1. Decide the five facts, and write them where git cannot see them
+
+| Fact | File | Tracked example |
+|---|---|---|
+| Firebase project id | `.firebaserc` | `.firebaserc.example` |
+| Content bucket, public domain | `config/deploy.json` | `config/deploy.example.json` |
+| Web SDK config, measurement id | `app/.env.local` | `app/.env.example` |
+| Bucket, origin, sign-in hint | `functions/.env` | `functions/.env.example` |
+| Console account | **nowhere** — passed as `--account` | — |
+| Resend API key | Firebase Secret Manager | `functions/.env.example` names it |
+
+All four files are gitignored from the first commit, before any `firebase`
+command runs — which matters, because `firebase use` writes `.firebaserc`
+unprompted.
+
+Keep one gitignored `DEPLOYMENT.local.md` holding the project id, account,
+bucket and domain together, so the facts survive outside git without a scavenger
+hunt through four dotfiles.
+
+**None of this is secret in the cryptographic sense.** Vite inlines every
+`VITE_*` value into the public bundle, and a Firebase web config is designed to
+be public — security comes from the rules, not from hiding the project id.
+What is kept out of the tree is the *binding* between this source and one
+particular deployment. "Never committed" is achievable; "never public" is not.
+
+The console account is deliberately in no file at all. Every script **requires**
+`--account` for a real run and never defaults it, because a tool that picks up
+whatever identity happens to be active is how the wrong project gets modified.
+
+### 2. Dry-run the setup and read it
+
+```bash
+node scripts/setup.mjs --account you@example.com --project your-firebase-project-id --dry-run
+```
+
+It prints seven steps and executes nothing, needing no credentials. Read the
+project id on the first line before you drop `--dry-run`.
+
+### 3. Run it
+
+```bash
+node scripts/setup.mjs --account you@example.com --project your-firebase-project-id
+```
+
+Steps 1–6 are check-then-act or naturally idempotent, so re-running converges:
+enable services, ensure the Firestore database, ensure the **private** bucket
+(uniform access, public access prevention), deploy rules and indexes, deploy
+functions, build and deploy hosting.
+
+### 4. Do step 7 by hand
+
+There is no clean CLI for these, so the script prints them as a checklist rather
+than pretending. Each one has a failure mode that reads as a bug:
+
+- **Enable the Google provider.**
+- **Enable GitHub, and request the `user:email` scope.** Without that scope
+  Firebase receives no address at all for users who keep theirs private, and an
+  email-keyed ACL cannot grant them anything ([ADR 0004](adr/0004-email-keyed-acl.md)).
+- **Add every serving host to Authorized domains**, including any custom domain.
+  `signInWithPopup` rejects an unlisted origin with `auth/unauthorized-domain`,
+  which presents as a sign-in button that does nothing.
+- **Create a Realtime Database** if you want peer presence. Without one,
+  presence degrades to a clean no-op and everything else is unchanged.
+- **Set `RESEND_API_KEY`** if you want transactional email:
+  `firebase functions:secrets:set RESEND_API_KEY`. It is a Firebase secret, not
+  an env file, so it never touches disk. Without it every send is a logged
+  no-op — the path CI exercises.
+- **Set a budget alert.** This is a numbered step, not advice; see
+  [Cost](#cost) below.
+
+### 5. Verify the deployment does what the rules say
+
+```bash
+node scripts/publish.mjs --doc bikeshed-tour --account you@example.com   # publish a sample
+node scripts/publish.mjs --doc bikeshed-tour --account you@example.com   # → "already published as v1"
+```
+
+The second run printing a no-op is the check that content-hash idempotency is
+working end to end. Then sign in as an account that is not a member and confirm
+`/content/bikeshed-tour/v1/index.html` returns **404**, not 403 — read-only byte
+paths collapse "forbidden" into "absent" so a signed-in stranger cannot
+enumerate the slug space.
+
+---
+
+## Running one
+
+### Publishing and access
+
+```bash
+node scripts/publish.mjs --doc <id> --account you@example.com
+node scripts/set-access.mjs --doc <id> --list
+node scripts/set-access.mjs --doc <id> --add ana@example.com,team:design --account you@example.com
+node scripts/set-access.mjs --doc <id> --remove bo@example.com --role editor --account you@example.com
+```
+
+`--dry-run` needs no credentials on either. `--list` does: it reads the document
+from Firestore, which is the point of it.
+
+Membership is recomputed by the same code the server uses, including the parent
+folder's members, and all four membership fields are written together
+([ADR 0006](adr/0006-denormalized-members.md)).
+
+### Withdrawing a version
+
+The one guarded exception to "versions are immutable".
+
+```bash
+node scripts/delete-version.mjs --doc <id> --list
+node scripts/delete-version.mjs --doc <id> --version v3 --repoint v2 --dry-run
+node scripts/delete-version.mjs --doc <id> --version v3 --repoint v2 --yes --account you@example.com
+```
+
+Seven refusals guard it, each with its own override flag, so removing one guard
+never removes the rest. **Unlike every other script here, `--dry-run` reads
+Firestore and Storage and therefore needs credentials** — a destructive preview
+that cannot show you what it would destroy is worthless. It performs no writes.
+
+The order is load-bearing: `currentVersion` is repointed **first**, in a
+transaction that aborts if anything published mid-run, because the viewer
+resolves a bare `/d/{docId}` from that field. Then the Storage bytes, then the
+Firestore record.
+
+### Upgrading
+
+```bash
+npm run verify                                        # must pass before deploying
+firebase deploy --only functions --project <id> --account you@example.com
+npm --prefix app run build && firebase deploy --only hosting --project <id> --account you@example.com
+```
+
+Deploy **functions before hosting**. The new app may call an endpoint the old
+functions do not have; the reverse is never a problem, because an endpoint
+nobody calls yet is inert.
+
+**A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
+are part of the content hash, so bumping `markdown-it`, `turndown` or
+`turndown-plugin-gfm` changes every Markdown document's hash and the next save
+mints a new version. That is correct — the rendering is part of the artifact —
+but it is a decision, which is why all three are pinned to exact versions and
+`rendererVersion` is recorded on each version record
+([ADR 0003](adr/0003-server-side-markdown.md)).
+
+---
+
+## Cost
+
+**Every byte of every document is proxied through a Cloud Function.** That is
+the price of a private bucket plus an ACL, and it is the line item most likely
+to surprise you.
+
+- **Prefer single-file documents.** A fifty-asset deck is fifty function
+  invocations per reader; the same deck inlined is one.
+  `docs/authoring-bundles.md` says so at the top.
+- **Public and unlisted content is cached** `public, max-age=300` on the
+  immutable version path, because public documents are where traffic spikes.
+  Gated content stays `private, no-store`.
+- **Set the budget alert.** As of early 2026 a small team's usage sits inside
+  the Firebase free tier; a public document that gets attention does not.
+
+There is deliberately **no rate limiter**. CDN caching is the cost defence, and
+Firebase App Check is the named hook if abuse ever appears.
+
+---
+
+## Revoking access, and the five minutes it takes
+
+Making a document private again is immediate in Firestore — the `public/{docId}`
+projection is deleted in the same write — but **content already cached at the
+CDN can still be served for up to five minutes**.
+
+That latency is the trade for caching public content at all, and it is stated
+here rather than discovered. If you need it gone now:
+
+```bash
+node scripts/set-access.mjs --doc <id> --list      # confirm who actually has it
+firebase hosting:channel:delete <channel> --project <id>   # only if it is on a preview channel
+```
+
+For the primary channel there is no purge API. The reliable move is to withdraw
+the version with `delete-version.mjs`, which removes the bytes the cached URL
+points at, and accept that the cached copy expires on its own.
+
+If the leak was an ACL mistake rather than a visibility one, no cache is
+involved: gated content was never cacheable, so removing the grant is immediate.
+
+---
+
+## Taking it down
+
+```bash
+node scripts/teardown.mjs --yes --account you@example.com --project <id> --dry-run
+node scripts/teardown.mjs --yes --account you@example.com --project <id> --functions
+```
+
+Deletes `docs/**`, `folders/**`, `teams/**`, `tokens/**`, `public/**` and
+`users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths;
+optionally the deployed functions. **Never deletes the project.**
+
+The function list comes from `scripts/lib/endpoints.mjs`, the same table
+`firebase.json` and the dev proxy derive from, and a wiring test asserts all
+three agree — so a new endpoint cannot be added without teardown learning about
+it. The design this replaces deleted two functions by name, because it was
+written when there were two, and reported success.
+
+---
+
+## When something is wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Sign-in button does nothing | serving host not in Authorized domains | add it; the error is `auth/unauthorized-domain` in the console |
+| GitHub sign-in yields no email | `user:email` scope not requested | add the scope in the provider config |
+| "email not permitted by policy" | `config/access-policy.json` has an allowlist | edit it, `npm run build:policy`, redeploy rules **and** functions |
+| Rules change had no effect | generated artifacts not rebuilt | `npm run check:policy` fails loudly; it is `pretest` and the first build step |
+| Peer cursors missing | no Realtime Database | create one, or accept the no-op |
+| No email arriving | no `RESEND_API_KEY` | set the secret, or accept the logged no-op |
+| A reader sees 404 on a document they were granted | membership not recomputed | `set-access.mjs --doc <id> --list` shows the effective members |
+| `npm run emulators` fails to bind | another process on 8088/5050 | change the port in `firebase.json`; everything reads it from there |
+
+**Logs.** `firebase functions:log --project <id> --account you@example.com`.
+Presence, email and stats failures are logged and swallowed by design — they
+never fail the request that triggered them. Access control never is.
