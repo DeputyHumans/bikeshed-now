@@ -431,6 +431,8 @@ export function DocViewer() {
           commentsOpen={commentsOpen}
           onToggleComments={() => setCommentsOpen((v) => !v)}
           canEdit={canEdit}
+          canShare={isOwner}
+          onShare={() => setDialog("share")}
           editing={editingNow}
           onToggleEdit={() => setWantsEdit((v) => !v)}
           offerTrust={liveTrust.shouldOffer}

@@ -60,6 +60,8 @@ export function ViewerToolbar({
   canEdit,
   editing,
   onToggleEdit,
+  canShare,
+  onShare,
   offerTrust,
   onOpenTrust,
   onPresent,
@@ -78,6 +80,9 @@ export function ViewerToolbar({
   canEdit: boolean;
   editing: boolean;
   onToggleEdit: () => void;
+  /** Owner-only, matching who the server lets change an ACL. */
+  canShare: boolean;
+  onShare: () => void;
   offerTrust: boolean;
   onOpenTrust: () => void;
   onPresent: () => void;
@@ -131,6 +136,17 @@ export function ViewerToolbar({
             onClick={onToggleEdit}
           />
         ) : null}
+
+        {/* Promoted out of the overflow menu deliberately. Sharing a document
+            with the people who should review it IS the product's loop, and a
+            reader who has just published looks for it by name — "I don't see a
+            share button" is what a hidden one produces.
+
+            It does NOT keep its label below 1100px: that set is for actions
+            which change what the document IS, and sharing changes who can see
+            it. Adding a fifth always-labelled action overflowed the bar at
+            400px. */}
+        {canShare ? <Action icon="share" label="Share" onClick={onShare} /> : null}
 
         <Action icon="present" label="Present" onClick={onPresent} />
         <MoreMenu entries={menuEntries} />
