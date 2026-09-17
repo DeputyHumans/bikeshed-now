@@ -107,4 +107,38 @@ describe("analytics is gated on consent", () => {
     const init = await initWith("granted");
     expect(init).toHaveBeenCalledTimes(1);
   });
+
+  it("initializes when consent is granted AFTER a refusal, in the same page", async () => {
+    /**
+     * The case that shipped broken, and that every test above missed because
+     * each ran in a fresh module registry.
+     *
+     * The consent check lived inside the memoized async body and reset `ready`
+     * from within it. That body runs synchronously up to its first await, so it
+     * cleared `ready` a moment before the outer assignment overwrote it with
+     * the promise that had just resolved to null — memoizing the refusal
+     * forever. Clicking Allow then did nothing at all.
+     */
+    const initializeAnalytics = vi.fn(() => ({}) as never);
+    vi.doMock("./config", () => ({ MEASUREMENT_ID: "G-TESTONLY", USE_EMULATORS: false }));
+    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/analytics", () => ({
+      initializeAnalytics,
+      isSupported: async () => true,
+      logEvent: vi.fn(),
+      setAnalyticsCollectionEnabled: vi.fn(),
+    }));
+    const analytics = await import("./analytics");
+
+    // Unanswered: nothing loads.
+    analytics.initAnalytics();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(initializeAnalytics).not.toHaveBeenCalled();
+
+    // The visitor now clicks Allow, in the SAME page — no reload.
+    writeConsent("granted");
+    analytics.initAnalytics();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(initializeAnalytics).toHaveBeenCalledTimes(1);
+  });
 });

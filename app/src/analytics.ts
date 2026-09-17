@@ -58,18 +58,27 @@ export function analyticsConfigured(): boolean {
   return Boolean(MEASUREMENT_ID) && !USE_EMULATORS;
 }
 
-/** Resolve the Analytics instance once, or null forever. */
+/**
+ * Resolve the Analytics instance once, or null until consent changes.
+ *
+ * The two guards are OUTSIDE the memo deliberately. An earlier version put the
+ * consent check inside the async body and reset `ready` from in there, which
+ * does not work: the body runs synchronously up to its first await, so it
+ * cleared `ready` before the outer `ready = (...)()` assignment overwrote it
+ * with the very promise that had just resolved to null. Consent could then be
+ * granted and nothing would ever initialize — which is exactly what the
+ * deployment did, while the unit tests passed because each case ran in a fresh
+ * module registry and never granted consent after a refusal.
+ *
+ * Checking before memoizing means a refusal costs nothing and is not sticky.
+ */
 function resolve(): Promise<Analytics | null> {
+  if (!analyticsConfigured()) return Promise.resolve(null);
+  // Denial means the measurement script is never fetched, rather than fetched
+  // and then disabled — a request nobody sends cannot be logged by anybody.
+  if (readConsent() !== "granted") return Promise.resolve(null);
   if (ready) return ready;
   ready = (async () => {
-    if (!analyticsConfigured()) return null;
-    // Consent is checked HERE, at the one place the measurement script would
-    // otherwise be fetched. Denial means the request is never made, rather than
-    // made and then disabled — a request nobody sends cannot be logged.
-    if (readConsent() !== "granted") {
-      ready = null; // so a later grant can resolve rather than reuse this null
-      return null;
-    }
     try {
       const { initializeAnalytics, isSupported } = await import("firebase/analytics");
       if (!(await isSupported())) return null;
