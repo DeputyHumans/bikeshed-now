@@ -1,0 +1,13 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/scripts/status-line.py",
+    "padding": 0,
+    "refreshInterval": 30
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  }
+}

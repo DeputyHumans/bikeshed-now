@@ -1,0 +1,68 @@
+Bikeshed
+Copyright 2026 Bikeshed contributors
+
+This product includes software developed by the Bikeshed contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+
+-------------------------------------------------------------------------------
+THIRD-PARTY MATERIAL INCLUDED IN THIS DISTRIBUTION
+-------------------------------------------------------------------------------
+
+Runtime and build dependencies are not vendored; they are fetched by npm and
+their licenses are listed in THIRD_PARTY_LICENSES.md. The items below are files
+that ship inside this repository and are not covered by the Apache License above.
+
+
+1. docs/acf/** and .claude/scripts/
+   -------------------------------------------------------------------------
+   Agentic Coding Framework (ACF) documentation and helper scripts.
+   Copyright (c) 2025 Fibonacci Seven, LLC. All rights reserved.
+
+   KNOWN LICENSE CONFLICT — READ BEFORE REDISTRIBUTING.
+
+   These files originate from a work published under a PROPRIETARY LICENSE whose
+   terms state, in relevant part, that you may NOT "copy, modify, merge,
+   publish, distribute, sublicense, or sell copies of the Software" and may NOT
+   "redistribute the Software in any form, modified or unmodified."
+
+   They are present here at the express direction of this repository's author,
+   who is also the author of the substantial majority of the upstream work, and
+   who accepted this risk knowingly after it was raised. Their presence is
+   recorded here rather than left silent.
+
+   Consequences a downstream recipient must understand:
+
+     - These paths are NOT licensed to you under Apache-2.0. Nothing in the
+       LICENSE file grants any right in them.
+     - At least one upstream commit is authored by a third party, so the
+       author's own rights may not cover the whole of the material.
+     - Before publishing, forking, mirroring or redistributing this repository,
+       obtain written permission from Fibonacci Seven, LLC (acf@fib7.ai), or
+       remove these paths.
+
+   Removing them is safe and affects no product behaviour: they are
+   agent-workflow documentation and a shell status line. Nothing in app/,
+   functions/, scripts/, cli/ or content/ reads them at build time or at
+   runtime.
+
+
+2. app/public/fonts/*.woff2 — "Bikeshed Sans"
+   -------------------------------------------------------------------------
+   A subset of an upstream typeface released under the SIL Open Font License,
+   Version 1.1. Subsetting is a modification, so under the OFL's Reserved Font
+   Name clause the modified file is distributed under a different name.
+
+   The upstream face, its author, and the full OFL text are recorded in
+   app/public/fonts/OFL.txt and in THIRD_PARTY_LICENSES.md. The OFL applies to
+   the font files only and does not extend to any other part of this work.

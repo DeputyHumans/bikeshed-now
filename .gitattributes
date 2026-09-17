@@ -1,0 +1,23 @@
+# Normalize line endings for text; keep binaries byte-exact.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.ico binary
+
+# Generated security rules and policy mirrors are rendered by
+# tools/build-policy.mjs from config/access-policy.json. They are committed so
+# the security boundary is reviewable and has diff history, but they should
+# collapse in review — edit the source, not the output.
+firestore.rules linguist-generated=true
+database.rules.json linguist-generated=true
+functions/src/generated/policy.ts linguist-generated=true
+app/src/generated/policy.ts linguist-generated=true
+
+# Sample document bundles are content, not source. Keep them out of language
+# statistics so the repo does not read as an HTML project.
+content/** linguist-vendored=true
+
+# Vendored third-party documentation (see NOTICE).
+docs/acf/** linguist-vendored=true
