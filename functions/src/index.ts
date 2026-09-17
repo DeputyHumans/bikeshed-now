@@ -92,6 +92,7 @@ import { resolveMarking, type Marking } from "./lib/marking";
 import {
   badRequest,
   jsonBody,
+  noStore,
   pathSegments,
   rawBuffer,
   rejectMethod,
@@ -182,7 +183,19 @@ export const session = onRequest(PLAIN, async (req, res) => {
     sessionCookie = await admin
       .auth()
       .createSessionCookie(idToken, { expiresIn: SESSION_EXPIRES_MS });
-  } catch {
+  } catch (err) {
+    /**
+     * LOG IT. The client still learns only "session_failed" — it must not be
+     * told whether the token was bad or the deployment is misconfigured — but
+     * swallowing this server-side made the two indistinguishable to the
+     * OPERATOR too, which is the person who can actually fix it.
+     *
+     * The realistic cause is not a bad token: minting a session cookie signs a
+     * JWT, so the runtime service account needs `iam.serviceAccounts.signBlob`
+     * on itself (roles/iam.serviceAccountTokenCreator). A fresh project does
+     * not grant that, and the symptom is every sign-in failing with no trace.
+     */
+    console.error("createSessionCookie failed:", (err as Error)?.message ?? err);
     res.status(401).json({ status: "session_failed" });
     return;
   }
@@ -255,6 +268,9 @@ function streamObject(
  */
 export const contentProxy = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
+
+  // Uncacheable until something deliberately says otherwise. See noStore().
+  noStore(res);
 
   const caller = await resolveCaller(req);
 
@@ -333,6 +349,7 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
  */
 export const downloadBundle = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
+  noStore(res); // before any branch can return — see noStore()
   const caller = await resolveCaller(req);
 
   const segments = pathSegments(req, "download");
@@ -883,6 +900,7 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
  */
 export const getDraft = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
+  noStore(res); // before any branch can return — see noStore()
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
