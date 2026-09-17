@@ -203,6 +203,7 @@ served. Both halves are the same number, which is why it is documented in
 | Functions | 5001 | |
 | Hosting | **5050** | not 5000 — AirPlay Receiver holds it on macOS |
 | Storage | 9199 | |
+| Emulator UI | **4040** | not 4000 — Docker Desktop and a dozen dev servers claim it |
 
 `firebase.json` is the source; the rules tests and the Vite dev proxy read the
 ports from it. `app/src/config.ts` mirrors the three the client needs, because
