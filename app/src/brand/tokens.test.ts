@@ -160,3 +160,58 @@ describe("peer colours", () => {
     expect(peerColor("ana@example.com")).toMatch(/^hsl\(\d+ \d+% \d+%\)$/);
   });
 });
+
+describe("every token a stylesheet uses actually exists", () => {
+  /**
+   * The bug this catches, which shipped: consent.css and legal.css were written
+   * against `--space-3`, `--space-4` and friends. No such tokens exist — the
+   * scale is `--s-1` .. `--s-8`. CSS does not warn about that. An unresolved
+   * `var()` makes the whole declaration invalid at computed-value time, so
+   * `padding: var(--space-3) var(--space-4)` silently became no padding at all,
+   * and the cookie banner rendered jammed into the corner of the viewport.
+   *
+   * The rule is the one the codebase already follows without having stated it:
+   *
+   *   var(--x)            must resolve to a token defined in a stylesheet
+   *   var(--x, fallback)  may be injected at runtime from JS
+   *
+   * That distinction needs no allowlist to maintain, and it is exactly right:
+   * the four variables set from JavaScript — thread, peer and lock colour, and
+   * folder depth — all supply a fallback precisely because they are absent
+   * until an element sets them.
+   */
+  const cssFiles = readdirSync(STYLES).filter((f) => f.endsWith(".css"));
+
+  const defined = new Set<string>();
+  for (const file of cssFiles) {
+    const css = readFileSync(join(STYLES, file), "utf8");
+    for (const m of css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)) defined.add(m[1]);
+  }
+
+  it("defines the tokens it claims to", () => {
+    // A sanity floor, so a parsing regression cannot make this suite vacuous by
+    // finding nothing and therefore complaining about nothing.
+    expect(defined.size).toBeGreaterThan(40);
+    expect(defined.has("--s-1")).toBe(true);
+    expect(defined.has("--color-accent")).toBe(true);
+  });
+
+  for (const file of cssFiles) {
+    it(`${file} references only tokens that exist`, () => {
+      const css = readFileSync(join(STYLES, file), "utf8");
+      const undefinedRefs: string[] = [];
+
+      // `var(--x` followed by `)` — i.e. no comma, so no fallback.
+      for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/g)) {
+        if (!defined.has(m[1])) undefinedRefs.push(m[1]);
+      }
+
+      expect(
+        [...new Set(undefinedRefs)],
+        `${file} uses these without a fallback, and nothing defines them. ` +
+          "Either the name is wrong (the spacing scale is --s-1..--s-8, not " +
+          "--space-N), or it is injected at runtime and needs a fallback.",
+      ).toEqual([]);
+    });
+  }
+});
