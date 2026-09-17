@@ -95,6 +95,59 @@ test("the document title never leaks into the body as a stray first line", () =>
   assert.equal(out.split("\n")[0], "# Alpha");
 });
 
+// --- Author comments -------------------------------------------------------
+
+test("an HTML comment survives the round trip, and stays put", () => {
+  /**
+   * Turndown never visits comment nodes, so before this was handled a single
+   * save deleted every comment in the document — including the SPDX header
+   * every sample in `content/` opens with. Lossy AND idempotent is the worst
+   * shape a normalization can have: it destroys the author's content once and
+   * then looks stable forever.
+   */
+  const cases = {
+    "a licence header": "<!-- SPDX-License-Identifier: Apache-2.0 -->\n\n# Title\n\nBody.\n",
+    "quotes, angle brackets and an ampersand": '<!-- a "quoted" <tag> & more -->\n\n# T\n',
+    "several lines": "<!--\n  line one\n  line two\n-->\n\n# T\n",
+    "two of them, one mid-document": "<!-- one -->\n\n# T\n\n<!-- two -->\n\nBody.\n",
+    // Base64 of "" is "", so an unprefixed placeholder would be blank — which
+    // is the exact condition the placeholder exists to avoid.
+    "an empty one": "<!---->\n\n# T\n",
+    "beside an authored empty div": '# T\n\n<!-- why -->\n<div id="chart"></div>\n',
+  };
+
+  for (const [name, source] of Object.entries(cases)) {
+    const first = htmlToMarkdown(renderMarkdown(source).html);
+    assert.ok(first.includes("<!--"), `${name}: the comment was dropped`);
+    const second = htmlToMarkdown(renderMarkdown(first).html);
+    assert.equal(second, first, `${name} is not idempotent`);
+  }
+});
+
+test("a comment INSIDE code is code, not a comment", () => {
+  // The parking step works on the rendered HTML string. That is only safe
+  // because markdown-it escapes `<` inside code spans and fenced blocks, so
+  // what looks like a comment in code never becomes a comment node.
+  for (const source of [
+    "# T\n\n```html\n<!-- not a real comment -->\n```\n",
+    "# T\n\nUse `<!-- x -->` here.\n",
+  ]) {
+    const first = htmlToMarkdown(renderMarkdown(source).html);
+    assert.ok(
+      first.includes("<!-- not a real comment -->") || first.includes("`<!-- x -->`"),
+      "the literal text must survive as code",
+    );
+    assert.equal(htmlToMarkdown(renderMarkdown(first).html), first);
+  }
+});
+
+test("the placeholder never reaches the output", () => {
+  // If it ever did, it would be visible markup in somebody's document.
+  const source = "<!-- one -->\n\n# T\n\n<!-- two -->\n";
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.doesNotMatch(out, /data-md-comment/);
+});
+
 // --- Determinism -----------------------------------------------------------
 
 test("rendering the same source twice is byte-identical", () => {

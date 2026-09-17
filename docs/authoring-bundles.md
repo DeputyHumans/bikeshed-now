@@ -138,12 +138,21 @@ express — font family, font size, text colour, highlight colour, alignment —
 to work and then loses your formatting is worse than one that is visibly
 unavailable.
 
-**Two things to expect.** The first save normalizes your Markdown (`*` bullets
-become `-`, setext headings become ATX). After that first pass it is idempotent,
-which is a tested contract, not a hope. And `~~strikethrough~~` round-trips as
-`~strikethrough~` — GFM accepts both, so it renders identically and is stable
-thereafter; it is the one lossy normalization, recorded here rather than
-discovered.
+**Three things to expect.** The first save normalizes your Markdown: `*` bullets
+become `-`, setext headings become ATX, and hard-wrapped prose is joined into one
+line per paragraph. After that first pass it is idempotent, which is a tested
+contract, not a hope.
+
+`~~strikethrough~~` round-trips as `~strikethrough~` — GFM accepts both, so it
+renders identically and is stable thereafter. It is the one lossy
+normalization, recorded here rather than discovered.
+
+**HTML comments are preserved**, including the SPDX header the samples open
+with. They were not always: turndown never visits comment nodes, so an early
+version deleted every comment on the first save. Lossy *and* idempotent is the
+worst shape a normalization can have — it destroys something once and then looks
+stable forever — so this one is tested in six shapes, including an empty comment
+and one that lives beside an authored `<div>`.
 
 Raw HTML in Markdown passes straight through and obeys the same trust model as
 any other document. A `<script>` in your Markdown makes it a scripted document.

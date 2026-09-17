@@ -52,6 +52,17 @@ const GENERATED_ELEMENTS = new Set([
   "table", "thead", "tbody", "tr", "th", "td",
 ]);
 
+/** The placeholder a comment is parked in while turndown walks the tree. */
+const COMMENT_ATTR = "data-md-comment";
+
+/**
+ * A one-character prefix on the parked payload, so the placeholder always has
+ * text. `<!---->` base64-encodes to the empty string, and an empty placeholder
+ * is blank again — which is precisely the case this whole arrangement exists to
+ * avoid. It is not a character base64 can produce, so stripping it is exact.
+ */
+const COMMENT_SENTINEL = "#";
+
 /** Document scaffolding that carries no authored content. */
 const DOCUMENT_CHROME = ["head", "title", "meta", "link", "base"];
 
@@ -204,12 +215,57 @@ function createService(): TurndownService {
     },
   });
 
+  /**
+   * Author comments, carried through a placeholder.
+   *
+   * Turndown never visits comment nodes — its walker handles element and text
+   * nodes and returns "" for anything else — so no rule can reach one and a
+   * comment is simply gone after a single save. That is silent deletion of
+   * something the author wrote, and it is the third instance of the
+   * lossy-but-idempotent bug this module's header calls the worst shape. Not
+   * hypothetical either: every sample in `content/` opens with an SPDX comment,
+   * so editing one stripped its licence header.
+   *
+   * The payload rides as the placeholder's TEXT, not as an attribute, and that
+   * is load-bearing. Turndown treats an element with no text as blank and
+   * consults `blankReplacement` before any rule — and blankness propagates, so
+   * an empty placeholder would make its whole enclosing `<section>` blank and
+   * the section's own replacement would drop the subtree before this rule was
+   * ever asked. Text content makes the node meaningful, and everything above it
+   * too.
+   *
+   * Base64 so a comment containing quotes, angle brackets or newlines survives
+   * the trip through markup intact.
+   */
+  service.addRule("authorComment", {
+    filter: nodeFilter((node) => node.getAttribute?.(COMMENT_ATTR) != null),
+    replacement: (content) => {
+      const payload = content.trim().slice(COMMENT_SENTINEL.length);
+      return `\n\n<!--${Buffer.from(payload, "base64").toString("utf8")}-->\n\n`;
+    },
+  });
+
   // Everything the renderer does not generate is the author's raw HTML, and is
   // emitted verbatim. Turndown's default would print an unknown element's text
   // content, quietly turning an inline <svg> or a <script> into stray prose.
   service.keep(nodeFilter((node) => !GENERATED_ELEMENTS.has(tagOf(node))));
 
   return service;
+}
+
+/**
+ * Park every HTML comment in a placeholder element.
+ *
+ * Operating on the string is safe here because this input is always rendered
+ * output: markdown-it escapes `<` to `&lt;` inside code spans and fenced
+ * blocks, so a comment written INSIDE code is not a comment node and does not
+ * match. The only `<!--` left in the rendered HTML is a real one.
+ */
+function parkComments(html: string): string {
+  return html.replace(/<!--([\s\S]*?)-->/g, (_all, body: string) => {
+    const encoded = Buffer.from(body, "utf8").toString("base64");
+    return `<div ${COMMENT_ATTR}="1">${COMMENT_SENTINEL}${encoded}</div>`;
+  });
 }
 
 let service: TurndownService | null = null;
@@ -232,5 +288,5 @@ function tidy(markdown: string): string {
  */
 export function htmlToMarkdown(html: string): string {
   if (!service) service = createService();
-  return tidy(service.turndown(html ?? ""));
+  return tidy(service.turndown(parkComments(html ?? "")));
 }
