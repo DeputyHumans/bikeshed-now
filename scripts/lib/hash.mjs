@@ -1,5 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Deterministic content hash over a bundle directory (SPEC §9.1).
+//
+// Copyright 2026 Bikeshed contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// The FULL notice is here, rather than the one-line identifier the rest of this
+// codebase uses, because this file is a normative wire format that somebody may
+// reimplement from scratch in another language — and when it is copied out on
+// its own, the LICENSE at the repository root does not travel with it.
 
 /**
  * The ESM half of a two-runtime pair; `functions/src/lib/hash.ts` is the

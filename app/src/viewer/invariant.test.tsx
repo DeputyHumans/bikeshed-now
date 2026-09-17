@@ -25,16 +25,26 @@ import type { FrameMode } from "./frameMode";
  * nothing this app injected.
  */
 
-const saveDraft = vi.fn(async () => ({
-  baseVersion: "v1",
-  entry: "index.html",
-  bytes: 0,
-  updatedByEmail: "ana@example.com",
+/**
+ * Typed with the real signature, so the assertion on the posted HTML is a
+ * checked one rather than a cast.
+ *
+ * Defined through `vi.hoisted` because `vi.mock`'s factory is hoisted above
+ * every other statement in the file — a plain `const` above it is still in the
+ * temporal dead zone when the factory runs.
+ */
+const { saveDraft } = vi.hoisted(() => ({
+  saveDraft: vi.fn(async (_docId: string, _baseVersion: string, _html: string) => ({
+    baseVersion: "v1",
+    entry: "index.html",
+    bytes: 0,
+    updatedByEmail: "ana@example.com",
+  })),
 }));
 
 vi.mock("../edit", async () => {
   const actual = await vi.importActual<typeof import("../edit")>("../edit");
-  return { ...actual, saveDraft: (...args: unknown[]) => saveDraft(...(args as [])) };
+  return { ...actual, saveDraft };
 });
 
 function makeDoc(): Document {
@@ -171,7 +181,7 @@ describe("the decoration invariant", () => {
     });
 
     expect(saveDraft).toHaveBeenCalled();
-    const html = saveDraft.mock.calls[0][2] as unknown as string;
+    const html = saveDraft.mock.calls[0][2];
     for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, "contenteditable"]) {
       expect(html, `the draft payload contains ${artifact}`).not.toContain(artifact);
     }

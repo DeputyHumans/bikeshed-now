@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Markdown in Bikeshed
 
 This document is three things at once: a sample you can publish, the
