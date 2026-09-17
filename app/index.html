@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bikeshed</title>
+    <meta
+      name="description"
+      content="Publish a document, collect comments anchored to the exact passage they are about."
+    />
+
+    <!--
+      Hand-authored brand art. Every file is under 1 KB: the favicon is the
+      primary icon and carries its own prefers-color-scheme rule so it stays
+      legible in dark browser chrome; the mask icon is a single flat path with
+      no <style> and no <defs>, because Safari's mask renderer ignores both.
+
+      There is deliberately no .ico. A PNG named *.ico is not an ICO file and
+      does nothing except add a request.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/brand/mask-icon.svg" color="#4b3dd1" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#ffffff" />
+
+    <!--
+      Typography is self-hosted, not loaded from a font CDN.
+
+      This product holds documents people mark confidential, and a CDN link tells
+      a third party the viewer's IP, user agent and referer on every single page
+      load. That is an unacceptable default for a self-hosted tool, it fails a
+      security review on sight, and it breaks entirely in an air-gapped
+      deployment. The @font-face rule lives in app/src/brand/fonts.ts so the app
+      stylesheet and the edit-iframe injector share one definition — in the
+      original of this design the same CDN URL was pasted in two places and drifted.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/bikeshed-sans-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "mcpVersion": "2025-06-18",
+  "name": "bikeshed",
+  "description": "Publish documents and read anchored review feedback.",
+  "transport": { "type": "streamable-http", "url": "/mcp" },
+  "authentication": {
+    "type": "bearer",
+    "description": "A personal access token, minted in account settings. Send it as Authorization: Bearer bsk_...",
+    "instructions": "/llms.txt"
+  }
+}

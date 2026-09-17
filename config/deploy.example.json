@@ -1,0 +1,5 @@
+{
+  "$comment": "Copy to config/deploy.json (gitignored) and fill in. Nothing here is secret in the cryptographic sense — a Firebase web config is public by design — but the binding between this source tree and one particular deployment is deliberately not committed. See docs/operations.md.",
+  "bucket": "your-content-bucket",
+  "domain": "example.com"
+}

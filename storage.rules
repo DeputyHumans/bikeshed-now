@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Storage security rules (SPEC §2, §8).
+//
+// Document bundles live in a private bucket and are NEVER served to clients
+// directly. Every read goes through the contentProxy Cloud Function, which
+// authenticates the caller (session cookie, or anonymously for a non-private
+// document), checks the Firestore ACL, and then streams the object using the
+// Admin SDK — which bypasses these rules by design.
+//
+// "Public" in this product means "the proxy will serve you without a cookie".
+// It never means the bucket is readable. Deny everything.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

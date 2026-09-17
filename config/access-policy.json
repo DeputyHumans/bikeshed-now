@@ -1,0 +1,4 @@
+{
+  "$comment": "SINGLE SOURCE OF TRUTH for the identity gate (SPEC §1). Edit this file, then run `npm run build:policy`. Never hand-edit the four generated artifacts it renders.",
+  "allowedEmailDomains": []
+}

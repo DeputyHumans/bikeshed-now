@@ -1,0 +1,259 @@
+rules_version = '2';
+
+@@BANNER@@
+//
+// Firestore security rules (SPEC §1, §4, §13, §17, §18).
+//
+// Identity gate: signed in, email verified, and — only when the deployment
+// configures one — inside the domain allowlist. There is no built-in domain
+// restriction; the per-doc owner+member ACL is the access control.
+//
+// Access gate: doc owner (by uid) OR email present in the doc's `members` list.
+// `members` is the EFFECTIVE read set, maintained server-side: the owner, direct
+// grants, grants inherited from parent folders, and team grants expanded to the
+// people in them. Keeping it a flat array of lowercased emails is what lets the
+// `list` rule below be statically provable from the query's array-contains
+// filter — rules are not filters, so a transformed expression would make the
+// whole workspace query undeniable-or-unusable.
+//
+// All doc/version/folder/team writes are server-side (Admin SDK) only. Clients
+// may only create and edit their own annotations, comments, personal trust and
+// user record.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Identity ---------------------------------------------------------
+
+    // `email is string` is not redundant. A custom token can carry
+    // `email_verified: true` with no `email` claim at all; without this
+    // conjunct that principal reaches the member checks below, where it would
+    // deny only by accident. Make the requirement explicit and test it.
+    function isVerifiedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string@@GATE_CLAUSES@@;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function docData(docId) {
+      return get(/databases/$(database)/documents/docs/$(docId)).data;
+    }
+
+    // --- Document access --------------------------------------------------
+
+    /** Default and private-equivalent: absent `visibility` means private. */
+    function isNonPrivate(d) {
+      return d.visibility is string
+        && (d.visibility == 'public' || d.visibility == 'unlisted');
+    }
+
+    function isMember(d) {
+      return isVerifiedUser()
+        && (request.auth.uid == d.ownerUid
+            || (d.members is list && myEmail() in d.members));
+    }
+
+    // Everything a client reads DIRECTLY under docs/** requires an account,
+    // even on a public document. These records carry member lists and reviewer
+    // identities; publishing a document must not publish the people who read
+    // and annotated it. An anonymous reader gets the world-readable
+    // public/{docId} projection plus the bytes through contentProxy, and
+    // nothing else (SPEC §17).
+    function canRead(d) {
+      return isMember(d) || (isVerifiedUser() && isNonPrivate(d));
+    }
+
+    // The real editor set: owner, direct editors, or effective/inherited
+    // editors (folder and team grants, expanded server-side). Mirrors
+    // functions/src/lib/acl.ts isDocEditor(). This — not canEdit — gates the
+    // per-person usage stats, because open editing on a public doc must not
+    // hand a stranger the reading history of everyone who opened it.
+    function isDocEditor(d) {
+      return isVerifiedUser()
+        && (request.auth.uid == d.ownerUid
+            || myEmail() == d.ownerEmail
+            || (d.editors is list && myEmail() in d.editors)
+            || (d.editorMembers is list && myEmail() in d.editorMembers));
+    }
+
+    // `publicEdit` widens WHO MAY EDIT to "any verified account". It never
+    // relaxes isVerifiedUser(), so anonymous stays read-only everywhere.
+    function canEdit(d) {
+      return isDocEditor(d)
+        || (isVerifiedUser() && isNonPrivate(d) && d.publicEdit == true);
+    }
+
+    // Author fields must match the caller. The actor's `channel` is pinned to
+    // 'web' here because a direct client write IS the web channel by
+    // definition — automation writes arrive through the Admin SDK, which
+    // bypasses these rules entirely. That is what makes `channel` server-
+    // derived rather than self-reported (SPEC §17).
+    function authoredBySelf() {
+      return request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorEmail == myEmail()
+        && request.resource.data.actor.uid == request.auth.uid
+        && request.resource.data.actor.email == myEmail()
+        && request.resource.data.actor.channel == 'web';
+    }
+
+    match /docs/{docId} {
+      // get: evaluated against the concrete document, so the member check can
+      // be case-insensitive. Member-only even for a public doc — the record
+      // carries members/viewers/editors/ownerEmail/stats and Firestore rules
+      // cannot project fields.
+      allow get: if isMember(resource.data);
+
+      // list: the workspace query is `members array-contains <myEmail> orderBy
+      // createdAt desc`. A list rule must be statically provable from the query
+      // constraints, so it cannot use a transformed expression like
+      // email.lower(); a direct membership comparison matches the
+      // array-contains filter exactly. Members are stored lowercased
+      // (invariant), so this is exact rather than merely close.
+      allow list: if isVerifiedUser()
+        && request.auth.token.email in resource.data.members;
+
+      allow write: if false; // Admin SDK only (endpoints + admin CLIs)
+
+      // PERSONAL trust (SPEC §6c). Lifting the sandbox for EVERYONE stays
+      // owner-only through POST /trust. This subcollection is the per-account
+      // opt-in: it un-sandboxes the bundle only in the granting user's own
+      // browser, so the sole session exposed to that bundle's JS is theirs.
+      // Because the decision is self-regarding, any reader may make it for
+      // themselves. It never touches ACL, content, or another user's
+      // rendering. Read is self-only: nobody needs to know who else opted in.
+      match /trust/{uid} {
+        allow read: if isVerifiedUser() && request.auth.uid == uid;
+        allow create, update: if canRead(docData(docId))
+          && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.email == myEmail();
+        allow delete: if isVerifiedUser() && request.auth.uid == uid;
+      }
+
+      // Usage stats (SPEC §4). The AGGREGATE lives on the doc itself, so every
+      // member sees it. The per-person breakdown is editor-gated.
+      match /viewers/{uid} {
+        allow read: if isDocEditor(docData(docId));
+        allow write: if false; // recordView, via the Admin SDK
+      }
+      match /views/{sessionId} {
+        allow read: if isDocEditor(docData(docId));
+        allow write: if false; // recordView, via the Admin SDK
+      }
+
+      // ACL change log — the provenance record for "who granted whom access,
+      // from where" (SPEC §17). Append-only, server-written.
+      match /acl/{entryId} {
+        allow read: if isDocEditor(docData(docId));
+        allow write: if false;
+      }
+
+      match /versions/{versionId} {
+        allow read: if canRead(docData(docId));
+        allow write: if false; // immutable; minted server-side only
+
+        match /annotations/{annId} {
+          allow read: if canRead(docData(docId));
+          allow create: if canRead(docData(docId)) && authoredBySelf();
+          // Readers may only toggle `resolved`. Author, anchor, colour, actor
+          // and createdAt are immutable after creation.
+          allow update: if canRead(docData(docId))
+            && request.resource.data.authorUid == resource.data.authorUid
+            && request.resource.data.authorEmail == resource.data.authorEmail
+            && request.resource.data.actor == resource.data.actor
+            && request.resource.data.anchor == resource.data.anchor
+            && request.resource.data.color == resource.data.color
+            && request.resource.data.createdAt == resource.data.createdAt;
+          allow delete: if isVerifiedUser()
+            && resource.data.authorUid == request.auth.uid;
+
+          match /comments/{commentId} {
+            allow read: if canRead(docData(docId));
+            allow create: if canRead(docData(docId)) && authoredBySelf();
+            allow update: if canRead(docData(docId))
+              && resource.data.authorUid == request.auth.uid
+              && request.resource.data.authorUid == resource.data.authorUid
+              && request.resource.data.authorEmail == resource.data.authorEmail
+              && request.resource.data.actor == resource.data.actor;
+            allow delete: if isVerifiedUser()
+              && resource.data.authorUid == request.auth.uid;
+          }
+        }
+      }
+    }
+
+    // --- Public projection (SPEC §17) -------------------------------------
+    // Firestore rules cannot project fields, so "anonymous may read a public
+    // doc" cannot be an exception carved into the docs/{docId} rule without
+    // handing the world `members`, `viewers`, `ownerEmail` and `stats`.
+    // Instead the server mirrors ONLY the render fields here, and deletes the
+    // mirror the instant visibility returns to private. The rules that protect
+    // everything else stay exactly as they were.
+    match /public/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // --- Folders (SPEC §13) -----------------------------------------------
+    // Sharing containers that nest. Effective `members` is denormalized
+    // server-side (self + every ancestor's grants), so read/list mirror docs.
+    match /folders/{folderId} {
+      allow get: if isMember(resource.data);
+      allow list: if isVerifiedUser()
+        && request.auth.token.email in resource.data.members;
+      allow write: if false; // createFolder / setFolderAccess / organize
+    }
+
+    // --- Teams (SPEC §18) --------------------------------------------------
+    // A team is an access grant, never a principal: documents always have a
+    // person as owner. `team:{id}` entries in a doc's viewers/editors are
+    // expanded server-side into the flat `members` array above, so nothing here
+    // participates in the doc read path.
+    match /teams/{teamId} {
+      allow get: if isVerifiedUser() && myEmail() in resource.data.members;
+      allow list: if isVerifiedUser()
+        && request.auth.token.email in resource.data.members;
+      allow write: if false; // POST /team, POST /team-members
+    }
+
+    // --- Accounts (SPEC §14) ----------------------------------------------
+    // Self-only. The client may set its own profile and preferences; anything
+    // that gates access — verification state, email cooldowns, personal access
+    // tokens — is server-written and unwritable here, so a user cannot mark
+    // their own address verified or clear their own rate limit.
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if isVerifiedUser()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == myEmail()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'photoURL', 'providers',
+          'emailNotifications', 'analyticsOptOut', 'defaultMarking',
+          'createdAt', 'updatedAt'
+        ]);
+      allow update: if isVerifiedUser()
+        && request.auth.uid == uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['uid', 'email', 'verification', 'emailCooldowns', 'createdAt']);
+      allow delete: if false;
+
+      // Personal access tokens (SPEC §19). Metadata is readable by the owner so
+      // the account screen can list and revoke; the hash is never stored here.
+      match /tokens/{tokenId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false; // minted and revoked through POST /tokens
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

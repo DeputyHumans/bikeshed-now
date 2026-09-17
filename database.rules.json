@@ -1,0 +1,87 @@
+// GENERATED — DO NOT EDIT.
+// Rendered by tools/build-policy.mjs from config/access-policy.json.
+// Edit the source and run `npm run build:policy`; CI byte-compares this file.
+// source sha256: 309f8413ff70f3c681cc9cc5f947062d3ecdce61128e827ebc23152f4ee6b40c
+//
+// Realtime Database security rules (SPEC §6b, §16).
+//
+// RTDB carries only ephemeral collaboration state — who is here, where they are
+// looking, and who currently holds the edit lock. None of it is content; all of
+// it disappears when the last tab closes.
+//
+// The read gate is the interesting part. RTDB rules cannot query Firestore, so
+// the authorization data has to live IN RTDB: `presenceAccess/{docId}/{emailKey}`
+// is a server-maintained mirror of each doc's member list, written by the same
+// six code paths that already recompute `members`. It is keyed by EMAIL rather
+// than uid because the server does not learn a grantee's uid until they first
+// sign in, and a share must work the moment it is granted.
+//
+// It fails CLOSED: a missing mirror entry means presence goes dark for that
+// document, never that a stranger can read it. Without this gate, any signed-in
+// account could walk the slug space and learn who reads what — and since a live
+// selection stream reveals what someone is reading sentence by sentence, that is
+// considerably more than a name.
+//
+// emailKey = the lowercased address with every '.' replaced by ','. Dots are
+// illegal in RTDB keys; the four other illegal characters ($ # [ ] /) are
+// rejected by the email validator in config/policy.mjs, so every address the
+// system stores is representable here.
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "status": {
+      "$docId": {
+        ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+
+        "peers": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+            ".validate": "newData.hasChildren(['email', 'mode', 'lastChanged']) && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('mode').isString() && (newData.child('mode').val() == 'view' || newData.child('mode').val() == 'edit') && newData.child('lastChanged').val() == now",
+
+            "name": { ".validate": "newData.isString() && newData.val().length <= 120" },
+
+            "focus": {
+              ".validate": "newData.hasChildren(['exact'])",
+              "elementId": { ".validate": "newData.isString() && newData.val().length <= 200" },
+              "exact": { ".validate": "newData.isString() && newData.val().length <= 600" },
+              "prefix": { ".validate": "newData.isString() && newData.val().length <= 200" },
+              "suffix": { ".validate": "newData.isString() && newData.val().length <= 200" },
+              "start": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+              "end": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+              "$other": { ".validate": false }
+            },
+
+            "viewport": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
+
+            "composing": { ".validate": "newData.isString() && newData.val().length <= 200" },
+
+            "$other": { ".validate": false }
+          }
+        },
+
+        "lock": {
+          ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || data.child('uid').val() == auth.uid || now - data.child('since').val() > 300000) && (!newData.exists() || newData.child('uid').val() == auth.uid)",
+          ".validate": "newData.hasChildren(['uid', 'email', 'since']) && newData.child('uid').val() == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('since').val() == now",
+          "$other": { ".validate": false }
+        },
+
+        "requests": {
+          "$uid": {
+            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && ($uid == auth.uid || !newData.exists())",
+            ".validate": "newData.hasChildren(['email', 'at']) && $uid == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('at').val() == now",
+            "$other": { ".validate": false }
+          }
+        },
+
+        "$other": { ".validate": false }
+      }
+    },
+
+    "presenceAccess": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

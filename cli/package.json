@@ -1,0 +1,13 @@
+{
+  "name": "bikeshed-cli",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Publish and revise documents on a Bikeshed deployment from the terminal.",
+  "bin": { "bikeshed": "./src/index.mjs" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  }
+}

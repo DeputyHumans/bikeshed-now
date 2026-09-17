@@ -1,0 +1,43 @@
+{
+  "name": "bikeshed-now",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Versioned document publishing with highlight-anchored feedback, collaborative review, and an agent-facing publishing API.",
+  "homepage": "https://bikeshed.now",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:policy": "node tools/build-policy.mjs",
+    "check:policy": "node tools/build-policy.mjs --check",
+    "check:brand": "./scripts/check-brand.sh",
+    "check:headers": "node scripts/check-headers.mjs",
+    "check:agents": "node tools/build-agents.mjs --check",
+    "build:agents": "node tools/build-agents.mjs",
+    "setup": "node scripts/setup.mjs",
+    "teardown": "node scripts/teardown.mjs",
+    "publish:doc": "node scripts/publish.mjs",
+    "delete-version": "node scripts/delete-version.mjs",
+    "access": "node scripts/set-access.mjs",
+    "prebuild": "npm run check:policy",
+    "build": "npm run build:app && npm run build:functions",
+    "build:app": "npm --prefix app run build",
+    "build:functions": "npm --prefix functions run build",
+    "install:all": "npm install && npm --prefix app install && npm --prefix functions install && npm --prefix cli install",
+    "emulators": "firebase emulators:start --project demo-bikeshed",
+    "pretest": "npm run check:policy",
+    "test": "npm run test:functions && npm run test:app",
+    "test:functions": "npm --prefix functions test",
+    "test:app": "npm --prefix app test",
+    "test:rules": "node --test rules-tests/",
+    "test:rules:emulated": "firebase emulators:exec --only firestore,database --project demo-bikeshed \"npm run test:rules\"",
+    "verify": "npm run check:policy && npm run build && npm run test && npm run check:brand && npm run check:headers"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase-admin": "^12.7.0",
+    "mime": "^4.0.4"
+  }
+}
