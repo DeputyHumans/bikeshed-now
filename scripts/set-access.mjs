@@ -34,6 +34,24 @@ import { syncPresenceAccess } from "./lib/presence.mjs";
 import { FieldValue, getDb, getProjectId } from "./lib/firebase.mjs";
 
 async function main() {
+const USAGE = `set-access.mjs — grant or revoke access to one document
+
+  node scripts/set-access.mjs --doc <docId> [options]
+
+  --doc <docId>        required
+  --add <list>         comma-separated emails and team:<id> grants
+  --remove <list>      comma-separated emails and team:<id> grants
+  --role viewer|editor which grant list to edit (default: viewer)
+  --list               print the current grants and effective members, then exit
+  --account <email>    console identity, required for a real run
+  --project <id>       Firebase project id (default: .firebaserc)
+  --dry-run            print the resulting ACL, write nothing, need no
+                       credentials
+  --help
+
+Membership is recomputed by the same code the server uses, including the parent
+folder's members, and all four fields are written. The owner is never removable.`;
+
   const { values } = parse({
     doc: { type: "string" },
     add: { type: "string" },
@@ -43,7 +61,7 @@ async function main() {
     account: { type: "string" },
     project: { type: "string" },
     "dry-run": { type: "boolean", default: false },
-  });
+  }, { usage: USAGE });
 
   const dry = values["dry-run"];
   const docId = values.doc;

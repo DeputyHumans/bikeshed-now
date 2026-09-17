@@ -45,6 +45,38 @@ async function countOf(ref) {
   return (await ref.count().get()).data().count;
 }
 
+const USAGE = `delete-version.mjs — withdraw ONE version of a document, guarded
+
+  node scripts/delete-version.mjs --doc <id> --list
+  node scripts/delete-version.mjs --doc <id> --version <vN> [--repoint <vN>] --dry-run
+  node scripts/delete-version.mjs --doc <id> --version <vN> --yes --account <email>
+
+  --doc <id>             required
+  --version <vN>         the version to withdraw
+  --repoint <vN>         where currentVersion should point afterwards
+  --list                 print the document's versions and exit
+  --yes                  required for a real run
+  --account <email>      console identity, required for a real run
+  --project <id>         Firebase project id (default: .firebaserc)
+  --bucket <name>        content bucket (default: config/deploy.json)
+  --dry-run              preview; performs no writes
+  --help
+
+  Refusal overrides, each corresponding to one of the seven refusals. Every one
+  of them removes a guard, so pass them one at a time and read what it says:
+  --allow-non-current    withdraw a version that is not currentVersion
+  --allow-annotations    withdraw a version that carries annotations
+  --drop-draft           discard a draft based on this version
+  --keep-stats           leave aggregate stats untouched
+  --keep-views           leave view sessions untouched
+
+ORDER IS LOAD-BEARING: currentVersion is repointed first, in a transaction that
+aborts if anything published mid-run, then the Storage bytes, then the record.
+
+Unlike every other script here, --dry-run READS Firestore and Storage and so
+needs credentials. A destructive preview that cannot show you what it would
+destroy is worthless.`;
+
 async function main() {
   const { values } = parse({
     doc: { type: "string" },
@@ -61,7 +93,7 @@ async function main() {
     "drop-draft": { type: "boolean", default: false },
     "keep-stats": { type: "boolean", default: false },
     "keep-views": { type: "boolean", default: false },
-  });
+  }, { usage: USAGE });
 
   const docId = values.doc;
   const dry = values["dry-run"];

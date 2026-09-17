@@ -37,6 +37,26 @@ const COLLECTIONS = ["docs", "folders", "teams", "tokens", "public", "users"];
 const RTDB_PATHS = ["status", "presenceAccess"];
 
 async function main() {
+const USAGE = `teardown.mjs — delete this deployment's DATA, guarded
+
+  node scripts/teardown.mjs --yes --account <email> [options]
+
+  --yes                required. Without it nothing is deleted
+  --account <email>    console identity, required for a real run
+  --functions          also delete the deployed Cloud Functions
+  --project <id>       Firebase project id (default: .firebaserc)
+  --bucket <name>      content bucket (default: config/deploy.json)
+  --dry-run            list what would be deleted, delete nothing, need no
+                       credentials
+  --help
+
+Deletes documents, folders, teams, tokens, stored bundles and both RTDB paths.
+NEVER deletes the project itself.
+
+This is an OPERATOR tool with Admin credentials. It is not the \`bikeshed\` CLI,
+which is scoped to one user's own documents. Run --dry-run first, and read the
+project id it prints before you drop --dry-run.`;
+
   const { values } = parse({
     yes: { type: "boolean", default: false },
     functions: { type: "boolean", default: false },
@@ -44,7 +64,7 @@ async function main() {
     project: { type: "string" },
     bucket: { type: "string" },
     "dry-run": { type: "boolean", default: false },
-  });
+  }, { usage: USAGE });
 
   const dry = values["dry-run"];
   const account = values.account;

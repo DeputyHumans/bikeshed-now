@@ -20,13 +20,32 @@ import { spawnSync } from "node:child_process";
 import { parse, fail } from "./lib/args.mjs";
 import { REPO_ROOT, getBucketName, getProjectId } from "./lib/firebase.mjs";
 
+const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempotently
+
+  node scripts/setup.mjs --account <email> [options]
+
+  --account <email>    console identity, threaded into every gcloud and firebase
+                       call. REQUIRED for a real run; never defaulted, because a
+                       tool that picks up whatever identity happens to be active
+                       is how the wrong project gets modified
+  --project <id>       Firebase project id (default: .firebaserc)
+  --bucket <name>      content bucket (default: config/deploy.json, then a
+                       derived \${projectId}-content)
+  --location <region>  default us-central1
+  --dry-run            print the intended commands, run nothing, need no
+                       credentials
+  --help
+
+Every step is check-then-act or naturally idempotent, so re-running converges.
+Start with --dry-run. See docs/operations.md.`;
+
 const { values } = parse({
   account: { type: "string" },
   project: { type: "string" },
   bucket: { type: "string" },
   location: { type: "string", default: "us-central1" },
   "dry-run": { type: "boolean", default: false },
-});
+}, { usage: USAGE });
 
 const DRY = values["dry-run"];
 const LOCATION = values.location;
@@ -201,4 +220,11 @@ function main() {
   console.log(`\nsetup complete.${DRY ? " (dry-run)" : ""}`);
 }
 
-main();
+// Every other script here ends `main().catch(fail)`. setup is the FIRST one an
+// operator runs, and the likeliest to hit a missing .firebaserc, so it is the
+// one that must not answer with a stack trace.
+try {
+  main();
+} catch (err) {
+  fail(err.message || String(err));
+}

@@ -65,6 +65,30 @@ async function loadRenderer() {
 }
 
 async function main() {
+const USAGE = `publish.mjs — publish a bundle directory as a new version
+
+  node scripts/publish.mjs --doc <docId> [options]
+
+  --doc <docId>        required
+  --dir <path>         bundle directory (default: content/<docId>/bundle)
+  --entry <file>       entry file (default: manifest, else index.html/index.md)
+  --title <text>       document title (default: manifest)
+  --owner <email>      owning account (default: manifest)
+  --viewers <list>     comma-separated emails and team:<id> grants
+  --label <text>       version label
+  --account <email>    console identity, required for a real run
+  --project <id>       Firebase project id (default: .firebaserc)
+  --bucket <name>      content bucket (default: config/deploy.json)
+  --dry-run            print what would be written, write nothing, need no
+                       credentials
+  --help
+
+IDEMPOTENT by content hash: re-running with unchanged bytes prints
+"already published as vN" and writes nothing, which is what makes this safe in a
+loop, in CI, or in front of an agent that cannot remember what it already did.
+
+This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
+
   const { values } = parse({
     doc: { type: "string" },
     dir: { type: "string" },
@@ -77,7 +101,7 @@ async function main() {
     project: { type: "string" },
     bucket: { type: "string" },
     "dry-run": { type: "boolean", default: false },
-  });
+  }, { usage: USAGE });
 
   const dry = values["dry-run"];
   const docId = values.doc;
