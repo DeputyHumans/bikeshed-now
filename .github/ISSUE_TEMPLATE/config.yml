@@ -1,0 +1,4 @@
+# No fake URL here: this project has no repository URL committed, so a
+# contact_link would have to point somewhere invented. Security reporting goes
+# to security@spesivtsev.com — see SECURITY.md, which both issue templates name.
+blank_issues_enabled: true

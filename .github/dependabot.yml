@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Dependency updates, grouped so review stays possible (SPEC §12).
+#
+# Grouped rather than one PR per package: four npm ecosystems at
+# `open-pull-requests-limit: 10` each would be forty pull requests a week
+# against a codebase with a dependency budget of seventeen. A grouped update is
+# one review with one CI run, which is a review that actually happens.
+#
+# Three markdown packages are EXCLUDED from grouping and from automatic updates
+# entirely. `markdown-it`, `turndown` and `turndown-plugin-gfm` decide the bytes
+# of every Markdown document, and those bytes are part of the content hash — a
+# patch bump re-renders every document and mints a new version on the next save.
+# That is a migration with a runbook (docs/operations.md), not a dependency
+# update, which is why all three are pinned to exact versions.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    groups:
+      dev-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /app
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    groups:
+      app:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /functions
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: markdown-it
+      - dependency-name: turndown
+      - dependency-name: turndown-plugin-gfm
+    groups:
+      functions:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    groups:
+      actions:
+        patterns: ["*"]

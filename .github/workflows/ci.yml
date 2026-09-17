@@ -1,0 +1,157 @@
+# SPDX-License-Identifier: Apache-2.0
+# The verification table in CONTRIBUTING.md, run on every push (SPEC §12).
+#
+# Job boundaries follow failure MODES, not convenience, so a red check tells you
+# what kind of thing broke before you open it: `build` means the code is wrong,
+# `rules` means the security boundary moved, `guards` means something about the
+# project's shape is wrong — a brand leak, a missing header, a sample that
+# stopped demonstrating what it is for, a dependency with the wrong licence.
+#
+# Every job is credential-free. Nothing here can reach a real backend:
+# `demo-bikeshed` is an emulator-only project id.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Reproducible installs. `npm ci` fails outright if a lockfile is stale, which
+  # is the behaviour we want from CI and not from a developer machine.
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_AUDIT: "false"
+
+jobs:
+  build:
+    name: typecheck, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            functions/package-lock.json
+
+      # `npm ci` rather than `npm install`: it fails outright on a stale
+      # lockfile, which is what CI is for. `cli/` is absent on purpose — it has
+      # zero dependencies, so there is nothing to install and no lockfile to
+      # commit.
+      - name: Install
+        run: |
+          npm ci
+          npm --prefix app ci
+          npm --prefix functions ci
+
+      # Runs FIRST. Every generated artifact is committed, so a change to the
+      # identity policy that was not re-rendered has to fail before anything
+      # else runs — otherwise the tests pass against rules nobody deployed.
+      - name: Generated artifacts are up to date
+        run: |
+          npm run check:policy
+          npm run check:agents
+          git diff --exit-code
+
+      - name: Typecheck the app
+        run: npm --prefix app run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Functions tests
+        run: npm --prefix functions test
+
+      - name: App tests and coverage
+        run: npm --prefix app test
+
+      - name: CLI tests
+        run: npm --prefix cli test
+
+      # The dry runs are the assertion that firebase-admin is initialized
+      # lazily. If an import ever moves to module scope this fails here, rather
+      # than the day an operator tries to preview a teardown without gcloud.
+      - name: Operator scripts run without credentials
+        run: |
+          node scripts/setup.mjs --account you@example.com --project demo-bikeshed --dry-run
+          node scripts/teardown.mjs --yes --account you@example.com --project demo-bikeshed --dry-run
+          node scripts/publish.mjs --doc bikeshed-tour --project demo-bikeshed --dry-run
+          node scripts/publish.mjs --doc markdown-reference --project demo-bikeshed --dry-run
+          node scripts/set-access.mjs --doc bikeshed-tour --add a@example.com --project demo-bikeshed --dry-run
+
+  rules:
+    name: security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The emulators are a Java process, not a Node one.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Install the Firebase CLI
+        run: npm install --no-save firebase-tools
+
+      - name: Rules tests against the emulators
+        run: npx firebase emulators:exec --only firestore,database --project demo-bikeshed "npm run test:rules"
+
+  guards:
+    name: brand, headers, content, licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The brand guard scans git HISTORY — author and committer identities,
+          # not just messages — so a shallow clone would silently check nothing.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            functions/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm --prefix app ci
+          npm --prefix functions ci
+
+      - name: Brand purity
+        run: npm run check:brand
+
+      - name: SPDX headers
+        run: npm run check:headers
+
+      - name: Samples still demonstrate what they are for
+        run: npm run check:content
+
+      - name: Dependency licences
+        run: npm run check:licenses
