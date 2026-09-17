@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A tour of Bikeshed</title>
+<!--
+  A deliberately SCRIPTED sample, and the counterpart to
+  design-review-shortener, which has no scripts at all.
+
+  Together the two prove both halves of the trust condition: the viewer prompts
+  for trust only when a document is sandboxed AND its DOM actually contains
+  script tags. This one prompts; that one never does.
+
+  It is also the worked example for docs/authoring-bundles.md, and its subject
+  is this repository — which makes it structurally incapable of leaking
+  anything, and means every claim in it is checkable against the source.
+
+  Properties worth copying:
+    - Every section carries an id. Comments anchor to the nearest id-bearing
+      ancestor, so this is what makes feedback survive an edit.
+    - One file. No external URLs, no raster images, no base64. Every byte of a
+      multi-file bundle is a separate authenticated request.
+    - Inline SVG for every diagram, so it scales, prints, and recolours.
+    - #dot-nav is left EMPTY for the script to fill. In edit mode the editor
+      outlines it and says so, because otherwise it looks like missing content.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #1a1a26;
+    --muted: #55526b;
+    --line: rgba(26, 26, 38, 0.14);
+    --surface: #f4f3f8;
+    --accent: #4b3dd1;
+    --accent-soft: #edeafb;
+    --mark: #b5257b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 400 17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+  }
+  .deck { max-width: 46rem; margin: 0 auto; padding: 56px 24px 120px; }
+  section { margin: 0 0 4.5rem; scroll-margin-top: 32px; }
+  h1 { font-size: 2.4rem; line-height: 1.15; letter-spacing: -0.024em; margin: 0 0 0.35em; }
+  h2 { font-size: 1.5rem; line-height: 1.22; letter-spacing: -0.014em; margin: 0 0 0.5em; }
+  h3 { font-size: 1.08rem; margin: 1.8em 0 0.4em; }
+  p, ul, ol, table, pre, blockquote, figure { margin: 0 0 1.15em; }
+  .lede { font-size: 1.2rem; color: var(--muted); }
+  .eyebrow { font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 650; margin: 0 0 0.6em; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; background: var(--surface); border: 1px solid rgba(26,26,38,0.1); border-radius: 4px; padding: 0.1em 0.35em; }
+  pre { background: var(--surface); border: 1px solid rgba(26,26,38,0.1); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; border: 0; padding: 0; }
+  blockquote { border-left: 3px solid var(--line); padding-left: 1.1em; color: var(--muted); }
+  figure { margin-inline: 0; }
+  figcaption { font-size: 0.86rem; color: var(--muted); margin-top: 0.5em; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  th, td { border: 1px solid var(--line); padding: 0.5em 0.7em; text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 650; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 0.6em 0.9em; margin: 0 0 1.15em; background: #fff; }
+  details[open] { background: var(--surface); }
+  summary { cursor: pointer; font-weight: 600; }
+  details details { margin: 1em 0 0.2em; background: #fff; }
+  .callout { border-left: 3px solid var(--mark); padding: 0.4em 0 0.4em 1.1em; margin: 0 0 1.3em; }
+  .callout p:last-child { margin-bottom: 0; }
+  .highlighted { border: 1px solid var(--mark); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255,255,255,0.55); }
+
+  /* The dot navigation is FILLED BY SCRIPT. It is empty in the markup on
+     purpose, which is exactly the case the editor's placeholder marking
+     exists for. */
+  #dot-nav { position: fixed; right: 18px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 9px; z-index: 5; }
+  #dot-nav a { width: 9px; height: 9px; border-radius: 50%; background: var(--line); transition: background 160ms, transform 160ms; }
+  #dot-nav a:hover, #dot-nav a[aria-current="true"] { background: var(--accent); transform: scale(1.35); }
+
+  .reveal { opacity: 0; transform: translateY(12px); transition: opacity 420ms ease-out, transform 420ms ease-out; }
+  .reveal.seen { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    #dot-nav a { transition: none; }
+  }
+  @media (max-width: 900px) { #dot-nav { display: none; } }
+  @media (max-width: 600px) { .deck { padding: 32px 18px 72px; } h1 { font-size: 1.9rem; } }
+
+  @media print {
+    #dot-nav { display: none; }
+    .reveal { opacity: 1 !important; transform: none !important; }
+    details { break-inside: avoid; }
+    details:not([open]) > *:not(summary) { display: block; }
+    section { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+    .deck { padding: 0; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Filled in by this document's own script. See the note in the stylesheet. -->
+<nav id="dot-nav" aria-label="Sections"></nav>
+
+<div class="deck">
+
+<section id="s1-what" class="reveal">
+  <p class="eyebrow">A tour</p>
+  <h1>Bikeshed</h1>
+  <p class="lede">
+    Publish a document. Collect comments anchored to the exact passage they are
+    about. Revise, and publish again.
+  </p>
+  <p>
+    This document is the tour, and it is also a demonstration: it is a
+    self-contained HTML bundle, it carries its own scripts, and it was published
+    the same way anything else here is. Everything it claims is checkable
+    against the source it describes.
+  </p>
+  <p>
+    <span class="highlighted">Select this sentence</span> and a button appears.
+    That is the whole interaction.
+  </p>
+</section>
+
+<section id="s2-name" class="reveal">
+  <h2>The name</h2>
+  <p>
+    Parkinson's law of triviality: the bike shed is the thing everyone has an
+    opinion about. For a tool whose entire purpose is collecting other people's
+    opinions on a document, the name is the joke and the joke is the product.
+  </p>
+  <p>
+    The canonical bikeshedding argument is what colour to paint it, which is why
+    the interface has exactly one accent colour and it is one deliberate,
+    arguable choice.
+  </p>
+  <figure>
+    <svg viewBox="0 0 240 120" width="100%" height="120" role="img" aria-labelledby="s2-title">
+      <title id="s2-title">A shed with three ruled lines, the middle one highlighted</title>
+      <defs>
+        <linearGradient id="g-roof" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#4b3dd1"/>
+          <stop offset="1" stop-color="#3c30b0"/>
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M60 60 120 22l60 38" stroke="url(#g-roof)" stroke-width="7"/>
+        <path d="M72 64v42M168 64v42" stroke="#1a1a26" stroke-width="7"/>
+        <path d="M90 76h60M90 100h60" stroke="#1a1a26" stroke-width="5"/>
+        <path d="M90 88h38" stroke="#b5257b" stroke-width="5"/>
+      </g>
+    </svg>
+    <figcaption>The mark: a document sheltered under a shed roof, with one passage picked out.</figcaption>
+  </figure>
+</section>
+
+<section id="s3-loop" class="reveal">
+  <h2>The loop</h2>
+  <p>
+    Four steps, and the third is the one that makes the other three worth doing.
+  </p>
+  <figure>
+    <svg viewBox="0 0 640 140" width="100%" height="140" role="img" aria-labelledby="s3-title">
+      <title id="s3-title">Publish, read, comment, revise — a cycle</title>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10z" fill="#55526b"/>
+        </marker>
+      </defs>
+      <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" text-anchor="middle">
+        <g fill="#edeafb" stroke="#4b3dd1" stroke-width="1.5">
+          <rect x="8" y="34" width="120" height="46" rx="8"/>
+          <rect x="176" y="34" width="120" height="46" rx="8"/>
+          <rect x="344" y="34" width="120" height="46" rx="8"/>
+          <rect x="512" y="34" width="120" height="46" rx="8"/>
+        </g>
+        <g fill="#1a1a26">
+          <text x="68" y="62">publish</text>
+          <text x="236" y="62">read</text>
+          <text x="404" y="62">comment</text>
+          <text x="572" y="62">revise</text>
+        </g>
+        <g stroke="#55526b" stroke-width="1.5" marker-end="url(#arrow)" fill="none">
+          <path d="M132 57h38"/>
+          <path d="M300 57h38"/>
+          <path d="M468 57h38"/>
+          <path d="M572 84v20H68V84"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption>A comment is attached to a passage, so the revision knows what it is about.</figcaption>
+  </figure>
+  <details>
+    <summary>Why anchoring changes the loop</summary>
+    <p>
+      A comment that says "this paragraph overstates the case" is only useful
+      while you both remember which paragraph. Anchored to the text, it is still
+      useful in a month, in a different version, and to somebody who was not in
+      the conversation.
+    </p>
+    <p>
+      It is also what makes the agent surface worth having: an agent reading
+      feedback gets the passage with the comment, so it does not have to guess.
+    </p>
+  </details>
+</section>
+
+<section id="s4-anchors" class="reveal">
+  <h2>How an anchor survives an edit</h2>
+  <p>
+    Two selectors, and the pairing is the point. A <strong>text quote</strong>
+    stores the exact words with a little context either side. A
+    <strong>text position</strong> stores character offsets.
+  </p>
+  <table>
+    <thead><tr><th>What changed</th><th>Quote</th><th>Position</th></tr></thead>
+    <tbody>
+      <tr><td>Text moved (something added above)</td><td>still finds it</td><td>now wrong</td></tr>
+      <tr><td>Text reworded</td><td>no longer matches</td><td>still close</td></tr>
+      <tr><td>Section deleted</td><td>gone</td><td>gone</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Quote first, position as the fallback: a position that has drifted points
+    confidently at the wrong words, which is worse than admitting it cannot
+    find them.
+  </p>
+  <div class="callout">
+    <p>
+      <strong>Both are scoped to the nearest ancestor with an <code>id</code>.</strong>
+      That is what makes them survive at all. Measured against the whole
+      document, every offset shifts when anything above changes, and the quote
+      search has the entire document to get lost in.
+    </p>
+  </div>
+</section>
+
+<section id="s5-sections" class="reveal">
+  <h2>Put an id on every section</h2>
+  <p>
+    It is the single most consequential thing you can do to a document you
+    intend people to comment on.
+  </p>
+<pre><code>&lt;section id="rollout-plan"&gt;
+  &lt;h2&gt;Rollout plan&lt;/h2&gt;
+  …
+&lt;/section&gt;</code></pre>
+  <p>
+    Markdown gets this free: every heading is wrapped in a section whose id is a
+    slug of its text. If you are writing Markdown, just use headings.
+  </p>
+  <details>
+    <summary>What happens without ids</summary>
+    <p>
+      Every highlight anchors to <code>&lt;body&gt;</code>. Add a paragraph at
+      the top and every offset in the document shifts at once, so a comment on
+      the second paragraph starts resolving against the ninth.
+    </p>
+    <details>
+      <summary>And why this example is nested</summary>
+      <p>
+        To demonstrate that rehydration opens <em>every</em> collapsed ancestor,
+        not just the nearest one. Comment on this sentence, reload, and both
+        disclosures open themselves.
+      </p>
+    </details>
+  </details>
+</section>
+
+<section id="s6-versions" class="reveal">
+  <h2>Versions are immutable</h2>
+  <p>
+    Publishing mints <code>v1</code>, <code>v2</code>, and so on. A version is
+    never rewritten. Comments belong to the version they were written about, so
+    a revision never orphans them and an old version keeps its discussion.
+  </p>
+  <p>
+    Publishing identical content is a <strong>no-op</strong>. The bundle is
+    hashed, and identical bytes produce no new version — which is what makes it
+    safe to publish in a loop, from CI, or after a change you are not sure you
+    made.
+  </p>
+  <figure>
+    <svg viewBox="0 0 620 130" width="100%" height="130" role="img" aria-labelledby="s6-title">
+      <title id="s6-title">A chain of immutable versions, each carrying its own comments</title>
+      <defs>
+        <linearGradient id="g-version" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="#f4f3f8"/>
+        </linearGradient>
+      </defs>
+      <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" text-anchor="middle">
+        <g fill="url(#g-version)" stroke="#55526b" stroke-width="1.4">
+          <rect x="16" y="20" width="104" height="44" rx="8"/>
+          <rect x="176" y="20" width="104" height="44" rx="8"/>
+          <rect x="336" y="20" width="104" height="44" rx="8"/>
+          <rect x="496" y="20" width="104" height="44" rx="8" stroke="#4b3dd1" stroke-width="2"/>
+        </g>
+        <g fill="#1a1a26">
+          <text x="68" y="47">v1</text><text x="228" y="47">v2</text>
+          <text x="388" y="47">v3</text><text x="548" y="47">v4</text>
+        </g>
+        <g stroke="#55526b" stroke-width="1.4" marker-end="url(#arrow)" fill="none">
+          <path d="M124 42h46"/><path d="M284 42h46"/><path d="M444 42h46"/>
+        </g>
+        <g fill="#b5257b" font-size="11">
+          <text x="68" y="90">3 comments</text><text x="228" y="90">1 comment</text>
+          <text x="388" y="90">resolved</text>
+        </g>
+        <text x="548" y="90" fill="#4b3dd1" font-size="11">current</text>
+        <text x="308" y="116" fill="#55526b" font-size="11">each version keeps its own discussion</text>
+      </g>
+    </svg>
+    <figcaption>A revision never orphans a comment: the old version keeps it, and the new one starts clean.</figcaption>
+  </figure>
+  <details>
+    <summary>The hash, precisely</summary>
+<pre><code>files sorted by path
+per file: uint32(len path) uint32(len bytes) path bytes
+sha256 over the whole stream</code></pre>
+    <p>
+      The length prefixes make the framing injective: without them, a file
+      called <code>a b</code> containing <code>c</code> and one called
+      <code>a</code> containing <code>&nbsp;bc</code> would hash identically.
+    </p>
+  </details>
+</section>
+
+<section id="s7-editing" class="reveal">
+  <h2>Editing edits the real document</h2>
+  <p>
+    The editor works on the authored markup itself, not on a normalized model of
+    it. A schema editor would decide what a document is allowed to contain, and
+    a deck with inline SVG, a folded tree and a scroll observer is exactly the
+    kind of document such a decision destroys.
+  </p>
+  <p>
+    While you edit, the document's own scripts are switched off — unconditionally,
+    whatever its trust setting says. Otherwise a script's generated DOM would be
+    saved as static markup while the generator stayed in place, and every later
+    render would append another copy.
+  </p>
+  <details>
+    <summary>Which is why empty containers get outlined</summary>
+    <p>
+      With scripts off, a container a script fills at read time renders as blank
+      space. The editor outlines it and names it, so it reads as "this is filled
+      in later" rather than "the tool lost my content".
+    </p>
+    <p>
+      The outline is an <em>attribute</em> and a stylesheet, never an inserted
+      node — so nothing it draws can end up inside your document.
+    </p>
+  </details>
+</section>
+
+<section id="s8-trust" class="reveal">
+  <h2>Scripts, and who vouches for them</h2>
+  <p>
+    A document renders in an iframe on this origin, which is what lets comments
+    be attached to it without injecting anything into it. That also means an
+    untrusted document's scripts would run somewhere they could read your
+    session, so they do not run at all until somebody vouches for them.
+  </p>
+  <table>
+    <thead><tr><th>Scope</th><th>Who may</th><th>Affects</th></tr></thead>
+    <tbody>
+      <tr><td>Just me</td><td>any reader</td><td>only their own browser</td></tr>
+      <tr><td>Everyone</td><td>the owner</td><td>every reader</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The split follows who bears the risk. Trusting a document for yourself
+    exposes only your own session, so it is yours to decide. Trusting it for
+    everyone is a decision made on other people's behalf.
+  </p>
+  <figure>
+    <svg viewBox="0 0 600 170" width="100%" height="170" role="img" aria-labelledby="s8-title">
+      <title id="s8-title">When the trust prompt appears, and when it does not</title>
+      <defs>
+        <linearGradient id="g-warn" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fcf0da"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+      </defs>
+      <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" text-anchor="middle">
+        <rect x="200" y="8" width="200" height="38" rx="8" fill="#edeafb" stroke="#4b3dd1" stroke-width="1.5"/>
+        <text x="300" y="32" fill="#1a1a26">sandboxed for this reader?</text>
+        <rect x="24" y="72" width="180" height="38" rx="8" fill="#fff" stroke="#55526b" stroke-width="1.3"/>
+        <text x="114" y="96" fill="#55526b">no — nothing to ask</text>
+        <rect x="336" y="72" width="220" height="38" rx="8" fill="#edeafb" stroke="#4b3dd1" stroke-width="1.5"/>
+        <text x="446" y="96" fill="#1a1a26">yes — does it contain script?</text>
+        <rect x="248" y="126" width="140" height="34" rx="8" fill="#fff" stroke="#55526b" stroke-width="1.3"/>
+        <text x="318" y="148" fill="#55526b">no — silent</text>
+        <rect x="412" y="126" width="164" height="34" rx="8" fill="url(#g-warn)" stroke="#8a5200" stroke-width="1.5"/>
+        <text x="494" y="148" fill="#8a5200">yes — ask once</text>
+        <g stroke="#55526b" stroke-width="1.3" marker-end="url(#arrow)" fill="none">
+          <path d="M248 48 132 68"/><path d="M352 48l84 20"/>
+          <path d="M414 112l-70 12"/><path d="M470 112v10"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption>Both conditions, because a prompt that changes nothing teaches people to click through the one that matters.</figcaption>
+  </figure>
+  <div class="callout">
+    <p>
+      You will have seen the prompt for this document, because it contains
+      scripts and arrived sandboxed. A document with no scripts never prompts —
+      asking about something that would change nothing teaches people to click
+      through the prompt that matters.
+    </p>
+  </div>
+</section>
+
+<section id="s9-sharing" class="reveal">
+  <h2>Sharing</h2>
+  <p>
+    Share with a person by address, or with a team. Either way it reaches them
+    the moment you share it, whether or not they have an account: the moment
+    they sign in with that address, it is waiting.
+  </p>
+  <figure>
+    <svg viewBox="0 0 560 170" width="100%" height="170" role="img" aria-labelledby="s9-title">
+      <title id="s9-title">Folder grants flow down to the documents inside</title>
+      <defs>
+        <linearGradient id="g-folder" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#edeafb"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+      </defs>
+      <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" text-anchor="middle">
+        <rect x="200" y="10" width="160" height="40" rx="8" fill="url(#g-folder)" stroke="#4b3dd1" stroke-width="1.5"/>
+        <text x="280" y="35" fill="#1a1a26">Folder · shared with 6</text>
+        <g fill="#fff" stroke="#55526b" stroke-width="1.3">
+          <rect x="40" y="110" width="140" height="40" rx="8"/>
+          <rect x="210" y="110" width="140" height="40" rx="8"/>
+          <rect x="380" y="110" width="140" height="40" rx="8"/>
+        </g>
+        <g fill="#1a1a26">
+          <text x="110" y="135">document</text>
+          <text x="280" y="135">document</text>
+          <text x="450" y="135">document</text>
+        </g>
+        <g stroke="#55526b" stroke-width="1.4" marker-end="url(#arrow)" fill="none">
+          <path d="M240 52 118 106"/>
+          <path d="M280 52v54"/>
+          <path d="M320 52l122 54"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption>Inheritance is computed when you share, not when somebody reads. One query answers "what can I see".</figcaption>
+  </figure>
+  <details>
+    <summary>What a team grant means</summary>
+    <p>
+      "The design team can read this" is stored as exactly that, and expanded
+      into the six people it names. Adding somebody to the team grants them
+      everything the team holds, immediately — which is the same silence an
+      invitation email exists to break, so one is sent.
+    </p>
+  </details>
+</section>
+
+<section id="s10-public" class="reveal">
+  <h2>Public, unlisted, private</h2>
+  <p>
+    Private is the default and means what it says. Unlisted is readable by
+    anybody holding the link and is not indexed. Public is readable by anybody
+    and is listed.
+  </p>
+  <p>
+    <strong>Reading without an account never becomes writing without one.</strong>
+    A document whose owner turned on open editing widens who may edit to anybody
+    <em>with</em> an account. It never widens to anybody at all.
+  </p>
+  <details>
+    <summary>What a reader without an account can see</summary>
+    <p>
+      The document, and nothing else. Not who else can read it, not who
+      commented, not how long anybody spent reading. Publishing a document must
+      not publish the people who reviewed it.
+    </p>
+  </details>
+</section>
+
+<section id="s11-presence" class="reveal">
+  <h2>Other people, live</h2>
+  <p>
+    Open a document somebody else is in and you see where they are: their
+    cursor, their selection, their place in the document, and whether they are
+    typing a reply.
+  </p>
+  <p>
+    One colour per person, derived from their address rather than assigned, so
+    the same person is the same colour tomorrow and in a different document. The
+    colour is never the only signal — every caret carries a name.
+  </p>
+  <figure>
+    <svg viewBox="0 0 600 150" width="100%" height="150" role="img" aria-labelledby="s11-title">
+      <title id="s11-title">Peer cursors drawn over the document, never inside it</title>
+      <defs>
+        <linearGradient id="g-doc" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="#f4f3f8"/>
+        </linearGradient>
+      </defs>
+      <rect x="20" y="12" width="560" height="120" rx="10" fill="url(#g-doc)" stroke="#55526b" stroke-width="1.3"/>
+      <g fill="rgba(26,26,38,0.16)">
+        <rect x="46" y="34" width="330" height="8" rx="4"/>
+        <rect x="46" y="54" width="420" height="8" rx="4"/>
+        <rect x="46" y="74" width="270" height="8" rx="4"/>
+        <rect x="46" y="94" width="380" height="8" rx="4"/>
+      </g>
+      <g opacity="0.2">
+        <rect x="150" y="50" width="150" height="16" rx="3" fill="#4b3dd1"/>
+        <rect x="46" y="90" width="120" height="16" rx="3" fill="#18653f"/>
+      </g>
+      <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#fff">
+        <rect x="298" y="46" width="2.5" height="24" fill="#4b3dd1"/>
+        <rect x="300" y="34" width="34" height="14" rx="3" fill="#4b3dd1"/>
+        <text x="317" y="44" text-anchor="middle">Ana</text>
+        <rect x="164" y="86" width="2.5" height="24" fill="#18653f"/>
+        <rect x="166" y="74" width="28" height="14" rx="3" fill="#18653f"/>
+        <text x="180" y="84" text-anchor="middle">Bo</text>
+      </g>
+    </svg>
+    <figcaption>An overlay, not markup: peer cursors never enter the document, so they cannot land in your undo stack or in a saved version.</figcaption>
+  </figure>
+  <details>
+    <summary>Why only one person can edit at a time</summary>
+    <p>
+      There is no merge engine here, and showing live cursors without a lock
+      would actively invite the one thing last-writer-wins handles badly: two
+      people typing in the same paragraph.
+    </p>
+    <p>
+      So editing has a single holder. Everybody else watches the draft update,
+      sees the editor's cursor, and can still highlight and comment. Review does
+      not stop because somebody is typing, and "ask to edit" is one tap and is
+      asked once.
+    </p>
+  </details>
+</section>
+
+<section id="s12-provenance" class="reveal">
+  <h2>Who did what</h2>
+  <p>
+    Every version, comment, highlight and access change records who made it and
+    through what: the browser, the command line, an agent. The channel is
+    derived from the credential presented, so it cannot be claimed.
+  </p>
+  <p>
+    A client may also name itself and its model. Those are stored and shown
+    <em>as self-reported</em>, with no badge implying they were checked — because
+    they were not, and a badge that implies verification it does not have is
+    worse than no badge at all.
+  </p>
+  <details>
+    <summary>And why agent reads are counted separately</summary>
+    <p>
+      An agent fetching a document forty times would turn "how many people read
+      this, and for how long" into noise — and reading <em>time</em> is not a
+      concept that applies to a machine fetch at all. Automated reads get their
+      own counter and never touch the human numbers.
+    </p>
+  </details>
+</section>
+
+<section id="s13-agents" class="reveal">
+  <h2>Agents publish here too</h2>
+  <p>
+    A personal access token, six MCP tools, and a command-line client. A token
+    carries exactly its owner's permissions: it can see what they can see and
+    nothing more, and there are no service accounts to widen that.
+  </p>
+<pre><code>bikeshed publish proposal.md --title "Storage migration"
+bikeshed comments storage-migration
+bikeshed update storage-migration proposal.md</code></pre>
+  <p>
+    The tool that earns the whole surface is <code>get_comments</code>: it
+    returns each comment <em>with the passage it is anchored to</em>, so an
+    agent can revise without fetching the document and diffing it.
+  </p>
+</section>
+
+<section id="s14-exports" class="reveal">
+  <h2>Taking it with you</h2>
+  <p>
+    Print or save as PDF, export a section as PNG, pull a diagram out as SVG, or
+    download the document as the file it is. A Markdown document gives you back
+    the Markdown.
+  </p>
+  <p>
+    An owner can set a marking — a corner label and a per-page footer — that is
+    stamped on every export. It is their policy, resolved when they published,
+    not the exporter's preference.
+  </p>
+  <details>
+    <summary>Why the marking cannot be styled away</summary>
+    <p>
+      The stamp's styles are set inline with <code>!important</code>, which
+      outranks any stylesheet rule a document could carry, and the print frame
+      runs with no scripts, so a document has nothing with which to change them.
+      Every hiding trick is covered — including making the box visible but its
+      text invisible, which is the half people forget.
+    </p>
+  </details>
+</section>
+
+<section id="s15-not" class="reveal">
+  <h2>What this is not</h2>
+  <p>
+    Stated plainly, because a list of decisions is more useful than a list of
+    features:
+  </p>
+  <ul>
+    <li><strong>Not a word processor.</strong> It edits documents you authored
+      elsewhere, in the markup you authored them in.</li>
+    <li><strong>Not collaborative editing.</strong> Shared awareness, yes. A
+      merge engine, no — and a single-writer lock is what makes that honest.</li>
+    <li><strong>Not a wiki.</strong> No search index, no cross-linking, no
+      hierarchy beyond folders.</li>
+    <li><strong>Not an analytics product.</strong> Reading time for the owner of
+      a document; nothing that identifies an anonymous reader, ever.</li>
+    <li><strong>Not deletable.</strong> Documents are permanent by design. A
+      single version can be withdrawn by whoever runs the deployment, through a
+      guarded tool with seven refusals.</li>
+  </ul>
+  <div class="callout">
+    <p>
+      If something here seems wrong, highlight it and say so. That is the entire
+      product, and this document is the obvious place to start.
+    </p>
+  </div>
+</section>
+
+</div>
+
+<script>
+/*
+  One inline IIFE. Two behaviours, both progressive: with scripts blocked, this
+  document is entirely readable — the sections are all there, the navigation is
+  simply absent, and nothing is revealed-on-scroll because nothing was hidden by
+  markup in the first place.
+
+  This is also what makes the file a useful sample: it is the case the trust
+  prompt exists for, and #dot-nav is the case the editor's placeholder marking
+  exists for.
+*/
+(function () {
+  "use strict";
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section[id]"));
+  var nav = document.getElementById("dot-nav");
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Build the dot navigation from the sections that actually exist, so adding
+  // or removing one in the editor keeps it correct with no second list.
+  if (nav) {
+    sections.forEach(function (section) {
+      var heading = section.querySelector("h1, h2");
+      var link = document.createElement("a");
+      link.href = "#" + section.id;
+      link.setAttribute("aria-label", heading ? heading.textContent.trim() : section.id);
+      nav.appendChild(link);
+    });
+  }
+
+  if (!("IntersectionObserver" in window)) {
+    // No observer: show everything rather than leaving it faded out. A
+    // progressive enhancement that hides content when it fails is a bug.
+    sections.forEach(function (s) { s.classList.add("seen"); });
+    return;
+  }
+
+  var reveal = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("seen");
+        reveal.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  var current = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting || !nav) return;
+      var index = sections.indexOf(entry.target);
+      Array.prototype.forEach.call(nav.children, function (dot, i) {
+        if (i === index) dot.setAttribute("aria-current", "true");
+        else dot.removeAttribute("aria-current");
+      });
+    });
+  }, { threshold: 0.5 });
+
+  sections.forEach(function (section) {
+    if (reduced) section.classList.add("seen");
+    else reveal.observe(section);
+    current.observe(section);
+  });
+})();
+</script>
+</body>
+</html>

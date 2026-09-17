@@ -1,0 +1,8 @@
+{
+  "title": "Design review: a link shortener",
+  "slug": "design-review-shortener",
+  "entry": "index.html",
+  "owner": "owner@example.com",
+  "viewers": ["reviewer@example.com"],
+  "label": "v1"
+}

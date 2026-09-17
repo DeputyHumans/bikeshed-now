@@ -1,0 +1,8 @@
+{
+  "title": "A tour of Bikeshed",
+  "slug": "bikeshed-tour",
+  "entry": "index.html",
+  "owner": "owner@example.com",
+  "viewers": ["reviewer@example.com"],
+  "label": "v1"
+}

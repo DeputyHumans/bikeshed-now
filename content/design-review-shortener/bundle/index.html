@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design review: a link shortener</title>
+<!--
+  A deliberately SCRIPT-FREE sample.
+
+  It is here to demonstrate three things at once:
+
+    1. The real use case. A design document is the canonical artifact people
+       want anchored feedback on — more so than a deck, which is usually
+       presented rather than argued with.
+    2. That navigation, folding and layout need no JavaScript. The nav below is
+       plain anchors; there is no script in this file at all, and there is a CI
+       check that keeps it that way.
+    3. Half of the trust condition. This document is sandboxed when uploaded
+       through a browser, exactly like any other — and because it contains no
+       script tags, the viewer never prompts anybody to trust it. The scripted
+       sample is the other half.
+
+  Every section carries an id, because comments anchor to the nearest ancestor
+  with one. That is the single most important thing to copy from this file.
+-->
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font: 400 17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #1a1a26;
+    background: #ffffff;
+  }
+  .page { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 40px; max-width: 1040px; margin: 0 auto; padding: 48px 24px 96px; }
+  nav { position: sticky; top: 24px; align-self: start; font-size: 14px; line-height: 1.5; }
+  nav ol { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  nav li { counter-increment: s; margin: 0 0 6px; }
+  nav a { display: block; color: #55526b; text-decoration: none; padding: 2px 0; }
+  nav a::before { content: counter(s) ". "; color: #a5a2b8; }
+  nav a:hover { color: #3c30b0; }
+  main { max-width: 44rem; }
+  section { margin: 0 0 3rem; scroll-margin-top: 24px; }
+  h1 { font-size: 2.1rem; line-height: 1.2; letter-spacing: -0.021em; margin: 0 0 0.3em; }
+  h2 { font-size: 1.45rem; line-height: 1.25; letter-spacing: -0.012em; margin: 0 0 0.6em; }
+  h3 { font-size: 1.1rem; margin: 1.6em 0 0.4em; }
+  p, ul, ol, table, pre, blockquote { margin: 0 0 1.1em; }
+  .lede { font-size: 1.15rem; color: #55526b; }
+  .meta { font-size: 0.86rem; color: #55526b; margin: 0 0 2.5rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; background: #f4f3f8; border: 1px solid rgba(26,26,38,0.1); border-radius: 4px; padding: 0.1em 0.35em; }
+  pre { background: #f4f3f8; border: 1px solid rgba(26,26,38,0.1); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; border: 0; padding: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+  th, td { border: 1px solid rgba(26,26,38,0.14); padding: 0.5em 0.7em; text-align: left; vertical-align: top; }
+  th { background: #f4f3f8; font-weight: 650; }
+  blockquote { border-left: 3px solid rgba(26,26,38,0.18); padding-left: 1em; color: #55526b; }
+  .open-question { border-left: 3px solid #b5257b; padding: 0.2em 0 0.2em 1em; margin: 0 0 1.4em; }
+  .open-question p:last-child { margin-bottom: 0; }
+  .decided { color: #18653f; font-weight: 600; }
+  .undecided { color: #8a5200; font-weight: 600; }
+  @media (max-width: 800px) {
+    .page { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 32px 20px 64px; }
+    nav { position: static; margin-bottom: 2.5rem; }
+  }
+  @media print {
+    .page { display: block; padding: 0; }
+    nav { display: none; }
+    section { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- Static navigation. No JavaScript: id-anchored links do the whole job, and
+     they keep working in a downloaded copy and in a PDF's outline. -->
+<nav aria-label="Contents">
+  <ol>
+    <li><a href="#s-summary">Summary</a></li>
+    <li><a href="#s-problem">The problem</a></li>
+    <li><a href="#s-goals">Goals and non-goals</a></li>
+    <li><a href="#s-shape">Shape of the system</a></li>
+    <li><a href="#s-ids">Choosing an identifier</a></li>
+    <li><a href="#s-storage">Storage</a></li>
+    <li><a href="#s-redirect">The redirect path</a></li>
+    <li><a href="#s-abuse">Abuse</a></li>
+    <li><a href="#s-questions">Open questions</a></li>
+    <li><a href="#s-plan">Plan</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="s-summary">
+  <h1>A link shortener</h1>
+  <p class="meta">Design review · draft for comment</p>
+  <p class="lede">
+    We want short, stable, shareable links that resolve fast and cannot be
+    guessed. This document proposes the smallest system that does that, and is
+    explicit about the five decisions it has not made.
+  </p>
+  <p>
+    Nothing here is novel. The interesting parts of a link shortener are not the
+    shortening — they are what happens at the tail: what an identifier reveals,
+    what happens when one is deleted, and what the redirect costs at the
+    ninety-ninth percentile.
+  </p>
+</section>
+
+<section id="s-problem">
+  <h2>The problem</h2>
+  <p>
+    Links we share today are long, they encode structure that changes, and they
+    break when the structure does. Three concrete failures, all of them real:
+  </p>
+  <ul>
+    <li>A link pasted into a document last quarter now resolves to a 404,
+      because the path it encoded was reorganized.</li>
+    <li>A link read aloud in a meeting cannot be typed by anybody hearing it.</li>
+    <li>A link forwarded outside the company discloses an internal hostname and
+      a directory layout, neither of which we meant to publish.</li>
+  </ul>
+  <p>
+    The third is the one that makes this worth building rather than tolerating.
+  </p>
+</section>
+
+<section id="s-goals">
+  <h2>Goals and non-goals</h2>
+  <h3>Goals</h3>
+  <ul>
+    <li>A link of at most twenty characters, typable and readable aloud.</li>
+    <li>Stable: once created, it resolves to the same target for as long as it
+      exists, or it stops existing. It never silently points somewhere else.</li>
+    <li>Fast: the redirect is served from cache in the common case.</li>
+    <li>Revocable: the person who created a link can withdraw it.</li>
+  </ul>
+  <h3>Non-goals</h3>
+  <ul>
+    <li><strong>Analytics.</strong> Counting clicks means recording who clicked,
+      and that is a different product with a different set of obligations.</li>
+    <li><strong>Custom domains.</strong> One host. Two is an operational
+      surface, not a feature.</li>
+    <li><strong>Editable targets.</strong> Repointing a live link is how a link
+      somebody trusted becomes a link to something else.</li>
+  </ul>
+</section>
+
+<section id="s-shape">
+  <h2>Shape of the system</h2>
+  <p>
+    Three pieces, and deliberately no more.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Piece</th><th>Does</th><th>Does not</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Creator</td>
+        <td>Takes a target URL and an optional expiry. Returns an identifier.</td>
+        <td>Validate that the target exists. That is a race we would lose.</td>
+      </tr>
+      <tr>
+        <td>Store</td>
+        <td>Maps identifier to target, with a creation time and an owner.</td>
+        <td>Keep history. A link has one target, forever or not at all.</td>
+      </tr>
+      <tr>
+        <td>Redirector</td>
+        <td>Reads the map and issues a redirect.</td>
+        <td>Log the request. See non-goals.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s-ids">
+  <h2>Choosing an identifier</h2>
+  <p>
+    The identifier is the whole design compressed into one decision, because it
+    determines both the length of a link and what somebody can learn by trying
+    other links.
+  </p>
+  <h3>Sequential</h3>
+  <p>
+    Shortest possible, and enumerable. Anybody with one link can walk the whole
+    corpus by incrementing. That is disqualifying for a system whose whole
+    justification is that links currently leak too much.
+  </p>
+  <h3>Hash of the target</h3>
+  <p>
+    Deduplicates for free: the same target always shortens to the same link. It
+    also means an identifier <em>is</em> a guessable function of the target, so
+    anybody who can guess a URL can confirm somebody shortened it.
+  </p>
+  <h3>Random</h3>
+  <p>
+    Eight characters from a 32-symbol alphabet is forty bits — a trillion
+    possibilities, so guessing is not a strategy — and it reveals nothing about
+    the target or about when the link was made. The alphabet excludes
+    <code>0</code>, <code>1</code>, <code>i</code> and <code>l</code>, which are
+    the characters people mistype when reading a link aloud.
+  </p>
+  <p>
+    <span class="decided">Proposed:</span> random, eight characters, Crockford
+    base32.
+  </p>
+</section>
+
+<section id="s-storage">
+  <h2>Storage</h2>
+  <p>
+    A single table, keyed by identifier:
+  </p>
+<pre><code>id        text primary key
+target    text not null
+owner     text not null
+createdAt timestamptz not null
+expiresAt timestamptz
+</code></pre>
+  <p>
+    There is no <code>updatedAt</code>, because there is no update. A link is
+    created and eventually deleted; it is never repointed. That single
+    constraint removes the entire class of "the link I shared now goes
+    somewhere else" problems, and it is why the table has no history.
+  </p>
+  <p>
+    Expiry is a column rather than a job. The redirector checks it on read, and
+    a periodic sweep reclaims rows. Deleting on a schedule alone would leave a
+    window where an expired link still resolves.
+  </p>
+</section>
+
+<section id="s-redirect">
+  <h2>The redirect path</h2>
+  <p>
+    This is the only path that has to be fast, and it is four steps:
+  </p>
+  <ol>
+    <li>Look the identifier up in an in-process cache.</li>
+    <li>On a miss, read the row.</li>
+    <li>If it is missing or expired, return 404. Not 410: distinguishing "never
+      existed" from "existed and is gone" tells a prober which identifiers were
+      real.</li>
+    <li>Otherwise issue a <code>302</code>.</li>
+  </ol>
+  <blockquote>
+    <p>
+      <strong>Why 302 and not 301.</strong> A permanent redirect is cached by
+      the browser indefinitely, which means revocation does not work: somebody
+      who followed a link once keeps following it after it is withdrawn. A
+      temporary redirect with a short cache lifetime gives us revocation in
+      seconds at the cost of a little more traffic.
+    </p>
+  </blockquote>
+</section>
+
+<section id="s-abuse">
+  <h2>Abuse</h2>
+  <p>
+    A shortener is a laundering tool: it takes a URL somebody would not click
+    and makes it look like ours. Three mitigations, in the order they are worth
+    doing:
+  </p>
+  <ol>
+    <li><strong>Attribution.</strong> Every link records who made it. Most abuse
+      stops being interesting once it is not anonymous.</li>
+    <li><strong>An interstitial for off-domain targets.</strong> Showing where a
+      link goes before following it removes the disguise, which is the only
+      thing the attacker wanted.</li>
+    <li><strong>A denylist.</strong> Last, because it is the one that needs
+      maintaining forever and catches the least.</li>
+  </ol>
+</section>
+
+<section id="s-questions">
+  <h2>Open questions</h2>
+  <p>
+    Five statements that are contestable. Each is written as a claim rather than
+    a question, so disagreeing with one is a matter of highlighting it and
+    saying why.
+  </p>
+
+  <div class="open-question">
+    <p><span class="undecided">1.</span> <strong>Eight characters is the right
+      length.</strong> Six would be shorter and still gives a billion
+      possibilities, which is plenty against a rate-limited prober.</p>
+  </div>
+
+  <div class="open-question">
+    <p><span class="undecided">2.</span> <strong>Links should never
+      expire by default.</strong> A link that quietly stops working is worse
+      than a long one, and defaults decide almost everything.</p>
+  </div>
+
+  <div class="open-question">
+    <p><span class="undecided">3.</span> <strong>The interstitial should be
+      shown for every off-domain target, with no way to skip it.</strong> A
+      remembered "do not show this again" is a setting an attacker can rely on.</p>
+  </div>
+
+  <div class="open-question">
+    <p><span class="undecided">4.</span> <strong>Not counting clicks is worth
+      the complaints.</strong> Somebody will ask for it within a month, and the
+      answer has to be the same answer in a year.</p>
+  </div>
+
+  <div class="open-question">
+    <p><span class="undecided">5.</span> <strong>Deleting a link should free its
+      identifier for reuse.</strong> The alternative leaks the total number ever
+      created, which is a business fact, not a technical one.</p>
+  </div>
+</section>
+
+<section id="s-plan">
+  <h2>Plan</h2>
+  <ol>
+    <li>The table, the creator and the redirector. No cache, no interstitial.</li>
+    <li>The interstitial, because it is the mitigation that matters most.</li>
+    <li>The cache, once there is enough traffic to measure the difference.</li>
+    <li>The expiry sweep.</li>
+  </ol>
+  <p>
+    Steps one and two are a week. Three and four are worth doing only after
+    somebody has complained about latency or storage, and not before.
+  </p>
+</section>
+
+</main>
+</div>
+</body>
+</html>
