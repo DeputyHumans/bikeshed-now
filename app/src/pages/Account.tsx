@@ -2,6 +2,7 @@
 // The account screen: preferences, teams, and access tokens (SPEC §14, §15, §18, §19).
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { setAnalyticsOptOut } from "../analytics";
 import { formatRelative, listMyTeams, saveUserProfile, watchMyTokens, watchUser } from "../firestore";
@@ -143,6 +144,15 @@ export function Account() {
             </span>
           </label>
         </div>
+        {/* The per-device cookie choice is a DIFFERENT question from the
+            account preference above, and somebody who already answered the
+            banner has no other way back to it. Both live here so neither is a
+            dead end. */}
+        <p className="field-hint" style={{ marginTop: "var(--s-3)" }}>
+          Cookie choices are per device and live on the{" "}
+          <Link to="/privacy">privacy policy</Link> page. See also the{" "}
+          <Link to="/terms">terms of service</Link>.
+        </p>
       </section>
 
       <section style={{ marginTop: "var(--s-5)" }}>
