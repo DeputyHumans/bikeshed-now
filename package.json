@@ -31,7 +31,7 @@
     "test": "npm run test:functions && npm run test:app",
     "test:functions": "npm --prefix functions test",
     "test:app": "npm --prefix app test",
-    "test:rules": "node --test rules-tests/",
+    "test:rules": "node --test \"rules-tests/*.test.mjs\"",
     "test:rules:emulated": "firebase emulators:exec --only firestore,database --project demo-bikeshed \"npm run test:rules\"",
     "verify": "npm run check:policy && npm run build && npm run test && npm run check:brand && npm run check:headers"
   },

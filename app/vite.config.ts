@@ -6,6 +6,7 @@
 import { defineConfig } from "vitest/config";
 import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import { viteProxyKeys } from "../scripts/lib/endpoints.mjs";
 
 /**
@@ -23,8 +24,20 @@ import { viteProxyKeys } from "../scripts/lib/endpoints.mjs";
  * is a PREFIX match in Vite, so it would send folder deep-links to the emulator
  * and break them silently. Do not "simplify" this back to string keys.
  */
+/**
+ * The Hosting emulator, which itself rewrites to the Functions emulator, so the
+ * proxied paths behave exactly as they will in production.
+ *
+ * The port is read from firebase.json rather than repeated here — that file is
+ * the one place emulator ports are configured, and a second copy would drift the
+ * first time somebody changed one.
+ */
+const firebaseConfig = JSON.parse(
+  readFileSync(new URL("../firebase.json", import.meta.url), "utf8"),
+) as { emulators?: { hosting?: { port?: number } } };
+const HOSTING_PORT = firebaseConfig.emulators?.hosting?.port ?? 5050;
 const FUNCTIONS_ORIGIN =
-  process.env.BIKESHED_FUNCTIONS_ORIGIN || "http://127.0.0.1:5000";
+  process.env.BIKESHED_FUNCTIONS_ORIGIN || `http://127.0.0.1:${HOSTING_PORT}`;
 
 function devProxy(): Record<string, ProxyOptions> {
   const target: ProxyOptions = { target: FUNCTIONS_ORIGIN, changeOrigin: true };

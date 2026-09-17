@@ -1,0 +1,553 @@
+// SPDX-License-Identifier: Apache-2.0
+// The Firestore rules are the real boundary; this is what proves it (SPEC §1, §5, §17).
+
+import { after, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from "@firebase/rules-unit-testing";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  deleteDoc,
+} from "firebase/firestore";
+
+import {
+  renderFirestoreRules,
+} from "../config/policy.mjs";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+/**
+ * Emulator ports come from firebase.json, the one place they are configured.
+ *
+ * They are not the Firebase defaults: 8080 and 5000 are both commonly occupied
+ * on a developer machine (5000 by macOS AirPlay), and an emulator that refuses
+ * to start is a worse first impression than a port number nobody recognizes.
+ */
+const EMULATORS = JSON.parse(
+  readFileSync(join(ROOT, "firebase.json"), "utf8"),
+).emulators;
+
+const TEMPLATE = readFileSync(
+  join(ROOT, "config", "templates", "firestore.rules.tmpl"),
+  "utf8",
+);
+
+const OWNER = { uid: "u-owner", email: "owner@example.com" };
+const EDITOR = { uid: "u-editor", email: "ed@example.com" };
+const VIEWER = { uid: "u-viewer", email: "viewer@example.com" };
+const STRANGER = { uid: "u-stranger", email: "stranger@example.com" };
+const OUTSIDER = { uid: "u-outsider", email: "someone@evil.example.com" };
+
+/** A verified principal. */
+const verified = (env, p) =>
+  env.authenticatedContext(p.uid, { email: p.email, email_verified: true });
+
+/** Verified in the token's own opinion, but with no address at all. */
+const noEmail = (env) =>
+  env.authenticatedContext("u-noemail", { email_verified: true });
+
+const unverified = (env, p) =>
+  env.authenticatedContext(p.uid, { email: p.email, email_verified: false });
+
+function actorFor(p) {
+  return { uid: p.uid, email: p.email, channel: "web" };
+}
+
+async function seed(env, mutate) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await mutate(ctx.firestore());
+  });
+}
+
+describe("firestore rules", () => {
+  let env;
+
+  before(async () => {
+    env = await initializeTestEnvironment({
+      projectId: "demo-bikeshed",
+      firestore: {
+        // Rendered IN MEMORY from the same pure functions that produce the
+        // committed artifact, so the suite can never test a stale file.
+        rules: renderFirestoreRules({ allowedEmailDomains: [] }, TEMPLATE, "test"),
+        host: "127.0.0.1",
+        port: EMULATORS.firestore.port,
+      },
+    });
+  });
+
+  after(async () => {
+    await env?.cleanup();
+  });
+
+  before(async () => {
+    await env.clearFirestore();
+    await seed(env, async (db) => {
+      await setDoc(doc(db, "docs/private-doc"), {
+        docId: "private-doc",
+        title: "Private",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        currentVersion: "v1",
+        viewers: [VIEWER.email],
+        editors: [EDITOR.email],
+        members: [OWNER.email, VIEWER.email, EDITOR.email],
+        editorMembers: [OWNER.email, EDITOR.email],
+        visibility: "private",
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/private-doc/versions/v1"), { versionId: "v1" });
+      await setDoc(doc(db, "docs/private-doc/versions/v1/annotations/a1"), {
+        annId: "a1",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: actorFor(VIEWER),
+        anchor: { elementId: "s1", exact: "text", prefix: "", suffix: "", start: 0, end: 4 },
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/private-doc/viewers/u-viewer"), { uid: VIEWER.uid, views: 1 });
+      await setDoc(doc(db, "docs/private-doc/views/s1"), { sessionId: "s1", uid: VIEWER.uid });
+      await setDoc(doc(db, "docs/private-doc/acl/e1"), { at: new Date(), added: [] });
+
+      // A document whose members entry is stored with the wrong case.
+      await setDoc(doc(db, "docs/mixedcase-doc"), {
+        docId: "mixedcase-doc",
+        ownerUid: null,
+        ownerEmail: "Owner@Example.com",
+        members: ["Viewer@Example.com"],
+        visibility: "private",
+        createdAt: new Date(),
+      });
+
+      await setDoc(doc(db, "docs/public-doc"), {
+        docId: "public-doc",
+        title: "Public",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        currentVersion: "v1",
+        viewers: [],
+        editors: [],
+        members: [OWNER.email],
+        editorMembers: [OWNER.email],
+        visibility: "public",
+        publicEdit: true,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/public-doc/versions/v1"), { versionId: "v1" });
+      await setDoc(doc(db, "public/public-doc"), {
+        docId: "public-doc",
+        title: "Public",
+        visibility: "public",
+      });
+
+      await setDoc(doc(db, "folders/f1"), {
+        folderId: "f1",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        members: [OWNER.email, VIEWER.email],
+        editorMembers: [OWNER.email],
+        createdAt: new Date(),
+      });
+
+      await setDoc(doc(db, "teams/t1"), {
+        teamId: "t1",
+        name: "Design",
+        ownerEmail: OWNER.email,
+        admins: [OWNER.email],
+        members: [OWNER.email, EDITOR.email],
+        createdAt: new Date(),
+      });
+
+      await setDoc(doc(db, "users/u-owner"), {
+        uid: OWNER.uid,
+        email: OWNER.email,
+        displayName: "Owner",
+        verification: { hash: "secret", email: OWNER.email },
+        emailCooldowns: { "private-doc": 1 },
+      });
+      await setDoc(doc(db, "users/u-owner/tokens/tok1"), { tokenId: "tok1", name: "cli" });
+      await setDoc(doc(db, "tokens/tok1"), { tokenId: "tok1", uid: OWNER.uid, hash: "h" });
+    });
+  });
+
+  // --- The identity gate ---------------------------------------------------
+
+  it("an unauthenticated caller reads nothing", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, "docs/private-doc")));
+    await assertFails(getDoc(doc(db, "docs/public-doc")));
+    await assertFails(getDoc(doc(db, "docs/public-doc/versions/v1")));
+  });
+
+  it("an unverified address reads nothing, even as the owner", async () => {
+    const db = unverified(env, OWNER).firestore();
+    await assertFails(getDoc(doc(db, "docs/private-doc")));
+  });
+
+  it("a token claiming verification with NO email claim is denied everywhere", async () => {
+    // `email is string` is a real conjunct. Without it this principal reaches
+    // the member checks and denies only by accident.
+    const db = noEmail(env).firestore();
+    await assertFails(getDoc(doc(db, "docs/private-doc")));
+    await assertFails(getDoc(doc(db, "folders/f1")));
+    await assertFails(getDoc(doc(db, "teams/t1")));
+  });
+
+  it("a verified account on ANY domain who is a member can read", async () => {
+    // The capability this rebuild adds: there is no domain gate.
+    const db = verified(env, VIEWER).firestore();
+    await assertSucceeds(getDoc(doc(db, "docs/private-doc")));
+  });
+
+  it("a verified non-member cannot read a private document", async () => {
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(getDoc(doc(db, "docs/private-doc")));
+  });
+
+  // --- The list rule -------------------------------------------------------
+
+  it("the workspace query succeeds for a member", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertSucceeds(
+      getDocs(query(collection(db, "docs"), where("members", "array-contains", VIEWER.email))),
+    );
+  });
+
+  it("a stranger cannot query for SOMEONE ELSE'S membership", async () => {
+    // Proves the list rule compares against the caller's own token email rather
+    // than trusting the filter value. A domain gate would have masked this
+    // entirely, because the attacker would have been refused earlier.
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(
+      getDocs(query(collection(db, "docs"), where("members", "array-contains", OWNER.email))),
+    );
+  });
+
+  it("an unfiltered listing of every document is refused", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(getDocs(collection(db, "docs")));
+  });
+
+  it("a mixed-case members entry grants neither get nor list", async () => {
+    // Members are stored lowercased as an invariant, and the list rule cannot
+    // call .lower() because it must be statically provable from the query. This
+    // is what that invariant is protecting.
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(getDoc(doc(db, "docs/mixedcase-doc")));
+    await assertFails(
+      getDocs(
+        query(collection(db, "docs"), where("members", "array-contains", "Viewer@Example.com")),
+      ),
+    );
+  });
+
+  // --- Server-only writes --------------------------------------------------
+
+  it("clients never write documents, versions, folders, teams or the projection", async () => {
+    const db = verified(env, OWNER).firestore();
+    await assertFails(setDoc(doc(db, "docs/private-doc"), { title: "hijacked" }));
+    await assertFails(updateDoc(doc(db, "docs/private-doc"), { members: [STRANGER.email] }));
+    await assertFails(setDoc(doc(db, "docs/private-doc/versions/v2"), { versionId: "v2" }));
+    await assertFails(setDoc(doc(db, "folders/f1"), { name: "hijacked" }));
+    await assertFails(setDoc(doc(db, "teams/t1"), { name: "hijacked" }));
+    await assertFails(setDoc(doc(db, "public/public-doc"), { title: "hijacked" }));
+    await assertFails(setDoc(doc(db, "docs/private-doc/acl/e2"), { at: new Date() }));
+  });
+
+  it("a brand-new collection is denied by default", async () => {
+    // Guards against a rules suite going vacuous: if the catch-all ever
+    // loosened, this is what notices.
+    const db = verified(env, OWNER).firestore();
+    await assertFails(getDoc(doc(db, "somethingNew/x")));
+    await assertFails(setDoc(doc(db, "somethingNew/x"), { a: 1 }));
+  });
+
+  // --- Annotations and comments -------------------------------------------
+
+  it("a member creates an annotation authored by themselves", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "docs/private-doc/versions/v1/annotations/new1"), {
+        annId: "new1",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: actorFor(VIEWER),
+        anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it("an annotation cannot be authored as somebody else", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(
+      setDoc(doc(db, "docs/private-doc/versions/v1/annotations/forged"), {
+        annId: "forged",
+        authorUid: OWNER.uid,
+        authorEmail: OWNER.email,
+        actor: actorFor(OWNER),
+        anchor: {},
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it("a client write cannot claim an automation channel", async () => {
+    // A direct client write IS the web channel by definition; automation goes
+    // through the Admin SDK, which bypasses these rules. Pinning it here is what
+    // makes `channel` server-derived rather than self-reported (SPEC §17).
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(
+      setDoc(doc(db, "docs/private-doc/versions/v1/annotations/faked"), {
+        annId: "faked",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: { uid: VIEWER.uid, email: VIEWER.email, channel: "mcp" },
+        anchor: {},
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it("a reader may toggle resolved and nothing else", async () => {
+    const db = verified(env, EDITOR).firestore();
+    const ref = doc(db, "docs/private-doc/versions/v1/annotations/a1");
+    await assertSucceeds(updateDoc(ref, { resolved: true }));
+    await assertFails(updateDoc(ref, { authorEmail: EDITOR.email }));
+    await assertFails(updateDoc(ref, { anchor: { elementId: "moved" } }));
+    await assertFails(updateDoc(ref, { actor: actorFor(EDITOR) }));
+  });
+
+  it("only the author deletes their annotation", async () => {
+    const mine = verified(env, VIEWER).firestore();
+    const theirs = verified(env, EDITOR).firestore();
+    await assertFails(deleteDoc(doc(theirs, "docs/private-doc/versions/v1/annotations/a1")));
+    await assertSucceeds(deleteDoc(doc(mine, "docs/private-doc/versions/v1/annotations/new1")));
+  });
+
+  it("a non-member cannot read or write feedback", async () => {
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(getDoc(doc(db, "docs/private-doc/versions/v1/annotations/a1")));
+    await assertFails(
+      setDoc(doc(db, "docs/private-doc/versions/v1/annotations/x"), { annId: "x" }),
+    );
+  });
+
+  // --- Public documents ----------------------------------------------------
+
+  it("anyone reads the public projection, and nobody writes it", async () => {
+    const anon = env.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anon, "public/public-doc")));
+    await assertFails(setDoc(doc(anon, "public/public-doc"), { title: "x" }));
+  });
+
+  it("anonymous cannot read the SOURCE document of a public one", async () => {
+    // Firestore rules cannot project fields, so the source record still carries
+    // members, ownerEmail and stats. That is the whole reason the projection
+    // exists.
+    const anon = env.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(anon, "docs/public-doc")));
+  });
+
+  it("a signed-in non-member reads a public document's versions and feedback", async () => {
+    const db = verified(env, STRANGER).firestore();
+    await assertSucceeds(getDoc(doc(db, "docs/public-doc/versions/v1")));
+    await assertSucceeds(
+      getDocs(collection(db, "docs/public-doc/versions/v1/annotations")),
+    );
+  });
+
+  it("a signed-in non-member still cannot read the public document's own record", async () => {
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(getDoc(doc(db, "docs/public-doc")));
+  });
+
+  it("open editing does not expose per-person reading history", async () => {
+    // publicEdit widens WHO may edit. It must not widen who may see who read.
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(getDocs(collection(db, "docs/public-doc/viewers")));
+    await assertFails(getDocs(collection(db, "docs/public-doc/views")));
+  });
+
+  // --- Statistics ----------------------------------------------------------
+
+  it("per-person statistics are readable by editors and nobody else", async () => {
+    const editor = verified(env, EDITOR).firestore();
+    await assertSucceeds(getDoc(doc(editor, "docs/private-doc/viewers/u-viewer")));
+    await assertSucceeds(getDoc(doc(editor, "docs/private-doc/views/s1")));
+
+    const viewer = verified(env, VIEWER).firestore();
+    await assertFails(getDoc(doc(viewer, "docs/private-doc/viewers/u-viewer")));
+    await assertFails(getDoc(doc(viewer, "docs/private-doc/views/s1")));
+  });
+
+  it("nobody writes statistics from a client", async () => {
+    const db = verified(env, OWNER).firestore();
+    await assertFails(setDoc(doc(db, "docs/private-doc/viewers/u-owner"), { views: 999 }));
+    await assertFails(setDoc(doc(db, "docs/private-doc/views/s2"), { ms: 999 }));
+  });
+
+  it("the ACL change log is editor-readable and never client-written", async () => {
+    const editor = verified(env, EDITOR).firestore();
+    await assertSucceeds(getDoc(doc(editor, "docs/private-doc/acl/e1")));
+    const viewer = verified(env, VIEWER).firestore();
+    await assertFails(getDoc(doc(viewer, "docs/private-doc/acl/e1")));
+  });
+
+  // --- Personal trust ------------------------------------------------------
+
+  it("a member grants personal trust to themselves only", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "docs/private-doc/trust/u-viewer"), {
+        uid: VIEWER.uid,
+        email: VIEWER.email,
+        trustedAt: new Date(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db, "docs/private-doc/trust/u-owner"), {
+        uid: OWNER.uid,
+        email: OWNER.email,
+        trustedAt: new Date(),
+      }),
+    );
+  });
+
+  it("personal trust is readable only by the account that granted it", async () => {
+    const other = verified(env, EDITOR).firestore();
+    await assertFails(getDoc(doc(other, "docs/private-doc/trust/u-viewer")));
+  });
+
+  it("a non-member cannot grant themselves trust on a document they cannot read", async () => {
+    const db = verified(env, STRANGER).firestore();
+    await assertFails(
+      setDoc(doc(db, "docs/private-doc/trust/u-stranger"), {
+        uid: STRANGER.uid,
+        email: STRANGER.email,
+        trustedAt: new Date(),
+      }),
+    );
+  });
+
+  // --- Folders and teams ---------------------------------------------------
+
+  it("folder reads mirror document reads", async () => {
+    await assertSucceeds(getDoc(doc(verified(env, VIEWER).firestore(), "folders/f1")));
+    await assertFails(getDoc(doc(verified(env, STRANGER).firestore(), "folders/f1")));
+  });
+
+  it("a team is visible to its members and to nobody else", async () => {
+    await assertSucceeds(getDoc(doc(verified(env, EDITOR).firestore(), "teams/t1")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "teams/t1")));
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(verified(env, EDITOR).firestore(), "teams"),
+          where("members", "array-contains", EDITOR.email),
+        ),
+      ),
+    );
+  });
+
+  // --- Accounts ------------------------------------------------------------
+
+  it("a user record is self-only", async () => {
+    await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "users/u-owner")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner")));
+  });
+
+  it("a user cannot mark their own address verified or clear their own cooldown", async () => {
+    const db = verified(env, OWNER).firestore();
+    await assertFails(updateDoc(doc(db, "users/u-owner"), { verification: null }));
+    await assertFails(updateDoc(doc(db, "users/u-owner"), { emailCooldowns: {} }));
+    await assertFails(updateDoc(doc(db, "users/u-owner"), { email: "other@example.com" }));
+  });
+
+  it("a user may set their own profile and preferences", async () => {
+    const db = verified(env, OWNER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, "users/u-owner"), {
+        displayName: "New Name",
+        emailNotifications: false,
+        analyticsOptOut: true,
+      }),
+    );
+  });
+
+  it("token metadata is readable by its owner, and the secret store by nobody", async () => {
+    await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok1")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner/tokens/tok1")));
+    await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "tokens/tok1")));
+    await assertFails(
+      setDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok2"), { name: "x" }),
+    );
+  });
+});
+
+describe("firestore rules with a domain allowlist", () => {
+  let env;
+
+  before(async () => {
+    env = await initializeTestEnvironment({
+      projectId: "demo-bikeshed-allowlist",
+      firestore: {
+        // Rendered in memory from the SAME pure renderer, so allowlist mode is
+        // tested without a temp file or a second committed fixture that could
+        // itself drift.
+        rules: renderFirestoreRules(
+          { allowedEmailDomains: ["example.com"] },
+          TEMPLATE,
+          "test",
+        ),
+        host: "127.0.0.1",
+        port: EMULATORS.firestore.port,
+      },
+    });
+    await env.clearFirestore();
+    await seed(env, async (db) => {
+      await setDoc(doc(db, "docs/d1"), {
+        docId: "d1",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        members: [OWNER.email, OUTSIDER.email],
+        visibility: "private",
+        createdAt: new Date(),
+      });
+    });
+  });
+
+  after(async () => {
+    await env?.cleanup();
+  });
+
+  it("an allowed domain still reads normally", async () => {
+    await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "docs/d1")));
+  });
+
+  it("a subdomain of an allowed domain is NOT allowed", async () => {
+    // The matcher is anchored. An unanchored pattern would accept
+    // someone@evil.example.com, and membership alone would then let them in.
+    await assertFails(getDoc(doc(verified(env, OUTSIDER).firestore(), "docs/d1")));
+  });
+});

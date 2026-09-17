@@ -37,6 +37,12 @@
             ".write": "auth != null && auth.uid == $uid && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
             ".validate": "newData.hasChildren(['email', 'mode', 'lastChanged']) && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('mode').isString() && (newData.child('mode').val() == 'view' || newData.child('mode').val() == 'edit') && newData.child('lastChanged').val() == now",
 
+            // Every child needs its own rule: `$other` below matches ANY key
+            // not explicitly named, so omitting one here rejects the whole
+            // write rather than merely leaving it unvalidated.
+            "email": { ".validate": "newData.isString() && newData.val().length <= 254" },
+            "mode": { ".validate": "newData.isString()" },
+            "lastChanged": { ".validate": "newData.isNumber()" },
             "name": { ".validate": "newData.isString() && newData.val().length <= 120" },
 
             "focus": {
@@ -61,6 +67,9 @@
         "lock": {
           ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || data.child('uid').val() == auth.uid || now - data.child('since').val() > 300000) && (!newData.exists() || newData.child('uid').val() == auth.uid)",
           ".validate": "newData.hasChildren(['uid', 'email', 'since']) && newData.child('uid').val() == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('since').val() == now",
+          "uid": { ".validate": "newData.isString()" },
+          "email": { ".validate": "newData.isString()" },
+          "since": { ".validate": "newData.isNumber()" },
           "$other": { ".validate": false }
         },
 
@@ -68,6 +77,8 @@
           "$uid": {
             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && ($uid == auth.uid || !newData.exists())",
             ".validate": "newData.hasChildren(['email', 'at']) && $uid == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('at').val() == now",
+            "email": { ".validate": "newData.isString()" },
+            "at": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           }
         },
