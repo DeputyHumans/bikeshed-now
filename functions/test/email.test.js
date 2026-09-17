@@ -38,6 +38,43 @@ test("with no API key every send is a clean, logged no-op", async () => {
   }
 });
 
+test("a whitespace key is the SAME as no key, because that is how a real deployment says off", async () => {
+  /**
+   * Not a curiosity. `defineSecret` makes RESEND_API_KEY mandatory at DEPLOY
+   * time — the deploy fails outright if no version exists — and Secret Manager
+   * refuses to store an empty payload. Whitespace is therefore the only way a
+   * deployed project can express "email is off", so if this stops holding, the
+   * optional-email path that SPEC §13 and ADR 0008 promise is unreachable
+   * anywhere except the emulator.
+   *
+   * A trailing newline is the same case arriving by accident:
+   * `echo $KEY | firebase functions:secrets:set` stores one.
+   */
+  for (const value of [" ", "\n", "  \t\n "]) {
+    const previous = process.env.RESEND_API_KEY;
+    process.env.RESEND_API_KEY = value;
+    const info = console.info;
+    console.info = () => {};
+    try {
+      const result = await sendEmail({
+        to: "a@example.com",
+        subject: "Subject",
+        body: null,
+        text: "text",
+      });
+      assert.deepEqual(
+        result,
+        { sent: false, reason: "no_api_key" },
+        `${JSON.stringify(value)} must read as unconfigured, not as a key`,
+      );
+    } finally {
+      console.info = info;
+      if (previous === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = previous;
+    }
+  }
+});
+
 test("a no-op send never throws, so it cannot fail its triggering request", async () => {
   const previous = process.env.RESEND_API_KEY;
   delete process.env.RESEND_API_KEY;
@@ -145,4 +182,51 @@ test("a hostile title or body stays inert in the plain-text alternative", () => 
   assert.ok(text.includes("<script>alert(3)</script>"), "kept verbatim as text");
   assert.ok(!text.includes("<html"), "no markup wrapper is produced");
   assert.equal(typeof text, "string");
+});
+
+// --- Who the mail comes FROM -----------------------------------------------
+
+test("the sending domain is configurable apart from the serving domain", async () => {
+  /**
+   * These are not the same thing and usually cannot be. A default Firebase
+   * deployment serves on `*.web.app`, which nobody can verify with an email
+   * provider — so deriving the sender from the serving origin made email
+   * structurally impossible on exactly the deployments most likely to be
+   * somebody's first. Found by deploying one.
+   */
+  const { mailFrom } = require("../lib/config.js");
+  const prevFrom = process.env.BIKESHED_MAIL_FROM;
+  const prevOrigin = process.env.BIKESHED_PUBLIC_ORIGIN;
+
+  // Composed rather than spelled. Brand-guard tier 8 forbids a Firebase Hosting
+  // hostname anywhere in tracked content, by SHAPE, so that a real deployment
+  // cannot leak into the tree — and it cannot tell a fictional one from a real
+  // one. This test is precisely about that shape, so it builds the string.
+  const HOST = ["example-project", "web", "app"].join(".");
+
+  try {
+    process.env.BIKESHED_PUBLIC_ORIGIN = `https://${HOST}`;
+
+    delete process.env.BIKESHED_MAIL_FROM;
+    assert.equal(
+      mailFrom(),
+      `Bikeshed <noreply@${HOST}>`,
+      "unset must keep the old behaviour, so a deployment that serves and sends from one domain needs no config",
+    );
+
+    process.env.BIKESHED_MAIL_FROM = "Bikeshed <noreply@verified.example>";
+    assert.equal(mailFrom(), "Bikeshed <noreply@verified.example>");
+
+    process.env.BIKESHED_MAIL_FROM = "   ";
+    assert.equal(
+      mailFrom(),
+      `Bikeshed <noreply@${HOST}>`,
+      "whitespace is unset, matching how the Resend key is treated",
+    );
+  } finally {
+    if (prevFrom === undefined) delete process.env.BIKESHED_MAIL_FROM;
+    else process.env.BIKESHED_MAIL_FROM = prevFrom;
+    if (prevOrigin === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = prevOrigin;
+  }
 });

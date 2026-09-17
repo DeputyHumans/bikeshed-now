@@ -2,7 +2,7 @@
 // The one place email leaves this system (SPEC §14).
 
 import type { ReactElement } from "react";
-import { RESEND_API_KEY, publicOrigin } from "../config";
+import { RESEND_API_KEY, mailFrom, publicOrigin } from "../config";
 
 /**
  * Email is OPTIONAL, and that is a requirement rather than a nicety.
@@ -22,16 +22,28 @@ export interface SendResult {
   reason?: "no_api_key" | "failed";
 }
 
-/** The sender address. Deployments that have not configured one send nothing. */
+/** The sender address. See config.mailFrom() for why it is not the serving host. */
 function fromAddress(): string {
-  const origin = publicOrigin();
-  const host = origin.replace(/^https?:\/\//, "") || "localhost";
-  return `Bikeshed <noreply@${host}>`;
+  return mailFrom();
 }
 
+/**
+ * The configured key, or "" for "email is off".
+ *
+ * TRIMMED, and that is load-bearing rather than tidy. `defineSecret` makes the
+ * secret mandatory at DEPLOY time — a deploy fails outright if no version
+ * exists — while Secret Manager refuses to store an empty payload. So the only
+ * way a real deployment can express "email is disabled" is a whitespace
+ * payload, and without this trim the documented optional path is unreachable
+ * anywhere but the emulator.
+ *
+ * It also absorbs the commonest real mistake: `echo $KEY | firebase
+ * functions:secrets:set` stores a trailing newline, which would otherwise be
+ * sent to Resend verbatim and rejected on every message.
+ */
 function apiKey(): string {
   try {
-    return RESEND_API_KEY.value() || "";
+    return (RESEND_API_KEY.value() || "").trim();
   } catch {
     // .value() throws when the secret is not bound to the running function,
     // which is the same situation as "not configured".

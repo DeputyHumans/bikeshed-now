@@ -74,6 +74,27 @@ export function publicOrigin(): string {
   return id ? `https://${id}.web.app` : "";
 }
 
+/**
+ * The address transactional email is sent FROM.
+ *
+ * Separate from `publicOrigin()` on purpose, because the domain a deployment
+ * SERVES from and the one it is allowed to SEND from are not the same thing and
+ * usually cannot be. A default Firebase deployment serves on `*.web.app`, which
+ * no one can verify with an email provider — so deriving the sender from the
+ * serving origin made email structurally impossible on exactly the deployments
+ * most likely to be someone's first.
+ *
+ * Unset, it falls back to the old behaviour: noreply@<publicOrigin host>. That
+ * keeps a deployment whose serving domain IS its verified sending domain
+ * working with no configuration.
+ */
+export function mailFrom(): string {
+  const configured = process.env.BIKESHED_MAIL_FROM;
+  if (configured && configured.trim().length > 0) return configured.trim();
+  const host = publicOrigin().replace(/^https?:\/\//, "") || "localhost";
+  return `Bikeshed <noreply@${host}>`;
+}
+
 /** One sentence for someone the allowlist rejected. Never the allowlist itself. */
 export function signInHint(): string {
   return process.env.BIKESHED_SIGN_IN_HINT || "";
