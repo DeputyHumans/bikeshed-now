@@ -25,7 +25,8 @@ The app connects to the emulators when `VITE_USE_EMULATORS=1` is set — copy
 ## The verification table
 
 A change is done when every row passes **with output shown**. `npm run verify`
-runs the ones that do not need an emulator.
+runs every row except 5, which needs the emulators — use
+`npm run test:rules:emulated`, which starts them.
 
 | # | Command | Pass condition |
 |---|---|---|
@@ -34,9 +35,12 @@ runs the ones that do not need an emulator.
 | 3 | `npm --prefix functions run build && npm --prefix functions test` | 0 failing |
 | 4 | `npm --prefix app test` | green; ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
 | 5 | `npm run test:rules:emulated` | 0 failing |
-| 6 | `node scripts/<each>.mjs --dry-run …` | exit 0, **none requires credentials** |
+| 6 | `node scripts/<each>.mjs --dry-run …` | exit 0; credential-free for all but `delete-version`, whose preview must read to be useful |
 | 7 | `npm run check:brand` | `brand-guard: clean` |
 | 8 | `npm run check:headers` | exit 0 |
+| 9 | `npm run check:content` | every sample still demonstrates what it is there for |
+| 10 | `npm run check:licenses` | exit 0 — every dependency permissive |
+| 11 | `npm run check:agents` | `AGENTS.md` and `app/public/llms.txt` still match |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug
@@ -66,9 +70,12 @@ These are the ones that actually get enforced in review.
    subsystem, three declined.
 6. **Failure of a non-essential subsystem never fails the request.** Presence,
    email and stats are try/catch-and-continue. Access control never is.
-7. **Dependencies have a budget**: 7 runtime deps in `app/`, 10 in `functions/`
-   (plus 3 lazily imported only inside the email path). Anything beyond it needs
-   a written justification in the pull request, not a line in `package.json`.
+7. **Dependencies have a budget**: 7 runtime deps in `app/` and 10 in
+   `functions/`, plus the four lazily imported inside the email path only.
+   `functions/` currently sits at nine, one under. Anything beyond the budget
+   needs a written justification in the pull request, not a line in
+   `package.json`. `npm run check:licenses` separately hard-fails on anything
+   outside the permissive allowlist.
 8. **Every non-obvious constant carries its reason inline.** `OPEN_DELAY_MS`
    exists both to ignore mis-clicks *and* to survive StrictMode's double mount —
    that sentence is worth more than the name.
