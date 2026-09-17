@@ -51,6 +51,34 @@ function rpcResult(id: unknown, result: unknown) {
 }
 
 /** Handle one JSON-RPC message. Returns null for a notification. */
+/**
+ * Enforce a tool's own `required` list before it runs.
+ *
+ * Without this a missing argument reaches Firestore and comes back as
+ * `Value for argument "documentPath" is not a valid resource path` — an internal
+ * error that tells an agent nothing about which argument to supply. An agent's
+ * context is the scarce resource on this surface, so an error that costs a round
+ * trip and teaches nothing is the expensive kind.
+ *
+ * Empty string counts as missing: every required argument here is an id or a
+ * body, and none of them is meaningfully empty.
+ *
+ * Returns the complaint, or null when the arguments are acceptable.
+ */
+export function missingArguments(
+  tool: { name: string; inputSchema: Record<string, unknown> },
+  args: Record<string, unknown>,
+): string | null {
+  const required = (tool.inputSchema.required as string[] | undefined) ?? [];
+  const missing = required.filter(
+    (key) => args[key] === undefined || args[key] === null || args[key] === "",
+  );
+  if (missing.length === 0) return null;
+  const plural = missing.length === 1 ? "argument" : "arguments";
+  const names = missing.map((k) => `"${k}"`).join(", ");
+  return `${tool.name}: missing required ${plural} ${names}. Call tools/list for this tool's schema.`;
+}
+
 async function dispatch(
   message: JsonRpcRequest,
   ctx: ToolContext,
@@ -92,6 +120,15 @@ async function dispatch(
         return rpcError(id, METHOD_NOT_FOUND, `no tool named "${name}"`);
       }
       const args = (params?.arguments as Record<string, unknown>) ?? {};
+
+      const complaint = missingArguments(tool, args);
+      if (complaint) {
+        return rpcResult(id, {
+          content: [{ type: "text", text: complaint }],
+          isError: true,
+        });
+      }
+
       try {
         const output = await tool.run(ctx, args);
         // Tool failures are reported INSIDE the result with isError, not as a

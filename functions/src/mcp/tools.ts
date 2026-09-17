@@ -128,13 +128,40 @@ export const TOOLS: ToolDefinition[] = [
         if (after.exists) q = q.startAfter(after);
       }
       const snap = await q.get();
-      const rows = snap.docs.slice(0, limit).map((d) => {
+      const page = snap.docs.slice(0, limit);
+
+      /**
+       * `format` lives on the VERSION, not on the document — a document's
+       * format is whatever its current version is. Reading it off the document
+       * record returned "html" for every row, including Markdown documents,
+       * which is one of only seven fields this tool returns and the one an
+       * agent uses to decide what it is about to receive.
+       *
+       * Fetched with a single getAll rather than N sequential gets, and
+       * deliberately NOT denormalized onto the document: that would add a field
+       * three separate paths have to keep in step, including version
+       * withdrawal, to save one batched round trip.
+       */
+      const versionRefs = page
+        .map((d) => {
+          const current = d.data().currentVersion;
+          return typeof current === "string" && current
+            ? d.ref.collection("versions").doc(current)
+            : null;
+        })
+        .filter((r): r is admin.firestore.DocumentReference => r !== null);
+      const versions = versionRefs.length > 0 ? await ctx.db.getAll(...versionRefs) : [];
+      const formatOf = new Map(
+        versions.map((v) => [v.ref.parent.parent!.id, v.data()?.format === "markdown" ? "markdown" : "html"]),
+      );
+
+      const rows = page.map((d) => {
         const v = d.data();
         return {
           id: d.id,
           title: v.title,
           version: v.currentVersion,
-          format: v.format ?? "html",
+          format: formatOf.get(d.id) ?? "html",
           visibility: visibilityOf(v as DocAclData),
           owner: v.ownerEmail,
           updatedAt: (v.updatedAt as admin.firestore.Timestamp)?.toDate?.().toISOString(),
