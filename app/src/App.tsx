@@ -6,6 +6,8 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 
 import { useAuth } from "./auth";
 import { initAnalytics, logPageView } from "./analytics";
+import { CookieConsent } from "./components/CookieConsent";
+import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
 import { Loading } from "./components/Spinner";
 import { DocList } from "./pages/DocList";
@@ -108,8 +110,13 @@ export function App() {
               </RequireAccount>
             }
           />
+          {/* Public on purpose: a visitor deciding about cookies must be
+              able to read the policy without signing in first. */}
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <CookieConsent />
       </main>
     </div>
   );

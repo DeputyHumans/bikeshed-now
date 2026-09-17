@@ -4,6 +4,7 @@
 import type { Analytics } from "firebase/analytics";
 import { app } from "./firebase";
 import { MEASUREMENT_ID, USE_EMULATORS } from "./config";
+import { readConsent } from "./consent";
 
 /**
  * Three things here are easy to get wrong, and one of them is a real leak.
@@ -46,11 +47,29 @@ let instance: Analytics | null = null;
 let ready: Promise<Analytics | null> | null = null;
 let optedOut = false;
 
+/**
+ * True when this deployment could collect anything at all.
+ *
+ * Exported so the consent banner can stay hidden on a deployment that has no
+ * measurement id: asking somebody to consent to something that cannot happen is
+ * a dark pattern in the shape of diligence.
+ */
+export function analyticsConfigured(): boolean {
+  return Boolean(MEASUREMENT_ID) && !USE_EMULATORS;
+}
+
 /** Resolve the Analytics instance once, or null forever. */
 function resolve(): Promise<Analytics | null> {
   if (ready) return ready;
   ready = (async () => {
-    if (!MEASUREMENT_ID || USE_EMULATORS) return null;
+    if (!analyticsConfigured()) return null;
+    // Consent is checked HERE, at the one place the measurement script would
+    // otherwise be fetched. Denial means the request is never made, rather than
+    // made and then disabled — a request nobody sends cannot be logged.
+    if (readConsent() !== "granted") {
+      ready = null; // so a later grant can resolve rather than reuse this null
+      return null;
+    }
     try {
       const { initializeAnalytics, isSupported } = await import("firebase/analytics");
       if (!(await isSupported())) return null;
@@ -72,11 +91,13 @@ export function initAnalytics(): void {
 }
 
 /**
- * Honour the account's preference.
+ * Honour the account's preference, on top of the visitor's consent.
  *
- * Consent lives on the account rather than in a banner because there is no
- * anonymous browsing to consent for: a signed-out visitor to a public document
- * never initializes analytics at all.
+ * The two are different questions and both must be satisfied. Consent
+ * (`consent.ts`) is per-visitor and gates whether the measurement script loads
+ * at all; this is per-account and travels with the person across their devices.
+ * An account opt-out cannot re-enable something consent has denied, because
+ * `resolve()` returns null and there is nothing to enable.
  */
 export async function setAnalyticsOptOut(value: boolean): Promise<void> {
   optedOut = value;

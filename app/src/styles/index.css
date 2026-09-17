@@ -36,3 +36,5 @@
 @import "./editor.css" layer(feature);
 @import "./slides.css" layer(feature);
 @import "./dialogs.css" layer(feature);
+@import "./consent.css" layer(feature);
+@import "./legal.css" layer(feature);

@@ -1,0 +1,45 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The terms and privacy pages (SPEC §21).
+ *
+ * Plain prose at a readable measure. These are documents people actually have to
+ * read, so they get the same typographic care as a published one — and none of
+ * the dense small-print styling that signals "do not read this".
+ */
+
+.legal {
+  max-width: 72ch;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+.legal h1 {
+  margin-bottom: var(--space-2);
+}
+
+.legal__updated {
+  margin-top: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--fs-caption);
+}
+
+.legal h2 {
+  margin-top: var(--space-6);
+}
+
+.legal p,
+.legal li {
+  line-height: 1.65;
+}
+
+.legal ul {
+  padding-inline-start: var(--space-4);
+}
+
+.legal__nav {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+  font-size: var(--fs-caption);
+}

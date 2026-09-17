@@ -770,10 +770,37 @@ read this document and for how long" and live in the owner's own Firestore;
 Analytics answers "how is the product used" in aggregate. Neither grows to cover
 the other's job.
 
-Opt-out lives on the account (`users/{uid}.analyticsOptOut` →
-`setAnalyticsCollectionEnabled(false)`), not in a banner, because there is no
-anonymous browsing to consent for except public documents, where analytics is
-not initialized for signed-out visitors.
+### Consent
+
+An earlier revision of this section stated that no banner was needed, "because
+there is no anonymous browsing to consent for except public documents, where
+analytics is not initialized for signed-out visitors."
+
+**Both halves of that were false once §17 landed.** Public and unlisted sharing
+created anonymous browsing, and `initAnalytics()` runs from a single effect at
+App mount for every visitor — signed in or not. A signed-out reader of a public
+document was getting `_ga` cookies having never been asked, and having no
+account for a preference to live on. Confirmed on a real deployment.
+
+So consent is now a **per-visitor** decision, held per-visitor in
+`localStorage` (`app/src/consent.ts`), and it gates initialization itself:
+
+- Unanswered or declined ⇒ `resolve()` returns null and the measurement script
+  is **never fetched**. Not fetched-then-disabled: a request nobody sends cannot
+  be logged by anybody.
+- A corrupted or unreadable store reads as unanswered. Silence is never a yes.
+- The banner appears only when a measurement id is configured. A deployment
+  without analytics never asks, because there would be nothing to consent to.
+- The **session cookie is out of scope and needs no consent** — it is strictly
+  necessary to serve a document to the person who asked for one, and asking
+  permission for the thing that makes the page work teaches people to click
+  Accept without reading.
+
+Account-level opt-out (`users/{uid}.analyticsOptOut` →
+`setAnalyticsCollectionEnabled(false)`) remains, and answers a different
+question: it is per-account and travels across devices, where consent is
+per-device. Both must be satisfied, and an account opt-out cannot re-enable what
+consent denied, because there is no instance to enable.
 
 ---
 

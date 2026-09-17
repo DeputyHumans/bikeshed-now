@@ -68,5 +68,15 @@ export const DEPLOYMENT_MARKING: Marking = {
   footer: env("VITE_EXPORT_MARK_FOOTER"),
 };
 
+/**
+ * Who to contact about the terms and the privacy policy.
+ *
+ * Per-deployment, because those documents describe the OPERATOR's handling of
+ * data and not this project's. Unset, the pages say so plainly rather than
+ * inventing an address — a privacy policy naming a mailbox nobody reads is
+ * worse than one that admits it has none.
+ */
+export const LEGAL_CONTACT = env("VITE_LEGAL_CONTACT");
+
 /** True when the app is talking to a real backend rather than the emulators. */
 export const IS_LIVE = !USE_EMULATORS && firebaseConfig.projectId.length > 0;

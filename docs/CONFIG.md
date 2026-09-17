@@ -105,9 +105,12 @@ changes are logged manually as route **patterns**: `/d/:docId/:versionId`, never
 part of a URL. No document id, title, slug, folder name or email is ever sent,
 and a test asserts it.
 
-Per-account opt-out lives on the user record and drives
-`setAnalyticsCollectionEnabled(false)`. There is no cookie banner because there
-is no anonymous browsing to consent on behalf of.
+**Consent gates initialization**, per visitor, held in `localStorage`. Until it
+is granted the measurement script is never fetched — not fetched and disabled.
+The banner appears only when a measurement id is configured, so a deployment
+without analytics never asks. Per-account opt-out lives on the user record and
+drives `setAnalyticsCollectionEnabled(false)`; it answers the across-devices
+question that per-device consent cannot.
 
 ### Export marking
 
