@@ -12,7 +12,23 @@ const { Slugger, baseSlug } = require("../lib/lib/markdown/slug.js");
 
 const FIXTURES = join(__dirname, "fixtures", "markdown");
 const fixture = (name) => readFileSync(join(FIXTURES, name), "utf8");
-const fixtureNames = () => readdirSync(FIXTURES).filter((f) => f.endsWith(".md"));
+
+/**
+ * The shipped sample is ALSO a fixture.
+ *
+ * content/markdown-reference documents this feature and is published by the
+ * emulator walkthrough, so running the round-trip contract against it is what
+ * stops the documentation drifting from the renderer: a change that breaks the
+ * sample breaks the suite in the same commit.
+ */
+const SAMPLE = join(__dirname, "..", "..", "content", "markdown-reference", "bundle", "index.md");
+
+const sources = () => [
+  ...readdirSync(FIXTURES)
+    .filter((f) => f.endsWith(".md"))
+    .map((name) => [name, fixture(name)]),
+  ["content/markdown-reference", readFileSync(SAMPLE, "utf8")],
+];
 
 const sections = (html) =>
   [...html.matchAll(/<section id="([^"]*)">/g)].map((m) => m[1]);
@@ -23,8 +39,7 @@ test("the round trip is idempotent after the first normalizing pass", () => {
   // `md -> md'` may normalize. `md' -> md''` must change NOTHING. That property
   // is what keeps editing a Markdown document from degrading it one save at a
   // time, and it is the reason this whole feature is safe to offer.
-  for (const name of fixtureNames()) {
-    const source = fixture(name);
+  for (const [name, source] of sources()) {
     const first = htmlToMarkdown(renderMarkdown(source).html);
     const second = htmlToMarkdown(renderMarkdown(first).html);
     assert.equal(second, first, `${name} is not idempotent after the first pass`);
@@ -83,8 +98,7 @@ test("the document title never leaks into the body as a stray first line", () =>
 // --- Determinism -----------------------------------------------------------
 
 test("rendering the same source twice is byte-identical", () => {
-  for (const name of fixtureNames()) {
-    const source = fixture(name);
+  for (const [name, source] of sources()) {
     assert.equal(renderMarkdown(source).html, renderMarkdown(source).html, name);
   }
 });
