@@ -18,7 +18,13 @@ const PATHS: Record<string, string> = {
   plus: "M12 5v14M5 12h14",
   close: "m6 6 12 12M18 6 6 18",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",
-  more: "M12 6h.01M12 12h.01M12 18h.01",
+  // Three real circles, not zero-length strokes. As `h.01` segments these
+  // were only as wide as the stroke itself — about one pixel at the 15px
+  // the toolbar renders them, in muted grey, which is how the only route
+  // to Share became invisible. Every other icon is a SHAPE made of lines,
+  // so a thin stroke still reads; a dot IS the stroke.
+  more:
+    "M12 4.6a1.45 1.45 0 1 0 0 2.9 1.45 1.45 0 0 0 0-2.9zM12 10.55a1.45 1.45 0 1 0 0 2.9 1.45 1.45 0 0 0 0-2.9zM12 16.5a1.45 1.45 0 1 0 0 2.9 1.45 1.45 0 0 0 0-2.9z",
   share: "M15 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM15 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4",
   comment: "M21 12a8 8 0 0 1-8 8H7l-4 3v-4.6A8 8 0 0 1 5 4h8a8 8 0 0 1 8 8z",
   edit: "M4 20h4l11-11a2.8 2.8 0 1 0-4-4L4 16z",
@@ -37,6 +43,14 @@ const PATHS: Record<string, string> = {
 };
 
 export type IconName = keyof typeof PATHS;
+
+/**
+ * Icons drawn as filled shapes rather than strokes.
+ *
+ * Kept to the cases where the mark IS a solid form — a dot has no outline to
+ * stroke — so the one-weight rule still governs everything that is a drawing.
+ */
+const FILLED = new Set<IconName>(["more"]);
 
 export function Icon({
   name,
@@ -63,7 +77,12 @@ export function Icon({
       aria-hidden={title ? undefined : true}
       focusable="false"
     >
-      <path d={PATHS[name]} />
+      <path
+        d={PATHS[name]}
+        {...(FILLED.has(name)
+          ? { fill: "currentColor", stroke: "none" }
+          : null)}
+      />
     </svg>
   );
 }
