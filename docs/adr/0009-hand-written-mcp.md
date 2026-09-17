@@ -1,0 +1,55 @@
+# 0009 — Hand-write the MCP server instead of using the SDK
+
+**Status** Accepted · **Spec** §19 · **Deviates from** the implementation plan
+
+## Context
+
+The agent surface needs an MCP endpoint: six tools over streamable HTTP, one
+Cloud Function, one rewrite. The plan named `@modelcontextprotocol/sdk` and
+counted it inside the functions dependency budget of ten.
+
+The SDK requires **`zod` as a peer dependency**. That is two packages, not one,
+and the second is a validation library this codebase has no other use for —
+tool arguments are validated by hand today because there are six of them.
+Taking it would have put the runtime over budget for a surface that is, on the
+server side, small and fully specified.
+
+The relevant asymmetry: the SDK's value is concentrated in the **client** half
+of MCP — transport negotiation, session management, sampling, reconnection. The
+**server** half of streamable HTTP is a JSON-RPC 2.0 request arriving by POST
+and a JSON-RPC response going back.
+
+## Decision
+
+Implement the server directly. `functions/src/mcp/server.ts` is about 200 lines
+with **zero dependencies**: five methods (`initialize`, `notifications/initialized`,
+`tools/list`, `tools/call`, `ping`), the standard JSON-RPC error codes, and
+`PROTOCOL_VERSION` pinned to `2025-06-18`.
+
+Deliberately not implemented: server-sent events (no tool here streams),
+sessions (every request carries its own credential), and sampling, roots and
+prompts (nothing would use them).
+
+## Consequences
+
+- The functions runtime stays at **nine** eager dependencies, one under budget,
+  rather than eleven.
+- The entire wire protocol is visible in one file. A reader can see what the
+  endpoint accepts without reading a framework.
+- **Protocol changes are ours to follow.** That is the real cost, and it is
+  mitigated by a test that speaks the wire format directly — constructing raw
+  JSON-RPC envelopes rather than calling through a client — so a protocol
+  revision surfaces as a failing assertion about bytes.
+- No client-side compatibility risk, because the deviation is server-only: any
+  conformant MCP client still talks to it.
+- This is a **documented deviation from the approved plan**, recorded here
+  rather than absorbed silently, and repeated in the module header where
+  somebody editing the file will actually see it.
+
+## What would change this
+
+Two things, either one sufficient. If the SDK drops the `zod` peer or ships a
+server-only entry point without it, the argument disappears and adopting it is
+the better default. If this endpoint ever needs streaming, sessions or
+sampling, the hand-written surface stops being small and the SDK's cost becomes
+worth paying.

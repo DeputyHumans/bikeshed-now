@@ -3,6 +3,9 @@
 `docs/SPEC.md` says what the system does and is normative. This file says why it
 is shaped this way, and — more usefully — what it deliberately is not.
 
+The individual decisions, with their costs and their reversal conditions, are in
+[`adr/`](adr/) — nine records of about thirty lines each.
+
 ## The one-paragraph version
 
 A document is an immutable bundle of bytes in a private bucket. The only path
@@ -144,8 +147,8 @@ a written argument in a pull request, not a dependency.
 | Surface | Budget | Why |
 |---|---|---|
 | `app/` runtime | **7** | Markdown renders server-side; email renders server-side |
-| `functions/` runtime | **10** | the original 5 + `markdown-it`, `turndown`, `turndown-plugin-gfm`, `resend`, `@modelcontextprotocol/sdk` |
-| `functions/` lazy | 3 | `react`, `react-dom`, `@react-email/components`, imported only inside the email path |
+| `functions/` eager | **9**, budget 10 | `adm-zip`, `cookie`, `firebase-admin`, `firebase-functions`, `markdown-it`, `mime-types`, `resend`, `turndown`, `turndown-plugin-gfm` |
+| `functions/` lazy | 4 | `react`, `react-dom`, `@react-email/components`, `@react-email/render` — imported only inside the email path ([0008](adr/0008-runtime-email-rendering.md)) |
 | `cli/` | its own package | nothing it pulls in reaches the app or the functions |
 | root | dev only | |
 
@@ -153,6 +156,18 @@ The app ships with **no UI kit, no CSS framework, no icon library, no state
 manager, no PDF library and no zip library.** That discipline is the most
 valuable structural property this codebase has, and the budget exists to keep it
 from being traded away one convenient package at a time.
+
+The functions side came in **one under** its budget rather than at it. The MCP
+endpoint was planned around `@modelcontextprotocol/sdk`, which requires `zod` as
+a peer; the server half of streamable HTTP turned out to be ~200 lines of
+JSON-RPC, so it is hand-written and the two packages were never added. That is a
+deliberate deviation from the plan and is recorded in
+[ADR 0009](adr/0009-hand-written-mcp.md).
+
+Three markdown-related packages are load-bearing and **pinned to exact
+versions**, not ranges: the rendered bytes are part of the content hash, so a
+patch release would mint new versions of every Markdown document
+([0003](adr/0003-server-side-markdown.md)).
 
 ## Cost model
 
