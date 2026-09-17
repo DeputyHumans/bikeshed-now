@@ -1,124 +1,159 @@
 # Working in this repository
 
-Notes for an agent — human or otherwise — making changes here. `AGENTS.md` is
-different: it is for an agent *using* a deployment through the API. This file is
-about editing the source.
+For an agent changing this **source**. `AGENTS.md` is a different document: it is
+for an agent *using* a deployment through the API.
 
-Read `docs/architecture.md` first, especially **"What this is not"**. Most bad
-changes to this codebase are additions that were never argued for.
-
-## Before you start
+Read `docs/architecture.md` first — especially **"What this is not"**. Most bad
+changes here are additions nobody argued for. `docs/SPEC.md` is normative; cite
+it as `(SPEC §N)`.
 
 ```bash
-npm run install:all
-npm run build:policy
+npm run install:all && npm run build:policy   # no Firebase account needed
 ```
 
-Nothing needs a Firebase account. `demo-bikeshed` is emulator-only and Firebase
-refuses to point it at a real backend.
-
-## Before you claim you are done
+## Before you say it works
 
 ```bash
-npm run verify              # policy, agents, build, tests, brand, headers, content, licences
-npm run test:rules:emulated # rules tests — needs the emulators, and starts them
+npm run verify               # policy, agents, build, tests, brand, headers, content, licences
+npm run test:rules:emulated  # rules — needs emulators, and starts them
 ```
 
-`npm run verify` is the whole gate except the rules suite. Run both, show the
-output, and do not describe a check as passing that you did not run.
+Run both. Show the output. **Never describe a check as passing that you did not
+run**, and never report a fix as verified when you only reasoned about it.
 
-## The five things most likely to bite you
+## The emulator cannot tell you everything
 
-**1. Four files are generated. Do not edit them.**
-`firestore.rules`, `database.rules.json`, `functions/src/generated/policy.ts`
-and `app/src/generated/policy.ts` are rendered from `config/access-policy.json`
-by `config/policy.mjs`. Edit the source or the template in `config/templates/`,
-then `npm run build:policy`. `npm run check:policy` byte-compares and runs as
-`pretest` and `prebuild`.
+Four classes of defect are **invisible locally** and have all shipped:
 
-**2. Three module pairs are duplicated on purpose.**
-`hash`, `membership` and `policy` exist in both ESM (`scripts/`) and CommonJS
-(`functions/`) because the runtimes differ. They are held in agreement by parity
-tests, and the hash pair is pinned by a **shared golden-vector fixture** — never
-by comparing one implementation to the other, which lets them drift together.
-Change one, change both, and the parity test is the proof.
+| Invisible locally | Because |
+|---|---|
+| Response cache headers | Hosting adds `max-age=600` to any function response that sets none; the emulator adds nothing. A cacheable 404 got served to members |
+| `admin.firestore.FieldValue` | The Functions emulator proxies firebase-admin and drops static namespace properties, so it is `undefined` there and fine in production. Import from `firebase-admin/firestore` |
+| Anything IAM | A fresh project grants its runtime identity almost nothing. Symptoms are remote from causes; `docs/operations.md` has the table |
+| `defineSecret` | Mandatory at deploy time, whatever the runtime does with it |
 
-**3. Decoration must never reach serialized bytes.**
-Highlights, placeholder marks and the peer-presence overlay are all injected
-into the document being edited. Four independent legs keep them out of what is
-saved: the `FrameMode` tagged union, effect-cleanup ordering, an unconditional
-strip plus a dev-only assertion, and `serializeCleanHtml` itself. If you touch
-`viewer/`, `annotation/` or `wysiwyg/`, run `app/src/viewer/invariant.test.tsx`
-and believe it — it has already caught one real bug that no other test saw.
+So: **if you touch a response header, an admin-SDK call, the sign-in path, or
+anything about deployment, a green local suite is not evidence.** Assert it
+structurally (see `noStore` in `functions/src/lib/http.ts` and the test pinning
+it) or verify against a real deployment.
 
-**4. `[data-bshd]` is removed by VALUE, not by presence.**
-A document of somebody else's could legitimately contain `data-bshd="whatever"`.
-The serializer only strips values this app writes, listed in `brand/dom.ts`.
-Weakening that check to an attribute-presence test is silent data loss in
-somebody's document.
+## How tests pass while the bug is live
 
-**5. Every source file needs a two-line header.**
+This has happened repeatedly here, so assume it until disproven.
+
+- **Write a negative control for every new assertion.** Reintroduce the bug,
+  watch the test fail, restore. A test you have not seen fail is a test you have
+  not written. Several tests in this repo passed with their bug put back.
+- **Fresh module registry per case hides sequences.** The consent test checked
+  each state in isolation and so never exercised *unset → granted in one page*,
+  which is the only sequence a real visitor performs — and the only one broken.
+- **Vitest loads `app/.env.local`**, so ambient config leaks into tests. Stub
+  the module instead of asserting against whatever env happens to exist.
+
+## Five things most likely to bite
+
+**1. Four files are generated. Do not edit them.** `firestore.rules`,
+`database.rules.json`, `functions/src/generated/policy.ts`,
+`app/src/generated/policy.ts` come from `config/access-policy.json` via
+`config/policy.mjs`. Edit the source or `config/templates/`, then
+`npm run build:policy`. `check:policy` byte-compares and runs as `pretest`.
+
+**2. Three module pairs are duplicated on purpose.** `hash`, `membership`,
+`policy` exist in ESM (`scripts/`) and CommonJS (`functions/`) because the
+runtimes differ. Parity tests hold them together, and the hash pair is pinned by
+a **shared golden vector** — never by comparing the two implementations, which
+lets them drift together. Change one, change both.
+
+**3. Decoration must never reach serialized bytes.** Highlights, placeholder
+marks and the peer overlay all go into the document being edited. Four legs keep
+them out: the `FrameMode` tagged union, effect-cleanup ordering, an
+unconditional strip plus a dev-only assertion, and `serializeCleanHtml`. **Every
+hook that puts something in the document must be declared before
+`useInlineEditor`** — and must be in `viewer/invariant.test.tsx`'s harness.
+Presence was in neither, and reached edit mode in a real browser.
+
+**4. `[data-bshd]` is stripped by VALUE, not presence.** Someone's document may
+legitimately contain `data-bshd="whatever"`. Only values listed in
+`brand/dom.ts` are removed. Weakening that to an attribute check is silent data
+loss in a document you do not own.
+
+**5. Use tokens that exist.** The spacing scale is `--s-1`…`--s-8` — there is no
+`--space-N`. An unresolved `var()` invalidates the whole declaration, so an
+invented name silently becomes no padding at all. The rule, enforced by
+`brand/tokens.test.ts`:
+
+```
+var(--x)            must resolve to a token a stylesheet defines
+var(--x, fallback)  may be injected at runtime from JS
+```
+
+## Every file needs a two-line header
 
 ```
 // SPDX-License-Identifier: Apache-2.0
 // <what this file owns> (SPEC §N)
 ```
 
-`npm run check:headers` enforces both lines. The two hash implementations carry
-the full Apache notice instead, because they are a normative wire format
-somebody may copy out on its own.
+`check:headers` enforces both lines. The two hash implementations carry the full
+Apache notice instead, because they are a wire format someone may copy out alone.
 
 ## Commits
 
-Conventional commits, lower case, imperative, no trailing period.
+Conventional, lower case, imperative, no trailing period.
 
-**Stage explicit paths.** `git add -A` and `git add .` are not used here — they
-are how a stray local file or a credential enters history.
+**Stage explicit paths.** Not `git add -A` or `.` — that is how a credential
+enters history. **No attribution trailers**; the brand guard fails the build on
+them, and an author field cannot be fixed without a rewrite.
 
-**No attribution trailers.** `Co-Authored-By:`, `Generated-by:` and session ids
-do not belong in the permanent record of what the code is. The brand guard fails
-the build on them, and an author field cannot be corrected without rewriting
-history.
-
-Write the commit body for somebody reading `git log` in two years with no
-context. Say what was wrong and why this fixes it, not what the diff already
-shows.
+Write the body for someone reading `git log` in two years: what was wrong and
+why this fixes it, not what the diff already shows.
 
 ## Deployment facts stay out of the tree
 
-No tracked file may name the real Firebase project, console account, bucket,
-Web SDK config or measurement id. They live in gitignored files and in Firebase
-Secret Manager; see `docs/operations.md`.
+No tracked file may name the real project, account, bucket, SDK config or
+measurement id. They live in gitignored files and Secret Manager
+(`docs/operations.md`). Everything committed uses `demo-bikeshed`, which
+Firebase refuses to point at a real backend.
 
-The brand guard catches leaks **by shape** — any `*.web.app`, `gs://` URL,
-`AIza…` key, app id, measurement id, or a `projects` block naming a non-`demo-`
-id — so a project rename cannot quietly reintroduce one. The package slug
-`bikeshed-now` is a legitimate name and is not forbidden; the binding is.
+The brand guard matches **by shape** — `*.web.app`, `gs://`, `AIza…`, app ids,
+measurement ids, non-`demo-` project blocks — so a rename cannot quietly
+reintroduce a leak. The slug `bikeshed-now` is a legitimate package name and is
+not forbidden; the binding is.
+
+**It will fire on your own comments.** Describing a forbidden shape means
+*describing* it, not spelling it. That has caught this project twice.
+
+## Dependencies have a budget
+
+7 runtime in `app/`, 10 in `functions/` (currently 9) plus 4 lazily imported
+inside the email path only. Beyond it needs a written justification in the pull
+request, not a line in `package.json`. `check:licenses` separately hard-fails
+anything outside the permissive allowlist.
 
 ## Where things are
 
 | | |
 |---|---|
-| `docs/SPEC.md` | normative; cite it as `(SPEC §N)` |
-| `docs/adr/` | nine decisions with their reversal conditions |
 | `config/policy.mjs` | the identity gate, rendered four ways |
 | `functions/src/index.ts` | every endpoint; mirrored by `scripts/lib/endpoints.mjs` |
-| `functions/src/lib/` | one concern per module |
-| `app/src/viewer/` | the nine hooks `DocViewer` decomposes into, plus `frameMode.ts` |
+| `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
-| `scripts/` | operator CLIs, Admin credentials |
-| `cli/` | the end-user CLI, token over HTTPS |
+| `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
+| `docs/adr/` | nine decisions, each with its reversal condition |
+| `docs/verification.md` | the emulator walkthrough, and what it proves |
 
-## Things that look like bugs and are not
+## Looks like a bug, is not
 
-- **`execCommand` is deprecated.** It was deprecated when it was chosen, and it
-  is the only API that edits a document in place without first deciding what a
-  document may contain. See [ADR 0007](docs/adr/0007-execcommand-over-schema-editor.md).
-- **The MCP server is hand-written.** The SDK needs `zod` as a peer, and the
-  server half of streamable HTTP is ~200 lines. See
-  [ADR 0009](docs/adr/0009-hand-written-mcp.md).
-- **Firestore is 8088 and Hosting is 5050.** Not the defaults: 8080 is the most
-  contended port on a developer machine and 5000 is AirPlay on macOS.
-- **`zoom` is in the export stamp lock but untestable in jsdom.** It is a real
-  hiding vector in Blink and WebKit. It is named in `UNREPRESENTABLE_IN_JSDOM`,
-  and a test asserts that list is exactly right.
+- **`execCommand` is deprecated.** It was when it was chosen, and it is the only
+  API that edits a document in place without first deciding what a document may
+  contain ([ADR 0007](docs/adr/0007-execcommand-over-schema-editor.md)).
+- **The MCP server is hand-written.** The SDK needs `zod`; the server half of
+  streamable HTTP is ~200 lines ([ADR 0009](docs/adr/0009-hand-written-mcp.md)).
+- **Firestore is 8088, Hosting 5050, emulator UI 4040.** Not the defaults: 8080,
+  5000 and 4000 are all commonly taken (AirPlay, Docker).
+- **`zoom` is locked in the export stamp but untestable in jsdom.** It is a real
+  hiding vector in Blink and WebKit, named in `UNREPRESENTABLE_IN_JSDOM`, with a
+  test asserting that list is exactly right.
+- **The email secret holds a single space.** `defineSecret` demands a version;
+  Secret Manager refuses an empty payload. Whitespace is how a deployment says
+  "email off", and `apiKey()` trims.
