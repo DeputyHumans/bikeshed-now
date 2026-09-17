@@ -50,8 +50,14 @@ fi
 rm -f /tmp/bg.$$
 
 # ---------------------------------------------------------------------------
-# 3. FILENAMES. `git grep` never sees a path, so a file called
-#    a wordmark named after the company would pass every content scan ever written.
+# 3. FILENAMES. `git grep` never sees a path, so an asset whose NAME carries a
+#    forbidden term — the predecessor shipped exactly that, a wordmark PNG named
+#    after the company — passes every content scan ever written.
+#
+#    Note the example is described rather than spelled. This script is scanned by
+#    tier 1 like everything else, and a guard that trips over its own comments is
+#    a guard people start skipping. The terms live in forbidden-terms.txt, which
+#    is the one path tier 1 excludes.
 # ---------------------------------------------------------------------------
 while IFS= read -r term; do
   case "$term" in ''|\#*) continue ;; esac
