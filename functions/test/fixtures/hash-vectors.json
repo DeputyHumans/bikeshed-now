@@ -1,0 +1,114 @@
+[
+  {
+    "name": "single html file",
+    "files": [
+      {
+        "rel": "index.html",
+        "utf8": "<!doctype html><p>hi</p>"
+      }
+    ],
+    "contentHash": "e220c67316012837e8274313655710ea9b92c8f305947ffae6de144c0b4c8aea",
+    "fileCount": 1,
+    "bytes": 24
+  },
+  {
+    "name": "empty file",
+    "files": [
+      {
+        "rel": "empty.txt",
+        "utf8": ""
+      }
+    ],
+    "contentHash": "dfd5d3645154749552fffc9605fefc916711c35cd7b124777e38ac0dfe10f8ec",
+    "fileCount": 1,
+    "bytes": 0
+  },
+  {
+    "name": "two files, order independent",
+    "files": [
+      {
+        "rel": "b.css",
+        "utf8": "body{}"
+      },
+      {
+        "rel": "a.html",
+        "utf8": "<p>a</p>"
+      }
+    ],
+    "contentHash": "4bf45f6c3d6eeece79fa203ad5fcd1bc06418adb42036b5d81dfbf118e51ddf0",
+    "fileCount": 2,
+    "bytes": 14
+  },
+  {
+    "name": "nested paths",
+    "files": [
+      {
+        "rel": "index.html",
+        "utf8": "<p>x</p>"
+      },
+      {
+        "rel": "assets/deck.css",
+        "utf8": "h1{}"
+      },
+      {
+        "rel": "assets/img/logo.svg",
+        "utf8": "<svg/>"
+      }
+    ],
+    "contentHash": "d5fec35bf581887b4a8713e5c3721ba3a3128e0901a0da0e111875ff4277c103",
+    "fileCount": 3,
+    "bytes": 18
+  },
+  {
+    "name": "trailing space in filename",
+    "files": [
+      {
+        "rel": "a b",
+        "utf8": "c"
+      }
+    ],
+    "contentHash": "de7d909d7ddc0e68b373df6a1d0e17568c0f7be69282e458fc330dd90fd41735",
+    "fileCount": 1,
+    "bytes": 1
+  },
+  {
+    "name": "ambiguous split of the same bytes",
+    "files": [
+      {
+        "rel": "a",
+        "utf8": " bc"
+      }
+    ],
+    "contentHash": "a07f686a7d37586a597e246707a5ba1b1cc663af1afe32d55cc941f8132b0650",
+    "fileCount": 1,
+    "bytes": 3
+  },
+  {
+    "name": "non-ascii path",
+    "files": [
+      {
+        "rel": "été/résumé.md",
+        "utf8": "# café"
+      }
+    ],
+    "contentHash": "b4c8a489d0664aa582c56954091b84d06ebba3f485ffd3b2113625410979d4e9",
+    "fileCount": 1,
+    "bytes": 7
+  },
+  {
+    "name": "markdown pair",
+    "files": [
+      {
+        "rel": "index.md",
+        "utf8": "# Title\n\nBody.\n"
+      },
+      {
+        "rel": "index.html",
+        "utf8": "<!DOCTYPE html>\n<h1>Title</h1>\n"
+      }
+    ],
+    "contentHash": "6f4c40a40c56615c60acd7aad8c42fcbc5121a1539d8b044d3e0687806d5548f",
+    "fileCount": 2,
+    "bytes": 46
+  }
+]

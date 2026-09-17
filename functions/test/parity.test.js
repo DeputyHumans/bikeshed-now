@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: Apache-2.0
+// The ESM and CommonJS membership implementations must agree (SPEC §13).
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const cjs = require("../lib/lib/folders.js");
+
+/**
+ * `scripts/` is ESM and `functions/` is CommonJS, so `computeMembership` exists
+ * twice on purpose. Duplication is allowed here — a shared build artifact is
+ * more machinery and one more thing to be stale — but only because this test
+ * holds the two in agreement.
+ *
+ * The defect this prevents is not hypothetical. In the design being rebuilt,
+ * the script had its own arithmetic, which omitted the parent folder, so
+ * granting one person access silently revoked every inherited reader.
+ */
+const CASES = [
+  {
+    name: "owner only",
+    owner: "owner@example.com",
+    viewers: [],
+    editors: [],
+    parent: null,
+    teams: {},
+  },
+  {
+    name: "direct grants",
+    owner: "owner@example.com",
+    viewers: ["v@example.com"],
+    editors: ["e@example.com"],
+    parent: null,
+    teams: {},
+  },
+  {
+    name: "inherited from a folder",
+    owner: "owner@example.com",
+    viewers: ["v@example.com"],
+    editors: [],
+    parent: { members: ["p@example.com"], editorMembers: ["pe@example.com"] },
+    teams: {},
+  },
+  {
+    name: "team expansion",
+    owner: "owner@example.com",
+    viewers: ["team:design", "ana@example.com"],
+    editors: ["team:leads"],
+    parent: null,
+    teams: { design: ["bo@example.com", "cy@example.com"], leads: ["di@example.com"] },
+  },
+  {
+    name: "unknown team",
+    owner: "owner@example.com",
+    viewers: ["team:gone"],
+    editors: [],
+    parent: null,
+    teams: {},
+  },
+  {
+    name: "mixed case and duplicates",
+    owner: "Owner@Example.com",
+    viewers: ["A@Example.com", "a@example.com", "b@example.com"],
+    editors: ["A@Example.com"],
+    parent: { members: ["Owner@Example.com"], editorMembers: [] },
+    teams: {},
+  },
+  {
+    name: "everything at once",
+    owner: "owner@example.com",
+    viewers: ["team:design", "v@example.com"],
+    editors: ["team:leads", "e@example.com"],
+    parent: { members: ["p@example.com"], editorMembers: ["pe@example.com"] },
+    teams: { design: ["bo@example.com"], leads: ["di@example.com"] },
+  },
+];
+
+test("both implementations agree across the fixture table", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  for (const c of CASES) {
+    const teams = new Map(Object.entries(c.teams));
+    const fromCjs = cjs.computeMembership(c.owner, c.viewers, c.editors, c.parent, teams);
+    const fromEsm = esm.computeMembership(c.owner, c.viewers, c.editors, c.parent, teams);
+    assert.deepEqual(fromEsm, fromCjs, c.name);
+  }
+});
+
+test("both implementations normalize emails identically", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const { normalizeEmail } = require("../lib/lib/access.js");
+  for (const raw of ["  A@Example.com ", "b@example.com", "", "  "]) {
+    assert.equal(esm.normalizeEmail(raw), normalizeEmail(raw), JSON.stringify(raw));
+  }
+});
+
+test("both implementations parse a team reference identically", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const { isTeamRef, teamIdOf } = require("../lib/lib/access.js");
+  for (const raw of ["team:abc", "team:", "a@example.com", "teams:abc"]) {
+    assert.equal(esm.isTeamRef(raw), isTeamRef(raw), raw);
+    assert.equal(esm.teamIdOf(raw), teamIdOf(raw), raw);
+  }
+});
