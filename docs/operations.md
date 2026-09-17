@@ -73,7 +73,7 @@ whatever identity happens to be active is how the wrong project gets modified.
 node scripts/setup.mjs --account you@example.com --project your-firebase-project-id --dry-run
 ```
 
-It prints seven steps and executes nothing, needing no credentials. Read the
+It prints ten steps and executes nothing, needing no credentials. Read the
 project id on the first line before you drop `--dry-run`.
 
 ### 3. Run it
@@ -82,12 +82,55 @@ project id on the first line before you drop `--dry-run`.
 node scripts/setup.mjs --account you@example.com --project your-firebase-project-id
 ```
 
-Steps 1–6 are check-then-act or naturally idempotent, so re-running converges:
+Steps 1–9 are check-then-act or naturally idempotent, so re-running converges:
 enable services, ensure the Firestore database, ensure the **private** bucket
-(uniform access, public access prevention), deploy rules and indexes, deploy
-functions, build and deploy hosting.
+(uniform access, public-access prevention), deploy rules and indexes, ensure the
+email secret exists, grant the runtime service account its permissions, deploy
+functions, allow unauthenticated invocation, then build and deploy hosting.
 
-### 4. Do step 7 by hand
+**The Realtime Database and email are genuinely optional.** Without an RTDB
+instance step 4 skips its rules rather than failing, and the email secret is
+created holding a single space, which the runtime reads as "off".
+
+### 3b. What setup does that is not obvious
+
+Two of its ten steps exist only because a **fresh** Google Cloud project is far
+more locked down than an older one, and every symptom is remote from its cause:
+
+| Missing | What you would see |
+|---|---|
+| `cloudbuild.builds.builder` | the build fails at `gcs-fetcher`, exit 3 |
+| `datastore.user` | every request 500s with `PERMISSION_DENIED` |
+| `firebaseauth.admin` | every sign-in fails with `session_failed` |
+| `storage.objectAdmin` | documents publish but never serve |
+| `iam.serviceAccountTokenCreator` on itself | `createSessionCookie` cannot sign |
+| `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
+
+Step 6 grants the first five to the runtime service account — Storage scoped to
+the content bucket only, never project-wide — and step 8 makes the 23 HTTP
+endpoints publicly invokable. "Publicly invokable" is not "public": each
+function authenticates its own caller. The Firestore trigger is deliberately
+left private.
+
+**If step 8 fails with `FAILED_PRECONDITION`**, the project's organization has
+Domain Restricted Sharing on (`constraints/iam.allowedPolicyMemberDomains`),
+which forbids `allUsers`. No public web app can run under it. Override it for
+this project alone, leaving every other project in the organization restricted:
+
+```bash
+cat > /tmp/policy.yaml <<'YAML'
+constraint: constraints/iam.allowedPolicyMemberDomains
+listPolicy:
+  allValues: ALLOW
+YAML
+gcloud resource-manager org-policies set-policy /tmp/policy.yaml --project <id>
+```
+
+That needs `roles/orgpolicy.policyAdmin`, which can only be granted at
+organization or folder level — not on the project. Grant it, set the override,
+and revoke it again if you would rather not leave it standing.
+
+### 4. Do step 10 by hand
 
 There is no clean CLI for these, so the script prints them as a checklist rather
 than pretending. Each one has a failure mode that reads as a bug:

@@ -136,6 +136,7 @@ the `javascript:` scrub — stays unconditional.
 |---|---|---|
 | `BIKESHED_BUCKET` | recommended | The private content bucket |
 | `BIKESHED_PUBLIC_ORIGIN` | recommended | Origin for links in email and `sitemap.xml` |
+| `BIKESHED_MAIL_FROM` | recommended | The address email is sent FROM, e.g. `Bikeshed <noreply@example.com>` |
 | `BIKESHED_SIGN_IN_HINT` | no | One sentence returned by `GET /config` to a rejected visitor |
 
 ### The bucket is never guessed
@@ -154,15 +155,34 @@ default bucket is fully supported by naming it explicitly, which is the point.
 `BIKESHED_SIGN_IN_HINT` is one sentence, never the allowlist. The allowlist is
 never sent to a client.
 
+### The sending domain is not the serving domain
+
+`BIKESHED_MAIL_FROM` is separate from `BIKESHED_PUBLIC_ORIGIN` on purpose. The
+domain you **serve** from and the one you may **send** from are usually not the
+same, and often cannot be: a default Firebase deployment serves on `*.web.app`,
+which nobody can verify with an email provider.
+
+Unset, it falls back to `noreply@<public origin host>` — correct only when you
+serve from the domain you have verified. Set it whenever those differ, or every
+send is rejected by the provider for an unverified sender.
+
 ### `RESEND_API_KEY` — a Firebase secret, not an env var
 
 ```bash
 firebase functions:secrets:set RESEND_API_KEY --project <id>
 ```
 
-Declared with `defineSecret`, so it never lands on disk. **Email is optional by
-construction**: with no key every send is a logged no-op and the app behaves
-identically. That is the path CI exercises, and it is why the quickstart does
+Declared with `defineSecret`, so it never lands on disk.
+
+**The secret must EXIST before functions deploy, even when email is off.**
+`defineSecret` binds it to every mailing function and a non-interactive deploy
+refuses to proceed when it has no version — while Secret Manager refuses to
+store an empty payload. So "off" is expressed as a **single space**, which the
+runtime trims and reads as unconfigured. `setup.mjs` creates it that way, which
+is what keeps the quickstart free of a Resend account.
+
+**Email is optional by construction**: with a blank key every send is a logged
+no-op and the app behaves identically. That is the path CI exercises, and it is why the quickstart does
 not require a Resend account ([ADR 0008](adr/0008-runtime-email-rendering.md)).
 
 Sends are wrapped in try/catch and never fail the request that triggered them.
