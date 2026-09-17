@@ -1,0 +1,333 @@
+// SPDX-License-Identifier: Apache-2.0
+// The shared data contract (SPEC §4).
+
+/**
+ * These shapes MUST match what the endpoints, the publish CLI and
+ * firestore.rules write and enforce. Field names are fixed by SPEC §4; do not
+ * rename them here without changing the spec in the same commit.
+ */
+
+import type { Timestamp } from "firebase/firestore";
+
+/** Who did this, through what, and which of that is trustworthy (SPEC §17). */
+export interface Actor {
+  /** Null only for the operator scripts, which authenticate as Admin, not as an account. */
+  uid: string | null;
+  email: string;
+  /**
+   * SERVER-DERIVED. A Bearer token cannot claim to be "web", the MCP endpoint
+   * stamps "mcp" regardless of what the caller says, and firestore.rules pins
+   * "web" on the direct client write path.
+   */
+  channel: "web" | "cli" | "mcp" | "api";
+  /** Which personal access token, when the channel is not "web". */
+  tokenId?: string;
+  /** SELF-REPORTED. Rendered as such; never presented as verified. */
+  client?: string;
+  /** SELF-REPORTED agent or model identifier. */
+  agent?: string;
+}
+
+export type Visibility = "private" | "unlisted" | "public";
+export type SourceFormat = "html" | "markdown";
+export type Role = "viewer" | "editor";
+
+/** Export marking, resolved at publish time so it is the OWNER's policy (SPEC §20). */
+export interface Marking {
+  enabled: boolean;
+  label: string;
+  /** Supports {year} {date} {title} {version} {user}. */
+  footer: string;
+}
+
+/** Firestore: docs/{docId} */
+export interface DocMeta {
+  docId: string;
+  title: string;
+  slug: string;
+  ownerUid: string | null;
+  ownerEmail: string;
+  currentVersion: string;
+
+  /**
+   * DIRECT grants: the record of intent. Entries are lowercased emails or
+   * `team:{teamId}` references, which the server expands into `members`.
+   */
+  viewers: string[];
+  editors: string[];
+
+  /**
+   * EFFECTIVE read set: the record of reality. Owner, direct grants, the parent
+   * folder chain's grants, and every team grant expanded to the people in it —
+   * all lowercased.
+   *
+   * This array is simultaneously the read gate and the workspace query key, and
+   * the Firestore `list` rule is only valid because it is statically provable
+   * from an array-contains filter. Anything that makes it something other than a
+   * flat array of lowercased emails breaks the entire workspace (SPEC §5).
+   */
+  members: string[];
+  /** EFFECTIVE editor set. Missing on legacy records: fall back to `editors`. */
+  editorMembers?: string[];
+
+  folderId?: string | null;
+
+  /** Default private. Absent means private. */
+  visibility?: Visibility;
+  /** Widens WHO may edit to any verified account. Never to anyone (SPEC §17). */
+  publicEdit?: boolean;
+  /** Present only while visibility is "unlisted"; it IS the access control. */
+  linkToken?: string;
+
+  /**
+   * GLOBAL trust: whether the viewer sandboxes the content iframe for EVERY
+   * reader. CLI and MCP publishes write true; browser upload and duplicate
+   * write false; the owner flips it. Missing means trusted (SPEC §6c).
+   */
+  trusted?: boolean;
+
+  marking?: Marking;
+
+  createdAt: Timestamp;
+  /** Bumped on every publish. Deliberately NOT touched by a read. */
+  updatedAt: Timestamp;
+
+  draft?: DraftMeta | null;
+  stats?: ViewStats;
+}
+
+/**
+ * Firestore: docs/{docId}.stats — the denormalized usage rollup.
+ *
+ * Lives ON the document so the workspace renders counts with no extra reads and
+ * every member sees the aggregate. Written only by the Admin SDK, always as a
+ * nested map under set/merge, so the view writer and the edit writer cannot
+ * clobber each other. Missing means treat every counter as zero.
+ */
+export interface ViewStats {
+  views: number;
+  viewers: number;
+  totalMs: number;
+  lastViewedAt?: Timestamp;
+  lastViewedByEmail?: string;
+  commits: number;
+  lastEditedAt?: Timestamp;
+  lastEditedByEmail?: string;
+  /**
+   * Automated reads, counted SEPARATELY and never folded into `views` or
+   * `totalMs`. An agent fetching a document forty times would otherwise make
+   * both meaningless, and reading time is not a concept that applies to a
+   * machine fetch (SPEC §17).
+   */
+  apiReads?: number;
+}
+
+/** Firestore: docs/{docId}/viewers/{uid} — per-account rollup. Editor-gated. */
+export interface ViewerStat {
+  uid: string;
+  email: string;
+  views: number;
+  totalMs: number;
+  firstViewedAt?: Timestamp;
+  lastViewedAt?: Timestamp;
+}
+
+/**
+ * Firestore: docs/{docId}/views/{sessionId} — one reading session.
+ *
+ * `ms` is absolute accumulated active time, re-set on every heartbeat, so a
+ * retried beat can never double-count. An anonymous session records a null uid
+ * and is never rolled into viewers/{uid}: sessions are counted, people are not.
+ */
+export interface ViewSession {
+  sessionId: string;
+  uid: string | null;
+  email: string | null;
+  versionId: string;
+  ms: number;
+  via: "app" | "unlisted" | "public";
+  automated?: boolean;
+  actor?: Actor;
+  startedAt?: Timestamp;
+  lastBeatAt?: Timestamp;
+}
+
+/** Firestore: docs/{docId}/acl/{entryId} — append-only ACL provenance (SPEC §17). */
+export interface AclChange {
+  at: Timestamp;
+  actor: Actor;
+  added: string[];
+  removed: string[];
+  viewers: string[];
+  editors: string[];
+}
+
+/**
+ * Firestore: docs/{docId}/trust/{uid} — PERSONAL trust.
+ *
+ * Lifts the untrusted-content sandbox for THIS ACCOUNT ONLY, so any reader may
+ * grant it to themselves: the only session exposed to the bundle's JS is their
+ * own. Never writes DocMeta.trusted (SPEC §6c).
+ */
+export interface PersonalTrust {
+  uid: string;
+  email: string;
+  trustedAt: Timestamp;
+}
+
+/** Firestore: folders/{folderId} — a sharing container that nests (SPEC §13). */
+export interface FolderMeta {
+  folderId: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+  ownerUid: string | null;
+  ownerEmail: string;
+  viewers: string[];
+  editors: string[];
+  members: string[];
+  editorMembers: string[];
+  /** Root-first folder ids: breadcrumb, subtree and cycle guard in one field. */
+  ancestors: string[];
+  depth: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/**
+ * Firestore: teams/{teamId} — an access grant, never a principal (SPEC §18).
+ *
+ * A document always has a person as owner. A team is something you can grant to.
+ */
+export interface TeamMeta {
+  teamId: string;
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  admins: string[];
+  members: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Firestore: users/{uid}. Verification state and cooldowns are server-only. */
+export interface UserRecord {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  providers?: string[];
+  emailNotifications?: boolean;
+  analyticsOptOut?: boolean;
+  defaultMarking?: Marking;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+/** Firestore: users/{uid}/tokens/{tokenId} — metadata only; never the secret. */
+export interface TokenSummary {
+  tokenId: string;
+  name: string;
+  channel: "cli" | "mcp" | "api";
+  createdAt?: Timestamp;
+  lastUsedAt?: Timestamp;
+  revokedAt?: Timestamp | null;
+}
+
+/** Firestore: public/{docId} — the world-readable projection (SPEC §17). */
+export interface PublicDoc {
+  docId: string;
+  title: string;
+  slug: string;
+  currentVersion: string;
+  entry: string;
+  format: SourceFormat;
+  visibility: "unlisted" | "public";
+  publicEdit: boolean;
+  trusted: boolean;
+  publishedAt?: Timestamp;
+}
+
+/** One person's stint of editing a draft, derived from their saves (SPEC §17). */
+export interface EditSession {
+  email: string;
+  actor: Actor;
+  from: number;
+  to: number;
+}
+
+/** Firestore: docs/{docId}.draft — the shared, in-progress edit. */
+export interface DraftMeta {
+  baseVersion: string;
+  entry: string;
+  /** Present for a Markdown-authored document: the canonical source file. */
+  sourceEntry?: string;
+  bytes: number;
+  updatedAt: Timestamp;
+  updatedByEmail: string;
+  editSessions?: EditSession[];
+}
+
+/** Firestore: docs/{docId}/versions/{versionId} — immutable. */
+export interface DocVersion {
+  versionId: string;
+  label: string;
+  /** The file the iframe loads. For Markdown, the COMPILED HTML. */
+  entry: string;
+  format?: SourceFormat;
+  /** For Markdown: the authored source, which is canonical. */
+  sourceEntry?: string;
+  /** Pinned renderer identity, so "why did the hash move" has an answer. */
+  rendererVersion?: string;
+  storagePrefix: string;
+  fileCount: number;
+  bytes: number;
+  /** sha256 over the bundle; identical bytes republish as a no-op (SPEC §9.1). */
+  contentHash: string;
+  files?: string[];
+  parentVersion?: string | null;
+  publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "duplicate";
+  publishedByEmail?: string;
+  publishedBy?: Actor;
+  /** Carried from the draft: who actually wrote this version (SPEC §17). */
+  editSessions?: EditSession[];
+  publishedAt: Timestamp;
+}
+
+/** A W3C-style text anchor, scoped to a stable container id (SPEC §6). */
+export interface Anchor {
+  /** The nearest id-bearing ancestor. Scoping here is what makes anchors survive edits. */
+  elementId: string;
+  exact: string;
+  prefix: string;
+  suffix: string;
+  /** Position fallback, relative to the elementId root. */
+  start: number;
+  end: number;
+}
+
+/** Firestore: docs/{docId}/versions/{versionId}/annotations/{annId} */
+export interface Annotation {
+  annId: string;
+  anchor: Anchor;
+  authorUid: string;
+  authorEmail: string;
+  /** Immutable after creation; `channel` is pinned to "web" by the rules. */
+  actor: Actor;
+  color: string;
+  resolved: boolean;
+  createdAt: Timestamp;
+}
+
+/** Firestore: .../annotations/{annId}/comments/{commentId} */
+export interface Comment {
+  commentId: string;
+  body: string;
+  authorUid: string;
+  authorEmail: string;
+  actor: Actor;
+  createdAt: Timestamp;
+}
+
+/** The typed outcomes of POST /session. Not error strings (SPEC §2). */
+export type SessionStatus = "ok" | "unverified" | "not_allowed" | "session_failed";
