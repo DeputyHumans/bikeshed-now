@@ -231,4 +231,16 @@
 
 @media (max-width: 400px) {
   .viewer-title { display: none; }
+
+  /* The narrowest tier drops the keep-label exception too.
+     Trust and Edit keep their labels at every other width because both change
+     what the document does — but at 400px FITTING outranks that, and the bar
+     overflowed by 69px on an untrusted document even before a Share button
+     existed. Nothing is lost that a screen reader or a tooltip cannot say:
+     aria-label stays on every one of them. */
+  .viewer-toolbar .btn-keep-label .btn-label { display: none; }
+
+  /* A backstop, so no future action can reintroduce the overflow: the row
+     wraps to a second line rather than running off the screen. */
+  .viewer-toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
 }
