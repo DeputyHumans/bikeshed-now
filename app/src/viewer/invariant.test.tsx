@@ -215,6 +215,68 @@ describe("the decoration invariant", () => {
     expect(doc.body.getAttribute("contenteditable")).toBe("true");
   });
 
+  it("does not tear down the editing host when the parent re-renders", async () => {
+    /**
+     * The bug this pins reached production: typing in edit mode did nothing.
+     *
+     * DocViewer passes `onStale` as an inline arrow, so it has a new identity
+     * every render. It was a dependency of `flush`, which was a dependency of
+     * the editor's setup effect — whose CLEANUP removes `contenteditable`. In
+     * edit mode the component re-renders constantly (presence, the edit lock,
+     * save state), so the editing host was destroyed and rebuilt faster than
+     * anyone could type. `keydown` fired; the browser never completed the
+     * insertion, so `beforeinput` never fired at all.
+     *
+     * The assertion is deliberately about the ATTRIBUTE's continuity rather
+     * than about render counts: what broke typing was `contenteditable` going
+     * away, so that is what is watched.
+     */
+    const doc = makeDoc();
+    const { rerender } = render(
+      <Harness doc={doc} mode={{ kind: "reading", versionId: "v1", draft: false, sandboxed: true }} />,
+    );
+    act(() => {
+      rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} />);
+    });
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+
+    let touches = 0;
+    /**
+     * Count the MUTATION RECORDS, not the attribute's state when the callback
+     * runs. Observer callbacks are delivered on a microtask, so a remove
+     * immediately followed by a re-add looks like "still there" by then — which
+     * is exactly how the first version of this test passed with the bug put
+     * back. A settled editor touches this attribute zero times.
+     *
+     * The harness document comes from DOMParser and has no defaultView; jsdom's
+     * global observer works across documents.
+     */
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.attributeName === "contenteditable") touches += 1;
+      }
+    });
+    observer.observe(doc.body, { attributes: true, attributeFilter: ["contenteditable"] });
+
+    // Three re-renders in the SAME mode, exactly as a presence heartbeat or a
+    // save-state change produces.
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} />);
+      });
+    }
+    await act(async () => {
+      await Promise.resolve();
+    });
+    observer.disconnect();
+
+    expect(
+      touches,
+      "contenteditable was torn down and rebuilt while still editing — a callback prop is a dependency somewhere it must not be",
+    ).toBe(0);
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+  });
+
   it("publishes bytes that carry no trace of this app", async () => {
     vi.useFakeTimers();
     const doc = makeDoc();

@@ -57,6 +57,24 @@ export function useInlineEditor(options: {
   const lastSaveFailed = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * `onStale` is held in a ref so it cannot destabilise `flush`.
+   *
+   * DocViewer passes an inline arrow, so it has a new identity on every render.
+   * As a dependency it rebuilt `flush`, which rebuilt the setup effect below,
+   * whose CLEANUP removes `contenteditable` — and in edit mode this component
+   * re-renders constantly (presence, the lock, save state). The editing host
+   * was therefore being torn down and recreated faster than anybody could
+   * type: keydown fired, the browser never got to perform the insertion, and
+   * `beforeinput` never fired at all. Typing silently did nothing.
+   *
+   * This is the SECOND time this exact shape has bitten here — `onSelect` did
+   * it to useAnnotationLayer — so the rule is worth stating: in these hooks, a
+   * callback prop is held in a ref and never becomes a dependency.
+   */
+  const onStaleRef = useRef(onStale);
+  onStaleRef.current = onStale;
+
   const flush = useCallback(async () => {
     if (!doc || mode.kind !== "editing") return;
     setSaveState("saving");
@@ -72,13 +90,17 @@ export function useInlineEditor(options: {
       lastSaveFailed.current = true;
       setSaveState("error");
       if (e instanceof StaleVersionError) {
-        onStale(e.currentVersion);
+        onStaleRef.current(e.currentVersion);
         setSaveError(e.message);
       } else {
         setSaveError((e as Error).message);
       }
     }
-  }, [doc, mode, docId, authoredAssets, onStale]);
+  }, [doc, mode, docId, authoredAssets]);
+
+  /** Held in a ref for the same reason, so the effect can close over it safely. */
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
   useEffect(() => {
     if (!editing || !doc) return;
@@ -105,7 +127,7 @@ export function useInlineEditor(options: {
       rewriteLegacyFontTags(doc);
       setSaveState("dirty");
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), AUTOSAVE_MS);
+      timer.current = setTimeout(() => void flushRef.current(), AUTOSAVE_MS);
     };
     doc.addEventListener("input", onInput);
 
@@ -116,7 +138,9 @@ export function useInlineEditor(options: {
       body.removeAttribute("contenteditable");
       body.removeAttribute("spellcheck");
     };
-  }, [editing, doc, epoch, flush]);
+    // NOT `flush`. Depending on it would reintroduce exactly the tear-down
+    // described above the ref declaration, one indirection further away.
+  }, [editing, doc, epoch]);
 
   return {
     saveState,
