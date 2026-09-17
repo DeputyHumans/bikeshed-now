@@ -897,8 +897,8 @@ and public-access-prevention; `contentProxy` stays the only path bytes take.
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A non-private document is mirrored to **`public/{docId}`** carrying
-only `title`, `slug`, `currentVersion`, `entry`, `format`, `visibility`,
-`publicEdit`, `trusted`, `publishedAt` — written by the same server paths that
+only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
+`visibility`, `publicEdit`, `trusted`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant visibility returns to private**.
 
 Everything else under `docs/**` still requires an account, even on a public

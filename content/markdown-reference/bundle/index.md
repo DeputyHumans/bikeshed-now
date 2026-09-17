@@ -114,7 +114,19 @@ Markdown may contain raw HTML, and it passes straight through. It is governed
 by the same trust model as a hand-authored document rather than by a separate
 sanitizer policy — one concept, not two.
 
+That includes `<script>`. The block below fills the empty `<div>` beside it, so
+this document is a *scripted* document: uploaded through the browser it renders
+sandboxed and offers the trust prompt, and until somebody vouches for it the
+line below stays empty. Published through the CLI it is trusted on arrival and
+the line is filled. Nothing about that is specific to Markdown — it is the same
+model a hand-authored document obeys.
+
 <div id="generated"></div>
+
+<script>
+  document.getElementById("generated").textContent =
+    "This line was written by the document's own script.";
+</script>
 
 <details>
 <summary>Something folded</summary>

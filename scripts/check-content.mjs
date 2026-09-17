@@ -30,13 +30,34 @@ const check = (ok, message) => {
   if (!ok) problems.push(message);
 };
 
-/** Properties every sample must have, whatever it is demonstrating. */
+/**
+ * Properties every sample must have, whatever it is demonstrating.
+ *
+ * The external-URL rule is about what the browser FETCHES, not about what the
+ * document mentions. A `<a href="https://…">` is a link a reader may choose to
+ * follow; `src=`, `<link rel=stylesheet>`, `url()` and `@import` are requests
+ * the browser makes on its own, before the reader does anything, and those are
+ * what leak a confidential document's reader to a third party.
+ *
+ * Distinguishing them matters here because the Markdown sample legitimately
+ * links out to example.com. A rule that banned both would either fail on that
+ * or — worse — be quietly relaxed until it meant nothing.
+ */
 function checkUniversal(name, file, text) {
   const where = `${name}/${file}`;
-  check(
-    !/(?:src|href)="https?:\/\//.test(text),
-    `${where}: an external URL. Every sample must be self-contained — a reader's browser should never contact a third party to render one.`,
-  );
+  const ASSET_FETCHES = [
+    [/\bsrc\s*=\s*"https?:\/\//, "src="],
+    [/<link\b[^>]*href\s*=\s*"https?:\/\//, "<link href="],
+    [/url\(\s*['"]?https?:\/\//, "url()"],
+    [/@import\s+(?:url\()?['"]https?:\/\//, "@import"],
+    [/!\[[^\]]*\]\(\s*https?:\/\//, "![](…) image"],
+  ];
+  for (const [re, what] of ASSET_FETCHES) {
+    check(
+      !re.test(text),
+      `${where}: ${what} fetches from a third party. Every sample must be self-contained — a reader's browser should never contact anybody to RENDER one. Outbound <a href> links are fine.`,
+    );
+  }
   check(
     !/data:image|\.(?:png|jpe?g|gif|webp)"/.test(text),
     `${where}: a raster image. Samples use inline SVG so they scale, print and recolour.`,
@@ -87,6 +108,13 @@ const EXPECTATIONS = {
     report(
       /<details>/.test(text) && /<div id="generated">/.test(text),
       "markdown-reference must keep its raw-HTML block: it demonstrates that raw HTML flows through the existing trust model.",
+    );
+    // The Markdown half of the trust proof. A and B prove both halves for
+    // hand-authored HTML; without a script HERE, nothing in the repository
+    // demonstrates that a Markdown document's raw HTML obeys the same model.
+    report(
+      /<script/.test(text),
+      "markdown-reference must contain a <script> inside its raw-HTML block: it is the sample that proves the trust model reaches Markdown documents too.",
     );
   },
 };
