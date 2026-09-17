@@ -169,7 +169,7 @@ human concept; a machine fetch has none.
 
 ## What this walkthrough found
 
-Four defects, none of which the 305 unit and rules tests could have caught,
+Four defects, none of which the 344 unit and rules tests could have caught,
 because each needed a real runtime:
 
 | | Found because |
