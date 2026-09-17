@@ -935,7 +935,7 @@ is never a guess:
 
 ```ts
 type Actor = {
-  uid: string;      // always a real account — there are no anonymous writes
+  uid: string | null;  // an account, or null for the operator scripts (below)
   email: string;
   channel: "web" | "cli" | "mcp" | "api";   // SERVER-DERIVED, never client-claimed
   tokenId?: string; // which PAT, when channel !== "web"
@@ -955,6 +955,12 @@ that implies verification it does not have is worse than no badge.
 
 Stamped on: version records (`publishedBy`), draft `editSessions[]`, annotations
 and comments (`actor`, immutable after create), view sessions, and ACL changes.
+
+`uid` is null in exactly one case: the operator scripts in `scripts/`, which
+authenticate with Admin credentials rather than as an account. They remain
+identifiable — `channel: "cli"`, an `email` from the required `--account` flag,
+and no `tokenId` — and that combination is precisely what distinguishes an
+operator action from a user's own CLI token.
 
 **`tokenId` is the forensic primitive.** If a token leaks, "everything this token
 ever touched" is one query, and revocation is one click without disturbing the
