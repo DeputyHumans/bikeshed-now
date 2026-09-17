@@ -46,13 +46,27 @@ import type { Annotation, TeamMeta } from "../types";
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
  * what remains here is which hooks exist and what they are wired to.
  *
- * The declaration order below is load-bearing, not stylistic:
- * `useAnnotationLayer` MUST come before `useInlineEditor`. Within one
- * component, effect cleanups run in declaration order before any setup — so the
- * annotation layer's cleanup, which strips every highlight, has already run by
- * the time the editor attaches. That is leg 2 of the four defences that keep
- * decoration out of published bytes; legs 1, 3 and 4 are in the hooks and the
- * serializer.
+ * The declaration order below is load-bearing, not stylistic. Every hook that
+ * puts something INTO the document must be declared before `useInlineEditor`.
+ * Within one component, effect cleanups run in declaration order before any
+ * setup, so their cleanups have already run by the time the editor attaches.
+ *
+ * Today that is two of them, and both matter:
+ *   `useAnnotationLayer`  strips every highlight and the injected stylesheet
+ *   `usePeerPresence`     removes the peer overlay and its stylesheet
+ *
+ * Presence was originally declared AFTER the editor, and its overlay reached
+ * edit mode in a real browser: its cleanup ran after the editor's setup, so the
+ * peer layer was still in the document the editor attached to.
+ *
+ * What actually prevents that now is leg 1 — `usePeerPresence` does not create
+ * the overlay at all while this reader is editing, so there is nothing to tear
+ * down and the ordering cannot matter. This order is the belt to that braces,
+ * kept because the next hook to inject something will be written by somebody
+ * reading this list rather than that guard.
+ *
+ * This is leg 2 of the four defences that keep decoration out of published
+ * bytes; legs 1, 3 and 4 are in the hooks and the serializer.
  */
 
 type Dialog =
@@ -148,16 +162,6 @@ export function DocViewer() {
     onSelect: setSelectedId,
   });
 
-  const editor = useInlineEditor({
-    mode,
-    doc: frame.doc,
-    epoch: frame.epoch,
-    docId,
-    authoredAssets: frame.authoredAssets,
-    observing: lock.observing,
-    onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
-  });
-
   const presence = usePeerPresence({
     docId,
     uid: user?.uid ?? null,
@@ -167,6 +171,16 @@ export function DocViewer() {
     epoch: frame.epoch,
     mode: mode.kind === "editing" ? "edit" : "view",
     enabled: signedIn,
+  });
+
+  const editor = useInlineEditor({
+    mode,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    docId,
+    authoredAssets: frame.authoredAssets,
+    observing: lock.observing,
+    onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
 
   const live = useLiveSync({

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useInlineEditor } from "./useInlineEditor";
+import { usePeerPresence } from "./usePeerPresence";
 import { ANN_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
@@ -47,6 +48,43 @@ vi.mock("../edit", async () => {
   return { ...actual, saveDraft };
 });
 
+/**
+ * Presence talks to the Realtime Database, which is not the subject here. The
+ * OVERLAY is: it is the third class of thing this app puts inside somebody
+ * else's document, after highlights and placeholder marks, and the only one
+ * that was never in this harness. It is mocked down to a peer who is selecting
+ * text, which is all it takes to make the overlay render.
+ */
+const PEER = {
+  uid: "u2",
+  email: "bo@example.com",
+  name: "Bo",
+  color: "#00769b",
+  mode: "view" as const,
+  focus: { elementId: "s2", exact: "second passage", prefix: "", suffix: "", start: 0, end: 14 },
+  viewport: 0,
+  composing: null,
+  lastChanged: 0,
+};
+
+vi.mock("../presence", async () => {
+  const actual = await vi.importActual<typeof import("../presence")>("../presence");
+  return {
+    ...actual,
+    joinPresence: () => ({
+      setMode: () => {},
+      setFocus: () => {},
+      setViewport: () => {},
+      setComposing: () => {},
+      leave: () => {},
+    }),
+    watchPeers: (_docId: string, _uid: string, cb: (peers: unknown[]) => void) => {
+      cb([PEER]);
+      return () => {};
+    },
+  };
+});
+
 function makeDoc(): Document {
   return new DOMParser().parseFromString(
     `<!DOCTYPE html><html><head><style>body{margin:0}</style></head>
@@ -78,9 +116,13 @@ const ANNOTATIONS = [
  * A minimal stand-in for the viewer.
  *
  * The hook DECLARATION ORDER here mirrors DocViewer exactly, and that is the
- * point: effect cleanups run in declaration order before any setup, so the
- * annotation layer's strip has already happened by the time the editor
- * attaches. Reordering these two lines is what the test would catch.
+ * point: effect cleanups run in declaration order before any setup, so every
+ * strip has already happened by the time the editor attaches. Reordering these
+ * lines is what the test would catch.
+ *
+ * EVERY hook that puts something in the document has to be here. Presence was
+ * not, and that is precisely how the peer overlay reached edit mode in a real
+ * browser: the harness mirrored an order it did not contain.
  */
 function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
   const [selected] = useState<string | null>(null);
@@ -93,6 +135,17 @@ function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
     annotations: ANNOTATIONS,
     selectedId: selected,
     onSelect: () => {},
+  });
+
+  usePeerPresence({
+    docId: "d1",
+    uid: "u1",
+    emailLower: "ana@example.com",
+    displayName: "Ana",
+    doc,
+    epoch: 1,
+    mode: mode.kind === "editing" ? "edit" : "view",
+    enabled: true,
   });
 
   const editor = useInlineEditor({

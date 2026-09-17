@@ -59,15 +59,29 @@ export function usePeerPresence(options: {
     return watchPeers(docId, uid, setPeers);
   }, [enabled, docId, uid]);
 
-  // The overlay lives inside the document, so it is recreated on every load.
+  /**
+   * The overlay lives inside the document, so it is recreated on every load —
+   * and it does NOT exist while this reader is editing.
+   *
+   * That second half is leg 1 of the decoration invariant applied to presence,
+   * and it was missing. `mode` was not a dependency, so on the no-remount path
+   * into edit mode — an editor already viewing the draft clicks Edit, the
+   * iframe `src` is unchanged, `doc` and `epoch` are unchanged — the peer layer
+   * stayed in the document the editor then attached to. In development the
+   * assertion caught it; in production `serializeCleanHtml` would have been the
+   * only thing between a peer caret and the next published version.
+   *
+   * An OBSERVER is not editing: their frame mode is "reading", so they keep
+   * every peer cursor, which is the whole point of observe mode.
+   */
   useEffect(() => {
-    if (!enabled || !doc) return;
+    if (!enabled || !doc || mode === "edit") return;
     overlay.current = createPeerOverlay(doc);
     return () => {
       overlay.current?.destroy();
       overlay.current = null;
     };
-  }, [enabled, doc, epoch]);
+  }, [enabled, doc, epoch, mode]);
 
   useEffect(() => {
     overlay.current?.render(peers);
