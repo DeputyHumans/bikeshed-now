@@ -156,10 +156,14 @@
  * unmounting, so the frame is never remounted and the reader never loses their
  * place.
  */
+/* The class lives on <body> (see DocViewer), so every one of these is a real
+   descendant selector. When it lived on .viewer, the first never matched — the
+   header is a sibling of <main> — and presenting left it on screen. */
 .is-presenting .app-header,
 .is-presenting .viewer-toolbar,
 .is-presenting .viewer-banners,
-.is-presenting .comments-panel {
+.is-presenting .comments-panel,
+.is-presenting .consent {
   display: none;
 }
 .is-presenting .viewer { height: 100vh; height: 100dvh; }

@@ -95,6 +95,25 @@ export function DocViewer() {
   const [commentsOpen, setCommentsOpen] = useState(true);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const [presenting, setPresenting] = useState(false);
+
+  /**
+   * Presentation is an APP-level state, so its class goes on <body>.
+   *
+   * It used to go on this component's own .viewer div, which quietly broke two
+   * of the four things it claims to do: `.is-presenting .app-header` never
+   * matched, because the header is a sibling of <main> and not a descendant of
+   * the viewer, and `.is-presenting .viewer` never matched either, because
+   * .viewer CARRIED the class rather than descending from it. Presenting
+   * therefore left the application header on screen over the document.
+   *
+   * On <body> every one of those selectors means what it reads as — including
+   * hiding the cookie banner, which would otherwise be the only chrome left on
+   * somebody's full-window presentation.
+   */
+  useEffect(() => {
+    document.body.classList.toggle("is-presenting", presenting);
+    return () => document.body.classList.remove("is-presenting");
+  }, [presenting]);
   const [pendingComment, setPendingComment] = useState(false);
 
   const signedIn = gate === "ready" && Boolean(user);
@@ -386,7 +405,7 @@ export function DocViewer() {
   const lockColor = presence.peers.find((p) => p.uid === lock.lock?.uid)?.color;
 
   return (
-    <div className={presenting ? "viewer is-presenting" : "viewer"} data-pane={pane}>
+    <div className="viewer" data-pane={pane}>
       {editingNow ? (
         <EditToolbar
           format={doc.format}
