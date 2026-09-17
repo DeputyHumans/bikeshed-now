@@ -19,6 +19,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as mime from "mime-types";
 import { bucketName } from "../config";
 import type { Actor } from "./actor";
@@ -37,7 +38,7 @@ import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
 
-const now = () => admin.firestore.FieldValue.serverTimestamp();
+const now = () => FieldValue.serverTimestamp();
 
 export interface CompiledBundle {
   files: BundleFile[];
@@ -285,10 +286,10 @@ export async function commitNewVersion(args: {
       docRef,
       {
         currentVersion: versionId,
-        draft: admin.firestore.FieldValue.delete(),
+        draft: FieldValue.delete(),
         updatedAt: now(),
         stats: {
-          commits: admin.firestore.FieldValue.increment(1),
+          commits: FieldValue.increment(1),
           lastEditedAt: now(),
           lastEditedByEmail: args.authorEmail,
         },

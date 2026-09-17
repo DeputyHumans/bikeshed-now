@@ -2,6 +2,7 @@
 // The world-readable projection of a non-private document (SPEC §17).
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { visibilityOf, type DocAclData } from "./acl";
 
 type Db = admin.firestore.Firestore;
@@ -35,7 +36,7 @@ export interface PublicDoc {
   publicEdit: boolean;
   /** Needed so an anonymous reader's iframe is sandboxed the same way (SPEC §6c). */
   trusted: boolean;
-  publishedAt: admin.firestore.Timestamp | admin.firestore.FieldValue | null;
+  publishedAt: admin.firestore.Timestamp | FieldValue | null;
 }
 
 /** Fields that may appear in the projection. Anything else is a leak. */

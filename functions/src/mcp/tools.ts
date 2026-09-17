@@ -21,6 +21,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { bucketName } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
@@ -88,13 +89,13 @@ async function recordApiRead(
         via: "app",
         automated: true,
         actor: ctx.actor,
-        reads: admin.firestore.FieldValue.increment(1),
-        lastBeatAt: admin.firestore.FieldValue.serverTimestamp(),
+        reads: FieldValue.increment(1),
+        lastBeatAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
     await docRef.set(
-      { stats: { apiReads: admin.firestore.FieldValue.increment(1) } },
+      { stats: { apiReads: FieldValue.increment(1) } },
       { merge: true },
     );
   } catch {
@@ -367,7 +368,7 @@ export const TOOLS: ToolDefinition[] = [
         // and in the notification email. A reviewer should never have to guess
         // whether feedback came from a person.
         actor: ctx.actor,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       });
       return { commentId: commentRef.id, threadId, documentId: ref.id };
     },

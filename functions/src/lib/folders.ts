@@ -19,6 +19,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { isTeamRef, normalizeEmail, teamIdOf } from "./access";
 import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -205,7 +206,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         editorMembers: membership.editorMembers,
         ancestors,
         depth: ancestors.length,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
@@ -244,7 +245,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
           {
             members: docMembership.members,
             editorMembers: docMembership.editorMembers,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
@@ -299,7 +300,7 @@ export async function persistDocMembership(
       editors: fields.editors,
       members: membership.members,
       editorMembers: membership.editorMembers,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
       ...extra,
     },
     { merge: true },

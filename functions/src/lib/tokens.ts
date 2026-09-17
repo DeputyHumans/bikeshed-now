@@ -3,6 +3,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 type Db = admin.firestore.Firestore;
 
@@ -85,7 +86,7 @@ export async function mintToken(
   const tokenId = randomBytes(ID_BYTES).toString("hex");
   const secret = randomBytes(SECRET_BYTES).toString("base64url");
   const plaintext = `${PREFIX}${tokenId}.${secret}`;
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  const now = FieldValue.serverTimestamp();
 
   const batch = db.batch();
   batch.set(db.collection("tokens").doc(tokenId), {
@@ -119,7 +120,7 @@ export async function revokeToken(
   const ref = db.collection("tokens").doc(tokenId);
   const snap = await ref.get();
   if (!snap.exists || snap.data()?.uid !== uid) return false;
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  const now = FieldValue.serverTimestamp();
   const batch = db.batch();
   batch.set(ref, { revokedAt: now }, { merge: true });
   batch.set(
@@ -188,7 +189,7 @@ export async function verifyToken(
   if (expected.length !== actual.length) return null;
   if (!timingSafeEqual(expected, actual)) return null;
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  const now = FieldValue.serverTimestamp();
   void db
     .batch()
     .set(snap.ref, { lastUsedAt: now }, { merge: true })

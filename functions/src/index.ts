@@ -17,6 +17,17 @@
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+/**
+ * FieldValue comes from the MODULAR entry point, not `FieldValue`.
+ *
+ * The Functions emulator wraps `firebase-admin` in a proxy so calls reach the
+ * local services, and that proxy does not carry the static namespace properties
+ * onto the callable `firestore` function — so `FieldValue` is
+ * `undefined` there and every write that stamps a timestamp throws. It works in
+ * a deployed function, which is exactly why it survived 127 unit tests and was
+ * only found by running the emulator suite.
+ */
+import { FieldValue } from "firebase-admin/firestore";
 import * as cookie from "cookie";
 import * as mime from "mime-types";
 import { randomBytes, createHash } from "crypto";
@@ -103,7 +114,7 @@ if (admin.apps.length === 0) {
 
 const db = () => admin.firestore();
 const bucket = () => admin.storage().bucket(bucketName());
-const now = () => admin.firestore.FieldValue.serverTimestamp();
+const now = () => FieldValue.serverTimestamp();
 
 /** Functions that may send email declare the secret; the rest never load it. */
 const MAILING = { region: REGION, secrets: [RESEND_API_KEY] };
@@ -584,7 +595,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
         ? data.linkToken
         : randomBytes(16).toString("base64url");
   } else {
-    update.linkToken = admin.firestore.FieldValue.delete();
+    update.linkToken = FieldValue.delete();
   }
   await ref.set(update, { merge: true });
   await syncPublicProjection(db(), docId);
@@ -1040,7 +1051,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
   const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
   if (!dup.empty) {
     await docRef.set(
-      { draft: admin.firestore.FieldValue.delete(), updatedAt: now() },
+      { draft: FieldValue.delete(), updatedAt: now() },
       { merge: true },
     );
     await bucket().deleteFiles({ prefix: draftPrefix, force: true });
@@ -1107,7 +1118,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
         docRef,
         {
           currentVersion: versionId,
-          draft: admin.firestore.FieldValue.delete(),
+          draft: FieldValue.delete(),
           // `trusted` is deliberately untouched, so it PROPAGATES: a document
           // the owner trusted stays trusted across in-app edits. Safe because
           // platform editing is parent-driven and cannot introduce a new
@@ -1115,7 +1126,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
           // trusted:false documents.
           updatedAt: now(),
           stats: {
-            commits: admin.firestore.FieldValue.increment(1),
+            commits: FieldValue.increment(1),
             lastEditedAt: now(),
             lastEditedByEmail: caller.emailLower,
           },
@@ -1817,8 +1828,8 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
         {
           uid: caller.uid,
           email: caller.emailLower,
-          views: admin.firestore.FieldValue.increment(isNewSession ? 1 : 0),
-          totalMs: admin.firestore.FieldValue.increment(delta),
+          views: FieldValue.increment(isNewSession ? 1 : 0),
+          totalMs: FieldValue.increment(delta),
           ...(isNewViewer ? { firstViewedAt: now() } : {}),
           lastViewedAt: now(),
         },
@@ -1830,11 +1841,11 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
       docRef,
       {
         stats: automated
-          ? { apiReads: admin.firestore.FieldValue.increment(isNewSession ? 1 : 0) }
+          ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
           : {
-              views: admin.firestore.FieldValue.increment(isNewSession ? 1 : 0),
-              viewers: admin.firestore.FieldValue.increment(isNewViewer ? 1 : 0),
-              totalMs: admin.firestore.FieldValue.increment(delta),
+              views: FieldValue.increment(isNewSession ? 1 : 0),
+              viewers: FieldValue.increment(isNewViewer ? 1 : 0),
+              totalMs: FieldValue.increment(delta),
               lastViewedAt: now(),
               ...(caller ? { lastViewedByEmail: caller.emailLower } : {}),
             },
@@ -1955,12 +1966,12 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     return;
   }
   if (Number(verification.expiresAt ?? 0) < Date.now()) {
-    await ref.set({ verification: admin.firestore.FieldValue.delete() }, { merge: true });
+    await ref.set({ verification: FieldValue.delete() }, { merge: true });
     res.status(409).json({ error: "that code has expired" });
     return;
   }
   if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
-    await ref.set({ verification: admin.firestore.FieldValue.delete() }, { merge: true });
+    await ref.set({ verification: FieldValue.delete() }, { merge: true });
     res.status(429).json({ error: "too many attempts; request a new code" });
     return;
   }
@@ -1983,7 +1994,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     {
       uid,
       email: verification.email,
-      verification: admin.firestore.FieldValue.delete(),
+      verification: FieldValue.delete(),
     },
     { merge: true },
   );
