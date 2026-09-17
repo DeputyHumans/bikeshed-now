@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    Safari pinned-tab mask. One flat black layer, no <style> and no <defs>:
+    Safari's mask renderer ignores both, so anything relying on them disappears.
+  -->
+  <g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 14 16 4l12 10" stroke-width="3"/>
+    <path d="M6.5 15v13M25.5 15v13" stroke-width="3"/>
+    <path d="M11 18.5h10M11 26.5h10M11 22.5h7" stroke-width="2.4"/>
+  </g>
+</svg>

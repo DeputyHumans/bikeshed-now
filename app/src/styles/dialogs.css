@@ -1,0 +1,218 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * Modals, menus, the share panel, and the trust dialog (SPEC §6c, §17, §18, §19).
+ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--s-3);
+  background: rgba(var(--ink-rgb), 0.44);
+}
+
+.modal {
+  width: min(520px, 100%);
+  max-height: min(84vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-xl);
+}
+.modal-wide { width: min(720px, 100%); }
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+}
+.modal-title { font-size: var(--fs-h3); }
+.modal-head .icon-btn { margin-left: auto; }
+.modal-body { padding: var(--s-3); overflow-y: auto; }
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-top: 1px solid var(--color-line);
+}
+.modal-foot .spacer { flex: 1; }
+
+.menu {
+  position: absolute;
+  z-index: 55;
+  min-width: 192px;
+  padding: var(--s-1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover:not(:disabled) { background: var(--color-surface); }
+.menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.menu-item-danger { color: var(--color-danger); }
+.menu-sep { height: 1px; margin: var(--s-1) 0; background: var(--color-line); }
+.menu-label {
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--fs-caption);
+  font-weight: 620;
+  color: var(--color-ink-muted);
+}
+
+/* --- Sharing (SPEC §18) --------------------------------------------------
+ * Teams and people sit in ONE list, and a team shows its expansion inline:
+ * "who can actually read this" must never require a second screen.
+ */
+.share-list { list-style: none; margin: 0 0 var(--s-3); padding: 0; }
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.share-row:last-child { border-bottom: 0; }
+.share-principal { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.share-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-sub { font-size: var(--fs-caption); color: var(--color-ink-muted); }
+.share-role { margin-left: auto; }
+
+.team-expansion {
+  margin: 0 0 var(--s-2) var(--s-4);
+  padding: var(--s-2);
+  border-left: 2px solid var(--color-line);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.team-expansion summary { cursor: pointer; }
+
+/* --- Visibility ---------------------------------------------------------- */
+
+.visibility-options { display: flex; flex-direction: column; gap: var(--s-2); }
+.visibility-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.visibility-option[data-selected="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.visibility-desc { font-size: var(--fs-caption); color: var(--color-ink-muted); }
+
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  padding: var(--s-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.link-row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  border: 0;
+  background: none;
+}
+
+/* --- Trust (SPEC §6c) ----------------------------------------------------
+ * Surfaced ONLY when it would change something: the document is still
+ * sandboxed for this reader AND its DOM actually contains a script tag. A
+ * static upload therefore never prompts.
+ */
+.trust-scopes { display: flex; flex-direction: column; gap: var(--s-2); }
+.trust-scope {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+}
+.trust-scope-title { font-weight: 620; margin-bottom: 2px; }
+.trust-scope-note { font-size: var(--fs-caption); color: var(--color-ink-muted); }
+.trust-scope[data-scope="global"] { border-color: rgba(138, 82, 0, 0.3); background: var(--color-warn-soft); }
+
+/* --- Tokens (SPEC §19) ---------------------------------------------------
+ * Shown once. There is no second chance, and the interface says so before the
+ * dialog can be dismissed.
+ */
+.token-reveal {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+}
+.token-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  word-break: break-all;
+}
+.token-list { list-style: none; margin: 0; padding: 0; }
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.token-row[data-revoked="true"] { opacity: 0.5; }
+.token-unused { color: var(--color-warn); }
+
+/* --- Image export -------------------------------------------------------- */
+
+.bg-choices { display: flex; gap: var(--s-2); }
+.bg-choice {
+  width: 40px;
+  height: 32px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.bg-choice[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--color-accent); }
+.bg-choice[data-bg="transparent"] {
+  background-image: linear-gradient(45deg, var(--color-surface) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-surface) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-surface) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-surface) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+.bg-choice[data-bg="white"] { background: #ffffff; }
+.bg-choice[data-bg="surface"] { background: var(--color-surface); }
+
+@media (max-width: 600px) {
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal {
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+}

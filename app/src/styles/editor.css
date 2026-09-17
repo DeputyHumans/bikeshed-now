@@ -1,0 +1,123 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The WYSIWYG toolbar and its save state (SPEC §6a, §11).
+ */
+
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--s-2);
+  border-right: 1px solid var(--color-line);
+}
+.toolbar-group:last-of-type { border-right: 0; }
+
+.toolbar-select {
+  min-height: 30px;
+  padding: 0 var(--s-1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-size: var(--fs-caption);
+}
+
+/**
+ * Markdown cannot express a font family, a size, a colour or an alignment, so
+ * those controls are DISABLED with an explanation rather than hidden.
+ *
+ * A control that appears to work and then loses your formatting on save is
+ * worse than one that is visibly unavailable — and a control that silently
+ * disappears leaves the author wondering what they did wrong.
+ */
+.toolbar-btn:disabled,
+.toolbar-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.toolbar-unavailable {
+  position: relative;
+}
+.toolbar-unavailable::after {
+  content: attr(data-reason);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: var(--color-bg);
+  font-size: var(--fs-caption);
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+.toolbar-unavailable:hover::after,
+.toolbar-unavailable:focus-within::after { opacity: 1; }
+
+.save-state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.save-state[data-state="error"] { color: var(--color-danger); }
+.save-state[data-state="saved"] { color: var(--color-success); }
+
+/* --- The edit lock (SPEC §16) --------------------------------------------
+ * Observe mode is not a locked-out state. You watch the draft, see the
+ * editor's caret live, and can still highlight and comment: review does not
+ * stop because somebody is typing.
+ */
+.lock-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-small);
+}
+.lock-holder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 620;
+  color: var(--lock-color, var(--color-ink));
+}
+.lock-actions { margin-left: auto; display: flex; gap: var(--s-1); }
+
+.observe-mode .edit-toolbar {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* --- Generated-container placeholders ------------------------------------
+ * The visual treatment lives in the stylesheet INJECTED into the iframe
+ * (wysiwyg/placeholders.ts), because it has to apply inside a document this
+ * stylesheet never reaches. Described here so the two are findable together.
+ */
+
+.commit-blocked {
+  font-size: var(--fs-small);
+}
+.commit-blocked strong { font-weight: 640; }
+
+@media (max-width: 860px) {
+  .toolbar-group { border-right: 0; padding-right: var(--s-1); }
+  /* Below this width the toolbar wraps to three rows, which pushes the document
+     off screen. The overflow menu carries everything past the essentials. */
+  .toolbar-group[data-overflow="true"] { display: none; }
+}

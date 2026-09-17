@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bikeshed">
+  <!--
+    The source for the raster app icons. Home-screen and manifest icons are
+    composited onto an unknown background, so this one carries its own.
+  -->
+  <rect width="64" height="64" rx="14" fill="#ffffff"/>
+  <g transform="translate(16 16) scale(1)" fill="none"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 14 16 4l12 10" stroke="#1a1a26" stroke-width="2.6"/>
+    <path d="M6.5 15v13M25.5 15v13" stroke="#1a1a26" stroke-width="2.6"/>
+    <path d="M11 18.5h10M11 26.5h10" stroke="#1a1a26" stroke-width="2"/>
+    <path d="M11 22.5h7" stroke="#b5257b" stroke-width="2"/>
+  </g>
+</svg>

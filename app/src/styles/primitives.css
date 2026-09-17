@@ -1,0 +1,270 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * Buttons, fields, chips, cards, toasts: the pieces every feature reuses.
+ *
+ * These names are NOT prefixed. They never enter the document iframe, so they
+ * cannot collide with anything an author wrote, and prefixing them would make
+ * this file harder to read for no benefit (SPEC §10.1).
+ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-size: var(--fs-small);
+  font-weight: 560;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+.btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: rgba(var(--ink-rgb), 0.22);
+}
+.btn:active:not(:disabled) { transform: translateY(0.5px); }
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-xs);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+}
+.btn-quiet:hover:not(:disabled) { background: var(--color-surface); }
+
+.btn-danger {
+  color: var(--color-danger);
+  border-color: rgba(176, 35, 24, 0.3);
+}
+.btn-danger:hover:not(:disabled) { background: var(--color-danger-soft); }
+
+.btn-sm { min-height: 30px; padding: 0 var(--s-2); font-size: var(--fs-caption); }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.icon-btn[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+/* --- Fields -------------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin-bottom: var(--s-3);
+}
+.field-label {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: 36px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font-size: var(--fs-small);
+}
+.textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
+.input:hover, .textarea:hover { border-color: rgba(var(--ink-rgb), 0.24); }
+.field-hint { font-size: var(--fs-caption); color: var(--color-ink-muted); }
+.field-error { font-size: var(--fs-caption); color: var(--color-danger); }
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--fs-small);
+}
+
+/* --- Chips, badges, cards ------------------------------------------------ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 24px;
+  padding: 0 var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.chip-accent {
+  background: var(--color-accent-soft);
+  border-color: rgba(75, 61, 209, 0.24);
+  color: var(--color-accent-strong);
+}
+.chip-warn {
+  background: var(--color-warn-soft);
+  border-color: rgba(138, 82, 0, 0.26);
+  color: var(--color-warn);
+}
+
+/**
+ * The automation badge (SPEC §17).
+ *
+ * Deliberately plain and deliberately worded "via": it reports a
+ * server-derived channel, and it sits next to self-reported client and agent
+ * strings that get no badge at all. A badge implying verification it does not
+ * have would be worse than no badge.
+ */
+.badge-automated {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: 0 6px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+.self-reported {
+  font-style: italic;
+  color: var(--color-ink-muted);
+}
+
+.card {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-xs);
+}
+
+/* --- Feedback ------------------------------------------------------------ */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--fs-small);
+}
+.banner-warn { background: var(--color-warn-soft); border-color: rgba(138, 82, 0, 0.26); }
+.banner-error { background: var(--color-danger-soft); border-color: rgba(176, 35, 24, 0.26); }
+.banner-success { background: var(--color-success-soft); border-color: rgba(24, 101, 63, 0.26); }
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-line);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 720ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* A spinner that cannot spin conveys nothing, so under reduced motion it
+   becomes a static, still-meaningful ring rather than a frozen partial one. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--color-line);
+    border-right-color: var(--color-accent);
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 25%,
+    rgba(var(--ink-rgb), 0.06) 37%,
+    var(--color-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes shimmer { to { background-position: -135% 0; } }
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: var(--s-4);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  width: min(420px, calc(100vw - var(--s-4)));
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-md);
+  background: var(--color-ink);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-small);
+}
+.toast-error { background: var(--color-danger); }
+.toast-action {
+  margin-left: auto;
+  color: inherit;
+  background: none;
+  border: 0;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.empty-state {
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+  color: var(--color-ink-muted);
+}

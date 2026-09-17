@@ -1,0 +1,155 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The comments panel and its threads (SPEC §6, §16, §17).
+ */
+
+.comments-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+
+.comments-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+}
+.comments-count { font-weight: 620; }
+.comments-head .icon-btn { margin-left: auto; }
+
+.comments-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/**
+ * The author's colour is the thread's accent.
+ *
+ * The same value paints the presence chip, the live caret, the rail marker and
+ * the edge of the persisted highlight, so a person can be traced by colour
+ * across all five surfaces. It is derived from the address, so it is the same
+ * tomorrow and on another device.
+ */
+.thread {
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--thread-color, var(--color-annotation));
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  padding: var(--s-2);
+  cursor: pointer;
+}
+.thread[aria-selected="true"] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.thread[data-resolved="true"] {
+  opacity: 0.68;
+  /* Resolved differs by border STYLE, never by colour alone. */
+  border-left-style: dashed;
+}
+
+.thread-quote {
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+  padding: var(--s-1) var(--s-2);
+  margin-bottom: var(--s-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-1) 0;
+}
+.comment + .comment { border-top: 1px solid var(--color-line); }
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.comment-author { font-weight: 620; color: var(--color-ink); }
+.comment-body { white-space: pre-wrap; font-size: var(--fs-small); }
+
+.thread-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  margin-top: var(--s-2);
+}
+
+/* "Ana is replying…" — driven by the peer's `composing` field, so a thread
+   shows that somebody is already answering before they finish typing. */
+.thread-composing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-caption);
+  color: var(--peer-color, var(--color-ink-muted));
+  font-style: italic;
+}
+
+.comment-composer {
+  padding: var(--s-2) var(--s-3);
+  border-top: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+/* An anonymous reader who selects text and tries to comment keeps their
+   selection through the sign-in prompt. Losing it is where this feature dies. */
+.signin-to-comment {
+  padding: var(--s-3);
+  border-top: 1px solid var(--color-line);
+  background: var(--color-accent-soft);
+  font-size: var(--fs-small);
+}
+
+@media (max-width: 860px) {
+  .comments-panel {
+    border-left: 0;
+    border-top: 1px solid var(--color-line);
+  }
+  /* One column: a segmented control switches between document and comments,
+     because two 50%-height panes are useful for neither. */
+  .viewer[data-pane="doc"] .comments-panel { display: none; }
+  .viewer[data-pane="comments"] .doc-frame-wrap { display: none; }
+}
+
+.pane-toggle {
+  display: none;
+  gap: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.pane-toggle button {
+  border: 0;
+  background: var(--color-bg);
+  padding: 0 var(--s-2);
+  min-height: 30px;
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.pane-toggle button[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-weight: 620;
+}
+@media (max-width: 860px) {
+  .pane-toggle { display: inline-flex; }
+}

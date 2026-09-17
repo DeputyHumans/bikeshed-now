@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The stylesheet entry point: declares layer order, then imports (SPEC §10).
+ *
+ * Why the split
+ * -------------
+ * The real cost of one large stylesheet is not readability, it is CONTENTION:
+ * parallel work on any part of the interface touches the same file. Splitting on
+ * the component boundary means a slide-navigator change touches slides.css and
+ * nothing else.
+ *
+ * @layer is what makes the split SAFE. Without it, a plain split invites a
+ * specificity arms race, because whether a feature rule beats a primitive rule
+ * depends on import order and selector weight. With the order declared here, a
+ * feature rule always wins, whatever its specificity, and nobody has to add an
+ * !important to find out.
+ *
+ * Two co-location rules, both learned from the file this replaces:
+ *   - Each feature file owns its own breakpoints. There is no responsive.css.
+ *     The original scattered twelve @media blocks and then overrode them again
+ *     fourteen hundred lines later.
+ *   - prefers-reduced-motion for a feature lives with that feature, for the
+ *     same reason.
+ *
+ * Build cost: zero. Vite concatenates.
+ */
+
+@layer tokens, base, primitives, layout, feature;
+
+@import "./tokens.css" layer(tokens);
+@import "./base.css" layer(base);
+@import "./primitives.css" layer(primitives);
+@import "./layout.css" layer(layout);
+@import "./workspace.css" layer(feature);
+@import "./viewer.css" layer(feature);
+@import "./comments.css" layer(feature);
+@import "./editor.css" layer(feature);
+@import "./slides.css" layer(feature);
+@import "./dialogs.css" layer(feature);

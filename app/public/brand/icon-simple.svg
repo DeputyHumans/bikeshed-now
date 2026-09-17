@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bikeshed">
+  <!--
+    The small-size cut: roof, walls, and TWO lines instead of three, at a
+    heavier stroke. Three 2px lines inside a 10px interior anti-alias into mush
+    below about 20px, which is most of where an icon is actually seen.
+  -->
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 14 16 4l12 10" stroke-width="3.2"/>
+    <path d="M6.5 15v13M25.5 15v13" stroke-width="3.2"/>
+    <path d="M11 19.5h10M11 25.5h10" stroke-width="2.8"/>
+  </g>
+</svg>

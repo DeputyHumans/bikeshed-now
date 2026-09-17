@@ -1,0 +1,100 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The design tokens. Twelve of them, all semantic (SPEC §10).
+ *
+ * None is named after a colour. A token called --teal cannot be re-themed
+ * without a rename, and every consumer then encodes a colour rather than a
+ * role — which is how a palette change becomes a hundred-file refactor.
+ *
+ * app/src/brand/tokens.ts mirrors these values for the three places that need
+ * them in JavaScript (the canvas stamp, the iframe stylesheet, the peer
+ * palette). brand/tokens.test.ts parses this file and asserts the mirror
+ * matches, and recomputes the contrast table so a tweak that breaks WCAG AA
+ * fails CI.
+ */
+
+:root {
+  /* Surfaces and ink */
+  --color-bg: #ffffff;
+  --color-surface: #f4f3f8;
+  --color-line: rgba(26, 26, 38, 0.14);
+  --color-ink: #1a1a26;
+  --color-ink-muted: #55526b;
+
+  /* The paint. The bikeshedding argument is what colour to paint it, so the
+     accent is one deliberate, arguable choice. */
+  --color-accent: #4b3dd1;
+  --color-on-accent: #ffffff;
+
+  /* Reserved for :focus-visible and NOTHING else, so the ring is the only
+     colour of its kind on the page and is unmistakable wherever it lands. */
+  --color-focus: #00769b;
+
+  --color-success: #18653f;
+  --color-warn: #8a5200;
+  --color-danger: #b02318;
+
+  /* Highlights, and every surface that traces back to one. */
+  --color-annotation: #b5257b;
+
+  /* Derived. Not new colours — variations of the twelve above. */
+  --color-accent-strong: #3c30b0;
+  --color-accent-soft: #edeafb;
+  --color-warn-fill: #f0b429;
+  --color-warn-soft: #fcf0da;
+  --color-success-soft: #e4f3ea;
+  --color-danger-soft: #fceceb;
+
+  /* The ink RGB, so every translucent surface and shadow is TINTED rather than
+     neutral black. Neutral black over a tinted palette reads as dirt. */
+  --ink-rgb: 26, 26, 38;
+
+  /* Type */
+  --font-sans: "Bikeshed Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Fluid scale, ratio 1.25. clamp() means no breakpoint has to restate a size. */
+  --fs-caption: 0.78rem;
+  --fs-small: 0.86rem;
+  --fs-body: 0.95rem;
+  --fs-lead: clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
+  --fs-h3: clamp(1.05rem, 1rem + 0.3vw, 1.2rem);
+  --fs-h2: clamp(1.25rem, 1.15rem + 0.5vw, 1.5rem);
+  --fs-h1: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+
+  /* Spacing, 8pt */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 16px;
+  --s-4: 24px;
+  --s-5: 32px;
+  --s-6: 48px;
+  --s-7: 64px;
+  --s-8: 96px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(var(--ink-rgb), 0.06);
+  --shadow-sm: 0 1px 3px rgba(var(--ink-rgb), 0.08), 0 1px 2px rgba(var(--ink-rgb), 0.04);
+  --shadow-md: 0 4px 12px rgba(var(--ink-rgb), 0.1), 0 1px 3px rgba(var(--ink-rgb), 0.06);
+  --shadow-lg: 0 12px 32px rgba(var(--ink-rgb), 0.14), 0 2px 8px rgba(var(--ink-rgb), 0.06);
+  --shadow-xl: 0 24px 64px rgba(var(--ink-rgb), 0.18), 0 4px 12px rgba(var(--ink-rgb), 0.08);
+
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 120ms;
+  --t-base: 200ms;
+  --t-slow: 320ms;
+
+  /* Published by App.tsx from the header's MEASURED height, so full-height
+     surfaces subtract the real value and stay correct as the header condenses.
+     The literal here is only the value before first paint. */
+  --header-h: 56px;
+
+  /* The minimum comfortable touch target. Referenced, never retyped. */
+  --tap: 44px;
+}

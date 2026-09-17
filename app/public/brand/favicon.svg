@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bikeshed">
+  <!--
+    A gable roof over three ruled lines, the middle one picked out.
+
+    A document sheltered under a shed roof, with one passage highlighted: the
+    mark encodes the name and the product in one figure. Hand-authored, one
+    stroke weight, no generator artefacts.
+
+    The embedded media query is the point of shipping an SVG favicon at all —
+    browser chrome is dark for a great many people, and a single dark mark on it
+    is invisible.
+  -->
+  <style>
+    .ink { stroke: #1a1a26 }
+    .hl  { stroke: #b5257b }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #f4f3f8 }
+      .hl  { stroke: #ef7ab9 }
+    }
+  </style>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path class="ink" d="M4 14 16 4l12 10" stroke-width="2.6"/>
+    <path class="ink" d="M6.5 15v13M25.5 15v13" stroke-width="2.6"/>
+    <path class="ink" d="M11 18.5h10M11 26.5h10" stroke-width="2"/>
+    <path class="hl" d="M11 22.5h7" stroke-width="2"/>
+  </g>
+</svg>
