@@ -5,6 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readConsent, writeConsent } from "./consent";
 
 /**
+ * Deliberately NOT shaped like a real measurement id.
+ *
+ * Brand-guard tier 8 rejects a measurement id anywhere in tracked content by
+ * SHAPE, so a real deployment's cannot leak into the tree — and it cannot tell
+ * a fictional one from a real one. The shape is described rather than spelled
+ * here for the same reason, which is a trap this project has now fallen into
+ * twice. `analyticsConfigured()` only checks that the value is non-empty, so
+ * nothing here needs to resemble one at all.
+ */
+const MEASUREMENT_ID_FOR_TESTS = "measurement-id-for-tests";
+
+/**
  * The bug this guards against is not hypothetical — it shipped.
  *
  * SPEC §15 argued no cookie banner was needed because "there is no anonymous
@@ -75,7 +87,7 @@ describe("analytics is gated on consent", () => {
     if (consent !== "unset") writeConsent(consent);
     const initializeAnalytics = vi.fn(() => ({}) as never);
     vi.doMock("./config", () => ({
-      MEASUREMENT_ID: "G-TESTONLY",
+      MEASUREMENT_ID: MEASUREMENT_ID_FOR_TESTS,
       USE_EMULATORS: false,
     }));
     vi.doMock("./firebase", () => ({ app: {} }));
@@ -120,7 +132,7 @@ describe("analytics is gated on consent", () => {
      * forever. Clicking Allow then did nothing at all.
      */
     const initializeAnalytics = vi.fn(() => ({}) as never);
-    vi.doMock("./config", () => ({ MEASUREMENT_ID: "G-TESTONLY", USE_EMULATORS: false }));
+    vi.doMock("./config", () => ({ MEASUREMENT_ID: MEASUREMENT_ID_FOR_TESTS, USE_EMULATORS: false }));
     vi.doMock("./firebase", () => ({ app: {} }));
     vi.doMock("firebase/analytics", () => ({
       initializeAnalytics,
