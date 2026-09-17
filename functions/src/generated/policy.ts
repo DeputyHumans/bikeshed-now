@@ -9,11 +9,42 @@ export const ALLOWED_EMAIL_DOMAINS: readonly string[] = [];
 
 export const POLICY_IS_OPEN = true;
 
+const FORBIDDEN_CHARS = /[\s$#[\]/\\,;:"'<>()]/;
+const CONTROL_CHARS = new RegExp("[\\u0000-\\u001f\\u007f]");
+const LOCAL_OK = /^[a-z0-9!%&'*+=?^_`{|}~.-]+$/;
+const DOMAIN_OK = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+
+/** Structural validity: the shapes this system can store and key on (SPEC §1.3). */
+export function isEmailShapeValid(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  if (e.length === 0 || e.length > 254) return false;
+  if (FORBIDDEN_CHARS.test(e)) return false;
+  if (CONTROL_CHARS.test(e)) return false;
+  const at = e.indexOf("@");
+  if (at <= 0 || at !== e.lastIndexOf("@")) return false;
+  const local = e.slice(0, at);
+  const domain = e.slice(at + 1);
+  if (local.length === 0 || local.length > 64) return false;
+  if (e.includes("..")) return false;
+  if (local.startsWith(".") || local.endsWith(".")) return false;
+  if (!LOCAL_OK.test(local)) return false;
+  return DOMAIN_OK.test(domain);
+}
+
 /** Anchored per-entry matchers, precompiled once. */
 const MATCHERS: readonly RegExp[] = [];
 
-/** True iff the deployment's allowlist permits this (already-normalized) email. */
-export function isAllowedEmail(emailLower: string): boolean {
+/**
+ * True iff this deployment accepts the address.
+ *
+ * Shape is checked FIRST and always: an open policy accepts any address the
+ * system can actually store, not any string. Without that conjunct
+ * `isAllowedEmail("not an email")` would be true on the default configuration,
+ * and the value would flow straight into an ACL array.
+ */
+export function isAllowedEmail(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  if (!isEmailShapeValid(e)) return false;
   if (POLICY_IS_OPEN) return true;
-  return MATCHERS.some((re) => re.test(emailLower));
+  return MATCHERS.some((re) => re.test(e));
 }

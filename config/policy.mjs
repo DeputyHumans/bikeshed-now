@@ -178,9 +178,34 @@ export function renderDatabaseRules(policy, template, sourceHash) {
  * because Cloud Functions uploads only that directory and tsconfig pins
  * `rootDir: "src"` — a shared module one level up is simply not deployed.
  */
+/**
+ * Emit `isEmailShapeValid` from THIS module's own implementation rather than
+ * retyping it, so the three runtimes cannot disagree about which addresses
+ * exist. The body is stringified, not re-authored.
+ */
+function emitShapeValidator() {
+  const body = subst(isEmailShapeValid.toString(), {
+    "function isEmailShapeValid(email) {":
+      "export function isEmailShapeValid(email: string): boolean {",
+    "const e = normalizeEmail(email);": "const e = email.trim().toLowerCase();",
+  });
+  return [
+    `const FORBIDDEN_CHARS = ${FORBIDDEN_CHARS.toString()};`,
+    `const CONTROL_CHARS = new RegExp(${JSON.stringify(CONTROL_CHARS.source)});`,
+    `const LOCAL_OK = ${LOCAL_OK.toString()};`,
+    `const DOMAIN_OK = ${DOMAIN_OK.toString()};`,
+    "",
+    "/** Structural validity: the shapes this system can store and key on (SPEC §1.3). */",
+    body,
+  ].join("\n");
+}
+
 export function renderFunctionsPolicy(policy, sourceHash) {
   const list = isOpenPolicy(policy) ? [] : policy.allowedEmailDomains.map(String);
-  const matchers = list.length === 0 ? "" : `\n${list.map((d) => `  /${domainPattern(d)}/,`).join("\n")}\n`;
+  const matchers =
+    list.length === 0
+      ? ""
+      : `\n${list.map((d) => `  /${domainPattern(d)}/,`).join("\n")}\n`;
   return `// SPDX-License-Identifier: Apache-2.0
 ${banner("// ", sourceHash)}
 // The deployment's identity policy, server side (SPEC §1).
@@ -189,13 +214,24 @@ export const ALLOWED_EMAIL_DOMAINS: readonly string[] = ${JSON.stringify(list)};
 
 export const POLICY_IS_OPEN = ${list.length === 0};
 
+${emitShapeValidator()}
+
 /** Anchored per-entry matchers, precompiled once. */
 const MATCHERS: readonly RegExp[] = [${matchers}];
 
-/** True iff the deployment's allowlist permits this (already-normalized) email. */
-export function isAllowedEmail(emailLower: string): boolean {
+/**
+ * True iff this deployment accepts the address.
+ *
+ * Shape is checked FIRST and always: an open policy accepts any address the
+ * system can actually store, not any string. Without that conjunct
+ * \`isAllowedEmail("not an email")\` would be true on the default configuration,
+ * and the value would flow straight into an ACL array.
+ */
+export function isAllowedEmail(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  if (!isEmailShapeValid(e)) return false;
   if (POLICY_IS_OPEN) return true;
-  return MATCHERS.some((re) => re.test(emailLower));
+  return MATCHERS.some((re) => re.test(e));
 }
 `;
 }
@@ -207,31 +243,18 @@ export function isAllowedEmail(emailLower: string): boolean {
  * visitor. The client learns policy outcomes from POST /session instead.
  */
 export function renderAppPolicy(policy, sourceHash) {
-  const body = subst(isEmailShapeValid.toString(), {
-    "function isEmailShapeValid(email) {":
-      "export function isEmailShapeValid(email: string): boolean {",
-    "const e = normalizeEmail(email);": "const e = email.trim().toLowerCase();",
-  });
   return `// SPDX-License-Identifier: Apache-2.0
 ${banner("// ", sourceHash)}
-// The client's half of the identity policy (SPEC §1).
+// The client's half of the identity policy (SPEC §1.2).
 //
 // Deliberately list-free: Vite inlines this module into the public bundle, so
 // the allowlist itself must never appear here. The client gets the shape rules
-// (so a sign-up form can validate before a round trip) and one boolean.
-//
-// The validator body below is emitted from config/policy.mjs' own function, not
-// retyped — one implementation, rendered twice, so client and server cannot
-// disagree about which addresses exist.
+// (so a sign-up form can validate before a round trip) and one boolean. It
+// learns policy OUTCOMES from POST /session, which returns a typed status
+// rather than an explanation.
 
 export const POLICY_IS_OPEN = ${isOpenPolicy(policy)};
 
-const FORBIDDEN_CHARS = ${FORBIDDEN_CHARS.toString()};
-const CONTROL_CHARS = new RegExp(${JSON.stringify(CONTROL_CHARS.source)});
-const LOCAL_OK = ${LOCAL_OK.toString()};
-const DOMAIN_OK = ${DOMAIN_OK.toString()};
-
-/** Structural validity — the same rule the server applies (SPEC §1). */
-${body}
+${emitShapeValidator()}
 `;
 }
