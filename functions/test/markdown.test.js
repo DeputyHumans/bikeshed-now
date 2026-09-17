@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: Apache-2.0
+// Markdown round-trip idempotence is the contract (SPEC §11).
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { readFileSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+
+const { renderMarkdown, titleFromMarkdown, RENDERER_VERSION } = require("../lib/lib/markdown/render.js");
+const { htmlToMarkdown } = require("../lib/lib/markdown/serialize.js");
+const { Slugger, baseSlug } = require("../lib/lib/markdown/slug.js");
+
+const FIXTURES = join(__dirname, "fixtures", "markdown");
+const fixture = (name) => readFileSync(join(FIXTURES, name), "utf8");
+const fixtureNames = () => readdirSync(FIXTURES).filter((f) => f.endsWith(".md"));
+
+const sections = (html) =>
+  [...html.matchAll(/<section id="([^"]*)">/g)].map((m) => m[1]);
+
+// --- The contract ----------------------------------------------------------
+
+test("the round trip is idempotent after the first normalizing pass", () => {
+  // `md -> md'` may normalize. `md' -> md''` must change NOTHING. That property
+  // is what keeps editing a Markdown document from degrading it one save at a
+  // time, and it is the reason this whole feature is safe to offer.
+  for (const name of fixtureNames()) {
+    const source = fixture(name);
+    const first = htmlToMarkdown(renderMarkdown(source).html);
+    const second = htmlToMarkdown(renderMarkdown(first).html);
+    assert.equal(second, first, `${name} is not idempotent after the first pass`);
+    const third = htmlToMarkdown(renderMarkdown(second).html);
+    assert.equal(third, second, `${name} drifts on the third pass`);
+  }
+});
+
+test("normalization is not lossy: formatting survives the first pass", () => {
+  const source = [
+    "# T",
+    "",
+    "*em* **strong** ~~struck~~ `code`",
+    "",
+    "* star bullet",
+    "",
+    "| a | b |",
+    "| --- | --- |",
+    "| 1 | 2 |",
+    "",
+    "- [x] done",
+  ].join("\n");
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.match(out, /\*em\*/, "emphasis survives");
+  assert.match(out, /\*\*strong\*\*/, "strong survives");
+  // A single tilde would round-trip as literal text, losing the formatting
+  // idempotently — which is worse than losing it noisily.
+  assert.match(out, /~~struck~~/, "strikethrough keeps both tildes");
+  assert.match(out, /`code`/, "inline code survives");
+  assert.match(out, /^- star bullet$/m, "* bullets normalize to -");
+  assert.match(out, /\| a \| b \|/, "the table survives");
+  assert.match(out, /- \[x\] done/, "the task marker survives");
+});
+
+test("raw HTML the author wrote is never silently dropped", () => {
+  // Turndown treats an element with no text as blank and drops it before any
+  // rule is consulted. An empty <div id="chart"> is exactly the fill target a
+  // scripted document uses, so losing it is silent data loss.
+  const source = '# T\n\n<div id="chart"></div>\n\n<script>go()</script>\n';
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.match(out, /<div id="chart"><\/div>/);
+  assert.match(out, /<script>go\(\)<\/script>/);
+});
+
+test("the renderer's own stylesheet never reaches the author's source", () => {
+  const out = htmlToMarkdown(renderMarkdown("# T\n\nBody.\n").html);
+  assert.ok(!out.includes("box-sizing"), "the embedded theme leaked into the Markdown");
+  assert.ok(!out.includes("<style"), "a <style> block leaked into the Markdown");
+});
+
+test("the document title never leaks into the body as a stray first line", () => {
+  const out = htmlToMarkdown(renderMarkdown("# Alpha\n\nBody.\n").html);
+  assert.equal(out.split("\n")[0], "# Alpha");
+});
+
+// --- Determinism -----------------------------------------------------------
+
+test("rendering the same source twice is byte-identical", () => {
+  for (const name of fixtureNames()) {
+    const source = fixture(name);
+    assert.equal(renderMarkdown(source).html, renderMarkdown(source).html, name);
+  }
+});
+
+test("there is nothing time- or random-dependent in the output", () => {
+  const html = renderMarkdown(fixture("kitchen-sink.md")).html;
+  assert.ok(!/\b20\d\d-\d\d-\d\dT/.test(html), "a timestamp reached the output");
+});
+
+test("the renderer version is pinned and recorded", () => {
+  assert.match(RENDERER_VERSION, /^markdown-it@\d+\.\d+\.\d+\+bikeshed-\d+$/);
+  assert.equal(renderMarkdown("# x").rendererVersion, RENDERER_VERSION);
+});
+
+// --- Section wrapping and slugs --------------------------------------------
+
+test("every heading opens a section with a stable id", () => {
+  const ids = sections(renderMarkdown(fixture("headings.md")).html);
+  assert.deepEqual(ids, [
+    "preamble",
+    "alpha",
+    "beta",
+    "gamma",
+    "beta-1",
+    "alpha-1",
+  ]);
+});
+
+test("content before the first heading still gets a scope", () => {
+  // Without this, every anchor in the preamble would resolve against <body>,
+  // and an edit anywhere in the document would shift all of them at once.
+  const html = renderMarkdown("Intro.\n\n# H\n").html;
+  assert.ok(html.includes('<section id="preamble">'));
+});
+
+test("a document that opens with a heading has no preamble section", () => {
+  const html = renderMarkdown("# H\n\nBody.\n").html;
+  assert.ok(!html.includes('id="preamble"'));
+});
+
+test("sections nest by heading level and close correctly", () => {
+  const html = renderMarkdown("# A\n\n## B\n\n### C\n\n## D\n\n# E\n").html;
+  const opens = (html.match(/<section /g) || []).length;
+  const closes = (html.match(/<\/section>/g) || []).length;
+  assert.equal(opens, closes, "unbalanced sections");
+  assert.equal(opens, 5);
+});
+
+test("editing one heading does not renumber unrelated slugs", () => {
+  // Anchors scope to the nearest id-bearing ancestor, so a renumber would
+  // silently re-scope every anchor below the edit.
+  const before = sections(renderMarkdown("# A\n\n## Notes\n\n## Other\n\n## Notes\n").html);
+  const after = sections(renderMarkdown("# A\n\n## Notes\n\n## Renamed\n\n## Notes\n").html);
+  assert.deepEqual(before, ["a", "notes", "other", "notes-1"]);
+  assert.deepEqual(after, ["a", "notes", "renamed", "notes-1"]);
+});
+
+test("a heading called Preamble cannot collide with the wrapper", () => {
+  const ids = sections(renderMarkdown("Intro.\n\n# Preamble\n").html);
+  assert.deepEqual(ids, ["preamble", "preamble-1"]);
+});
+
+test("slugs strip inline markup and non-alphanumerics", () => {
+  assert.equal(baseSlug("**Bold** heading!"), "bold-heading");
+  assert.equal(baseSlug("`code` in a heading"), "code-in-a-heading");
+  assert.equal(baseSlug("[linked](https://x.test)"), "linked");
+  assert.equal(baseSlug("   "), "section");
+  assert.equal(baseSlug("!!!"), "section");
+});
+
+test("the slugger dedupes in document order", () => {
+  const s = new Slugger();
+  assert.equal(s.slug("Notes"), "notes");
+  assert.equal(s.slug("Notes"), "notes-1");
+  assert.equal(s.slug("Notes"), "notes-2");
+});
+
+// --- Output shape ----------------------------------------------------------
+
+test("output is self-contained: no external URLs in head", () => {
+  const html = renderMarkdown(fixture("kitchen-sink.md")).html;
+  const head = html.slice(0, html.indexOf("</head>"));
+  assert.ok(!/<link\b/i.test(head), "an external stylesheet reference appeared");
+  assert.ok(!/src=["']https?:/i.test(head), "an external script appeared");
+  assert.ok(head.includes("<style"), "the theme should be embedded");
+});
+
+test("raw HTML including script passes through so the trust model governs it", () => {
+  // One concept, not two: a script-bearing Markdown document is sandboxed and
+  // prompts for trust exactly like a hand-authored bundle (SPEC §6c).
+  const html = renderMarkdown(fixture("script.md")).html;
+  assert.ok(html.includes("<script>"));
+  assert.ok(html.includes('<div id="chart">'));
+});
+
+test("the title comes from the first level-1 heading", () => {
+  assert.equal(titleFromMarkdown("# Alpha\n\n# Beta\n", "fallback"), "Alpha");
+  assert.equal(titleFromMarkdown("Alpha\n=====\n", "fallback"), "Alpha");
+  assert.equal(titleFromMarkdown("## Only h2\n", "fallback"), "fallback");
+  assert.equal(renderMarkdown("# Alpha\n").title, "Alpha");
+});
+
+test("the title is HTML-escaped in the output", () => {
+  const html = renderMarkdown("# <script>alert(1)</script>\n").html;
+  assert.ok(html.includes("<title>&lt;script&gt;"), "the title element must be escaped");
+});
+
+test("task list items render as inert checkboxes", () => {
+  const html = renderMarkdown("- [x] done\n- [ ] open\n").html;
+  assert.ok(html.includes('<input type="checkbox" disabled checked>'));
+  assert.ok(html.includes('<input type="checkbox" disabled>'));
+  assert.ok(html.includes('class="task-list-item"'));
+});
+
+test("linkify and typographer stay off", () => {
+  // Both are normalizations the author did not ask for, and both would make the
+  // round trip lossy.
+  const html = renderMarkdown("Visit https://example.com -- really...\n").html;
+  assert.ok(!html.includes("<a href"), "a bare URL was auto-linked");
+  assert.ok(html.includes("--"), "typographer rewrote punctuation");
+});
