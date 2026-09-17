@@ -32,8 +32,8 @@ import { readConsent } from "./consent";
 
 export type AnalyticsEvent =
   | { name: "page_view"; params: { page_path: string } }
-  | { name: "login"; params: { method: "google" | "github" } }
-  | { name: "sign_up"; params: { method: "google" | "github" } }
+  | { name: "login"; params: { method: "google" | "github" | "password" } }
+  | { name: "sign_up"; params: { method: "google" | "github" | "password" } }
   | { name: "doc_publish"; params: { source: "cli" | "upload" | "mcp"; format: "html" | "markdown" } }
   | { name: "doc_open"; params: { format: "html" | "markdown"; sandboxed: boolean } }
   | { name: "annotation_create"; params: Record<string, never> }

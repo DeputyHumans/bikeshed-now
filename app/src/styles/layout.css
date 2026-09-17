@@ -162,3 +162,80 @@
      what the header is for. */
   .header-email { display: none; }
 }
+
+/* --- Password sign-in ------------------------------------------------------
+ * The credential form beneath the two provider buttons. It carries more than
+ * they do — fields, a policy to satisfy, a way out when the password is
+ * forgotten — so it gets structure they do not need, and no more.
+ */
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* "or", with a rule either side. The pseudo-elements do the drawing so the
+   markup stays one element with an accessible name. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-4) 0 var(--s-2);
+  color: var(--color-ink-muted);
+  font-size: var(--fs-caption);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-line);
+}
+
+/* The live policy checklist. Unmet is the RESTING state, not an error state:
+   somebody halfway through typing a good password has not done anything wrong,
+   so nothing here is red until the server actually rejects it. */
+.password-reqs {
+  list-style: none;
+  margin: var(--s-1) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.password-reqs li {
+  display: grid;
+  grid-template-columns: 1em 1fr;
+  gap: var(--s-2);
+  align-items: baseline;
+}
+.password-reqs .is-met,
+.password-reqs li.is-met {
+  color: var(--color-success);
+}
+
+.password-form__alt {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+}
+
+/* A button that reads as a link: used where the action is navigational in
+   feeling ("create an account instead") rather than a commitment. */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--fs-caption);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn:hover:not(:disabled) { color: var(--color-accent-strong); }
+.link-btn:disabled { color: var(--color-ink-muted); cursor: not-allowed; text-decoration: none; }

@@ -2,7 +2,8 @@
 // Signing in, signing up, and email verification (SPEC §3, §14).
 
 import { useEffect, useState } from "react";
-import { useAuth, type Provider } from "../auth";
+import { useAuth, type PopupProvider } from "../auth";
+import { PasswordForm } from "../components/PasswordForm";
 import { auth } from "../firebase";
 import { Icon } from "../components/Icon";
 import { Spinner } from "../components/Spinner";
@@ -43,7 +44,7 @@ function ProviderButtons({
   onPick,
   busy,
 }: {
-  onPick: (provider: Provider) => void;
+  onPick: (provider: PopupProvider) => void;
   busy: boolean;
 }) {
   return (
@@ -191,6 +192,9 @@ export function SignUp() {
               sign in — you do not need an invitation first.
             </p>
             <ProviderButtons onPick={(p) => void signIn(p)} busy={busy} />
+            {/* Below the providers, because an address and a password is the
+                method somebody falls back to, not the one they reach for. */}
+            <PasswordForm busy={busy} setBusy={setBusy} />
           </>
         ) : null}
 

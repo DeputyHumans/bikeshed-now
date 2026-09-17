@@ -13,9 +13,12 @@ import {
 import {
   GithubAuthProvider,
   GoogleAuthProvider,
+  createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   linkWithCredential,
   onIdTokenChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
   type AuthCredential,
@@ -26,7 +29,10 @@ import { auth, githubProvider, googleProvider } from "./firebase";
 import { logEvent } from "./analytics";
 import type { SessionStatus } from "./types";
 
-export type Provider = "google" | "github";
+export type Provider = "google" | "github" | "password";
+
+/** The two that open a popup. `password` takes credentials instead. */
+export type PopupProvider = Exclude<Provider, "password">;
 
 /**
  * What the app is waiting for.
@@ -52,7 +58,20 @@ interface AuthState {
   notAllowedMessage: string;
   /** Set when a second provider carries an address another account owns. */
   linkPrompt: { email: string; existingProvider: Provider } | null;
-  signIn: (provider: Provider) => Promise<void>;
+  signIn: (provider: PopupProvider) => Promise<void>;
+  /**
+   * Create an account from an address and a password.
+   *
+   * The gate is `email_verified === true` and Firebase does NOT set that for a
+   * password account, so this deliberately lands the caller in
+   * `needs_verification` — the same state a GitHub user with an unvouched
+   * address reaches, handled by the same flow. There is no second notion of
+   * verification, which is why adding a third sign-in method changed no rule.
+   */
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  /** Firebase sends this one; it is the only way out of a forced upgrade. */
+  resetPassword: (email: string) => Promise<void>;
   completeLink: () => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -64,7 +83,43 @@ const AuthContext = createContext<AuthState | null>(null);
 function providerOf(id: string): Provider | null {
   if (id.startsWith("google")) return "google";
   if (id.startsWith("github")) return "github";
+  if (id === "password") return "password";
   return null;
+}
+
+/**
+ * Turn a Firebase auth error into something a person can act on.
+ *
+ * The password-policy case is the one that must not be generic. This
+ * deployment enforces length, case, digit and symbol requirements, and
+ * `forceUpgradeOnSignin` means an account whose password predates the policy is
+ * refused at SIGN-IN too — with the same error code as a bad sign-up. Telling
+ * that person "sign-in failed" would strand them: the only way out is a reset,
+ * so the message says so.
+ */
+function passwordErrorMessage(code: string, mode: "signup" | "signin"): string {
+  switch (code) {
+    case "auth/password-does-not-meet-requirements":
+      return mode === "signup"
+        ? "That password does not meet this deployment's requirements."
+        : "Your password no longer meets this deployment's requirements. Reset it to continue.";
+    case "auth/email-already-in-use":
+      return "There is already an account with that address. Sign in instead.";
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      // Deliberately one message for all three: distinguishing them tells an
+      // attacker which addresses have accounts.
+      return "That address and password do not match.";
+    case "auth/invalid-email":
+      return "That does not look like an email address.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Wait a few minutes and try again.";
+    default:
+      return mode === "signup"
+        ? "Could not create the account. Please try again."
+        : "Sign-in failed. Please try again.";
+  }
 }
 
 /** POST the fresh ID token to set `__session`, and report the typed outcome. */
@@ -143,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [syncSession],
   );
 
-  const signIn = useCallback(async (provider: Provider) => {
+  const signIn = useCallback(async (provider: PopupProvider) => {
     setError(null);
     setLinkPrompt(null);
     try {
@@ -197,6 +252,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string) => {
+      setError(null);
+      setLinkPrompt(null);
+      try {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        logEvent({ name: "sign_up", params: { method: "password" } });
+        // No verification email is sent from here: this deployment runs its own
+        // flow through Resend and writes Firebase's canonical `emailVerified`
+        // with the Admin SDK, so there is exactly one source of truth (§13).
+      } catch (e) {
+        const code = (e as { code?: string }).code ?? "";
+        setError(passwordErrorMessage(code, "signup"));
+        throw e;
+      }
+    },
+    [],
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      setError(null);
+      setLinkPrompt(null);
+      try {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+        logEvent({ name: "login", params: { method: "password" } });
+      } catch (e) {
+        const code = (e as { code?: string }).code ?? "";
+        setError(passwordErrorMessage(code, "signin"));
+        throw e;
+      }
+    },
+    [],
+  );
+
+  const resetPassword = useCallback(async (email: string) => {
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? "";
+      // A reset request must not reveal whether an address has an account, so
+      // an unknown address is reported to the caller as success. Only a
+      // malformed address is worth saying out loud.
+      if (code === "auth/invalid-email") {
+        setError("That does not look like an email address.");
+        throw e;
+      }
+    }
+  }, []);
+
   /** Sign in with the provider that owns the address, then attach the other. */
   const completeLink = useCallback(async () => {
     if (!linkPrompt) return;
@@ -241,6 +347,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notAllowedMessage,
       linkPrompt,
       signIn,
+      signUpWithPassword,
+      signInWithPassword,
+      resetPassword,
       completeLink,
       signOut,
       refresh,
@@ -253,6 +362,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notAllowedMessage,
       linkPrompt,
       signIn,
+      signUpWithPassword,
+      signInWithPassword,
+      resetPassword,
       completeLink,
       signOut,
       refresh,
