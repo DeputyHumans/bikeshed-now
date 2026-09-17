@@ -79,6 +79,7 @@ and spends most of its length on **what this is not**.
 | [`docs/operations.md`](docs/operations.md) | Deploying and running one |
 | [`docs/authoring-bundles.md`](docs/authoring-bundles.md) | Writing a document that works well here |
 | [`docs/CONFIG.md`](docs/CONFIG.md) | Every setting, and what it changes |
+| [`docs/verification.md`](docs/verification.md) | The emulator walkthrough: what to observe, and what it proves |
 | [`docs/adr/`](docs/adr/) | Nine decisions, ~30 lines each, so nobody re-argues them in a pull request |
 | [`AGENTS.md`](AGENTS.md) | Instructions for an agent. Served as `/llms.txt` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |

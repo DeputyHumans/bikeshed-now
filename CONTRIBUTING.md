@@ -46,6 +46,12 @@ runs every row except 5, which needs the emulators — use
 expected to work.** A document is wrong if a command in it fails; that is a bug
 worth reporting on its own.
 
+The table above proves the code is self-consistent. It does not prove the
+product works — the properties that matter most here are integration ones. For
+those, walk `docs/verification.md` against the emulators. It is ten
+observations, it needs no cloud account, and it is where four real defects were
+found that no unit test could have caught.
+
 ## House rules
 
 These are the ones that actually get enforced in review.
