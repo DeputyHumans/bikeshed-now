@@ -467,19 +467,34 @@ normative:
   of one parent, and the navigator appears only above two slides.
 
 Navigation **scrolls** the document and never styles it, so §7's rule stands
-unchanged. Paging is bound to the arrow keys only when slides measure about one
-viewport tall; on a document whose sections are taller, taking those keys would
-leave the reader unable to scroll within a section. Keys are bound on both the
+unchanged. The navigator — rail, overview and arrow keys alike — appears only
+when slides measure about one viewport tall. On a document whose sections are
+taller, taking the arrow keys would leave the reader unable to scroll within a
+section, and a thumbnail of a section three screens deep is a smudge nobody can
+read. That measurement is **latched per document load**: the rail's own width
+narrows the frame, so a navigator that re-decided on every resize could unmount
+itself, widen the frame, reappear, and oscillate. Keys are bound on both the
 parent and the frame document, because an iframe's key events never reach the
 parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins.
 
 **Previews are a separate document.** The rail and the overview render each
 slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's
 own stylesheets minus every `data-bshd` node, and a `<base>` pointing at the
-content proxy. They are sandboxed `allow-same-origin` with NO `allow-scripts`
-even for a trusted document. Because a preview is a copy the app constructs and
-nothing serializes, the layout it forces on that copy is not a restyle of
-embedded content and cannot reach published bytes.
+content proxy. A preview renders the slide **in the CSS context it was written
+in**: every ancestor up to `<body>` is reproduced, shallowly, with its
+attributes, and `html` and `body` keep theirs. A deck whose slides take their
+width from a container rule, or whose slides live inside `<svg><foreignObject>`,
+has no layout at all without them. For the same reason a preview forces only
+visibility — never position, inset, margin or size — and forces `display` or
+`transform` only where the live document shows that is what hides the slide.
+Every preview in one deck is laid out at **one** size, the reader's own frame
+viewport, so the same media queries resolve and the rail cannot go ragged.
+
+Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a
+trusted document. Because a preview is a copy the app constructs and nothing
+serializes, the layout it forces on that copy is not a restyle of embedded
+content and cannot reach published bytes — and for the same reason the marker
+it uses to find the slide is set on the copy, never on the document being read.
 
 Presentation mode hides app chrome with a class on `<body>` and requests
 fullscreen as an enhancement; the CSS state is what hides the chrome, and the

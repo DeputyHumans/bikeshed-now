@@ -152,6 +152,7 @@ anything outside the permissive allowlist.
 | `functions/src/index.ts` | every endpoint; mirrored by `scripts/lib/endpoints.mjs` |
 | `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
 | `app/src/viewer/deck.ts` | what counts as a slide, defined once for the rail, the overview and the keys |
+| `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
 | `docs/architecture/adr/` | ten decisions, each with its reversal condition |
@@ -174,6 +175,11 @@ anything outside the permissive allowlist.
   their coverage does not overlap. Reading order is DOM order: some decks
   number sections out of order, and some use bare numerals whose `#id` form is
   not a valid selector at all.
+- **A thumbnail keeps the slide's ancestors, and `paged` is latched.** Rendering
+  a slide alone throws away the container rules its own stylesheet is written
+  against, so it renders unstyled in a box measured from the styled frame — all
+  whitespace. And the navigator is gated on `paged`, which the rail's own width
+  can change: re-deciding it on resize makes the viewer oscillate.
 - **The email secret holds a single space.** `defineSecret` demands a version;
   Secret Manager refuses an empty payload. Whitespace is how a deployment says
   "email off", and `apiKey()` trims.

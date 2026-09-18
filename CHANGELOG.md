@@ -134,6 +134,63 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **The slide rail had no layout container, so it stacked on top of the
+  document.** `.doc-frame-wrap` was a plain block, and the rail was rendered as
+  a normal-flow sibling of a full-width iframe — so above 860px the rail sat
+  above the document, grew to the height of every thumbnail it held (nothing
+  bounded it, so its own `overflow-y` never engaged), and pushed the frame out
+  of view. Below 860px the rail is `position: fixed`, which is why only wide
+  windows were affected and why the mobile drawer looked fine. The wrapper is
+  now a grid whose rail track is `auto`, so it collapses to nothing when there
+  is no rail rather than stranding an empty band — the failure `.viewer-body`
+  already carries a comment about.
+
+- **Slide thumbnails were rendered without the CSS that shapes them.** A
+  preview emitted the slide alone as the only child of `<body>`, discarding
+  every ancestor its stylesheet is written against — a deck that gets its width
+  from a container rule rendered full-bleed, and one built as
+  `<svg><foreignObject><section>` lost its layout entirely. The box was still
+  sized from the live, correctly-styled frame, so the contents filled a
+  fraction of it and the rest was the reported whitespace. Previews now
+  reproduce the ancestor chain, and `html` and `body` keep every attribute
+  rather than only `class` — `dir="rtl"` alone flips a deck.
+
+- **Previews flattened the slide they were previewing.** The override forced
+  `position: static`, `inset: auto` and `margin: 0`, which turns
+  `position:absolute; inset:0; display:grid; place-items:center` into
+  shrink-wrapped content in the top-left corner. Only visibility is forced now;
+  `display` and `transform` move only where the live document shows that is
+  what hides the slide, and the layout properties are never touched.
+
+- **Every thumbnail was a different height.** Each was measured from its own
+  slide and clamped, so the rail was a ragged column and the overview left a
+  band of dead space under every short card — a grid row is as tall as its
+  tallest item. All previews in a deck are now laid out at one size, the
+  reader's own frame viewport, which also means a deck that re-flows at a
+  breakpoint is previewed at the width it is being read at.
+
+- **The thumbnail width was declared twice, in two languages, and disagreed.**
+  The rail's CSS left a 131px content box against a hardcoded 132, and the
+  overview's cards were pinned to 236px inside `minmax(236px, 1fr)` columns
+  that are wider, leaving dead space beside each one. CSS is now the only owner
+  and the thumbnail measures its own box.
+
+- **The slide navigator appeared for anything with two sections.** It is now
+  shown only for a document whose slides measure about one viewport tall — the
+  signal the arrow keys already used. A long article no longer gets a rail of
+  illegible prose thumbnails, each of which cost a function invocation. The
+  measurement is latched per load, because opening the rail narrows the frame
+  and an unlatched answer makes the viewer oscillate.
+
+- **The rail did not follow the reader**, so on a long deck the highlight
+  walked off the bottom and stayed there; and a slide dragged in edit mode gave
+  no indication of where it would land, though the rail had styled a drop
+  target since it was written and nothing ever set it.
+
+- **The overview took focus to the first slide, not the current one.**
+  `querySelector('[aria-current="true"], button')` returns the first element
+  matching *either* in tree order, which is always card one.
+
 - **The tour rendered blank when its scripts were blocked.** Its fifteen
   sections started at `opacity: 0` and were revealed by a class the inline
   script adds on scroll, so with scripts blocked none of them ever appeared —
