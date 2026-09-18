@@ -124,6 +124,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   version. Confirmed against node 20.19.3: 157 functions tests and 19 cli tests,
   where the old form found none.
 
+- **The app suite asserted against whatever configuration a machine happened to
+  have.** Vitest loads `app/.env.local`, which is gitignored, so the suite
+  passed on a developer machine that had copied it and failed on a fresh clone
+  that had not: `firebase.ts` calls `initializeApp` at module scope, throws
+  `auth/invalid-api-key` without a key, and took `analytics`, `Landing` and
+  `viewer/invariant` down with it at import time. The test environment is now
+  pinned to the `app/.env.example` values in `vite.config.ts`, so the suite is
+  hermetic either way. 259 tests pass with the file present and absent alike.
+
 ## 0.1.0 — 2026-09-17
 
 First release. Everything below is new, so this entry says what the thing *is*

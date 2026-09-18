@@ -75,6 +75,32 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+
+    /**
+     * Pinned, because Vitest loads app/.env.local and that file is gitignored.
+     * Without these the suite asserts against whatever configuration a machine
+     * happens to have: it passed on a developer machine that had the file and
+     * failed on a fresh clone that did not, where firebase.ts throws
+     * auth/invalid-api-key at import and takes three test files with it.
+     *
+     * These are the app/.env.example values. demo- project ids are
+     * emulator-only, so nothing here can reach a backend.
+     */
+    env: {
+      VITE_USE_EMULATORS: "1",
+      VITE_FIREBASE_PROJECT_ID: "demo-bikeshed",
+      VITE_FIREBASE_API_KEY: "demo-api-key",
+      VITE_FIREBASE_AUTH_DOMAIN: "demo-bikeshed.firebaseapp.com",
+      VITE_FIREBASE_STORAGE_BUCKET: "demo-bikeshed-content",
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000",
+      VITE_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000000000",
+      VITE_FIREBASE_DATABASE_URL: "http://127.0.0.1:9000?ns=demo-bikeshed",
+      VITE_FIREBASE_MEASUREMENT_ID: "",
+      VITE_EXPORT_MARK_ENABLED: "",
+      VITE_EXPORT_MARK_LABEL: "",
+      VITE_EXPORT_MARK_FOOTER: "",
+      VITE_LEGAL_CONTACT: "",
+    },
     coverage: {
       provider: "v8",
       include: [
