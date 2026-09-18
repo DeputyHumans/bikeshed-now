@@ -7,7 +7,6 @@ import {
   EDIT_FONTS_ID,
   EMPTY_ATTR,
   HL_CLASS,
-  HL_RESOLVED_CLASS,
   HL_STYLE_ID,
   OWN_ATTR,
   isOwnMarker,
@@ -31,8 +30,8 @@ import type { Anchor, Annotation } from "../types";
  * edge one. A 1px border plus a WHITE HALO survives any backdrop: against dark
  * content the halo reads, against light content the border does.
  *
- * Resolved differs by border STYLE and alpha, never by colour alone, so the
- * distinction survives a monochrome display and colour blindness.
+ * A RESOLVED annotation is not drawn at all — see `redrawHighlights`. There is
+ * therefore one treatment here, not two.
  *
  * A coarse pointer gets a tinted fill as well, because a 1px border is not
  * something a thumb can hit.
@@ -52,11 +51,6 @@ export function ensureHighlightStyles(doc: Document): void {
       cursor: pointer;
       box-decoration-break: clone;
       -webkit-box-decoration-break: clone;
-    }
-    .${HL_CLASS}.${HL_RESOLVED_CLASS} {
-      border-style: dashed;
-      opacity: 0.55;
-      box-shadow: none;
     }
     .${HL_CLASS}[data-selected="true"] {
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8),
@@ -114,7 +108,7 @@ export function highlightRange(
   doc: Document,
   range: Range,
   annId: string,
-  options: { resolved: boolean; authorEmail?: string },
+  options: { authorEmail?: string } = {},
 ): void {
   if (range.collapsed) return;
 
@@ -134,7 +128,7 @@ export function highlightRange(
     sub.setEnd(node, to);
 
     const mark = doc.createElement("mark");
-    mark.className = options.resolved ? `${HL_CLASS} ${HL_RESOLVED_CLASS}` : HL_CLASS;
+    mark.className = HL_CLASS;
     mark.setAttribute(ANN_ATTR, annId);
     // The author's colour, so a highlight can be traced to a person without
     // opening the panel — the same value the chip, caret and rail marker use.
@@ -305,7 +299,18 @@ export function assertNoDecoration(doc: Document, context: string): void {
   }
 }
 
-/** Clear, then redraw every annotation using the supplied resolver. */
+/**
+ * Clear, then redraw every annotation using the supplied resolver.
+ *
+ * A RESOLVED annotation is not drawn. Resolving is how a reader says "this is
+ * dealt with", and leaving its passage marked means the document never gets
+ * visibly cleaner however much feedback is worked through — which is the whole
+ * point of resolving one. The thread stays in the panel and can be reopened
+ * there; what goes away is the mark on the prose.
+ *
+ * It is not counted as orphaned either. Whether a settled comment's passage
+ * still matches is not a question anybody needs answered.
+ */
 export function redrawHighlights(
   doc: Document,
   annotations: Annotation[],
@@ -315,12 +320,10 @@ export function redrawHighlights(
   const drawn: string[] = [];
   const orphaned: string[] = [];
   for (const ann of annotations) {
+    if (ann.resolved) continue;
     const range = resolve(ann.anchor);
     if (range) {
-      highlightRange(doc, range, ann.annId, {
-        resolved: ann.resolved,
-        authorEmail: ann.authorEmail,
-      });
+      highlightRange(doc, range, ann.annId, { authorEmail: ann.authorEmail });
       drawn.push(ann.annId);
     } else {
       // Reported rather than swallowed: a comment whose passage no longer

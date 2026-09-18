@@ -346,8 +346,7 @@ The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`.
 Because it is same-origin, the parent app drives annotation directly on
 `iframe.contentDocument`. **The proxy injects nothing.**
 
-- On `load`: inject one `<style>` into the iframe head for `.bshd-hl` and
-  `.bshd-hl--resolved`.
+- On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
   `dom-anchor-text-position` as the fallback, both scoped to the **nearest
   ancestor element carrying an `id`**, stored as `anchor.elementId`. Selectors
@@ -358,6 +357,10 @@ Because it is same-origin, the parent app drives annotation directly on
   then wrap in `<mark class="bshd-hl" data-bshd-ann="...">`.
 - Wrapping is per-text-node, so existing element nodes are never destroyed or
   re-parented. Highlights are presentational and are NEVER persisted.
+- **A resolved annotation is not drawn.** Resolving is how a reader says a
+  passage is dealt with, so its mark comes off the prose; the thread stays in
+  the panel and can be reopened there. A resolved annotation is skipped before
+  its anchor is resolved, so it is never reported as orphaned either.
 
 ### 6a. Inline editing
 

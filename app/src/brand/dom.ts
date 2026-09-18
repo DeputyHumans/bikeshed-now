@@ -70,7 +70,6 @@ export const PEER_LAYER_ID = "bshd-peers";
 // --- Classes and attributes inside the document ----------------------------
 
 export const HL_CLASS = "bshd-hl";
-export const HL_RESOLVED_CLASS = "bshd-hl--resolved";
 
 /**
  * The annotation id carried by a highlight.

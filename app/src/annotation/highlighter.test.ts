@@ -49,7 +49,7 @@ describe("serializeCleanHtml", () => {
 
   it("unwraps highlights, keeping their text and their structure", () => {
     const doc = makeDoc("<section id=s1><p>alpha <b>beta</b> gamma</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
     expect(doc.querySelectorAll(`mark.${HL_CLASS}`).length).toBeGreaterThan(0);
 
     const out = serializeCleanHtml(doc);
@@ -62,7 +62,7 @@ describe("serializeCleanHtml", () => {
 
   it("does not re-parent nested elements while unwrapping", () => {
     const doc = makeDoc("<section id=s1><p>one <b>two <i>three</i></b> four</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
     const out = serializeCleanHtml(doc);
     // The <i> must still be inside the <b>: a highlight is presentational and
     // must never change the document's structure.
@@ -100,7 +100,7 @@ describe("serializeCleanHtml", () => {
   it("does not mutate the live document", () => {
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
     ensureHighlightStyles(doc);
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
     const before = doc.documentElement.outerHTML;
     serializeCleanHtml(doc);
     // Stripping in place would make the editor's own view flicker and could
@@ -156,7 +156,7 @@ describe("serializeCleanHtml", () => {
 describe("assertNoDecoration", () => {
   it("throws when a highlight survived into edit mode", () => {
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
     expect(() => assertNoDecoration(doc, "edit mode")).toThrow(/decoration survived/);
   });
 
@@ -174,7 +174,7 @@ describe("assertNoDecoration", () => {
   it("is silent after the strip that edit mode performs", () => {
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
     ensureHighlightStyles(doc);
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
     clearHighlights(doc);
     doc.querySelector(`[${OWN_ATTR}]`)?.remove();
     expect(() => assertNoDecoration(doc, "edit mode")).not.toThrow();
@@ -190,7 +190,7 @@ describe("highlightRange", () => {
     );
     const details = doc.querySelector("details") as HTMLDetailsElement;
     expect(details.open).toBe(false);
-    highlightRange(doc, rangeOver(doc, "details p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "details p"), "a1");
     expect(details.open).toBe(true);
   });
 
@@ -198,22 +198,16 @@ describe("highlightRange", () => {
     const doc = makeDoc(
       "<section id=s1><details><summary>Outer</summary><details><summary>Inner</summary><p>deep</p></details></details></section>",
     );
-    highlightRange(doc, rangeOver(doc, "details details p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "details details p"), "a1");
     for (const d of Array.from(doc.querySelectorAll("details"))) {
       expect((d as HTMLDetailsElement).open).toBe(true);
     }
   });
 
-  it("marks resolved by class, so it can differ by border style not colour", () => {
-    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: true });
-    expect(doc.querySelector("mark")?.className).toContain("--resolved");
-  });
 
   it("carries the author's colour, so a highlight traces to a person", () => {
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
     highlightRange(doc, rangeOver(doc, "p"), "a1", {
-      resolved: false,
       authorEmail: "ana@example.com",
     });
     const mark = doc.querySelector("mark") as HTMLElement;
@@ -225,8 +219,8 @@ describe("selection and clicks", () => {
   it("marks exactly one thread as selected", async () => {
     const { setSelectedHighlight } = await import("./highlighter");
     const doc = makeDoc("<section id=s1><p>alpha</p><p>beta</p></section>");
-    highlightRange(doc, rangeOver(doc, "p:first-child"), "a1", { resolved: false });
-    highlightRange(doc, rangeOver(doc, "p:last-child"), "a2", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p:first-child"), "a1");
+    highlightRange(doc, rangeOver(doc, "p:last-child"), "a2");
 
     setSelectedHighlight(doc, "a2");
     expect(doc.querySelector(`[${ANN_ATTR}="a1"]`)?.getAttribute("data-selected")).toBeNull();
@@ -239,7 +233,7 @@ describe("selection and clicks", () => {
   it("reports a click on a highlight, and detaches cleanly", async () => {
     const { attachHighlightClick } = await import("./highlighter");
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1", { resolved: false });
+    highlightRange(doc, rangeOver(doc, "p"), "a1");
 
     const seen: string[] = [];
     const detach = attachHighlightClick(doc, (id) => seen.push(id));
@@ -258,6 +252,33 @@ describe("selection and clicks", () => {
     attachHighlightClick(doc, (id) => seen.push(id));
     doc.querySelector("p")!.dispatchEvent(new Event("click", { bubbles: true }));
     expect(seen).toEqual([]);
+  });
+
+  it("leaves a resolved annotation undrawn, and does not call it orphaned", async () => {
+    const { redrawHighlights } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    const anchor = { elementId: "s1", exact: "alpha", prefix: "", suffix: "", start: 0, end: 5 };
+    let resolverCalls = 0;
+    const result = redrawHighlights(
+      doc,
+      [
+        { annId: "open", resolved: false, anchor },
+        { annId: "done", resolved: true, anchor },
+      ] as never,
+      () => {
+        resolverCalls += 1;
+        return rangeOver(doc, "p");
+      },
+    );
+
+    // Resolving a comment has to make the document visibly cleaner, or there
+    // is no reason to do it.
+    expect(result.drawn).toEqual(["open"]);
+    expect(doc.querySelectorAll(`mark.${HL_CLASS}`)).toHaveLength(1);
+    // Skipped BEFORE the anchor is resolved: whether a settled comment's
+    // passage still matches is not a question worth answering.
+    expect(resolverCalls).toBe(1);
+    expect(result.orphaned).toEqual([]);
   });
 
   it("reports an anchor it cannot resolve as orphaned rather than dropping it", async () => {
