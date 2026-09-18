@@ -29,6 +29,10 @@ const PATHS = {
   comment: "M21 12a8 8 0 0 1-8 8H7l-4 3v-4.6A8 8 0 0 1 5 4h8a8 8 0 0 1 8 8z",
   edit: "M4 20h4l11-11a2.8 2.8 0 1 0-4-4L4 16z",
   download: "M12 3v12m0 0 4-4m-4 4-4-4M4 19h16",
+  // The same arrow through the horizontal. Upload had been borrowing
+  // `download`, so the button that sends a file up, the dropzone and the
+  // drop hint all pointed down.
+  upload: "M12 21V9m0 0 4 4m-4-4-4 4M4 5h16",
   present: "M3 4h18v11H3zM12 15v5M8 20h8",
   stats: "M5 20V10M12 20V4M19 20v-7",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",

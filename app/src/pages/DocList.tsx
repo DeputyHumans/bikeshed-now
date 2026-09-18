@@ -475,7 +475,7 @@ export function DocList() {
             <Icon name="plus" size={15} /> Folder
           </button>
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setUploading(true)}>
-            <Icon name="download" size={15} /> Upload
+            <Icon name="upload" size={15} /> Upload
           </button>
         </div>
 
@@ -519,7 +519,7 @@ export function DocList() {
 
       {workspaceDrop.over ? (
         <div className="drop-hint" role="status">
-          <Icon name="download" size={18} />
+          <Icon name="upload" size={18} />
           Drop to upload into {currentFolderName}
         </div>
       ) : null}

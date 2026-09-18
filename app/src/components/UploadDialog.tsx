@@ -99,7 +99,7 @@ export function UploadDialog({
           accept(e.dataTransfer.files[0] ?? null);
         }}
       >
-        <Icon name="download" size={28} />
+        <Icon name="upload" size={28} />
         {file ? (
           <>
             <strong>{file.name}</strong>
