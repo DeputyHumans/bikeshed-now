@@ -6,7 +6,6 @@ import {
   onValue,
   ref,
   remove,
-  runTransaction,
   serverTimestamp,
   set,
 } from "firebase/database";
@@ -54,18 +53,6 @@ export interface Peer {
   lastChanged: number;
   /** Derived from the address, so it is the same person's colour every time. */
   color: string;
-}
-
-export interface EditLock {
-  uid: string;
-  email: string;
-  since: number;
-}
-
-export interface EditRequest {
-  uid: string;
-  email: string;
-  at: number;
 }
 
 export interface PresenceHandle {
@@ -245,119 +232,5 @@ export function watchPeers(
  * Review does not stop because somebody is typing.
  */
 
-export function watchLock(docId: string, cb: (lock: EditLock | null) => void): () => void {
-  if (!rtdb) {
-    cb(null);
-    return () => {};
-  }
-  return onValue(
-    ref(rtdb, `status/${docId}/lock`),
-    (snap) => cb((snap.val() as EditLock | null) ?? null),
-    () => cb(null),
-  );
-}
-
-/**
- * Claim the lock, or fail because somebody else holds it.
- *
- * A transaction rather than a plain set, so two people clicking Edit in the
- * same second cannot both believe they won. A lock older than LOCK_IDLE_MS is
- * stealable: the holder's tab may have died in a way `onDisconnect` could not
- * observe, and a permanently wedged document is worse than a rare stolen lock.
- */
-export async function claimLock(
-  docId: string,
-  uid: string,
-  email: string,
-): Promise<boolean> {
-  if (!rtdb) return true; // no RTDB means no peers to conflict with
-  const lockRef = ref(rtdb, `status/${docId}/lock`);
-  try {
-    const result = await runTransaction(lockRef, (current: EditLock | null) => {
-      if (current && current.uid !== uid && Date.now() - current.since < LOCK_IDLE_MS) {
-        return undefined; // abort: somebody else holds a live lock
-      }
-      return { uid, email: email.toLowerCase(), since: serverTimestamp() };
-    });
-    if (result.committed) {
-      void onDisconnect(lockRef).remove().catch(() => {});
-    }
-    return result.committed;
-  } catch {
-    return false;
-  }
-}
-
-export async function releaseLock(docId: string, uid: string): Promise<void> {
-  if (!rtdb) return;
-  const lockRef = ref(rtdb, `status/${docId}/lock`);
-  try {
-    await runTransaction(lockRef, (current: EditLock | null) =>
-      current && current.uid !== uid ? undefined : null,
-    );
-  } catch {
-    /* a failed release is corrected by onDisconnect or the idle window */
-  }
-}
-
-/** Re-stamp the lock so it does not idle out while somebody is actually typing. */
-export async function touchLock(
-  docId: string,
-  uid: string,
-  email: string,
-): Promise<void> {
-  if (!rtdb) return;
-  await claimLock(docId, uid, email);
-}
-
 // --- "Ask to edit" ---------------------------------------------------------
 
-/**
- * Asked ONCE.
- *
- * The request is a single node keyed by the asker, so asking twice overwrites
- * rather than accumulating, and the holder dismissing it removes it. Nobody
- * gets nagged, and nobody has to build a queue to prevent nagging.
- */
-export async function requestEdit(
-  docId: string,
-  uid: string,
-  email: string,
-): Promise<void> {
-  if (!rtdb) return;
-  try {
-    await set(ref(rtdb, `status/${docId}/requests/${uid}`), {
-      email: email.toLowerCase(),
-      at: serverTimestamp(),
-    });
-  } catch {
-    /* best-effort */
-  }
-}
-
-export async function clearEditRequest(docId: string, uid: string): Promise<void> {
-  if (!rtdb) return;
-  try {
-    await remove(ref(rtdb, `status/${docId}/requests/${uid}`));
-  } catch {
-    /* best-effort */
-  }
-}
-
-export function watchEditRequests(
-  docId: string,
-  cb: (requests: EditRequest[]) => void,
-): () => void {
-  if (!rtdb) {
-    cb([]);
-    return () => {};
-  }
-  return onValue(
-    ref(rtdb, `status/${docId}/requests`),
-    (snap) => {
-      const val = (snap.val() as Record<string, { email: string; at: number }> | null) ?? {};
-      cb(Object.entries(val).map(([uid, v]) => ({ uid, email: v.email, at: v.at })));
-    },
-    () => cb([]),
-  );
-}

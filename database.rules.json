@@ -6,7 +6,10 @@
 // Realtime Database security rules (SPEC §6b, §16).
 //
 // RTDB carries ephemeral collaboration state — who is here, where they are
-// looking, and the live merge of the document everyone is typing into. None of
+// looking, and the live merge of the document everyone is typing into. The
+// `lock` and `requests` nodes an earlier design used are withdrawn along with
+// the edit lock itself (ADR 0010); anything still writing them is rejected by
+// the `$other` rule below, which is the point of having one. None of
 // it is the durable artifact: the draft and the published versions live in
 // Firestore and Storage, and everything here disappears when the last tab
 // closes.
@@ -88,25 +91,6 @@
           "$entry": {
             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
-          }
-        },
-
-        "lock": {
-          ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || data.child('uid').val() == auth.uid || now - data.child('since').val() > 300000) && (!newData.exists() || newData.child('uid').val() == auth.uid)",
-          ".validate": "newData.hasChildren(['uid', 'email', 'since']) && newData.child('uid').val() == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('since').val() == now",
-          "uid": { ".validate": "newData.isString()" },
-          "email": { ".validate": "newData.isString()" },
-          "since": { ".validate": "newData.isNumber()" },
-          "$other": { ".validate": false }
-        },
-
-        "requests": {
-          "$uid": {
-            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && ($uid == auth.uid || !newData.exists())",
-            ".validate": "newData.hasChildren(['email', 'at']) && $uid == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('at').val() == now",
-            "email": { ".validate": "newData.isString()" },
-            "at": { ".validate": "newData.isNumber()" },
-            "$other": { ".validate": false }
           }
         },
 

@@ -119,30 +119,31 @@
 .save-state[data-state="error"] { color: var(--color-danger); }
 .save-state[data-state="saved"] { color: var(--color-success); }
 
-/* --- The edit lock (SPEC §16) --------------------------------------------
- * Observe mode is not a locked-out state. You watch the draft, see the
- * editor's caret live, and can still highlight and comment: review does not
- * stop because somebody is typing.
+/* --- The shared document (SPEC §6b) --------------------------------------
+ * Quiet on purpose. "Shared" is the normal state, so it sits at caption weight
+ * beside the save state rather than announcing itself; what actually needs to
+ * be visible is the moment BEFORE it, when typing would not yet reach anyone.
+ *
+ * Nothing here disables anything. The edit lock this replaces greyed the whole
+ * toolbar out for everyone who did not hold it — there is no such state now.
  */
-.lock-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--fs-small);
-}
-.lock-holder {
+.share-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 620;
-  color: var(--lock-color, var(--color-ink));
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
 }
-.lock-actions { margin-left: auto; display: flex; gap: var(--s-1); }
-
-.observe-mode .edit-toolbar {
-  opacity: 0.55;
-  pointer-events: none;
+.share-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
+.share-state[data-state="shared"] { color: var(--color-success); }
+.share-state[data-state="joining"] { color: var(--color-warn); }
 
 /* --- Generated-container placeholders ------------------------------------
  * The visual treatment lives in the stylesheet INJECTED into the iframe

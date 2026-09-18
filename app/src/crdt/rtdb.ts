@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The update log, carried on the presence database (SPEC §6b, §16).
 
-import { onChildAdded, push, ref, remove, update } from "firebase/database";
+import { onChildAdded, onValue, push, ref, remove, update } from "firebase/database";
 import { rtdb } from "../firebase";
 import type { UpdateLog } from "./log";
 
@@ -20,7 +20,26 @@ import type { UpdateLog } from "./log";
 export function rtdbLog(docId: string): UpdateLog | null {
   if (!rtdb) return null;
   const logRef = ref(rtdb, `status/${docId}/y`);
+  // RTDB delivers child_added for every existing child BEFORE the first value
+  // event, so a value event is a reliable "you have seen everything that was
+  // already here". That is the only ordering guarantee this needs.
+  const ready = new Promise<void>((resolve) => {
+    const stop = onValue(
+      logRef,
+      () => {
+        stop();
+        resolve();
+      },
+      () => {
+        // A denied read is not worth blocking the editor on: the document is
+        // still editable alone, which is what a deployment without RTDB does.
+        stop();
+        resolve();
+      },
+    );
+  });
   return {
+    ready: () => ready,
     subscribe(onEntry) {
       // `onChildAdded` replays the children that already exist before it
       // reports new ones, so a late joiner catches up and then keeps up

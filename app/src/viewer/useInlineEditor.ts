@@ -41,11 +41,11 @@ export function useInlineEditor(options: {
   docId: string;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
-  /** True while somebody else holds the lock: observe, do not edit. */
-  observing: boolean;
 }) {
-  const { mode, doc, epoch, docId, authoredAssets, onStale, observing } = options;
-  const editing = mode.kind === "editing" && !observing;
+  const { mode, doc, epoch, docId, authoredAssets, onStale } = options;
+  // There is no longer a state in which somebody may open the editor and not
+  // type in it: edits merge (SPEC §6b), so the mode is the whole condition.
+  const editing = mode.kind === "editing";
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);

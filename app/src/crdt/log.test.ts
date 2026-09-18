@@ -26,6 +26,7 @@ function makeLog() {
       if (!online) return;
       for (const l of listeners) for (const [k, p] of entries) l(k, p);
     },
+    async ready() {},
     subscribe(onEntry) {
       listeners.add(onEntry);
       for (const [k, p] of entries) onEntry(k, p);

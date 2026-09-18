@@ -19,10 +19,10 @@ import { useDocument } from "../viewer/useDocument";
 import { useDocFrame } from "../viewer/useDocFrame";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
+import { useSharedDocument } from "../viewer/useSharedDocument";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
-import { useEditLock } from "../viewer/useEditLock";
 import { useLiveSync } from "../viewer/useLiveSync";
 import type { FrameMode } from "../viewer/frameMode";
 
@@ -132,8 +132,6 @@ export function DocViewer() {
   // required, on every document, whatever its owner chose.
   const canEdit = isDocEditor || (signedIn && doc.publicEdit);
 
-  const lock = useEditLock({ docId, uid: user?.uid ?? null, emailLower, wantsEdit });
-
   const trust = useDocTrust({
     docId,
     uid: user?.uid ?? null,
@@ -145,7 +143,7 @@ export function DocViewer() {
 
   const mode: FrameMode = useMemo(
     () =>
-      wantsEdit && !lock.observing
+      wantsEdit
         ? { kind: "editing", baseVersion: doc.currentVersion }
         : {
             kind: "reading",
@@ -153,7 +151,7 @@ export function DocViewer() {
             draft: Boolean(doc.meta?.draft) && canEdit,
             sandboxed: !trust.trusted,
           },
-    [wantsEdit, lock.observing, doc.currentVersion, doc.meta?.draft, canEdit, trust.trusted],
+    [wantsEdit, doc.currentVersion, doc.meta?.draft, canEdit, trust.trusted],
   );
 
   const frame = useDocFrame({
@@ -196,13 +194,24 @@ export function DocViewer() {
     enabled: signedIn,
   });
 
+  // Between the annotation layer and the editor, deliberately: cleanups run in
+  // declaration order, so highlights are stripped before the shared document is
+  // seeded from this DOM. Decoration reaching the CRDT does not contaminate one
+  // save, it lands in every peer's copy.
+  const shared = useSharedDocument({
+    mode,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    docId,
+    enabled: signedIn,
+  });
+
   const editor = useInlineEditor({
     mode,
     doc: frame.doc,
     epoch: frame.epoch,
     docId,
     authoredAssets: frame.authoredAssets,
-    observing: lock.observing,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
 
@@ -425,7 +434,6 @@ export function DocViewer() {
 
   const editingNow = mode.kind === "editing";
   const showComments = commentsOpen && Boolean(doc.currentVersion);
-  const lockColor = presence.peers.find((p) => p.uid === lock.lock?.uid)?.color;
 
   return (
     <div className="viewer" data-pane={pane}>
@@ -435,7 +443,7 @@ export function DocViewer() {
           doc={frame.doc}
           saveState={editor.saveState}
           saveError={editor.saveError}
-          observing={lock.observing}
+          sharing={shared.state}
           onCommit={() => void commit()}
           onExit={() => void stopEditing()}
           commitDisabled={annotations.some((a) => !a.resolved)}
@@ -484,19 +492,9 @@ export function DocViewer() {
           frame.reload();
         }}
         onKeepMine={live.dismissConflict}
-        lock={lock.lock}
-        observing={lock.observing}
-        asked={lock.asked}
-        onAskToEdit={() => void lock.askToEdit()}
-        idleWarning={lock.idleWarning}
-        onStayEditing={lock.keepAlive}
-        requests={lock.requests}
-        onHandOff={(uid) => void lock.handOff(uid)}
-        onDismissRequest={lock.dismissRequest}
         orphanedCount={annotationLayer.orphaned.length}
         offerTrust={liveTrust.shouldOffer}
         onOpenTrust={() => setDialog("trust")}
-        peerColor={lockColor}
       />
 
       {/* One source of truth for "is the panel there", because the layout and
@@ -508,7 +506,7 @@ export function DocViewer() {
             <SlidePanel
               doc={frame.doc}
               epoch={frame.epoch}
-              editable={!lock.observing}
+              editable
               onChanged={() => frame.doc?.dispatchEvent(new Event("input", { bubbles: true }))}
             />
           ) : null}

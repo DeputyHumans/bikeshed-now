@@ -136,8 +136,16 @@ export interface EditToolbarProps {
    * opened the editor on a document under review was stuck in it.
    */
   onExit: () => void;
-  /** True while somebody else holds the edit lock: observe mode. */
-  observing?: boolean;
+  /**
+   * Whether this editor is joined to the shared document.
+   *
+   * It replaces the `observing` flag the edit lock used to set, and it says
+   * something materially different: not "somebody else is typing so you may
+   * not", but "your typing is reaching everybody" — or, while joining, "not
+   * yet". Nothing here is disabled by it; there is no state in which editing is
+   * refused any more.
+   */
+  sharing?: "off" | "joining" | "shared";
 }
 
 function SaveState({
@@ -174,14 +182,14 @@ export function EditToolbar({
   commitDisabled,
   commitDisabledReason,
   onExit,
-  observing,
+  sharing,
 }: EditToolbarProps) {
   const [active, setActive] = useState<Set<string>>(new Set());
   const markdown = format === "markdown";
 
   const run = useCallback(
     (command: Command) => {
-      if (!doc || observing) return;
+      if (!doc) return;
       doc.defaultView?.focus();
       if (command.kind === "block") {
         doc.execCommand("formatBlock", false, command.value);
@@ -189,7 +197,7 @@ export function EditToolbar({
         doc.execCommand(command.command, false, command.value);
       }
     },
-    [doc, observing],
+    [doc],
   );
 
   /** Reflect the caret's current formatting, so the toolbar is not lying. */
@@ -226,7 +234,7 @@ export function EditToolbar({
           title={unavailable ? MARKDOWN_UNAVAILABLE : control.title}
           aria-label={control.title}
           aria-pressed={active.has(control.id)}
-          disabled={unavailable || observing}
+          disabled={unavailable}
           onClick={() => run(control.command)}
         >
           {control.icon ? <Icon name={control.icon} size={16} /> : control.label}
@@ -244,7 +252,6 @@ export function EditToolbar({
         <select
           id="bshd-block"
           className="toolbar-select"
-          disabled={observing}
           onChange={(e) => run({ kind: "block", value: e.target.value })}
           defaultValue="p"
         >
@@ -265,7 +272,6 @@ export function EditToolbar({
           className="icon-btn toolbar-btn"
           title="Link"
           aria-label="Link"
-          disabled={observing}
           onClick={() => {
             if (!doc) return;
             // A prompt, not a popover: the browser's own dialog keeps focus and
@@ -290,7 +296,7 @@ export function EditToolbar({
             className="toolbar-select"
             aria-label="Font"
             title={markdown ? MARKDOWN_UNAVAILABLE : "Font"}
-            disabled={markdown || observing}
+            disabled={markdown}
             onChange={(e) => run({ kind: "exec", command: "fontName", value: e.target.value })}
             defaultValue={EDITOR_FONT_CHOICES[0].value}
           >
@@ -310,7 +316,7 @@ export function EditToolbar({
             className="toolbar-select"
             aria-label="Text colour"
             title={markdown ? MARKDOWN_UNAVAILABLE : "Text colour"}
-            disabled={markdown || observing}
+            disabled={markdown}
             defaultValue={TOKENS.ink}
             onChange={(e) => run({ kind: "exec", command: "foreColor", value: e.target.value })}
           />
@@ -326,7 +332,7 @@ export function EditToolbar({
               className="icon-btn toolbar-btn"
               aria-label={command === "justifyLeft" ? "Align left" : "Align centre"}
               title={markdown ? MARKDOWN_UNAVAILABLE : "Alignment"}
-              disabled={markdown || observing}
+              disabled={markdown}
               onClick={() => run({ kind: "exec", command })}
             >
               <Icon
@@ -342,12 +348,16 @@ export function EditToolbar({
           as a unit. Left loose in the bar they inherited its 4px control gap,
           which read as the word "Saved" being stuck to the button. */}
       <div className="toolbar-end">
+        {sharing && sharing !== "off" ? (
+          <span className="share-state" data-state={sharing} role="status" aria-live="polite">
+            {sharing === "joining" ? "Joining…" : "Shared"}
+          </span>
+        ) : null}
         <SaveState state={saveState} error={saveError} />
 
-        {/* Never disabled, and deliberately not `observing`-gated either: the
-            way out of a mode has to work in every state the mode can be in, or
-            it is not a way out. The draft survives — leaving the editor is not
-            discarding anything. */}
+        {/* Never disabled: the way out of a mode has to work in every state
+            the mode can be in, or it is not a way out. The draft survives —
+            leaving the editor is not discarding anything. */}
         <button
           type="button"
           className="btn btn-sm btn-keep-label"
@@ -361,7 +371,7 @@ export function EditToolbar({
           type="button"
           className="btn btn-primary btn-sm btn-keep-label"
           onClick={onCommit}
-          disabled={commitDisabled || observing}
+          disabled={commitDisabled}
           title={commitDisabledReason}
         >
           Save as new version

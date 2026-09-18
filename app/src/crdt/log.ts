@@ -30,6 +30,15 @@ export interface UpdateLog {
   subscribe(onEntry: (key: string, payload: string) => void): () => void;
   append(payload: string): Promise<string | null>;
   remove(keys: readonly string[]): Promise<void>;
+  /**
+   * Resolves once every entry that existed at join time has been delivered.
+   *
+   * This is what decides WHO SEEDS. `bindSync` seeds an empty fragment from the
+   * local DOM, so two people opening the editor in the same second would both
+   * seed and the document would appear twice. Waiting for the existing log
+   * first means the second one finds a non-empty fragment and adopts it.
+   */
+  ready(): Promise<void>;
 }
 
 /**

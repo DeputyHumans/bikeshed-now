@@ -7,10 +7,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useInlineEditor } from "./useInlineEditor";
+import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
 import { ANN_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
+
+/**
+ * Vitest loads `app/.env.local`, so a deployment's Realtime Database config
+ * leaks in and `useSharedDocument` opens a real socket from a unit test. Stub
+ * the transport rather than assert against whatever env happens to exist: what
+ * is under test is the BINDING's effect on the document, which needs no peers.
+ */
+vi.mock("../crdt/rtdb", () => ({
+  rtdbLog: () => null,
+  clearLog: async () => {},
+}));
 
 /**
  * THE test this whole decomposition exists to make possible.
@@ -148,13 +160,25 @@ function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
     enabled: true,
   });
 
+  // Between the annotation layer and the editor, mirroring DocViewer. This one
+  // matters more than the others: it does not merely put something in the
+  // document, it COPIES the document to every peer. Decoration that reaches it
+  // is not a contaminated save, it is a contaminated document in somebody
+  // else's browser.
+  useSharedDocument({
+    mode,
+    doc,
+    epoch: 1,
+    docId: "d1",
+    enabled: true,
+  });
+
   const editor = useInlineEditor({
     mode,
     doc,
     epoch: 1,
     docId: "d1",
     authoredAssets,
-    observing: false,
     onStale: () => {},
   });
 

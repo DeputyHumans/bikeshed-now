@@ -2,7 +2,6 @@
 // Everything the viewer needs to say above the document (SPEC §6a, §16, §17).
 
 import { Icon } from "./Icon";
-import type { EditLock, EditRequest } from "../presence";
 
 /**
  * Presentational only: every decision is made in a hook, and this file just
@@ -21,21 +20,6 @@ export function ViewerBanners(props: {
   onTakeTheirs?: () => void;
   onKeepMine?: () => void;
 
-  /** Somebody else holds the edit lock: this reader observes. */
-  lock?: EditLock | null;
-  observing?: boolean;
-  asked?: boolean;
-  onAskToEdit?: () => void;
-
-  /** This reader holds the lock and is about to lose it to idleness. */
-  idleWarning?: boolean;
-  onStayEditing?: () => void;
-
-  /** Somebody has asked this reader to hand over the lock. */
-  requests?: EditRequest[];
-  onHandOff?: (uid: string) => void;
-  onDismissRequest?: (uid: string) => void;
-
   /** Anchors that no longer resolve against this version's text. */
   orphanedCount?: number;
 
@@ -43,7 +27,6 @@ export function ViewerBanners(props: {
   offerTrust?: boolean;
   onOpenTrust?: () => void;
 
-  peerColor?: string;
 }) {
   const rows: React.ReactNode[] = [];
 
@@ -74,60 +57,6 @@ export function ViewerBanners(props: {
         </button>
         <button type="button" className="btn btn-quiet btn-sm" onClick={props.onKeepMine}>
           Keep mine
-        </button>
-      </div>,
-    );
-  }
-
-  if (props.observing && props.lock) {
-    rows.push(
-      <div key="lock" className="banner lock-banner" role="status">
-        <Icon name="lock" size={15} />
-        <span>
-          <span className="lock-holder" style={{ ["--lock-color" as string]: props.peerColor }}>
-            {props.lock.email}
-          </span>{" "}
-          is editing. You can still highlight and comment.
-        </span>
-        <span className="lock-actions">
-          {props.asked ? (
-            <span className="caption">Asked — they will see it.</span>
-          ) : (
-            <button type="button" className="btn btn-sm" onClick={props.onAskToEdit}>
-              Ask to edit
-            </button>
-          )}
-        </span>
-      </div>,
-    );
-  }
-
-  if (props.idleWarning) {
-    rows.push(
-      <div key="idle" className="banner banner-warn" role="alert">
-        <Icon name="lock" size={15} />
-        <span>You have been idle. Editing will pass to somebody else in a minute.</span>
-        <button type="button" className="btn btn-sm" onClick={props.onStayEditing}>
-          Keep editing
-        </button>
-      </div>,
-    );
-  }
-
-  for (const request of props.requests ?? []) {
-    rows.push(
-      <div key={`req-${request.uid}`} className="banner" role="status">
-        <Icon name="edit" size={15} />
-        <span>{request.email} would like to edit.</span>
-        <button type="button" className="btn btn-sm" onClick={() => props.onHandOff?.(request.uid)}>
-          Hand over
-        </button>
-        <button
-          type="button"
-          className="btn btn-quiet btn-sm"
-          onClick={() => props.onDismissRequest?.(request.uid)}
-        >
-          Not now
         </button>
       </div>,
     );

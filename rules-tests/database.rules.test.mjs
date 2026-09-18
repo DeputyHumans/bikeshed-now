@@ -58,6 +58,10 @@ describe("realtime database rules", () => {
       const db = ctx.database();
       await set(ref(db, `presenceAccess/doc1/${key(MEMBER.email)}`), true);
       await set(ref(db, `presenceAccess/doc1/${key(OTHER.email)}`), true);
+      // MEMBER may edit; OTHER may only read. `editAccess` mirrors
+      // `editorMembers` and `presenceAccess` mirrors `members`, and the whole
+      // reason there are two is that this asymmetry has to be enforceable.
+      await set(ref(db, `editAccess/doc1/${key(MEMBER.email)}`), true);
     });
   });
 
@@ -146,32 +150,47 @@ describe("realtime database rules", () => {
     );
   });
 
-  it("the edit lock is claimed by its holder and cannot be stolen while held", async () => {
-    const mine = verified(env, MEMBER).database();
-    await assertSucceeds(
-      set(ref(mine, "status/doc1/lock"), {
-        uid: MEMBER.uid,
-        email: MEMBER.email,
-        since: serverTimestamp(),
-      }),
-    );
-    const theirs = verified(env, OTHER).database();
-    await assertFails(
-      set(ref(theirs, "status/doc1/lock"), {
-        uid: OTHER.uid,
-        email: OTHER.email,
-        since: serverTimestamp(),
-      }),
-    );
-    await assertSucceeds(set(ref(mine, "status/doc1/lock"), null));
+  it("an editor may append to the shared document", async () => {
+    const db = verified(env, MEMBER).database();
+    await assertSucceeds(set(ref(db, "status/doc1/y/e1"), "AQIDBA=="));
   });
 
-  it("a lock cannot be claimed on behalf of somebody else", async () => {
+  it("a READ-ONLY member may not, which is the escalation this gate exists for", async () => {
+    // OTHER is in `presenceAccess` and may watch the document, but is not in
+    // `editAccess`. Gating document state on the presence mirror would let them
+    // push content into an editor's browser, which that editor then autosaves
+    // and publishes: read escalated to write through a channel nobody audits.
+    const db = verified(env, OTHER).database();
+    await assertFails(set(ref(db, "status/doc1/y/e2"), "AQIDBA=="));
+  });
+
+  it("a stranger may neither read nor write the shared document", async () => {
+    const db = verified(env, STRANGER).database();
+    await assertFails(get(ref(db, "status/doc1/y")));
+    await assertFails(set(ref(db, "status/doc1/y/e3"), "AQIDBA=="));
+  });
+
+  it("an editor may remove entries, because compaction has to", async () => {
+    const db = verified(env, MEMBER).database();
+    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), null));
+  });
+
+  it("rejects an entry that is not a bounded string", async () => {
+    const db = verified(env, MEMBER).database();
+    await assertFails(set(ref(db, "status/doc1/y/e5"), { not: "a string" }));
+    await assertFails(set(ref(db, "status/doc1/y/e6"), "x".repeat(200_001)));
+  });
+
+  it("the withdrawn lock node is rejected outright", async () => {
+    // The lock is gone (ADR 0010). A client still writing one is a client
+    // running stale code, and `$other` is what makes that loud rather than
+    // silently tolerated.
     const db = verified(env, MEMBER).database();
     await assertFails(
       set(ref(db, "status/doc1/lock"), {
-        uid: OTHER.uid,
-        email: OTHER.email,
+        uid: MEMBER.uid,
+        email: MEMBER.email,
         since: serverTimestamp(),
       }),
     );
