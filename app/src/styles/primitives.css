@@ -113,6 +113,17 @@
 }
 .textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
 .input:hover, .textarea:hover { border-color: rgba(var(--ink-rgb), 0.24); }
+/* A field's controls on one line: an input beside the button that acts on it.
+   The input takes the slack and may drop to its own row on a narrow viewport,
+   so a long label can never push a button off the edge. */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.field-row .input { flex: 1 1 12rem; min-width: 0; }
+
 .field-hint { font-size: var(--fs-caption); color: var(--color-ink-muted); }
 .field-error { font-size: var(--fs-caption); color: var(--color-danger); }
 

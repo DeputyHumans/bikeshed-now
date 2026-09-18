@@ -2,6 +2,7 @@
 // Sharing: people and teams, side by side (SPEC §2, §18).
 
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
@@ -47,23 +48,31 @@ function PrincipalRow({
 }) {
   const isTeam = principal.startsWith("team:");
   const team = isTeam ? teams.find((t) => t.teamId === principal.slice(5)) : undefined;
+  // What this row IS, said once. It is also what the accessible names use: a
+  // screen reader was being read "Remove team colon" and twenty characters of
+  // base-62, which is the same defect as showing the id, only worse.
+  const label = isTeam ? (team?.name ?? `team ${principal.slice(5)}`) : principal;
 
   return (
     <li className="share-row">
       <Icon name={isTeam ? "team" : "eye"} />
       <span className="share-principal">
-        <span className="share-name">
-          {isTeam ? (team?.name ?? `team ${principal.slice(5)}`) : principal}
-        </span>
+        <span className="share-name">{label}</span>
         {isTeam ? (
           <span className="share-sub">
-            {team ? `${team.members.length} ${team.members.length === 1 ? "person" : "people"}` : "team no longer exists"}
+            {team
+              ? `${team.members.length} ${team.members.length === 1 ? "person" : "people"}`
+              : // A team is readable only by its own members, so an unresolved
+                // grant means one of two things and the interface cannot tell
+                // them apart. Saying which it might be beats asserting the
+                // wrong one.
+                "deleted, or a team you are not in"}
           </span>
         ) : null}
       </span>
       <span className="share-role">
         <label className="visually-hidden" htmlFor={`role-${principal}`}>
-          Access for {principal}
+          Access for {label}
         </label>
         <select
           id={`role-${principal}`}
@@ -79,7 +88,7 @@ function PrincipalRow({
       <button
         type="button"
         className="icon-btn"
-        aria-label={`Remove ${principal}`}
+        aria-label={`Remove ${label}`}
         disabled={disabled}
         onClick={onRemove}
       >
@@ -93,6 +102,23 @@ function PrincipalRow({
       ) : null}
     </li>
   );
+}
+
+/**
+ * What somebody typed, as the server wants it stored.
+ *
+ * Three accepted forms, in the order they are distinguishable: the stored
+ * `team:{id}` verbatim, because the CLI and the agent surface document it and
+ * somebody pasting one should not be second-guessed; anything with an `@` as an
+ * address; and everything else as a team NAME. An address is the only one of
+ * the three whose shape is unambiguous, which is why it is tested before the
+ * lookup rather than after.
+ */
+function resolvePrincipal(value: string, teamByName: Map<string, TeamMeta>): string | null {
+  if (value.startsWith("team:")) return value;
+  if (value.includes("@")) return value.toLowerCase();
+  const team = teamByName.get(value.toLowerCase());
+  return team ? `team:${team.teamId}` : null;
 }
 
 export function SharePanel({
@@ -114,6 +140,20 @@ export function SharePanel({
   const [input, setInput] = useState("");
   const [role, setRole] = useState<Role>("viewer");
   const [busy, setBusy] = useState(false);
+
+  /**
+   * Teams are entered BY NAME and stored as `team:{id}`.
+   *
+   * The picker used to offer the stored form directly, so choosing a team from
+   * the list filled the box with `team:` and twenty-odd random characters — the
+   * one string in this dialog that means nothing to the person reading it. The
+   * id is an implementation detail of the grant; the name is the grant.
+   */
+  const teamByName = useMemo(() => {
+    const byName = new Map<string, TeamMeta>();
+    for (const t of teams) byName.set(t.name.trim().toLowerCase(), t);
+    return byName;
+  }, [teams]);
 
   const principals = useMemo(
     () => [
@@ -155,8 +195,15 @@ export function SharePanel({
   const addPrincipal = async () => {
     const value = input.trim();
     if (!value) return;
+    const principal = resolvePrincipal(value, teamByName);
+    if (!principal) {
+      toast.error(
+        `No team called “${value}”. Add a person by email address, or a team by its name.`,
+      );
+      return;
+    }
     setInput("");
-    await apply({ add: [{ principal: value, role }] });
+    await apply({ add: [{ principal, role }] });
   };
 
   return (
@@ -189,7 +236,7 @@ export function SharePanel({
             <label className="field-label" htmlFor="share-input">
               Add a person or a team
             </label>
-            <div style={{ display: "flex", gap: "var(--s-2)" }}>
+            <div className="field-row">
               <input
                 id="share-input"
                 className="input"
@@ -205,11 +252,12 @@ export function SharePanel({
                   }
                 }}
               />
+              {/* Values, not labels. A datalist shows the VALUE as the
+                  primary line and fills the box with it on selection, so a
+                  label here would have been decoration over the id. */}
               <datalist id="bshd-teams">
                 {teams.map((t) => (
-                  <option key={t.teamId} value={`team:${t.teamId}`}>
-                    {t.name}
-                  </option>
+                  <option key={t.teamId} value={t.name} />
                 ))}
               </datalist>
               <select
@@ -233,6 +281,13 @@ export function SharePanel({
             <span className="field-hint">
               Anything you share reaches them the moment they sign in with this
               address, whether or not they have an account yet.
+              {teams.length > 0 ? (
+                <>
+                  {" "}
+                  Type a team’s name to share with everyone in it —{" "}
+                  <Link to="/account">manage your teams</Link>.
+                </>
+              ) : null}
             </span>
           </div>
 
