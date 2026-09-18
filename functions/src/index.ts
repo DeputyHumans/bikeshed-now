@@ -55,6 +55,8 @@ import {
   canRead,
   canEditFolder,
   canManageFolder,
+  expiryMs,
+  isExpired,
   isMember,
   visibilityOf,
   type DocAclData,
@@ -66,6 +68,7 @@ import {
   invalidPrincipals,
   normalizeEmail,
   parseAccessDelta,
+  parseExpiry,
   type AccessState,
   type Role,
 } from "./lib/access";
@@ -119,6 +122,31 @@ if (admin.apps.length === 0) {
 const db = () => admin.firestore();
 const bucket = () => admin.storage().bucket(bucketName());
 const now = () => FieldValue.serverTimestamp();
+
+/**
+ * An expired document is READ-ONLY, and visible only to its owner.
+ *
+ * One sentence, enforced in eight places, because expiry is not in the security
+ * rules and cannot be (see `isExpired`). The owner keeps reading it because they
+ * are the one who set the date and the one who can move it; locking them out of
+ * their own document would make the setting unrecoverable rather than
+ * reversible. Everybody else gets the same 404 a document they may not read
+ * gives them, so expiry does not become a way to confirm that a slug exists.
+ *
+ * Writing is refused for EVERYONE, the owner included. An expired document is
+ * frozen; lifting the date is what unfreezes it, and that is one action rather
+ * than a special case in every write path.
+ */
+function expiredForReader(
+  doc: DocAclData,
+  caller: { uid: string; emailLower: string } | null,
+): boolean {
+  if (!isExpired(doc, Date.now())) return false;
+  return !(caller && canManageSharing(doc, caller.emailLower));
+}
+
+/** The message a write path gives, which has to say how to undo it. */
+const EXPIRED_WRITE = "this document has expired — change or clear its expiry to edit it";
 
 /** Functions that may send email declare the secret; the rest never load it. */
 const MAILING = { region: REGION, secrets: [RESEND_API_KEY] };
@@ -306,6 +334,14 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     ? isMember(docData, caller.uid, caller.emailLower)
     : false;
 
+  // Expiry is checked HERE, on the one path every byte takes, because it is not
+  // in the security rules and cannot be. Same 404 as "you may not read this":
+  // an expired document must not become a way to confirm a slug exists.
+  if (expiredForReader(docData, caller)) {
+    res.status(404).end();
+    return;
+  }
+
   if (!isOwnMember) {
     if (visibility === "private") {
       res.status(404).end();
@@ -334,7 +370,18 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
   if (visibility === "private" || isOwnMember) {
     res.setHeader("Cache-Control", "private, no-store");
   } else {
-    res.setHeader("Cache-Control", `public, max-age=${PUBLIC_CACHE_SECONDS}`);
+    /**
+     * The window is capped at the time left before expiry.
+     *
+     * Revocation latency is a documented trade — a document made private again
+     * can be served from cache for up to five minutes. An EXPIRY is not the
+     * same thing: its moment is known in advance, so serving past it would be a
+     * choice rather than a consequence. `max-age` never outlives the date.
+     */
+    const at = expiryMs(docData);
+    const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
+    const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
+    res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
   }
   if (visibility === "unlisted") {
     res.setHeader("X-Robots-Tag", "noindex");
@@ -368,6 +415,10 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const docData = docSnap.data() as DocAclData & { slug?: string; linkToken?: string };
+  if (expiredForReader(docData, caller)) {
+    res.status(404).end();
+    return;
+  }
   const isOwnMember = caller ? isMember(docData, caller.uid, caller.emailLower) : false;
   if (!isOwnMember) {
     const visibility = visibilityOf(docData);
@@ -578,6 +629,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
     docId?: unknown;
     visibility?: unknown;
     publicEdit?: unknown;
+    expiresAt?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
   if (!docId || !safeSegment(docId)) {
@@ -587,6 +639,11 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   const visibility = body?.visibility;
   if (visibility !== "private" && visibility !== "unlisted" && visibility !== "public") {
     badRequest(res, 'visibility must be "private", "unlisted" or "public"');
+    return;
+  }
+  const expiry = parseExpiry(body?.expiresAt);
+  if ("error" in expiry) {
+    badRequest(res, expiry.error);
     return;
   }
 
@@ -605,6 +662,10 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   const update: Record<string, unknown> = {
     visibility,
     publicEdit: body?.publicEdit === true && visibility !== "private",
+    expiresAt:
+      expiry.value === null
+        ? FieldValue.delete()
+        : admin.firestore.Timestamp.fromMillis(expiry.value),
     updatedAt: now(),
   };
   if (visibility === "unlisted") {
@@ -633,8 +694,10 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
     visibility,
     publicEdit: fresh.data()?.publicEdit === true,
     linkToken: fresh.data()?.linkToken ?? null,
+    expiresAt: expiryMs(fresh.data() as DocAclData),
   });
 });
+
 
 /**
  * POST /trust — the owner lifts (or restores) the untrusted-content sandbox.
@@ -834,6 +897,12 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     res.status(403).end();
     return;
   }
+  // Refused for the OWNER too: an expired document is frozen, and lifting the
+  // date is what unfreezes it. One action, rather than a special case here.
+  if (isExpired(data, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
+    return;
+  }
   if (data.currentVersion !== baseVersion) {
     res.status(409).json({
       error: "This document has a newer version. Reload before editing.",
@@ -938,6 +1007,10 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     res.status(403).end();
     return;
   }
+  if (isExpired(docData, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
+    return;
+  }
 
   const baseVersion = docData.draft?.baseVersion ?? docData.currentVersion;
   if (typeof baseVersion !== "string" || !safeSegment(baseVersion)) {
@@ -1013,6 +1086,12 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
   };
   if (!canEdit(data, caller)) {
     res.status(403).end();
+    return;
+  }
+  // Refused for the OWNER too: an expired document is frozen, and lifting the
+  // date is what unfreezes it. One action, rather than a special case here.
+  if (isExpired(data, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
     return;
   }
   if (data.currentVersion !== baseVersion) {
@@ -1558,6 +1637,13 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
     res.status(403).end();
     return;
   }
+  // Duplicating reads every byte of the source, so it is a read path — and
+  // without this, copying an expired document would be a way to get its content
+  // back out from behind the date.
+  if (expiredForReader(src, caller)) {
+    res.status(404).end();
+    return;
+  }
   const srcVersion = typeof src.currentVersion === "string" ? src.currentVersion : "";
   if (!srcVersion || !safeSegment(srcVersion)) {
     res.status(409).json({ error: "the source document has no published version" });
@@ -1721,7 +1807,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const docData = docSnap.data() as DocAclData;
-  if (!canRead(docData, caller)) {
+  if (!canRead(docData, caller) || expiredForReader(docData, caller)) {
     res.status(404).end();
     return;
   }
@@ -2238,6 +2324,10 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
     .get();
 
   const entries = snap.docs
+    // An expired document is not served, so listing it would be advertising a
+    // 404 to a crawler. The projection carries the date precisely so this can
+    // be decided without a second read per row.
+    .filter((d) => !isExpired(d.data() as DocAclData, Date.now()))
     .map((d) => {
       const at = d.data()?.publishedAt as admin.firestore.Timestamp | undefined;
       const lastmod = at?.toDate ? at.toDate().toISOString().slice(0, 10) : "";

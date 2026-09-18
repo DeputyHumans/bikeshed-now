@@ -3,7 +3,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { visibilityOf, type DocAclData } from "./acl";
+import { expiryMs, visibilityOf, type DocAclData } from "./acl";
 
 type Db = admin.firestore.Firestore;
 
@@ -36,6 +36,17 @@ export interface PublicDoc {
   publicEdit: boolean;
   /** Needed so an anonymous reader's iframe is sandboxed the same way (SPEC §6c). */
   trusted: boolean;
+  /**
+   * Epoch milliseconds, or null. Carried so an anonymous reader is TOLD the
+   * document expired rather than shown an empty frame.
+   *
+   * Nothing deletes this projection when the moment arrives — there is no
+   * scheduler here, by decision — so the projection describes an expiry rather
+   * than disappearing at one, and `contentProxy` is what actually stops serving
+   * the bytes. A title outliving its content is the honest cost of having no
+   * cron, and it is stated in SPEC §17 rather than discovered.
+   */
+  expiresAt: number | null;
   publishedAt: admin.firestore.Timestamp | FieldValue | null;
 }
 
@@ -50,6 +61,7 @@ const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [
   "visibility",
   "publicEdit",
   "trusted",
+  "expiresAt",
   "publishedAt",
 ];
 
@@ -75,6 +87,7 @@ export function projectPublicDoc(
     visibility,
     publicEdit: data.publicEdit === true,
     trusted: data.trusted !== false,
+    expiresAt: expiryMs(data as DocAclData),
     publishedAt:
       (data.updatedAt as admin.firestore.Timestamp | undefined) ??
       (data.createdAt as admin.firestore.Timestamp | undefined) ??

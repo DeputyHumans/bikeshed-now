@@ -152,6 +152,18 @@ A `…` in a path is a folder you cannot see: access flows downward, so a grant 
 a child says nothing about its parent. A folder listed without `canWrite` is one
 you may read and may not file into.
 
+## A document can have an expiry
+
+`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or
+null. After that moment the document is **read-only, and readable only by its
+owner**: every tool here answers as though it does not exist, and the write
+tools refuse it.
+
+Nothing has been deleted. The versions, the comments and the bytes all survive,
+and the owner can move the date or clear it. If you need an expired document,
+ask them — do not republish its content as a new one and leave two documents
+where there was one.
+
 ## Writing a document that works well here
 
 Each of the four below changes whether a feature works.
@@ -208,6 +220,8 @@ so a reader seeing an empty box knows why.
   be withdrawn by whoever runs the deployment, through a guarded tool. Deleting
   a folder reparents everything beneath it, so that is a person's call too.
 - **Rename a folder.** Names are the workspace's language. Ask.
+- **Set or clear a document's expiry.** Same reason as sharing: it decides who
+  can read something, and until when.
 - **Resolve a comment thread.** Whether an objection has been answered is the
   objector's decision. Reply, and let them close it.
 - **Act as somebody else.** A token is its owner. There are no service accounts.

@@ -35,6 +35,27 @@ save mints a new version. `docs/operations.md` says how to plan one.
   exists must be named in `docs/agent-guide.md`. A skill naming an absent
   command is worse than no skill, because an agent believes it.
 
+- **Documents can carry an optional expiry.** The owner sets a date in "Who can
+  see this"; after it, the document is read-only and readable only by them.
+  It is **not a deletion date** — this product does not delete documents, so the
+  bytes, versions, annotations and comments all survive and clearing the date
+  restores everything. The interface says that in those words, because "expire"
+  reads as "delete" to most people.
+
+  It is deliberately **not in the security rules**: the workspace `list` rule
+  must stay statically provable from its query (SPEC §5), and a query cannot
+  filter on a field most documents lack without dropping every document that
+  lacks it. So the record stays readable and the content stops being served,
+  which is sufficient because every byte already flows through one function.
+  The consequence is stated rather than discovered: a member still sees the row
+  and its title.
+
+  Two details that are decisions. The public cache window is capped at the time
+  remaining, so an expiry — unlike a revocation — is never served stale. And
+  nothing deletes the `public/{docId}` projection at the moment itself, because
+  there is no scheduler here; it carries the date instead, so an anonymous
+  reader is told rather than shown an empty frame.
+
 ### Changed
 
 - **`move_document` is an access operation, not a filing one.** A document's

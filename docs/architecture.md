@@ -137,7 +137,14 @@ a written argument in a pull request, not a dependency.
 - **No document deletion.** Versions can be withdrawn through a guarded CLI with
   seven refusals. A document itself is not deletable through any path, which is
   a product decision about a review tool, stated explicitly rather than left as
-  a missing button.
+  a missing button. A document's optional **expiry** is therefore not a deletion
+  date either: it ends access to the content and nothing else, and clearing it
+  restores everything (SPEC §17).
+- **No scheduler, no cron.** Expiry is enforced when a document is READ rather
+  than by a job that runs at the appointed minute, which is what lets it exist
+  at all without a queue. The visible cost is that the world-readable projection
+  of a public document keeps its title after the content stops being served, and
+  SPEC §17 says so rather than leaving it to be found.
 - **No OAuth 2.1 for the agent surface.** Personal access tokens, ~120 lines,
   revocable by someone who has never heard of OAuth.
 - **No destructive or sharing tools on the agent surface.** It can list, create

@@ -21,10 +21,54 @@ export interface DocAclData {
   editorMembers?: unknown;
   visibility?: unknown;
   publicEdit?: unknown;
+  expiresAt?: unknown;
 }
 
 function includesEmail(list: unknown, emailLower: string): boolean {
   return Array.isArray(list) && list.includes(emailLower);
+}
+
+/**
+ * Expiry, in epoch milliseconds, or null when the document does not expire.
+ *
+ * Accepts both shapes deliberately. Firestore hands back a `Timestamp`; an
+ * endpoint receives a number over JSON; and a document written before this
+ * field existed has neither. Normalising in one place is what stops each caller
+ * inventing its own idea of what an absent or malformed value means — and the
+ * answer that matters is that anything it cannot read is NOT an expiry, so a
+ * corrupt field can never lock a document away.
+ */
+export function expiryMs(doc: DocAclData | null | undefined): number | null {
+  const v = doc?.expiresAt;
+  if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const toMillis = (v as { toMillis?: () => number }).toMillis;
+  if (typeof toMillis === "function") {
+    const ms = toMillis.call(v);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+/**
+ * Has the owner's expiry passed?
+ *
+ * Expiry is NOT part of the ACL, and keeping it out of `canRead` is deliberate.
+ * `canRead` mirrors `firestore.rules canRead`, and the rules cannot carry this
+ * one: the workspace list rule has to be statically provable from the query's
+ * constraints (SPEC §5), and a query cannot filter on a field most documents do
+ * not have without dropping every document that does not have it.
+ *
+ * So the record stays readable and the CONTENT stops being served. Every byte
+ * in this system already flows through one function, which is exactly the
+ * property that makes enforcing it there sufficient (SPEC §17).
+ */
+export function isExpired(
+  doc: DocAclData | null | undefined,
+  nowMs: number,
+): boolean {
+  const at = expiryMs(doc);
+  return at !== null && at <= nowMs;
 }
 
 /** Absent `visibility` means private. That is what keeps the default unchanged. */

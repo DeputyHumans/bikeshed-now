@@ -35,6 +35,7 @@ import { UploadDialog } from "../components/UploadDialog";
 import { CardSkeletons } from "../components/Spinner";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
+import { expiringSoon, expiryLabel, isExpired } from "../expiry";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -43,6 +44,29 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "views", label: "Most read" },
   { value: "lastViewed", label: "Recently read" },
 ];
+
+/**
+ * Shown for every document that has a date, not only the expired ones.
+ *
+ * A workspace is where somebody notices that a document goes away next Tuesday,
+ * and the only place they would notice it without opening the document. The
+ * `soon` attribute is what lets the last week look different from next year
+ * without inventing a second chip.
+ */
+function ExpiryChip({ doc }: { doc: DocMeta }) {
+  const label = expiryLabel(doc.expiresAt);
+  if (!label) return null;
+  return (
+    <span
+      className="chip expiry-chip"
+      data-expired={isExpired(doc.expiresAt) ? "" : undefined}
+      data-soon={expiringSoon(doc.expiresAt) ? "" : undefined}
+    >
+      <Icon name="clock" size={12} />
+      {label}
+    </span>
+  );
+}
 
 function VisibilityChip({ doc }: { doc: DocMeta }) {
   const visibility = doc.visibility ?? "private";
@@ -82,6 +106,7 @@ function DocCard({
       </div>
       <div className="doc-card-meta">
         <VisibilityChip doc={doc} />
+        <ExpiryChip doc={doc} />
         {doc.stats?.views ? (
           <span className="doc-card-stat numeric">
             <Icon name="eye" size={12} /> {doc.stats.views}

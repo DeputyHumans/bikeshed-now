@@ -9,6 +9,8 @@ export interface VisibilityState {
   publicEdit: boolean;
   /** Present only while unlisted. It IS the access control for that level. */
   linkToken: string | null;
+  /** Epoch milliseconds, or null for a document that does not expire. */
+  expiresAt: number | null;
 }
 
 /**
@@ -20,10 +22,19 @@ export function setVisibility(
   docId: string,
   visibility: Visibility,
   publicEdit = false,
+  /**
+   * Epoch milliseconds, or null for no expiry.
+   *
+   * Sent on EVERY call, including the ones that only change visibility, because
+   * the server writes the whole triple. Omitting it here would clear the date
+   * as a side effect of ticking a different box — which is the kind of thing
+   * nobody notices until the document is gone.
+   */
+  expiresAt: number | null = null,
 ): Promise<VisibilityState> {
   return post<VisibilityState>(
     "/visibility",
-    { docId, visibility, publicEdit },
+    { docId, visibility, publicEdit, expiresAt },
     { forbidden: "Only the document owner can change who can see this." },
   );
 }

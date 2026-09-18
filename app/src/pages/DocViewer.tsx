@@ -40,6 +40,7 @@ import { StatsPanel } from "../components/StatsPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
+import { expiryLabel, expiryMs, isExpired } from "../expiry";
 import type { MenuEntry } from "../components/Menu";
 import type { Annotation, FolderMeta, TeamMeta } from "../types";
 
@@ -501,6 +502,19 @@ export function DocViewer() {
         orphanedCount={annotationLayer.orphaned.length}
         offerTrust={liveTrust.shouldOffer}
         onOpenTrust={() => setDialog("trust")}
+        expiry={
+          /* Shown once it HAS expired, and in the last week before — not for
+             every future date, or a document set to expire next year carries a
+             banner for eleven months and everybody stops reading banners. */
+          doc.meta && expiryLabel(doc.meta.expiresAt)
+            ? {
+                label: expiryLabel(doc.meta.expiresAt) as string,
+                expired: isExpired(doc.meta.expiresAt),
+                isOwner,
+              }
+            : null
+        }
+        onOpenVisibility={() => setDialog("visibility")}
       />
 
       {/* One source of truth for "is the panel there", because the layout and
@@ -588,6 +602,7 @@ export function DocViewer() {
             visibility: doc.meta.visibility ?? "private",
             publicEdit: doc.meta.publicEdit ?? false,
             linkToken: doc.meta.linkToken ?? null,
+            expiresAt: expiryMs(doc.meta.expiresAt),
           }}
           onClose={() => setDialog(null)}
           onChanged={() => {}}

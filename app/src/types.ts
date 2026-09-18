@@ -80,6 +80,16 @@ export interface DocMeta {
   linkToken?: string;
 
   /**
+   * When the CONTENT stops being served. Absent means never (SPEC §17).
+   *
+   * Not a deletion date. Nothing is removed, the versions and comments survive,
+   * and the owner can move it or clear it. It is also not in the security
+   * rules — the workspace list rule has to stay statically provable — so this
+   * field is what the interface reads, and the server is what enforces it.
+   */
+  expiresAt?: Timestamp | number | null;
+
+  /**
    * GLOBAL trust: whether the viewer sandboxes the content iframe for EVERY
    * reader. CLI and MCP publishes write true; browser upload and duplicate
    * write false; the owner flips it. Missing means trusted (SPEC §6c).
@@ -245,6 +255,8 @@ export interface PublicDoc {
   visibility: "unlisted" | "public";
   publicEdit: boolean;
   trusted: boolean;
+  /** Epoch milliseconds, or null. Carried so an anonymous reader is told. */
+  expiresAt: number | null;
   publishedAt?: Timestamp;
 }
 

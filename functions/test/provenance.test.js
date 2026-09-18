@@ -128,6 +128,7 @@ test("the projection carries render fields and nothing else", () => {
     "currentVersion",
     "docId",
     "entry",
+    "expiresAt",
     "format",
     "publicEdit",
     "publishedAt",
@@ -200,4 +201,18 @@ test("the email validator guarantees the remaining illegal key characters cannot
   for (const ch of ["$", "#", "[", "]", "/"]) {
     assert.equal(isEmailShapeValid(`a${ch}b@example.com`), false, ch);
   }
+});
+
+test("the projection carries the expiry, so a reader is told rather than shown nothing", () => {
+  // There is no scheduler here, so nothing deletes this row when the moment
+  // arrives — the date travels with it and the app says "expired" instead of
+  // rendering an empty frame against a 404.
+  const at = Date.UTC(2030, 0, 1);
+  const p = projectPublicDoc("d1", storedDoc({ visibility: "public", expiresAt: at }));
+  assert.equal(p.expiresAt, at);
+  assert.equal(
+    projectPublicDoc("d1", storedDoc({ visibility: "public" })).expiresAt,
+    null,
+    "a document with no expiry says so explicitly",
+  );
 });

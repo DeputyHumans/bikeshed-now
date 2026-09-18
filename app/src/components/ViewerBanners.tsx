@@ -27,6 +27,16 @@ export function ViewerBanners(props: {
   offerTrust?: boolean;
   onOpenTrust?: () => void;
 
+  /**
+   * "Expires in 3 days", or the expired state. Null when it never expires.
+   *
+   * `isOwner` changes the SENTENCE, not just the button. The owner is the only
+   * person who can still open an expired document, so telling a reviewer "only
+   * you can open it" would be flatly untrue for them — and the thing they
+   * actually need is who to ask.
+   */
+  expiry?: { label: string; expired: boolean; isOwner: boolean } | null;
+  onOpenVisibility?: () => void;
 }) {
   const rows: React.ReactNode[] = [];
 
@@ -84,6 +94,33 @@ export function ViewerBanners(props: {
         <button type="button" className="btn btn-sm" onClick={props.onOpenTrust}>
           Review
         </button>
+      </div>,
+    );
+  }
+
+  if (props.expiry) {
+    rows.push(
+      <div
+        key="expiry"
+        className={props.expiry.expired ? "banner banner-warn" : "banner"}
+        role="status"
+      >
+        <Icon name="clock" size={15} />
+        <span>
+          {/* Said in full, because "Expired" alone reads as "deleted" — and
+              this product does not delete documents at all. What changed is who
+              can open it. */}
+          {!props.expiry.expired
+            ? props.expiry.label
+            : props.expiry.isOwner
+              ? "This document has expired. Only you can open it now, and it cannot be edited until you change or clear the date."
+              : "This document has expired and is no longer readable. Nothing has been deleted — its owner can restore it by changing the date."}
+        </span>
+        {props.expiry.isOwner ? (
+          <button type="button" className="btn btn-sm" onClick={props.onOpenVisibility}>
+            Change
+          </button>
+        ) : null}
       </div>,
     );
   }

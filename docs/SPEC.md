@@ -937,6 +937,59 @@ wrote v3" and nothing else does either. That is a known loss, recorded in ADR
 and public-access-prevention; `contentProxy` stays the only path bytes take.
 "Public" means *the proxy will serve you without a cookie*.
 
+### Expiry
+
+`DocMeta.expiresAt: Timestamp | null`, default absent, set by the owner through
+`POST /visibility` alongside visibility and open editing. One rule:
+
+> **An expired document is read-only, and visible only to its owner.**
+
+It is **not a deletion date.** This product does not delete documents (see
+`docs/architecture.md`), so expiry cannot mean removal: the bytes, the versions,
+the annotations and the comments all survive, and clearing the date restores
+everything. The interface says so in those words, because "expire" reads as
+"delete" to most people and teaching the wrong model here is expensive.
+
+The owner keeps reading it because they set the date and are the only one who
+can move it; locking them out would make the setting unrecoverable rather than
+reversible. Everybody else gets the **same 404** a document they may not read
+gives them, so an expiry cannot be used to confirm that a slug exists. Writing
+is refused for everyone, the owner included — an expired document is frozen, and
+lifting the date is the single action that unfreezes it.
+
+**Expiry is not in the security rules, and cannot be.** The workspace `list`
+rule has to be statically provable from the query's constraints (§5), and a
+query cannot filter on a field most documents do not have without dropping every
+document that does not have it. So the record stays readable and the CONTENT
+stops being served — which is sufficient precisely because every byte in this
+system already flows through one function. The consequence, stated rather than
+discovered: a member still sees the row, its title and its comments; what they
+cannot get is the document.
+
+Enforced in eight places from one predicate (`isExpired` in `lib/acl.ts`):
+`contentProxy`, `downloadBundle`, `getDraft`, `saveDraft`, `commitVersion`,
+`duplicateDoc`, `recordView` and `sitemap`, plus the MCP tools.
+
+Two details that are decisions rather than implementation:
+
+- **The public cache window is capped at the time remaining.** Revocation
+  latency is an accepted trade — a document made private again can be served
+  from cache for up to five minutes — but an expiry's moment is known in
+  advance, so serving past it would be a choice. `max-age` never outlives the
+  date.
+- **Nothing deletes the `public/{docId}` projection when the moment arrives.**
+  There is no scheduler here, by decision, so the projection *carries* the date
+  (`expiresAt`, epoch milliseconds) and the reader is told rather than shown an
+  empty frame. A title outliving its content is the honest cost of having no
+  cron.
+
+A date in the past is **refused**, not applied: accepting one would make "take
+this down now" a side effect of a typo in a year, and the intended way to take a
+document down immediately is to make it private, which is reversible in a way an
+accidental expiry is not. Dates beyond a hundred years are refused for the same
+class of reason — milliseconds pasted where seconds were meant land in the year
+55000, which looks like an expiry and is not one.
+
 ### Anonymous reads use a projection, not a rules exception
 
 Firestore rules cannot project fields, so letting an anonymous client `get` a
@@ -1156,6 +1209,14 @@ embedded stylesheet**; responses are capped and cursor-paginated.
 
 There is no anonymous MCP access. Publishing always attributes to a real account
 and stamps `publishedVia: "mcp"`.
+
+`list_documents` and `get_document` **report** `expiresAt`; nothing on this
+surface sets it. Expiry decides who may read a document and until when, which is
+the same class of decision as sharing, and this surface does not make those. An
+expired document reads as absent to every caller but its owner, and every write
+tool refuses it. *What would change this:* narrowing a document's reach is
+safe to automate in a way widening it is not, so an agent setting — never
+clearing or extending — an expiry is the reversal worth arguing for first.
 
 **The folder tools are an access surface, not a filing surface.** A document's
 effective members are its own grants unioned with its folder's (§13), so moving

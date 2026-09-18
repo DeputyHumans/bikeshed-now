@@ -38,8 +38,11 @@ import type { Principal } from "../lib/auth";
 import {
   canEdit,
   canEditFolder,
+  canManageSharing,
   canRead,
+  expiryMs,
   isDocEditor,
+  isExpired,
   visibilityOf,
   type DocAclData,
   type FolderAclData,
@@ -121,7 +124,20 @@ async function loadDoc(ctx: ToolContext, slug: string) {
   if (!snap.exists) throw new Error(`no document with id "${slug}"`);
   const data = snap.data() as DocAclData & Record<string, unknown>;
   if (!canRead(data, ctx.caller)) throw new Error(`no document with id "${slug}"`);
+  // An expired document reads as absent to everyone but its owner — the same
+  // answer a document they may not read gives, so expiry cannot be used to
+  // confirm that a slug exists (SPEC §17).
+  if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
+    throw new Error(`no document with id "${slug}"`);
+  }
   return { ref, snap, data };
+}
+
+/** Writes are refused on an expired document, the owner's included. */
+function refuseIfExpired(data: DocAclData): void {
+  if (isExpired(data, Date.now())) {
+    throw new Error("this document has expired — change or clear its expiry to edit it");
+  }
 }
 
 /**
@@ -223,6 +239,10 @@ export const TOOLS: ToolDefinition[] = [
           version: v.currentVersion,
           format: formatOf.get(d.id) ?? "html",
           visibility: visibilityOf(v as DocAclData),
+          // Reported, never settable here: narrowing a document's reach is
+          // still a decision about who may read it, and this surface does not
+          // make those (SPEC §19).
+          expiresAt: expiryMs(v as DocAclData),
           owner: v.ownerEmail,
           updatedAt: (v.updatedAt as admin.firestore.Timestamp)?.toDate?.().toISOString(),
         };
@@ -274,7 +294,8 @@ export const TOOLS: ToolDefinition[] = [
         format: v.format ?? "html",
         sourceFile: sourceRel,
         visibility: visibilityOf(data),
-        canEdit: canEdit(data, ctx.caller),
+        expiresAt: expiryMs(data),
+        canEdit: canEdit(data, ctx.caller) && !isExpired(data, Date.now()),
         source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
         truncated,
       };
@@ -341,6 +362,7 @@ export const TOOLS: ToolDefinition[] = [
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"));
       if (!canEdit(data, ctx.caller)) throw new Error("you cannot edit that document");
+      refuseIfExpired(data);
       const content = String(args.content ?? "");
       if (!content.trim()) throw new Error("content is empty");
 
@@ -451,6 +473,7 @@ export const TOOLS: ToolDefinition[] = [
       // Moving a document changes who inherits access to it, so it takes the
       // same permission as editing it — not merely the right to read it.
       if (!canEdit(data, ctx.caller)) throw new Error("you cannot move that document");
+      refuseIfExpired(data);
 
       const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
       if (!target.ok) throw new Error(target.error);
@@ -531,6 +554,7 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"));
+      refuseIfExpired(data);
       const threadId = str(args, "threadId");
       const body = String(args.body ?? "").slice(0, 5000);
       if (!body.trim()) throw new Error("body is empty");

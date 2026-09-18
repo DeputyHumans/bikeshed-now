@@ -133,6 +133,15 @@
 .visibility-chip[data-visibility="public"] { color: var(--color-success); }
 .visibility-chip[data-visibility="unlisted"] { color: var(--color-warn); }
 
+/* An expiry escalates rather than shouting from the start: a date eleven months
+   out is information, the last week is a warning, and past it is a state. Each
+   step is also carried by the WORDING, so the colour is never the only signal. */
+.expiry-chip[data-soon] { color: var(--color-warn); }
+.expiry-chip[data-expired] {
+  color: var(--color-danger);
+  border-color: currentColor;
+}
+
 .upload-dropzone {
   display: flex;
   flex-direction: column;

@@ -33,6 +33,7 @@ const PATHS = {
   // `download`, so the button that sends a file up, the dropzone and the
   // drop hint all pointed down.
   upload: "M12 21V9m0 0 4 4m-4-4-4 4M4 5h16",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3.5 2",
   present: "M3 4h18v11H3zM12 15v5M8 20h8",
   stats: "M5 20V10M12 20V4M19 20v-7",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",

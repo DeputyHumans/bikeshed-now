@@ -246,3 +246,15 @@
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 }
+
+/* Expiry sits below the visibility choices and is separated by a rule rather
+   than by spacing alone: it is a different question ("until when") from the one
+   above it ("who"), and running them together is how somebody sets a date
+   believing it applies only to public links. */
+.expiry-row {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--color-line);
+}
+.expiry-row .link-row { margin-top: var(--s-2); }
+.expiry-row input[type="date"] { flex: 0 1 auto; }

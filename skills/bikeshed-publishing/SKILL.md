@@ -83,6 +83,21 @@ Give `publish` a `--folder` (or `create_folder`'s id) when you know where it
 belongs — see the `bikeshed-folders` skill, and read its warning about what
 moving a document does to who can read it.
 
+## A document may expire
+
+`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or
+null for a document that does not expire. After that moment it is **read-only,
+and readable only by its owner**: it will answer you as though it does not
+exist, and `update_document` will refuse it.
+
+Nothing has been deleted when that happens. The versions, the comments and the
+bytes all survive, and the owner can move the date or clear it — so if you need
+an expired document, ask, rather than republishing its content as a new one and
+leaving two documents where there was one.
+
+You cannot set an expiry. It decides who may read something and until when,
+which is the same kind of decision as sharing.
+
 ## Scripts run only if somebody vouched for them
 
 A document published through a token is trusted and its scripts run. One

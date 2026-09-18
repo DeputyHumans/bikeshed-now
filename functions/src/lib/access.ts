@@ -154,3 +154,34 @@ export function parseAccessDelta(
   }
   return { delta: { add, remove } };
 }
+
+/**
+ * Read an expiry off a request body: epoch milliseconds, or null to clear it.
+ *
+ * A date in the PAST is refused rather than accepted. Accepting one would make
+ * "expire this now" a side effect of a typo in a year, and the intended way to
+ * take a document down immediately is to make it private — which is
+ * reversible in a way an accidental expiry, silently applied, is not.
+ *
+ * The far bound is arbitrary but not decorative: a value in milliseconds pasted
+ * where seconds were meant lands tens of thousands of years out, and a
+ * document that "expires" in the year 55000 has no expiry at all while looking
+ * like it has one.
+ */
+const MAX_EXPIRY_MS = 100 * 365 * 24 * 60 * 60 * 1000;
+
+export function parseExpiry(
+  raw: unknown,
+): { value: number | null } | { error: string } {
+  if (raw === undefined || raw === null || raw === "") return { value: null };
+  const ms = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(ms) || !Number.isInteger(ms)) {
+    return { error: "expiresAt must be a time in epoch milliseconds, or null" };
+  }
+  const nowMs = Date.now();
+  if (ms <= nowMs) return { error: "an expiry must be in the future" };
+  if (ms > nowMs + MAX_EXPIRY_MS) {
+    return { error: "an expiry must be within a hundred years" };
+  }
+  return { value: ms };
+}

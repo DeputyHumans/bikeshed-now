@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
 import { setVisibility, shareUrl, type VisibilityState } from "../visibility";
+import { endOfDayMs, expiryLabel, toDateInput } from "../expiry";
 import type { Visibility } from "../types";
 
 /**
@@ -55,10 +56,22 @@ export function VisibilityDialog({
   const [state, setState] = useState(current);
   const [busy, setBusy] = useState(false);
 
-  const apply = async (visibility: Visibility, publicEdit: boolean) => {
+  /**
+   * Every change sends the whole triple.
+   *
+   * The server writes visibility, open editing and expiry together, so a call
+   * that left one of them out would clear it. Reading the current value from
+   * `state` for the arguments not being changed is what keeps ticking a
+   * checkbox from quietly removing a date somebody set last week.
+   */
+  const apply = async (
+    visibility: Visibility,
+    publicEdit: boolean,
+    expiresAt: number | null,
+  ) => {
     setBusy(true);
     try {
-      const next = await setVisibility(docId, visibility, publicEdit);
+      const next = await setVisibility(docId, visibility, publicEdit, expiresAt);
       setState(next);
       onChanged(next);
     } catch (e) {
@@ -96,7 +109,7 @@ export function VisibilityDialog({
               value={option.value}
               checked={state.visibility === option.value}
               disabled={busy}
-              onChange={() => void apply(option.value, state.publicEdit)}
+              onChange={() => void apply(option.value, state.publicEdit, state.expiresAt)}
             />
             <Icon name={option.icon} />
             <span>
@@ -132,7 +145,7 @@ export function VisibilityDialog({
               type="checkbox"
               checked={state.publicEdit}
               disabled={busy}
-              onChange={(e) => void apply(state.visibility, e.target.checked)}
+              onChange={(e) => void apply(state.visibility, e.target.checked, state.expiresAt)}
             />
             <label htmlFor="public-edit">
               <strong>Let anyone with an account edit this</strong>
@@ -156,6 +169,51 @@ export function VisibilityDialog({
           the copy they have.
         </p>
       ) : null}
+
+      {/* Expiry applies at every visibility, which is why it sits outside the
+          branches above: a private document shared with six reviewers is
+          exactly the kind that should stop being readable after the review. */}
+      <div className="expiry-row">
+        <label htmlFor="expires-on">
+          <strong>Stop being readable after</strong>
+          <span className="field-hint" style={{ display: "block" }}>
+            {/* The single most important sentence in this dialog. "Expire"
+                reads as "delete" to almost everybody, and this product does not
+                delete documents at all. */}
+            Nothing is deleted. After this date only you can open it, and it
+            cannot be edited until you change or clear the date.
+          </span>
+        </label>
+        <div className="link-row">
+          <input
+            id="expires-on"
+            type="date"
+            value={toDateInput(state.expiresAt)}
+            min={toDateInput(Date.now() + 24 * 60 * 60 * 1000)}
+            disabled={busy}
+            onChange={(e) => {
+              const at = endOfDayMs(e.target.value);
+              // An emptied field clears it; a half-typed one is not a date yet
+              // and must not be sent as one.
+              if (e.target.value === "") void apply(state.visibility, state.publicEdit, null);
+              else if (at !== null) void apply(state.visibility, state.publicEdit, at);
+            }}
+          />
+          {state.expiresAt !== null ? (
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={busy}
+              onClick={() => void apply(state.visibility, state.publicEdit, null)}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+        {state.expiresAt !== null ? (
+          <p className="field-hint">{expiryLabel(state.expiresAt)}</p>
+        ) : null}
+      </div>
     </Modal>
   );
 }

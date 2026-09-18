@@ -12,7 +12,9 @@ const {
   canEditFolder,
   canManageFolder,
   canReadFolder,
+  expiryMs,
   isDocEditor,
+  isExpired,
   isMember,
   isNonPrivate,
   isTeamMember,
@@ -24,6 +26,7 @@ const {
   isTeamRef,
   isValidPrincipal,
   parseAccessDelta,
+  parseExpiry,
   teamIdOf,
 } = require("../lib/lib/access.js");
 
@@ -232,7 +235,77 @@ test("body parsing rejects the shapes that would otherwise write junk", () => {
   assert.ok("error" in parseAccessDelta({ remove: [""] }));
 });
 
+test("an expiry must be a future instant, or nothing", () => {
+  const hour = 60 * 60 * 1000;
+  assert.deepEqual(parseExpiry(undefined), { value: null }, "absent clears it");
+  assert.deepEqual(parseExpiry(null), { value: null });
+  assert.deepEqual(parseExpiry(""), { value: null }, "an emptied form field clears it");
+
+  const soon = Date.now() + hour;
+  assert.deepEqual(parseExpiry(soon), { value: soon });
+
+  // A past date is refused rather than applied. Accepting one would turn a typo
+  // in a year into an immediate, silent takedown — and the way to take a
+  // document down now is to make it private, which is reversible in a way an
+  // accidental expiry is not.
+  assert.ok("error" in parseExpiry(Date.now() - hour));
+  assert.ok("error" in parseExpiry(Date.now()), "now is already too late");
+
+  // Seconds pasted where milliseconds were meant reads as 1970; milliseconds
+  // pasted where seconds were meant reads as the year 55000. Both are refused.
+  assert.ok("error" in parseExpiry(Math.floor(Date.now() / 1000)));
+  assert.ok("error" in parseExpiry(Date.now() * 1000));
+
+  for (const bad of ["soon", {}, [], NaN, Infinity, true, 1.5]) {
+    assert.ok("error" in parseExpiry(bad), JSON.stringify(String(bad)));
+  }
+});
+
 test("body parsing accepts `email` as an alias for `principal`", () => {
   const parsed = parseAccessDelta({ add: [{ email: "a@example.com", role: "viewer" }] });
   assert.deepEqual(parsed.delta.add, [{ principal: "a@example.com", role: "viewer" }]);
+});
+
+// --- Expiry ----------------------------------------------------------------
+
+test("an expiry reads from a number, a Timestamp, or nothing at all", () => {
+  assert.equal(expiryMs({ expiresAt: 1700000000000 }), 1700000000000);
+  assert.equal(expiryMs({ expiresAt: { toMillis: () => 1700000000000 } }), 1700000000000);
+  assert.equal(expiryMs({}), null, "a document written before the field existed");
+  assert.equal(expiryMs(null), null);
+  assert.equal(expiryMs({ expiresAt: null }), null);
+});
+
+test("anything unreadable is NOT an expiry", () => {
+  // The failure direction matters. A malformed value that read as "expired"
+  // would take a document away from everyone but its owner, with no error
+  // anywhere and nothing to point at. Unreadable means no expiry, always.
+  for (const bad of ["soon", {}, [], NaN, Infinity, true, { toMillis: () => NaN }]) {
+    assert.equal(expiryMs({ expiresAt: bad }), null, JSON.stringify(String(bad)));
+    assert.equal(isExpired({ expiresAt: bad }, Date.now()), false);
+  }
+});
+
+test("expiry is a moment, and the moment itself counts as expired", () => {
+  const at = 1700000000000;
+  assert.equal(isExpired({ expiresAt: at }, at - 1), false);
+  assert.equal(isExpired({ expiresAt: at }, at), true, "at the stroke, it is over");
+  assert.equal(isExpired({ expiresAt: at }, at + 1), true);
+  assert.equal(isExpired({}, at), false, "no expiry never expires");
+});
+
+test("expiry is not part of canRead, and that is deliberate", () => {
+  // canRead mirrors firestore.rules canRead, and the rules cannot carry a date:
+  // the workspace list rule must be statically provable from the query, and a
+  // query cannot filter on a field most documents do not have without dropping
+  // every document that does not have it (SPEC §5). Expiry gates the CONTENT,
+  // in the functions, on the one path every byte takes.
+  const expired = {
+    ownerEmail: "owner@example.com",
+    ownerUid: "u-owner",
+    members: ["owner@example.com", "ana@example.com"],
+    expiresAt: 1,
+  };
+  assert.equal(canRead(expired, { uid: "u-ana", emailLower: "ana@example.com" }), true);
+  assert.equal(isExpired(expired, Date.now()), true);
 });
