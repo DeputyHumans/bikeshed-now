@@ -144,7 +144,7 @@ document that gets attention does not.
 
 Each of these is a decision with a reason in `docs/architecture.md`, not a gap:
 
-no CRDT merge · no plugin system · no theming engine · no i18n · no
+no operational transform · no plugin system · no theming engine · no i18n · no
 multi-tenancy · no SSO or SCIM · no search index · no mobile app · no admin
 console · no rate limiter · no document deletion · no OAuth for the agent
 surface · no service accounts · no unique-visitor tracking

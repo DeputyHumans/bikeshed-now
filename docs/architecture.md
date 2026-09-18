@@ -115,11 +115,13 @@ dynamic-imports the ESM side from the CommonJS one.
 Each line below is a decision, not a gap. If you want to change one, the bar is
 a written argument in a pull request, not a dependency.
 
-- **No CRDT or operational-transform merge of document state.** Shared
-  *awareness* is built in full (SPEC §16). A single-holder edit lock with
-  observe mode makes the no-merge decision honest rather than a hole: visible
-  cursors without a lock would actively invite the one thing last-writer-wins
-  handles badly.
+- **No operational transform.** Document state IS merged: several people may
+  type into one document at once, by a Yjs CRDT bound to the DOM without a
+  schema ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)). OT is the
+  alternative that was not taken — it needs a central server to order
+  operations, which this architecture does not have and does not want. The
+  single-holder edit lock this replaces is withdrawn; ADR 0010 records both why
+  it was chosen and why it was reversed.
 - **No plugin system.** Nothing has asked for an extension point twice.
 - **No theming engine.** One palette, swapped by editing twelve tokens.
 - **No i18n.** No second locale is in sight, and retrofitting is mechanical.
@@ -146,7 +148,7 @@ a written argument in a pull request, not a dependency.
 
 | Surface | Budget | Why |
 |---|---|---|
-| `app/` runtime | **7** | Markdown renders server-side; email renders server-side |
+| `app/` runtime | **8** | Markdown renders server-side; email renders server-side. The eighth is `yjs`, argued for in [ADR 0010](adr/0010-crdt-for-shared-document-state.md) — no CRDT can be hand-written at a defensible size |
 | `functions/` eager | **9**, budget 10 | `adm-zip`, `cookie`, `firebase-admin`, `firebase-functions`, `markdown-it`, `mime-types`, `resend`, `turndown`, `turndown-plugin-gfm` |
 | `functions/` lazy | 4 | `react`, `react-dom`, `@react-email/components`, `@react-email/render` — imported only inside the email path ([0008](adr/0008-runtime-email-rendering.md)) |
 | `cli/` | its own package | nothing it pulls in reaches the app or the functions |

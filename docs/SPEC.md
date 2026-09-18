@@ -205,7 +205,6 @@ mints a NEW `vN+1`.
   when `baseVersion !== currentVersion`. Writes `docs/{docId}/draft/{entry}` and
   `docs/{docId}.draft`. For a Markdown-sourced document the edited HTML is
   converted to Markdown server-side and `index.md` is what is stored (§11).
-  Appends to `draft.editSessions` when the edit lock changes hands (§17).
 - **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
   `docs/{docId}/{baseVersion}/<relPath>` for anything the draft does not carry,
   so first-edit and non-entry assets render. `private, no-store`.
@@ -398,9 +397,21 @@ The one path that writes content, and it is explicit and server-mediated.
 
 ### 6b. Presence and live collaboration
 
-Shared **awareness** is in scope. Shared **document state** is not: there is no
-CRDT and no operational transform. That is only honest because concurrent
-editing is *prevented* rather than invited — see the edit lock in §16.
+Shared **awareness** and shared **document state** are both in scope. Several
+people may type into one document at the same time; their edits merge and every
+copy converges ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)).
+
+Document state is a **Yjs** CRDT, bound to the DOM by `app/src/crdt/binding.ts`.
+The binding imposes no schema, which is what keeps §6a's guarantee intact: a
+`Y.XmlElement` is a name, a string map and a child list, so a hand-authored
+document with inline SVG and a `<details>` tree is mirrored exactly rather than
+normalized into an editor's model. The **normative** property is that a document
+survives a round trip through the wire format byte-identical; the sample bundles
+are the fixtures that hold it.
+
+Deletion beats concurrent typing: if one person removes a passage while another
+edits it, the passage goes. That is the CRDT's semantics, not a policy choice,
+and it is tested rather than assumed.
 
 ### 6c. Trust and the untrusted-content sandbox
 
@@ -807,7 +818,7 @@ consent denied, because there is no instance to enable.
 
 ---
 
-## 16. Collaborative presence and the edit lock
+## 16. Collaborative presence and concurrent editing
 
 ### One colour per person
 
@@ -875,34 +886,38 @@ is wrapped in try/catch, and never fails the request.
 It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
 
-### The edit lock
+### Concurrent editing
 
-- Claimed on entering edit mode; released on exit, on `onDisconnect`, and after
-  5 minutes idle (warned at 4).
-- While held, other editors are **not blocked from the document** — they enter
-  **observe mode**: they watch the draft, see the editor's caret and selection
-  live, and can still highlight and comment. Review does not stop because
-  someone is typing.
-- **"Ask to edit"** sends the holder a toast with one-tap handoff. If ignored,
-  the asker is told once and never again.
-- The stale-base `409` and the conflict banner **stay** as the backstop for what
-  a lock cannot cover: a tab that never disconnected cleanly.
+Anyone who may edit a document may edit it at any time. There is no lock, no
+holder and no hand-off: edits merge, and every copy converges on the same
+document whatever order the updates arrive in.
 
-### Observing: one-second text, 200-millisecond pointer
+**The lock this replaces is withdrawn.** It was a single-holder soft claim in
+`status/{docId}/lock` with observe mode for everyone else, and it is gone along
+with `requests/{uid}`, the idle release and the "Ask to edit" hand-off. The
+reasoning that chose it, and the reasoning that reversed it, are both in
+[ADR 0010](adr/0010-crdt-for-shared-document-state.md).
 
-An observer sees the draft refresh on each of the editor's autosaves — the
-existing 1 s debounce — with scroll preserved. The peer's caret and selection
-update at 200 ms.
+The stale-base `409` **stays**, and now means only what it always meant:
+somebody PUBLISHED a new version while you were editing. It never described
+concurrent drafts, and no longer has to.
 
-That split is what avoids a CRDT entirely: the *pointer* is what the eye tracks,
-so it has to feel live; the *text* arriving a second later reads as natural,
-because that is roughly the cadence at which a person finishes a sentence.
+### The caret is still faster than the text
+
+Peer carets and selections update at 200 ms; the document merges as fast as
+updates arrive. The two are separate channels on purpose — the pointer is what
+the eye tracks, so it has to feel live, and it is ephemeral, so it must never
+touch the document DOM (see the overlay rule above).
 
 ### Deliberately not built
 
 Per-character attribution or blame · cursor chat · voice and video · a live chat
-channel · CRDT/OT merge · presence for non-members · workspace-wide "who is
-online".
+channel · presence for non-members · workspace-wide "who is online".
+
+Per-character attribution is the one worth naming twice: with the edit lock gone
+there are no hand-offs to record, so `draft.editSessions` no longer answers "who
+wrote v3" and nothing else does either. That is a known loss, recorded in ADR
+0010 rather than discovered.
 
 ---
 
@@ -983,8 +998,9 @@ reason. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`,
 are stored verbatim, and are **rendered as self-reported** in the UI. A badge
 that implies verification it does not have is worse than no badge.
 
-Stamped on: version records (`publishedBy`), draft `editSessions[]`, annotations
-and comments (`actor`, immutable after create), view sessions, and ACL changes.
+Stamped on: version records (`publishedBy`), annotations and comments (`actor`,
+immutable after create), view sessions, and ACL changes. Not on drafts — see
+`editSessions` in §17.
 
 `uid` is null in exactly one case: the operator scripts in `scripts/`, which
 authenticate with Admin credentials rather than as an account. They remain
@@ -1009,10 +1025,13 @@ created through an automation channel carry a visible "via MCP" marker.
   "editor" | "mcp" | "duplicate"`, `parentVersion`, and the full `publishedBy`
   Actor, alongside `contentHash`, `fileCount`, `bytes`, `publishedAt`, `format`
   and `rendererVersion`.
-- The edit lock records `{uid, email, since}`; on release it appends
-  `{email, from, to}` to the draft's `editSessions`, carried onto the version at
-  commit. That answers "who actually wrote v3" when the lock changed hands
-  twice, which `lastEditedByEmail` alone cannot.
+- `draft.editSessions` is **withdrawn**. It was appended when the edit lock
+  changed hands, and with the lock gone (§16) there are no hand-offs to record.
+  A version therefore answers "who published this" but not "who wrote which
+  part of it": per-character attribution is still deliberately not built, so
+  `lastEditedByEmail` is now the whole of the answer. Recorded as a loss in
+  [ADR 0010](adr/0010-crdt-for-shared-document-state.md) rather than left to be
+  discovered.
 - Views record `via: "app" | "unlisted" | "public"`. Anonymous sessions record
   `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never**
   rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees

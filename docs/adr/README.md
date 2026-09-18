@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Nine decisions that a newcomer would otherwise re-argue in a pull request, each
+Ten decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
@@ -20,6 +20,7 @@ actually available at the time.
 | [0007](0007-execcommand-over-schema-editor.md) | Edit with `execCommand`, not a schema editor | Accepted |
 | [0008](0008-runtime-email-rendering.md) | Render email at runtime with a lazy import | Accepted |
 | [0009](0009-hand-written-mcp.md) | Hand-write the MCP server instead of using the SDK | Accepted |
+| [0010](0010-crdt-for-shared-document-state.md) | Merge shared document state with a CRDT | Accepted |
 
 ## Format
 
