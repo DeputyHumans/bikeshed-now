@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Presentation mode hides chrome that is NOT inside the viewer (SPEC §6).
+// Presentation mode hides chrome that is NOT inside the viewer (SPEC §6d).
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

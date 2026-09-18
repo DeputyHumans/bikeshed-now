@@ -132,8 +132,8 @@ committed.
 
 ## Dependencies have a budget
 
-7 runtime in `app/`, 10 in `functions/` (currently 9) plus 4 lazily imported
-inside the email path only. Beyond it needs a written justification in the pull
+8 runtime in `app/` (and it is at 8), 10 in `functions/` (currently 9) plus 4
+lazily imported inside the email path only. Beyond it needs a written justification in the pull
 request, not a line in `package.json`. `check:licenses` separately hard-fails
 anything outside the permissive allowlist.
 
@@ -144,6 +144,7 @@ anything outside the permissive allowlist.
 | `config/policy.mjs` | the identity gate, rendered four ways |
 | `functions/src/index.ts` | every endpoint; mirrored by `scripts/lib/endpoints.mjs` |
 | `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
+| `app/src/viewer/deck.ts` | what counts as a slide, defined once for the rail, the overview and the keys |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
 | `docs/architecture/adr/` | ten decisions, each with its reversal condition |
@@ -161,6 +162,11 @@ anything outside the permissive allowlist.
 - **`zoom` is locked in the export stamp but untestable in jsdom.** It is a real
   hiding vector in Blink and WebKit, named in `UNREPRESENTABLE_IN_JSDOM`, with a
   test asserting that list is exactly right.
+- **Slide detection is a list of rules, not a selector.** Measured against real
+  decks, `section[id]` and `section.slide` each match under half of them and
+  their coverage does not overlap. Reading order is DOM order: some decks
+  number sections out of order, and some use bare numerals whose `#id` form is
+  not a valid selector at all.
 - **The email secret holds a single space.** `defineSecret` demands a version;
   Secret Manager refuses an empty payload. Whitespace is how a deployment says
   "email off", and `apiKey()` trims.

@@ -442,6 +442,49 @@ which is safe because platform editing is parent-driven and cannot introduce a
 new uploaded bundle; re-upload and duplicate both make FRESH `trusted: false`
 documents.
 
+A sandboxed document may therefore be one whose scripts were the only thing
+that would have BUILT it. The viewer distinguishes "this document has no
+slides" from "this document has no slides yet" and says which, because the
+first is a fact about the document and the second is a decision the reader can
+undo.
+
+### 6d. Decks and presentation
+
+There is no slide model and no deck format. A **slide** is a region the author
+already treated as one, found by reading the loaded DOM (`app/src/viewer/deck.ts`).
+Detection is an ordered list of rules, not one selector, because real decks
+disagree: roughly half carry no `id` on a slide and roughly half never use the
+class `slide`, and those two sets do not overlap. Three properties are
+normative:
+
+- **Reading order is DOM order.** Ids and index attributes are display labels.
+  Decks exist whose sections are numbered out of order, and whose ids are bare
+  numerals whose `#id` form is not a valid selector, so no selector is ever
+  built from an id.
+- **Detection never runs the document.** It reads markup, which is what makes
+  it work in the sandboxed case that needs it most.
+- **A document that is not a deck is unaffected.** Candidates must be siblings
+  of one parent, and the navigator appears only above two slides.
+
+Navigation **scrolls** the document and never styles it, so §7's rule stands
+unchanged. Paging is bound to the arrow keys only when slides measure about one
+viewport tall; on a document whose sections are taller, taking those keys would
+leave the reader unable to scroll within a section. Keys are bound on both the
+parent and the frame document, because an iframe's key events never reach the
+parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins.
+
+**Previews are a separate document.** The rail and the overview render each
+slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's
+own stylesheets minus every `data-bshd` node, and a `<base>` pointing at the
+content proxy. They are sandboxed `allow-same-origin` with NO `allow-scripts`
+even for a trusted document. Because a preview is a copy the app constructs and
+nothing serializes, the layout it forces on that copy is not a restyle of
+embedded content and cannot reach published bytes.
+
+Presentation mode hides app chrome with a class on `<body>` and requests
+fullscreen as an enhancement; the CSS state is what hides the chrome, and the
+app's state follows `fullscreenchange` rather than assuming it.
+
 ---
 
 ## 7. Web app structure

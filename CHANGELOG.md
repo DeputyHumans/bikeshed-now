@@ -58,6 +58,25 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **A deck can be moved through.** The slide navigator was edit-mode only, so a
+  reader opening a long deck got one very long scroll and no way around it. It
+  is now available while reading too, behind a toolbar toggle, alongside
+  arrow-key paging and an overview of every slide at once. Its thumbnails are
+  the slides themselves rather than an index and a title: each is the slide
+  rendered into a separate document, scaled down, sandboxed without
+  `allow-scripts` even when the document is trusted, and mounted only when
+  scrolled into view — one deck in the sample set has 48 slides and every
+  preview is an iframe.
+
+  What counts as a slide now lives in one place (`app/src/viewer/deck.ts`) and
+  is decided by an ordered list of rules rather than a selector. Measured
+  against real decks, `body > section[id]` — the old selector — matched none of
+  them, including the repo's own tour, whose sections sit inside `div.deck`. So
+  the navigator had never appeared for the one sample built to be navigated.
+  Paging is gated on measurement rather than markup: on a document whose
+  sections are taller than the viewport, taking the arrow keys would leave the
+  reader unable to scroll within a section.
+
 - **The brand guard is now `scripts/check-secrets.sh`, and matches only by
   shape.** It used to be driven by `scripts/forbidden-terms.txt`, a committed
   list of literal strings that must never appear. A list like that has to be in
@@ -114,6 +133,25 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   browser.
 
 ### Fixed
+
+- **The tour rendered blank when its scripts were blocked.** Its fifteen
+  sections started at `opacity: 0` and were revealed by a class the inline
+  script adds on scroll, so with scripts blocked none of them ever appeared —
+  measured in a sandboxed frame, 0 of 15 were visible. That is the state the
+  file is most often read in, and it is the sample that exists to demonstrate
+  the trust prompt, so it was demonstrating the bug instead. Its own header
+  comment claimed the opposite. The fade is now opted into by a class the
+  script adds once it knows it can finish the job: 15 of 15 visible.
+
+- **Leaving fullscreen left the app in presentation mode.** Nothing listened
+  for `fullscreenchange`, and neither Escape nor F11 clicks the Exit button, so
+  the header, toolbar, banners and comments panel all stayed hidden with a
+  35%-opacity button as the only way back.
+
+- **The trust banner promised content to readers looking at nothing.** A deck
+  that generates its slides at runtime ships an empty container, so "parts of
+  it may look empty" described a page that was entirely empty. The viewer now
+  tells those two states apart and says which one it is.
 
 - **The functions, cli and rules suites never ran in CI.** Their scripts passed
   a quoted glob to `node --test`, which means node expands it rather than the
