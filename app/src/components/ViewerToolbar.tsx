@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // The viewer's action row (SPEC §7).
 
+import { Breadcrumb } from "./Breadcrumb";
 import { Icon, type IconName } from "./Icon";
 import { MoreMenu } from "./MoreMenu";
 import { PresenceBar } from "./PresenceBar";
 import type { MenuEntry } from "./Menu";
 import type { Peer } from "../presence";
+import type { FolderMeta } from "../types";
 
 /**
  * Below 1100px the secondary actions go icon-only: the LABEL is hidden, never
@@ -51,6 +53,8 @@ function Action({
 
 export function ViewerToolbar({
   title,
+  folderId,
+  folders,
   versionLabel,
   peers,
   following,
@@ -71,6 +75,9 @@ export function ViewerToolbar({
   singleColumn,
 }: {
   title: string;
+  /** The folder holding this document, for the trail back out of it. */
+  folderId: string | null;
+  folders: FolderMeta[];
   versionLabel: string;
   peers: Peer[];
   following: string | null;
@@ -93,9 +100,12 @@ export function ViewerToolbar({
 }) {
   return (
     <div className="viewer-toolbar">
-      <span className="viewer-title" title={title}>
-        {title}
-      </span>
+      {/* The title, with everything above it made walkable. A document opened
+          from a link used to be a dead end: its folder was named nowhere, and
+          the only way back to the workspace was the browser's back button. */}
+      <div className="viewer-title">
+        <Breadcrumb folderId={folderId} folders={folders} current={title} />
+      </div>
       <span className="chip mono">{versionLabel}</span>
 
       <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />

@@ -9,10 +9,22 @@
   height: calc(100dvh - var(--header-h));
 }
 
+/*
+ * The comments column exists only when the panel does.
+ *
+ * The track used to be declared unconditionally, so closing the panel unmounted
+ * it and left its 340px behind: an empty band down the right of every document,
+ * with no way to reclaim it short of reopening the panel and closing it again —
+ * which did nothing either. A grid track is part of the layout whether or not
+ * anything is in it, so the track has to be conditional, not just its contents.
+ */
 .viewer-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   min-height: 0;
+}
+.viewer-body[data-comments="closed"] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .viewer-toolbar {
@@ -26,13 +38,42 @@
   scrollbar-width: none;
 }
 .viewer-toolbar::-webkit-scrollbar { display: none; }
+/*
+ * The title slot holds the whole folder trail, so it is the trail that has to
+ * fit: `min-width: 0` lets it shrink, and the breadcrumb ellipsises the leaf.
+ * Without the min-width a flex item refuses to go below its content size, and
+ * a deep folder path would push the action buttons off the bar.
+ */
 .viewer-title {
+  min-width: 0;
+  max-width: 44ch;
   font-weight: 620;
+}
+.viewer-title .breadcrumb {
+  flex-wrap: nowrap;
+  margin-bottom: 0;
+  min-width: 0;
+  font-size: var(--fs-caption);
+  font-weight: 400;
+}
+.viewer-title .breadcrumb-current {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 34ch;
+  font-size: var(--fs-small);
+  font-weight: 620;
+  color: var(--color-ink);
 }
+/* The folders shorten before the document's own name does: which document you
+   are reading matters more than how you got to it. */
+.viewer-title .breadcrumb a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 2ch;
+}
+.viewer-title .breadcrumb-sep { flex: none; }
 .viewer-toolbar-actions {
   margin-left: auto;
   display: flex;
@@ -226,7 +267,13 @@
 
 @media (max-width: 860px) {
   .viewer-body { grid-template-columns: minmax(0, 1fr); }
-  .viewer-title { max-width: 18ch; }
+  .viewer-title { max-width: 24ch; }
+  /* The trail collapses to its two ends — the workspace and this document —
+     because a middle folder you cannot read the name of is not navigation. */
+  .viewer-title .breadcrumb a:not(:first-of-type),
+  .viewer-title .breadcrumb .breadcrumb-sep[data-folder] {
+    display: none;
+  }
 }
 
 @media (max-width: 400px) {

@@ -6,7 +6,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import { logEvent } from "../analytics";
-import { createAnnotation, listAnnotations, listMyTeams } from "../firestore";
+import { createAnnotation, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
 import { describeAnchorFromSelection } from "../annotation/anchor";
 import { Sidebar } from "../annotation/Sidebar";
 import { commitVersion, UnresolvedCommentsError, StaleVersionError } from "../edit";
@@ -40,7 +40,7 @@ import { ImageExportDialog } from "../components/ImageExportDialog";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
 import type { MenuEntry } from "../components/Menu";
-import type { Annotation, TeamMeta } from "../types";
+import type { Annotation, FolderMeta, TeamMeta } from "../types";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -89,6 +89,10 @@ export function DocViewer() {
   const doc = useDocument(docId, versionId);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [teams, setTeams] = useState<TeamMeta[]>([]);
+  // Only for the breadcrumb. An anonymous reader of a public document has no
+  // folders and gets a trail of one, which is correct: "Everything" is still
+  // where the workspace is if they sign in.
+  const [folders, setFolders] = useState<FolderMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [wantsEdit, setWantsEdit] = useState(false);
@@ -224,7 +228,12 @@ export function DocViewer() {
 
   useEffect(() => {
     if (!signedIn) return;
-    return listMyTeams(emailLower, setTeams, () => setTeams([]));
+    const stopTeams = listMyTeams(emailLower, setTeams, () => setTeams([]));
+    const stopFolders = listMyFolders(emailLower, setFolders, () => setFolders([]));
+    return () => {
+      stopTeams();
+      stopFolders();
+    };
   }, [signedIn, emailLower]);
 
   useEffect(() => {
@@ -303,6 +312,19 @@ export function DocViewer() {
       else toast.error((e as Error).message);
     }
   }, [editor, docId, doc.currentVersion, doc.format, navigate, toast]);
+
+  /**
+   * Leave the editor without publishing.
+   *
+   * The pending autosave is flushed FIRST. `useInlineEditor`'s cleanup clears
+   * the debounce timer, so leaving within a second of the last keystroke would
+   * otherwise drop that keystroke on the floor — silently, since the draft that
+   * remains looks perfectly healthy.
+   */
+  const stopEditing = useCallback(async () => {
+    await editor.flushNow();
+    setWantsEdit(false);
+  }, [editor]);
 
   const menuEntries: MenuEntry[] = useMemo(() => {
     const entries: MenuEntry[] = [
@@ -402,6 +424,7 @@ export function DocViewer() {
   }
 
   const editingNow = mode.kind === "editing";
+  const showComments = commentsOpen && Boolean(doc.currentVersion);
   const lockColor = presence.peers.find((p) => p.uid === lock.lock?.uid)?.color;
 
   return (
@@ -414,6 +437,7 @@ export function DocViewer() {
           saveError={editor.saveError}
           observing={lock.observing}
           onCommit={() => void commit()}
+          onExit={() => void stopEditing()}
           commitDisabled={annotations.some((a) => !a.resolved)}
           commitDisabledReason={
             annotations.some((a) => !a.resolved)
@@ -424,6 +448,8 @@ export function DocViewer() {
       ) : (
         <ViewerToolbar
           title={doc.title}
+          folderId={doc.meta?.folderId ?? null}
+          folders={folders}
           versionLabel={doc.currentVersion}
           peers={presence.peers}
           following={presence.following}
@@ -433,8 +459,8 @@ export function DocViewer() {
           canEdit={canEdit}
           canShare={isOwner}
           onShare={() => setDialog("share")}
-          editing={editingNow}
-          onToggleEdit={() => setWantsEdit((v) => !v)}
+          editing={wantsEdit}
+          onToggleEdit={() => void (wantsEdit ? stopEditing() : setWantsEdit(true))}
           offerTrust={liveTrust.shouldOffer}
           onOpenTrust={() => setDialog("trust")}
           onPresent={() => {
@@ -473,7 +499,10 @@ export function DocViewer() {
         peerColor={lockColor}
       />
 
-      <div className="viewer-body">
+      {/* One source of truth for "is the panel there", because the layout and
+          the panel must agree — a version-less document renders no panel
+          whatever the toggle says. */}
+      <div className="viewer-body" data-comments={showComments ? "open" : "closed"}>
         <div className="doc-frame-wrap">
           {editingNow ? (
             <SlidePanel
@@ -510,7 +539,7 @@ export function DocViewer() {
           ) : null}
         </div>
 
-        {commentsOpen && doc.currentVersion ? (
+        {showComments ? (
           <Sidebar
             docId={docId}
             versionId={doc.currentVersion}
