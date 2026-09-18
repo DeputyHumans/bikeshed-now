@@ -168,3 +168,16 @@ anything outside the permissive allowlist.
 - **The email secret holds a single space.** `defineSecret` demands a version;
   Secret Manager refuses an empty payload. Whitespace is how a deployment says
   "email off", and `apiKey()` trims.
+
+## Agentic Continuous Flow (ACF)
+
+**ACF is software development for a world where intelligence exists in silicon as
+well as carbon.** Humans shift from writing code to governing intelligent agent
+swarms. Knowledge (ontologies, policies, constraints) becomes the product; code
+is ephemeral output regenerated on demand.
+
+## Conventions
+
+- **Organization**: `docs/acf/organization.md` (naming, directory structure, documentation standards)
+- **Git**: `docs/acf/git/commit-conventions.md` (conventional commits, atomic commits)
+- **Audit**: Run `/audit-acf-conventions` to check compliance, `--fix` to auto-fix
