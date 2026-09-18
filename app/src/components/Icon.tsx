@@ -2,15 +2,15 @@
 // The icon set: hand-authored paths, one stroke weight, no icon library.
 
 /**
- * Twenty icons is not a dependency. A library would bring a thousand, a build
+ * Thirty-one icons is not a dependency. A library would bring a thousand, a build
  * step to shake them, and a second visual language to reconcile with the mark —
- * for the sake of the eighteen this interface actually uses.
+ * for the sake of the thirty-one this interface actually uses.
  *
  * Every path is drawn on a 24-unit grid with a 1.7 stroke and round caps, so
  * they sit together, inherit `currentColor`, and stay crisp at any size.
  */
 
-const PATHS: Record<string, string> = {
+const PATHS = {
   folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   doc: "M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5",
   chevron: "m9 5 7 7-7 7",
@@ -40,7 +40,31 @@ const PATHS: Record<string, string> = {
   globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18",
   team: "M8 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M17 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM15.5 15.2A5 5 0 0 1 22 20",
   key: "M15 9a4 4 0 1 0-3.5 3.97L10 14.5l-1.5-.5L7 15.5 5 15l-.5 2L3 17.5V20h3l7.2-7.2A4 4 0 0 0 15 9z",
-};
+
+  // --- The editor toolbar -------------------------------------------------
+  // Every one of these replaced a TEXT label. "• List" and "1. List" wrapped
+  // onto two lines inside a 34px button, and an emoji link glyph rendered in
+  // full colour beside monochrome strokes. A toolbar is a row of things that
+  // have to read as one set.
+  listBullet:
+    "M5 6.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5M5 11.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5M5 16.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5M10 7h10M10 12h10M10 17h10",
+  // TWO rows, against the bulleted list's three, and that is the whole design.
+  // The numerals are what distinguish the two icons, so they have to be
+  // readable — and three legible numerals do not fit in a 24-unit grid at this
+  // stroke weight. Drawn at three rows they collide into an inkblot at the 16px
+  // the toolbar renders. Two rows buys each numeral six units, which is enough.
+  listOrdered:
+    "M3.7 6.9 5.6 5.7v5.6M4.1 11.3h3M3.6 13.6a1.9 1.9 0 1 1 3.3 1.4l-3.3 3.4h3.5M10 8.5h10M10 15.5h10",
+  // A quote is an indent bar, not a pair of curled commas: at 16px a curl is
+  // an ink blot, and the bar is what a blockquote actually looks like.
+  quote: "M5 5.5v13M10 7.5h10M10 12h10M10 16.5h6",
+  rule: "M3 12h18",
+  code: "m9 7.5-5 4.5 5 4.5M15 7.5l5 4.5-5 4.5",
+  link:
+    "M9.6 13.6a3.6 3.6 0 0 0 5.1 0l2.7-2.7a3.6 3.6 0 0 0-5.1-5.1l-1.3 1.3M14.4 10.4a3.6 3.6 0 0 0-5.1 0l-2.7 2.7a3.6 3.6 0 0 0 5.1 5.1l1.3-1.3",
+  alignLeft: "M4 6h16M4 12h10M4 18h13",
+  alignCenter: "M4 6h16M7 12h10M6 18h12",
+} satisfies Record<string, string>;
 
 export type IconName = keyof typeof PATHS;
 

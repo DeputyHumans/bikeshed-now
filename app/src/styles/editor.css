@@ -38,6 +38,33 @@
  * worse than one that is visibly unavailable — and a control that silently
  * disappears leaves the author wondering what they did wrong.
  */
+/*
+ * A toolbar button never wraps. It GROWS.
+ *
+ * `.icon-btn` is a fixed 34x34 square, which is right for a glyph and wrong for
+ * anything wider: `• List` and `1. List` broke onto a second line inside it,
+ * which is what made the bar two rows tall and ragged. Overriding the width to
+ * a MINIMUM rather than clipping means a label that outgrows the square is
+ * visibly too long instead of quietly mangled — a bug you can see is a bug that
+ * gets fixed.
+ */
+.toolbar-btn {
+  width: auto;
+  min-width: 34px;
+  padding: 0 var(--s-1);
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  line-height: 1;
+}
+
+/* A letter set in its own style is the icon for it. This is the whole reason
+   bold, italic, underline and strikethrough stay typographic while everything
+   else in the bar became a drawing. */
+.toolbar-btn[data-control="bold"] { font-weight: 750; }
+.toolbar-btn[data-control="italic"] { font-style: italic; }
+.toolbar-btn[data-control="underline"] { text-decoration: underline; }
+.toolbar-btn[data-control="strike"] { text-decoration: line-through; }
+
 .toolbar-btn:disabled,
 .toolbar-select:disabled {
   opacity: 0.4;
@@ -68,14 +95,27 @@
 .toolbar-unavailable:hover::after,
 .toolbar-unavailable:focus-within::after { opacity: 1; }
 
-.save-state {
+/* The trailing group: state, then the way out, then the way forward.
+   Its own gap, because the bar's 4px is the gap between CONTROLS IN A SET —
+   B beside I — and these three are not one set. */
+.toolbar-end {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.save-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: var(--fs-caption);
   color: var(--color-ink-muted);
+  white-space: nowrap;
 }
+/* Deliberately NOT hidden when empty. It is an aria-live region, and
+   display:none takes it out of the accessibility tree — a screen reader then
+   has nothing to announce into when the first save lands. An empty element
+   costs one gap; a silent save state costs the feature. */
 .save-state[data-state="error"] { color: var(--color-danger); }
 .save-state[data-state="saved"] { color: var(--color-success); }
 

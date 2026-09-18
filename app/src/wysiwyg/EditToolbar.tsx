@@ -2,6 +2,7 @@
 // The WYSIWYG toolbar, with a palette that depends on the source format (SPEC §6a, §11).
 
 import { useCallback, useEffect, useState } from "react";
+import { Icon, type IconName } from "../components/Icon";
 import { EDITOR_FONT_CHOICES } from "../brand/fonts";
 import { TOKENS } from "../brand/tokens";
 import type { SourceFormat } from "../types";
@@ -24,10 +25,20 @@ export type Command =
   | { kind: "block"; value: string }
   | { kind: "exec"; command: string; value?: string };
 
-/** What a control does, and whether Markdown can express it. */
+/**
+ * What a control does, and whether Markdown can express it.
+ *
+ * A control shows EITHER an icon or a short typographic label, never a word.
+ * `• List` and `1. List` wrapped onto two lines inside a 34px button — the
+ * button cannot grow to fit a word without the toolbar reflowing, so the label
+ * has to be the thing that fits. B/I/U/S stay as letters because a letter set
+ * in its own style IS the icon for it, everywhere, in every editor ever built.
+ */
 interface Control {
   id: string;
-  label: string;
+  /** The typographic label. Omitted when `icon` carries the meaning. */
+  label?: string;
+  icon?: IconName;
   title: string;
   command: Command;
   /** Absent means every format supports it. */
@@ -53,7 +64,7 @@ const INLINE_CONTROLS: Control[] = [
   },
   {
     id: "code",
-    label: "‹›",
+    icon: "code",
     title: "Inline code",
     command: { kind: "exec", command: "formatBlock", value: "code" },
   },
@@ -62,25 +73,25 @@ const INLINE_CONTROLS: Control[] = [
 const LIST_CONTROLS: Control[] = [
   {
     id: "ul",
-    label: "• List",
+    icon: "listBullet",
     title: "Bulleted list",
     command: { kind: "exec", command: "insertUnorderedList" },
   },
   {
     id: "ol",
-    label: "1. List",
+    icon: "listOrdered",
     title: "Numbered list",
     command: { kind: "exec", command: "insertOrderedList" },
   },
   {
     id: "quote",
-    label: "❝",
+    icon: "quote",
     title: "Blockquote",
     command: { kind: "exec", command: "formatBlock", value: "blockquote" },
   },
   {
     id: "hr",
-    label: "—",
+    icon: "rule",
     title: "Horizontal rule",
     command: { kind: "exec", command: "insertHorizontalRule" },
   },
@@ -116,6 +127,15 @@ export interface EditToolbarProps {
   onCommit: () => void;
   commitDisabled?: boolean;
   commitDisabledReason?: string;
+  /**
+   * Leave the editor without publishing.
+   *
+   * This bar REPLACES the viewer's toolbar while editing, so until it existed
+   * the only ways out were publishing and navigating away — and publishing is
+   * blocked while any comment on the base version is unresolved. An author who
+   * opened the editor on a document under review was stuck in it.
+   */
+  onExit: () => void;
   /** True while somebody else holds the edit lock: observe mode. */
   observing?: boolean;
 }
@@ -153,6 +173,7 @@ export function EditToolbar({
   onCommit,
   commitDisabled,
   commitDisabledReason,
+  onExit,
   observing,
 }: EditToolbarProps) {
   const [active, setActive] = useState<Set<string>>(new Set());
@@ -201,13 +222,14 @@ export function EditToolbar({
         <button
           type="button"
           className="icon-btn toolbar-btn"
+          data-control={control.id}
           title={unavailable ? MARKDOWN_UNAVAILABLE : control.title}
           aria-label={control.title}
           aria-pressed={active.has(control.id)}
           disabled={unavailable || observing}
           onClick={() => run(control.command)}
         >
-          {control.label}
+          {control.icon ? <Icon name={control.icon} size={16} /> : control.label}
         </button>
       </span>
     );
@@ -253,7 +275,7 @@ export function EditToolbar({
             if (url) run({ kind: "exec", command: "createLink", value: url });
           }}
         >
-          🔗
+          <Icon name="link" size={16} />
         </button>
       </div>
 
@@ -307,23 +329,44 @@ export function EditToolbar({
               disabled={markdown || observing}
               onClick={() => run({ kind: "exec", command })}
             >
-              {command === "justifyLeft" ? "⯇" : "⯈"}
+              <Icon
+                name={command === "justifyLeft" ? "alignLeft" : "alignCenter"}
+                size={16}
+              />
             </button>
           </span>
         ))}
       </div>
 
-      <SaveState state={saveState} error={saveError} />
+      {/* One trailing group, so the save state and the two actions are spaced
+          as a unit. Left loose in the bar they inherited its 4px control gap,
+          which read as the word "Saved" being stuck to the button. */}
+      <div className="toolbar-end">
+        <SaveState state={saveState} error={saveError} />
 
-      <button
-        type="button"
-        className="btn btn-primary btn-sm btn-keep-label"
-        onClick={onCommit}
-        disabled={commitDisabled || observing}
-        title={commitDisabledReason}
-      >
-        Save as new version
-      </button>
+        {/* Never disabled, and deliberately not `observing`-gated either: the
+            way out of a mode has to work in every state the mode can be in, or
+            it is not a way out. The draft survives — leaving the editor is not
+            discarding anything. */}
+        <button
+          type="button"
+          className="btn btn-sm btn-keep-label"
+          onClick={onExit}
+          title="Leave the editor. Your draft is kept, and stays on the document until you publish it."
+        >
+          Done
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-primary btn-sm btn-keep-label"
+          onClick={onCommit}
+          disabled={commitDisabled || observing}
+          title={commitDisabledReason}
+        >
+          Save as new version
+        </button>
+      </div>
     </div>
   );
 }
