@@ -36,7 +36,7 @@ runs every row except 5, which needs the emulators — use
 | 4 | `npm --prefix app test` | green; ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
 | 5 | `npm run test:rules:emulated` | 0 failing |
 | 6 | `node scripts/<each>.mjs --dry-run …` | exit 0; credential-free for all but `delete-version`, whose preview must read to be useful |
-| 7 | `npm run check:brand` | `brand-guard: clean` |
+| 7 | `npm run check:secrets` | `check-secrets: clean` |
 | 8 | `npm run check:headers` | exit 0 |
 | 9 | `npm run check:content` | every sample still demonstrates what it is there for |
 | 10 | `npm run check:licenses` | exit 0 — every dependency permissive |

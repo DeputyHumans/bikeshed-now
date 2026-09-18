@@ -25,7 +25,7 @@ npm run install:all && npm run build:policy   # no Firebase account needed
 ## Before you say it works
 
 ```bash
-npm run verify               # policy, agents, build, tests, brand, headers, content, licences
+npm run verify               # policy, agents, build, tests, secrets, headers, content, licences
 npm run test:rules:emulated  # rules — needs emulators, and starts them
 ```
 
@@ -113,7 +113,7 @@ Apache notice instead, because they are a wire format someone may copy out alone
 Conventional, lower case, imperative, no trailing period.
 
 **Stage explicit paths.** Not `git add -A` or `.` — that is how a credential
-enters history. **No attribution trailers**; the brand guard fails the build on
+enters history. **No attribution trailers**; the secrets guard fails the build on
 them, and an author field cannot be fixed without a rewrite.
 
 Write the body for someone reading `git log` in two years: what was wrong and
@@ -126,10 +126,13 @@ measurement id. They live in gitignored files and Secret Manager
 (`docs/operations/overview.md`). Everything committed uses `demo-bikeshed`, which
 Firebase refuses to point at a real backend.
 
-The brand guard matches **by shape** — `*.web.app`, `gs://`, `AIza…`, app ids,
-measurement ids, non-`demo-` project blocks — so a rename cannot quietly
-reintroduce a leak. The slug `bikeshed-now` is a legitimate package name and is
-not forbidden; the binding is.
+`scripts/check-secrets.sh` matches **by shape** — `*.web.app`, `gs://`, `AIza…`,
+app ids, measurement ids, non-`demo-` project blocks — so a rename cannot
+quietly reintroduce a leak. It matches on form rather than spelling for a
+reason: a list of forbidden words has to be committed to be useful, and
+committing it publishes the very strings it exists to suppress. The slug
+`bikeshed-now` is a legitimate package name; the binding is what must never be
+committed.
 
 **It will fire on your own comments.** Describing a forbidden shape means
 *describing* it, not spelling it. That has caught this project twice.

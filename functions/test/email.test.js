@@ -198,7 +198,7 @@ test("the sending domain is configurable apart from the serving domain", async (
   const prevFrom = process.env.BIKESHED_MAIL_FROM;
   const prevOrigin = process.env.BIKESHED_PUBLIC_ORIGIN;
 
-  // Composed rather than spelled. Brand-guard tier 8 forbids a Firebase Hosting
+  // Composed rather than spelled. check-secrets tier 1 forbids a Firebase Hosting
   // hostname anywhere in tracked content, by SHAPE, so that a real deployment
   // cannot leak into the tree — and it cannot tell a fictional one from a real
   // one. This test is precisely about that shape, so it builds the string.

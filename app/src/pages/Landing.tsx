@@ -23,7 +23,7 @@ import { useToast } from "../components/Toast";
 /**
  * Built from the LIVE origin, never a literal host. Bikeshed is self-hosted, so
  * a hardcoded domain would be wrong on every deployment but one — and a host
- * string in the tree is the shape the brand guard matches for.
+ * string in the tree is the shape the secrets guard matches for.
  */
 export function agentInstructions(origin: string): string {
   return [

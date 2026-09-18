@@ -23,7 +23,7 @@ derivative is explicitly permitted and is the honest thing to do. Attribution
 and the full license text live in app/public/fonts/OFL.txt and
 THIRD_PARTY_LICENSES.md.
 
-The output is committed as a binary asset. The brand guard keeps an explicit
+The output is committed as a binary asset. The secrets guard keeps an explicit
 allowlist of tracked binaries and byte-scans each one, so this file cannot
 become a place where a forbidden string hides.
 

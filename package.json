@@ -12,7 +12,7 @@
   "scripts": {
     "build:policy": "node tools/build-policy.mjs",
     "check:policy": "node tools/build-policy.mjs --check",
-    "check:brand": "./scripts/check-brand.sh",
+    "check:secrets": "./scripts/check-secrets.sh",
     "check:headers": "node scripts/check-headers.mjs",
     "check:agents": "node tools/build-agents.mjs --check",
     "build:agents": "node tools/build-agents.mjs",
@@ -34,7 +34,7 @@
     "test:cli": "npm --prefix cli test",
     "test:rules": "node --test \"rules-tests/*.test.mjs\"",
     "test:rules:emulated": "firebase emulators:exec --only firestore,database --project demo-bikeshed \"npm run test:rules\"",
-    "verify": "npm run check:policy && npm run check:agents && npm run build && npm run test && npm run check:brand && npm run check:headers && npm run check:content && npm run check:licenses",
+    "verify": "npm run check:policy && npm run check:agents && npm run build && npm run test && npm run check:secrets && npm run check:headers && npm run check:content && npm run check:licenses",
     "check:content": "node scripts/check-content.mjs",
     "check:licenses": "node tools/check-licenses.mjs"
   },

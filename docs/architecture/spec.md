@@ -652,7 +652,7 @@ destroying it.
 | `npm --prefix app test` | green; coverage ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
 | `npm run test:rules:emulated` | 0 failing |
 | 5 script `--dry-run` commands | exit 0, **none requires credentials** |
-| `npm run check:brand` | `brand-guard: clean` |
+| `npm run check:secrets` | `check-secrets: clean` |
 | `npm run check:headers` | exit 0 |
 
 **The app MUST connect to the emulators** behind `VITE_USE_EMULATORS=1`

@@ -58,6 +58,24 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **The brand guard is now `scripts/check-secrets.sh`, and matches only by
+  shape.** It used to be driven by `scripts/forbidden-terms.txt`, a committed
+  list of literal strings that must never appear. A list like that has to be in
+  the tree to be useful, so committing it published the very words it existed to
+  suppress — it was its own first leak — and it could never catch anything
+  nobody had thought to add. The four tiers that read it are gone. The five that
+  remain never needed a list of names: deployment bindings by shape, absolute
+  local paths, attribution trailers, the tracked-binary allowlist, and a new
+  credential tier covering `sk-`, GitHub and Slack tokens, AWS key ids,
+  private-key blocks, service-account JSON, and any tracked dotenv or key file.
+  `npm run check:brand` is now `npm run check:secrets`, and the guard prints
+  `check-secrets: clean`.
+- **Git history was rewritten once, before first publication.** The old guard
+  carried the suppressed company name in a comment example, sanitised in the
+  working tree but still present in five historical commits, where no tier could
+  see it — the history tier reads commit metadata, never historical file
+  content. Every commit id therefore changed. Nothing had been published at the
+  time, so no clone needed reconciling.
 - **`move_document` is an access operation, not a filing one.** A document's
   members are its own grants unioned with its folder's, so moving it between
   folders changes who can read it. It requires `canEdit` on the document and

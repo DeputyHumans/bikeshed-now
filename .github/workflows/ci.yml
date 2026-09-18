@@ -4,7 +4,7 @@
 # Job boundaries follow failure MODES, not convenience, so a red check tells you
 # what kind of thing broke before you open it: `build` means the code is wrong,
 # `rules` means the security boundary moved, `guards` means something about the
-# project's shape is wrong — a brand leak, a missing header, a sample that
+# project's shape is wrong — a leaked secret, a missing header, a sample that
 # stopped demonstrating what it is for, a dependency with the wrong licence.
 #
 # Every job is credential-free. Nothing here can reach a real backend:
@@ -120,13 +120,13 @@ jobs:
         run: npx firebase emulators:exec --only firestore,database --project demo-bikeshed "npm run test:rules"
 
   guards:
-    name: brand, headers, content, licences
+    name: secrets, headers, content, licences
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # The brand guard scans git HISTORY — author and committer identities,
-          # not just messages — so a shallow clone would silently check nothing.
+          # The secrets guard scans git HISTORY for attribution trailers, so a
+          # shallow clone would silently check nothing.
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -144,8 +144,8 @@ jobs:
           npm --prefix app ci
           npm --prefix functions ci
 
-      - name: Brand purity
-        run: npm run check:brand
+      - name: Secrets and deployment bindings
+        run: npm run check:secrets
 
       - name: SPDX headers
         run: npm run check:headers

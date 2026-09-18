@@ -7,7 +7,7 @@ import { readConsent, writeConsent } from "./consent";
 /**
  * Deliberately NOT shaped like a real measurement id.
  *
- * Brand-guard tier 8 rejects a measurement id anywhere in tracked content by
+ * check-secrets tier 1 rejects a measurement id anywhere in tracked content by
  * SHAPE, so a real deployment's cannot leak into the tree — and it cannot tell
  * a fictional one from a real one. The shape is described rather than spelled
  * here for the same reason, which is a trap this project has now fallen into
