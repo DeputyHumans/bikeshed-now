@@ -151,12 +151,14 @@ function scanAuthoredTitles(doc: Document): Slide[] | null {
   const seed = doc.querySelector<HTMLElement>("section[data-title], article[data-title]");
   if (!seed?.parentElement) return null;
   const token = tokens(seed)[0];
+  // No `instanceof HTMLElement` here. The document comes from the FRAME's
+  // realm, so it is false for every element in it — the filter would quietly
+  // return nothing and this rule would never fire for the decks it exists for.
+  // `children` is already an element collection, so the check bought nothing
+  // even where it worked.
   const run = Array.from(seed.parentElement.children).filter(
-    (el): el is HTMLElement =>
-      el instanceof HTMLElement &&
-      el.tagName === seed.tagName &&
-      (token ? el.classList.contains(token) : true),
-  );
+    (el) => el.tagName === seed.tagName && (token ? el.classList.contains(token) : true),
+  ) as HTMLElement[];
   if (run.length < 2) return null;
   return toSlides(run);
 }

@@ -175,6 +175,38 @@ describe("scanSlides", () => {
   });
 });
 
+describe("scanSlides across realms", () => {
+  /**
+   * The document being scanned comes from the iframe, so its elements are
+   * built by another realm's constructors and `instanceof HTMLElement` is
+   * false for every one of them. Worse, nothing guarantees the constructor is
+   * a global at all — run this module where it is not and an `instanceof`
+   * throws outright, which is how this was found: scanning two real decks
+   * outside a browser raised "HTMLElement is not defined".
+   *
+   * Removing the global is the only construction that reproduces it here.
+   * A `DOMParser` fixture and a jsdom iframe both share this realm's
+   * constructors, so neither one can.
+   */
+  it("leans on no constructor the document's realm might not have", () => {
+    const doc = parse(`<body><main>
+      <section class="section cover" id="s-cover"><h1>Cover</h1></section>
+      <section class="section" id="s-one" data-title="01 · First"><h2>heading</h2></section>
+      <section class="section" id="s-two" data-title="02 · Second"><h2>heading</h2></section>
+    </main></body>`);
+
+    const realm = globalThis as { HTMLElement?: unknown };
+    const saved = realm.HTMLElement;
+    delete realm.HTMLElement;
+    try {
+      expect(() => scanSlides(doc)).not.toThrow();
+      expect(titles(doc)).toEqual(["Cover", "01 · First", "02 · Second"]);
+    } finally {
+      realm.HTMLElement = saved;
+    }
+  });
+});
+
 describe("activeIndex", () => {
   it("picks the slide nearest the top edge, above or below it", () => {
     expect(activeIndex([-900, -40, 820, 1680])).toBe(1);
