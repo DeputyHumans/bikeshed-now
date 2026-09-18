@@ -616,6 +616,14 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   }
   await ref.set(update, { merge: true });
   await syncPublicProjection(db(), docId);
+  // Open editing widens who may write the SHARED document too, and the RTDB
+  // gate is a mirror rather than a query, so it has to be told.
+  await syncPresenceAccess(
+    docId,
+    asArray(data.members),
+    asArray(data.editorMembers),
+    update.publicEdit === true,
+  );
 
   const fresh = await ref.get();
   res.status(200).json({

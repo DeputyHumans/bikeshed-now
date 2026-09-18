@@ -69,10 +69,24 @@ function database(): admin.database.Database | null {
  * the admin scripts. Never throws: presence is a non-essential subsystem, and a
  * subsystem that can fail a share is worse than one that can go dark.
  */
+/**
+ * The key that means "any verified account", for an open-editing document.
+ *
+ * `publicEdit` widens WHO may edit to any verified account (SPEC §17), and
+ * those accounts are by definition not in `editorMembers`. Without this they
+ * would be the one class of editor the shared document locks out — which is
+ * how the withdrawn edit lock behaved, and it was a defect there too.
+ *
+ * `*` is safe as a key precisely because it is not a legal email: the validator
+ * rejects it, so it can never collide with a person.
+ */
+export const OPEN_EDIT_KEY = "*";
+
 export async function syncPresenceAccess(
   docId: string,
   members: readonly string[],
   editorMembers: readonly string[] = [],
+  publicEdit = false,
 ): Promise<void> {
   const db = database();
   if (!db) return;
@@ -84,13 +98,15 @@ export async function syncPresenceAccess(
     }
     return out;
   };
+  const edit = keyed(editorMembers) as Record<string, true>;
+  if (publicEdit) edit[OPEN_EDIT_KEY] = true;
   try {
     // ONE multi-path update, so the two mirrors can never disagree about a
     // person: a window where `editAccess` still names somebody `presenceAccess`
     // has dropped is a window where a revoked reader can still write.
     await db.ref().update({
       [`presenceAccess/${docId}`]: keyed(members),
-      [`editAccess/${docId}`]: keyed(editorMembers),
+      [`editAccess/${docId}`]: edit,
     });
   } catch {
     /* presence is best-effort and must never fail the request it rode in on */

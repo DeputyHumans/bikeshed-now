@@ -20,6 +20,7 @@ import { useDocFrame } from "../viewer/useDocFrame";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
+import { clearLog } from "../crdt/rtdb";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
@@ -308,6 +309,11 @@ export function DocViewer() {
     try {
       const result = await commitVersion(docId, doc.currentVersion);
       logEvent({ name: "version_commit", params: { format: doc.format } });
+      // The shared document described the DRAFT, which the commit has just
+      // consumed. Leaving it behind means the next person to open the editor
+      // syncs the old draft from the log and it reappears on top of the version
+      // that replaced it — published work silently reverted by a stale cache.
+      await clearLog(docId);
       setWantsEdit(false);
       toast.show(
         result.deduped

@@ -164,6 +164,20 @@ describe("realtime database rules", () => {
     await assertFails(set(ref(db, "status/doc1/y/e2"), "AQIDBA=="));
   });
 
+  it("an open-editing document admits any verified account", async () => {
+    // `publicEdit` widens who may edit to accounts that are by definition not
+    // in `editorMembers`. Without the `*` key they would be the one class of
+    // editor the shared document locks out — which is how the withdrawn edit
+    // lock behaved, and it was a defect there too.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, `presenceAccess/doc2/${key(OTHER.email)}`), true);
+      await set(ref(db, "editAccess/doc2/*"), true);
+    });
+    const db = verified(env, OTHER).database();
+    await assertSucceeds(set(ref(db, "status/doc2/y/e1"), "AQIDBA=="));
+  });
+
   it("a stranger may neither read nor write the shared document", async () => {
     const db = verified(env, STRANGER).database();
     await assertFails(get(ref(db, "status/doc1/y")));

@@ -24,6 +24,11 @@
 // selection stream reveals what someone is reading sentence by sentence, that is
 // considerably more than a name.
 //
+// `editAccess/{docId}/*` is how an OPEN-EDITING document says "any verified
+// account". `publicEdit` widens who may edit to accounts that are by definition
+// not in `editorMembers`, and `*` is safe as a key precisely because it is not a
+// legal address: the validator rejects it, so it cannot collide with a person.
+//
 // `editAccess/{docId}` is the SECOND mirror, of `editorMembers`, and it exists
 // because `status/{docId}/y` carries shared document state (SPEC §6b). Gating
 // that on `presenceAccess` would let a read-only member push edits into an
@@ -86,7 +91,7 @@
         // already applied it, and the durable copy is the saved draft.
         "y": {
           "$entry": {
-            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() || root.child('editAccess').child($docId).child('*').exists())",
             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
           }
         },
