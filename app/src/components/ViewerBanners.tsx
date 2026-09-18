@@ -25,6 +25,12 @@ export function ViewerBanners(props: {
 
   /** Set when the document is sandboxed and actually contains scripts. */
   offerTrust?: boolean;
+  /**
+   * Set when the blocked scripts are the only thing that would BUILD the
+   * content — a deck whose slides are generated at runtime ships an empty
+   * container, so there is nothing on screen at all to look partly empty.
+   */
+  scriptsBuildContent?: boolean;
   onOpenTrust?: () => void;
 
   /**
@@ -90,7 +96,16 @@ export function ViewerBanners(props: {
     rows.push(
       <div key="trust" className="banner banner-warn" role="status">
         <Icon name="shield" size={15} />
-        <span>This document's scripts are blocked, so parts of it may look empty.</span>
+        {/* Two sentences, because they describe two different screens. "Parts
+            of it may look empty" is misleading in front of a document that is
+            entirely empty — the reader is looking at nothing and being told to
+            expect something, which reads as the app being broken rather than
+            as a decision they can undo. */}
+        <span>
+          {props.scriptsBuildContent
+            ? "This document builds its content with scripts, and they are blocked, so there is nothing to show yet."
+            : "This document's scripts are blocked, so parts of it may look empty."}
+        </span>
         <button type="button" className="btn btn-sm" onClick={props.onOpenTrust}>
           Review
         </button>

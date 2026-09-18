@@ -510,6 +510,7 @@ export function DocViewer() {
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}
         offerTrust={liveTrust.shouldOffer}
+        scriptsBuildContent={deck.scan.kind === "script-required"}
         onOpenTrust={() => setDialog("trust")}
         expiry={
           /* Shown once it HAS expired, and in the last week before — not for
