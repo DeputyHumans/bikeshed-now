@@ -150,6 +150,57 @@
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
 }
+/* --- Dropping a file onto the workspace (SPEC §2) --------------------------
+ * The zone is the whole column rather than the grid, because most of the free
+ * space on a workspace with two documents in it is BELOW them. min-height keeps
+ * that true when there is almost nothing in it at all.
+ */
+.workspace-main {
+  min-width: 0;
+  min-height: 60vh;
+  border-radius: var(--radius-lg);
+  /* An outline rather than a border: a border would resize the column on
+     every dragenter and shuffle the grid under the pointer. */
+  outline: 2px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color var(--t-fast) var(--ease-out);
+}
+.workspace-main[data-drop-over] { outline-color: var(--color-accent); }
+
+/* A folder claims the drag from the workspace behind it, so it says so
+   loudly: dropping ON a folder and dropping NEAR one are different intentions
+   and the difference has to be visible before the pointer is released. */
+.doc-card[data-drop-over] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.drop-hint {
+  position: fixed;
+  inset-block-end: calc(var(--s-4) + env(safe-area-inset-bottom, 0px));
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 48;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: max-content;
+  max-width: min(26rem, calc(100% - var(--s-4) * 2));
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--fs-caption);
+  color: var(--color-ink);
+  pointer-events: none;
+}
+.drop-hint .upload-progress { width: 80px; flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-main { transition: none; }
+}
+
 .upload-progress {
   width: 100%;
   height: 6px;

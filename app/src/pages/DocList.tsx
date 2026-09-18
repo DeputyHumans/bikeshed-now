@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The workspace: folders, documents, and everything you can do to them (SPEC §5, §13).
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
@@ -21,6 +21,9 @@ import {
   type SortKey,
 } from "../workspace/tree";
 import { useIsSingleColumn } from "../hooks/useMediaQuery";
+import { useFileDrop } from "../hooks/useFileDrop";
+import { UPLOAD_HINT, isUploadable, uploadDoc } from "../upload";
+import { logEvent } from "../analytics";
 
 import { Breadcrumb } from "../components/Breadcrumb";
 import { FolderTree } from "../components/FolderTree";
@@ -95,6 +98,52 @@ function DocCard({
   );
 }
 
+/**
+ * A folder you can drop onto.
+ *
+ * Its own component because a hook cannot live in a loop, and its own drop zone
+ * because dropping a file "somewhere in the workspace" and dropping it "on that
+ * folder" are different intentions and should not both mean the former.
+ */
+function FolderCard({
+  folder,
+  menu,
+  onFiles,
+}: {
+  folder: FolderMeta;
+  menu: MenuEntry[];
+  onFiles: (files: File[], folderId: string) => void;
+}) {
+  const drop = useFileDrop(
+    useCallback((files: File[]) => onFiles(files, folder.folderId), [onFiles, folder.folderId]),
+  );
+  return (
+    <div className="doc-card" data-drop-over={drop.over || undefined} {...drop.handlers}>
+      <div className="doc-card-head">
+        <Link to={`/folder/${folder.folderId}`} className="doc-card-title">
+          <Icon name="folder" size={15} /> {folder.name}
+        </Link>
+        <span className="doc-card-menu">
+          <Menu
+            label={`Actions for ${folder.name}`}
+            entries={menu}
+            trigger={(props) => (
+              <button {...props} type="button" className="icon-btn" aria-label="Actions">
+                <Icon name="more" size={16} />
+              </button>
+            )}
+          />
+        </span>
+      </div>
+      <div className="doc-card-meta">
+        <span className="doc-card-stat">
+          {folder.members.length} {folder.members.length === 1 ? "person" : "people"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function DocList() {
   const { folderId = null } = useParams();
   const navigate = useNavigate();
@@ -117,6 +166,12 @@ export function DocList() {
     id: string;
     title: string;
     folderId: string | null;
+  } | null>(null);
+  /** `{ done, total, fraction }` while a dropped batch is in flight. */
+  const [dropping, setDropping] = useState<{
+    done: number;
+    total: number;
+    fraction: number;
   } | null>(null);
 
   useEffect(() => {
@@ -146,10 +201,76 @@ export function DocList() {
     return watchUser(user.uid, setAccount);
   }, [user]);
 
+  const defaultMarkingRef = useRef(MARKING_OFF as Marking);
+  defaultMarkingRef.current = account?.defaultMarking ?? MARKING_OFF;
+
+  /**
+   * Upload dropped files where they landed.
+   *
+   * No dialog: everything the dialog collects is already determined by the
+   * drop. The title comes from the filename exactly as the dialog derives it,
+   * the marking from the account default exactly as the dialog seeds it, and
+   * the folder from what was dropped on. Asking again would be asking somebody
+   * to confirm what they just did.
+   *
+   * Sequential rather than parallel, because each upload streams a whole bundle
+   * and the progress figure has to mean something. The list is live, so each
+   * document appears as it lands.
+   */
+  const uploadFiles = useCallback(
+    async (files: File[], target: string | null) => {
+      const usable = files.filter(isUploadable);
+      const rejected = files.length - usable.length;
+      if (rejected > 0) {
+        toast.error(
+          `${UPLOAD_HINT}. ${rejected === files.length ? "That is not one of those." : `${rejected} of those are not.`}`,
+        );
+      }
+      if (usable.length === 0) return;
+
+      let done = 0;
+      setDropping({ done: 0, total: usable.length, fraction: 0 });
+      for (const file of usable) {
+        try {
+          const result = await uploadDoc(file, {
+            title: file.name.replace(/\.[^.]+$/, "") || undefined,
+            folderId: target,
+            marking: defaultMarkingRef.current,
+            onProgress: (fraction) =>
+              setDropping({ done, total: usable.length, fraction }),
+          });
+          logEvent({ name: "doc_publish", params: { source: "upload", format: result.format } });
+          // Staying put is what makes dropping several files work, so the way
+          // to the document is offered rather than taken.
+          toast.show(`Uploaded ${result.title}.`, {
+            label: "Open",
+            onSelect: () => navigate(`/d/${result.docId}`),
+          });
+        } catch (e) {
+          toast.error(`${file.name}: ${(e as Error).message}`);
+        }
+        done += 1;
+        setDropping({ done, total: usable.length, fraction: 0 });
+      }
+      setDropping(null);
+    },
+    [navigate, toast],
+  );
+
+  const workspaceDrop = useFileDrop(
+    useCallback((files: File[]) => void uploadFiles(files, folderId), [uploadFiles, folderId]),
+    dropping === null,
+  );
+
   const visibleDocs = useMemo(() => {
     const scoped = search ? docs : docsInFolder(docs, folderId);
     return sortDocs(filterDocs(scoped, search), sort);
   }, [docs, folderId, search, sort]);
+
+  const currentFolderName = useMemo(
+    () => folders.find((f) => f.folderId === folderId)?.name ?? "Everything",
+    [folders, folderId],
+  );
 
   const visibleFolders = useMemo(() => {
     const scoped = search
@@ -291,7 +412,13 @@ export function DocList() {
     <div className="workspace">
       <FolderTree folders={folders} currentFolderId={folderId} drawerOpen={drawer} />
 
-      <div>
+      {/* The drop zone is the whole column, not just the grid: "free space" on
+          a workspace with two documents in it is mostly below them. */}
+      <div
+        className="workspace-main"
+        data-drop-over={workspaceDrop.over || undefined}
+        {...workspaceDrop.handlers}
+      >
         <Breadcrumb folderId={folderId} folders={folders} />
 
         <div className="workspace-toolbar">
@@ -376,30 +503,12 @@ export function DocList() {
         ) : (
           <div className="doc-grid">
             {visibleFolders.map((folder) => (
-              <div key={folder.folderId} className="doc-card">
-                <div className="doc-card-head">
-                  <Link to={`/folder/${folder.folderId}`} className="doc-card-title">
-                    <Icon name="folder" size={15} /> {folder.name}
-                  </Link>
-                  <span className="doc-card-menu">
-                    <Menu
-                      label={`Actions for ${folder.name}`}
-                      entries={folderMenu(folder)}
-                      trigger={(props) => (
-                        <button {...props} type="button" className="icon-btn" aria-label="Actions">
-                          <Icon name="more" size={16} />
-                        </button>
-                      )}
-                    />
-                  </span>
-                </div>
-                <div className="doc-card-meta">
-                  <span className="doc-card-stat">
-                    {folder.members.length}{" "}
-                    {folder.members.length === 1 ? "person" : "people"}
-                  </span>
-                </div>
-              </div>
+              <FolderCard
+                key={folder.folderId}
+                folder={folder}
+                menu={folderMenu(folder)}
+                onFiles={uploadFiles}
+              />
             ))}
             {visibleDocs.map((doc) => (
               <DocCard key={doc.docId} doc={doc} menu={docMenu(doc)} />
@@ -407,6 +516,26 @@ export function DocList() {
           </div>
         )}
       </div>
+
+      {workspaceDrop.over ? (
+        <div className="drop-hint" role="status">
+          <Icon name="download" size={18} />
+          Drop to upload into {currentFolderName}
+        </div>
+      ) : null}
+
+      {dropping ? (
+        <div className="drop-hint" role="status" aria-live="polite">
+          <span className="spinner" />
+          Uploading {dropping.done + 1} of {dropping.total}
+          <span className="upload-progress">
+            <span
+              className="upload-progress-bar"
+              style={{ width: `${Math.round(dropping.fraction * 100)}%` }}
+            />
+          </span>
+        </div>
+      ) : null}
 
       {uploading ? (
         <UploadDialog
