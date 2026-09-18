@@ -14,7 +14,7 @@
     "serve": "npm run build && firebase emulators:start --only functions --project demo-bikeshed",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

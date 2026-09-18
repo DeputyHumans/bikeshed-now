@@ -113,6 +113,17 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   presence mirror would let a read-only member push content into an editor's
   browser.
 
+### Fixed
+
+- **The functions, cli and rules suites never ran in CI.** Their scripts passed
+  a quoted glob to `node --test`, which means node expands it rather than the
+  shell — and node only learned to do that after 20. Development happens on
+  node 22, where it works; CI pins node 20, where `node --test` reported
+  `Could not find .../test/**/*.test.js` and exited non-zero having run nothing.
+  The globs are now unquoted and single-level, which the shell expands on every
+  version. Confirmed against node 20.19.3: 157 functions tests and 19 cli tests,
+  where the old form found none.
+
 ## 0.1.0 — 2026-09-17
 
 First release. Everything below is new, so this entry says what the thing *is*

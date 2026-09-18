@@ -39,7 +39,7 @@
     "test:functions": "npm --prefix functions test",
     "test:app": "npm --prefix app test",
     "test:cli": "npm --prefix cli test",
-    "test:rules": "node --test \"rules-tests/*.test.mjs\"",
+    "test:rules": "node --test rules-tests/*.test.mjs",
     "test:rules:emulated": "firebase emulators:exec --only firestore,database --project demo-bikeshed \"npm run test:rules\"",
     "verify": "npm run check:policy && npm run check:agents && npm run build && npm run test && npm run check:secrets && npm run check:headers && npm run check:content && npm run check:licenses",
     "check:content": "node scripts/check-content.mjs",
