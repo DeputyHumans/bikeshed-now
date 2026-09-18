@@ -76,6 +76,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   see it — the history tier reads commit metadata, never historical file
   content. Every commit id therefore changed. Nothing had been published at the
   time, so no clone needed reconciling.
+- **`npm --prefix app run coverage` now runs in CI.** The step was named "App
+  tests and coverage" and the verification table promised ≥90%, but the command
+  behind both was `vitest run` with no `--coverage`, so the thresholds in
+  `app/vite.config.ts` had never once been enforced.
+- **`firebase` is a declared root devDependency.** `rules-tests/` imports it and
+  had been resolving it as an auto-installed peer of
+  `@firebase/rules-unit-testing`, which breaks under `--legacy-peer-deps`.
 - **`move_document` is an access operation, not a filing one.** A document's
   members are its own grants unioned with its folder's, so moving it between
   folders changes who can read it. It requires `canEdit` on the document and

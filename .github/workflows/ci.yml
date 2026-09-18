@@ -76,7 +76,7 @@ jobs:
         run: npm --prefix functions test
 
       - name: App tests and coverage
-        run: npm --prefix app test
+        run: npm --prefix app run coverage
 
       - name: CLI tests
         run: npm --prefix cli test

@@ -10,6 +10,9 @@ feedback through the same interface people do, and are visibly marked as agents.
 
 Self-hosted on Firebase. Apache-2.0.
 
+Needs Node 20 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
+JRE — the emulators are a Java process, not a Node one.
+
 ```bash
 npm run install:all
 npm run build:policy
@@ -81,10 +84,12 @@ and spends most of its length on **what this is not**.
 | [`docs/development/authoring-bundles.md`](docs/development/authoring-bundles.md) | Writing a document that works well here |
 | [`docs/operations/config.md`](docs/operations/config.md) | Every setting, and what it changes |
 | [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | Nine decisions, ~30 lines each, so nobody re-argues them in a pull request |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | Ten decisions, ~30 lines each, so nobody re-argues them in a pull request |
 | [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
 | [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | How people here are expected to treat each other |
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed, and what counts as a breaking change |
 
 ---
 
@@ -168,7 +173,9 @@ in the title, the wordmark and the package names.
 
 ## Status
 
-`v0.1.0`. Working, tested and deployable. The rough edges are honest ones:
+`v0.1.0` is the last tag; `main` carries the unreleased work listed in
+[`CHANGELOG.md`](CHANGELOG.md). Working, tested and deployable. The rough edges
+are honest ones:
 
 - A membership change fans out one write per affected document. Bounded and
   batched, fine for a small team, and stated in `docs/architecture/overview.md` so nobody
@@ -182,3 +189,18 @@ in the title, the wordmark and the package names.
 
 See [`SECURITY.md`](SECURITY.md). Please do not open a public issue for anything
 that lets somebody read a document they should not.
+
+## Licence
+
+[Apache-2.0](LICENSE) — with two carve-outs, both recorded in [`NOTICE`](NOTICE),
+which is worth reading before you fork, mirror or redistribute this repository:
+
+- `app/public/fonts/*.woff2` is a renamed subset of an upstream typeface under
+  the SIL Open Font License 1.1. It covers the font files and nothing else.
+- `docs/acf/**` and `.claude/scripts/` are third-party material under a
+  proprietary licence that forbids redistribution. **They are not licensed to
+  you under Apache-2.0**, and nothing in `LICENSE` grants any right in them.
+  Removing them is safe: no build step and no runtime reads them.
+
+Dependency licences, and the CI gate that hard-fails anything outside the
+permissive allowlist, are in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

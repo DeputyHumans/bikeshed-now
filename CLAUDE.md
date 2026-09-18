@@ -146,7 +146,7 @@ anything outside the permissive allowlist.
 | `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | nine decisions, each with its reversal condition |
+| `docs/architecture/adr/` | ten decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 
 ## Looks like a bug, is not
@@ -176,4 +176,6 @@ is ephemeral output regenerated on demand.
 
 - **Organization**: `docs/acf/organization.md` (naming, directory structure, documentation standards)
 - **Git**: `docs/acf/git/commit-conventions.md` (conventional commits, atomic commits)
-- **Audit**: Run `/audit-acf-conventions` to check compliance, `--fix` to auto-fix
+- **Audit**: `/audit-acf-conventions` checks compliance and `--fix` repairs it. It
+  is a slash command from the `acf-librarian` Claude Code plugin, which is not
+  vendored here — without that plugin installed, the command does not exist.
