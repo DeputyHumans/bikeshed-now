@@ -14,6 +14,26 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **Several people can now edit one document at the same time.** Document state
+  is a Yjs CRDT bound to the DOM without a schema, so edits merge and every copy
+  converges ([ADR 0010](docs/adr/0010-crdt-for-shared-document-state.md)).
+  Hand-authored HTML still round-trips byte-identical; that property is the
+  contract, and the sample bundles are the fixtures that hold it.
+- **The single-holder edit lock is withdrawn**, along with observe mode, "Ask to
+  edit", the hand-off and the idle release. SPEC §6b and §16 are rewritten: both
+  said there was no CRDT, and both were normative.
+- `draft.editSessions` is **withdrawn**. It recorded lock hand-offs, and there
+  are none; a version no longer answers "who wrote which part of it".
+- The `app/` runtime dependency budget rises from **7 to 8** (`yjs`, MIT).
+- RTDB gains `editAccess`, a second mirror of `editorMembers`. Shared document
+  state is gated on "may edit" rather than on "may read" — gating it on the
+  presence mirror would let a read-only member push content into an editor's
+  browser.
+
 ## 0.1.0 — 2026-09-17
 
 First release. Everything below is new, so this entry says what the thing *is*
@@ -43,6 +63,7 @@ as agents.
   through a projection that carries no member list, never by opening the bucket.
 - **Collaborative presence**: peer cursors, selections and reading positions,
   with a single-holder edit lock and observe mode instead of a merge engine.
+  (Superseded in Unreleased: edits now merge.)
 - **Teams**, expanded server-side into the flat membership arrays so the one
   provable workspace query is unchanged
   ([ADR 0006](docs/adr/0006-denormalized-members.md)).
