@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: Apache-2.0
+// Two editing hosts, one document, typing at the same time (SPEC §6b).
+
+import { describe, expect, it } from "vitest";
+import * as Y from "yjs";
+import { bindSync } from "./sync";
+import { HL_CLASS, OWN_ATTR } from "../brand/dom";
+
+/**
+ * A peer is a DOM host plus its own Y.Doc, wired to the others by hand. The
+ * transport is tested in log.test.ts; what is under test here is the BINDING —
+ * that a change made in one host reaches the other's DOM, and that neither
+ * one's own change comes back to it as a remote patch.
+ */
+function peer(html: string, syncFrom?: Y.Doc) {
+  const doc = document.implementation.createHTMLDocument("");
+  doc.body.innerHTML = html;
+  const y = new Y.Doc();
+  // A peer arriving second syncs BEFORE it binds. That ordering is the whole
+  // protocol: bindSync seeds only an empty fragment, so whoever has already
+  // received the shared document adopts it instead of publishing a second copy
+  // of the bytes they happened to load.
+  if (syncFrom) Y.applyUpdate(y, Y.encodeStateAsUpdate(syncFrom));
+  const sync = bindSync(y.getXmlFragment("body"), doc.body);
+  return { doc, y, sync, body: doc.body };
+}
+
+/** Deliver every pending update in both directions until they agree. */
+function exchange(...peers: { y: Y.Doc }[]) {
+  for (const from of peers) {
+    const update = Y.encodeStateAsUpdate(from.y);
+    for (const to of peers) if (to !== from) Y.applyUpdate(to.y, update);
+  }
+}
+
+/** MutationObserver is async; flush it. */
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe("local edits reach the CRDT", () => {
+  it("records typing into a text node", async () => {
+    const a = peer(`<p>hello</p>`);
+    a.body.querySelector("p")!.firstChild!.nodeValue = "hello world";
+    await flush();
+    expect(a.sync.html()).toBe(`<p>hello world</p>`);
+  });
+
+  it("records a new element", async () => {
+    const a = peer(`<p>one</p>`);
+    a.body.appendChild(Object.assign(a.doc.createElement("p"), { textContent: "two" }));
+    await flush();
+    expect(a.sync.html()).toBe(`<p>one</p><p>two</p>`);
+  });
+
+  it("records a removal", async () => {
+    const a = peer(`<p>one</p><p>two</p>`);
+    a.body.querySelector("p")!.remove();
+    await flush();
+    expect(a.sync.html()).toBe(`<p>two</p>`);
+  });
+
+  it("records an attribute change", async () => {
+    const a = peer(`<p id="x">t</p>`);
+    a.body.querySelector("p")!.setAttribute("id", "y");
+    await flush();
+    expect(a.sync.html()).toBe(`<p id="y">t</p>`);
+  });
+
+  it("ignores the editing host's own attributes", async () => {
+    const a = peer(`<p>t</p>`);
+    a.body.setAttribute("contenteditable", "true");
+    a.body.querySelector("p")!.setAttribute("contenteditable", "true");
+    await flush();
+    expect(a.sync.html()).toBe(`<p>t</p>`);
+  });
+
+  it("never lets a highlight into the shared document", async () => {
+    // The fourth contaminant path: a highlight reaching the CRDT arrives in
+    // EVERY peer's copy and is then indistinguishable from the author's markup.
+    const a = peer(`<p>t</p>`);
+    const mark = a.doc.createElement("mark");
+    mark.className = HL_CLASS;
+    mark.textContent = "x";
+    a.body.querySelector("p")!.appendChild(mark);
+    const style = a.doc.createElement("style");
+    style.setAttribute(OWN_ATTR, "hl-style");
+    a.body.appendChild(style);
+    await flush();
+    expect(a.sync.html()).toBe(`<p>t</p>`);
+  });
+});
+
+describe("remote edits reach the DOM", () => {
+  it("delivers a peer's typing", async () => {
+    const a = peer(`<p>hello</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+    expect(b.body.innerHTML).toBe(`<p>hello</p>`);
+
+    a.body.querySelector("p")!.firstChild!.nodeValue = "hello there";
+    await flush();
+    exchange(a, b);
+    await flush();
+    expect(b.body.innerHTML).toBe(`<p>hello there</p>`);
+  });
+
+  it("delivers a peer's new paragraph", async () => {
+    const a = peer(`<p>one</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+    a.body.appendChild(Object.assign(a.doc.createElement("p"), { textContent: "two" }));
+    await flush();
+    exchange(a, b);
+    await flush();
+    expect(b.body.innerHTML).toBe(`<p>one</p><p>two</p>`);
+  });
+
+  it("does NOT echo a remote patch back as a local change", async () => {
+    // If the observer's records from applying a remote patch were treated as
+    // local edits, every keystroke would ping-pong between peers forever.
+    const a = peer(`<p>x</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+    const before = Y.encodeStateVector(b.y);
+    a.body.querySelector("p")!.firstChild!.nodeValue = "xy";
+    await flush();
+    exchange(a, b);
+    await flush();
+    const afterFirst = Y.encodeStateVector(b.y);
+    // Settling again must produce nothing new: B contributed no updates of
+    // its own for a change it only received.
+    exchange(a, b);
+    await flush();
+    expect([...Y.encodeStateVector(b.y)]).toEqual([...afterFirst]);
+    expect([...afterFirst]).not.toEqual([...before]);
+  });
+});
+
+describe("simultaneous typing", () => {
+  it("keeps both people's words in the same paragraph", async () => {
+    const a = peer(`<p id="p">The fox.</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+
+    // Neither has seen the other yet: this is the concurrent case.
+    a.body.querySelector("p")!.firstChild!.nodeValue = "The quick fox.";
+    b.body.querySelector("p")!.firstChild!.nodeValue = "The fox. Jumped.";
+    await flush();
+    exchange(a, b);
+    await flush();
+
+    expect(a.body.innerHTML).toBe(b.body.innerHTML);
+    expect(a.body.textContent).toContain("quick");
+    expect(a.body.textContent).toContain("Jumped");
+  });
+
+  it("converges when one types and the other deletes the paragraph", async () => {
+    const a = peer(`<p id="a">one</p><p id="b">two</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+
+    a.body.querySelector("#b")!.remove();
+    b.body.querySelector("#b")!.firstChild!.nodeValue = "two edited";
+    await flush();
+    exchange(a, b);
+    await flush();
+    exchange(a, b);
+    await flush();
+
+    expect(a.body.innerHTML).toBe(b.body.innerHTML);
+  });
+
+  it("leaves the local selection alone when the change is elsewhere", async () => {
+    // The whole reason this patches subtrees instead of re-rendering: a peer
+    // typing in another paragraph must not move your caret.
+    const a = peer(`<p id="mine">mine</p><p id="theirs">theirs</p>`);
+    const b = peer(``);
+    exchange(a, b);
+    await flush();
+
+    const caretHost = a.body.querySelector("#mine")!.firstChild as Text;
+    b.body.querySelector("#theirs")!.firstChild!.nodeValue = "theirs edited";
+    await flush();
+    exchange(a, b);
+    await flush();
+
+    // The node the caret would be in is the SAME object, not a replacement.
+    expect(a.body.querySelector("#mine")!.firstChild).toBe(caretHost);
+    expect(a.body.querySelector("#theirs")!.textContent).toBe("theirs edited");
+  });
+});
+
+describe("the two guards that are easy to think are load-bearing and are not", () => {
+  it("a local change writes to the CRDT and NOT back into the DOM", async () => {
+    // The origin check. Without it, applying our own transaction re-enters the
+    // remote path, which rebuilds children and calls takeRecords() — discarding
+    // local mutations that have not been delivered yet. Counting DOM writes is
+    // the only way to see it: the document ends up correct either way.
+    const a = peer(`<p>one</p>`);
+    let domWrites = 0;
+    const real = a.body.replaceChildren.bind(a.body);
+    a.body.replaceChildren = ((...nodes: Node[]) => {
+      domWrites += 1;
+      return real(...nodes);
+    }) as typeof a.body.replaceChildren;
+
+    a.body.appendChild(Object.assign(a.doc.createElement("p"), { textContent: "two" }));
+    await flush();
+
+    expect(a.sync.html()).toBe(`<p>one</p><p>two</p>`);
+    expect(domWrites).toBe(0);
+  });
+
+  it("a remote insertion keeps the sibling nodes the caret may be in", async () => {
+    // Node reuse in rebuildChildren. A text-only remote change never reaches
+    // that path, so proving reuse needs a STRUCTURAL change: a peer inserting a
+    // paragraph must not replace the paragraph you are typing in.
+    const a = peer(`<p id="mine">mine</p>`);
+    const b = peer(``, a.y);
+    await flush();
+
+    const mine = a.body.querySelector("#mine")!;
+    const caretHost = mine.firstChild;
+
+    const inserted = b.doc.createElement("p");
+    inserted.id = "theirs";
+    inserted.textContent = "theirs";
+    b.body.insertBefore(inserted, b.body.firstChild);
+    await flush();
+    exchange(a, b);
+    await flush();
+
+    expect(a.body.innerHTML).toBe(`<p id="theirs">theirs</p><p id="mine">mine</p>`);
+    // Same objects, not replacements: a rebuilt subtree takes the caret with it.
+    expect(a.body.querySelector("#mine")).toBe(mine);
+    expect(a.body.querySelector("#mine")!.firstChild).toBe(caretHost);
+  });
+});
+
+describe("joining", () => {
+  it("adopts the shared document over the bytes it loaded", async () => {
+    // A peer who arrives second loaded the PUBLISHED document; the shared one
+    // already has edits theirs does not. Seeding again would duplicate it.
+    const a = peer(`<p>edited already</p>`);
+    const b = peer(`<p>stale from disk</p>`, a.y);
+    await flush();
+    expect(b.sync.html()).toBe(`<p>edited already</p>`);
+    expect(b.body.innerHTML).toBe(`<p>edited already</p>`);
+  });
+
+  it("stops tracking once destroyed", async () => {
+    const a = peer(`<p>x</p>`);
+    a.sync.destroy();
+    a.body.querySelector("p")!.firstChild!.nodeValue = "changed";
+    await flush();
+    expect(a.sync.html()).toBe(`<p>x</p>`);
+  });
+});
