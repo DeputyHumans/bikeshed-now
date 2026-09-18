@@ -101,6 +101,38 @@ export async function uploadFile(origin, token, path, { title, folder } = {}) {
   return res.json();
 }
 
+/**
+ * The skills a deployment publishes, and their text.
+ *
+ * Unauthenticated on purpose: these are static files beside `/llms.txt`,
+ * describing what the deployment can do, not anything belonging to an account.
+ * Asking for a token to read public instructions would mean an agent has to be
+ * credentialed before it can learn how to ask for credentials.
+ */
+export async function listSkills(origin) {
+  const res = await fetch(`${origin}/skills/index.json`);
+  if (!res.ok) {
+    throw new CliError(
+      `${origin} publishes no skills (${res.status}). It may be an older deployment.`,
+    );
+  }
+  const body = await res.json().catch(() => null);
+  if (!Array.isArray(body?.skills)) {
+    // A Hosting catch-all rewrite answers a missing file with the SPA's
+    // index.html and a 200, so "it parsed as JSON" is the real test of whether
+    // the endpoint exists — not the status code.
+    throw new CliError(`${origin} returned something that is not a skill index.`);
+  }
+  return body;
+}
+
+/** Fetch one skill's Markdown, by the path its index gave. */
+export async function fetchSkill(origin, skill) {
+  const res = await fetch(`${origin}/${skill.path}`);
+  if (!res.ok) throw new CliError(`could not read ${skill.name} (${res.status})`);
+  return res.text();
+}
+
 /** Check that a token works, and say who it belongs to. */
 export async function whoami(origin, token) {
   // list_documents is the cheapest authenticated call, and a token that can

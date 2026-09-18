@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The agent surface speaks JSON-RPC and has exactly six tools (SPEC §19).
+// The agent surface speaks JSON-RPC and has exactly nine tools (SPEC §19).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -10,7 +10,7 @@ const {
   PROTOCOL_VERSION,
   SERVER_INFO,
 } = require("../lib/mcp/server.js");
-const { TOOLS, TOOL_NAMES, toolByName } = require("../lib/mcp/tools.js");
+const { TOOLS, TOOL_NAMES, folderPath, toolByName } = require("../lib/mcp/tools.js");
 
 /** A minimal Express-ish response that records what was sent. */
 function recorder() {
@@ -58,16 +58,38 @@ function post(body, headers = {}) {
 
 // --- The tool surface ------------------------------------------------------
 
-test("there are exactly six tools, and they are the six in the spec", () => {
+test("there are exactly nine tools, and they are the nine in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
     "publish_document",
     "update_document",
+    "list_folders",
+    "create_folder",
+    "move_document",
     "get_comments",
     "reply_to_comment",
   ]);
-  assert.equal(TOOLS.length, 6);
+  assert.equal(TOOLS.length, 9);
+});
+
+test("the surface has no tool that deletes or shares", () => {
+  // Both are stated refusals rather than gaps: deleting a folder reparents
+  // everything beneath it, and deciding who can read a document is not a
+  // decision to automate. docs/agent-guide.md says so to the agent; this says
+  // so to whoever adds the tenth tool.
+  for (const name of TOOL_NAMES) {
+    assert.doesNotMatch(name, /delete|remove|share|grant|access/);
+  }
+});
+
+test("move_document treats the workspace root as an omitted argument", () => {
+  // `folder` must stay OPTIONAL. missingArguments rejects an empty string, so
+  // making it required would leave no way to say "move this out to the root" —
+  // and an agent would discover that only from a refusal it cannot act on.
+  const tool = toolByName("move_document");
+  assert.deepEqual(tool.inputSchema.required, ["id"]);
+  assert.match(tool.inputSchema.properties.folder.description, /OMIT/);
 });
 
 test("every tool declares a usable JSON schema", () => {
@@ -100,6 +122,29 @@ test("get_comments is the tool that earns the surface", () => {
 test("get_document returns source, not rendered HTML", () => {
   const tool = toolByName("get_document");
   assert.match(tool.description, /SOURCE/i);
+});
+
+// --- Folder paths ----------------------------------------------------------
+
+test("a path names every level the caller can see", () => {
+  const names = new Map([
+    ["f1", "Design"],
+    ["f2", "Reviews"],
+  ]);
+  assert.equal(folderPath([], "Design", names), "Design");
+  assert.equal(folderPath(["f1"], "Reviews", names), "Design/Reviews");
+  assert.equal(folderPath(["f1", "f2"], "Q3", names), "Design/Reviews/Q3");
+});
+
+test("an ancestor the caller cannot see is a level, not a gap", () => {
+  // Membership cascades DOWN only: a grant made directly on a child leaves its
+  // parent invisible. Dropping that level would make a nested folder read as a
+  // top-level one and an agent would file things by a path nobody has; printing
+  // the id would look like somewhere it could navigate to.
+  const names = new Map([["f2", "Reviews"]]);
+  assert.equal(folderPath(["f1", "f2"], "Q3", names), "…/Reviews/Q3");
+  assert.equal(folderPath(["f1"], "Reviews", names), "…/Reviews");
+  assert.equal(folderPath(["f1", "f9"], "Q3", names), "…/…/Q3");
 });
 
 // --- Arguments -------------------------------------------------------------

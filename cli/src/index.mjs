@@ -3,12 +3,12 @@
 // `bikeshed` — publish and revise documents from the terminal (SPEC §19).
 
 import { parseArgs } from "node:util";
-import { readFileSync, watch } from "node:fs";
-import { basename, resolve } from "node:path";
+import { mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { CONFIG_PATH, readConfig, resolveAuth, writeConfig } from "./config.mjs";
-import { CliError, callTool, uploadFile, whoami } from "./client.mjs";
+import { CliError, callTool, fetchSkill, listSkills, uploadFile, whoami } from "./client.mjs";
 
 /**
  * This is the END-USER tool, and it is deliberately not the same thing as the
@@ -36,10 +36,21 @@ const USAGE = `bikeshed — publish and revise documents
   bikeshed reply <id> <thread> <text>  reply in a thread
   bikeshed open <id>                   open it in a browser
 
+Organising
+  bikeshed folders                     the folder tree, with ids
+  bikeshed mkdir <name> [--parent <id>]  create a folder
+  bikeshed mv <id> <folder|root>       move a document
+
+Skills
+  bikeshed skills                      skills this deployment publishes
+  bikeshed skills install <dir>        write them into an agent's skills directory
+                                       (Claude Code: ~/.claude/skills)
+
 Options
   --json                 machine-readable output
   --title <text>         title for publish
   --folder <id>          destination folder for publish
+  --parent <id>          parent folder for mkdir
   --watch                with publish/update: republish on every save
   --origin <url>         the deployment (default: the one you logged in to)
   --token <token>        override the stored token
@@ -198,6 +209,102 @@ async function reply(flags, [id, threadId, ...rest]) {
   out(flags.json, result, () => console.log(`replied in ${threadId}`));
 }
 
+async function folders(flags) {
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "list_folders", {});
+  out(flags.json, result, () => {
+    if (result.folders.length === 0) {
+      console.log("No folders. `bikeshed mkdir <name>` to make one.");
+      return;
+    }
+    for (const folder of result.folders) {
+      // Indentation comes from the PATH, not from walking parents: a folder
+      // whose parent is not shared with you still sits at its real depth, and
+      // its path already says so with an ellipsis for the level you cannot see.
+      const depth = folder.path.split("/").length - 1;
+      const label = `${"  ".repeat(depth)}${folder.name}`;
+      const note = folder.canWrite ? "" : "  (read-only)";
+      console.log(`${label.padEnd(40)} ${folder.id}${note}`);
+    }
+    if (result.truncated) {
+      console.log("\nThere are more folders than this listing shows.");
+    }
+  });
+}
+
+async function mkdir(flags, rest) {
+  const name = rest.join(" ");
+  if (!name) fail("usage: bikeshed mkdir <name> [--parent <id>]");
+  const { origin, token } = resolveAuth(flags);
+  const args = { name };
+  if (flags.parent) args.parent = flags.parent;
+  const result = await callTool(origin, token, "create_folder", args);
+  out(flags.json, result, () => console.log(`${result.name}  ${result.folderId}`));
+}
+
+async function mv(flags, [id, dest]) {
+  /**
+   * The destination is REQUIRED, and the workspace root has to be spelled.
+   *
+   * On the MCP side an omitted `folder` means the root, because the protocol
+   * has no way to send an empty one. A positional argument does: leaving it off
+   * is something a person does by accident, and "bikeshed mv report" silently
+   * pulling a document out of the folder it was filed in is not a mistake the
+   * interface should make easy.
+   */
+  if (!id || !dest) fail("usage: bikeshed mv <id> <folder|root>");
+  const { origin, token } = resolveAuth(flags);
+  const args = dest === "root" ? { id } : { id, folder: dest };
+  const result = await callTool(origin, token, "move_document", args);
+  out(flags.json, result, () =>
+    console.log(result.folder ? `moved ${id} into ${result.folder}` : `moved ${id} to the root`),
+  );
+}
+
+/**
+ * Skills are instructions, not code, and they are fetched from the DEPLOYMENT
+ * rather than bundled with this CLI on purpose: a deployment running an older
+ * version should hand out the skills that describe what it can actually do.
+ *
+ * No token is needed — they are public static files, the same ones `/llms.txt`
+ * points at.
+ */
+async function skillsCommand(flags, [sub, dir]) {
+  const { origin } = resolveAuth(flags);
+  const index = await listSkills(origin);
+
+  if (!sub) {
+    out(flags.json, index, () => {
+      for (const skill of index.skills) {
+        console.log(`${skill.name}\n  ${skill.description}\n`);
+      }
+      console.log(`bikeshed skills install <dir>   — Claude Code: ~/.claude/skills`);
+    });
+    return;
+  }
+  if (sub !== "install") fail("usage: bikeshed skills [install <dir>]");
+  if (!dir) fail("usage: bikeshed skills install <dir>");
+
+  const root = resolve(dir);
+  const written = [];
+  for (const skill of index.skills) {
+    // The name decides a path on this machine, so it is validated here rather
+    // than trusted from the response. A deployment is not an adversary, but a
+    // name is still the wrong place to find out it could have been one.
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(skill.name)) {
+      fail(`refusing a skill with an unusable name: ${skill.name}`);
+    }
+    const body = await fetchSkill(origin, skill);
+    const target = join(root, skill.name);
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, "SKILL.md"), body);
+    written.push(join(skill.name, "SKILL.md"));
+  }
+  out(flags.json, { installed: written, into: root }, () => {
+    for (const file of written) console.log(`${root}/${file}`);
+  });
+}
+
 async function open(flags, [id]) {
   if (!id) fail("usage: bikeshed open <id>");
   const { origin } = resolveAuth(flags);
@@ -231,7 +338,23 @@ async function watchFile(file, run) {
 
 // --- Entry point -----------------------------------------------------------
 
-const COMMANDS = { login, list, publish, update, get, comments, reply, open };
+const COMMANDS = {
+  login,
+  list,
+  publish,
+  update,
+  get,
+  comments,
+  reply,
+  open,
+  folders,
+  mkdir,
+  mv,
+  skills: skillsCommand,
+};
+
+/** Commands that reach a deployment without authenticating as anybody. */
+const NO_TOKEN = new Set(["login", "open", "skills"]);
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -245,6 +368,7 @@ async function main() {
       help: { type: "boolean", default: false },
       title: { type: "string" },
       folder: { type: "string" },
+      parent: { type: "string" },
       origin: { type: "string" },
       token: { type: "string" },
       limit: { type: "string" },
@@ -262,7 +386,7 @@ async function main() {
   if (!command) fail(`unknown command: ${name}\n\n${USAGE}`);
 
   const { token } = resolveAuth(values);
-  if (!token && name !== "login" && name !== "open") {
+  if (!token && !NO_TOKEN.has(name)) {
     fail("no token. Run `bikeshed login`, or set BIKESHED_TOKEN.");
   }
 

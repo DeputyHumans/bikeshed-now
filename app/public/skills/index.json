@@ -1,0 +1,19 @@
+{
+  "skills": [
+    {
+      "name": "bikeshed-feedback",
+      "description": "Use when reading review comments on a Bikeshed document and revising it — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document.",
+      "path": "skills/bikeshed-feedback/SKILL.md"
+    },
+    {
+      "name": "bikeshed-folders",
+      "description": "Use when organising a Bikeshed workspace — listing the folder tree, creating folders, and filing documents into them. Read this before moving a document, because a folder decides who can read what is inside it.",
+      "path": "skills/bikeshed-folders/SKILL.md"
+    },
+    {
+      "name": "bikeshed-publishing",
+      "description": "Use when publishing a document to a Bikeshed deployment, or revising one you already published — writing the source so that highlight-anchored comments land on the right passage, then publishing or updating it over the CLI or MCP.",
+      "path": "skills/bikeshed-publishing/SKILL.md"
+    }
+  ]
+}

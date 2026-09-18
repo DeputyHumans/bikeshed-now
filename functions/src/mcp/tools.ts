@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The six MCP tools (SPEC §19).
+// The nine MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -18,6 +18,16 @@
  *     stylesheet — the rendering is three kilobytes of CSS the agent cannot use.
  *   - `get_comments` returns quote, comment, author and thread id, nothing else.
  *   - Everything is capped and cursor-paginated.
+ *
+ * The three folder tools are the workspace half of the same argument. An agent
+ * that can publish but cannot see where things go either drops everything at
+ * the root or asks a person to file it — and the person is not there, which is
+ * why an agent is doing this. `list_folders` returns whole paths rather than a
+ * tree to walk, so placing a document is one call and not a traversal.
+ *
+ * What they deliberately do NOT include is deleting or sharing a folder.
+ * Deletion reparents everything beneath it, sharing decides who can read what;
+ * both are decisions a person makes, and the guide says so in the same words.
  */
 
 import * as admin from "firebase-admin";
@@ -25,8 +35,21 @@ import { FieldValue } from "firebase-admin/firestore";
 import { bucketName } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
-import { canEdit, canRead, isDocEditor, visibilityOf, type DocAclData } from "../lib/acl";
+import {
+  canEdit,
+  canEditFolder,
+  canRead,
+  isDocEditor,
+  visibilityOf,
+  type DocAclData,
+  type FolderAclData,
+} from "../lib/acl";
 import { extractBundle } from "../lib/bundle";
+import {
+  createFolderRecord,
+  persistDocMembership,
+  resolveFolderTarget,
+} from "../lib/folders";
 import { commitNewVersion, compileBundle, publishNewDocument } from "../lib/publish";
 import { MAX_BUNDLE_BYTES } from "../config";
 
@@ -34,6 +57,15 @@ type Db = admin.firestore.Firestore;
 
 const LIST_LIMIT = 50;
 const COMMENT_LIMIT = 50;
+/**
+ * The folder tree comes back whole or not at all.
+ *
+ * Paginating it would be worse than capping it: a page of folders cannot render
+ * its own paths, because an ancestor may be on the next page, so half a tree is
+ * a tree with wrong names in it. A workspace with more than two hundred folders
+ * says so in `truncated` rather than quietly returning some of them.
+ */
+const FOLDER_LIMIT = 200;
 /** Source is capped so one oversized document cannot consume an agent's context. */
 const SOURCE_LIMIT = 200_000;
 
@@ -53,6 +85,34 @@ export interface ToolDefinition {
 function str(args: Record<string, unknown>, key: string): string {
   const v = args[key];
   return typeof v === "string" ? v.trim() : "";
+}
+
+function asArray(v: unknown): string[] {
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
+/**
+ * A folder's full path, given the names the caller is allowed to know.
+ *
+ * An ancestor can be INVISIBLE. Membership cascades downward, so a grant on a
+ * folder carries to everything beneath it — but a grant made directly on a
+ * child says nothing about its parent, and that parent is then absent from the
+ * caller's listing. Rendering its raw id would look like a folder they could
+ * navigate to; dropping the level entirely would make a nested folder read as a
+ * top-level one, and an agent would file things by a path that does not exist.
+ *
+ * An ellipsis is the only one of the three that is true: there is a level here,
+ * and it is not yours.
+ *
+ * Pure, and exported, because it is the only part of `list_folders` with a
+ * decision in it — the rest is a query.
+ */
+export function folderPath(
+  ancestors: readonly string[],
+  name: string,
+  nameOf: ReadonlyMap<string, string>,
+): string {
+  return [...ancestors.map((id) => nameOf.get(id) ?? "…"), name].join("/");
 }
 
 async function loadDoc(ctx: ToolContext, slug: string) {
@@ -246,20 +306,8 @@ export const TOOLS: ToolDefinition[] = [
       const extracted = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
       if ("error" in extracted) throw new Error(extracted.error);
 
-      const folder = str(args, "folder");
-      let parentMembership = null as null | { members: string[]; editorMembers: string[] };
-      if (folder) {
-        const f = await ctx.db.collection("folders").doc(folder).get();
-        if (!f.exists) throw new Error("destination folder not found");
-        const fd = f.data() || {};
-        if (!(Array.isArray(fd.editorMembers) && fd.editorMembers.includes(ctx.caller.emailLower))) {
-          throw new Error("you cannot add to that folder");
-        }
-        parentMembership = {
-          members: (fd.members as string[]) ?? [],
-          editorMembers: (fd.editorMembers as string[]) ?? [],
-        };
-      }
+      const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
+      if (!target.ok) throw new Error(target.error);
 
       const compiled = compileBundle(extracted, title);
       // `via: "mcp"` is stamped here, from the endpoint, not from anything the
@@ -271,8 +319,8 @@ export const TOOLS: ToolDefinition[] = [
         ownerUid: ctx.caller.uid,
         compiled,
         title,
-        folderId: folder || null,
-        parentMembership,
+        folderId: target.id,
+        parentMembership: target.membership,
         via: "mcp",
       });
     },
@@ -314,6 +362,116 @@ export const TOOLS: ToolDefinition[] = [
         baseVersion: baseVersion || null,
         via: "mcp",
       });
+    },
+  },
+
+  {
+    name: "list_folders",
+    description:
+      "List every folder you can see, each with its full path. Use an id as the `folder` argument to publish_document or move_document.",
+    inputSchema: { type: "object", properties: {} },
+    async run(ctx) {
+      const snap = await ctx.db
+        .collection("folders")
+        .where("members", "array-contains", ctx.caller.emailLower)
+        .orderBy("createdAt", "desc")
+        .limit(FOLDER_LIMIT + 1)
+        .get();
+      const page = snap.docs.slice(0, FOLDER_LIMIT);
+      const nameOf = new Map(page.map((d) => [d.id, String(d.data().name ?? d.id)]));
+
+      const folders = page.map((d) => {
+        const v = d.data();
+        const name = String(v.name ?? d.id);
+        return {
+          id: d.id,
+          name,
+          parent: typeof v.parentId === "string" ? v.parentId : null,
+          path: folderPath(asArray(v.ancestors), name, nameOf),
+          // Read access and write access differ here: a folder shared with you
+          // as a viewer is one you can see and cannot file into.
+          canWrite: canEditFolder(
+            v as FolderAclData,
+            ctx.caller.uid,
+            ctx.caller.emailLower,
+          ),
+        };
+      });
+      // Sorted by path so the listing reads as a tree, and compared by code
+      // unit rather than by locale so two callers get the same order.
+      folders.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+      return { folders, truncated: snap.docs.length > FOLDER_LIMIT };
+    },
+  },
+
+  {
+    name: "create_folder",
+    description:
+      "Create a folder, optionally inside one you can already write to. Returns its id.",
+    inputSchema: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "Up to 120 characters." },
+        parent: {
+          type: "string",
+          description: "Folder id to create it inside. Omit for the workspace root.",
+        },
+      },
+    },
+    async run(ctx, args) {
+      const name = str(args, "name");
+      if (!name || name.length > 120) {
+        throw new Error("folder name is required (up to 120 characters)");
+      }
+      const parent = await resolveFolderTarget(ctx.db, args.parent, ctx.caller);
+      if (!parent.ok) throw new Error(parent.error);
+      return createFolderRecord(ctx.db, ctx.caller, name, parent);
+    },
+  },
+
+  {
+    name: "move_document",
+    description:
+      "Move a document into a folder. OMIT `folder` to move it out to the workspace root.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "The document id." },
+        folder: {
+          type: "string",
+          description:
+            "Destination folder id, from list_folders. OMIT this argument to move the document to the workspace root.",
+        },
+      },
+    },
+    async run(ctx, args) {
+      const { ref, data } = await loadDoc(ctx, str(args, "id"));
+      // Moving a document changes who inherits access to it, so it takes the
+      // same permission as editing it — not merely the right to read it.
+      if (!canEdit(data, ctx.caller)) throw new Error("you cannot move that document");
+
+      const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
+      if (!target.ok) throw new Error(target.error);
+
+      // persistDocMembership, not a bare field write: a document's effective
+      // membership is its own grants unioned with its folder's, so moving it
+      // between folders changes who can read it. The presence mirror and the
+      // public projection are recomputed in the same call, which is the whole
+      // reason that helper exists.
+      await persistDocMembership(
+        ctx.db,
+        ref,
+        {
+          ownerEmail: String(data.ownerEmail ?? ""),
+          viewers: asArray(data.viewers),
+          editors: asArray(data.editors),
+          folderId: target.id,
+        },
+        { folderId: target.id },
+      );
+      return { id: ref.id, folder: target.id };
     },
   },
 
@@ -407,7 +565,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is six tools, not "some tools". */
+/** Exported for the wiring test: the surface is nine tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

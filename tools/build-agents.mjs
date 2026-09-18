@@ -12,6 +12,7 @@
  *
  *   CLAUDE.md          → AGENTS.md            for an agent CHANGING THIS SOURCE
  *   docs/agent-guide.md → app/public/llms.txt for an agent USING A DEPLOYMENT
+ *   skills/            → app/public/skills/  the long form of the second
  *
  * `AGENTS.md` is the cross-tool convention, so it must exist and must say the
  * same thing as `CLAUDE.md` rather than a stale paraphrase of it. `/llms.txt`
@@ -23,7 +24,7 @@
  * invisible until somebody acts on the wrong one.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,34 +54,159 @@ const PAIRS = [
   },
 ];
 
-const check = process.argv.includes("--check");
-let drifted = 0;
+/**
+ * The skills, and the index that lets a client discover them.
+ *
+ * Generated for the same reason the two documents above are: the copy a
+ * deployment serves has to be the copy in the tree, and "remember to update the
+ * other one" is not a mechanism. The index is generated from the frontmatter
+ * rather than hand-written, so a skill cannot be added without becoming
+ * discoverable, or removed without disappearing.
+ */
+const SKILLS_DIR = join(ROOT, "skills");
+const SKILLS_OUT = join(ROOT, "app", "public", "skills");
 
-for (const { source, target, banner } of PAIRS) {
-  const expected = banner + readFileSync(join(ROOT, source), "utf8");
-
-  if (!check) {
-    writeFileSync(join(ROOT, target), expected);
-    console.log(`wrote ${target} from ${source}`);
-    continue;
+/** The `name:` and `description:` of a SKILL.md, from its YAML frontmatter. */
+export function frontmatter(text) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text);
+  if (!match) return null;
+  const fields = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    // Deliberately not a YAML parser: the frontmatter here is two scalar keys,
+    // and a dependency to read two scalar keys is not a trade worth making.
+    // Anything more elaborate is rejected by the skills test rather than
+    // silently half-read.
+    const pair = /^([a-z]+):\s*(.*)$/.exec(line);
+    if (pair) fields[pair[1]] = pair[2].trim().replace(/^["']|["']$/g, "");
   }
+  return fields;
+}
 
-  let current = null;
+/** Every skill in the tree, in a stable order, with its text. */
+export function readSkills() {
+  let names = [];
   try {
-    current = readFileSync(join(ROOT, target), "utf8");
+    names = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
   } catch {
-    /* missing counts as drift */
+    return [];
   }
-  if (current !== expected) {
-    console.error(`${target} does not match ${source}.`);
-    drifted += 1;
+  return names.map((name) => {
+    const text = readFileSync(join(SKILLS_DIR, name, "SKILL.md"), "utf8");
+    const fields = frontmatter(text) ?? {};
+    return {
+      name,
+      description: fields.description ?? "",
+      declaredName: fields.name ?? "",
+      path: `skills/${name}/SKILL.md`,
+      text,
+    };
+  });
+}
+
+/** The discovery document, formatted exactly as it is written and compared. */
+function skillIndex(skills) {
+  return `${JSON.stringify(
+    { skills: skills.map(({ name, description, path }) => ({ name, description, path })) },
+    null,
+    2,
+  )}\n`;
+}
+
+/**
+ * Everything below runs only when this file is a COMMAND.
+ *
+ * `functions/test/skills.test.js` imports `readSkills` to check the skills
+ * against the surface they describe, and an import that writes files — or exits
+ * the process on drift — would turn that test into a build step with a hidden
+ * side effect.
+ */
+const RUN_DIRECTLY = process.argv[1] === fileURLToPath(import.meta.url);
+
+function run() {
+  const check = process.argv.includes("--check");
+  let drifted = 0;
+
+  for (const { source, target, banner } of PAIRS) {
+    const expected = banner + readFileSync(join(ROOT, source), "utf8");
+
+    if (!check) {
+      writeFileSync(join(ROOT, target), expected);
+      console.log(`wrote ${target} from ${source}`);
+      continue;
+    }
+
+    let current = null;
+    try {
+      current = readFileSync(join(ROOT, target), "utf8");
+    } catch {
+      /* missing counts as drift */
+    }
+    if (current !== expected) {
+      console.error(`${target} does not match ${source}.`);
+      drifted += 1;
+    }
+  }
+
+  const skills = readSkills();
+  const skillFiles = [
+    ["index.json", skillIndex(skills)],
+    ...skills.map((s) => [join(s.name, "SKILL.md"), s.text]),
+  ];
+
+  for (const [rel, expected] of skillFiles) {
+    const target = join(SKILLS_OUT, rel);
+    if (!check) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, expected);
+      console.log(`wrote app/public/skills/${rel}`);
+      continue;
+    }
+    let current = null;
+    try {
+      current = readFileSync(target, "utf8");
+    } catch {
+      /* missing counts as drift */
+    }
+    if (current !== expected) {
+      console.error(`app/public/skills/${rel} does not match skills/${rel}.`);
+      drifted += 1;
+    }
+  }
+
+  /**
+   * A skill deleted from the tree has to disappear from the deployment too.
+   * Writing the files that should exist would otherwise leave the old one being
+   * served forever, still listed by nothing and still installed by anyone who
+   * knew its URL.
+   */
+  if (check) {
+    let served = [];
+    try {
+      served = readdirSync(SKILLS_OUT, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      /* nothing served yet */
+    }
+    const known = new Set(skills.map((s) => s.name));
+    for (const name of served) {
+      if (!known.has(name)) {
+        console.error(`app/public/skills/${name} is served but no longer in skills/.`);
+        drifted += 1;
+      }
+    }
+  }
+
+  if (check) {
+    if (drifted > 0) {
+      console.error("\nrun `npm run build:agents` and commit the result.");
+      process.exit(1);
+    }
+    console.log("agent instructions: in sync");
   }
 }
 
-if (check) {
-  if (drifted > 0) {
-    console.error("\nrun `npm run build:agents` and commit the result.");
-    process.exit(1);
-  }
-  console.log("agent instructions: in sync");
-}
+if (RUN_DIRECTLY) run();
