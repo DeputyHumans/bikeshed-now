@@ -35,6 +35,10 @@ const PATHS = {
   upload: "M12 21V9m0 0 4 4m-4-4-4 4M4 5h16",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3.5 2",
   present: "M3 4h18v11H3zM12 15v5M8 20h8",
+  // A rail of slides beside the one being shown, and the same rail opened out
+  // into a grid. Both read at 14px, which is where the toolbar uses them.
+  slides: "M3 5h5v14H3zM11 5h10v14H11z",
+  grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   stats: "M5 20V10M12 20V4M19 20v-7",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   lock: "M6 11h12v9H6zM9 11V7a3 3 0 0 1 6 0v4",

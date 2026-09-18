@@ -45,6 +45,8 @@ export interface DeckControls {
   goTo: (index: number) => void;
   next: () => void;
   prev: () => void;
+  /** Re-read the document after a structural edit. */
+  rescan: () => void;
 }
 
 export function useDeck({
@@ -58,6 +60,10 @@ export function useDeck({
   keysEnabled: boolean;
 }): DeckControls {
   const [scan, setScan] = useState<SlideScan>({ kind: "none" });
+  // Bumped after a structural edit. Adding or reordering a slide is DOM
+  // surgery that fires no load and no scroll, so nothing else would tell us
+  // the list changed.
+  const [nonce, setNonce] = useState(0);
   const [current, setCurrent] = useState(0);
   const [paged, setPaged] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
@@ -67,9 +73,17 @@ export function useDeck({
   // onLoad, and that is the only moment the document is known to be the new one.
   useEffect(() => {
     setScan(scanSlides(doc));
+  }, [doc, epoch, nonce]);
+
+  // Position and the overview belong to the DOCUMENT, not to its slide list:
+  // resetting them on a rescan would throw the reader back to slide one every
+  // time somebody reordered a section.
+  useEffect(() => {
     setCurrent(0);
     setOverviewOpen(false);
   }, [doc, epoch]);
+
+  const rescan = useCallback(() => setNonce((n) => n + 1), []);
 
   const slides = scan.kind === "slides" ? scan.slides : NO_SLIDES;
 
@@ -195,7 +209,8 @@ export function useDeck({
       goTo,
       next,
       prev,
+      rescan,
     }),
-    [scan, slides, current, paged, overviewOpen, goTo, next, prev],
+    [scan, slides, current, paged, overviewOpen, goTo, next, prev, rescan],
   );
 }

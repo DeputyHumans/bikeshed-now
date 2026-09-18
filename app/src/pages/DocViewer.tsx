@@ -23,6 +23,7 @@ import { useSharedDocument } from "../viewer/useSharedDocument";
 import { clearLog } from "../crdt/rtdb";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
+import { useDeck } from "../viewer/useDeck";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
@@ -33,6 +34,7 @@ import { ViewerToolbar } from "../components/ViewerToolbar";
 import { ViewerBanners } from "../components/ViewerBanners";
 import { SelectionFab } from "../components/SelectionFab";
 import { SlidePanel } from "../components/SlidePanel";
+import { SlideOverview } from "../components/SlideOverview";
 import { SharePanel } from "../components/SharePanel";
 import { VisibilityDialog } from "../components/VisibilityDialog";
 import { TrustDialog } from "../components/TrustDialog";
@@ -70,6 +72,11 @@ import type { Annotation, FolderMeta, TeamMeta } from "../types";
  *
  * This is leg 2 of the four defences that keep decoration out of published
  * bytes; legs 1, 3 and 4 are in the hooks and the serializer.
+ *
+ * `useDeck` is deliberately NOT in that list. It scrolls the document and
+ * measures it and writes nothing to it, so it has no cleanup the editor could
+ * race. If it ever injects a node, a class or an attribute, it moves above
+ * `useInlineEditor` and into `viewer/invariant.test.tsx`'s harness.
  */
 
 type Dialog =
@@ -102,6 +109,7 @@ export function DocViewer() {
   const [commentsOpen, setCommentsOpen] = useState(true);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
+  const [railOpen, setRailOpen] = useState(true);
   const [pendingComment, setPendingComment] = useState(false);
 
   const signedIn = gate === "ready" && Boolean(user);
@@ -204,6 +212,14 @@ export function DocViewer() {
     emailLower,
     isEditing: mode.kind === "editing",
     onPeerSavedDraft: frame.reload,
+  });
+
+  const deck = useDeck({
+    doc: frame.doc,
+    epoch: frame.epoch,
+    // A dialog or the editor owns the keyboard while it is up: paging the deck
+    // underneath a "who can see this" dialog is somebody losing their place.
+    keysEnabled: dialog === null && mode.kind === "reading",
   });
 
   useReadingSession({
@@ -423,6 +439,16 @@ export function DocViewer() {
 
   const editingNow = mode.kind === "editing";
   const showComments = commentsOpen && Boolean(doc.currentVersion);
+  const hasSlides = deck.slides.length > 1;
+  // The same base the print export uses. Without it a preview's relative
+  // images resolve against the app origin and every one of them 404s.
+  const baseHref = `/content/${docId}/${doc.currentVersion}/`;
+  // Structural slide edits are DOM surgery: they fire no input event, so
+  // autosave has to be told, and the slide list has to be read again.
+  const onSlidesChanged = () => {
+    frame.doc?.dispatchEvent(new Event("input", { bubbles: true }));
+    deck.rescan();
+  };
 
   return (
     <div className="viewer" data-pane={pane}>
@@ -460,6 +486,10 @@ export function DocViewer() {
           onToggleEdit={() => void (wantsEdit ? stopEditing() : setWantsEdit(true))}
           offerTrust={liveTrust.shouldOffer}
           onOpenTrust={() => setDialog("trust")}
+          hasSlides={hasSlides}
+          railOpen={railOpen}
+          onToggleRail={() => setRailOpen((open) => !open)}
+          onOverview={() => deck.setOverviewOpen(true)}
           onPresent={startPresenting}
           menuEntries={menuEntries}
           pane={pane}
@@ -501,12 +531,17 @@ export function DocViewer() {
           whatever the toggle says. */}
       <div className="viewer-body" data-comments={showComments ? "open" : "closed"}>
         <div className="doc-frame-wrap">
-          {editingNow ? (
+          {/* Presenting hides the rail; the overview stays reachable, so there
+              is still a way to jump without leaving the presentation. */}
+          {hasSlides && railOpen && !presenting ? (
             <SlidePanel
-              doc={frame.doc}
-              epoch={frame.epoch}
-              editable
-              onChanged={() => frame.doc?.dispatchEvent(new Event("input", { bubbles: true }))}
+              slides={deck.slides}
+              current={deck.current}
+              editable={editingNow}
+              drawerOpen={singleColumn ? railOpen : undefined}
+              baseHref={baseHref}
+              onGoTo={deck.goTo}
+              onChanged={onSlidesChanged}
             />
           ) : null}
           <iframe
@@ -522,6 +557,20 @@ export function DocViewer() {
             label={user ? "Comment" : "Sign in to comment"}
             onComment={() => void startComment()}
           />
+          {presenting && hasSlides ? (
+            <span className="present-counter">
+              {deck.current + 1} / {deck.slides.length}
+            </span>
+          ) : null}
+          {deck.overviewOpen && hasSlides ? (
+            <SlideOverview
+              slides={deck.slides}
+              current={deck.current}
+              baseHref={baseHref}
+              onGoTo={deck.goTo}
+              onClose={() => deck.setOverviewOpen(false)}
+            />
+          ) : null}
           {presenting ? (
             <button
               type="button"

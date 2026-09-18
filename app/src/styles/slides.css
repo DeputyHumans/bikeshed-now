@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0
- * The slide navigator: thumbnails, reorder, add, delete (SPEC §6a).
+ * The slide navigator and the all-slides overview (SPEC §6d).
  *
  * Every operation is a plain DOM edit through the same autosave path as typing.
  * There is no slide model: a "slide" is a top-level section of the authored
@@ -21,14 +21,35 @@
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
   padding: 0;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   overflow: hidden;
-  cursor: grab;
+  cursor: pointer;
   text-align: left;
+}
+.slide-rail .slide-thumb[draggable="true"] { cursor: grab; }
+
+/*
+ * The preview is a full-size document scaled down, so the box clips and the
+ * frame inside it is transformed from its top-left corner. `pointer-events`
+ * has to come off the frame or every click lands in the preview instead of on
+ * the button wrapping it.
+ */
+.slide-thumb-box {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+.slide-thumb-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: top left;
+  pointer-events: none;
 }
 .slide-thumb[aria-current="true"] {
   border-color: var(--color-accent);
@@ -109,4 +130,77 @@
     transition: transform var(--t-base) var(--ease-out);
   }
   .slide-rail[data-drawer="open"] { transform: translateX(0); }
+}
+
+/* --- The overview -------------------------------------------------------
+ * Covers the frame, not the window: the toolbar stays put, and presenting
+ * keeps its Exit button. STACKING: 46 — above the slide drawer (45) and below
+ * the modal scrim and present-exit (50), so neither is ever trapped behind it.
+ */
+.slide-overview {
+  position: absolute;
+  inset: 0;
+  z-index: 46;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.slide-overview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-ink-muted);
+  font-size: var(--fs-caption);
+}
+
+.slide-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  gap: var(--s-3);
+  padding: var(--s-3);
+  overflow-y: auto;
+  align-content: start;
+}
+
+.slide-overview-item {
+  display: grid;
+  gap: var(--s-1);
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+}
+.slide-overview-item[aria-current="true"] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-soft);
+}
+
+.slide-overview-caption {
+  display: flex;
+  gap: var(--s-1);
+  align-items: baseline;
+  padding: 0 var(--s-2) var(--s-2);
+  font-size: var(--fs-caption);
+}
+.slide-overview-index {
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.slide-overview-title {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-overview { backdrop-filter: none; }
 }

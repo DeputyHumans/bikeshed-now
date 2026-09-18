@@ -68,6 +68,10 @@ export function ViewerToolbar({
   onShare,
   offerTrust,
   onOpenTrust,
+  hasSlides,
+  railOpen,
+  onToggleRail,
+  onOverview,
   onPresent,
   menuEntries,
   pane,
@@ -92,6 +96,11 @@ export function ViewerToolbar({
   onShare: () => void;
   offerTrust: boolean;
   onOpenTrust: () => void;
+  /** True once the document turns out to have slides to move between. */
+  hasSlides: boolean;
+  railOpen: boolean;
+  onToggleRail: () => void;
+  onOverview: () => void;
   onPresent: () => void;
   menuEntries: MenuEntry[];
   pane: "doc" | "comments";
@@ -158,6 +167,25 @@ export function ViewerToolbar({
             400px. */}
         {canShare ? <Action icon="share" label="Share" onClick={onShare} /> : null}
 
+        {/* Both appear only for a document that HAS slides, so an ordinary
+            document's toolbar is unchanged. */}
+        {hasSlides ? (
+          <Action
+            icon="slides"
+            label="Slides"
+            onClick={onToggleRail}
+            pressed={railOpen}
+            title={railOpen ? "Hide the slide list" : "Show the slide list"}
+          />
+        ) : null}
+        {hasSlides ? (
+          <Action
+            icon="grid"
+            label="All slides"
+            onClick={onOverview}
+            title="See every slide at once (O)"
+          />
+        ) : null}
         <Action icon="present" label="Present" onClick={onPresent} />
         <MoreMenu entries={menuEntries} />
       </div>

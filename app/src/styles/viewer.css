@@ -210,6 +210,20 @@
 .is-presenting .viewer { height: 100vh; height: 100dvh; }
 .is-presenting .viewer-body { grid-template-columns: minmax(0, 1fr); }
 
+/* Where you are in the deck, while every other piece of chrome is hidden. */
+.present-counter {
+  position: fixed;
+  left: var(--s-3);
+  bottom: var(--s-3);
+  z-index: 50;
+  padding: 2px var(--s-2);
+  border-radius: var(--radius-pill);
+  background: rgba(var(--ink-rgb), 0.55);
+  color: var(--color-bg);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
 .present-exit {
   position: fixed;
   right: var(--s-3);
