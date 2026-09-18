@@ -44,8 +44,31 @@ function devProxy(): Record<string, ProxyOptions> {
   return Object.fromEntries(viteProxyKeys().map((key) => [key, target]));
 }
 
+/**
+ * Declare a charset on the text files this app serves from `public/`.
+ *
+ * Vite's dev server sends `.txt` as bare `text/plain`, and a browser with no
+ * charset to go on falls back to a single-byte encoding: `/llms.txt` then
+ * renders its arrows and ellipses as mojibake. Firebase Hosting sends
+ * `text/plain; charset=utf-8` and is unaffected, so this only ever bit local
+ * development — which is also the only place anybody reads that file by eye.
+ */
+function utf8Text() {
+  return {
+    name: "utf8-text",
+    configureServer(server: { middlewares: { use: (fn: unknown) => void } }) {
+      server.middlewares.use((req: any, res: any, next: () => void) => {
+        if (req.url?.split("?")[0].endsWith(".txt")) {
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), utf8Text()],
   server: { port: 5173, proxy: devProxy() },
   build: { outDir: "dist", sourcemap: true },
   test: {
