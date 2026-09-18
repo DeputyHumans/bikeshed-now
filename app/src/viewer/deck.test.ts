@@ -201,6 +201,17 @@ describe("isPaged", () => {
     expect(isPaged([4200, 3800, 5100], 800)).toBe(false);
   });
 
+  it("does not page a document of short sections either", () => {
+    // Prose with a sidebar nav is also a sibling run of sections, and its
+    // sections FIT the viewport — which is why fitting cannot be the test.
+    expect(isPaged([180, 240, 320, 150, 400], 800)).toBe(false);
+  });
+
+  it("wants most slides slide-shaped, not just some", () => {
+    expect(isPaged([800, 800, 780, 90, 120], 800)).toBe(false);
+    expect(isPaged([800, 800, 780, 810, 120], 800)).toBe(true);
+  });
+
   it("refuses to decide without a measurement", () => {
     // jsdom has no layout, and a zero viewport must not read as "everything
     // fits" — which is what a naive `h <= viewport` comparison would do.

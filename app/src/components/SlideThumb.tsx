@@ -103,6 +103,10 @@ export function SlideThumb({
   }, [slide]);
 
   const scale = thumbWidth / size.width;
+  // A preview of a very tall section would be a long ribbon down the rail, so
+  // the box clips at roughly 4:3 and shows the top of it. A 16:9 slide is
+  // shorter than that and is never touched.
+  const boxHeight = Math.min(Math.round(size.height * scale), Math.round(thumbWidth * 0.8));
   const srcDoc = useMemo(
     () => (visible ? previewDoc(slide, baseHref) : null),
     [visible, slide, baseHref],
@@ -112,7 +116,7 @@ export function SlideThumb({
     <span
       ref={box}
       className="slide-thumb-box"
-      style={{ width: thumbWidth, height: Math.round(size.height * scale) }}
+      style={{ width: thumbWidth, height: boxHeight }}
     >
       {srcDoc ? (
         <iframe

@@ -241,6 +241,11 @@ export function activeIndex(tops: number[]): number {
  */
 export function isPaged(heights: number[], viewportHeight: number): boolean {
   if (viewportHeight <= 0 || heights.length < 2) return false;
-  const fits = heights.filter((h) => h > 0 && h <= viewportHeight * 1.2).length;
-  return fits * 2 >= heights.length;
+  // Not "fits in the viewport" — a short section fits too, and a document of
+  // short sections is prose. A deck's slides are all about ONE viewport tall,
+  // so the test is uniformity near that height, which prose never satisfies.
+  const slideLike = heights.filter(
+    (h) => h >= viewportHeight * 0.6 && h <= viewportHeight * 1.25,
+  ).length;
+  return slideLike >= heights.length * 0.7;
 }
