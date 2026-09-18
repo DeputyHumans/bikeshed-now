@@ -3,77 +3,50 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { OWN_SELECTOR } from "../brand/dom";
-import type { Slide } from "../viewer/deck";
+import type { Slide, StageSize } from "../viewer/deck";
+import { buildPreviewDoc } from "../viewer/preview";
 
 /**
- * A preview is a SEPARATE document we build, never the frame the reader reads.
- *
- * That distinction is the whole reason this is allowed to restyle anything.
- * The copy below forces the slide visible and static, which a deck whose
- * `.slide` is `position:absolute; visibility:hidden` needs or it previews
- * blank — but it is applied to a parent-constructed document that nothing
- * serializes, so it cannot reach published bytes and does not touch the
- * reader's view.
- *
- * Previews are inert even for a trusted document: `sandbox="allow-same-origin"`
- * with no `allow-scripts`. A thumbnail is not worth running anybody's code.
+ * This component owns scaling and nothing else. What a preview CONTAINS is
+ * `viewer/preview.ts`; what size it is laid out at is `stage`, decided once for
+ * the whole deck by `useDeck` so every thumbnail in the rail and every card in
+ * the overview is the same shape. Sizing previews slide by slide is what made
+ * the rail a ragged column and left dead space under every short card.
  */
 
-/** Used only until the live frame can be measured; a deck is near enough 16:9. */
-const FALLBACK = { width: 1280, height: 720 };
-
-function previewDoc(slide: Slide, baseHref: string): string {
-  const doc = slide.outer.ownerDocument;
-
-  // The guest's own stylesheets, minus ours. Without the filter a reader's
-  // highlights bleed into every thumbnail.
-  const styles = Array.from(doc.head.querySelectorAll('style, link[rel="stylesheet"]'))
-    .filter((el) => !el.matches(OWN_SELECTOR))
-    .map((el) => el.outerHTML)
-    .join("");
-
-  const htmlClass = doc.documentElement.getAttribute("class") ?? "";
-  const bodyClass = doc.body?.getAttribute("class") ?? "";
-
-  return [
-    "<!doctype html><html",
-    htmlClass ? ` class="${htmlClass.replace(/"/g, "&quot;")}"` : "",
-    '><head><meta charset="utf-8">',
-    // Relative images and fonts resolve against the content proxy, not the app
-    // origin. Without this every asset in a preview 404s.
-    `<base href="${baseHref.replace(/"/g, "&quot;")}">`,
-    styles,
-    "<style>html,body{margin:0;padding:0;overflow:hidden;background:#fff}",
-    // Undo the layout a deck applies to hide every slide but the current one.
-    "body>*{position:static!important;visibility:visible!important;",
-    "inset:auto!important;margin:0!important;transform:none!important;opacity:1!important}",
-    "</style></head><body",
-    bodyClass ? ` class="${bodyClass.replace(/"/g, "&quot;")}"` : "",
-    ">",
-    slide.outer.outerHTML,
-    "</body></html>",
-  ].join("");
-}
+/**
+ * Only until the box reports a width. jsdom never lays out, so this is the
+ * value every test runs on; a browser replaces it in the same commit, because
+ * the measuring effect reads the box synchronously after layout.
+ *
+ * It is NOT a second owner of the thumbnail width. CSS owns that — the box is
+ * `width:100%` with an `aspect-ratio` — and nothing here is allowed to know it.
+ */
+const UNMEASURED_WIDTH = 240;
 
 export function SlideThumb({
   slide,
   baseHref,
-  thumbWidth,
+  stage,
 }: {
   slide: Slide;
   /** `/content/{docId}/{versionId}/`, the same base the print export uses. */
   baseHref: string;
-  thumbWidth: number;
+  stage: StageSize;
 }) {
   const box = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
+  const [boxWidth, setBoxWidth] = useState(0);
 
   /**
-   * Mount only what is on screen. One deck in the sample set has 48 slides, and
-   * every preview is an iframe whose assets are fetched through a function —
-   * the README is explicit that bytes cost invocations, so rendering all of
-   * them at once would be a real bill for a rail nobody scrolled.
+   * Mount only what is on screen. A deck can run to dozens of slides, and a
+   * preview's relative assets are fetched through a function — the README is
+   * explicit that bytes cost invocations, so rendering every slide at once
+   * would be a real bill for a rail nobody scrolled.
+   *
+   * `visible` is deliberately one-way. A private document is served `no-store`,
+   * so unmounting a scrolled-past preview would mean a genuine refetch on the
+   * way back; latching caps each slide at one load per session instead.
    */
   useEffect(() => {
     const el = box.current;
@@ -92,32 +65,37 @@ export function SlideThumb({
     return () => observer.disconnect();
   }, []);
 
-  // Measured from the live frame rather than assumed: decks ship 16:9 stages,
-  // 1280x720 pages and full-viewport sections, and guessing gets two of the
-  // three wrong.
-  const size = useMemo(() => {
-    const rect = slide.outer.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0
-      ? { width: rect.width, height: rect.height }
-      : FALLBACK;
-  }, [slide]);
+  /**
+   * The scale comes from measuring our own box, so CSS stays the only owner of
+   * how wide a thumbnail is. The rail's width lives in one stylesheet rule and
+   * the overview's is `minmax(236px, 1fr)` — a function of the container, not a
+   * constant at all, which is why no exported number could have served both.
+   */
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const apply = () => {
+      const width = el.getBoundingClientRect().width;
+      // Guarded so a resize that changes nothing does not re-render the rail.
+      setBoxWidth((prev) => (Math.abs(prev - width) < 0.5 ? prev : width));
+    };
+    apply();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  const scale = thumbWidth / size.width;
-  // A preview of a very tall section would be a long ribbon down the rail, so
-  // the box clips at roughly 4:3 and shows the top of it. A 16:9 slide is
-  // shorter than that and is never touched.
-  const boxHeight = Math.min(Math.round(size.height * scale), Math.round(thumbWidth * 0.8));
   const srcDoc = useMemo(
-    () => (visible ? previewDoc(slide, baseHref) : null),
+    () => (visible ? buildPreviewDoc(slide, baseHref) : null),
     [visible, slide, baseHref],
   );
 
+  const width = boxWidth > 0 ? boxWidth : UNMEASURED_WIDTH;
+  const scale = width / stage.width;
+
   return (
-    <span
-      ref={box}
-      className="slide-thumb-box"
-      style={{ width: thumbWidth, height: boxHeight }}
-    >
+    <span ref={box} className="slide-thumb-box">
       {srcDoc ? (
         <iframe
           className="slide-thumb-frame"
@@ -127,8 +105,8 @@ export function SlideThumb({
           sandbox="allow-same-origin"
           srcDoc={srcDoc}
           style={{
-            width: size.width,
-            height: size.height,
+            width: stage.width,
+            height: stage.height,
             transform: `scale(${scale})`,
           }}
         />

@@ -40,7 +40,8 @@
  *
  * STACKING: 42. Above the sticky header (40) so its order is defined without
  * anyone having to reason about it, and below every surface the reader asked
- * for — drawers 45, present-exit and the modal scrim 50, menus 55, toasts 60.
+ * for — drawers 45, the slide overview 46, present-exit and the modal scrim 50,
+ * menus 55, toasts 60.
  * There is no free multiple of five in that gap. This is the one fixed thing on
  * the page nobody requested, so it yields to all of them, and a dialog's scrim
  * dimming it is correct.

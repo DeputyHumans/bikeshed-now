@@ -439,7 +439,17 @@ export function DocViewer() {
 
   const editingNow = mode.kind === "editing";
   const showComments = commentsOpen && Boolean(doc.currentVersion);
-  const hasSlides = deck.slides.length > 1;
+  /**
+   * The navigator is for DECKS, not for anything with two sections in it.
+   *
+   * `paged` is true only when slides measure about one viewport tall, which is
+   * the same signal the arrow keys already use. Without it a long article gets
+   * a rail of illegible thumbnails of prose — sections whose heights differ
+   * tenfold, scaled to a smudge — and the reader pays a function invocation per
+   * preview for the privilege. It is latched in `useDeck`, so opening the rail
+   * cannot narrow the frame into changing the answer.
+   */
+  const hasSlides = deck.slides.length > 1 && deck.paged;
   // The same base the print export uses. Without it a preview's relative
   // images resolve against the app origin and every one of them 404s.
   const baseHref = `/content/${docId}/${doc.currentVersion}/`;
@@ -531,7 +541,12 @@ export function DocViewer() {
           the panel must agree — a version-less document renders no panel
           whatever the toggle says. */}
       <div className="viewer-body" data-comments={showComments ? "open" : "closed"}>
-        <div className="doc-frame-wrap">
+        <div
+          className="doc-frame-wrap"
+          // One ratio for every thumbnail in the deck, published at the common
+          // ancestor of the rail and the overview so they cannot disagree.
+          style={{ ["--thumb-ratio" as string]: `${deck.stage.width} / ${deck.stage.height}` }}
+        >
           {/* Presenting hides the rail; the overview stays reachable, so there
               is still a way to jump without leaving the presentation. */}
           {hasSlides && railOpen && !presenting ? (
@@ -541,23 +556,33 @@ export function DocViewer() {
               editable={editingNow}
               drawerOpen={singleColumn ? railOpen : undefined}
               baseHref={baseHref}
+              stage={deck.stage}
               onGoTo={deck.goTo}
               onChanged={onSlidesChanged}
             />
           ) : null}
-          <iframe
-            {...frame.frameProps}
-            ref={frame.ref}
-            className="doc-frame"
-            title={doc.title}
-          />
-          <SelectionFab
-            doc={frame.doc}
-            epoch={frame.epoch}
-            enabled={mode.kind === "reading"}
-            label={user ? "Comment" : "Sign in to comment"}
-            onComment={() => void startComment()}
-          />
+          {/*
+            The frame gets its own positioned box, and SelectionFab lives INSIDE
+            it. The FAB is placed from a rect read through the frame's viewport
+            but rendered against its offset parent, so leaving it a child of the
+            wrapper would put every button a rail's width too far left the moment
+            the rail took a column.
+          */}
+          <div className="doc-frame-stage">
+            <iframe
+              {...frame.frameProps}
+              ref={frame.ref}
+              className="doc-frame"
+              title={doc.title}
+            />
+            <SelectionFab
+              doc={frame.doc}
+              epoch={frame.epoch}
+              enabled={mode.kind === "reading"}
+              label={user ? "Comment" : "Sign in to comment"}
+              onComment={() => void startComment()}
+            />
+          </div>
           {presenting && hasSlides ? (
             <span className="present-counter">
               {deck.current + 1} / {deck.slides.length}
@@ -568,6 +593,7 @@ export function DocViewer() {
               slides={deck.slides}
               current={deck.current}
               baseHref={baseHref}
+              stage={deck.stage}
               onGoTo={deck.goTo}
               onClose={() => deck.setOverviewOpen(false)}
             />

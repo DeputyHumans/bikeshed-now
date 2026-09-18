@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { Icon } from "./Icon";
 import { SlideThumb } from "./SlideThumb";
-import type { Slide } from "../viewer/deck";
+import type { Slide, StageSize } from "../viewer/deck";
 
 /**
  * Escape is deliberately NOT bound here.
@@ -15,27 +15,39 @@ import type { Slide } from "../viewer/deck";
  * key and closes the overview before presentation mode sees it.
  */
 
-const THUMB_WIDTH = 236;
-
 export function SlideOverview({
   slides,
   current,
   baseHref,
+  stage,
   onGoTo,
   onClose,
 }: {
   slides: Slide[];
   current: number;
   baseHref: string;
+  stage: StageSize;
   onGoTo: (index: number) => void;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
-  // Focus moves in so the overview is keyboard-reachable the moment it opens,
-  // and so Escape has somewhere sensible to return from.
+  /**
+   * Focus moves in so the overview is keyboard-reachable the moment it opens,
+   * and so Escape has somewhere sensible to return from — landing on the slide
+   * the reader is actually on.
+   *
+   * Two queries, not one selector list. `querySelector('[aria-current], button')`
+   * returns the first element matching EITHER in tree order, which is always
+   * card one: the reader on slide thirty opened the overview and was put back
+   * at the beginning.
+   */
   useEffect(() => {
-    panel.current?.querySelector<HTMLElement>('[aria-current="true"], button')?.focus();
+    const grid = panel.current;
+    const target =
+      grid?.querySelector<HTMLElement>('[aria-current="true"]') ??
+      grid?.querySelector<HTMLElement>("button");
+    target?.focus();
   }, []);
 
   return (
@@ -69,7 +81,7 @@ export function SlideOverview({
               onClose();
             }}
           >
-            <SlideThumb slide={slide} baseHref={baseHref} thumbWidth={THUMB_WIDTH} />
+            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} />
             <span className="slide-overview-caption">
               <span className="slide-overview-index">{i + 1}</span>
               <span className="slide-overview-title">{slide.title}</span>

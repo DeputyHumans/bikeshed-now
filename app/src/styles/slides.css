@@ -10,12 +10,30 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  width: 148px;
+  /*
+   * The ONE owner of the rail's width, in both modes: above 860px the wrapper's
+   * `auto` grid track takes its size from here, and the drawer below 860px is
+   * out of flow and needs an explicit width anyway. Nothing in TypeScript knows
+   * this number, and nothing should — the thumbnail measures its own box.
+   */
+  width: 168px;
   padding: var(--s-2);
-  overflow-y: auto;
+  /* Explicit on both axes: with `overflow-y` alone, `overflow-x` computes to
+     `auto` too, and the 2px current-slide ring would earn a scrollbar. */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--color-line);
   background: var(--color-surface);
 }
+
+/*
+ * A column flex container SHRINKS its items before it overflows. Now that the
+ * grid row bounds the rail's height — which is the normal case for any deck
+ * taller than the viewport — without this every preview squashes instead of the
+ * rail scrolling, which looks like a new bug rather than a fixed one.
+ */
+.slide-thumb,
+.slide-add { flex: none; }
 
 .slide-thumb {
   position: relative;
@@ -40,6 +58,15 @@
 .slide-thumb-box {
   position: relative;
   display: block;
+  width: 100%;
+  /*
+   * One shape for every thumbnail in the deck, published by DocViewer from the
+   * frame's own viewport. The fallback is not decoration: a bare `var()` that
+   * resolves to nothing voids the whole declaration, which would mean no aspect
+   * ratio at all — the exact raggedness this replaces. It is also the honest
+   * answer for an unmeasured document, and the same one `stageSize` returns.
+   */
+  aspect-ratio: var(--thumb-ratio, 16 / 9);
   overflow: hidden;
   background: var(--color-bg);
 }
@@ -124,7 +151,10 @@
     position: fixed;
     inset: var(--header-h) auto 0 0;
     z-index: 45;
-    width: 160px;
+    /* Width is inherited from the base rule: one owner, one number. Being
+       `fixed` also takes the rail out of flow, so the wrapper's `auto` track
+       collapses to zero and the document keeps the full width with no override
+       needed here at all. */
     box-shadow: var(--shadow-xl);
     transform: translateX(-100%);
     transition: transform var(--t-base) var(--ease-out);
@@ -133,8 +163,9 @@
 }
 
 /* --- The overview -------------------------------------------------------
- * Covers the frame, not the window: the toolbar stays put, and presenting
- * keeps its Exit button. STACKING: 46 — above the slide drawer (45) and below
+ * Covers the frame AND the rail, but not the window: the toolbar stays put, and
+ * presenting keeps its Exit button. Covering the rail is deliberate — this is
+ * `aria-modal`, and leaving a column of live buttons beside a modal is wrong. STACKING: 46 — above the slide drawer (45) and below
  * the modal scrim and present-exit (50), so neither is ever trapped behind it.
  */
 .slide-overview {
@@ -160,15 +191,29 @@
 
 .slide-overview-grid {
   display: grid;
+  /* auto-fill, not auto-fit: with three slides on a wide window auto-fit
+     collapses the empty tracks and stretches three cards to 500px each. */
   grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
   gap: var(--s-3);
   padding: var(--s-3);
   overflow-y: auto;
   align-content: start;
+  /* A card sizes to its own content instead of stretching to the tallest card
+     in its row, which is where the dead space under short cards came from. */
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .slide-overview-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--s-2);
+    padding: var(--s-2);
+  }
 }
 
 .slide-overview-item {
   display: grid;
+  grid-template-rows: auto auto;
   gap: var(--s-1);
   padding: 0;
   border: 1px solid var(--color-line);
@@ -191,10 +236,15 @@
   font-size: var(--fs-caption);
 }
 .slide-overview-index {
+  flex: none;
   color: var(--color-ink-muted);
   font-variant-numeric: tabular-nums;
 }
 .slide-overview-title {
+  /* A flex item refuses to shrink below its content size, so one long unbroken
+     word in a title would push the caption past the card without this. The
+     same idiom, for the same reason, as `.viewer-title .breadcrumb`. */
+  min-width: 0;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;

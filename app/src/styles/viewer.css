@@ -81,10 +81,56 @@
   gap: var(--s-1);
 }
 
+/*
+ * The rail and the document share a row.
+ *
+ * This was a plain block, with the rail rendered as a normal-flow sibling of a
+ * `width:100%` iframe — so above 860px the rail stacked ABOVE the document,
+ * grew to the height of every thumbnail it held (its `overflow-y` never
+ * engaging, because nothing bounded it), and pushed the frame out of view.
+ *
+ * The rail track is `auto`, not a fixed width, and that is what keeps it from
+ * repeating the empty-340px-band bug documented on `.viewer-body` above: an
+ * `auto` track is sized by its items, so with no rail rendered — or with the
+ * rail lifted out of flow as the <=860px drawer — it is 0 and the document
+ * gets the whole width. Two things make that true and both are load-bearing:
+ *
+ *   - no `gap` and no minimum on the track, or the empty case is a stripe;
+ *   - each child is PINNED to its column. Auto-placement would drop a lone
+ *     stage into the rail's track and size the document to max-content.
+ *
+ * Add either and this needs an explicit `data-rail` attribute the way
+ * `.viewer-body` needs `data-comments`. Until then the DOM already says it.
+ *
+ * Do NOT add transform, filter, contain or will-change here: the <=860px rail
+ * is `position: fixed`, and any of them silently re-anchors it (consent.css
+ * carries the same warning for the same reason).
+ */
 .doc-frame-wrap {
   position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   background: var(--color-surface);
+}
+.doc-frame-wrap > .slide-rail { grid-column: 1; }
+
+/*
+ * The document's own positioned box.
+ *
+ * SelectionFab reads a rect through the FRAME's viewport and renders against
+ * its offset parent, so that parent has to be the frame's box. Left as a child
+ * of the wrapper it would land a rail's width too far left the moment the rail
+ * took a column — a regression with no error anywhere.
+ */
+.doc-frame-stage {
+  position: relative;
+  grid-column: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
 }
 .doc-frame {
   display: block;

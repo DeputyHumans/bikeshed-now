@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // The slide navigator: previews, jump, add, reorder, delete (SPEC §6d).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { SlideThumb } from "./SlideThumb";
-import type { Slide } from "../viewer/deck";
+import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
+import type { Slide, StageSize } from "../viewer/deck";
 
 /**
  * There is still no slide MODEL.
@@ -19,14 +20,13 @@ import type { Slide } from "../viewer/deck";
  * overview and the keyboard all agree about what slide three is.
  */
 
-const THUMB_WIDTH = 132;
-
 export function SlidePanel({
   slides,
   current,
   editable,
   drawerOpen,
   baseHref,
+  stage,
   onGoTo,
   onChanged,
 }: {
@@ -35,11 +35,29 @@ export function SlidePanel({
   editable: boolean;
   drawerOpen?: boolean;
   baseHref: string;
+  stage: StageSize;
   onGoTo: (index: number) => void;
   /** Fires after any structural edit, so the caller can rescan and mark dirty. */
   onChanged: () => void;
 }) {
   const [dragging, setDragging] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const rail = useRef<HTMLDivElement>(null);
+  const reduceMotion = usePrefersReducedMotion();
+
+  /**
+   * Follow the reader. Without this the highlight walks off the bottom of a
+   * long deck and stays there, so the rail shows slide one while the document
+   * shows slide thirty — a large part of what made it feel broken.
+   *
+   * `nearest` is the whole point: it is a no-op when the thumb is already in
+   * view, so clicking a thumb never yanks the rail out from under the pointer.
+   */
+  useEffect(() => {
+    rail.current
+      ?.querySelector<HTMLElement>('[aria-current="true"]')
+      ?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+  }, [current, reduceMotion]);
 
   if (slides.length < 2) return null;
 
@@ -69,7 +87,11 @@ export function SlidePanel({
   };
 
   return (
-    <div className="slide-rail" data-drawer={drawerOpen ? "open" : undefined}>
+    <div
+      className="slide-rail"
+      ref={rail}
+      data-drawer={drawerOpen ? "open" : undefined}
+    >
       {slides.map((slide, i) => (
         <button
           key={slide.el.id || `${slide.index}-${slide.title}`}
@@ -79,16 +101,26 @@ export function SlidePanel({
           aria-label={`Slide ${i + 1}: ${slide.title}`}
           draggable={editable}
           data-dragging={dragging === i}
+          data-drop-target={dropTarget === i && dragging !== i ? true : undefined}
           onClick={() => onGoTo(i)}
           onDragStart={() => setDragging(i)}
-          onDragEnd={() => setDragging(null)}
+          onDragEnd={() => {
+            setDragging(null);
+            setDropTarget(null);
+          }}
+          // preventDefault is what makes this a valid drop target at all; the
+          // state beside it is what tells the reader WHERE the slide will land,
+          // which the rail styled for and never actually set.
           onDragOver={(e) => e.preventDefault()}
+          onDragEnter={() => setDropTarget(i)}
+          onDragLeave={() => setDropTarget((t) => (t === i ? null : t))}
           onDrop={() => {
             if (dragging != null) move(dragging, i);
             setDragging(null);
+            setDropTarget(null);
           }}
         >
-          <SlideThumb slide={slide} baseHref={baseHref} thumbWidth={THUMB_WIDTH} />
+          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} />
           <span className="slide-thumb-index">{i + 1}</span>
           <span className="slide-thumb-title">{slide.title}</span>
           {editable ? (
