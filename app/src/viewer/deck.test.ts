@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { activeIndex, isPaged, scanSlides, slideTitle } from "./deck";
+import { activeIndex, isPaged, scanSlides, slideTitle, stageSize } from "./deck";
 
 /**
  * Every fixture here is SYNTHESISED to carry one structural pattern found in
@@ -250,5 +250,49 @@ describe("isPaged", () => {
     expect(isPaged([0, 0, 0], 0)).toBe(false);
     expect(isPaged([800, 800], 0)).toBe(false);
     expect(isPaged([800], 800)).toBe(false);
+  });
+});
+
+describe("stageSize", () => {
+  it("lays every preview out at the reader's own viewport", () => {
+    // Not the median rect, and the reason is media queries rather than
+    // arithmetic: a deck that re-flows at a breakpoint has to be previewed at
+    // the width the reader is reading it at, or the preview is of a different
+    // layout. Uniformity then comes for free.
+    const rects = [
+      { width: 800, height: 500 },
+      { width: 800, height: 520 },
+      { width: 800, height: 9000 },
+    ];
+    expect(stageSize({ width: 1400, height: 800 }, rects)).toEqual({
+      width: 1400,
+      height: 800,
+    });
+  });
+
+  it("falls back to a real slide's shape before the view reports a size", () => {
+    // Median by height, keeping that slide's own width: independent medians
+    // can combine into a shape no slide in the document actually has.
+    const rects = [
+      { width: 900, height: 200 },
+      { width: 400, height: 500 },
+      { width: 800, height: 9000 },
+    ];
+    expect(stageSize({ width: 0, height: 0 }, rects)).toEqual({
+      width: 400,
+      height: 500,
+    });
+  });
+
+  it("is total: nothing measurable still yields a usable stage", () => {
+    // Negative space for a division: a zero width here makes every thumbnail's
+    // scale Infinity, and the rail renders nothing at all.
+    for (const stage of [
+      stageSize({ width: 0, height: 0 }, []),
+      stageSize({ width: 0, height: 0 }, [{ width: 0, height: 0 }]),
+    ]) {
+      expect(stage.width).toBeGreaterThan(0);
+      expect(stage.height).toBeGreaterThan(0);
+    }
   });
 });

@@ -30,6 +30,10 @@ function mountDeck(body: string, slideHeight = 600, viewport = 700) {
     value: viewport,
     configurable: true,
   });
+  Object.defineProperty(doc.defaultView!, "innerWidth", {
+    value: 1200,
+    configurable: true,
+  });
 
   const sections = Array.from(doc.querySelectorAll<HTMLElement>("section"));
   sections.forEach((el, i) => {
@@ -163,5 +167,55 @@ describe("useDeck", () => {
     );
     expect(plain.result.current.slides).toEqual([]);
     expect(plain.result.current.paged).toBe(false);
+  });
+});
+
+describe("what counts as a deck", () => {
+  it("lays previews out at the frame's own viewport", () => {
+    const { doc } = mountDeck(DECK);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    expect(result.current.stage).toEqual({ width: 1200, height: 700 });
+  });
+
+  /**
+   * The rail renders only when `paged` is true, and rendering it NARROWS the
+   * frame — which fires this very resize event, reflows the guest, and can push
+   * its slides past the height `isPaged` accepts. Let a resize revise the
+   * answer and the rail unmounts, the frame widens, the answer flips back, and
+   * the viewer oscillates forever, for decks near the threshold only.
+   */
+  it("does not change its mind about being a deck when the frame resizes", () => {
+    const { doc, sections } = mountDeck(DECK);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    expect(result.current.paged).toBe(true);
+
+    // The guest reflows: every slide is now far taller than the viewport, which
+    // is exactly what opening a 168px rail can do to a deck near the threshold.
+    for (const el of sections) {
+      el.getBoundingClientRect = () => ({ top: 0, height: 4000 }) as DOMRect;
+    }
+    act(() => {
+      doc.defaultView!.dispatchEvent(new Event("resize"));
+    });
+
+    expect(result.current.paged).toBe(true);
+  });
+
+  it("still tracks the reader's position across that same resize", () => {
+    // The latch is on `paged` and `stage` only. Position is a live reading and
+    // has to stay one, or the rail stops following the document.
+    const { doc, sections } = mountDeck(DECK);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    expect(result.current.current).toBe(1);
+
+    sections.forEach((el, i) => {
+      el.getBoundingClientRect = () => ({ top: i * 600 - 1200, height: 600 }) as DOMRect;
+    });
+    act(() => {
+      doc.defaultView!.dispatchEvent(new Event("resize"));
+    });
+
+    expect(result.current.current).toBe(2);
   });
 });

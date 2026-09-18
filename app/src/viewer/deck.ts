@@ -251,3 +251,47 @@ export function isPaged(heights: number[], viewportHeight: number): boolean {
   ).length;
   return slideLike >= heights.length * 0.7;
 }
+
+/** What a preview is laid out at, before it is scaled into a thumbnail. */
+export interface StageSize {
+  width: number;
+  height: number;
+}
+
+/** Used only when nothing can be measured; a deck is near enough 16:9. */
+export const FALLBACK_STAGE: StageSize = { width: 1280, height: 720 };
+
+/**
+ * ONE size for every preview in a deck — the reader's own frame viewport.
+ *
+ * Previews used to be sized slide by slide. That made the rail a ragged column,
+ * and in the overview it left a band of dead space under every short card,
+ * because a grid row is as tall as its tallest item.
+ *
+ * The viewport is the right stage, and the reason is MEDIA QUERIES rather than
+ * arithmetic. Decks change padding, hide navigation and re-flow at breakpoints;
+ * laying a preview out at any other width previews the document in a different
+ * breakpoint than the one the reader is reading, and every `vw`, `vh` and `%`
+ * resolves against a different base. Reproducing the frame's own viewport is
+ * the only choice where a preview is a faithful crop of what the reader sees —
+ * and because every slide gets the same one, uniformity comes for free rather
+ * than being imposed by a clamp.
+ *
+ * The slide rects are a fallback only, for the window between a document
+ * loading and its view reporting a size.
+ */
+export function stageSize(
+  viewport: { width: number; height: number },
+  rects: readonly { width: number; height: number }[],
+): StageSize {
+  if (viewport.width > 0 && viewport.height > 0) {
+    return { width: viewport.width, height: viewport.height };
+  }
+  const usable = rects.filter((r) => r.width > 0 && r.height > 0);
+  if (usable.length === 0) return FALLBACK_STAGE;
+  // Median by height, keeping that slide's own width, so the ratio is one a
+  // real slide has. Independent medians can combine into a shape no slide is.
+  const byHeight = [...usable].sort((a, b) => a.height - b.height);
+  const pick = byHeight[(byHeight.length - 1) >> 1];
+  return { width: pick.width, height: pick.height };
+}

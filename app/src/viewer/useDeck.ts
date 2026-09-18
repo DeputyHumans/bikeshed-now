@@ -4,7 +4,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
-import { activeIndex, isPaged, scanSlides, type Slide, type SlideScan } from "./deck";
+import {
+  activeIndex,
+  FALLBACK_STAGE,
+  isPaged,
+  scanSlides,
+  stageSize,
+  type Slide,
+  type SlideScan,
+  type StageSize,
+} from "./deck";
 
 /**
  * This hook SCROLLS the document and reads it. It never writes to it, injects
@@ -40,6 +49,8 @@ export interface DeckControls {
   current: number;
   /** True when slides are about one viewport tall, so paging makes sense. */
   paged: boolean;
+  /** What a preview is laid out at: one size for every slide in the deck. */
+  stage: StageSize;
   overviewOpen: boolean;
   setOverviewOpen: (open: boolean) => void;
   goTo: (index: number) => void;
@@ -66,6 +77,7 @@ export function useDeck({
   const [nonce, setNonce] = useState(0);
   const [current, setCurrent] = useState(0);
   const [paged, setPaged] = useState(false);
+  const [stage, setStage] = useState<StageSize>(FALLBACK_STAGE);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const reduceMotion = usePrefersReducedMotion();
 
@@ -88,21 +100,21 @@ export function useDeck({
   const slides = scan.kind === "slides" ? scan.slides : NO_SLIDES;
 
   /**
-   * Both measurements come from the FRAME's view. A rect taken inside the frame
-   * is relative to the frame's viewport, and an iframe's scroll never reaches
-   * the parent window, so reading either from `window` gives a number that
-   * looks plausible and tracks nothing.
+   * Every measurement comes from the FRAME's view. A rect taken inside the
+   * frame is relative to the frame's viewport, and an iframe's scroll never
+   * reaches the parent window, so reading either from `window` gives a number
+   * that looks plausible and tracks nothing.
+   *
+   * Position tracks scroll and resize; whether this is a DECK does not. See
+   * the latch below for why that separation is load-bearing rather than tidy.
    */
   useEffect(() => {
     const view = doc?.defaultView;
-    if (!view || slides.length === 0) {
-      setPaged(false);
-      return;
-    }
+    if (!view || slides.length === 0) return;
     const measure = () => {
-      const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
-      setPaged(isPaged(rects.map((r) => r.height), view.innerHeight));
-      setCurrent(activeIndex(rects.map((r) => r.top)));
+      setCurrent(
+        activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
+      );
     };
     measure();
     view.addEventListener("scroll", measure, { passive: true });
@@ -111,6 +123,34 @@ export function useDeck({
       view.removeEventListener("scroll", measure);
       view.removeEventListener("resize", measure);
     };
+  }, [doc, epoch, slides]);
+
+  /**
+   * `paged` and `stage` are LATCHED: decided once per document, never
+   * recomputed for a resize.
+   *
+   * That is not an optimisation. The rail renders only when `paged` is true,
+   * and rendering it narrows the frame — which fires `resize` inside the guest,
+   * reflows it, and can push its slides past the height `isPaged` accepts. Let
+   * a resize revise the answer and the rail unmounts, the frame widens, the
+   * answer flips back, and the viewer oscillates forever. It would fire only
+   * for decks near the threshold, which is the worst kind of bug to own.
+   *
+   * It is also simply the truer statement: whether a document is a deck is a
+   * property of the document, not of whether somebody opened a panel.
+   */
+  useEffect(() => {
+    const view = doc?.defaultView;
+    if (!view || slides.length === 0) {
+      setPaged(false);
+      setStage(FALLBACK_STAGE);
+      return;
+    }
+    const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
+    setPaged(isPaged(rects.map((r) => r.height), view.innerHeight));
+    setStage(
+      stageSize({ width: view.innerWidth, height: view.innerHeight }, rects),
+    );
   }, [doc, epoch, slides]);
 
   const goTo = useCallback(
@@ -204,6 +244,7 @@ export function useDeck({
       slides,
       current,
       paged,
+      stage,
       overviewOpen,
       setOverviewOpen,
       goTo,
@@ -211,6 +252,6 @@ export function useDeck({
       prev,
       rescan,
     }),
-    [scan, slides, current, paged, overviewOpen, goTo, next, prev, rescan],
+    [scan, slides, current, paged, stage, overviewOpen, goTo, next, prev, rescan],
   );
 }
