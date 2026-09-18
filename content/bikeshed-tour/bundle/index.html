@@ -80,11 +80,16 @@
   #dot-nav a { width: 9px; height: 9px; border-radius: 50%; background: var(--line); transition: background 160ms, transform 160ms; }
   #dot-nav a:hover, #dot-nav a[aria-current="true"] { background: var(--accent); transform: scale(1.35); }
 
-  .reveal { opacity: 0; transform: translateY(12px); transition: opacity 420ms ease-out, transform 420ms ease-out; }
-  .reveal.seen { opacity: 1; transform: none; }
+  /* The reveal animation is OPT-IN: the class below is added by the script,
+     and only once it knows it can finish the job. Starting at opacity 0 and
+     revealing from JavaScript renders the whole document blank when scripts
+     are blocked — which is the exact state an untrusted document is read in
+     here, so this file would have demonstrated the bug rather than the
+     feature. Content is visible by default; motion is the enhancement. */
+  .deck-animated .reveal { opacity: 0; transform: translateY(12px); transition: opacity 420ms ease-out, transform 420ms ease-out; }
+  .deck-animated .reveal.seen { opacity: 1; transform: none; }
 
   @media (prefers-reduced-motion: reduce) {
-    .reveal { opacity: 1; transform: none; transition: none; }
     #dot-nav a { transition: none; }
   }
   @media (max-width: 900px) { #dot-nav { display: none; } }
@@ -645,8 +650,9 @@ bikeshed update storage-migration proposal.md</code></pre>
 /*
   One inline IIFE. Two behaviours, both progressive: with scripts blocked, this
   document is entirely readable — the sections are all there, the navigation is
-  simply absent, and nothing is revealed-on-scroll because nothing was hidden by
-  markup in the first place.
+  simply absent, and nothing is faded out, because the fade is opted into by
+  the `deck-animated` class this script adds rather than being the default the
+  script has to undo.
 
   This is also what makes the file a useful sample: it is the case the trust
   prompt exists for, and #dot-nav is the case the editor's placeholder marking
@@ -671,21 +677,12 @@ bikeshed update storage-migration proposal.md</code></pre>
     });
   }
 
-  if (!("IntersectionObserver" in window)) {
-    // No observer: show everything rather than leaving it faded out. A
-    // progressive enhancement that hides content when it fails is a bug.
-    sections.forEach(function (s) { s.classList.add("seen"); });
-    return;
-  }
-
-  var reveal = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("seen");
-        reveal.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.12 });
+  // No observer at all: the dots are already built and the sections are
+  // already visible, so there is nothing left to do. A progressive enhancement
+  // that hides content when it fails is a bug — and the same is true when it
+  // never runs, which is why the stylesheet hides nothing until this script
+  // opts in below.
+  if (!("IntersectionObserver" in window)) return;
 
   var current = new IntersectionObserver(function (entries) {
     entries.forEach(function (entry) {
@@ -699,9 +696,26 @@ bikeshed update storage-migration proposal.md</code></pre>
   }, { threshold: 0.5 });
 
   sections.forEach(function (section) {
-    if (reduced) section.classList.add("seen");
-    else reveal.observe(section);
     current.observe(section);
+  });
+
+  // The fade is the only part anybody can be spared, so it is the only part
+  // behind the motion preference — the dots above keep working either way.
+  if (reduced) return;
+
+  document.documentElement.classList.add("deck-animated");
+
+  var reveal = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("seen");
+        reveal.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  sections.forEach(function (section) {
+    reveal.observe(section);
   });
 })();
 </script>
