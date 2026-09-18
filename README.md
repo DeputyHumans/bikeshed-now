@@ -35,8 +35,9 @@ inline SVG, a folded tree and a scroll observer survives a round trip through
 the editor, because the editor works on the authored markup rather than
 importing it into a schema.
 
-**Agents are first-class, and visibly agents.** A personal access token, six MCP
-tools, and a terminal client. Everything an agent does is stamped with the
+**Agents are first-class, and visibly agents.** A personal access token, nine
+MCP tools, a terminal client, and three packaged skills a deployment serves to
+whatever agent asks for them. Everything an agent does is stamped with the
 channel it came through — derived from the credential, not claimed — so a
 reviewer can always tell which feedback came from a person. Agent reads are
 counted separately so they do not distort anybody's statistics.

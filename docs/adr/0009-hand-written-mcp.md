@@ -46,6 +46,15 @@ prompts (nothing would use them).
   rather than absorbed silently, and repeated in the module header where
   somebody editing the file will actually see it.
 
+## Since
+
+**2026-09-17** — the surface grew from six tools to nine, the three new ones for
+folders. The count is not what this decision turned on: hand-validation is still
+one `required` check in `missingArguments`, and what a schema library would buy
+at nine tools is the same coercion nobody has asked for at six. The reversal
+conditions below are streaming, sessions and the `zod` peer, and none of them
+moved.
+
 ## What would change this
 
 Two things, either one sufficient. If the SDK drops the `zod` peer or ships a

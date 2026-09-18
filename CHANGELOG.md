@@ -16,7 +16,40 @@ save mints a new version. `docs/operations.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **Agents can organise a workspace.** Three MCP tools — `list_folders`,
+  `create_folder`, `move_document` — and the CLI commands `folders`, `mkdir` and
+  `mv`. Filing a document was previously something only a person could do, which
+  meant an agent either dropped everything at the root or waited for somebody
+  who was not there.
+- **Three packaged skills**, in the Agent Skills convention, served by every
+  deployment at `/skills/` and installable with `bikeshed skills install <dir>`:
+  `bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`. `llms.txt` is
+  the short form every agent reads; a skill is the long form, loaded for the task
+  that needs it. Generated into `app/public/skills/` by the same build step that
+  produces `AGENTS.md` and `llms.txt`, and byte-compared by `check:agents`.
+- `functions/test/skills.test.js` holds those documents to the surface they
+  describe: every `bikeshed …` command and every tool name they mention must
+  exist, and — the direction that matters more — every tool and command that
+  exists must be named in `docs/agent-guide.md`. A skill naming an absent
+  command is worse than no skill, because an agent believes it.
+
 ### Changed
+
+- **`move_document` is an access operation, not a filing one.** A document's
+  members are its own grants unioned with its folder's, so moving it between
+  folders changes who can read it. It requires `canEdit` on the document and
+  `canEditFolder` on the destination, and goes through `persistDocMembership` so
+  the presence mirror and the public projection move with it. Both the guide and
+  the folders skill say so in those words.
+- One resolver now authorizes every "put this inside that folder" in the system.
+  `createDoc`, `createFolder`, both halves of `organize` and the MCP publish tool
+  each had their own copy of the same four steps, with three different refusal
+  messages for the same refusal — and one of them checked `editorMembers` by
+  hand rather than calling `canEditFolder`, which agreed only by accident.
+- The MCP surface is **nine tools**, not six. Tool schemas are public API
+  (see above), so this is additive: nothing existing changed shape.
 
 - **Several people can now edit one document at the same time.** Document state
   is a Yjs CRDT bound to the DOM without a schema, so edits merge and every copy

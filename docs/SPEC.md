@@ -450,7 +450,7 @@ documents.
 app/src/
   main.tsx App.tsx
   brand/{tokens.ts,dom.ts,fonts.ts,Wordmark.tsx,Mark.tsx}
-  styles/*.css                      (11 files, @layer tokens,base,primitives,layout,feature)
+  styles/*.css                      (14 files, @layer tokens,base,primitives,layout,feature)
   generated/policy.ts               (GENERATED)
   config.ts firebase.ts auth.tsx analytics.ts
   firestore.ts access.ts folders.ts teams.ts upload.ts edit.ts trust.ts
@@ -460,7 +460,7 @@ app/src/
   export/{labels.ts,html.ts,pdf.ts,image.ts}
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
   workspace/tree.ts
-  pages/{DocList.tsx,DocViewer.tsx,SignUp.tsx,Account.tsx}
+  pages/{DocList.tsx,DocViewer.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```
@@ -1128,7 +1128,7 @@ PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked
 by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
-### MCP — six tools
+### MCP — nine tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1138,6 +1138,9 @@ client onboarding is ever wanted.
 | `get_document` | metadata + current **source** (Markdown where available) |
 | `publish_document` | create a document from content |
 | `update_document` | commit a new version of an existing document |
+| `list_folders` | every folder the caller can see, each with its full path |
+| `create_folder` | create one, optionally inside another |
+| `move_document` | file a document into a folder, or back to the workspace root |
 | `get_comments` | **unresolved feedback, each with its anchored quote** |
 | `reply_to_comment` | respond in a thread |
 
@@ -1154,6 +1157,28 @@ embedded stylesheet**; responses are capped and cursor-paginated.
 There is no anonymous MCP access. Publishing always attributes to a real account
 and stamps `publishedVia: "mcp"`.
 
+**The folder tools are an access surface, not a filing surface.** A document's
+effective members are its own grants unioned with its folder's (§13), so moving
+a document between folders changes who can read it. `move_document` therefore
+requires `canEdit` on the document and `canEditFolder` on the destination, and
+goes through `persistDocMembership` so the presence mirror and the public
+projection move with it.
+
+`list_folders` returns whole paths rather than a tree to walk. An ancestor the
+caller is not a member of renders as `…`: membership cascades downward only, so
+a grant on a child leaves its parent invisible, and neither its id nor its
+omission would be a true answer.
+
+Three things are deliberately **absent** from the surface, and each is a stated
+refusal rather than a gap: deleting a folder (it reparents everything beneath
+it), renaming one, and sharing anything. `functions/test/mcp.test.js` asserts no
+tool name matches `delete|remove|share|grant|access`.
+
+One resolver authorizes every "put this inside that folder" in the system —
+`resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
+`createFolder`, both halves of `organize`, and the three MCP tools. It
+authorizes with `canEditFolder`, which is the question all six are asking.
+
 ### CLI — `bikeshed`
 
 Deliberately distinct from `scripts/*.mjs`:
@@ -1166,8 +1191,15 @@ Deliberately distinct from `scripts/*.mjs`:
 | Purpose | provision, withdraw, tear down | publish and revise documents |
 
 Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
-`comments <slug>`, `open <slug>`, plus `publish --watch`. Every command takes
-`--json`.
+`get <slug>`, `comments <slug>`, `reply`, `open <slug>`, `folders`,
+`mkdir <name>`, `mv <slug> <folder|root>`, `skills [install <dir>]`, plus
+`publish --watch`. Every command takes `--json`.
+
+`mv` requires its destination and spells the root as the literal word `root`.
+The MCP tool encodes the root as an OMITTED `folder` — JSON-RPC has no empty
+string to send, since `missingArguments` rejects one — but a positional argument
+left off by accident would silently unfile a document and revoke the access its
+folder granted, so the CLI does not accept the omission.
 
 ### Universal agent instructions
 
@@ -1175,10 +1207,34 @@ Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
 `app/public/llms.txt` and **CI asserts the two match**, so hosted instructions
 can never drift from the repo's. `/.well-known/mcp.json` advertises the endpoint.
 
+### Skills
+
+`skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter
+carrying `name` and `description`, then Markdown. Three of them —
+`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders` — one per job the
+surface exists for. `llms.txt` is the short form every agent reads; a skill is
+the long form, loaded for the task that needs it.
+
+The same build step copies them to `app/public/skills/`, with a generated
+`index.json` built from the frontmatter, so a deployment serves the skills that
+describe **what that deployment can do**. `bikeshed skills install <dir>` writes
+them wherever a harness reads skills from; it needs no token, because they are
+public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before
+it uses it as a directory.
+
+Kept true by `functions/test/skills.test.js` rather than by intention. Every
+`bikeshed …` command and every MCP tool name a skill or the guide mentions must
+exist, **and** every tool and command that exists must be named in the guide —
+the second direction being the one that catches a capability nobody is told
+about. A skill naming an absent command is worse than no skill: an agent
+believes it.
+
 ### Not built
 
 OAuth 2.1 flows · service accounts · webhooks · a REST API distinct from these
-endpoints · SDKs in other languages · rate limiting beyond CDN caching.
+endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
+deletion, folder renaming or sharing through the agent surface · resolving a
+comment thread from an agent.
 
 ---
 
