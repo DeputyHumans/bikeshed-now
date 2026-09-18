@@ -1,4 +1,10 @@
-# No fake URL here: this project has no repository URL committed, so a
-# contact_link would have to point somewhere invented. Security reporting goes
-# to security@spesivtsev.com — see SECURITY.md, which both issue templates name.
+# Blank issues stay on: the templates are a prompt, not a gate, and a report
+# that does not fit either of them is still worth having.
+#
+# The one link here exists to keep security reports out of the public tracker.
+# It points at SECURITY.md, which both issue templates also name.
 blank_issues_enabled: true
+contact_links:
+  - name: Report a security issue
+    url: https://github.com/DeputyHumans/bikeshed-now/blob/main/SECURITY.md
+    about: Please do not open a public issue for anything that lets somebody read a document they should not.

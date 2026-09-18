@@ -6,6 +6,13 @@
   "type": "module",
   "description": "Versioned document publishing with highlight-anchored feedback, collaborative review, and an agent-facing publishing API.",
   "homepage": "https://bikeshed.now",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DeputyHumans/bikeshed-now.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DeputyHumans/bikeshed-now/issues"
+  },
   "engines": {
     "node": ">=20"
   },
