@@ -86,6 +86,26 @@ export const AUTHOR_COLOR_VAR = "--bshd-author";
 /** Marks an id-bearing container the author left for a script to fill. */
 export const EMPTY_ATTR = "data-bshd-empty";
 
+/**
+ * Marks the one slide inside a thumbnail preview, so the preview's own
+ * stylesheet can force it visible without flattening its layout.
+ *
+ * Deliberately NOT in `OWN_MARKERS`, for two separate reasons:
+ *
+ *   - That list enumerates legal values of `data-bshd`, a different attribute.
+ *     An entry would make `isOwnMarker` and `OWN_SELECTOR` claim
+ *     `data-bshd="preview"`, which nothing writes.
+ *   - `OWN_MARKERS` means "a node the serializer deletes whole". This lands on
+ *     the AUTHOR's own slide element, so were it ever in that set and ever to
+ *     reach a live node, `serializeCleanHtml` would delete the author's slide
+ *     on the next save. `EMPTY_ATTR` sits outside the set for the same reason.
+ *
+ * It needs no cleanup path because it cannot reach a live node at all: it is
+ * set on a clone, in a document the parent builds, which is handed to `srcDoc`
+ * and never adopted into the reader's frame. `SlideThumb.test.tsx` pins that.
+ */
+export const PREVIEW_ATTR = "data-bshd-preview";
+
 // --- Export stamps ---------------------------------------------------------
 
 export const PRINT_MARK_CLASS = "bshd-print-mark";
