@@ -75,11 +75,14 @@ import { compileBundle, publishNewDocument } from "./lib/publish";
 import { extractBundle, zipBundle, type BundleEntry } from "./lib/bundle";
 import {
   computeDocMembership,
+  createFolderRecord,
   persistDocMembership,
   recomputeSubtree,
+  resolveFolderTarget,
   slugify,
   uniqueDocId,
   wouldCycle,
+  type FolderTarget,
   type Membership,
 } from "./lib/folders";
 import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
@@ -1210,26 +1213,10 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const folderId = strParam(req, "folderId");
-  let parentMembership: Membership | null = null;
-  if (folderId) {
-    if (!safeSegment(folderId)) {
-      badRequest(res, "invalid folderId");
-      return;
-    }
-    const fSnap = await db().collection("folders").doc(folderId).get();
-    if (!fSnap.exists) {
-      res.status(404).json({ error: "destination folder not found" });
-      return;
-    }
-    if (!canEditFolder(fSnap.data() as FolderAclData, caller.uid, caller.emailLower)) {
-      res.status(403).json({ error: "you cannot add to that folder" });
-      return;
-    }
-    parentMembership = {
-      members: asArray(fSnap.data()?.members),
-      editorMembers: asArray(fSnap.data()?.editorMembers),
-    };
+  const target = await resolveFolderTarget(db(), strParam(req, "folderId"), caller);
+  if (!target.ok) {
+    res.status(target.status).json({ error: target.error });
+    return;
   }
 
   const fileBase = filename.replace(/\.[^./\\]+$/, "");
@@ -1245,8 +1232,8 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     ownerUid: caller.uid,
     compiled,
     title: strParam(req, "title") || compiled.title,
-    folderId: folderId || null,
-    parentMembership,
+    folderId: target.id,
+    parentMembership: target.membership,
     marking: jsonParam(req, "marking"),
     via: "upload",
   }).catch((e: Error) => e);
@@ -1284,52 +1271,13 @@ export const createFolder = onRequest(PLAIN, async (req, res) => {
     badRequest(res, "folder name is required (up to 120 characters)");
     return;
   }
-  const parentId = typeof body?.parentId === "string" ? body.parentId : "";
-
-  let parent: Membership | null = null;
-  let parentAncestors: string[] = [];
-  if (parentId) {
-    if (!safeSegment(parentId)) {
-      badRequest(res, "invalid parentId");
-      return;
-    }
-    const pSnap = await db().collection("folders").doc(parentId).get();
-    if (!pSnap.exists) {
-      res.status(404).json({ error: "parent folder not found" });
-      return;
-    }
-    if (!canEditFolder(pSnap.data() as FolderAclData, caller.uid, caller.emailLower)) {
-      res.status(403).json({ error: "you cannot create a folder here" });
-      return;
-    }
-    parent = {
-      members: asArray(pSnap.data()?.members),
-      editorMembers: asArray(pSnap.data()?.editorMembers),
-    };
-    parentAncestors = asArray(pSnap.data()?.ancestors);
+  const parent = await resolveFolderTarget(db(), body?.parentId, caller);
+  if (!parent.ok) {
+    res.status(parent.status).json({ error: parent.error });
+    return;
   }
 
-  const membership = computeDocMembership(caller.emailLower, [], [], parent);
-  const ancestors = parentId ? [...parentAncestors, parentId] : [];
-  const ref = db().collection("folders").doc();
-  await ref.set({
-    folderId: ref.id,
-    name,
-    slug: slugify(name),
-    parentId: parentId || null,
-    ownerUid: caller.uid,
-    ownerEmail: caller.emailLower,
-    viewers: [],
-    editors: [],
-    members: membership.members,
-    editorMembers: membership.editorMembers,
-    ancestors,
-    depth: ancestors.length,
-    createdAt: now(),
-    updatedAt: now(),
-  });
-
-  res.status(200).json({ folderId: ref.id, name });
+  res.status(200).json(await createFolderRecord(db(), caller, name, parent));
 });
 
 /**
@@ -1475,22 +1423,10 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
 
-    const targetFolderId =
-      typeof body?.targetFolderId === "string" ? body.targetFolderId : "";
-    if (targetFolderId) {
-      if (!safeSegment(targetFolderId)) {
-        badRequest(res, "invalid targetFolderId");
-        return;
-      }
-      const tSnap = await db().collection("folders").doc(targetFolderId).get();
-      if (!tSnap.exists) {
-        res.status(404).json({ error: "destination folder not found" });
-        return;
-      }
-      if (!canEditFolder(tSnap.data() as FolderAclData, uid, emailLower)) {
-        res.status(403).json({ error: "you cannot move into that folder" });
-        return;
-      }
+    const target = await resolveFolderTarget(db(), body?.targetFolderId, caller);
+    if (!target.ok) {
+      res.status(target.status).json({ error: target.error });
+      return;
     }
     await persistDocMembership(
       db(),
@@ -1499,9 +1435,9 @@ export const organize = onRequest(PLAIN, async (req, res) => {
         ownerEmail: String(data.ownerEmail || ""),
         viewers: asArray(data.viewers),
         editors: asArray(data.editors),
-        folderId: targetFolderId || null,
+        folderId: target.id,
       },
-      { folderId: targetFolderId || null },
+      { folderId: target.id },
     );
     res.status(200).json({ ok: true });
     return;
@@ -1538,28 +1474,20 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       res.status(403).end();
       return;
     }
-    const targetFolderId =
-      typeof body?.targetFolderId === "string" ? body.targetFolderId : "";
-    if (targetFolderId) {
-      if (!safeSegment(targetFolderId)) {
-        badRequest(res, "invalid targetFolderId");
-        return;
-      }
-      const tSnap = await db().collection("folders").doc(targetFolderId).get();
-      if (!tSnap.exists) {
-        res.status(404).json({ error: "destination folder not found" });
-        return;
-      }
-      if (!canEditFolder(tSnap.data() as FolderAclData, uid, emailLower)) {
-        res.status(403).json({ error: "you cannot move into that folder" });
-        return;
-      }
-      if (await wouldCycle(db(), id, targetFolderId)) {
-        badRequest(res, "cannot move a folder into itself");
-        return;
-      }
+    const target: FolderTarget = await resolveFolderTarget(
+      db(),
+      body?.targetFolderId,
+      caller,
+    );
+    if (!target.ok) {
+      res.status(target.status).json({ error: target.error });
+      return;
     }
-    await ref.set({ parentId: targetFolderId || null, updatedAt: now() }, { merge: true });
+    if (target.id && (await wouldCycle(db(), id, target.id))) {
+      badRequest(res, "cannot move a folder into itself");
+      return;
+    }
+    await ref.set({ parentId: target.id, updatedAt: now() }, { merge: true });
     await recomputeSubtree(db(), id);
     res.status(200).json({ ok: true });
     return;

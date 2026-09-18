@@ -21,6 +21,8 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { isTeamRef, normalizeEmail, teamIdOf } from "./access";
+import { canEditFolder, type FolderAclData } from "./acl";
+import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
@@ -142,6 +144,112 @@ export async function wouldCycle(
   const snap = await db.collection("folders").doc(newParentId).get();
   if (!snap.exists) return false;
   return asArray(snap.data()?.ancestors).includes(folderId);
+}
+
+/** Who is acting, reduced to the two fields a folder decision reads. */
+export interface FolderCaller {
+  uid: string;
+  emailLower: string;
+}
+
+/**
+ * A destination folder that has been found and authorized, or the reason it
+ * cannot be used. `id: null` is the workspace root, which every account may
+ * write to and which therefore needs no lookup.
+ */
+export type FolderTarget =
+  | {
+      ok: true;
+      id: string | null;
+      /** The parent membership a child inherits. Null at the root. */
+      membership: Membership | null;
+      /** The target's own ancestor chain, so a child can extend it. */
+      ancestors: string[];
+    }
+  | { ok: false; status: 400 | 403 | 404; error: string };
+
+/**
+ * Resolve "put this inside that folder" once, for every caller that asks it.
+ *
+ * Five places used to ask it separately — createDoc, createFolder, both halves
+ * of organize, and the MCP publish tool — with five copies of the same four
+ * steps and three different refusal messages for the same refusal. A sixth
+ * copy was about to be written for the folder tools, which is the second call
+ * site rule saying the check has one owner now.
+ *
+ * It authorizes with `canEditFolder`, which is "may change what is INSIDE this
+ * folder". That is the correct question for every caller here: creating a
+ * subfolder, moving a document in and publishing into it are the same act. One
+ * of the five copies tested `editorMembers.includes(...)` by hand instead,
+ * which happens to agree today only because a folder's owner is always in its
+ * own `editorMembers` — an accident, not a guarantee.
+ */
+export async function resolveFolderTarget(
+  db: Db,
+  folderId: unknown,
+  caller: FolderCaller,
+): Promise<FolderTarget> {
+  const id = typeof folderId === "string" ? folderId.trim() : "";
+  if (!id) return { ok: true, id: null, membership: null, ancestors: [] };
+  if (!safeSegment(id)) {
+    return { ok: false, status: 400, error: "invalid folder id" };
+  }
+
+  const snap = await db.collection("folders").doc(id).get();
+  // 404 rather than 403 for a folder that is not there: a caller who may not
+  // write to a folder should not learn the difference between "not yours" and
+  // "does not exist" by comparing status codes.
+  if (!snap.exists) {
+    return { ok: false, status: 404, error: "destination folder not found" };
+  }
+  const data = snap.data() as FolderAclData & Record<string, unknown>;
+  if (!canEditFolder(data, caller.uid, caller.emailLower)) {
+    return { ok: false, status: 403, error: "you cannot put anything in that folder" };
+  }
+
+  return {
+    ok: true,
+    id,
+    membership: {
+      members: asArray(data.members),
+      editorMembers: asArray(data.editorMembers),
+    },
+    ancestors: asArray(data.ancestors),
+  };
+}
+
+/**
+ * Write a new folder inside an already-resolved target.
+ *
+ * `ancestors` is stored rather than walked, because the cycle guard and the
+ * cascade both need the whole chain and neither can afford a read per level.
+ */
+export async function createFolderRecord(
+  db: Db,
+  caller: FolderCaller,
+  name: string,
+  target: Extract<FolderTarget, { ok: true }>,
+): Promise<{ folderId: string; name: string }> {
+  const membership = computeMembership(caller.emailLower, [], [], target.membership);
+  const ancestors = target.id ? [...target.ancestors, target.id] : [];
+  const ref = db.collection("folders").doc();
+  await ref.set({
+    folderId: ref.id,
+    name,
+    slug: slugify(name),
+    parentId: target.id,
+    ownerUid: caller.uid,
+    ownerEmail: caller.emailLower,
+    viewers: [],
+    editors: [],
+    members: membership.members,
+    editorMembers: membership.editorMembers,
+    ancestors,
+    depth: ancestors.length,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { folderId: ref.id, name };
 }
 
 /**
