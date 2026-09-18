@@ -228,7 +228,8 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         ]),
       );
       const batch = db.batch();
-      const touched: { id: string; members: string[] }[] = [];
+      const touched: { id: string; members: string[]; editorMembers: string[] }[] =
+        [];
       for (const docSnap of docSnaps.docs) {
         const dd = docSnap.data() || {};
         const dv = asArray(dd.viewers);
@@ -249,12 +250,18 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
           },
           { merge: true },
         );
-        touched.push({ id: docSnap.id, members: docMembership.members });
+        touched.push({
+          id: docSnap.id,
+          members: docMembership.members,
+          editorMembers: docMembership.editorMembers,
+        });
       }
       await batch.commit();
-      // Presence is gated by a mirror of `members` that lives in RTDB, so every
-      // place that recomputes membership must refresh it or a revoked reader
-      // keeps seeing who else is in the document (SPEC §16).
+      // Presence is gated by a mirror of `members` in RTDB and shared document
+      // state by a mirror of `editorMembers`, so every place that recomputes
+      // membership must refresh BOTH — or a revoked reader keeps seeing who
+      // else is in the document, and a revoked editor keeps typing into it
+      // (SPEC §16).
       for (const t of touched) await syncPresenceAccess(t.id, t.members, t.editorMembers);
     }
 
