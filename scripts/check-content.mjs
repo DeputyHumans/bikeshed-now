@@ -89,6 +89,31 @@ const EXPECTATIONS = {
     report(svgs >= 3, `bikeshed-tour has ${svgs} inline SVG; it needs several to exercise per-diagram SVG export.`);
     report(text.includes("@media print"), "bikeshed-tour must carry a print stylesheet.");
   },
+  "deck-quarter-review": (text, report) => {
+    // The DECK. The navigator is gated on slides measuring about one viewport
+    // tall, so shortening these does not make the sample worse — it makes it
+    // stop being the thing it is here to be, with nothing else noticing.
+    report(
+      /min-height:\s*100vh/.test(text),
+      "deck-quarter-review's slides must be a viewport tall: that measurement is the only thing that makes the slide navigator appear.",
+    );
+    // Every sizing rule has to live on the CONTAINER, because a thumbnail
+    // reproduces a slide's ancestors precisely so rules like this still apply.
+    report(
+      /\.deck\s*>\s*section\s*\{/.test(text),
+      "deck-quarter-review must size its slides through `.deck > section`: a container-scoped rule is what the preview's ancestor chain exists to reproduce.",
+    );
+    report(
+      (text.match(/<section id="/g) || []).length >= 6,
+      "deck-quarter-review needs its sections: they are the slides, and they are what comments anchor to.",
+    );
+    // A third proof of the trust prompt would be noise; a deck that renders
+    // identically either way is what makes this a demonstration of NAVIGATION.
+    report(
+      !/<script/.test(text),
+      "deck-quarter-review must contain NO script: it demonstrates the deck navigator, and it can only do that cleanly if it renders the same trusted or not.",
+    );
+  },
   "design-review-shortener": (text, report) => {
     // The SCRIPT-FREE half. This is the assertion that matters most in this file.
     report(

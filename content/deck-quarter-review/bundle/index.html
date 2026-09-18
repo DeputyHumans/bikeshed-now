@@ -1,0 +1,215 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+
+  The DECK sample. The other two samples are prose; this one exists so the slide
+  navigator has something to navigate, and so `isPaged` has a document that
+  actually satisfies it.
+
+  Three properties are deliberate and worth keeping:
+
+    - **Every slide is about one viewport tall.** That is the whole signal the
+      navigator is gated on. Shorten these and the rail correctly disappears.
+    - **Every rule that sizes a slide lives on the CONTAINER**, as `.deck > section`.
+      That is the shape a thumbnail preview has to reproduce: render one section
+      on its own and it loses its height, its padding and its centring, which is
+      exactly the bug the ancestor chain in `viewer/preview.ts` exists for.
+    - **No script at all.** It therefore renders identically whether or not
+      anybody has vouched for it, which is what makes it a clean demonstration
+      of the deck feature rather than a second demonstration of the trust prompt.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarter review</title>
+<style>
+  :root {
+    --ink: #16161d;
+    --muted: #5b5b6b;
+    --accent: #3a2fd8;
+    --line: #dcdce6;
+    --surface: #f5f5f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 400 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+  }
+
+  /*
+   * The container owns the layout. A slide lifted out of it has no size at all,
+   * which is precisely why a preview reproduces its ancestors.
+   */
+  .deck > section {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 6vh 7vw;
+    border-bottom: 1px solid var(--line);
+  }
+  .deck > section:last-child { border-bottom: 0; }
+  .deck > section:nth-child(even) { background: var(--surface); }
+
+  .slide { width: 100%; max-width: 46rem; }
+
+  .eyebrow {
+    margin: 0 0 0.7em;
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1; letter-spacing: -0.026em; margin: 0 0 0.3em; }
+  h2 { font-size: clamp(1.5rem, 3.4vw, 2.1rem); line-height: 1.18; letter-spacing: -0.016em; margin: 0 0 0.6em; }
+  p { margin: 0 0 1.1em; }
+  .lede { font-size: 1.22rem; color: var(--muted); }
+  ul { margin: 0 0 1.1em; padding-left: 1.2em; }
+  li { margin: 0 0 0.5em; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.96em; }
+  th, td { border: 1px solid var(--line); padding: 0.55em 0.75em; text-align: left; }
+  th { background: #fff; font-weight: 650; }
+  .deck > section:nth-child(even) th { background: var(--surface); }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+
+  figure { margin: 0; }
+  figcaption { margin-top: 0.6em; font-size: 0.88rem; color: var(--muted); }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 0.3em 0 0.3em 1.1em;
+    color: var(--muted);
+  }
+
+  @media print {
+    .deck > section {
+      min-height: auto;
+      page-break-after: always;
+      border-bottom: 0;
+      padding: 2cm;
+    }
+    .deck > section:nth-child(even) { background: none; }
+  }
+</style>
+</head>
+<body>
+<main class="deck">
+
+  <section id="cover">
+    <div class="slide">
+      <p class="eyebrow">Internal review</p>
+      <h1>Quarter review</h1>
+      <p class="lede">Where the work went, what it bought us, and the two decisions
+        that are still open.</p>
+    </div>
+  </section>
+
+  <section id="agenda">
+    <div class="slide">
+      <h2>What we will cover</h2>
+      <ul>
+        <li>The three numbers that actually moved</li>
+        <li>What we shipped, and what we stopped</li>
+        <li>Where the time went, honestly</li>
+        <li>Two decisions that need an answer today</li>
+      </ul>
+      <p class="callout">Comment on any passage rather than saving it for the end —
+        an anchored note is still useful in a month.</p>
+    </div>
+  </section>
+
+  <section id="numbers">
+    <div class="slide">
+      <h2>The three numbers that moved</h2>
+      <table>
+        <thead>
+          <tr><th>Measure</th><th class="num">Start</th><th class="num">Now</th><th class="num">Change</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Documents published each week</td><td class="num">31</td><td class="num">54</td><td class="num">+74%</td></tr>
+          <tr><td>Median time to first comment</td><td class="num">31h</td><td class="num">4h</td><td class="num">−87%</td></tr>
+          <tr><td>Reviews closed without a meeting</td><td class="num">18%</td><td class="num">61%</td><td class="num">+43pt</td></tr>
+        </tbody>
+      </table>
+      <p>The middle row is the one that matters. Everything else follows from
+        somebody reading a document the day it appeared.</p>
+    </div>
+  </section>
+
+  <section id="shipped">
+    <div class="slide">
+      <h2>Shipped</h2>
+      <ul>
+        <li><strong>Anchored comments across versions.</strong> A note keeps
+          pointing at its passage after the document is revised.</li>
+        <li><strong>Agent access.</strong> Feedback arrives from whatever is
+          reading, and is marked as such.</li>
+        <li><strong>Folders.</strong> Filing stopped being a person's job.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="stopped">
+    <div class="slide">
+      <h2>Stopped, deliberately</h2>
+      <p>Two things came off the list, and both were the right call:</p>
+      <ul>
+        <li><strong>A search index.</strong> Nobody asked twice, and it would
+          have doubled the storage story.</li>
+        <li><strong>Real-time co-editing.</strong> The failure mode is silent
+          data loss, and the demand was one team.</li>
+      </ul>
+      <p class="callout">Both remain reversible. Neither is a gap.</p>
+    </div>
+  </section>
+
+  <section id="where-time-went">
+    <div class="slide">
+      <h2>Where the time went</h2>
+      <figure>
+        <svg viewBox="0 0 640 220" width="100%" height="auto" role="img" aria-label="Effort by area: delivery 46 percent, correctness 27 percent, unplanned 18 percent, everything else 9 percent">
+          <g font-family="inherit" font-size="13" fill="#5b5b6b">
+            <rect x="0" y="16" width="294" height="28" fill="#3a2fd8"></rect>
+            <text x="304" y="35">Delivery — 46%</text>
+            <rect x="0" y="62" width="173" height="28" fill="#6a60e4"></rect>
+            <text x="304" y="81">Correctness — 27%</text>
+            <rect x="0" y="108" width="115" height="28" fill="#9a93ee"></rect>
+            <text x="304" y="127">Unplanned — 18%</text>
+            <rect x="0" y="154" width="58" height="28" fill="#c8c4f6"></rect>
+            <text x="304" y="173">Everything else — 9%</text>
+          </g>
+        </svg>
+        <figcaption>Unplanned work is the number to argue about. It was 31% last
+          quarter, so the direction is right and the level is still too high.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <div class="slide">
+      <h2>Two decisions, today</h2>
+      <ul>
+        <li><strong>Do we keep the weekly review slot?</strong> Attendance is
+          down but the documents that go through it close faster.</li>
+        <li><strong>Who owns expiry policy?</strong> Nobody does, and documents
+          are accumulating that nobody intends to keep.</li>
+      </ul>
+      <p>Comment on either passage above and the thread stays attached to it.</p>
+    </div>
+  </section>
+
+  <section id="close">
+    <div class="slide">
+      <h1>Thank you</h1>
+      <p class="lede">Questions are more useful written down than asked aloud —
+        highlight the sentence you are asking about.</p>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>
