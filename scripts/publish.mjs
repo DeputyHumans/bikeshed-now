@@ -286,7 +286,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
 
   // Presence reads are gated by a mirror of `members` in RTDB, so every path
   // that recomputes membership has to refresh it — including this one.
-  await syncPresenceAccess(docId, membership.members, values.project);
+  await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
 
   console.log(
     `  published ${docId} ${versionId} (currentVersion=${versionId}, ${snap.exists ? "updated" : "created"}).`,

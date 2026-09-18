@@ -6,6 +6,10 @@
  * presence reads are gated by a mirror of `members` that lives in RTDB, and
  * EVERY path that recomputes membership has to refresh it — including the admin
  * CLIs. Miss one and a revoked reader keeps seeing who else is in the document.
+ *
+ * `editAccess` is the second mirror, of `editorMembers`, and it gates writes to
+ * the shared document state. Miss THAT one and a revoked editor keeps typing
+ * into everyone else's copy.
  */
 
 import { getRtdb } from "./firebase.mjs";
@@ -16,16 +20,29 @@ export function emailKey(email) {
 }
 
 /** Replace the mirror for one document. Best-effort; never fails the caller. */
-export async function syncPresenceAccess(docId, members, projectOverride) {
+export async function syncPresenceAccess(
+  docId,
+  members,
+  editorMembers = [],
+  projectOverride,
+) {
   const rtdb = getRtdb(projectOverride);
   if (!rtdb) return;
-  const payload = {};
-  for (const m of members) {
-    const key = emailKey(m);
-    if (key) payload[key] = true;
-  }
+  const keyed = (list) => {
+    const out = {};
+    for (const m of list) {
+      const key = emailKey(m);
+      if (key) out[key] = true;
+    }
+    return out;
+  };
   try {
-    await rtdb.ref(`presenceAccess/${docId}`).set(payload);
+    // One multi-path update, matching the CJS twin: the two mirrors must never
+    // disagree, or a revoked reader keeps write access to the shared document.
+    await rtdb.ref().update({
+      [`presenceAccess/${docId}`]: keyed(members),
+      [`editAccess/${docId}`]: keyed(editorMembers),
+    });
   } catch {
     /* presence is a non-essential subsystem */
   }

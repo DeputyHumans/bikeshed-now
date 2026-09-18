@@ -147,7 +147,7 @@ folder's members, and all four fields are written. The owner is never removable.
       },
       { merge: true },
     );
-    await syncPresenceAccess(docId, membership.members, values.project);
+    await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
     console.log(`  updated docs/${docId} (all four membership fields + presence mirror).`);
   }
 

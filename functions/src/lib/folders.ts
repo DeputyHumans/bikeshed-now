@@ -255,7 +255,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       // Presence is gated by a mirror of `members` that lives in RTDB, so every
       // place that recomputes membership must refresh it or a revoked reader
       // keeps seeing who else is in the document (SPEC §16).
-      for (const t of touched) await syncPresenceAccess(t.id, t.members);
+      for (const t of touched) await syncPresenceAccess(t.id, t.members, t.editorMembers);
     }
 
     // Enqueue child folders, recomputed against this now-fresh folder.
@@ -305,7 +305,7 @@ export async function persistDocMembership(
     },
     { merge: true },
   );
-  await syncPresenceAccess(docRef.id, membership.members);
+  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
   await syncPublicProjection(db, docRef.id);
   return membership;
 }

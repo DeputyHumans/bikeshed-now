@@ -16,6 +16,13 @@ import * as admin from "firebase-admin";
  * document's effective member list to `presenceAccess/{docId}`, and the rules
  * require an entry to exist before granting read or write on `status/{docId}`.
  *
+ * It mirrors the EDITOR list separately, to `editAccess/{docId}`, and that
+ * separation is load-bearing rather than tidy. Shared document state travels
+ * over the same node (SPEC §6b), and `presenceAccess` names everyone who may
+ * READ. Gating a CRDT write on it would let a read-only member inject content
+ * into an editor's browser, which that editor would then autosave and publish —
+ * read escalated to write, through a channel nobody would think to check.
+ *
  * Keyed by EMAIL, not uid, because the server does not learn a grantee's uid
  * until their first sign-in and a share has to work the moment it is granted.
  *
@@ -65,16 +72,26 @@ function database(): admin.database.Database | null {
 export async function syncPresenceAccess(
   docId: string,
   members: readonly string[],
+  editorMembers: readonly string[] = [],
 ): Promise<void> {
   const db = database();
   if (!db) return;
-  const payload: Record<string, true> = {};
-  for (const m of members) {
-    const key = emailKey(m);
-    if (key.length > 0) payload[key] = true;
-  }
+  const keyed = (list: readonly string[]): Record<string, true> => {
+    const out: Record<string, true> = {};
+    for (const m of list) {
+      const key = emailKey(m);
+      if (key.length > 0) out[key] = true;
+    }
+    return out;
+  };
   try {
-    await db.ref(`presenceAccess/${docId}`).set(payload);
+    // ONE multi-path update, so the two mirrors can never disagree about a
+    // person: a window where `editAccess` still names somebody `presenceAccess`
+    // has dropped is a window where a revoked reader can still write.
+    await db.ref().update({
+      [`presenceAccess/${docId}`]: keyed(members),
+      [`editAccess/${docId}`]: keyed(editorMembers),
+    });
   } catch {
     /* presence is best-effort and must never fail the request it rode in on */
   }
@@ -87,6 +104,7 @@ export async function clearPresence(docId: string): Promise<void> {
   try {
     await Promise.all([
       db.ref(`presenceAccess/${docId}`).remove(),
+      db.ref(`editAccess/${docId}`).remove(),
       db.ref(`status/${docId}`).remove(),
     ]);
   } catch {

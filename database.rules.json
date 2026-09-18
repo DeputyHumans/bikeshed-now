@@ -5,9 +5,11 @@
 //
 // Realtime Database security rules (SPEC §6b, §16).
 //
-// RTDB carries only ephemeral collaboration state — who is here, where they are
-// looking, and who currently holds the edit lock. None of it is content; all of
-// it disappears when the last tab closes.
+// RTDB carries ephemeral collaboration state — who is here, where they are
+// looking, and the live merge of the document everyone is typing into. None of
+// it is the durable artifact: the draft and the published versions live in
+// Firestore and Storage, and everything here disappears when the last tab
+// closes.
 //
 // The read gate is the interesting part. RTDB rules cannot query Firestore, so
 // the authorization data has to live IN RTDB: `presenceAccess/{docId}/{emailKey}`
@@ -21,6 +23,13 @@
 // account could walk the slug space and learn who reads what — and since a live
 // selection stream reveals what someone is reading sentence by sentence, that is
 // considerably more than a name.
+//
+// `editAccess/{docId}` is the SECOND mirror, of `editorMembers`, and it exists
+// because `status/{docId}/y` carries shared document state (SPEC §6b). Gating
+// that on `presenceAccess` would let a read-only member push edits into an
+// editor's browser, which that editor then autosaves and publishes: read
+// escalated to write through a channel nobody would think to audit. Presence is
+// gated on "may read"; document state is gated on "may edit".
 //
 // emailKey = the lowercased address with every '.' replaced by ','. Dots are
 // illegal in RTDB keys; the four other illegal characters ($ # [ ] /) are
@@ -67,6 +76,21 @@
           }
         },
 
+        // Shared document state: an append-only log of CRDT updates, each a
+        // base64 Yjs update. Order does not matter — that is the whole point of
+        // a CRDT — so a push id is enough and no client needs to coordinate.
+        //
+        // Entries are DELETABLE by any editor, because compaction replaces a
+        // run of updates with one merged update and must remove what it
+        // merged. Deleting a log entry cannot lose a document: every peer has
+        // already applied it, and the durable copy is the saved draft.
+        "y": {
+          "$entry": {
+            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
+          }
+        },
+
         "lock": {
           ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || data.child('uid').val() == auth.uid || now - data.child('since').val() > 300000) && (!newData.exists() || newData.child('uid').val() == auth.uid)",
           ".validate": "newData.hasChildren(['uid', 'email', 'since']) && newData.child('uid').val() == auth.uid && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('since').val() == now",
@@ -91,6 +115,11 @@
     },
 
     "presenceAccess": {
+      ".read": false,
+      ".write": false
+    },
+
+    "editAccess": {
       ".read": false,
       ".write": false
     }

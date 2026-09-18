@@ -1720,7 +1720,7 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  await syncPresenceAccess(newId, membership.members);
+  await syncPresenceAccess(newId, membership.members, membership.editorMembers);
   res.status(200).json({ docId: newId, versionId, title });
 });
 

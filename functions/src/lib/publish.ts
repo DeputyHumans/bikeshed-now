@@ -197,7 +197,7 @@ export async function publishNewDocument(
   });
   await batch.commit();
 
-  await syncPresenceAccess(docId, membership.members);
+  await syncPresenceAccess(docId, membership.members, membership.editorMembers);
 
   return {
     docId,
