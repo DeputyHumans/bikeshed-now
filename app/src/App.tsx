@@ -11,6 +11,7 @@ import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
 import { Loading } from "./components/Spinner";
 import { DocList } from "./pages/DocList";
+import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
 import { SignUp } from "./pages/SignUp";
 import { Account } from "./pages/Account";
@@ -57,10 +58,26 @@ function useRouteAnalytics() {
  * The gate is checked INSIDE the route rather than by wrapping it, so an
  * anonymous reader who follows a link to a public document lands on the
  * document rather than on a sign-in screen they cannot get past.
+ *
+ * `signedOut` is what a route shows somebody who has no account YET, and only
+ * `/` passes one. The distinction is load-bearing: `AuthGate` has six states,
+ * and `needs_email`, `needs_verification` and `not_allowed` are all
+ * signed-in-but-not-admitted — the middle of a flow. Handing a landing page to
+ * somebody waiting on a verification code would lose them the code field, and
+ * `not_allowed` has a deployment-authored message they need to read. So the
+ * fallback is reached from `signed_out` alone, and every other not-ready gate
+ * still goes to SignUp.
  */
-function RequireAccount({ children }: { children: React.ReactNode }) {
+function RequireAccount({
+  children,
+  signedOut,
+}: {
+  children: React.ReactNode;
+  signedOut?: React.ReactNode;
+}) {
   const { gate } = useAuth();
   if (gate === "loading") return <Loading label="Signing in" />;
+  if (gate === "signed_out" && signedOut) return <>{signedOut}</>;
   if (gate !== "ready") return <SignUp />;
   return <>{children}</>;
 }
@@ -86,7 +103,7 @@ export function App() {
           <Route
             path="/"
             element={
-              <RequireAccount>
+              <RequireAccount signedOut={<Landing />}>
                 <DocList />
               </RequireAccount>
             }

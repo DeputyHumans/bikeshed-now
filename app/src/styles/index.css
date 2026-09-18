@@ -38,3 +38,4 @@
 @import "./dialogs.css" layer(feature);
 @import "./consent.css" layer(feature);
 @import "./legal.css" layer(feature);
+@import "./landing.css" layer(feature);
