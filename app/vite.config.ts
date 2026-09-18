@@ -95,7 +95,7 @@ export default defineConfig({
        *   Mark, Wordmark  presentational SVG with no logic to assert
        *
        * They are covered instead by the emulator walkthrough in
-       * docs/operations.md. src/test/README.md explains each limitation.
+       * docs/operations/overview.md. src/test/README.md explains each limitation.
        */
       exclude: [
         // The tests themselves are not the subject. Counting them inflates the

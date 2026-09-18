@@ -48,7 +48,7 @@ CI, and in front of an agent that cannot remember what it already did.
 `docs/markdown-reference/versions/v1` records `format: "markdown"`,
 `entry: "index.html"`, `sourceEntry: "index.md"` and the pinned
 `rendererVersion`, and both files exist under the version prefix. Every ACL and
-export path sees an ordinary HTML bundle ([ADR 0003](adr/0003-server-side-markdown.md)).
+export path sees an ordinary HTML bundle ([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
 
 The operator script's actor is recorded as `uid: null, channel: "cli"` — the one
 case in the system where an actor has no account, because Admin credentials are

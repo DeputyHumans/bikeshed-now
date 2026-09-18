@@ -18,7 +18,7 @@ import type { SourceFormat } from "../types";
  *
  * execCommand is awkward and deprecated. It is also the only API that edits a
  * document in place without first deciding what a document is allowed to
- * contain. See docs/adr/0007.
+ * contain. See docs/architecture/adr/0007.
  */
 
 export type Command =

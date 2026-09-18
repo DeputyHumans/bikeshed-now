@@ -11,7 +11,7 @@ labels: enhancement
 ## Why the existing shape does not cover it
 
 <!--
-Please check `docs/architecture.md` — **"What this is not"** — first. Most of
+Please check `docs/architecture/overview.md` — **"What this is not"** — first. Most of
 what is missing here is missing on purpose, with a reason written down. If your
 request is on that list, the useful thing is an argument against the reason,
 which is a much better conversation than a feature request.

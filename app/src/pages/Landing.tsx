@@ -11,7 +11,7 @@ import { useToast } from "../components/Toast";
  * App.tsx. The other not-ready gates are states in the MIDDLE of a flow, and
  * somebody waiting on a verification code needs the code field, not a pitch.
  *
- * The copy is lifted from README.md, docs/SPEC.md §0 and the tour bundle rather
+ * The copy is lifted from README.md, docs/architecture/spec.md §0 and the tour bundle rather
  * than written fresh, so it cannot drift from the voice the product already
  * uses. Every claim here is something the code actually does.
  *

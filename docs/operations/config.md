@@ -3,7 +3,7 @@
 Every setting, where it lives, and what changes when you change it. Nothing here
 is required to run the emulator stack; `app/.env.example` already points at it.
 
-**Nothing in this file names a real deployment.** See `docs/operations.md` for
+**Nothing in this file names a real deployment.** See `docs/operations/overview.md` for
 which values go in which gitignored file, and why the binding is kept out of git
 even though a Firebase web config is public by design.
 
@@ -38,7 +38,7 @@ npm run check:policy    # re-render in memory and byte-compare — pretest and p
 Renders into `firestore.rules`, `database.rules.json`,
 `functions/src/generated/policy.ts` and `app/src/generated/policy.ts`, each with
 a `GENERATED — DO NOT EDIT` banner and the sha256 of its source
-([ADR 0005](adr/0005-generated-rules.md)).
+([ADR 0005](../architecture/adr/0005-generated-rules.md)).
 
 **Changing it requires deploying both rules and functions.** They are separate
 enforcement layers; updating one is how a gate half-closes.
@@ -186,7 +186,7 @@ is what keeps the quickstart free of a Resend account.
 
 **Email is optional by construction**: with a blank key every send is a logged
 no-op and the app behaves identically. That is the path CI exercises, and it is why the quickstart does
-not require a Resend account ([ADR 0008](adr/0008-runtime-email-rendering.md)).
+not require a Resend account ([ADR 0008](../architecture/adr/0008-runtime-email-rendering.md)).
 
 Sends are wrapped in try/catch and never fail the request that triggered them.
 
@@ -212,7 +212,7 @@ the right friction for each of them.
 `PUBLIC_CACHE_SECONDS` is the one with a visible trade: it is the cost defence
 for public documents and the five minutes a de-published document can still be
 served. Both halves are the same number, which is why it is documented in
-`docs/operations.md` under revocation rather than only here.
+`docs/operations/overview.md` under revocation rather than only here.
 
 ---
 

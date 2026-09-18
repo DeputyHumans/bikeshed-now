@@ -121,7 +121,7 @@ Two consequences for authoring:
 
 Upload `.md` or `.markdown`, or a zip whose entry is `index.md`. It is compiled
 to an HTML bundle **on the server, once per version**, and both files are stored
-([ADR 0003](adr/0003-server-side-markdown.md)):
+([ADR 0003](../architecture/adr/0003-server-side-markdown.md)):
 
 ```
 index.md      your source, canonical, downloadable

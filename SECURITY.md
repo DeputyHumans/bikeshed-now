@@ -38,7 +38,7 @@ Stated plainly, because "not built" is a decision and not an oversight:
 - **A malicious editor on a trusted document.** An owner who grants edit rights
   grants the ability to commit content, and a trusted document runs its own
   scripts for every reader. This is an owner-gated, deliberate relaxation of the
-  sandbox — see `docs/threat-model.md`.
+  sandbox — see `docs/architecture/threat-model.md`.
 - **A bundle blanking its own export.** The export marking is locked against
   every CSS hiding vector, but a document can render itself empty. That is
   self-defeating and leaks nothing.

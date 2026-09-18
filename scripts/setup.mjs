@@ -38,7 +38,7 @@ const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempoten
   --help
 
 Every step is check-then-act or naturally idempotent, so re-running converges.
-Start with --dry-run. See docs/operations.md.`;
+Start with --dry-run. See docs/operations/overview.md.`;
 
 const { values } = parse({
   account: { type: "string" },
@@ -368,7 +368,7 @@ function main() {
    * reachable from the internet is a different thing entirely.
    *
    * If this step fails with FAILED_PRECONDITION, the organization has Domain
-   * Restricted Sharing on. docs/operations.md says what to do about it.
+   * Restricted Sharing on. docs/operations/overview.md says what to do about it.
    */
   console.log("\n[8/10] Allow unauthenticated invocation of the HTTP endpoints");
   const httpFunctions = functionNames().filter((n) => !TRIGGERS.includes(n));

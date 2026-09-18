@@ -138,7 +138,7 @@ than pretending. Each one has a failure mode that reads as a bug:
 - **Enable the Google provider.**
 - **Enable GitHub, and request the `user:email` scope.** Without that scope
   Firebase receives no address at all for users who keep theirs private, and an
-  email-keyed ACL cannot grant them anything ([ADR 0004](adr/0004-email-keyed-acl.md)).
+  email-keyed ACL cannot grant them anything ([ADR 0004](../architecture/adr/0004-email-keyed-acl.md)).
 - **Add every serving host to Authorized domains**, including any custom domain.
   `signInWithPopup` rejects an unlisted origin with `auth/unauthorized-domain`,
   which presents as a sign-in button that does nothing.
@@ -182,7 +182,7 @@ from Firestore, which is the point of it.
 
 Membership is recomputed by the same code the server uses, including the parent
 folder's members, and all four membership fields are written together
-([ADR 0006](adr/0006-denormalized-members.md)).
+([ADR 0006](../architecture/adr/0006-denormalized-members.md)).
 
 ### Withdrawing a version
 
@@ -222,7 +222,7 @@ are part of the content hash, so bumping `markdown-it`, `turndown` or
 mints a new version. That is correct — the rendering is part of the artifact —
 but it is a decision, which is why all three are pinned to exact versions and
 `rendererVersion` is recorded on each version record
-([ADR 0003](adr/0003-server-side-markdown.md)).
+([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
 
 ---
 
@@ -234,7 +234,7 @@ to surprise you.
 
 - **Prefer single-file documents.** A fifty-asset deck is fifty function
   invocations per reader; the same deck inlined is one.
-  `docs/authoring-bundles.md` says so at the top.
+  `docs/development/authoring-bundles.md` says so at the top.
 - **Public and unlisted content is cached** `public, max-age=300` on the
   immutable version path, because public documents are where traffic spikes.
   Gated content stays `private, no-store`.

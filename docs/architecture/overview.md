@@ -1,6 +1,6 @@
 # Architecture
 
-`docs/SPEC.md` says what the system does and is normative. This file says why it
+`docs/architecture/spec.md` says what the system does and is normative. This file says why it
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
@@ -150,7 +150,7 @@ a written argument in a pull request, not a dependency.
 - **No destructive or sharing tools on the agent surface.** It can list, create
   and move; it cannot delete a folder, rename one, share anything, or resolve a
   comment thread. Each is a decision a person makes, and each is stated to the
-  agent in `docs/agent-guide.md` rather than left to be discovered as a refusal.
+  agent in `docs/agents/agent-guide.md` rather than left to be discovered as a refusal.
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are
   not.
@@ -191,11 +191,11 @@ surprise you on a bill.
 Two consequences:
 
 - **Prefer single-file bundles.** A 50-asset deck is 50 function invocations per
-  reader; the same deck inlined is one. `docs/authoring-bundles.md` says so at
+  reader; the same deck inlined is one. `docs/development/authoring-bundles.md` says so at
   the top.
 - **Public documents are cacheable** (`public, max-age=300` on the immutable
   version path) precisely because they are where traffic spikes. The trade is
-  five minutes of revocation latency, documented in `docs/operations.md` rather
+  five minutes of revocation latency, documented in `docs/operations/overview.md` rather
   than discovered.
 
-`docs/operations.md` makes setting a GCP budget alert a numbered setup step.
+`docs/operations/overview.md` makes setting a GCP budget alert a numbered setup step.

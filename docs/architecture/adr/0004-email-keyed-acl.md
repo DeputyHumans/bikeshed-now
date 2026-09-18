@@ -35,7 +35,7 @@ Two conditions make this safe, and both are absolute:
   address that matches a pending grant would hand over another person's
   documents. This is why verification blocks sign-up and why the gate cannot be
   relaxed for a provider that does not vouch for addresses — the most tempting
-  shortcut in the codebase, called out in `docs/threat-model.md`.
+  shortcut in the codebase, called out in `docs/architecture/threat-model.md`.
 - One account per email is enforced, not merely default. Two accounts sharing an
   address would be an ACL correctness bug, so a second provider offering a known
   address goes through explicit account linking.

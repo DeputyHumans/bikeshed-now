@@ -34,7 +34,7 @@ Only code paths that actually send email pay for React. `session`,
 - The first email send in a cold instance is slower. It is an email; nobody is
   waiting on the response, and the send is already fire-and-forget.
 - The lazy dependencies sit outside the eager dependency budget and are listed
-  separately in `docs/architecture.md`, so the exemption is visible rather than
+  separately in `docs/architecture/overview.md`, so the exemption is visible rather than
   quietly assumed.
 - **Email is optional by construction.** With no Resend key configured every
   send is a logged no-op and the app behaves identically — that is the path CI

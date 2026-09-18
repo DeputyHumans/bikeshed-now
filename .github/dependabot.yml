@@ -10,7 +10,7 @@
 # entirely. `markdown-it`, `turndown` and `turndown-plugin-gfm` decide the bytes
 # of every Markdown document, and those bytes are part of the content hash — a
 # patch bump re-renders every document and mints a new version on the next save.
-# That is a migration with a runbook (docs/operations.md), not a dependency
+# That is a migration with a runbook (docs/operations/overview.md), not a dependency
 # update, which is why all three are pinned to exact versions.
 
 version: 2

@@ -20,7 +20,7 @@ const ROOT = join(__dirname, "..", "..");
  *
  * So the skills are checked against the two things they describe: the commands
  * the CLI advertises in `--help`, and the tools the MCP server actually serves.
- * The same check runs over `docs/agent-guide.md`, which a deployment serves at
+ * The same check runs over `docs/agents/agent-guide.md`, which a deployment serves at
  * `/llms.txt` and which rots in exactly the same way.
  *
  * The reverse direction is checked too — every tool and every command must be
@@ -28,7 +28,7 @@ const ROOT = join(__dirname, "..", "..");
  * describing something absent. It is a capability nobody is told about.
  */
 
-const GUIDE = readFileSync(join(ROOT, "docs", "agent-guide.md"), "utf8");
+const GUIDE = readFileSync(join(ROOT, "docs", "agents", "agent-guide.md"), "utf8");
 
 /** Every tool the server serves, from the built bundle. */
 const { TOOL_NAMES } = require("../lib/mcp/tools.js");
@@ -80,7 +80,7 @@ async function documents() {
   return {
     skills,
     texts: [
-      ["docs/agent-guide.md", GUIDE],
+      ["docs/agents/agent-guide.md", GUIDE],
       ["skills/README.md", readFileSync(join(ROOT, "skills", "README.md"), "utf8")],
       ...skills.map((s) => [`skills/${s.name}/SKILL.md`, s.text]),
     ],
@@ -150,7 +150,7 @@ test("the guide names every tool the server serves", () => {
   // The costly drift is not a skill describing something absent — an agent
   // finds that out in one call. It is a capability nobody is ever told about.
   for (const tool of TOOL_NAMES) {
-    assert.ok(GUIDE.includes(tool), `docs/agent-guide.md never mentions ${tool}`);
+    assert.ok(GUIDE.includes(tool), `docs/agents/agent-guide.md never mentions ${tool}`);
   }
 });
 
@@ -158,7 +158,7 @@ test("the guide names every command the CLI advertises", () => {
   for (const command of advertisedCommands()) {
     assert.ok(
       commandsIn(GUIDE).has(command),
-      `docs/agent-guide.md never shows \`bikeshed ${command}\``,
+      `docs/agents/agent-guide.md never shows \`bikeshed ${command}\``,
     );
   }
 });
@@ -166,7 +166,7 @@ test("the guide names every command the CLI advertises", () => {
 test("the guide points at every skill, since it is what an agent reads first", async () => {
   const { skills } = await documents();
   for (const skill of skills) {
-    assert.ok(GUIDE.includes(skill.name), `docs/agent-guide.md never mentions ${skill.name}`);
+    assert.ok(GUIDE.includes(skill.name), `docs/agents/agent-guide.md never mentions ${skill.name}`);
   }
 });
 

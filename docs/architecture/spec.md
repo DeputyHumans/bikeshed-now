@@ -1,7 +1,7 @@
 # Bikeshed — implementation spec (normative)
 
 Every module MUST conform to this file. It supersedes prose elsewhere, including
-`README.md` and `docs/architecture.md`. Field names, endpoint shapes, and the
+`README.md` and `docs/architecture/overview.md`. Field names, endpoint shapes, and the
 auth flow are FIXED here. If something is underspecified, prefer the simplest
 choice consistent with the rest of this document.
 
@@ -726,7 +726,7 @@ sharing an address would be an ACL bug.
 Step 3 is security-load-bearing: without it, signing in with an unverified
 address that matches a pending share would hand an attacker someone else's
 documents. This is the most tempting shortcut in the whole feature and is
-recorded as such in `docs/threat-model.md`.
+recorded as such in `docs/architecture/threat-model.md`.
 
 ### Email
 
@@ -945,7 +945,7 @@ and public-access-prevention; `contentProxy` stays the only path bytes take.
 > **An expired document is read-only, and visible only to its owner.**
 
 It is **not a deletion date.** This product does not delete documents (see
-`docs/architecture.md`), so expiry cannot mean removal: the bytes, the versions,
+`docs/architecture/overview.md`), so expiry cannot mean removal: the bytes, the versions,
 the annotations and the comments all survive, and clearing the date restores
 everything. The interface says so in those words, because "expire" reads as
 "delete" to most people and teaching the wrong model here is expensive.
@@ -1145,7 +1145,7 @@ Removing someone from a team must revoke access everywhere the team was granted:
 an `array-contains` query over `team:{teamId}` grants feeding the **same batched
 BFS recompute** that folder-access changes already use. A 50-person team granted
 on 200 documents is 200 writes — a batch, not a job queue. For a small-team tool
-that is the right trade, and it is stated in `docs/architecture.md` so nobody is
+that is the right trade, and it is stated in `docs/architecture/overview.md` so nobody is
 surprised at 10,000 documents.
 
 Three things fall out free because expansion is server-side: the presence mirror
@@ -1264,7 +1264,7 @@ folder granted, so the CLI does not accept the omission.
 
 ### Universal agent instructions
 
-`docs/agent-guide.md` is the source of truth. A build step copies it to
+`docs/agents/agent-guide.md` is the source of truth. A build step copies it to
 `app/public/llms.txt` and **CI asserts the two match**, so hosted instructions
 can never drift from the repo's. `/.well-known/mcp.json` advertises the endpoint.
 

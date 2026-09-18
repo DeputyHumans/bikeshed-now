@@ -7,7 +7,7 @@ import type { Timestamp } from "firebase/firestore";
  * Expiry ends access to the CONTENT. It never deletes anything.
  *
  * This product does not delete documents — that is a decision, stated in
- * docs/architecture.md, not a missing button. So an expiry cannot mean removal,
+ * docs/architecture/overview.md, not a missing button. So an expiry cannot mean removal,
  * and the interface must not imply it does: the bytes, the versions and the
  * comments all survive, and the owner can move the date or clear it.
  *

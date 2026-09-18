@@ -65,7 +65,7 @@ makes highlight-anchored commenting possible without injecting anything into
 your document — and is why an untrusted document's scripts are blocked until
 somebody vouches for them.
 
-`docs/architecture.md` explains the five decisions everything else follows from,
+`docs/architecture/overview.md` explains the five decisions everything else follows from,
 and spends most of its length on **what this is not**.
 
 ---
@@ -74,15 +74,15 @@ and spends most of its length on **what this is not**.
 
 | | |
 |---|---|
-| [`docs/SPEC.md`](docs/SPEC.md) | Normative. Supersedes every other document, including this one |
-| [`docs/architecture.md`](docs/architecture.md) | Why it is shaped this way, and what it deliberately is not |
-| [`docs/threat-model.md`](docs/threat-model.md) | What it protects, from whom, and where it stops |
-| [`docs/operations.md`](docs/operations.md) | Deploying and running one |
-| [`docs/authoring-bundles.md`](docs/authoring-bundles.md) | Writing a document that works well here |
-| [`docs/CONFIG.md`](docs/CONFIG.md) | Every setting, and what it changes |
-| [`docs/verification.md`](docs/verification.md) | The emulator walkthrough: what to observe, and what it proves |
-| [`docs/adr/`](docs/adr/) | Nine decisions, ~30 lines each, so nobody re-argues them in a pull request |
-| [`docs/agent-guide.md`](docs/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
+| [`docs/architecture/spec.md`](docs/architecture/spec.md) | Normative. Supersedes every other document, including this one |
+| [`docs/architecture/overview.md`](docs/architecture/overview.md) | Why it is shaped this way, and what it deliberately is not |
+| [`docs/architecture/threat-model.md`](docs/architecture/threat-model.md) | What it protects, from whom, and where it stops |
+| [`docs/operations/overview.md`](docs/operations/overview.md) | Deploying and running one |
+| [`docs/development/authoring-bundles.md`](docs/development/authoring-bundles.md) | Writing a document that works well here |
+| [`docs/operations/config.md`](docs/operations/config.md) | Every setting, and what it changes |
+| [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | Nine decisions, ~30 lines each, so nobody re-argues them in a pull request |
+| [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
 | [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |
 
@@ -135,7 +135,7 @@ Two consequences worth knowing before you deploy:
   where traffic spikes. The trade is five minutes of revocation latency, and it
   is documented rather than discovered.
 
-`docs/operations.md` makes setting a budget alert a numbered setup step. As of
+`docs/operations/overview.md` makes setting a budget alert a numbered setup step. As of
 early 2026, a small team's usage sits inside the Firebase free tier; a public
 document that gets attention does not.
 
@@ -143,7 +143,7 @@ document that gets attention does not.
 
 ## Deliberately not built
 
-Each of these is a decision with a reason in `docs/architecture.md`, not a gap:
+Each of these is a decision with a reason in `docs/architecture/overview.md`, not a gap:
 
 no operational transform · no plugin system · no theming engine · no i18n · no
 multi-tenancy · no SSO or SCIM · no search index · no mobile app · no admin
@@ -171,7 +171,7 @@ in the title, the wordmark and the package names.
 `v0.1.0`. Working, tested and deployable. The rough edges are honest ones:
 
 - A membership change fans out one write per affected document. Bounded and
-  batched, fine for a small team, and stated in `docs/architecture.md` so nobody
+  batched, fine for a small team, and stated in `docs/architecture/overview.md` so nobody
   is surprised at ten thousand documents.
 - Presence needs a Realtime Database. Without one it degrades to a clean no-op —
   no peer cursors, everything else unchanged.

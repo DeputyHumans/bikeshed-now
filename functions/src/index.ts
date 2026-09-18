@@ -366,7 +366,7 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
   // non-private content need different answers and a Hosting header rule would
   // force one on both. Versions are immutable, so public bytes can never be
   // stale; the real exposure is revocation latency, bounded to this window and
-  // documented in docs/operations.md.
+  // documented in docs/operations/overview.md.
   if (visibility === "private" || isOwnMember) {
     res.setHeader("Cache-Control", "private, no-store");
   } else {
@@ -2114,7 +2114,7 @@ export const manageTokens = onRequest(PLAIN, async (req, res) => {
  * The affected set is an `array-contains` QUERY over `team:{id}` grants, not a
  * traversal, which is what lets this reuse the folder cascade rather than needing
  * a job queue. The cost is honest: a team granted on 200 documents is 200 writes.
- * That is a batch, and the trade is written down in docs/architecture.md rather
+ * That is a batch, and the trade is written down in docs/architecture/overview.md rather
  * than discovered at ten thousand documents.
  */
 async function refanTeam(teamId: string): Promise<number> {

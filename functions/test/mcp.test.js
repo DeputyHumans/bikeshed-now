@@ -76,7 +76,7 @@ test("there are exactly nine tools, and they are the nine in the spec", () => {
 test("the surface has no tool that deletes or shares", () => {
   // Both are stated refusals rather than gaps: deleting a folder reparents
   // everything beneath it, and deciding who can read a document is not a
-  // decision to automate. docs/agent-guide.md says so to the agent; this says
+  // decision to automate. docs/agents/agent-guide.md says so to the agent; this says
   // so to whoever adds the tenth tool.
   for (const name of TOOL_NAMES) {
     assert.doesNotMatch(name, /delete|remove|share|grant|access/);

@@ -7,12 +7,12 @@ treats the following as breaking:
 - the content-hash framing (SPEC §9), because it decides whether a republish
   deduplicates,
 - the MCP protocol version and tool schemas (SPEC §19),
-- `docs/SPEC.md` section numbers, which are cited from a hundred source files:
+- `docs/architecture/spec.md` section numbers, which are cited from a hundred source files:
   append, never renumber.
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
-save mints a new version. `docs/operations.md` says how to plan one.
+save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
@@ -32,7 +32,7 @@ save mints a new version. `docs/operations.md` says how to plan one.
 - `functions/test/skills.test.js` holds those documents to the surface they
   describe: every `bikeshed …` command and every tool name they mention must
   exist, and — the direction that matters more — every tool and command that
-  exists must be named in `docs/agent-guide.md`. A skill naming an absent
+  exists must be named in `docs/agents/agent-guide.md`. A skill naming an absent
   command is worse than no skill, because an agent believes it.
 
 - **Documents can carry an optional expiry.** The owner sets a date in "Who can
@@ -74,7 +74,7 @@ save mints a new version. `docs/operations.md` says how to plan one.
 
 - **Several people can now edit one document at the same time.** Document state
   is a Yjs CRDT bound to the DOM without a schema, so edits merge and every copy
-  converges ([ADR 0010](docs/adr/0010-crdt-for-shared-document-state.md)).
+  converges ([ADR 0010](docs/architecture/adr/0010-crdt-for-shared-document-state.md)).
   Hand-authored HTML still round-trips byte-identical; that property is the
   contract, and the sample bundles are the fixtures that hold it.
 - **The single-holder edit lock is withdrawn**, along with observe mode, "Ask to
@@ -107,11 +107,11 @@ as agents.
   `<details>` ancestor a highlight is hiding behind.
 - **It edits the document you wrote.** `execCommand` on the authored DOM, not a
   normalized schema, so a deck with inline SVG and a scroll observer survives a
-  round trip ([ADR 0007](docs/adr/0007-execcommand-over-schema-editor.md)).
+  round trip ([ADR 0007](docs/architecture/adr/0007-execcommand-over-schema-editor.md)).
 - **Markdown as a first-class source format**, compiled to an HTML bundle
   server-side once per version, with a restricted editor palette whose
   unsupported controls are disabled with a reason rather than hidden
-  ([ADR 0003](docs/adr/0003-server-side-markdown.md)).
+  ([ADR 0003](docs/architecture/adr/0003-server-side-markdown.md)).
 - **Idempotent publishing.** Identical bytes mint no version, by content hash.
 - **Three visibility levels** — private, unlisted by token, public — served
   through a projection that carries no member list, never by opening the bucket.
@@ -120,9 +120,9 @@ as agents.
   (Superseded in Unreleased: edits now merge.)
 - **Teams**, expanded server-side into the flat membership arrays so the one
   provable workspace query is unchanged
-  ([ADR 0006](docs/adr/0006-denormalized-members.md)).
+  ([ADR 0006](docs/architecture/adr/0006-denormalized-members.md)).
 - **An agent surface**: personal access tokens, six MCP tools, a `bikeshed` CLI,
-  and `docs/agent-guide.md` mirrored to `/llms.txt` with CI asserting they match.
+  and `docs/agents/agent-guide.md` mirrored to `/llms.txt` with CI asserting they match.
 - **Provenance on everything.** Identity and channel are derived from the
   credential, never claimed; `client` and `agent` are self-reported and labelled
   as such. Automated reads count into `stats.apiReads`, never into human
@@ -134,14 +134,14 @@ as agents.
 
 - Any verified account may sign in; an optional domain allowlist is generated
   into all four enforcement layers from one file
-  ([ADR 0005](docs/adr/0005-generated-rules.md)).
+  ([ADR 0005](docs/architecture/adr/0005-generated-rules.md)).
 - The bucket is private with public-access prevention. One function is the only
   path bytes take to a browser.
 - Read-only byte paths answer **404** for forbidden and absent alike, so a
   signed-in stranger cannot enumerate the slug space.
 - Untrusted documents render script-sandboxed, with two trust scopes — global
   (owner) and personal (self) — that never collapse into one
-  ([ADR 0002](docs/adr/0002-two-scope-trust.md)).
+  ([ADR 0002](docs/architecture/adr/0002-two-scope-trust.md)).
 - Presence reads are gated by a server-maintained mirror, so a live selection
   stream is never readable by a non-member.
 - Anonymous is read-only everywhere. `publicEdit` widens *who may edit* to any
@@ -155,14 +155,14 @@ modules is 93% of lines. Five guards run in CI — brand purity including git
 history and binary assets, SPDX headers, what each sample demonstrates,
 dependency licences, and byte-comparison of every generated artifact.
 
-`docs/verification.md` is the emulator walkthrough for the integration
+`docs/development/verification.md` is the emulator walkthrough for the integration
 properties no unit test reaches. Writing it found four real defects, each fixed
 in its own commit.
 
 ### Known limits, stated rather than discovered
 
 - A membership change fans out one write per affected document. Bounded and
-  batched; fine for a small team, and named in `docs/architecture.md` so nobody
+  batched; fine for a small team, and named in `docs/architecture/overview.md` so nobody
   is surprised at ten thousand documents.
 - Making a public document private again takes up to five minutes to propagate
   through the CDN. That is the price of caching public content at all.
@@ -171,5 +171,5 @@ in its own commit.
 - Presence needs a Realtime Database and email needs a Resend key. Without
   either, both degrade to clean no-ops — which is the path CI exercises.
 - The MCP server is hand-written rather than built on the SDK, which requires
-  `zod` as a peer ([ADR 0009](docs/adr/0009-hand-written-mcp.md)). Protocol
+  `zod` as a peer ([ADR 0009](docs/architecture/adr/0009-hand-written-mcp.md)). Protocol
   changes are ours to follow, and a test speaks the wire format to catch them.

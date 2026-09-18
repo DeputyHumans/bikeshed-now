@@ -4,7 +4,7 @@ Ten decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
-They are **historical records, not documentation**. `docs/SPEC.md` is normative
+They are **historical records, not documentation**. `docs/architecture/spec.md` is normative
 and wins over anything here. When a decision is reversed, the ADR is marked
 superseded rather than edited — the point is to preserve the reasoning that was
 actually available at the time.

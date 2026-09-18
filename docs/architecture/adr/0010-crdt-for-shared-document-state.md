@@ -8,7 +8,7 @@ collaboration design · **Amends** [0007](0007-execcommand-over-schema-editor.md
 Until now two people could work in a document at the same time but only one
 could type. A single-holder soft lock in Realtime Database made that honest:
 SPEC §6b said "shared awareness is in scope, shared document state is not",
-and `docs/architecture.md` listed "no CRDT or operational-transform merge"
+and `docs/architecture/overview.md` listed "no CRDT or operational-transform merge"
 under *What this is not*.
 
 The product owner asked for genuine simultaneous typing, with the costs in this

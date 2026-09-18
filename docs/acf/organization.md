@@ -182,6 +182,20 @@ These files may use uppercase:
 - ✅ CI directories: `.github/`, `.gitlab-ci.yml`, `.circleci/`
 - ✅ Framework files: `setup.py`, `manage.py` (Python), `mix.exs` (Elixir)
 
+### Confirmed Exceptions (this project)
+
+These root files are **approved and MUST NOT be moved**. The audit is expected
+to leave them alone; a run that reports them is reporting a stale rule.
+
+| File | Why it stays in root |
+|---|---|
+| `AGENTS.md` | Generated from `CLAUDE.md` by `tools/build-agents.mjs` and byte-compared by `check:agents`. Root is also where the cross-tool convention says an agent looks for it |
+| `CODE_OF_CONDUCT.md` | GitHub discovers community-health files by exact name in root, `.github/` or `docs/`. Moving it under `docs/development/` disables the repository UI for it |
+| `SECURITY.md` | Same discovery rule; also the entry point for the private vulnerability-reporting flow |
+| `CHANGELOG.md` | Read at the repo root by convention and by release tooling |
+| `THIRD_PARTY_LICENSES.md` | Cited by name in `check:licenses` output as where the attribution for the one non-permissive build-time dependency lives |
+| `DEPLOYMENT.local.md` | Gitignored, and holds deployment facts that no tracked file may name. `docs/` is tracked, so moving it is one step from committing a leak |
+
 ### Forbidden in Project Root
 
 - ❌ Scripts: `*.sh`, `*.py`, `*.bash` (except framework files above)

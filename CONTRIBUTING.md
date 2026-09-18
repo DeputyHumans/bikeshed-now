@@ -2,7 +2,7 @@
 
 Thanks for looking. This is a small, opinionated codebase that gets most of its
 value from staying small, so the most useful thing you can read before writing
-code is `docs/architecture.md` — in particular the **"What this is not"** list.
+code is `docs/architecture/overview.md` — in particular the **"What this is not"** list.
 
 ## Getting it running
 
@@ -40,7 +40,7 @@ runs every row except 5, which needs the emulators — use
 | 8 | `npm run check:headers` | exit 0 |
 | 9 | `npm run check:content` | every sample still demonstrates what it is there for |
 | 10 | `npm run check:licenses` | exit 0 — every dependency permissive |
-| 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agent-guide.md` |
+| 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agents/agent-guide.md` |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug
@@ -48,7 +48,7 @@ worth reporting on its own.
 
 The table above proves the code is self-consistent. It does not prove the
 product works — the properties that matter most here are integration ones. For
-those, walk `docs/verification.md` against the emulators. It is ten
+those, walk `docs/development/verification.md` against the emulators. It is ten
 observations, it needs no cloud account, and it is where four real defects were
 found that no unit test could have caught.
 
@@ -56,7 +56,7 @@ found that no unit test could have caught.
 
 These are the ones that actually get enforced in review.
 
-1. **`docs/SPEC.md` is normative.** It supersedes prose anywhere else, including
+1. **`docs/architecture/spec.md` is normative.** It supersedes prose anywhere else, including
    the README. If your change contradicts it, change the spec in the same pull
    request and say why. Section numbers are a public API: append, never renumber.
 2. **One owner per concern.** Every shared identifier, token and constant has

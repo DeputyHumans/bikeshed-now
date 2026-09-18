@@ -31,8 +31,8 @@ the rules suite.
 - [ ] **A new endpoint** — it is in `scripts/lib/endpoints.mjs`, `firebase.json`
       and the dev proxy; `wiring.test.js` proves it
 - [ ] **A new dependency** — the written justification is below, and it is
-      within the budget in `docs/architecture.md`
-- [ ] **`docs/SPEC.md`** — sections were appended, never renumbered
+      within the budget in `docs/architecture/overview.md`
+- [ ] **`docs/architecture/spec.md`** — sections were appended, never renumbered
 
 <!--
 A new dependency needs a paragraph here, not a line in package.json. What does

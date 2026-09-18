@@ -11,12 +11,12 @@ For an agent changing this **source**. `AGENTS.md` is generated from this file,
 so either name reaches the same instructions — edit this one.
 
 If you are an agent *using* a deployment through its API rather than changing
-its code, you want `docs/agent-guide.md` instead, which a deployment serves at
-`/llms.txt`. Different job, different document.
+its code, you want `docs/agents/agent-guide.md` instead, which a deployment
+serves at `/llms.txt`. Different job, different document.
 
-Read `docs/architecture.md` first — especially **"What this is not"**. Most bad
-changes here are additions nobody argued for. `docs/SPEC.md` is normative; cite
-it as `(SPEC §N)`.
+Read `docs/architecture/overview.md` first — especially **"What this is not"**.
+Most bad changes here are additions nobody argued for.
+`docs/architecture/spec.md` is normative; cite it as `(SPEC §N)`.
 
 ```bash
 npm run install:all && npm run build:policy   # no Firebase account needed
@@ -40,7 +40,7 @@ Four classes of defect are **invisible locally** and have all shipped:
 |---|---|
 | Response cache headers | Hosting adds `max-age=600` to any function response that sets none; the emulator adds nothing. A cacheable 404 got served to members |
 | `admin.firestore.FieldValue` | The Functions emulator proxies firebase-admin and drops static namespace properties, so it is `undefined` there and fine in production. Import from `firebase-admin/firestore` |
-| Anything IAM | A fresh project grants its runtime identity almost nothing. Symptoms are remote from causes; `docs/operations.md` has the table |
+| Anything IAM | A fresh project grants its runtime identity almost nothing. Symptoms are remote from causes; `docs/operations/overview.md` has the table |
 | `defineSecret` | Mandatory at deploy time, whatever the runtime does with it |
 
 So: **if you touch a response header, an admin-SDK call, the sign-in path, or
@@ -123,7 +123,7 @@ why this fixes it, not what the diff already shows.
 
 No tracked file may name the real project, account, bucket, SDK config or
 measurement id. They live in gitignored files and Secret Manager
-(`docs/operations.md`). Everything committed uses `demo-bikeshed`, which
+(`docs/operations/overview.md`). Everything committed uses `demo-bikeshed`, which
 Firebase refuses to point at a real backend.
 
 The brand guard matches **by shape** — `*.web.app`, `gs://`, `AIza…`, app ids,
@@ -150,16 +150,16 @@ anything outside the permissive allowlist.
 | `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/adr/` | nine decisions, each with its reversal condition |
-| `docs/verification.md` | the emulator walkthrough, and what it proves |
+| `docs/architecture/adr/` | nine decisions, each with its reversal condition |
+| `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 
 ## Looks like a bug, is not
 
 - **`execCommand` is deprecated.** It was when it was chosen, and it is the only
   API that edits a document in place without first deciding what a document may
-  contain ([ADR 0007](docs/adr/0007-execcommand-over-schema-editor.md)).
+  contain ([ADR 0007](docs/architecture/adr/0007-execcommand-over-schema-editor.md)).
 - **The MCP server is hand-written.** The SDK needs `zod`; the server half of
-  streamable HTTP is ~200 lines ([ADR 0009](docs/adr/0009-hand-written-mcp.md)).
+  streamable HTTP is ~200 lines ([ADR 0009](docs/architecture/adr/0009-hand-written-mcp.md)).
 - **Firestore is 8088, Hosting 5050, emulator UI 4040.** Not the defaults: 8080,
   5000 and 4000 are all commonly taken (AirPlay, Docker).
 - **`zoom` is locked in the export stamp but untestable in jsdom.** It is a real

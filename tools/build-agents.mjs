@@ -11,7 +11,7 @@
  * the wrong instructions confidently:
  *
  *   CLAUDE.md          → AGENTS.md            for an agent CHANGING THIS SOURCE
- *   docs/agent-guide.md → app/public/llms.txt for an agent USING A DEPLOYMENT
+ *   docs/agents/agent-guide.md → app/public/llms.txt for an agent USING A DEPLOYMENT
  *   skills/            → app/public/skills/  the long form of the second
  *
  * `AGENTS.md` is the cross-tool convention, so it must exist and must say the
@@ -48,7 +48,7 @@ const PAIRS = [
       "     not a paraphrase that fell behind. -->\n\n",
   },
   {
-    source: "docs/agent-guide.md",
+    source: "docs/agents/agent-guide.md",
     target: "app/public/llms.txt",
     banner: "",
   },

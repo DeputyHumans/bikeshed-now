@@ -47,7 +47,7 @@ not merely written.
 - the frontmatter parses, and `name` matches the directory,
 - every `bikeshed …` command it mentions is one the CLI advertises in `--help`,
 - every MCP tool it names is one the server actually serves,
-- every skill is named in `docs/agent-guide.md`, which is what a deployment
+- every skill is named in `docs/agents/agent-guide.md`, which is what a deployment
   serves at `/llms.txt`.
 
 `npm run check:agents` separately asserts that the copies under

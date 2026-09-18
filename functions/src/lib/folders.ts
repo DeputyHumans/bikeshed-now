@@ -265,7 +265,7 @@ export async function createFolderRecord(
  *
  * The cost is honest and bounded: a folder shared with 50 people containing 200
  * documents is 200 document writes. That is a batch, not a job queue, and the
- * trade is stated in docs/architecture.md so it is not discovered at scale.
+ * trade is stated in docs/architecture/overview.md so it is not discovered at scale.
  */
 export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
   const queue: string[] = [rootId];

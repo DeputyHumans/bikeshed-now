@@ -16,7 +16,7 @@ const turndownGfm = require("turndown-plugin-gfm") as {
  * The editor edits the rendered DOM, exactly as it does for an HTML document, so
  * a save arrives as HTML. Converting it here rather than in the browser means
  * one implementation instead of two, and keeps the app's runtime dependency
- * budget at seven (docs/architecture.md).
+ * budget at seven (docs/architecture/overview.md).
  *
  * The contract this must satisfy
  * ------------------------------
