@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **security@spesivtsev.com**. Please do not open a public issue for
+Email **info@bikeshed.now**. Please do not open a public issue for
 anything that lets someone read a document they should not.
 
 Include what you can: the version or commit, what you did, what happened, and

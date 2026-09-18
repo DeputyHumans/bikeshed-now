@@ -133,6 +133,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   pinned to the `app/.env.example` values in `vite.config.ts`, so the suite is
   hermetic either way. 259 tests pass with the file present and absent alike.
 
+- **Contact addresses now point at the project rather than at a person.**
+  `SECURITY.md` and `CODE_OF_CONDUCT.md` both named a personal domain; both now
+  say `info@bikeshed.now`. The permission address in `NOTICE` is deliberately
+  unchanged — it belongs to a third party, and redirecting it would misdirect
+  the request it exists to receive.
+
 ## 0.1.0 — 2026-09-17
 
 First release. Everything below is new, so this entry says what the thing *is*

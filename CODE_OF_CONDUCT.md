@@ -28,7 +28,7 @@ where you are representing the project.
 
 ## Reporting
 
-Report a problem privately to **conduct@spesivtsev.com**. Reports are read by
+Report a problem privately to **info@bikeshed.now**. Reports are read by
 the maintainers and are not shared further without your consent, except where
 we are legally obliged to.
 
