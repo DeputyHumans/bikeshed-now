@@ -6,10 +6,10 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { setAnalyticsOptOut } from "../analytics";
 import { formatRelative, listMyTeams, saveUserProfile, watchMyTokens, watchUser } from "../firestore";
-import { createTeam, updateTeamMembers } from "../teams";
 import { createToken, isUnused, revokeToken, type TokenChannel } from "../tokens";
 import { clampMarking, SUGGESTED_FOOTER, SUGGESTED_LABEL } from "../export/labels";
 import { Icon } from "../components/Icon";
+import { TeamsSection } from "../components/TeamsSection";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
 import type { Marking, TeamMeta, TokenSummary, UserRecord } from "../types";
@@ -180,61 +180,7 @@ export function Account() {
         </div>
       </section>
 
-      <section style={{ marginTop: "var(--s-5)" }}>
-        <h2>Teams</h2>
-        <p className="field-hint">
-          {/* The consequence people do not expect, said before it happens: a
-              team is an access grant, so adding somebody grants them everything
-              the team already holds. */}
-          A team is something you share with. Adding somebody gives them
-          everything the team has been granted, immediately.
-        </p>
-        <ul className="token-list">
-          {teams.map((team) => (
-            <li key={team.teamId} className="token-row">
-              <Icon name="team" size={15} />
-              <span style={{ flex: 1 }}>
-                <strong>{team.name}</strong>
-                <span className="field-hint" style={{ display: "block" }}>
-                  {team.members.length} {team.members.length === 1 ? "person" : "people"} ·{" "}
-                  <code className="mono">team:{team.teamId}</code>
-                </span>
-              </span>
-              {team.admins.includes(emailLower) ? (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => {
-                    const email = window.prompt(`Add somebody to ${team.name}`);
-                    if (!email) return;
-                    void updateTeamMembers(team.teamId, { add: [email] })
-                      .then((r) =>
-                        toast.show(
-                          r.affected
-                            ? `Added. Access updated on ${r.affected} item${r.affected === 1 ? "" : "s"}.`
-                            : "Added.",
-                        ),
-                      )
-                      .catch((e) => toast.error((e as Error).message));
-                  }}
-                >
-                  Add somebody
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => {
-            const name = window.prompt("Team name");
-            if (name) void createTeam(name).catch((e) => toast.error((e as Error).message));
-          }}
-        >
-          <Icon name="plus" size={14} /> New team
-        </button>
-      </section>
+      <TeamsSection teams={teams} emailLower={emailLower} />
 
       <section style={{ marginTop: "var(--s-5)" }}>
         <h2>Access tokens</h2>

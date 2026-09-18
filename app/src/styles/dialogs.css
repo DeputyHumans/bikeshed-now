@@ -104,6 +104,36 @@
 }
 .team-expansion summary { cursor: pointer; }
 
+/* --- Teams (SPEC §18) -----------------------------------------------------
+ * Same row shape as the share list, because it is the same idea seen from the
+ * other end: there, who a document reaches; here, who a team is.
+ */
+.member-list { list-style: none; margin: 0 0 var(--s-3); padding: 0; }
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.member-row:last-child { border-bottom: 0; }
+.member-row .share-principal { flex: 1; }
+.member-actions { display: flex; align-items: center; gap: var(--s-1); }
+
+/* Destructive actions sit below everything else, behind their own confirmation,
+   and never share a row with an ordinary one. */
+.danger-zone {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--color-line);
+}
+
+@media (max-width: 600px) {
+  /* The buttons wrap under the address rather than squeezing it to nothing. */
+  .member-row { flex-wrap: wrap; }
+  .member-row .share-principal { flex: 1 0 100%; }
+}
+
 /* --- Visibility ---------------------------------------------------------- */
 
 .visibility-options { display: flex; flex-direction: column; gap: var(--s-2); }
