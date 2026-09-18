@@ -2,11 +2,12 @@
 // Signing in, signing up, and email verification (SPEC §3, §14).
 
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth, type PopupProvider } from "../auth";
 import { PasswordForm } from "../components/PasswordForm";
 import { auth } from "../firebase";
 import { Icon } from "../components/Icon";
-import { Spinner } from "../components/Spinner";
+import { Loading, Spinner } from "../components/Spinner";
 import { isEmailShapeValid } from "../generated/policy";
 
 /**
@@ -99,6 +100,28 @@ export function SignUp() {
       .then((c: { signInHint?: string }) => setSignInHint(c.signInHint ?? ""))
       .catch(() => setSignInHint(""));
   }, [gate]);
+
+  /**
+   * Nothing to sign up for.
+   *
+   * This screen answers FOUR gates — signed_out, needs_email,
+   * needs_verification, not_allowed — and every body below is conditioned on
+   * one of them. `ready` and `loading` are not among them, so they rendered the
+   * title and the step list with nothing underneath, and nothing moved the
+   * person on: an empty card, forever, for somebody who had just successfully
+   * signed in.
+   *
+   * `RequireAccount` never hands those two gates here. But /signup is a URL,
+   * and since the landing page started linking to it, the person who completes
+   * a sign-in is standing on it when the gate flips to ready. Deciding this
+   * here rather than in the route covers every call site, including the next
+   * one somebody adds.
+   *
+   * Placed after every hook, because an early return before one changes the
+   * hook order between renders.
+   */
+  if (gate === "loading") return <Loading label="Signing in" />;
+  if (gate === "ready") return <Navigate to="/" replace />;
 
   const start = async () => {
     setBusy(true);
