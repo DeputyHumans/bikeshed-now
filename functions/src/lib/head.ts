@@ -11,13 +11,15 @@
  * The scanner is `indexOf`-driven and linear on adversarial input. Every
  * opener is found with `indexOf`, its terminator with `indexOf` from there,
  * and no character is scanned twice for the same purpose: each character that
- * can end something (`>`, `"`, `'`) is indexed lazily in one forward pass, and
- * the walk that finds a tag's end is memoised per position so that openers
- * nested inside a tag that never closes cost nothing after the first. A tag
- * with no `>` within TAG_CHARS is not a tag; the `<` is skipped. An element
- * that hides its contents (`<script>` and friends, or a comment) with no closer
- * consumes the rest of the input. The only regex is a bounded one over a
- * single already-isolated tag (at most TAG_CHARS long), for its attributes.
+ * can end something (`>`, `"`, `'`) is indexed lazily in one forward pass,
+ * whether a quote opens an attribute value is decided once per quote, and the
+ * walk that finds a tag's end is memoised at every position it passes, so
+ * that openers nested inside a tag that never closes cost nothing after the
+ * first. A tag with no `>` within TAG_CHARS is not a tag; the `<` is skipped.
+ * An element that hides its contents (`<script>` and friends, or a comment)
+ * with no closer consumes the rest of the input. The only regex is a bounded
+ * one over a single already-isolated tag (at most TAG_CHARS long), for its
+ * attributes.
  *
  * Two passes, over an input first cut to HEAD_SCAN_BYTES characters:
  *
@@ -63,22 +65,25 @@ const HIDDEN = ["script", "style", "svg", "template", "nav"];
 
 const RASTER_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: "\u00a0",
-  mdash: "\u2014",
-  ndash: "\u2013",
-  hellip: "\u2026",
-  lsquo: "\u2018",
-  rsquo: "\u2019",
-  ldquo: "\u201c",
-  rdquo: "\u201d",
-  copy: "\u00a9",
-};
+// Every lookup keyed by text from the document is a Map, never a plain
+// object: `&constructor;` or `name="__proto__"` must find nothing, not a
+// member of Object.prototype.
+const NAMED_ENTITIES = new Map<string, string>([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+  ["nbsp", "\u00a0"],
+  ["mdash", "\u2014"],
+  ["ndash", "\u2013"],
+  ["hellip", "\u2026"],
+  ["lsquo", "\u2018"],
+  ["rsquo", "\u2019"],
+  ["ldquo", "\u201c"],
+  ["rdquo", "\u201d"],
+  ["copy", "\u00a9"],
+]);
 
 /** The longest entity body this decoder accepts between `&` and `;`. */
 const ENTITY_CHARS = 32;
@@ -130,17 +135,17 @@ interface Declared {
 }
 
 /** Which `<meta>` goes where, keyed by the attribute that names it. */
-const META_BY_NAME: Record<string, keyof Declared> = {
-  description: "description",
-  keywords: "keywords",
-  "twitter:image": "twitterImage",
-};
-const META_BY_PROPERTY: Record<string, keyof Declared> = {
-  "og:title": "ogTitle",
-  "og:description": "ogDescription",
-  "og:image": "ogImage",
-  "twitter:image": "twitterImage",
-};
+const META_BY_NAME = new Map<string, keyof Declared>([
+  ["description", "description"],
+  ["keywords", "keywords"],
+  ["twitter:image", "twitterImage"],
+]);
+const META_BY_PROPERTY = new Map<string, keyof Declared>([
+  ["og:title", "ogTitle"],
+  ["og:description", "ogDescription"],
+  ["og:image", "ogImage"],
+  ["twitter:image", "twitterImage"],
+]);
 const CAP_OF: Record<keyof Declared, number> = {
   title: CAP.title,
   ogTitle: CAP.title,
@@ -176,17 +181,20 @@ function scanHead(text: string, lower: string): Declared {
       // the head is title text in a browser, which is not a title to trust.
       const closer = closerAt(lower, "title", gt + 1);
       if (closer === null) break;
-      found.title ??= tidy(text.slice(gt + 1, closer.at), CAP.title);
+      found.title ??= tidy(decodeEntities(text.slice(gt + 1, closer.at)), CAP.title);
       i = closer.end;
       continue;
     }
     if (tagIs(lower, lt, "meta")) {
       const attrs = attributes(text.slice(lt + "<meta".length, gt));
+      const name = attrs.get("name");
+      const property = attrs.get("property");
       const key =
-        (attrs.name !== undefined ? META_BY_NAME[attrs.name.toLowerCase()] : undefined) ??
-        (attrs.property !== undefined ? META_BY_PROPERTY[attrs.property.toLowerCase()] : undefined);
-      if (key !== undefined && found[key] === null && attrs.content !== undefined) {
-        found[key] = tidy(attrs.content, CAP_OF[key]);
+        (name !== undefined ? META_BY_NAME.get(name.toLowerCase()) : undefined) ??
+        (property !== undefined ? META_BY_PROPERTY.get(property.toLowerCase()) : undefined);
+      const content = attrs.get("content");
+      if (key !== undefined && found[key] === null && content !== undefined) {
+        found[key] = tidy(content, CAP_OF[key]);
       }
     }
     i = gt + 1;
@@ -231,9 +239,10 @@ function scanBody(text: string, lower: string, wants: BodyWants): { excerpt: str
     }
     if (textFrom === -1 && tagIs(lower, lt, "body")) textFrom = gt + 1;
     if (wantImage && tagIs(lower, lt, "img")) {
-      const src = attributes(text.slice(lt + "<img".length, gt)).src;
+      // Returned as written, less the ends: a URL's insides are the author's.
+      const src = attributes(text.slice(lt + "<img".length, gt)).get("src")?.trim();
       if (src !== undefined && isRaster(src)) {
-        image = tidy(src, CAP.image);
+        image = capped(src, CAP.image);
         wantImage = false;
       }
     }
@@ -402,13 +411,18 @@ function isHtmlSpace(c: number): boolean {
  * a character like any other, as in a browser. The walk from a position to
  * its `>` hops from one closing quote to the next, and its result is memoised
  * at every position it passes, so the openers inside one unterminated tag
- * share a single walk instead of each repeating it.
+ * share a single walk instead of each repeating it. Whether a quote opens a
+ * value is read off the whitespace behind it, and that too is remembered per
+ * quote: every opener before the same quote asks the same question.
  */
 class TagEnds {
   private readonly gt: CharIndex;
   private readonly dq: CharIndex;
   private readonly sq: CharIndex;
+  /** The `>` reached from each position a walk has passed, or -1. */
   private readonly memo = new Map<number, number>();
+  /** Whether each quote already looked at opens an attribute value. */
+  private readonly valueQuotes = new Map<number, boolean>();
 
   constructor(private readonly text: string) {
     this.gt = new CharIndex(text, ">");
@@ -431,6 +445,7 @@ class TagEnds {
         result = known;
         break;
       }
+      path.push(p);
       const gt = this.gt.next(p);
       if (gt === -1) {
         result = -1;
@@ -449,7 +464,6 @@ class TagEnds {
         result = gt;
         break;
       }
-      path.push(p);
       if (!this.opensValue(quote)) {
         p = quote + 1;
         continue;
@@ -465,11 +479,19 @@ class TagEnds {
     return result;
   }
 
-  /** Whether the quote at `at` follows `=` (and optional whitespace). */
+  /**
+   * Whether the quote at `at` follows `=` and optional whitespace. The walk
+   * back over that whitespace is done once per quote: walks from different
+   * quotes never overlap, so together they cost one pass over the text.
+   */
   private opensValue(at: number): boolean {
+    const known = this.valueQuotes.get(at);
+    if (known !== undefined) return known;
     let i = at - 1;
     while (i >= 0 && isHtmlSpace(this.text.charCodeAt(i))) i--;
-    return i >= 0 && this.text.charCodeAt(i) === 0x3d;
+    const opens = i >= 0 && this.text.charCodeAt(i) === 0x3d;
+    this.valueQuotes.set(at, opens);
+    return opens;
   }
 }
 
@@ -515,13 +537,17 @@ class CharIndex {
   }
 }
 
-/** The attributes of one isolated tag interior, names lowercased, first value winning. */
-function attributes(interior: string): Record<string, string> {
-  const out: Record<string, string> = {};
+/**
+ * The attributes of one isolated tag interior, names lowercased, first value
+ * winning. Values are entity-decoded here and nowhere else, as a browser
+ * decodes them once in the tokenizer: `&amp;amp;` reads as `&amp;`.
+ */
+function attributes(interior: string): Map<string, string> {
+  const out = new Map<string, string>();
   ATTRIBUTE.lastIndex = 0;
   for (let m = ATTRIBUTE.exec(interior); m !== null; m = ATTRIBUTE.exec(interior)) {
     const name = m[1].toLowerCase();
-    if (out[name] === undefined) out[name] = decodeEntities(m[2] ?? m[3] ?? m[4] ?? "");
+    if (!out.has(name)) out.set(name, decodeEntities(m[2] ?? m[3] ?? m[4] ?? ""));
   }
   return out;
 }
@@ -529,11 +555,15 @@ function attributes(interior: string): Record<string, string> {
 /* ------------------------------------------------------------------------ */
 /* Text                                                                      */
 
-/** Decoded, whitespace-collapsed, trimmed and capped; null when nothing is left. */
-function tidy(raw: string, cap: number): string | null {
-  const text = collapseWhitespace(decodeEntities(raw));
-  if (text.length === 0) return null;
-  return text.length > cap ? cutAt(text, cap).trimEnd() : text;
+/** Whitespace-collapsed, trimmed and capped; null when nothing is left. Decoding is the caller's. */
+function tidy(text: string, cap: number): string | null {
+  const collapsed = collapseWhitespace(text);
+  return collapsed.length === 0 ? null : capped(collapsed, cap);
+}
+
+/** At most `n` code units, without a trailing space the cut would leave. */
+function capped(text: string, n: number): string {
+  return text.length > n ? cutAt(text, n).trimEnd() : text;
 }
 
 /** The first `n` code units, less a high surrogate that would be left without its pair. */
@@ -566,7 +596,7 @@ function decodeEntities(text: string): string {
 }
 
 function decodeEntity(body: string): string | null {
-  if (body.charCodeAt(0) !== 0x23) return NAMED_ENTITIES[body] ?? null;
+  if (body.charCodeAt(0) !== 0x23) return NAMED_ENTITIES.get(body) ?? null;
   const hex = body.charCodeAt(1) === 0x78 || body.charCodeAt(1) === 0x58;
   const digits = body.slice(hex ? 2 : 1);
   if (digits.length === 0 || !(hex ? /^[0-9a-fA-F]+$/ : /^[0-9]+$/).test(digits)) return null;

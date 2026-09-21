@@ -116,6 +116,32 @@ test("entities in the title are decoded", () => {
   assert.equal(readHead(html).title, "A — B C’s © — D <E> & &bogus;");
 });
 
+test("an entity named like an Object.prototype member is unknown, not a lookup", () => {
+  const html = doc("<title>Q&constructor;A &__proto__; &hasOwnProperty;</title>");
+  assert.equal(readHead(html).title, "Q&constructor;A &__proto__; &hasOwnProperty;");
+});
+
+test("title text and attribute values are each decoded exactly once", () => {
+  // `&amp;amp;` is `&amp;` after one pass, as a browser reads it; a second
+  // pass would take it on to `&`, and no pass at all would leave `&amp;amp;`.
+  const html = doc(
+    "<title>Q&amp;amp;A</title>" +
+      '<meta name="description" content="Use &amp;amp; for &amp;lt;b&amp;gt;">',
+    '<h1>T</h1><img src="a.png?x=1&amp;amp;y=2">',
+  );
+  const head = readHead(html);
+  assert.equal(head.title, "Q&amp;A");
+  assert.equal(head.description, "Use &amp; for &lt;b&gt;");
+  assert.equal(head.image, "a.png?x=1&amp;y=2");
+});
+
+test("an <img> src is trimmed and capped but otherwise left as written", () => {
+  const spaced = doc("<title>T</title>", '<h1>T</h1><img src="  my   photo.png ">');
+  assert.equal(readHead(spaced).image, "my   photo.png");
+  const long = doc("<title>T</title>", `<h1>T</h1><img src="${"x".repeat(3000)}.png">`);
+  assert.equal(readHead(long).image.length, 2048);
+});
+
 test("a <title> directly under <html> with no <head> element is still found", () => {
   const html = "<html><title>Bare</title><body><p>Hi.</p></body></html>";
   assert.equal(readHead(html).title, "Bare");
@@ -280,6 +306,17 @@ test("100,000 unclosed <script> openers scan in linear time", () => {
 
 test("50,000 unclosed comment openers scan in linear time", () => {
   const html = "<!--".repeat(50_000);
+  const ms = timed(() => readHead(html));
+  assert.ok(ms < TIME_BUDGET_MS, `took ${ms.toFixed(0)} ms`);
+});
+
+test("65,536 openers before a whitespace run and a quoted > scan in linear time", () => {
+  // Every opener reaches the same quote before the only `>`, and whether that
+  // quote opens an attribute value is read off the whitespace behind it. That
+  // walk has to be paid once for the quote, not once for every opener.
+  const openers = HEAD_SCAN_BYTES / 4;
+  const html = "<x".repeat(openers) + " ".repeat(HEAD_SCAN_BYTES / 2 - 2) + '">';
+  assert.equal(html.length, HEAD_SCAN_BYTES);
   const ms = timed(() => readHead(html));
   assert.ok(ms < TIME_BUDGET_MS, `took ${ms.toFixed(0)} ms`);
 });
