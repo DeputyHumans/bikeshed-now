@@ -15,10 +15,18 @@ import { useEffect } from "react";
  * fallback exists: leaving the previous document's title behind would carry
  * it into whatever screen comes next — the workspace, another document mid
  * load — same shape of leak the server-side default closes on the way in.
+ *
+ * `title` is `""` for the whole `useDocument()` loading window and for every
+ * not-found/denied document (it never resolves) — falling back to "Bikeshed"
+ * for an empty title, rather than writing it verbatim, is what keeps the tab
+ * from going blank on every open and staying blank forever on one the reader
+ * cannot see. The same fallback also clears a *previous* document's title
+ * left over from before a same-component navigation, instead of leaving it
+ * showing through the next one's loading window.
  */
 export function useDocumentTitle(title: string): void {
   useEffect(() => {
-    document.title = title;
+    document.title = title || "Bikeshed";
     return () => {
       document.title = "Bikeshed";
     };

@@ -30,4 +30,27 @@ describe("useDocumentTitle", () => {
 
     expect(document.title).toBe("Bikeshed");
   });
+
+  it("falls back to the app title while the document is still loading", () => {
+    // useDocument()'s EMPTY sentinel is title: "" for the whole loading
+    // window, and permanently for a not-found/denied document — an empty
+    // string must never reach document.title verbatim.
+    renderHook(() => useDocumentTitle(""));
+
+    expect(document.title).toBe("Bikeshed");
+  });
+
+  it("falls back to the app title rather than leaking a previous document's title", () => {
+    // The same DocViewer instance navigates from one document straight into
+    // loading the next (or into one that turns out not-found) without
+    // unmounting in between — the only sequence a real visitor performs.
+    const { rerender } = renderHook(({ title }) => useDocumentTitle(title), {
+      initialProps: { title: "Q3 acquisition memo" },
+    });
+    expect(document.title).toBe("Q3 acquisition memo");
+
+    rerender({ title: "" });
+
+    expect(document.title).toBe("Bikeshed");
+  });
 });
