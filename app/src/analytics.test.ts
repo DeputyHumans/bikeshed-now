@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // No identifier ever reaches a third party (SPEC §15).
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildEvent, routePattern, type AnalyticsEvent } from "./analytics";
 
 /**
@@ -121,5 +121,43 @@ describe("buildEvent", () => {
     // be checked against the assertion above.
     const covered = new Set(EVERY_EVENT.map((e) => e.name));
     expect(covered.size).toBe(11);
+  });
+});
+
+describe("the tag's own events", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    window.localStorage.clear();
+  });
+
+  it("pins page_title in the tag config, so gtag's automatic events carry the constant too", async () => {
+    /**
+     * `buildEvent` covers only the events this app logs. gtag emits
+     * `session_start`, `first_visit` and `user_engagement` on its own and
+     * attaches `page_title` from `document.title` — which the viewer sets to
+     * the document's own title. The one place that reaches those is the
+     * config the tag is initialised with, beside `send_page_view: false`.
+     * Config and firebase are stubbed so nothing here depends on which .env
+     * file happens to be present.
+     */
+    const { writeConsent } = await import("./consent");
+    writeConsent("granted");
+    const initializeAnalytics = vi.fn(() => ({}) as never);
+    vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
+    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/analytics", () => ({
+      initializeAnalytics,
+      isSupported: async () => true,
+      logEvent: vi.fn(),
+      setAnalyticsCollectionEnabled: vi.fn(),
+    }));
+    const analytics = await import("./analytics");
+    analytics.initAnalytics();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(initializeAnalytics).toHaveBeenCalledTimes(1);
+    const [, options] = initializeAnalytics.mock.calls[0] as unknown as [unknown, { config: Record<string, unknown> }];
+    expect(options.config.send_page_view).toBe(false);
+    expect(options.config.page_title).toBe("Bikeshed");
   });
 });

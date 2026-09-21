@@ -83,8 +83,15 @@ function resolve(): Promise<Analytics | null> {
       const { initializeAnalytics, isSupported } = await import("firebase/analytics");
       if (!(await isSupported())) return null;
       instance = initializeAnalytics(app, {
-        // The one line that keeps document slugs out of a third party's logs.
-        config: { send_page_view: false },
+        config: {
+          // The one line that keeps document slugs out of a third party's logs.
+          send_page_view: false,
+          // gtag emits session_start, first_visit and user_engagement on its
+          // own and attaches page_title from document.title, which the viewer
+          // sets to the document's own title. `buildEvent` pins the constant
+          // on the events this app logs; this pins it on the tag's.
+          page_title: "Bikeshed",
+        },
       });
       return instance;
     } catch {
