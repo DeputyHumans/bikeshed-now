@@ -157,6 +157,19 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **Selecting text on a click-driven deck advanced the slide.** A drag that
+  selects a passage ends in a `click`, and a deck whose own script advances on
+  click — the common hand-made shape — took it, hiding the very slide the
+  reader was about to comment on. Clicking a highlight did the same: the thread
+  opened in the panel while the deck moved off it. Both clicks are now stopped
+  before the document's own scripts see them — a capture-phase listener on the
+  frame window for the selection, the highlight's own listener for the mark —
+  and only those. The selection test is what the gesture did, not whether
+  text is selected: a click that dismisses a selection, or one made while a
+  selection sits stranded on a slide the keys moved off, is an ordinary click
+  and the deck gets it as before. It is propagation that is stopped, never
+  the default action, so a link still navigates (SPEC §6).
+
 - **The slide rail had no layout container, so it stacked on top of the
   document.** `.doc-frame-wrap` was a plain block, and the rail was rendered as
   a normal-flow sibling of a full-width iframe — so above 860px the rail sat

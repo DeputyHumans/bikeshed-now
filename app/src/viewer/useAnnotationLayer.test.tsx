@@ -183,3 +183,50 @@ describe("selecting a thread", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("a click that carries a comment intent", () => {
+  /** The gesture a reader makes: pointer down, the drag selects, click. */
+  function dragSelect(doc: Document, selector: string): void {
+    const el = doc.querySelector(selector)!;
+    const view = doc.defaultView!;
+    act(() => {
+      el.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      const range = doc.createRange();
+      range.selectNodeContents(el);
+      const sel = doc.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      el.dispatchEvent(new view.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  function plainClick(doc: Document, selector: string): void {
+    const el = doc.querySelector(selector)!;
+    const view = doc.defaultView!;
+    act(() => {
+      el.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      doc.getSelection()!.removeAllRanges();
+      el.dispatchEvent(new view.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  it("never reaches the document's own click listener when the click made a selection", () => {
+    // The deck's own script, which advances on click and would hide the very
+    // slide the reader is about to comment on.
+    const doc = makeDoc();
+    const advance = vi.fn();
+    doc.addEventListener("click", advance);
+    const { unmount } = mount(doc);
+
+    dragSelect(doc, "#s1 p");
+    expect(advance).not.toHaveBeenCalled();
+
+    plainClick(doc, "#s1 p");
+    expect(advance).toHaveBeenCalledTimes(1);
+
+    // Gone with the layer: the edit frame gets every click, caret and all.
+    unmount();
+    dragSelect(doc, "#s1 p");
+    expect(advance).toHaveBeenCalledTimes(2);
+  });
+});

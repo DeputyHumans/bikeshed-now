@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The serializer is the single most valuable test in this app (SPEC §6a).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   captureAssetTags,
   clearHighlights,
@@ -331,6 +331,24 @@ describe("selection and clicks", () => {
     attachHighlightClick(doc, (id) => seen.push(id));
     doc.querySelector("p")!.dispatchEvent(new Event("click", { bubbles: true }));
     expect(seen).toEqual([]);
+  });
+
+  it("keeps a click on a highlight from the document's own listeners", async () => {
+    // The click is the thread's. A deck that advances on click would otherwise
+    // move off the passage the reader just opened.
+    const { attachHighlightClick } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha</p><p>beta</p></section>");
+    highlightRange(doc, rangeOver(doc, "p:first-child"), "a1");
+    const advance = vi.fn();
+    doc.addEventListener("click", advance);
+    attachHighlightClick(doc, () => {});
+
+    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(advance).not.toHaveBeenCalled();
+
+    // Plain text is still the document's to answer.
+    doc.querySelector("p:last-child")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(advance).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a resolved annotation undrawn, and does not call it orphaned", async () => {

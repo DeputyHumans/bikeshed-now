@@ -396,6 +396,28 @@ Because it is same-origin, the parent app drives annotation directly on
   passage is dealt with, so its mark comes off the prose; the thread stays in
   the panel and can be reopened there. A resolved annotation is skipped before
   its anchor is resolved, so it is never reported as orphaned either.
+- **A click that carries a comment intent never reaches the document's own
+  scripts.** A drag that selects text ends in a `click`, and a click on a
+  highlight is the thread's. Both are stopped in the capture phase before any
+  listener the document registered — the selection's at the frame *window*,
+  which sits above the document in the propagation path and so runs first
+  whatever the document attached, and whenever; the highlight's by the
+  listener that already claims it. Propagation is stopped, the default action
+  is not: a link still navigates and a `<summary>` still toggles. This is what
+  keeps a deck that advances on click (§6d) on the slide being annotated.
+  Reading mode only, with the rest of the layer: the edit frame runs no script
+  and the caret must never lose a click.
+
+  The test is what *this gesture* did, not whether text is selected: the
+  selection is noted at pointer-down and compared at click, and only a click
+  that changed it is stopped. Measured in Chrome, that is the line that
+  matters. A click that dismisses a selection collapses it on mouse-up, before
+  `click`, and is an ordinary click. A selection stranded on a slide the arrow
+  keys moved off is never collapsed — hidden text cannot be hit-tested — and
+  is the same selection at both moments, so it passes; stopping on "text is
+  selected" swallowed every click from then on. A click with no pointer-down
+  before it — keyboard activation, a script's own synthetic click — is nobody
+  selecting text and passes as well.
 
 ### 6a. Inline editing
 
@@ -513,7 +535,10 @@ which slide is *shown* (`display`, `visibility`, `opacity`, a translating
 changes as the signal, since nothing scrolls. That is the deck's own contract;
 the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the
 wild), and toggling the deck's class would style a document this app does not
-own. A stacked deck that takes no arrow keys cannot be driven from the rail and
+own. The one input a deck's script is denied is the click that carries a
+reader's comment intent — a drag that selected text, or a click on a
+highlight — which §6 stops before the deck sees it, so a deck that advances
+on click stays on the slide being annotated. A stacked deck that takes no arrow keys cannot be driven from the rail and
 falls back to the scroll, which leaves it exactly where it was. The navigator —
 rail, overview and arrow keys alike — appears only when slides measure about
 one viewport tall. On a document whose sections are

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
+import { attachSelectionGuard } from "../annotation/clickGuard";
 import {
   attachHighlightClick,
   clearHighlights,
@@ -60,8 +61,15 @@ export function useAnnotationLayer(options: {
     if (!enabled || !doc) return;
     ensureHighlightStyles(doc);
     const detach = attachHighlightClick(doc, (annId) => onSelectRef.current(annId));
+    // A click that ends a text selection is the start of a comment, not a
+    // click for the document's own scripts — on a deck that advances on
+    // click, letting it through hides the passage before the reader can
+    // comment on it. Reading mode only, with the rest of this effect: the edit
+    // frame runs no script and the caret must never lose a click.
+    const unguard = attachSelectionGuard(doc);
     return () => {
       detach();
+      unguard();
       // Both, and in this order: unwrap the marks, then remove the stylesheet.
       // Removing the stylesheet first leaves unstyled <mark> elements visible
       // for a frame.

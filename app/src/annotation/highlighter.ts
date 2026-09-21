@@ -382,7 +382,11 @@ export function attachHighlightClick(
     const target = e.target as Element | null;
     const mark = target?.closest?.(HL_SELECTOR) as Element | null;
     const id = mark?.getAttribute(ANN_ATTR);
-    if (id) onClick(id);
+    if (!id) return;
+    onClick(id);
+    // And it stops here: the click is the thread's. A deck that advances on
+    // click would otherwise move off the passage the reader just opened.
+    e.stopPropagation();
   };
   // Capture phase, so a document that stops propagation on its own click
   // handlers cannot make its highlights unclickable.
