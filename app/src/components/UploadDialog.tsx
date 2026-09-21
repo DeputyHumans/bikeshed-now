@@ -38,9 +38,8 @@ export function UploadDialog({
         return;
       }
       setFile(next);
-      if (!title) setTitle(next.name.replace(/\.[^.]+$/, ""));
     },
-    [title, toast],
+    [toast],
   );
 
   const upload = async () => {
@@ -138,7 +137,7 @@ export function UploadDialog({
           className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Taken from the file name"
+          placeholder="From the document's <title>, else the file name"
         />
       </div>
 

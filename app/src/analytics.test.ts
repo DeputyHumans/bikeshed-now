@@ -78,6 +78,31 @@ describe("buildEvent", () => {
     }
   });
 
+  it("pins page_title to the constant on every non-page_view event", () => {
+    // GA4 attaches page_title from document.title automatically. The viewer
+    // now sets that to the document's own title (Task 6), so every OTHER event
+    // has to override it back to the constant or the title rides along.
+    for (const event of EVERY_EVENT) {
+      if (event.name === "page_view") continue;
+      const built = buildEvent(event);
+      expect(built.params.page_title, event.name).toBe("Bikeshed");
+    }
+  });
+
+  it("still pins page_title when document.title is the document's own", () => {
+    const original = document.title;
+    document.title = "Q3 memo";
+    try {
+      const built = buildEvent({
+        name: "doc_open",
+        params: { format: "html", sandboxed: true },
+      });
+      expect(built.params.page_title).toBe("Bikeshed");
+    } finally {
+      document.title = original;
+    }
+  });
+
   it("never carries an identifier in any event", () => {
     for (const event of EVERY_EVENT) {
       const serialized = JSON.stringify(buildEvent(event));

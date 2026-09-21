@@ -155,7 +155,11 @@ export function buildEvent(event: AnalyticsEvent): {
       params: { page_path: pattern, page_location: pattern, page_title: pattern },
     };
   }
-  return { name: event.name, params: { ...event.params } };
+  // GA4 attaches page_title from document.title automatically, and the
+  // viewer now sets that to the document's own title — so every OTHER event
+  // has to pin it back to the constant, or a document's title rides along on
+  // doc_open, comment_create, every event this app logs (SPEC §15).
+  return { name: event.name, params: { ...event.params, page_title: "Bikeshed" } };
 }
 
 export function logEvent(event: AnalyticsEvent): void {

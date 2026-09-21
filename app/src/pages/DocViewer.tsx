@@ -16,6 +16,7 @@ import { MARKING_OFF } from "../export/labels";
 import { useIsSingleColumn } from "../hooks/useMediaQuery";
 
 import { useDocument } from "../viewer/useDocument";
+import { useDocumentTitle } from "../viewer/useDocumentTitle";
 import { useDocFrame } from "../viewer/useDocFrame";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
@@ -229,6 +230,13 @@ export function DocViewer() {
     epoch: frame.epoch,
     enabled: mode.kind === "reading" && !mode.draft,
   });
+
+  // Closes the gap the server-side shell title cannot: SPA navigation between
+  // documents never re-requests `/d/**`, and a member of a private document
+  // gets the generic shell regardless. Reads nothing from the frame and puts
+  // nothing in the document the frame owns, so the decoration-ordering rule
+  // above does not apply to it.
+  useDocumentTitle(doc.title);
 
   useEffect(() => {
     if (!doc.currentVersion) return;
