@@ -137,8 +137,25 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   const dirArg = values.dir ?? join("content", docId, "bundle");
   const bundleDir = isAbsolute(dirArg) ? dirArg : join(REPO_ROOT, dirArg);
 
-  // Hashed and the entry resolved before the title: an HTML default title
-  // needs to know which file the entry is before it can be read.
+  const slug = manifest.slug ?? docId;
+  const ownerRaw = values.owner ?? manifest.owner;
+  if (!ownerRaw) fail("no owner: pass --owner or set `owner` in the manifest");
+  const viewersRaw =
+    values.viewers != null ? splitList(values.viewers) : (manifest.viewers ?? []);
+  const editorsRaw = manifest.editors ?? [];
+
+  // Validate before touching anything: a mistyped address should fail here, not
+  // after the bytes are uploaded — and before the bundle is even read.
+  const [ownerEmail] = assertUsableEmails([ownerRaw]);
+  const viewers = [...new Set(viewersRaw.map(String))];
+  const editors = [...new Set(editorsRaw.map(String))];
+  for (const list of [viewers, editors]) {
+    assertUsableEmails(list.filter((p) => !p.startsWith("team:")));
+  }
+
+  // Hash the authored bundle exactly as it sits on disk. The entry is resolved
+  // here, before the title, because an HTML default title needs to know which
+  // file to read.
   const authored = hashBundle(bundleDir);
   const entry = values.entry ?? manifest.entry ?? guessEntry(authored.files);
 
@@ -154,21 +171,6 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
       const html = entryFile ? readFileSync(entryFile.abs, "utf8") : "";
       title = titleFromHtml(html) ?? docId;
     }
-  }
-  const slug = manifest.slug ?? docId;
-  const ownerRaw = values.owner ?? manifest.owner;
-  if (!ownerRaw) fail("no owner: pass --owner or set `owner` in the manifest");
-  const viewersRaw =
-    values.viewers != null ? splitList(values.viewers) : (manifest.viewers ?? []);
-  const editorsRaw = manifest.editors ?? [];
-
-  // Validate before touching anything: a mistyped address should fail here, not
-  // after the bytes are uploaded.
-  const [ownerEmail] = assertUsableEmails([ownerRaw]);
-  const viewers = [...new Set(viewersRaw.map(String))];
-  const editors = [...new Set(editorsRaw.map(String))];
-  for (const list of [viewers, editors]) {
-    assertUsableEmails(list.filter((p) => !p.startsWith("team:")));
   }
 
   // A Markdown bundle gains its compiled entry BEFORE hashing, so the stored
