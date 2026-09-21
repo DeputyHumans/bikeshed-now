@@ -2,7 +2,7 @@
 // The separate document a slide thumbnail renders (SPEC §6d).
 
 import { OWN_SELECTOR, PREVIEW_ATTR } from "../brand/dom";
-import type { Slide } from "./deck";
+import { hasTranslation, readComputed, type Slide, type SlideComputed } from "./deck";
 
 /**
  * A preview is a SEPARATE document this app builds. It is never the frame the
@@ -38,14 +38,6 @@ import type { Slide } from "./deck";
  * own frame too.
  */
 
-/** What the live frame says about the slide, and nothing more. */
-export interface SlideComputed {
-  display: string;
-  visibility: string;
-  opacity: string;
-  transform: string;
-}
-
 /**
  * Repeated three times on purpose.
  *
@@ -54,27 +46,6 @@ export interface SlideComputed {
  * single `[attr]` at (0,1,0) loses and the preview renders blank.
  */
 const SELECTOR = `[${PREVIEW_ATTR}][${PREVIEW_ATTR}][${PREVIEW_ATTR}]`;
-
-/**
- * Whether a transform MOVES the slide, as opposed to scaling or rotating it.
- *
- * A carousel parks its off-screen slides with `translate3d(-150%, 0, 0)`, and
- * that has to go. A deck that renders its stage with `scale(0.5)` is doing
- * layout, and taking that away would be the flattening bug again in a new
- * costume. A browser resolves both to a matrix; jsdom echoes the authored
- * string straight back, so both forms are read.
- */
-export function hasTranslation(transform: string): boolean {
-  if (!transform || transform === "none") return false;
-  const matrix = /^matrix(3d)?\(([^)]*)\)$/.exec(transform.trim());
-  if (!matrix) return /translate/i.test(transform);
-  const parts = matrix[2].split(",").map((n) => Number(n.trim()));
-  // matrix(a,b,c,d,e,f) carries the offset in e,f; matrix3d in 13 and 14.
-  const x = matrix[1] ? parts[12] : parts[4];
-  const y = matrix[1] ? parts[13] : parts[5];
-  // A sub-pixel offset is rounding, not a parked slide.
-  return Math.abs(x || 0) > 1 || Math.abs(y || 0) > 1;
-}
 
 /**
  * The only rule the preview adds, built from what the live document actually
@@ -114,16 +85,6 @@ function copyAttributes(from: Element | null, to: Element): void {
   for (const attr of Array.from(from.attributes)) {
     to.setAttribute(attr.name, attr.value);
   }
-}
-
-function readComputed(view: Window, el: Element): SlideComputed {
-  const style = view.getComputedStyle(el);
-  return {
-    display: style.display,
-    visibility: style.visibility,
-    opacity: style.opacity,
-    transform: style.transform,
-  };
 }
 
 function donorDisplay(view: Window, outer: Element): string | null {

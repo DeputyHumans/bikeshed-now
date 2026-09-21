@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Moving through a deck: position, paging, and the keys that drive it (SPEC §6d).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import {
   activeIndex,
   FALLBACK_STAGE,
   isPaged,
+  isShown,
+  isStacked,
+  readComputed,
   scanSlides,
+  shownIndex,
   stageSize,
   type Slide,
   type SlideScan,
@@ -16,14 +20,53 @@ import {
 } from "./deck";
 
 /**
- * This hook SCROLLS the document and reads it. It never writes to it, injects
- * nothing, and marks nothing — so unlike the annotation, presence and editor
- * hooks it carries no ordering obligation against `useInlineEditor`, and it is
- * deliberately absent from `viewer/invariant.test.tsx`'s harness. If it ever
- * gains a marker, a class or an attribute, both of those stop being true.
+ * This hook SCROLLS the document, presses its keys, and reads it. It never
+ * writes to it, injects nothing, and marks nothing — so unlike the annotation,
+ * presence and editor hooks it carries no ordering obligation against
+ * `useInlineEditor`, and it is deliberately absent from
+ * `viewer/invariant.test.tsx`'s harness. If it ever gains a marker, a class or
+ * an attribute, both of those stop being true.
+ *
+ * A deck that runs its own JavaScript usually STACKS its slides — every one at
+ * `position:absolute; inset:0`, one shown at a time — and on that shape
+ * scrolling to a slide changes nothing, which left the rail, the overview and
+ * the parent's arrow keys all dead on a trusted deck. So on a stacked deck
+ * this hook reaches a slide by pressing the arrow keys the deck already
+ * answers to, and reads position from which slide is SHOWN rather than from an
+ * offset. That is the deck's own contract, the same one `onKey` below defers to
+ * by yielding on `defaultPrevented`; the hash was rejected because its shape is
+ * per-framework, and toggling the deck's class ourselves because that styles a
+ * document this app does not own. A stacked deck that ignores the arrows is no
+ * worse off than before: `goTo` falls back to the scroll that never worked.
  */
 
 const NO_SLIDES: Slide[] = [];
+
+/**
+ * Walk a stacked deck from `from` to `to` with its own arrow keys, dispatched
+ * on the frame's `body` so a deck listening on `body`, `document` or `window`
+ * all hear it. `dispatchEvent` is false when a listener called
+ * `preventDefault`, which is how a deck says it took the key; the first key it
+ * does not take ends the walk and reports it, so the caller can fall back.
+ */
+function pressArrows(
+  doc: Document,
+  view: Window & typeof globalThis,
+  from: number,
+  to: number,
+): boolean {
+  const key = to > from ? "ArrowRight" : "ArrowLeft";
+  for (let n = Math.abs(to - from); n > 0; n -= 1) {
+    const event = new view.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    if (doc.body.dispatchEvent(event)) return false;
+  }
+  return true;
+}
+
+/** Which slide a stacked deck is showing, read live from the frame. */
+function shownSlide(view: Window, slides: Slide[]): number {
+  return shownIndex(slides.map((slide) => isShown(readComputed(view, slide.el))));
+}
 
 /**
  * Somewhere the reader is composing, so the keys are theirs, not ours.
@@ -77,9 +120,17 @@ export function useDeck({
   const [nonce, setNonce] = useState(0);
   const [current, setCurrent] = useState(0);
   const [paged, setPaged] = useState(false);
+  const [stacked, setStacked] = useState(false);
   const [stage, setStage] = useState<StageSize>(FALLBACK_STAGE);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const reduceMotion = usePrefersReducedMotion();
+  /**
+   * True while `goTo` is pressing keys into the frame. The keys it presses
+   * reach `onKey`'s own listener on the frame document, and on a stacked deck
+   * that takes no arrow keys that is goTo → key → goTo → key until the stack
+   * overflows. Not an `isTrusted` gate — see `onKey` for why that matters.
+   */
+  const driving = useRef(false);
 
   // Keyed on epoch, never on the iframe ref: `useDocFrame` bumps the epoch in
   // onLoad, and that is the only moment the document is known to be the new one.
@@ -107,27 +158,42 @@ export function useDeck({
    *
    * Position tracks scroll and resize; whether this is a DECK does not. See
    * the latch below for why that separation is load-bearing rather than tidy.
+   *
+   * A stacked deck moves by toggling a class or a style on a slide and fires
+   * no scroll for it, so there position is which slide is shown, and the
+   * attributes are what to watch. That is how the rail follows the reader's
+   * own keys, clicks and wheel inside the frame. Observation only: nothing
+   * here changes the document.
    */
   useEffect(() => {
     const view = doc?.defaultView;
     if (!view || slides.length === 0) return;
     const measure = () => {
       setCurrent(
-        activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
+        stacked
+          ? shownSlide(view, slides)
+          : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
       );
     };
     measure();
     view.addEventListener("scroll", measure, { passive: true });
     view.addEventListener("resize", measure);
+    const observer = stacked && doc.body ? new view.MutationObserver(measure) : null;
+    observer?.observe(doc.body, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["class", "style", "hidden", "aria-hidden"],
+    });
     return () => {
       view.removeEventListener("scroll", measure);
       view.removeEventListener("resize", measure);
+      observer?.disconnect();
     };
-  }, [doc, epoch, slides]);
+  }, [doc, epoch, slides, stacked]);
 
   /**
-   * `paged` and `stage` are LATCHED: decided once per document, never
-   * recomputed for a resize.
+   * `paged`, `stacked` and `stage` are LATCHED: decided once per document,
+   * never recomputed for a resize.
    *
    * That is not an optimisation. The rail renders only when `paged` is true,
    * and rendering it narrows the frame — which fires `resize` inside the guest,
@@ -143,11 +209,13 @@ export function useDeck({
     const view = doc?.defaultView;
     if (!view || slides.length === 0) {
       setPaged(false);
+      setStacked(false);
       setStage(FALLBACK_STAGE);
       return;
     }
     const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
     setPaged(isPaged(rects.map((r) => r.height), view.innerHeight));
+    setStacked(isStacked(rects));
     setStage(
       stageSize({ width: view.innerWidth, height: view.innerHeight }, rects),
     );
@@ -157,13 +225,30 @@ export function useDeck({
     (index: number) => {
       const slide = slides[Math.max(0, Math.min(slides.length - 1, index))];
       if (!slide) return;
+      const view = doc?.defaultView;
+      if (stacked && view && doc.body) {
+        // From where the deck IS, read live — the reader may have moved it
+        // with its own controls since the last thing this hook did.
+        driving.current = true;
+        try {
+          if (pressArrows(doc, view, shownSlide(view, slides), slide.index)) {
+            setCurrent(slide.index);
+            return;
+          }
+        } finally {
+          driving.current = false;
+        }
+        // The deck took no key. Fall through to the scroll: it does nothing on
+        // a stacked deck, but it is exactly what happened before, so a deck
+        // driven by clicks alone is no worse off.
+      }
       slide.outer.scrollIntoView({
         behavior: reduceMotion ? "auto" : "smooth",
         block: "start",
       });
       setCurrent(slide.index);
     },
-    [slides, reduceMotion],
+    [doc, slides, stacked, reduceMotion],
   );
 
   const next = useCallback(() => goTo(current + 1), [goTo, current]);
@@ -185,6 +270,7 @@ export function useDeck({
       // called preventDefault, and paging on top of it would advance twice.
       // When the frame is sandboxed that script never ran, which is exactly
       // the case this hook exists to cover.
+      if (driving.current) return;
       if (e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;

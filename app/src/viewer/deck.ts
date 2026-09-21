@@ -252,6 +252,89 @@ export function isPaged(heights: number[], viewportHeight: number): boolean {
   return slideLike >= heights.length * 0.7;
 }
 
+/**
+ * Whether the slides sit ON TOP of each other rather than after each other.
+ *
+ * A deck that runs its own JavaScript usually lays every slide out at
+ * `position:absolute; inset:0` and shows one at a time, so every rect has the
+ * same top and scrolling to any of them changes nothing. That is the case
+ * where navigation has to go through the deck's own keys (see `useDeck`) and
+ * position has to be read from what is SHOWN rather than from an offset.
+ *
+ * "Same top" is judged against the slides' own height, not a pixel count, so
+ * sub-pixel drift between boxes does not split the decision.
+ */
+export function isStacked(rects: readonly { top: number; height: number }[]): boolean {
+  if (rects.length < 2) return false;
+  const shortest = Math.min(...rects.map((r) => r.height));
+  const first = rects[0].top;
+  return rects.every((r) => Math.abs(r.top - first) < shortest / 2);
+}
+
+/** What the live frame says about the slide, and nothing more. */
+export interface SlideComputed {
+  display: string;
+  visibility: string;
+  opacity: string;
+  transform: string;
+}
+
+export function readComputed(view: Window, el: Element): SlideComputed {
+  const style = view.getComputedStyle(el);
+  return {
+    display: style.display,
+    visibility: style.visibility,
+    opacity: style.opacity,
+    transform: style.transform,
+  };
+}
+
+/**
+ * Whether a transform MOVES the slide, as opposed to scaling or rotating it.
+ *
+ * A carousel parks its off-screen slides with `translate3d(-150%, 0, 0)`, and
+ * that has to go. A deck that renders its stage with `scale(0.5)` is doing
+ * layout, and taking that away would be the flattening bug again in a new
+ * costume. A browser resolves both to a matrix; jsdom echoes the authored
+ * string straight back, so both forms are read.
+ */
+export function hasTranslation(transform: string): boolean {
+  if (!transform || transform === "none") return false;
+  const matrix = /^matrix(3d)?\(([^)]*)\)$/.exec(transform.trim());
+  if (!matrix) return /translate/i.test(transform);
+  const parts = matrix[2].split(",").map((n) => Number(n.trim()));
+  // matrix(a,b,c,d,e,f) carries the offset in e,f; matrix3d in 13 and 14.
+  const x = matrix[1] ? parts[12] : parts[4];
+  const y = matrix[1] ? parts[13] : parts[5];
+  // A sub-pixel offset is rounding, not a parked slide.
+  return Math.abs(x || 0) > 1 || Math.abs(y || 0) > 1;
+}
+
+/**
+ * Whether the deck is showing this slide, by the four properties
+ * `previewOverrides` already knows a deck hides one with. Anything a preview
+ * would have to undo is, here, the reason a slide is not the current one.
+ */
+export function isShown(computed: SlideComputed): boolean {
+  if (computed.display === "none") return false;
+  if (computed.visibility === "hidden" || computed.visibility === "collapse") return false;
+  // Only a MEASURED zero hides: jsdom reports "" for a property it does not
+  // compute, and a browser never reports an empty opacity.
+  const opacity = parseFloat(computed.opacity);
+  if (!Number.isNaN(opacity) && opacity <= 0) return false;
+  return !hasTranslation(computed.transform);
+}
+
+/**
+ * The reader's position in a stacked deck: the first slide being shown. Falls
+ * back to the first slide, as `activeIndex` does, so the rail always has
+ * somewhere to be.
+ */
+export function shownIndex(shown: readonly boolean[]): number {
+  const index = shown.indexOf(true);
+  return index < 0 ? 0 : index;
+}
+
 /** What a preview is laid out at, before it is scaled into a thumbnail. */
 export interface StageSize {
   width: number;

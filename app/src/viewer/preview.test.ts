@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { hasTranslation, previewOverrides } from "./preview";
+import { hasTranslation } from "./deck";
+import { previewOverrides } from "./preview";
 
 const HIDDEN = {
   display: "none",

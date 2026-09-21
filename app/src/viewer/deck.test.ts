@@ -3,7 +3,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { activeIndex, isPaged, scanSlides, slideTitle, stageSize } from "./deck";
+import {
+  activeIndex,
+  isPaged,
+  isShown,
+  isStacked,
+  scanSlides,
+  shownIndex,
+  slideTitle,
+  stageSize,
+} from "./deck";
 
 /**
  * Every fixture here is SYNTHESISED to carry one structural pattern found in
@@ -294,5 +303,63 @@ describe("stageSize", () => {
       expect(stage.width).toBeGreaterThan(0);
       expect(stage.height).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("isStacked", () => {
+  it("recognises a deck whose slides all occupy the same box", () => {
+    // The shape of a script-driven deck: `position:absolute; inset:0` on every
+    // slide, one of them visible. Scrolling to any of them is a no-op.
+    const rects = Array.from({ length: 26 }, () => ({ top: 0, height: 700 }));
+    expect(isStacked(rects)).toBe(true);
+  });
+
+  it("is not fooled by sub-pixel drift between the boxes", () => {
+    expect(isStacked([{ top: 0, height: 700 }, { top: 0.4, height: 700 }, { top: -0.3, height: 700 }])).toBe(true);
+  });
+
+  it("says no to slides that follow each other, whether or not they scroll yet", () => {
+    // The same deck with its script blocked: a column, some of it below the fold.
+    expect(isStacked([{ top: 0, height: 563 }, { top: 563, height: 563 }, { top: 1126, height: 563 }])).toBe(false);
+    // And after the reader has scrolled into it.
+    expect(isStacked([{ top: -1200, height: 600 }, { top: -600, height: 600 }, { top: 0, height: 600 }])).toBe(false);
+  });
+
+  it("refuses to decide from one slide or none", () => {
+    expect(isStacked([{ top: 0, height: 700 }])).toBe(false);
+    expect(isStacked([])).toBe(false);
+  });
+});
+
+describe("isShown", () => {
+  const shown = { display: "grid", visibility: "visible", opacity: "1", transform: "none" };
+
+  it("takes the four ways the preview already knows a deck hides a slide", () => {
+    expect(isShown(shown)).toBe(true);
+    expect(isShown({ ...shown, visibility: "hidden" })).toBe(false);
+    expect(isShown({ ...shown, visibility: "collapse" })).toBe(false);
+    expect(isShown({ ...shown, display: "none" })).toBe(false);
+    expect(isShown({ ...shown, opacity: "0" })).toBe(false);
+    expect(isShown({ ...shown, transform: "matrix(1, 0, 0, 1, -1200, 0)" })).toBe(false);
+  });
+
+  it("does not mistake a scaled stage for a hidden one", () => {
+    expect(isShown({ ...shown, transform: "matrix(0.5, 0, 0, 0.5, 0, 0)" })).toBe(true);
+  });
+
+  it("treats a property nothing measured as not hiding anything", () => {
+    // jsdom reports "" for opacity and transform. Only a measured zero hides.
+    expect(isShown({ ...shown, opacity: "", transform: "" })).toBe(true);
+  });
+});
+
+describe("shownIndex", () => {
+  it("is the first slide the deck is showing", () => {
+    expect(shownIndex([false, false, false, false, true, false])).toBe(4);
+  });
+
+  it("is 0 when nothing is shown, so the rail still has a place to be", () => {
+    expect(shownIndex([false, false, false])).toBe(0);
+    expect(shownIndex([])).toBe(0);
   });
 });

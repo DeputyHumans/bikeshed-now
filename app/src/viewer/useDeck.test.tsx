@@ -72,6 +72,39 @@ function press(target: Document | Window, k: string, init: KeyboardEventInit = {
   return event;
 }
 
+/**
+ * A deck that runs its own JavaScript: every slide in the same viewport-sized
+ * box, one of them shown, and a keydown listener that moves the showing —
+ * registered on the frame's document before the hook mounts, the way a deck's
+ * own script is. Hiding is by inline `visibility`, which is what jsdom's
+ * `getComputedStyle` can report. No `<script>` runs; the listener stands in.
+ */
+function mountStackedDeck(consumesKeys = true) {
+  const { doc, sections } = mountDeck(DECK, 700, 700);
+  sections.forEach((el, i) => {
+    el.getBoundingClientRect = () => ({ top: 0, height: 700 }) as DOMRect;
+    el.style.visibility = i === 0 ? "visible" : "hidden";
+  });
+  let at = 0;
+  const show = (n: number) => {
+    at = Math.max(0, Math.min(sections.length - 1, n));
+    sections.forEach((el, i) => {
+      el.style.visibility = i === at ? "visible" : "hidden";
+    });
+  };
+  const heard: string[] = [];
+  doc.addEventListener("keydown", (e) => {
+    heard.push(e.key);
+    if (!consumesKeys) return;
+    if (e.key === "ArrowRight") show(at + 1);
+    else if (e.key === "ArrowLeft") show(at - 1);
+    else return;
+    e.preventDefault();
+  });
+  const showing = () => sections.findIndex((el) => el.style.visibility === "visible");
+  return { doc, sections, heard, show, showing };
+}
+
 describe("useDeck", () => {
   it("hears a key pressed inside the frame, where the reader's focus is", () => {
     const { doc, sections } = mountDeck(DECK);
@@ -217,5 +250,102 @@ describe("what counts as a deck", () => {
     });
 
     expect(result.current.current).toBe(2);
+  });
+});
+
+/**
+ * The reported bug: a trusted deck that stacks its slides and shows one at a
+ * time. `scrollIntoView` on a box that is already at the top scrolls nothing,
+ * so the rail, the overview and the parent's arrow keys were all dead on it.
+ */
+describe("a deck that drives itself", () => {
+  it("is recognised as stacked, and still paged", () => {
+    const { doc } = mountStackedDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    expect(result.current.paged).toBe(true);
+    expect(result.current.current).toBe(0);
+  });
+
+  it("reaches a slide with the arrow keys the deck answers to, not by scrolling", () => {
+    const { doc, sections, heard, showing } = mountStackedDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    act(() => {
+      result.current.goTo(2);
+    });
+
+    expect(heard).toEqual(["ArrowRight", "ArrowRight"]);
+    expect(showing()).toBe(2);
+    expect(result.current.current).toBe(2);
+    for (const el of sections) expect(el.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("walks back from wherever the deck actually is, not from where it last sent it", () => {
+    const { doc, heard, show, showing } = mountStackedDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    // The reader moved the deck with its own controls; the hook did not do it.
+    show(2);
+    act(() => {
+      result.current.goTo(0);
+    });
+
+    expect(heard).toEqual(["ArrowLeft", "ArrowLeft"]);
+    expect(showing()).toBe(0);
+  });
+
+  it("follows the reader's own moves inside the frame", async () => {
+    const { doc, showing } = mountStackedDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    expect(result.current.current).toBe(0);
+
+    // A real keypress in the frame: the deck takes it, the hook yields — and
+    // must still notice that the deck moved, because nothing scrolled.
+    press(doc, "ArrowRight");
+    expect(showing()).toBe(1);
+    await act(async () => {});
+
+    expect(result.current.current).toBe(1);
+  });
+
+  it("moves the deck from the parent's arrow keys too", () => {
+    const { doc, heard, showing } = mountStackedDeck();
+    renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    // Focus is in the rail, so the deck's own listener never hears this one.
+    press(window, "ArrowRight");
+
+    expect(heard).toEqual(["ArrowRight"]);
+    expect(showing()).toBe(1);
+  });
+
+  it("falls back to scrolling, once, when the deck takes no arrow keys", () => {
+    // A stacked deck driven by clicks alone. The synthetic key reaches the
+    // hook's own listener on the frame document, and without a guard that is
+    // goTo → key → goTo → key until the stack overflows.
+    const { doc, sections, heard } = mountStackedDeck(false);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    act(() => {
+      result.current.goTo(2);
+    });
+
+    expect(heard).toEqual(["ArrowRight"]);
+    expect(sections[2].scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("never sends a key into a deck that scrolls", () => {
+    const { doc, sections } = mountDeck(DECK);
+    const heard: string[] = [];
+    doc.addEventListener("keydown", (e) => heard.push(e.key));
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    act(() => {
+      result.current.goTo(2);
+    });
+
+    expect(heard).toEqual([]);
+    expect(sections[2].scrollIntoView).toHaveBeenCalled();
   });
 });

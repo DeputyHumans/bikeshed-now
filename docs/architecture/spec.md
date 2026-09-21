@@ -503,8 +503,20 @@ normative:
   of one parent, and the navigator appears only above two slides.
 
 Navigation **scrolls** the document and never styles it, so §7's rule stands
-unchanged. The navigator — rail, overview and arrow keys alike — appears only
-when slides measure about one viewport tall. On a document whose sections are
+unchanged — with one measured exception. A deck that runs its own JavaScript
+usually **stacks** its slides, every one at `position:absolute; inset:0` with
+one shown at a time, and on that shape scrolling to a slide changes nothing.
+When every slide's rect shares a top, navigation instead presses the arrow keys
+the deck already answers to, dispatched into the frame, and reads position from
+which slide is *shown* (`display`, `visibility`, `opacity`, a translating
+`transform` — the same four the preview undoes) with the deck's own attribute
+changes as the signal, since nothing scrolls. That is the deck's own contract;
+the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the
+wild), and toggling the deck's class would style a document this app does not
+own. A stacked deck that takes no arrow keys cannot be driven from the rail and
+falls back to the scroll, which leaves it exactly where it was. The navigator —
+rail, overview and arrow keys alike — appears only when slides measure about
+one viewport tall. On a document whose sections are
 taller, taking the arrow keys would leave the reader unable to scroll within a
 section, and a thumbnail of a section three screens deep is a smudge nobody can
 read. That measurement is **latched per document load**: the rail's own width
