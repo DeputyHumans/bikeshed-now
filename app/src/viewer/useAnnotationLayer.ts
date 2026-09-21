@@ -11,6 +11,8 @@ import {
   removeHighlightStyles,
   setSelectedHighlight,
 } from "../annotation/highlighter";
+import { ANN_ATTR, HL_SELECTOR } from "../brand/dom";
+import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -39,6 +41,7 @@ export function useAnnotationLayer(options: {
   const { mode, doc, epoch, annotations, selectedId, onSelect } = options;
   const enabled = mode.kind === "reading";
   const [orphaned, setOrphaned] = useState<string[]>([]);
+  const reduceMotion = usePrefersReducedMotion();
 
   /**
    * The callback is held in a REF rather than depended on, and that is a
@@ -82,5 +85,45 @@ export function useAnnotationLayer(options: {
     setSelectedHighlight(doc, selectedId);
   }, [enabled, doc, epoch, selectedId, annotations]);
 
+  /**
+   * A newly selected thread brings its passage into view.
+   *
+   * Only when it is not already there: the usual way it is there is that the
+   * selection came from clicking the highlight itself, and moving a passage
+   * that is under the pointer is the document jumping under a click. Deciding
+   * by geometry rather than by where the selection came from also spares a
+   * reader who picked, from the panel, a passage they were already looking at.
+   *
+   * Only ONCE per selection, which is what the ref is for: this effect also
+   * runs when the highlights are redrawn for a peer's comment landing, and a
+   * reader who has scrolled on since selecting must not be pulled back. It
+   * does run again for a selection that outran its highlight — posting a
+   * comment selects the thread before the listener delivers it — because the
+   * redraw that finally draws the passage is the moment to land on it.
+   */
+  const scrolledTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedId === null) {
+      scrolledTo.current = null;
+      return;
+    }
+    if (!enabled || !doc || scrolledTo.current === selectedId) return;
+    const wrapper = Array.from(doc.querySelectorAll(HL_SELECTOR)).find(
+      (el) => el.getAttribute(ANN_ATTR) === selectedId,
+    );
+    if (!wrapper) return;
+    scrolledTo.current = selectedId;
+    if (inView(wrapper)) return;
+    wrapper.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+  }, [enabled, doc, epoch, selectedId, annotations, reduceMotion]);
+
   return { orphaned };
+}
+
+/** Whether the whole of an element sits inside its frame's viewport. */
+function inView(el: Element): boolean {
+  const view = el.ownerDocument.defaultView;
+  if (!view) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.top >= 0 && rect.bottom <= view.innerHeight;
 }

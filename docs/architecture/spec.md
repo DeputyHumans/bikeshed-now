@@ -359,6 +359,12 @@ Because it is same-origin, the parent app drives annotation directly on
   paints nothing.
 - Wrapping is per-text-node, so existing element nodes are never destroyed or
   re-parented. Highlights are presentational and are NEVER persisted.
+- Selecting a thread brings its passage into view, centred, **unless it is
+  already in view** — the usual reason it is being that the selection came
+  from clicking the highlight, which is under the pointer. Once per selection:
+  a redraw for a peer's comment landing must not pull back a reader who has
+  scrolled on. The thread card does the same in the panel, in the other
+  direction.
 - **A resolved annotation is not drawn.** Resolving is how a reader says a
   passage is dealt with, so its mark comes off the prose; the thread stays in
   the panel and can be reopened there. A resolved annotation is skipped before
