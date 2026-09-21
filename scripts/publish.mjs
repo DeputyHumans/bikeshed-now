@@ -64,6 +64,25 @@ async function loadRenderer() {
   return import(path);
 }
 
+/**
+ * Read an HTML entry's own `<title>` using THE scanner, not a second one.
+ *
+ * Loaded lazily and only when the title default actually needs it — neither
+ * `--title` nor the manifest supplies one, and the entry is HTML — so a
+ * `--dry-run` over a manifest that already carries a title, which is every
+ * sample bundle, still needs no `functions` build.
+ */
+async function loadHead() {
+  const path = join(REPO_ROOT, "functions", "lib", "lib", "head.js");
+  if (!existsSync(path)) {
+    fail(
+      "Title-from-<title> support needs the compiled server head scanner.\n" +
+        "  Run: npm --prefix functions run build",
+    );
+  }
+  return import(path);
+}
+
 async function main() {
 const USAGE = `publish.mjs — publish a bundle directory as a new version
 
@@ -118,7 +137,24 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   const dirArg = values.dir ?? join("content", docId, "bundle");
   const bundleDir = isAbsolute(dirArg) ? dirArg : join(REPO_ROOT, dirArg);
 
-  const title = values.title ?? manifest.title ?? docId;
+  // Hashed and the entry resolved before the title: an HTML default title
+  // needs to know which file the entry is before it can be read.
+  const authored = hashBundle(bundleDir);
+  const entry = values.entry ?? manifest.entry ?? guessEntry(authored.files);
+
+  // The default title is the explicit flag, else the manifest, else — for an
+  // HTML entry — the document's own <title>, else the doc id.
+  let title = values.title ?? manifest.title;
+  if (title === undefined) {
+    if (/\.(md|markdown)$/i.test(entry)) {
+      title = docId;
+    } else {
+      const { titleFromHtml } = await loadHead();
+      const entryFile = authored.files.find((f) => f.rel === entry);
+      const html = entryFile ? readFileSync(entryFile.abs, "utf8") : "";
+      title = titleFromHtml(html) ?? docId;
+    }
+  }
   const slug = manifest.slug ?? docId;
   const ownerRaw = values.owner ?? manifest.owner;
   if (!ownerRaw) fail("no owner: pass --owner or set `owner` in the manifest");
@@ -134,10 +170,6 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   for (const list of [viewers, editors]) {
     assertUsableEmails(list.filter((p) => !p.startsWith("team:")));
   }
-
-  // Hash the authored bundle exactly as it sits on disk.
-  const authored = hashBundle(bundleDir);
-  const entry = values.entry ?? manifest.entry ?? guessEntry(authored.files);
 
   // A Markdown bundle gains its compiled entry BEFORE hashing, so the stored
   // artifact and its hash describe the same thing the reader will see.
@@ -167,6 +199,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   const bucketName = getBucketName(values.project, values.bucket);
 
   console.log(`publish: doc=${docId} dir=${bundleDir}`);
+  console.log(`  title=${title}`);
   console.log(`  entry=${storedEntry} format=${format} owner=${ownerEmail}`);
   console.log(`  viewers=[${viewers.join(", ")}] editors=[${editors.join(", ")}]`);
   console.log(`  files=${fileCount} bytes=${bytes} contentHash=${contentHash}`);

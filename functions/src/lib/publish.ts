@@ -25,6 +25,7 @@ import { bucketName } from "../config";
 import type { Actor } from "./actor";
 import { hashBundleFiles, type BundleFile } from "./hash";
 import type { BundleEntry } from "./bundle";
+import { titleFromHtml } from "./head";
 import { renderMarkdown, titleFromMarkdown } from "./markdown/render";
 import {
   computeDocMembership,
@@ -57,6 +58,11 @@ export interface CompiledBundle {
  * what preserves content-hash idempotency — republishing identical Markdown is
  * still a no-op — while making a renderer upgrade correctly mint a new version,
  * because the artifact genuinely changed (SPEC §11).
+ *
+ * For HTML the default title is the document's own `<title>`, read from the
+ * entry file, else `fallbackTitle`. An explicit title from the caller still
+ * wins over either — that happens at the call site, which prefers a supplied
+ * title over `compiled.title`.
  */
 export function compileBundle(
   extracted: { files: BundleEntry[]; entry: string; format: "html" | "markdown" },
@@ -67,7 +73,9 @@ export function compileBundle(
     data: f.data,
   }));
   if (extracted.format !== "markdown") {
-    return { files, entry: extracted.entry, format: "html", title: fallbackTitle };
+    const entryFile = files.find((f) => f.rel === extracted.entry);
+    const title = entryFile ? (titleFromHtml(entryFile.data.toString("utf8")) ?? fallbackTitle) : fallbackTitle;
+    return { files, entry: extracted.entry, format: "html", title };
   }
 
   const source = files.find((f) => f.rel === extracted.entry);
