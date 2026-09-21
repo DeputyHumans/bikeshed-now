@@ -2460,7 +2460,12 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
     res.status(200);
     if (isHead) res.end();
     else res.send(html);
-  } catch {
+  } catch (err) {
+    // The generic shell is a 200, so without this line a runtime identity
+    // that cannot read the bucket would serve the product's head for every
+    // document and the request log would show nothing. Code or name only: a
+    // GCS message names the object path, which holds the document id.
+    console.warn("docShell: generic fallback", (err as { code?: unknown })?.code ?? (err as Error)?.name);
     serveGeneric();
   }
 });

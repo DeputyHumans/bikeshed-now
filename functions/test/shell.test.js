@@ -648,3 +648,44 @@ test("docShell sets the public cache header only after the page is built", () =>
   assert.ok(cached > 0, "docShell must set a public Cache-Control for a document");
   assert.ok(rendered < cached, "docShell sets the public cache header before the page is built");
 });
+
+test("docShell says why it fell back to the generic shell, naming neither the URL nor k", () => {
+  /**
+   * Everything that can fail after the decision — the version read, the
+   * Storage stream (including a runtime identity that cannot read the
+   * bucket, which CLAUDE.md lists as invisible locally), the scanner, the
+   * renderer — lands in one catch that serves the generic shell as a 200. A
+   * bare catch there turns "every document answers with the product's head"
+   * into a deployment with zero diagnostic: the request log shows a healthy
+   * 200 and nothing else. So the catch must log. And the line must carry the
+   * error's code or name, never its message: a GCS message names the object
+   * path, which contains the document id from the URL, and no log line may
+   * carry the request URL or `k`.
+   */
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const docShell = onRequest(");
+  assert.ok(start > 0, "docShell not found");
+  const body = src.slice(start, src.indexOf("\n});", start));
+
+  const caught = body.lastIndexOf("} catch");
+  assert.ok(caught > 0, "docShell must catch what fails after the decision");
+  const fallback = body.slice(caught);
+  const logged = fallback.indexOf('console.warn("docShell: generic fallback"');
+  assert.ok(logged > 0, "docShell must log before it falls back to the generic shell");
+  assert.ok(
+    logged < fallback.indexOf("serveGeneric()"),
+    "docShell must log the reason before serving the generic shell",
+  );
+
+  const args = fallback.slice(logged, fallback.indexOf(");", logged));
+  assert.match(args, /\berr\b/, "the log line must say what failed");
+
+  // Every log line in the handler, not just this one, is held to the rule.
+  const calls = body.match(/console\.\w+\([^;]*\);/g) ?? [];
+  assert.ok(calls.length >= 1, "the catch's log line must be a console call");
+  for (const call of calls) {
+    assert.doesNotMatch(call, /\bmessage\b/, "a GCS message names the object path, which holds the document id");
+    assert.doesNotMatch(call, /\b(k|docId|pinned|entry)\b/, "no log line may carry the URL's parts or k");
+    assert.doesNotMatch(call, /\breq\b/, "no log line may carry the request URL");
+  }
+});
