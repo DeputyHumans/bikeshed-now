@@ -2417,6 +2417,11 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  // Which step the catch is reporting on. A code or name alone cannot tell
+  // this repo's own throws apart — a template missing its `</head>` and a
+  // scanner bug are both a plain `Error` — and the message may name the
+  // object path, so the step is logged instead.
+  let stage = "version";
   try {
     const versionSnap = await docSnap.ref.collection("versions").doc(decision.versionId).get();
     if (!versionSnap.exists) {
@@ -2435,12 +2440,15 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
 
     // Only the prefix the scanner reads; `collectPrefix` enforces the cap
     // even where the range is ignored.
+    stage = "stream";
     const stream = bucket()
       .file(`docs/${docId}/${decision.versionId}/${entry}`)
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
+    stage = "scan";
     const head = readHead(bytes.toString("utf8"));
 
+    stage = "render";
     const page = composePage({
       origin: publicOrigin(),
       docId,
@@ -2463,9 +2471,10 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
   } catch (err) {
     // The generic shell is a 200, so without this line a runtime identity
     // that cannot read the bucket would serve the product's head for every
-    // document and the request log would show nothing. Code or name only: a
-    // GCS message names the object path, which holds the document id.
-    console.warn("docShell: generic fallback", (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    // document and the request log would show nothing. The step and a code
+    // or name only: a GCS message names the object path, which holds the
+    // document id.
+    console.warn("docShell: generic fallback at", stage, (err as { code?: unknown })?.code ?? (err as Error)?.name);
     serveGeneric();
   }
 });

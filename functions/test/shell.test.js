@@ -670,7 +670,7 @@ test("docShell says why it fell back to the generic shell, naming neither the UR
   const caught = body.lastIndexOf("} catch");
   assert.ok(caught > 0, "docShell must catch what fails after the decision");
   const fallback = body.slice(caught);
-  const logged = fallback.indexOf('console.warn("docShell: generic fallback"');
+  const logged = fallback.indexOf('console.warn("docShell: generic fallback');
   assert.ok(logged > 0, "docShell must log before it falls back to the generic shell");
   assert.ok(
     logged < fallback.indexOf("serveGeneric()"),
@@ -680,12 +680,59 @@ test("docShell says why it fell back to the generic shell, naming neither the UR
   const args = fallback.slice(logged, fallback.indexOf(");", logged));
   assert.match(args, /\berr\b/, "the log line must say what failed");
 
-  // Every log line in the handler, not just this one, is held to the rule.
-  const calls = body.match(/console\.\w+\([^;]*\);/g) ?? [];
-  assert.ok(calls.length >= 1, "the catch's log line must be a console call");
+  // Every log line in the handler, not just this one, is held to the rule,
+  // whichever logger writes it: `console.*` is what this file uses today;
+  // `logger.*`, however that module is bound, and the bare named exports of
+  // `firebase-functions/logger` are the other ways a line reaches the log.
+  const LOG_CALL = /(?:\b(?:console|\w*[Ll]ogger)\.\w+|(?<![\w.$])(?:log|info|warn|error|debug|write))\([^;]*\);/g;
+  const calls = body.match(LOG_CALL) ?? [];
+  assert.ok(calls.length >= 1, "the catch's log line must be a log call");
   for (const call of calls) {
     assert.doesNotMatch(call, /\bmessage\b/, "a GCS message names the object path, which holds the document id");
     assert.doesNotMatch(call, /\b(k|docId|pinned|entry)\b/, "no log line may carry the URL's parts or k");
     assert.doesNotMatch(call, /\breq\b/, "no log line may carry the request URL");
   }
+});
+
+test("docShell names the step that failed, so a template regression reads differently from a bucket failure", () => {
+  /**
+   * `code ?? name` tells IAM from a vanished object (403 against 404), but
+   * every throw from this repo's own code is a plain `Error`: a shell
+   * template missing its `</head>` logs the same word a scanner bug would,
+   * and neither says whether the bucket was even reached. The message is
+   * forbidden (it can name the object path), so the handler tracks which
+   * step it is in and logs that instead: `version` (the Firestore read),
+   * `stream` (the bucket), `scan` (the head scanner), `render` (the composer
+   * and the template). Each stage must be entered before the call that can
+   * throw in it, or the log names the wrong one.
+   */
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const docShell = onRequest(");
+  assert.ok(start > 0, "docShell not found");
+  const body = src.slice(start, src.indexOf("\n});", start));
+
+  const fallback = body.slice(body.lastIndexOf("} catch"));
+  const logged = fallback.indexOf('console.warn("docShell: generic fallback');
+  assert.ok(logged > 0, "docShell must log before it falls back to the generic shell");
+  const args = fallback.slice(logged, fallback.indexOf(");", logged));
+  assert.match(args, /\bstage\b/, "the log line must say which step failed");
+
+  const at = (marker) => {
+    const i = body.indexOf(marker);
+    assert.ok(i > 0, `${marker} not found in docShell`);
+    return i;
+  };
+  assert.ok(at('let stage = "version"') < at("try {"), "the version stage is the one the try starts in");
+  assert.ok(
+    at('collection("versions")') < at('stage = "stream"') && at('stage = "stream"') < at("createReadStream("),
+    "the stream stage is entered after the version read and before the bucket read",
+  );
+  assert.ok(
+    at("collectPrefix(") < at('stage = "scan"') && at('stage = "scan"') < at("readHead("),
+    "the scan stage is entered after the bucket read and before the scanner",
+  );
+  assert.ok(
+    at("readHead(") < at('stage = "render"') && at('stage = "render"') < at("composePage("),
+    "the render stage is entered after the scanner and before the composer",
+  );
 });
