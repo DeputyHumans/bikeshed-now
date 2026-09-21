@@ -702,6 +702,16 @@ test("warnIfOriginUnconfigured speaks only in the emulator with no origin", () =
   assert.deepEqual(silent, []);
 });
 
+test("warnIfOriginUnconfigured is silent during the emulator's discovery pass", () => {
+  // firebase-tools loads the module once to discover the function list, with
+  // FUNCTIONS_CONTROL_API set and none of the .env* files applied yet — so an
+  // origin that is correctly configured still looks unset. The runtime pass
+  // that actually serves requests repeats the check without that flag.
+  const lines = [];
+  warnIfOriginUnconfigured({ FUNCTIONS_CONTROL_API: "true" }, true, (l) => lines.push(l));
+  assert.deepEqual(lines, []);
+});
+
 /* ------------------------------------------------------------------------ */
 /* The handler                                                               */
 

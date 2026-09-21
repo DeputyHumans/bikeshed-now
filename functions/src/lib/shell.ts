@@ -420,8 +420,17 @@ export function resetShellCacheForTests(): void {
  * One line at start-up when the emulator has no origin to fetch the shell
  * from, because the symptom — every `/d/**` answers 503 — is far from the
  * cause. Silent in production: there `publicOrigin()` derives one.
+ *
+ * Also silent during the Functions emulator's *discovery* pass: firebase-tools
+ * loads this module once to list the functions, with `FUNCTIONS_CONTROL_API`
+ * set but none of the `.env*` files applied yet (`spawnFunctionsProcess` in
+ * firebase-tools' `deploy/functions/runtimes/node/index.js`), so a correctly
+ * configured origin still looks unset. The runtime pass that actually serves
+ * requests re-imports the module with the env files in place and repeats this
+ * check, so nothing is missed by staying quiet here.
  */
 export function warnIfOriginUnconfigured(env: NodeJS.ProcessEnv, emulated: boolean, log: (line: string) => void): void {
+  if (emulated && env.FUNCTIONS_CONTROL_API === "true") return;
   if (emulated && !env.BIKESHED_PUBLIC_ORIGIN) {
     log(
       "docShell: BIKESHED_PUBLIC_ORIGIN is unset — /d/** will answer 503; set BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050 in functions/.env.local",

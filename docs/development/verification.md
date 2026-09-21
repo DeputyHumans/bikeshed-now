@@ -33,7 +33,7 @@ The three samples are not decoration: **A is scripted HTML, B is script-free
 HTML, C is Markdown**, and that is exactly what makes the trust observations
 below possible. `npm run check:content` keeps them that way.
 
-Two prerequisites for the document page, which the Hosting emulator serves
+Three prerequisites for the document page, which the Hosting emulator serves
 through `docShell` exactly as production does:
 
 - **`functions/.env.local` containing `BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050`.**
@@ -42,15 +42,27 @@ through `docShell` exactly as production does:
   production origin, the emulator **silently fetches the production shell**:
   every document page boots the live site's assets and nothing warns. With no
   origin configured anywhere, the fallback is `demo-bikeshed`'s default site,
-  which does not exist: the emulator console warns at start-up
-  (`docShell: BIKESHED_PUBLIC_ORIGIN is unset — /d/** will answer 503 …`) and
-  every `/d/**` answers 503. Either way the console prints
-  `shell origin: http://127.0.0.1:5050` on the first document page once the
-  override is in place; if it prints anything else, it is missing.
-- **`VITE_USE_EMULATORS=1 npm run build:app`.** The Hosting emulator serves
-  `app/dist`, not the Vite dev server, and `app/.env.local` may hold a real
-  web config: a build without the flag points the document page's own app at
-  a real backend.
+  which does not exist: opening the first document page prints a warning from
+  the running function (`docShell: BIKESHED_PUBLIC_ORIGIN is unset — /d/**
+  will answer 503 …` — not at emulator start-up, where firebase-tools' brief
+  discovery pass would print the same line spuriously) and every `/d/**`
+  answers 503. Either way the console prints `shell origin:
+  http://127.0.0.1:5050` on the first document page once the override is in
+  place; if it prints anything else, it is missing.
+- **`functions/.env.local` also containing `BIKESHED_BUCKET=demo-bikeshed-content`.**
+  `functions/.env` may name the real content bucket on a deployer's machine;
+  without the `.local` override `contentProxy` reads a bucket `publish.mjs`
+  never wrote to, and every document asset 404s.
+- **`env $(grep -v '^#' app/.env.example | xargs) npm run build:app`.** The
+  Hosting emulator serves `app/dist`, not the Vite dev server, and
+  `app/.env.local` may hold a real web config: building with plain
+  `VITE_USE_EMULATORS=1 npm run build:app` on a deployer's machine inlines
+  that real project id, so the built app queries the emulator under the wrong
+  project and every document page sits at "Opening the document…" forever.
+  Building from `app/.env.example` instead uses the demo values it pins
+  (`demo-bikeshed`, `demo-api-key`, `demo-bikeshed-content`,
+  `http://127.0.0.1:9000?ns=demo-bikeshed`) regardless of what
+  `app/.env.local` holds.
 
 ---
 
