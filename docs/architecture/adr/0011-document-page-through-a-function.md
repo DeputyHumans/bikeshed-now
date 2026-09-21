@@ -35,8 +35,10 @@ there is none yet.
   graph every function loads includes `firebase-admin`, `markdown-it`,
   `turndown`, `adm-zip` and — statically, through `email/notify.ts`, contrary
   to what ADR 0008 says — `react` and `@react-email/components`. At the
-  defaults (256 MiB, concurrency 80, min instances 0) expect 2–4 s on a cold
-  open. `minInstances: 1` on `docShell` alone is the knob, and it is not set.
+  defaults (256 MiB, concurrency 80, min instances 0) the first request to a
+  freshly deployed revision measured 1.8 s to first byte on 2026-09-21, and
+  0.3–0.4 s warm. `minInstances: 1` on `docShell` alone is the knob; at that
+  number it is not set.
 - **Preview channels do not preview `/d/**`.** The function fetches the live
   site's shell, whose asset paths are root-relative, so a document page on a
   channel makes the browser ask the channel host for the live build's hashed
