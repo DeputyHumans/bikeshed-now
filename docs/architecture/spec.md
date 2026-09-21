@@ -135,11 +135,13 @@ rewrites require it). Export names are FIXED and are asserted to match
 | `/download/**` | `downloadBundle` |
 | `/draft/**` | `getDraft` |
 | `/content/**` | `contentProxy` |
+| `/d/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
 catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
-through to the SPA.
+through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
+`docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
 **`Cache-Control` for `/content/**` is set by the function, not by Hosting.**
 A Hosting `headers` entry would override the function and force one policy on
@@ -184,6 +186,23 @@ embed same-origin in the app's iframe.
 
 Streamed with `file.createReadStream()`; large files are never buffered whole.
 
+### `GET /d/:docId[/:versionId]`
+Serves the app shell — the same bytes Hosting would serve for any client
+route — and, when the document is readable **anonymously** (§17), with the
+document's own `<head>` spliced in for crawlers. The rules are `contentProxy`'s
+for an anonymous caller: private, expired, and unlisted without the exact `k`
+all get the generic shell, the owner included.
+
+**It never authenticates.** The response may be cached at a public URL, so
+whatever it carries is what a stranger may see; a member's tab title comes
+from the client. Headers: `Content-Type: text/html`, `nosniff`;
+`Cache-Control: private, no-store` for the generic shell,
+`public, max-age=min(300, seconds to expiry)` for a document, plus
+`X-Robots-Tag: noindex` when it is unlisted. **200 in every case** — a private
+slug and an absent one are byte-identical (§1.4b). The only other answers are
+`405` for a method other than `GET`/`HEAD` and `503` when no shell has ever
+been adopted from Hosting (§17). Accepts `?k=` exactly as `/content/**` does.
+
 ### `POST /access`
 Body `{ docId, add?: [{ email, role: "viewer"|"editor" }], remove?: string[] }`.
 `add` entries accept a plain email or a `team:{teamId}` grant (§18).
@@ -220,6 +239,9 @@ mints a NEW `vN+1`.
 - **`POST /publish` (`createDoc`)** — raw body is the uploaded file; metadata in
   the query string (`?filename=&title=&folderId=&marking=`). Accepts a single
   `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`.
+  `title` is optional: for HTML the document's own `<title>` (read by the §17
+  head scanner, else `og:title`) is the default, then the file name without its
+  extension; for Markdown, the first level-one heading.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree.
@@ -545,7 +567,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,folders,hash,bundle,presence,actor,public,teams,tokens}.ts
+  lib/{auth,acl,access,folders,hash,bundle,presence,actor,public,teams,tokens,head,html,shell}.ts
   lib/markdown/{render,serialize,slug,theme.ts}
   email/{send,cooldown,templates/*}
   mcp/{server,tools}.ts
@@ -557,6 +579,15 @@ functions/src/
   the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules`
   `canRead()`.** They are tested on both sides.
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
+- `lib/head.ts` — what a document's own `<head>` and first words say about it
+  (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
+  256 KiB, linear on adversarial input, with no HTML parser.
+- `lib/html.ts` — escaping for markup the functions emit into the app shell;
+  separate from the Markdown renderer's escaper, whose bytes are part of the
+  content hash.
+- `lib/shell.ts` — the `docShell` decision, the page composed from it, the
+  splice into the shell template, and the runtime fetch of the shell from
+  Hosting; the handler in `index.ts` is glue.
 - Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`.
   **The Firebase default bucket is never assumed** (§14 of the risk register:
   `${projectId}.appspot.com` is wrong for post-2024 projects and
@@ -731,6 +762,10 @@ The Vite dev proxy MUST cover **every** endpoint. Use anchored regex keys
 (`^/folder(\?.*)?$`) for exact endpoints and prefix rules only for `/content`,
 `/download`, `/draft`. A naive `/folder` prefix rule would proxy the client
 route `/folder/{id}` to the emulator and silently break folder deep-linking.
+A row with `devProxy: false` in `scripts/lib/endpoints.mjs` is a Hosting
+rewrite for a **client route** and is never proxied in dev: `/d` is rewritten
+to `docShell` in production, but in dev the shell is Vite's own, and the
+wiring test asserts the key is absent.
 
 ---
 
@@ -1033,9 +1068,9 @@ system already flows through one function. The consequence, stated rather than
 discovered: a member still sees the row, its title and its comments; what they
 cannot get is the document.
 
-Enforced in eight places from one predicate (`isExpired` in `lib/acl.ts`):
+Enforced in nine places from one predicate (`isExpired` in `lib/acl.ts`):
 `contentProxy`, `downloadBundle`, `getDraft`, `saveDraft`, `commitVersion`,
-`duplicateDoc`, `recordView` and `sitemap`, plus the MCP tools.
+`duplicateDoc`, `recordView`, `sitemap` and `docShell`, plus the MCP tools.
 
 Two details that are decisions rather than implementation:
 
@@ -1063,7 +1098,7 @@ Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A non-private document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
-`visibility`, `publicEdit`, `trusted`, `publishedAt` — written by the same paths that
+`visibility`, `publicEdit`, `trusted`, `expiresAt`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant visibility returns to private**.
 
 Everything else under `docs/**` still requires an account, even on a public
@@ -1092,6 +1127,69 @@ propagate**, documented in `operations.md` beside the purge steps.
 This is also the cost defence: every byte is proxied through a function, and
 public documents are where traffic spikes. A rate limiter is **deliberately not
 built**; Firebase App Check is the named hook if abuse materializes.
+
+### Link previews
+
+Hosting's static shell says "Bikeshed" in its `<head>` and nothing about the
+document, and a crawler runs no JavaScript, so a pasted link unfurled as the
+product. `/d/**` is therefore rewritten to `docShell` (§2), which serves the
+same shell to everyone and, only when the document is readable without an
+account, with the document's own head spliced in. The decision is
+`contentProxy`'s for an **anonymous** caller — no cookie, member or owner
+check — because the response may be cached at a public URL and whatever it
+carries is what a stranger may see. The owner of a private document gets the
+generic shell too; their tab title comes from the client
+([ADR 0011](adr/0011-document-page-through-a-function.md)).
+
+| | Shell | `Cache-Control` | Robots |
+|---|---|---|---|
+| `private` | generic | `private, no-store` | — |
+| `unlisted`, no or wrong `k` | generic | `private, no-store` | — |
+| `unlisted`, correct `k` | document | `public, max-age=min(300, seconds to expiry)` | `X-Robots-Tag: noindex` and `<meta name="robots" content="noindex">` |
+| `public` | document | `public, max-age=min(300, seconds to expiry)` | — |
+| expired, at any level | generic | `private, no-store` | — |
+
+An absent document, a version that does not exist, and any failure between
+the decision and the finished page are generic as well.
+
+**The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked
+for as a byte range and capped again in the function, so a large document is
+never read to the end for the sake of its head. What lies past the cap is not
+described. From that prefix, with comments, `<script>`, `<style>`, `<svg>`,
+`<template>` and `<nav>` dropped first — an inline SVG's accessible `<title>`
+must not become the document's, nor a table of contents its description:
+
+- **Title**: `<title>`, else `og:title`, else the stored workspace title.
+- **Description**: `<meta name="description">`, else `og:description`, else
+  the first ~200 characters of body text after the first `</h1>` (after
+  `<body>` when there is no `<h1>`), cut back to a word with an ellipsis.
+- **Keywords**: `<meta name="keywords">`, when declared.
+- **Image**: the declared `og:image`, else `twitter:image`, else the first
+  raster `<img>` in the body (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`),
+  resolved against the entry's URL under `/content/{docId}/{versionId}/` as a
+  browser would. A same-origin result must stay inside that version's prefix
+  and name a file the version holds, and carries `k` for an unlisted
+  document; a cross-origin `http(s)` URL is the author's; anything else —
+  none, `data:`, `javascript:`, an escape from the prefix, a file the version
+  lacks — is `/brand/og-default.png`, 1200×630, served by Hosting.
+- **`og:url`**: the URL as shared — `/d/{docId}`, `/{versionId}` when the
+  request pinned one, and `?k=` for an unlisted document, never for a public
+  one whatever `k` the request happened to carry.
+
+**Every refusal is one identical response** (§1.4b). `decideShell` returns
+the same frozen `GENERIC` object for every reason, so a generic answer carries
+no document-specific byte by construction; a generic response sets no header
+a document response does not; and the cache header is set only once the page
+is built, so a throw before then falls back to a generic shell that is still
+uncacheable — never a broken page pinned at a public URL for the window. Every
+injected value passes through `lib/html.ts` and is spliced by index, never by
+`String.replace` with a string, whose `$'` would paste the template into
+itself.
+
+**The shell is cached like content.** A document's shell is subject to the
+same five-minute window as `/content/**`, and withdrawing a version does not
+purge a cached shell: its title and excerpt can be served for up to five
+minutes after the bytes are gone, exactly as the content can.
 
 ### Actor provenance
 

@@ -138,9 +138,18 @@ the `javascript:` scrub — stays unconditional.
 | Variable | Required | Effect |
 |---|---|---|
 | `BIKESHED_BUCKET` | recommended | The private content bucket |
-| `BIKESHED_PUBLIC_ORIGIN` | recommended | Origin for links in email and `sitemap.xml` |
+| `BIKESHED_PUBLIC_ORIGIN` | recommended | Origin for links in email and `sitemap.xml`, and the origin the document page fetches the app shell from |
 | `BIKESHED_MAIL_FROM` | recommended | The address email is sent FROM, e.g. `Bikeshed <noreply@example.com>` |
 | `BIKESHED_SIGN_IN_HINT` | no | One sentence returned by `GET /config` to a rejected visitor |
+
+Set `BIKESHED_PUBLIC_ORIGIN` explicitly. The fallback is the default site's
+`.web.app` host, which is the app only when the site id equals the project id;
+`docShell` fetches the shell from that origin at runtime and **fails closed on
+anything that is not the app** — a 404 page, a stranger's site, the wrong
+site — so a wrong origin means every document page answers `503`
+([ADR 0011](../architecture/adr/0011-document-page-through-a-function.md)).
+Under the emulator it belongs in `functions/.env.local` as
+`http://127.0.0.1:5050`; see `docs/development/verification.md`.
 
 ### The bucket is never guessed
 

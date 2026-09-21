@@ -203,7 +203,9 @@ print stylesheet and no external requests. `get_document` gives you the
 and your context is not filled with three kilobytes of stylesheet.
 
 Use HTML when you need something Markdown cannot express: a slide deck, an
-inline diagram, a layout.
+inline diagram, a layout. Put a `<title>`, a `<meta name="description">` and
+an absolute `og:image` in its head: they become the link preview when the
+document is shared, and the `<title>` is its default title.
 
 ### Scripts run only if somebody vouches for them
 

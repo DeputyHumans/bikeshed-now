@@ -33,6 +33,21 @@ The three samples are not decoration: **A is scripted HTML, B is script-free
 HTML, C is Markdown**, and that is exactly what makes the trust observations
 below possible. `npm run check:content` keeps them that way.
 
+Two prerequisites for the document page, which the Hosting emulator serves
+through `docShell` exactly as production does:
+
+- **`functions/.env.local` containing `BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050`.**
+  That file is loaded last and only by the emulator. Without it the function
+  falls back to the deployment's origin — `functions/.env` on a deployer's
+  machine, else the default site — and the emulator **silently fetches the
+  production shell**. The emulator console prints
+  `shell origin: http://127.0.0.1:5050` on the first document page; if it
+  prints anything else, the override is missing.
+- **`VITE_USE_EMULATORS=1 npm run build:app`.** The Hosting emulator serves
+  `app/dist`, not the Vite dev server, and `app/.env.local` may hold a real
+  web config: a build without the flag points the document page's own app at
+  a real backend.
+
 ---
 
 ## What to observe, and what it proves
@@ -76,10 +91,29 @@ a slug space that often contains the confidential part.
 | `public` | 200 | `public, max-age=300` | — |
 
 Then check `public/{docId}`: it carries `docId, title, slug, currentVersion,
-entry, format, visibility, publicEdit, trusted, publishedAt` and **no**
-`members`, `viewers`, `ownerEmail` or `stats`. Set the document private again
-and the projection is gone — that is the revocation path, with the five minutes
-of CDN latency documented in `operations.md`.
+entry, format, visibility, publicEdit, trusted, expiresAt, publishedAt` and
+**no** `members`, `viewers`, `ownerEmail` or `stats`. Set the document private
+again and the projection is gone — that is the revocation path, with the five
+minutes of CDN latency documented in `operations.md`.
+
+The document page follows the same five rows. `curl -sI http://127.0.0.1:5050/d/<slug>`
+(with `?k=…` for the unlisted rows), and `curl -s` for the body:
+
+| | status | cache-control | X-Robots-Tag | `<title>` is the document's |
+|---|---|---|---|---|
+| `private` | 200 | `private, no-store` | — | no |
+| `unlisted`, no token | 200 | `private, no-store` | — | no |
+| `unlisted`, wrong token | 200 | `private, no-store` | — | no |
+| `unlisted`, correct token | 200 | `public, max-age=300` | `noindex` | **yes** |
+| `public` | 200 | `public, max-age=300` | — | **yes** |
+
+A slug that does not exist and a private one must return **byte-identical
+header sets**, `Date` aside — the generic shell is the same response for every
+refusal, so the page cannot confirm that a slug exists. One difference from
+production to know about: the Hosting emulator forwards every cookie to the
+function where production forwards only `__session`; the function reads none,
+so the rows above do not depend on it, but it is why a cookie-based bug can
+hide here.
 
 ### 5 · Both halves of the trust condition
 

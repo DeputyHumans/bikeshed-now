@@ -84,7 +84,7 @@ and spends most of its length on **what this is not**.
 | [`docs/development/authoring-bundles.md`](docs/development/authoring-bundles.md) | Writing a document that works well here |
 | [`docs/operations/config.md`](docs/operations/config.md) | Every setting, and what it changes |
 | [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | Ten decisions, ~30 lines each, so nobody re-argues them in a pull request |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | Eleven decisions, ~30 lines each, so nobody re-argues them in a pull request |
 | [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
 | [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |

@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — ten records of about thirty lines each.
+[`adr/`](adr/) — eleven records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -184,9 +184,13 @@ patch release would mint new versions of every Markdown document
 
 ## Cost model
 
-Every byte of every document is proxied through a Cloud Function. That is the
-price of the private bucket and the ACL, and it is the thing most likely to
-surprise you on a bill.
+Every byte **and every page** of every document is proxied through a Cloud
+Function: the bytes through `contentProxy`, and the page that loads them
+through `docShell`, which serves the app shell with the document's own head
+for link previews ([ADR 0011](adr/0011-document-page-through-a-function.md)).
+That is the price of the private bucket, the ACL and a link that unfurls as
+the document, and it is the thing most likely to surprise you on a bill — and
+on a stopwatch, since a document open cold-starts two services in sequence.
 
 Two consequences:
 

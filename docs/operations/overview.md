@@ -107,7 +107,7 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 23 HTTP
+the content bucket only, never project-wide — and step 8 makes the 24 HTTP
 endpoints publicly invokable. "Publicly invokable" is not "public": each
 function authenticates its own caller. The Firestore trigger is deliberately
 left private.
@@ -129,6 +129,18 @@ gcloud resource-manager org-policies set-policy /tmp/policy.yaml --project <id>
 That needs `roles/orgpolicy.policyAdmin`, which can only be granted at
 organization or folder level — not on the project. Grant it, set the override,
 and revoke it again if you would rather not leave it standing.
+
+The same grant applies to a function created **after** setup. `firebase
+deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new
+function such as `docShell`; under Domain Restricted Sharing that deploy fails
+at "set invoker" and the function stays private. The symptom of the missing
+grant is a `403` with an HTML body, before any code runs — every document page
+looks broken while being perfectly deployed. The repair, once the policy is
+overridden:
+
+```bash
+gcloud run services add-iam-policy-binding docshell --region=us-central1 --member=allUsers --role=roles/run.invoker
+```
 
 ### 4. Do step 10 by hand
 
@@ -216,6 +228,18 @@ Deploy **functions before hosting**. The new app may call an endpoint the old
 functions do not have; the reverse is never a problem, because an endpoint
 nobody calls yet is inert.
 
+**The document page needs both.** `docShell` is a new function *and* a
+`firebase.json` rewrite for `/d/**`, and the rewrite ships with hosting.
+Hosting alone keeps `/d/**` static, so nothing changes; functions alone deploys
+a service nothing routes to, so nothing visible changes either. Deploy
+functions, then hosting, and the first document page after the second deploy
+is the one that carries its own head.
+
+**Preview channels do not preview `/d/**`.** `docShell` fetches the app shell
+from `BIKESHED_PUBLIC_ORIGIN` at runtime, so a document page on a channel
+carries the live site's assets, whatever the channel deployed. Preview the
+workspace on a channel; preview the document page on the live site.
+
 **A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
 are part of the content hash, so bumping `markdown-it`, `turndown` or
 `turndown-plugin-gfm` changes every Markdown document's hash and the next save
@@ -263,6 +287,13 @@ firebase hosting:channel:delete <channel> --project <id>   # only if it is on a 
 For the primary channel there is no purge API. The reliable move is to withdraw
 the version with `delete-version.mjs`, which removes the bytes the cached URL
 points at, and accept that the cached copy expires on its own.
+
+**The document page is in the same window.** A public or unlisted document's
+`/d/**` page carries its title and an excerpt in its head, cached
+`public, max-age` for the same five minutes as the content. Withdrawing a
+version does not purge it, and neither does making the document private: the
+cached shell can still say what the document was called until it expires on
+its own.
 
 If the leak was an ACL mistake rather than a visibility one, no cache is
 involved: gated content was never cacheable, so removing the grant is immediate.

@@ -83,6 +83,13 @@ reaching for. The samples are all single-file at 5–31 KB.
 ```
 
 `<title>` becomes the fallback document title when a manifest does not give one.
+It is also the title a shared link unfurls with, and beside it a
+`<meta name="description">` and a `<meta property="og:image">` — an absolute
+URL, or a path to a raster image bundled with the document — shape the link
+preview when the link is shared. Declare a description: the fallback is an
+excerpt of the first words after the `<h1>`, and it reads only the first
+256 KiB of the file, so a bundle that inlines large assets above its text has
+no fallback at all.
 
 ### Scripts
 
