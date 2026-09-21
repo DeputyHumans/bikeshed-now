@@ -31,6 +31,11 @@ test("the SPA catch-all is last, after every wildcard", () => {
   assert.equal(sources[sources.length - 1], "**");
   // An exact rewrite must precede a wildcard that would shadow it.
   assert.ok(sources.indexOf("/draft") < sources.indexOf("/draft/**"));
+  // The document page is a function too, and it must come before the SPA
+  // catch-all or the shell is served with a generic head; after the content
+  // path so byte requests are never answered with a page.
+  assert.ok(sources.indexOf("/d/**") < sources.indexOf("**"));
+  assert.ok(sources.indexOf("/content/**") < sources.indexOf("/d/**"));
 });
 
 test("every table entry is exported by the built functions bundle", async () => {
@@ -63,6 +68,18 @@ test("exact endpoints get anchored dev-proxy keys", async () => {
   assert.ok(folderRe.test("/folder"));
   assert.ok(folderRe.test("/folder?x=1"));
   assert.ok(!folderRe.test("/folder/abc123"));
+  // /d/** is rewritten to docShell in Hosting, but it is a CLIENT ROUTE: the
+  // function serves the app shell, which in dev is Vite's own. A `/d` proxy
+  // key would send every document page to the emulator, which has no shell
+  // to serve, so the row must stay out of the proxy entirely. Decided the way
+  // Vite does: a key starting with `^` is a regex, anything else a prefix —
+  // so `/draft` and `/download` are fine and `/d` is not.
+  const proxied = (url) => keys.some((k) => (k[0] === "^" ? new RegExp(k).test(url) : url.startsWith(k)));
+  assert.ok(!keys.includes("/d"));
+  assert.ok(!proxied("/d"));
+  assert.ok(!proxied("/d/abc123"));
+  assert.ok(!proxied("/d/abc123/v2?k=tok"));
+  assert.ok(proxied("/draft/abc123"), "the simulation must still see a real prefix row");
 });
 
 // --- Cache headers on the byte paths ---------------------------------------
@@ -87,7 +104,7 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   const { join } = require("node:path");
   const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
 
-  for (const name of ["contentProxy", "downloadBundle", "getDraft"]) {
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);

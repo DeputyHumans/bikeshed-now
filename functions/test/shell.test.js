@@ -620,3 +620,31 @@ test("warnIfOriginUnconfigured speaks only in the emulator with no origin", () =
   warnIfOriginUnconfigured({ BIKESHED_PUBLIC_ORIGIN: "http://127.0.0.1:5050" }, false, (l) => silent.push(l));
   assert.deepEqual(silent, []);
 });
+
+/* ------------------------------------------------------------------------ */
+/* The handler                                                               */
+
+test("docShell sets the public cache header only after the page is built", () => {
+  /**
+   * The handler needs Firestore and Storage, so it is not unit-tested end to
+   * end: `wiring.test.js` pins `noStore(res)` first, and the emulator
+   * walkthrough exercises it. This pins the other half of the discipline.
+   *
+   * `public, max-age=<n>` is set only once `renderShell` has returned. Set
+   * earlier, a throw between the two — a version that vanished, a stream that
+   * failed, a template missing its `</head>` — would fall back to the generic
+   * shell with the public header already on it, and that broken page would be
+   * cached at a public URL for the whole window.
+   */
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const docShell = onRequest(");
+  assert.ok(start > 0, "docShell not found");
+  const end = src.indexOf("\n});", start);
+  const body = src.slice(start, end);
+
+  const rendered = body.indexOf("renderShell(");
+  const cached = body.indexOf('Cache-Control", `public');
+  assert.ok(rendered > 0, "docShell must render the shell");
+  assert.ok(cached > 0, "docShell must set a public Cache-Control for a document");
+  assert.ok(rendered < cached, "docShell sets the public cache header before the page is built");
+});

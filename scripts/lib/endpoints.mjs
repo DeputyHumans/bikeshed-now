@@ -25,6 +25,9 @@
  *             `/folder/{id}` is a client route, so a prefix rule here would
  *             proxy folder deep-links to the emulator and silently break them.
  *   prefix  — the path and everything beneath it (`/content/{doc}/{ver}/...`).
+ *
+ * `devProxy: false` keeps a row out of the Vite dev proxy while Hosting still
+ * rewrites it — for a function that serves a client route rather than an API.
  */
 export const ENDPOINTS = [
   { path: "/session", fn: "session", match: "exact" },
@@ -50,6 +53,11 @@ export const ENDPOINTS = [
   { path: "/download", fn: "downloadBundle", match: "prefix" },
   { path: "/draft", fn: "getDraft", match: "prefix" },
   { path: "/content", fn: "contentProxy", match: "prefix" },
+  // This function serves a CLIENT ROUTE — the app shell, with the document's
+  // own head spliced in for crawlers — so the Vite dev server must keep
+  // serving its own shell for `/d/*`. `devProxy: false` keeps the row out of
+  // the dev proxy while Hosting still rewrites it.
+  { path: "/d", fn: "docShell", match: "prefix", devProxy: false },
 ];
 
 /**
@@ -88,6 +96,7 @@ export function rewrites() {
 export function viteProxyKeys() {
   const keys = [];
   for (const e of ENDPOINTS) {
+    if (e.devProxy === false) continue;
     if (e.match === "prefix") {
       if (!keys.includes(e.path)) keys.push(e.path);
     } else {

@@ -43,6 +43,7 @@ import {
   SESSION_EXPIRES_MS,
   VERIFY_TTL_MS,
   bucketName,
+  isEmulated,
   publicOrigin,
   signInHint,
 } from "./config";
@@ -95,6 +96,16 @@ import { listTokens, mintToken, revokeToken, type TokenChannel } from "./lib/tok
 import { renderMarkdown } from "./lib/markdown/render";
 import { htmlToMarkdown } from "./lib/markdown/serialize";
 import { resolveMarking, type Marking } from "./lib/marking";
+import { HEAD_SCAN_BYTES, readHead } from "./lib/head";
+import {
+  collectPrefix,
+  composePage,
+  decideShell,
+  loadShell,
+  renderShell,
+  warnIfOriginUnconfigured,
+  type ShellDoc,
+} from "./lib/shell";
 import {
   badRequest,
   jsonBody,
@@ -118,6 +129,10 @@ import {
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
+
+// Once, at load: the emulator with no origin answers every /d/** with 503,
+// and the symptom is far from the cause.
+warnIfOriginUnconfigured(process.env, isEmulated(), console.warn);
 
 const db = () => admin.firestore();
 const bucket = () => admin.storage().bucket(bucketName());
@@ -2343,6 +2358,111 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
   res.status(200).send(
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`,
   );
+});
+
+/**
+ * GET /d/:docId[/:versionId] — the app shell for a document page, with the
+ * document's own head for crawlers (SPEC §17).
+ *
+ * Hosting would answer with the static shell, whose head says "Bikeshed" and
+ * nothing about the document; crawlers run no JS, so a pasted link unfurled
+ * as the product. This serves the same shell to everyone and, only when
+ * `decideShell` says the document is readable without an account, with its
+ * title, description, keywords and Open Graph tags spliced in.
+ *
+ * It never authenticates. The response may be cached at a public URL, so
+ * whatever it carries is what a stranger may see; a member's tab title comes
+ * from the client. Two invariants, each pinned by a structural test:
+ * `noStore` is the first thing to touch headers, so no early exit inherits
+ * Hosting's max-age=600; and `public, max-age` is set only once the page is
+ * built, so a throw before then falls back to a generic shell that is still
+ * uncacheable — never a broken page pinned at a public URL for the window.
+ */
+export const docShell = onRequest(PLAIN, async (req, res) => {
+  if (rejectMethod(req, res, ["GET", "HEAD"])) return;
+
+  // Uncacheable until the page is built and says otherwise. See noStore().
+  noStore(res);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+
+  const template = await loadShell({ origin: publicOrigin() }).catch(() => null);
+  if (!template) {
+    res.status(503).end();
+    return;
+  }
+
+  const isHead = req.method === "HEAD";
+  /** The shell as Hosting would serve it: the three headers above, no more. */
+  const serveGeneric = (): void => {
+    res.status(200);
+    if (isHead) res.end();
+    else res.send(template);
+  };
+
+  const segments = pathSegments(req, "d");
+  if (!segments || segments.length < 1 || segments.length > 2) {
+    serveGeneric();
+    return;
+  }
+  const [docId] = segments;
+  const pinned = segments.length === 2 ? segments[1] : null;
+  const k = strParam(req, "k");
+
+  const docSnap = await db().collection("docs").doc(docId).get();
+  const doc = docSnap.exists ? (docSnap.data() as ShellDoc) : null;
+  const decision = decideShell({ doc, k, versionId: pinned, now: Date.now() });
+  if (decision.kind === "generic") {
+    serveGeneric();
+    return;
+  }
+
+  try {
+    const versionSnap = await docSnap.ref.collection("versions").doc(decision.versionId).get();
+    if (!versionSnap.exists) {
+      serveGeneric();
+      return;
+    }
+    const data = versionSnap.data() || {};
+    const entry = safeRelPath(String(data.entry ?? "index.html"));
+    if (entry === null) {
+      serveGeneric();
+      return;
+    }
+    const files: string[] = Array.isArray(data.files)
+      ? data.files.filter((f: unknown): f is string => typeof f === "string")
+      : [];
+
+    // Only the prefix the scanner reads; `collectPrefix` enforces the cap
+    // even where the range is ignored.
+    const stream = bucket()
+      .file(`docs/${docId}/${decision.versionId}/${entry}`)
+      .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
+    const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
+    const head = readHead(bytes.toString("utf8"));
+
+    const page = composePage({
+      origin: publicOrigin(),
+      docId,
+      requestedVersion: pinned,
+      decision,
+      docTitle: typeof doc?.title === "string" ? doc.title : "Untitled",
+      head,
+      entry,
+      files,
+      k,
+    });
+    const html = renderShell(template, page);
+
+    // ONLY NOW: the page exists, so this URL may be cached with it.
+    res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
+    if (decision.noindex) res.setHeader("X-Robots-Tag", "noindex");
+    res.status(200);
+    if (isHead) res.end();
+    else res.send(html);
+  } catch {
+    serveGeneric();
+  }
 });
 
 // ---------------------------------------------------------------------------
