@@ -9,7 +9,7 @@ import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useInlineEditor } from "./useInlineEditor";
 import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
-import { ANN_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
+import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -191,7 +191,7 @@ function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
 
 function decorationIn(doc: Document): string[] {
   const found: string[] = [];
-  if (doc.querySelector(`mark.${HL_CLASS}`)) found.push("highlight mark");
+  if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
@@ -216,7 +216,7 @@ describe("the decoration invariant", () => {
         mode={{ kind: "reading", versionId: "v1", draft: false, sandboxed: true }}
       />,
     );
-    expect(doc.querySelectorAll(`mark.${HL_CLASS}`).length).toBeGreaterThan(0);
+    expect(doc.querySelectorAll(HL_SELECTOR).length).toBeGreaterThan(0);
     expect(doc.getElementById(HL_STYLE_ID)).not.toBeNull();
   });
 
@@ -349,7 +349,7 @@ describe("the decoration invariant", () => {
         />,
       );
     });
-    expect(doc.querySelectorAll(`mark.${HL_CLASS}`).length).toBeGreaterThan(0);
+    expect(doc.querySelectorAll(HL_SELECTOR).length).toBeGreaterThan(0);
     expect(doc.body.getAttribute("contenteditable")).toBeNull();
   });
 
@@ -364,7 +364,7 @@ describe("the decoration invariant", () => {
     const { rerender } = render(
       <Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} />,
     );
-    expect(doc.querySelector(`mark.${HL_CLASS}`)).toBeNull();
+    expect(doc.querySelector(HL_SELECTOR)).toBeNull();
     act(() => {
       rerender(
         <Harness

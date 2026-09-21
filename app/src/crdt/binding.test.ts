@@ -137,6 +137,11 @@ describe("decoration never reaches the shared document", () => {
     expect(roundTrip(html)).toBe(`<p>a b c</p>`);
   });
 
+  it("unwraps a highlight inside SVG text, which is a tspan rather than a mark", () => {
+    const html = `<svg><text>a <tspan class="${HL_CLASS}" data-bshd-ann="x">b</tspan> c</text></svg>`;
+    expect(roundTrip(html)).toBe(`<svg><text>a b c</text></svg>`);
+  });
+
   it("keeps a stranger's data-bshd node, because it is not ours", () => {
     // Removing by PREFIX rather than by value is silent data loss in somebody
     // else's document. The value check is the whole defence.

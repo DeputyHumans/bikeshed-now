@@ -72,6 +72,28 @@ export const PEER_LAYER_ID = "bshd-peers";
 export const HL_CLASS = "bshd-hl";
 
 /**
+ * The elements a highlight wraps text in: `<mark>` in HTML, `<tspan>` inside
+ * SVG text. Two, because SVG renders no foreign child of a text content
+ * element — an HTML `<mark>` inside `<text>` paints nothing at all, and a
+ * commented label in a figure simply vanished.
+ */
+export const HL_TAGS = ["mark", "tspan"] as const;
+
+/** CSS selector matching a highlight wrapper of either kind. */
+export const HL_SELECTOR = HL_TAGS.map((t) => `${t}.${HL_CLASS}`).join(", ");
+
+/**
+ * True for a node `highlightRange` wrapped around text.
+ *
+ * Through the selector, not `tagName`: that is `"MARK"` for the HTML wrapper
+ * and lowercase `"tspan"` for the SVG one, so a tag comparison written for one
+ * silently misses the other.
+ */
+export function isHighlightWrapper(el: Element): boolean {
+  return el.matches(HL_SELECTOR);
+}
+
+/**
  * The annotation id carried by a highlight.
  *
  * Namespaced deliberately: in the design this replaces it was a bare

@@ -7,6 +7,7 @@ import {
   EDIT_FONTS_ID,
   EMPTY_ATTR,
   HL_CLASS,
+  HL_SELECTOR,
   HL_STYLE_ID,
   OWN_ATTR,
   isOwnMarker,
@@ -35,6 +36,14 @@ import type { Anchor, Annotation } from "../types";
  *
  * A coarse pointer gets a tinted fill as well, because a 1px border is not
  * something a thumb can hit.
+ *
+ * Inside SVG text the wrapper is a `<tspan>` (see `wrapperFor`), and border,
+ * background and box-shadow do not apply to SVG text at all, so it gets its
+ * own treatment: a stroke in the author's colour painted BEHIND the glyph fill,
+ * which leaves the author's own glyph colour intact — the same principle as
+ * the border. Not an underline: SVG text decorations ignore
+ * `text-decoration-color`, so an underline cannot carry the author's colour.
+ * Measured, not assumed — it painted zero coloured pixels.
  */
 export function ensureHighlightStyles(doc: Document): void {
   if (doc.getElementById(HL_STYLE_ID)) return;
@@ -63,6 +72,15 @@ export function ensureHighlightStyles(doc: Document): void {
         margin: 0 -1px;
         touch-action: manipulation;
       }
+    }
+    tspan.${HL_CLASS} {
+      paint-order: stroke fill;
+      stroke: var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
+      stroke-width: 2px;
+      stroke-linejoin: round;
+    }
+    tspan.${HL_CLASS}[data-selected="true"] {
+      stroke-width: 4px;
     }
   `;
   (doc.head ?? doc.documentElement).appendChild(style);
@@ -96,8 +114,27 @@ function intersectingTextNodes(doc: Document, range: Range): Text[] {
   return out;
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 /**
- * Wrap a Range in <mark> nodes, one per text node.
+ * The element to wrap one text node in.
+ *
+ * SVG renders no foreign child of a text content element: an HTML `<mark>`
+ * inside `<text>` paints nothing, and the passage disappears — which is how a
+ * comment on a label in a figure made the label vanish. A `<tspan>` is what
+ * SVG has for a styled run, and it renders inline exactly where the mark would.
+ *
+ * Decided per text node, by the parent's namespace, so a range that runs from
+ * prose into a figure gets the right wrapper for each part.
+ */
+function wrapperFor(doc: Document, text: Text): HTMLElement | SVGElement {
+  return text.parentElement?.namespaceURI === SVG_NS
+    ? doc.createElementNS(SVG_NS, "tspan")
+    : doc.createElement("mark");
+}
+
+/**
+ * Wrap a Range in highlight nodes, one per text node.
  *
  * Per-text-node rather than one surroundContents over the whole range: a range
  * that crosses an element boundary cannot be surrounded at all, and splitting
@@ -127,8 +164,10 @@ export function highlightRange(
     sub.setStart(node, from);
     sub.setEnd(node, to);
 
-    const mark = doc.createElement("mark");
-    mark.className = HL_CLASS;
+    const mark = wrapperFor(doc, node);
+    // setAttribute, not `.className =`: on an SVG element `className` is an
+    // SVGAnimatedString and the assignment is silently ignored.
+    mark.setAttribute("class", HL_CLASS);
     mark.setAttribute(ANN_ATTR, annId);
     // The author's colour, so a highlight can be traced to a person without
     // opening the panel — the same value the chip, caret and rail marker use.
@@ -151,7 +190,7 @@ function unwrapMark(mark: Element): void {
 }
 
 export function clearHighlights(doc: Document): void {
-  for (const mark of Array.from(doc.querySelectorAll(`mark.${HL_CLASS}`))) {
+  for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
     unwrapMark(mark);
   }
 }
@@ -163,7 +202,7 @@ export function removeHighlightStyles(doc: Document): void {
 
 /** Mark one thread as selected, and clear the rest. */
 export function setSelectedHighlight(doc: Document, annId: string | null): void {
-  for (const mark of Array.from(doc.querySelectorAll(`mark.${HL_CLASS}`))) {
+  for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
     const isSelected = annId != null && mark.getAttribute(ANN_ATTR) === annId;
     if (isSelected) mark.setAttribute("data-selected", "true");
     else mark.removeAttribute("data-selected");
@@ -242,7 +281,7 @@ export function serializeCleanHtml(
   // keeps those documents from carrying it forever.
   root.querySelector(`#${EDIT_FONTS_ID}`)?.remove();
 
-  for (const mark of Array.from(root.querySelectorAll(`mark.${HL_CLASS}`))) {
+  for (const mark of Array.from(root.querySelectorAll(HL_SELECTOR))) {
     const parent = mark.parentNode;
     if (!parent) continue;
     while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
@@ -286,7 +325,7 @@ export function serializeCleanHtml(
 export function assertNoDecoration(doc: Document, context: string): void {
   if (!import.meta.env.DEV) return;
   const found: string[] = [];
-  if (doc.querySelector(`mark.${HL_CLASS}`)) found.push("highlight mark");
+  if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     if (isOwnMarker(el)) found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
@@ -341,7 +380,7 @@ export function attachHighlightClick(
 ): () => void {
   const handler = (e: Event) => {
     const target = e.target as Element | null;
-    const mark = target?.closest?.(`mark.${HL_CLASS}[${ANN_ATTR}]`) as HTMLElement | null;
+    const mark = target?.closest?.(HL_SELECTOR) as Element | null;
     const id = mark?.getAttribute(ANN_ATTR);
     if (id) onClick(id);
   };

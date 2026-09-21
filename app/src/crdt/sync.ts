@@ -4,7 +4,7 @@
 import * as Y from "yjs";
 import { seedFragment } from "./binding";
 import { COMMENT_TAG } from "./binding";
-import { EMPTY_ATTR, HL_CLASS, isOwnMarker } from "../brand/dom";
+import { EMPTY_ATTR, isHighlightWrapper, isOwnMarker } from "../brand/dom";
 
 /**
  * The two directions are not symmetrical, and pretending otherwise is how a
@@ -37,7 +37,7 @@ export interface Sync {
 
 /** Decoration, which must never enter the shared document. See binding.ts. */
 function isDecoration(el: Element): boolean {
-  return isOwnMarker(el) || (el.tagName === "MARK" && el.classList.contains(HL_CLASS));
+  return isOwnMarker(el) || isHighlightWrapper(el);
 }
 
 const INJECTED_ATTRS = new Set(["contenteditable", EMPTY_ATTR]);

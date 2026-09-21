@@ -2,7 +2,7 @@
 // The DOM <-> CRDT binding: shared document state without a schema (SPEC §6b, §16).
 
 import * as Y from "yjs";
-import { EMPTY_ATTR, HL_CLASS, isOwnMarker } from "../brand/dom";
+import { EMPTY_ATTR, isHighlightWrapper, isOwnMarker } from "../brand/dom";
 
 /**
  * Why a hand-written binding rather than y-prosemirror
@@ -69,7 +69,7 @@ function skipEntirely(el: Element): boolean {
 }
 
 function unwrapOnly(el: Element): boolean {
-  return el.tagName === "MARK" && el.classList.contains(HL_CLASS);
+  return isHighlightWrapper(el);
 }
 
 /**

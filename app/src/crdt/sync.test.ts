@@ -87,6 +87,18 @@ describe("local edits reach the CRDT", () => {
     await flush();
     expect(a.sync.html()).toBe(`<p>t</p>`);
   });
+
+  it("never lets a highlight inside SVG text into the shared document either", async () => {
+    // Inside <text> the wrapper is a <tspan>, and a tagName check written for
+    // <mark> would wave it through.
+    const a = peer(`<svg><text>t</text></svg>`);
+    const tspan = a.doc.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    tspan.setAttribute("class", HL_CLASS);
+    tspan.textContent = "x";
+    a.body.querySelector("text")!.appendChild(tspan);
+    await flush();
+    expect(a.sync.html()).toBe(`<svg><text>t</text></svg>`);
+  });
 });
 
 describe("remote edits reach the DOM", () => {

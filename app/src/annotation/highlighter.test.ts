@@ -10,7 +10,7 @@ import {
   serializeCleanHtml,
   assertNoDecoration,
 } from "./highlighter";
-import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, OWN_ATTR } from "../brand/dom";
+import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
 
 /**
  * Everything this app injects passes through serializeCleanHtml on its way to a
@@ -212,6 +212,85 @@ describe("highlightRange", () => {
     });
     const mark = doc.querySelector("mark") as HTMLElement;
     expect(mark.style.cssText).toContain("--bshd-author");
+  });
+});
+
+describe("inside SVG text", () => {
+  /**
+   * SVG paints no foreign child of a text content element, so an HTML <mark>
+   * wrapped around a label in a figure made the label disappear. jsdom does
+   * not lay out, so "the label stays visible" cannot be asserted here; the
+   * wrapper's NAMESPACE can, and that is what decides whether it paints.
+   */
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const figure =
+    '<section id=s1><p>prose</p><figure><svg viewBox="0 0 100 20">' +
+    '<text id="lane" x="0" y="10">LINEAR</text></svg></figure></section>';
+
+  it("wraps SVG text in a <tspan>, not a <mark>", () => {
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "#lane"), "a1", { authorEmail: "ana@example.com" });
+    expect(doc.querySelector("mark")).toBeNull();
+    const wrapper = doc.querySelector(`#lane > .${HL_CLASS}`)!;
+    expect(wrapper.localName).toBe("tspan");
+    expect(wrapper.namespaceURI).toBe(SVG_NS);
+    expect(wrapper.getAttribute(ANN_ATTR)).toBe("a1");
+    expect((wrapper as SVGElement).style.cssText).toContain("--bshd-author");
+    expect(wrapper.textContent).toBe("LINEAR");
+  });
+
+  it("gives each text node the wrapper its own namespace needs", () => {
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "section"), "a1");
+    expect(doc.querySelector(`p > mark.${HL_CLASS}`)).not.toBeNull();
+    expect(doc.querySelector(`text > tspan.${HL_CLASS}`)).not.toBeNull();
+    expect(doc.querySelector("text mark")).toBeNull();
+  });
+
+  it("unwraps a tspan on clear and on serialize, leaving the <text> as authored", () => {
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "#lane"), "a1");
+    const out = serializeCleanHtml(doc);
+    expect(out).not.toContain("tspan");
+    expect(out).not.toContain(HL_CLASS);
+    expect(out).toContain('<text id="lane" x="0" y="10">LINEAR</text>');
+
+    clearHighlights(doc);
+    expect(doc.querySelector("tspan")).toBeNull();
+    expect(doc.querySelector("#lane")!.childNodes).toHaveLength(1);
+  });
+
+  it("selects and clicks through a tspan exactly as through a mark", async () => {
+    const { setSelectedHighlight, attachHighlightClick } = await import("./highlighter");
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "#lane"), "a1");
+
+    setSelectedHighlight(doc, "a1");
+    expect(doc.querySelector("tspan")!.getAttribute("data-selected")).toBe("true");
+    setSelectedHighlight(doc, null);
+    expect(doc.querySelector("[data-selected]")).toBeNull();
+
+    const seen: string[] = [];
+    attachHighlightClick(doc, (id) => seen.push(id));
+    doc.querySelector("tspan")!.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(seen).toEqual(["a1"]);
+  });
+
+  it("is decoration the invariant assertion catches", () => {
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "#lane"), "a1");
+    expect(() => assertNoDecoration(doc, "a test")).toThrow(/highlight/);
+  });
+
+  it("is drawn with a stroke, because a border does not apply to SVG text", () => {
+    // And not an underline: SVG text decorations ignore text-decoration-color,
+    // so an underline could not carry the author's colour.
+    const doc = makeDoc(figure);
+    ensureHighlightStyles(doc);
+    const css = doc.getElementById(HL_STYLE_ID)!.textContent!;
+    const rule = /tspan\.bshd-hl\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/paint-order:\s*stroke fill/);
+    expect(rule).toMatch(/stroke:\s*var\(--bshd-author/);
   });
 });
 

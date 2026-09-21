@@ -353,7 +353,10 @@ Because it is same-origin, the parent app drives annotation directly on
   changing.
 - Rehydrate: find the element by `elementId`, `toRange` the quote selector
   within it; **if the range is inside a collapsed `<details>`, open it first**,
-  then wrap in `<mark class="bshd-hl" data-bshd-ann="...">`.
+  then wrap in `<mark class="bshd-hl" data-bshd-ann="...">` — or in a `<tspan>`
+  carrying the same class and attribute when the text node lives inside SVG
+  text, because SVG renders no foreign child of `<text>` and a `<mark>` there
+  paints nothing.
 - Wrapping is per-text-node, so existing element nodes are never destroyed or
   re-parented. Highlights are presentational and are NEVER persisted.
 - **A resolved annotation is not drawn.** Resolving is how a reader says a
