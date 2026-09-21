@@ -74,6 +74,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **A document with nothing to say opens without the comments panel.** The
+  panel was open on every document: a 340px column reading "0 open" and
+  asking the reader to select a passage. It now starts collapsed and opens on
+  its own only when the version's first annotation snapshot holds an
+  unresolved thread — resolved ones are hidden until asked for, so a version
+  whose every thread is dealt with reads as done. The reader's own toggle
+  still wins over the default in either direction, a comment landing later
+  does not reopen a panel they closed, and starting a comment opens it as
+  before.
+
 - **An HTML upload's default title is its own `<title>`.** When no title is
   given, the workspace title — and so the slug of a new document — comes from
   the document's `<title>` rather than the file name. The upload dialog no

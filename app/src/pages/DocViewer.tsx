@@ -24,6 +24,7 @@ import { useSharedDocument } from "../viewer/useSharedDocument";
 import { clearLog } from "../crdt/rtdb";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
+import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
@@ -107,7 +108,12 @@ export function DocViewer() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [wantsEdit, setWantsEdit] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(true);
+  // Collapsed until the first snapshot says there is a thread to read.
+  const {
+    open: commentsOpen,
+    setOpen: setCommentsOpen,
+    settle: settleComments,
+  } = useCommentsOpen(docId);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
   const [railOpen, setRailOpen] = useState(true);
@@ -240,8 +246,18 @@ export function DocViewer() {
 
   useEffect(() => {
     if (!doc.currentVersion) return;
-    return listAnnotations(docId, doc.currentVersion, setAnnotations, () => setAnnotations([]));
-  }, [docId, doc.currentVersion]);
+    return listAnnotations(
+      docId,
+      doc.currentVersion,
+      (anns) => {
+        setAnnotations(anns);
+        settleComments(anns);
+      },
+      // Unreadable is not "none": the panel stays undecided, which reads as
+      // closed, and the reader can still open it.
+      () => setAnnotations([]),
+    );
+  }, [docId, doc.currentVersion, settleComments]);
 
   useEffect(() => {
     if (!signedIn) return;

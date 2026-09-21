@@ -396,6 +396,14 @@ Because it is same-origin, the parent app drives annotation directly on
   passage is dealt with, so its mark comes off the prose; the thread stays in
   the panel and can be reopened there. A resolved annotation is skipped before
   its anchor is resolved, so it is never reported as orphaned either.
+- **The panel starts collapsed unless there is a thread to read.** Its default
+  is decided once per document, by the version's first annotation snapshot:
+  open when a thread is unresolved, collapsed otherwise — resolved threads are
+  hidden until asked for, so they do not count. Until that snapshot lands it
+  is closed. Whichever comes first, the snapshot or the reader's toggle, wins,
+  and nothing after it changes the answer: a comment landing later does not
+  reopen a panel the reader closed, and a new version of the same document
+  does not collapse one they had open. Starting a comment opens it regardless.
 - **A click that carries a comment intent never reaches the document's own
   scripts.** A drag that selects text ends in a `click`, and a click on a
   highlight is the thread's. Both are stopped in the capture phase before any
