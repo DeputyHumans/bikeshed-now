@@ -37,12 +37,16 @@ Two prerequisites for the document page, which the Hosting emulator serves
 through `docShell` exactly as production does:
 
 - **`functions/.env.local` containing `BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050`.**
-  That file is loaded last and only by the emulator. Without it the function
-  falls back to the deployment's origin — `functions/.env` on a deployer's
-  machine, else the default site — and the emulator **silently fetches the
-  production shell**. The emulator console prints
-  `shell origin: http://127.0.0.1:5050` on the first document page; if it
-  prints anything else, the override is missing.
+  That file is loaded last and only by the emulator. Without it, one of two
+  things happens. On a deployer's machine, where `functions/.env` carries the
+  production origin, the emulator **silently fetches the production shell**:
+  every document page boots the live site's assets and nothing warns. With no
+  origin configured anywhere, the fallback is `demo-bikeshed`'s default site,
+  which does not exist: the emulator console warns at start-up
+  (`docShell: BIKESHED_PUBLIC_ORIGIN is unset — /d/** will answer 503 …`) and
+  every `/d/**` answers 503. Either way the console prints
+  `shell origin: http://127.0.0.1:5050` on the first document page once the
+  override is in place; if it prints anything else, it is missing.
 - **`VITE_USE_EMULATORS=1 npm run build:app`.** The Hosting emulator serves
   `app/dist`, not the Vite dev server, and `app/.env.local` may hold a real
   web config: a build without the flag points the document page's own app at

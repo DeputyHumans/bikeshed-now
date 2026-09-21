@@ -56,7 +56,30 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   there is no scheduler here; it carries the date instead, so an anonymous
   reader is told rather than shown an empty frame.
 
+- **A shared link unfurls as the document.** `/d/**` is now served by a
+  function, `docShell`, that injects the document's own `<title>`, description,
+  keywords and image into the app shell — read from the uploaded HTML at
+  request time, no parser, no new dependency — for a document that is readable
+  anonymously: public, or unlisted with its link token in the URL. A link
+  pasted into Slack, iMessage or LinkedIn shows the document rather than the
+  product (SPEC §17 "Link previews"). Everything else gets the generic shell,
+  and a private slug and an absent one answer with the same bytes. A document
+  that declares no usable image gets a branded default card.
+
+  Two operational consequences. Deploying it needs **functions and hosting
+  both** — the function, and the `firebase.json` rewrite that routes to it —
+  and `BIKESHED_PUBLIC_ORIGIN` is now load-bearing for every document page,
+  because the shell is fetched from Hosting at runtime
+  ([ADR 0011](docs/architecture/adr/0011-document-page-through-a-function.md)).
+
 ### Changed
+
+- **An HTML upload's default title is its own `<title>`.** When no title is
+  given, the workspace title — and so the slug of a new document — comes from
+  the document's `<title>` rather than the file name. The upload dialog no
+  longer prefills the file name as a title, so a browser upload follows the
+  document's title exactly as CLI and MCP uploads already did; a typed title
+  still wins, and existing documents keep the titles they have.
 
 - **A deck can be moved through.** The slide navigator was edit-mode only, so a
   reader opening a long deck got one very long scroll and no way around it. It

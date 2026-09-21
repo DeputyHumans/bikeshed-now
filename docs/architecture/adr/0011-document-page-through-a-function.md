@@ -38,7 +38,9 @@ there is none yet.
   defaults (256 MiB, concurrency 80, min instances 0) expect 2–4 s on a cold
   open. `minInstances: 1` on `docShell` alone is the knob, and it is not set.
 - **Preview channels do not preview `/d/**`.** The function fetches the live
-  site's shell, so a channel's document pages carry the live assets.
+  site's shell, whose asset paths are root-relative, so a document page on a
+  channel makes the browser ask the channel host for the live build's hashed
+  asset names — which it does not have. The page is blank.
 - One more service needs `allUsers` as `roles/run.invoker`. `firebase deploy`
   grants it when it creates the function; under Domain Restricted Sharing the
   deploy fails at "set invoker", and `docs/operations/overview.md` has the

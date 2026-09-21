@@ -6,7 +6,7 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes | private bucket, served only by `contentProxy` | owner + `members`, or anyone when the owner made it non-private |
+| Document bytes | private bucket, served only by `contentProxy` and `downloadBundle`; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`, or anyone when the owner made it non-private |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
 | Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document |
 | Per-person reading history | `docs/{docId}/viewers`, `/views` | owner + real editors only |

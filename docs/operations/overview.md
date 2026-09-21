@@ -236,9 +236,12 @@ functions, then hosting, and the first document page after the second deploy
 is the one that carries its own head.
 
 **Preview channels do not preview `/d/**`.** `docShell` fetches the app shell
-from `BIKESHED_PUBLIC_ORIGIN` at runtime, so a document page on a channel
-carries the live site's assets, whatever the channel deployed. Preview the
-workspace on a channel; preview the document page on the live site.
+from `BIKESHED_PUBLIC_ORIGIN` — the live site — at runtime, and the shell's
+asset paths are root-relative (`/assets/index-<hash>.js`). So a document page
+opened on a channel makes the browser request the live build's hashed asset
+names from the channel host, which serves a different build and does not have
+them: a blank page. Preview the workspace on a channel; preview the document
+page on the live site.
 
 **A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
 are part of the content hash, so bumping `markdown-it`, `turndown` or
@@ -294,6 +297,13 @@ points at, and accept that the cached copy expires on its own.
 version does not purge it, and neither does making the document private: the
 cached shell can still say what the document was called until it expires on
 its own.
+
+The same window applies after a **hosting deploy**. The cached page names the
+previous release's hashed assets. Firebase's documentation says a deploy clears
+cached content across the CDN; if function responses turn out not to be
+included, a CDN-cached shell can go on naming asset files the new release no
+longer serves for up to 300 s. A browser that already holds the page keeps it
+for at most 300 s either way, and a reload after that fetches a fresh one.
 
 If the leak was an ACL mistake rather than a visibility one, no cache is
 involved: gated content was never cacheable, so removing the grant is immediate.

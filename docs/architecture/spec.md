@@ -148,7 +148,10 @@ A Hosting `headers` entry would override the function and force one policy on
 both gated and public content; §17 needs them to differ.
 
 Every endpoint is **auth-first**: authentication is checked before anything that
-could reveal whether a document exists.
+could reveal whether a document exists. The one exception is `GET /d/**`, which
+never authenticates at all: it decides from the document record and `k` alone,
+and answers a private slug and an absent one with the same bytes (§17 "Link
+previews").
 
 ### `POST /session`
 Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1.
@@ -199,9 +202,11 @@ from the client. Headers: `Content-Type: text/html`, `nosniff`;
 `Cache-Control: private, no-store` for the generic shell,
 `public, max-age=min(300, seconds to expiry)` for a document, plus
 `X-Robots-Tag: noindex` when it is unlisted. **200 in every case** — a private
-slug and an absent one are byte-identical (§1.4b). The only other answers are
-`405` for a method other than `GET`/`HEAD` and `503` when no shell has ever
-been adopted from Hosting (§17). Accepts `?k=` exactly as `/content/**` does.
+slug and an absent one are byte-identical (§1.4b). The function's only other
+answers are `405` for a method other than `GET`/`HEAD` and `503` when no shell
+has ever been adopted from Hosting (§17); a `403` with an HTML body is the
+platform refusing the invocation, not the function answering
+(`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
 
 ### `POST /access`
 Body `{ docId, add?: [{ email, role: "viewer"|"editor" }], remove?: string[] }`.
@@ -758,7 +763,8 @@ destroying it.
 This is a requirement, not a convenience: it is the single thing that makes the
 quickstart cost nothing.
 
-The Vite dev proxy MUST cover **every** endpoint. Use anchored regex keys
+The Vite dev proxy MUST cover **every** endpoint but one, the `devProxy: false`
+row described at the end of this paragraph. Use anchored regex keys
 (`^/folder(\?.*)?$`) for exact endpoints and prefix rules only for `/content`,
 `/download`, `/draft`. A naive `/folder` prefix rule would proxy the client
 route `/folder/{id}` to the emulator and silently break folder deep-linking.
@@ -871,8 +877,13 @@ Three things that are easy to get wrong:
 3. **Suppress the automatic page view.** `getAnalytics()` sends `page_location`,
    the full URL, and this app's URLs are `/d/{docId}/{versionId}` — **the slug is
    frequently the confidential thing**. Initialize with
-   `initializeAnalytics(app, { config: { send_page_view: false } })` and log
-   route changes manually using the **route pattern** (`/d/:docId/:versionId`).
+   `initializeAnalytics(app, { config: { send_page_view: false, page_title: "Bikeshed" } })`
+   and log route changes manually using the **route pattern**
+   (`/d/:docId/:versionId`). The `page_title` is pinned in the config because
+   the tab title is the document's (§17 "Link previews") and gtag attaches
+   `page_title` from `document.title` to every event, its own `session_start`,
+   `first_visit` and `user_engagement` included; the event builder pins it
+   again on every event the app logs.
 
 **No document id, title, slug, folder name or email is ever sent to Analytics.**
 An assertion in the event-builder test enforces it.
