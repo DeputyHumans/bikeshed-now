@@ -16,6 +16,7 @@ const {
   renderShell,
   collectPrefix,
   loadShell,
+  ShellNotAdopted,
   resetShellCacheForTests,
   warnIfOriginUnconfigured,
 } = require("../lib/lib/shell.js");
@@ -182,6 +183,22 @@ test("k is appended on the same-origin branch only, and only when given", () => 
   assert.equal(resolveImage("img.png", CTX).url, `${ORIGIN}/content/d/v1/deck/img.png`);
   assert.equal(resolveImage("img.png", { ...CTX, k: "" }).url, `${ORIGIN}/content/d/v1/deck/img.png`);
   assert.deepEqual(resolveImage("missing.png", withK), DEFAULT);
+});
+
+test("the configured origin is compared normalised: case and a default port still take the same-origin branch", () => {
+  // Only the same-origin branch carries k and checks the version's files; a
+  // literal comparison would send an image on an origin configured as
+  // `https://Example.com` down the cross-origin branch, without k and unchecked.
+  for (const origin of ["https://Example.com", "https://example.com:443", "HTTPS://EXAMPLE.COM"]) {
+    const ctx = { ...CTX, origin, k: "tok" };
+    assert.deepEqual(
+      resolveImage("img.png", ctx),
+      { url: `${ORIGIN}/content/d/v1/deck/img.png?k=tok`, isDefault: false },
+      origin,
+    );
+    assert.deepEqual(resolveImage("missing.png", ctx), { url: `${origin}/brand/og-default.png`, isDefault: true }, origin);
+    assert.deepEqual(resolveImage("../../x.png", ctx), { url: `${origin}/brand/og-default.png`, isDefault: true }, origin);
+  }
 });
 
 test("no image at all is the default card", () => {
@@ -544,9 +561,73 @@ test("a body that is not text/html is not the shell", async () => {
   await assert.rejects(loadShell(source(fetchImpl)));
 });
 
-test("a fetch that rejects, with nothing cached, rejects", async () => {
+test("a fetch that rejects, with nothing cached, rejects with the error's class and code", async () => {
+  // What Node's fetch throws: a TypeError whose cause carries the code.
+  const failed = new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
   resetShellCacheForTests();
-  await assert.rejects(loadShell(source(scripted([new Error("ECONNREFUSED")]).fetchImpl)), /ECONNREFUSED/);
+  await assert.rejects(loadShell(source(scripted([failed]).fetchImpl)), (err) => {
+    assert.ok(err instanceof ShellNotAdopted);
+    assert.equal(err.reason, "TypeError ECONNREFUSED");
+    assert.equal(err.cause, failed);
+    return true;
+  });
+  // A timeout has no cause; its name is the whole story.
+  const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+  resetShellCacheForTests();
+  await assert.rejects(loadShell(source(scripted([timeout]).fetchImpl)), (err) => {
+    assert.equal(err.reason, "TimeoutError");
+    return true;
+  });
+});
+
+test("every rejection says why in the module's own words, never the message of something else", async () => {
+  // The handler logs `reason` before its 503, so a 503 is diagnosable from
+  // the log alone: a status and a content type, or the fetch error's class
+  // and code. Never a URL — the fetch is to the configured origin's `/`, and
+  // no request URL or `k` is in reach of this function.
+  const cases = [
+    [html(SHELL, 404), "404 text/html; charset=utf-8"],
+    [html(NOT_FOUND_PAGE), "200 without the app's markers"],
+    [html(SHELL, 200, { "content-type": "text/plain" }), "200 text/plain"],
+    [new Response(null, { status: 503 }), "503 (no content type)"],
+    [new Response(null, { status: 304 }), "304 (no content type)"],
+  ];
+  for (const [answer, reason] of cases) {
+    resetShellCacheForTests();
+    await assert.rejects(loadShell(source(scripted([answer]).fetchImpl)), (err) => {
+      assert.ok(err instanceof ShellNotAdopted, reason);
+      assert.equal(err.reason, reason);
+      assert.equal(err.message, `shell not adopted: ${reason}`);
+      assert.doesNotMatch(err.reason, /:\/\/|example\.com/, "a reason names no URL");
+      return true;
+    });
+  }
+});
+
+test("a refused response's body is cancelled, so its connection goes back to the pool", async () => {
+  // Nothing reads a non-ok or non-HTML body, and an unread body holds its
+  // connection until it is cancelled. The markers check has to read the body
+  // to decide, so there is nothing left to release on that branch.
+  for (const [status, type] of [[404, "text/html"], [200, "text/plain"], [503, ""]]) {
+    resetShellCacheForTests();
+    const cancelled = [];
+    const answer = {
+      status,
+      ok: status === 200,
+      headers: new Headers(type ? { "content-type": type } : {}),
+      body: { cancel: async () => void cancelled.push(status) },
+      text: async () => SHELL,
+    };
+    await assert.rejects(loadShell(source(scripted([answer]).fetchImpl)));
+    assert.deepEqual(cancelled, [status], `${status} ${type || "(no content type)"}`);
+  }
+  // A stub with no body at all, or a body that will not cancel, is tolerated.
+  resetShellCacheForTests();
+  await assert.rejects(loadShell(source(scripted([{ status: 404, ok: false, headers: new Headers() }]).fetchImpl)));
+  resetShellCacheForTests();
+  const locked = { status: 404, ok: false, headers: new Headers(), body: { cancel: () => Promise.reject(new TypeError("locked")) } };
+  await assert.rejects(loadShell(source(scripted([locked]).fetchImpl)));
+  await new Promise((r) => setTimeout(r, 0));
 });
 
 test("a 304 with nothing cached is not a shell either", async () => {
@@ -647,6 +728,50 @@ test("docShell sets the public cache header only after the page is built", () =>
   assert.ok(rendered > 0, "docShell must render the shell");
   assert.ok(cached > 0, "docShell must set a public Cache-Control for a document");
   assert.ok(rendered < cached, "docShell sets the public cache header before the page is built");
+});
+
+test("docShell's fallback re-asserts no-store before it serves the generic shell", () => {
+  /**
+   * The public header is set only once the page is built, but the send comes
+   * after it, and a throw between the two would land in the same catch with
+   * `public, max-age` — and, for an unlisted document, `X-Robots-Tag` —
+   * already on the response. The generic shell must carry neither, so the
+   * catch puts the default back before anything is sent.
+   */
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const docShell = onRequest(");
+  assert.ok(start > 0, "docShell not found");
+  const body = src.slice(start, src.indexOf("\n});", start));
+  const fallback = body.slice(body.lastIndexOf("} catch"));
+  const served = fallback.indexOf("serveGeneric()");
+  assert.ok(served > 0, "the catch must serve the generic shell");
+  const reasserted = fallback.indexOf("noStore(res)");
+  assert.ok(reasserted > 0 && reasserted < served, "the catch must call noStore(res) before serveGeneric()");
+  const robots = fallback.indexOf('removeHeader("X-Robots-Tag")');
+  assert.ok(robots > 0 && robots < served, "the catch must drop X-Robots-Tag before serveGeneric()");
+});
+
+test("docShell logs why there is no shell before it answers 503", () => {
+  /**
+   * A 503 with nothing beside it in the log is undiagnosable: the origin
+   * answering 404 (site not deployed), a stranger's page without the app's
+   * markers, a wrong content type and a refused connection all look the
+   * same. `loadShell` rejects with `ShellNotAdopted`, whose `reason` is that
+   * module's own wording and never a URL, and the handler logs it — the
+   * `reason`, not the message, which is the rule every log line here obeys.
+   */
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const docShell = onRequest(");
+  assert.ok(start > 0, "docShell not found");
+  const body = src.slice(start, src.indexOf("\n});", start));
+  const loaded = body.indexOf("loadShell(");
+  const unavailable = body.indexOf("res.status(503)");
+  assert.ok(loaded > 0 && unavailable > loaded, "docShell loads the shell and answers 503 without one");
+  const between = body.slice(loaded, unavailable);
+  const logged = between.indexOf('console.warn("docShell: no shell');
+  assert.ok(logged > 0, "docShell must log before it answers 503");
+  const args = between.slice(logged, between.indexOf(");", logged));
+  assert.match(args, /\breason\b/, "the log line must carry the reason loadShell gave");
 });
 
 test("docShell says why it fell back to the generic shell, naming neither the URL nor k", () => {

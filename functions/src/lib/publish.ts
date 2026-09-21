@@ -25,7 +25,7 @@ import { bucketName } from "../config";
 import type { Actor } from "./actor";
 import { hashBundleFiles, type BundleFile } from "./hash";
 import type { BundleEntry } from "./bundle";
-import { titleFromHtml } from "./head";
+import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
 import { renderMarkdown, titleFromMarkdown } from "./markdown/render";
 import {
   computeDocMembership,
@@ -74,7 +74,11 @@ export function compileBundle(
   }));
   if (extracted.format !== "markdown") {
     const entryFile = files.find((f) => f.rel === extracted.entry);
-    const title = entryFile ? (titleFromHtml(entryFile.data.toString("utf8")) ?? fallbackTitle) : fallbackTitle;
+    // Only the prefix the scanner reads is decoded — the same bytes the
+    // document page streams — rather than the whole entry, up to the upload cap.
+    const title = entryFile
+      ? (titleFromHtml(entryFile.data.subarray(0, HEAD_SCAN_BYTES).toString("utf8")) ?? fallbackTitle)
+      : fallbackTitle;
     return { files, entry: extracted.entry, format: "html", title };
   }
 

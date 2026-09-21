@@ -141,12 +141,13 @@ const now = () => FieldValue.serverTimestamp();
 /**
  * An expired document is READ-ONLY, and visible only to its owner.
  *
- * One sentence, enforced in eight places, because expiry is not in the security
- * rules and cannot be (see `isExpired`). The owner keeps reading it because they
- * are the one who set the date and the one who can move it; locking them out of
- * their own document would make the setting unrecoverable rather than
- * reversible. Everybody else gets the same 404 a document they may not read
- * gives them, so expiry does not become a way to confirm that a slug exists.
+ * One sentence, enforced at every read and write path (SPEC §17 "Expiry"),
+ * because expiry is not in the security rules and cannot be (see `isExpired`).
+ * The owner keeps reading it because they are the one who set the date and the
+ * one who can move it; locking them out of their own document would make the
+ * setting unrecoverable rather than reversible. Everybody else gets the same
+ * 404 a document they may not read gives them, so expiry does not become a way
+ * to confirm that a slug exists.
  *
  * Writing is refused for EVERYONE, the owner included. An expired document is
  * frozen; lifting the date is what unfreezes it, and that is one action rather
@@ -2386,8 +2387,15 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("X-Content-Type-Options", "nosniff");
 
-  const template = await loadShell({ origin: publicOrigin() }).catch(() => null);
-  if (!template) {
+  const template = await loadShell({ origin: publicOrigin() }).catch((err: unknown) => {
+    // A 503 with nothing beside it is undiagnosable. The reason is
+    // `loadShell`'s own wording — a status and a content type, or the fetch
+    // error's class and code — never a URL or k: the fetch is to the
+    // configured origin's `/`.
+    console.warn("docShell: no shell to serve:", (err as { reason?: unknown })?.reason ?? (err as Error)?.name);
+    return null;
+  });
+  if (template === null) {
     res.status(503).end();
     return;
   }
@@ -2475,6 +2483,11 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
     // or name only: a GCS message names the object path, which holds the
     // document id.
     console.warn("docShell: generic fallback at", stage, (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    // A throw between the public header and the send lands here with that
+    // header — and, for an unlisted document, X-Robots-Tag — already set.
+    // The generic shell carries neither.
+    noStore(res);
+    res.removeHeader("X-Robots-Tag");
     serveGeneric();
   }
 });

@@ -65,6 +65,17 @@ const HIDDEN = ["script", "style", "svg", "template", "nav"];
 
 const RASTER_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
+/**
+ * Elements that sit inside a word or a phrase. Every other tag, opening or
+ * closing, separates the text on either side of it in the excerpt, so a
+ * minified `<p>First.</p><p>Second.</p>` reads "First. Second." and a `<br>`
+ * is a space — while `un<em>believable</em>` stays one word.
+ */
+const INLINE = new Set([
+  "a", "b", "i", "em", "strong", "span", "code", "sub", "sup", "small", "mark",
+  "abbr", "q", "s", "u", "time", "cite", "kbd", "var", "dfn",
+]);
+
 // Every lookup keyed by text from the document is a Map, never a plain
 // object: `&constructor;` or `name="__proto__"` must find nothing, not a
 // member of Object.prototype.
@@ -105,7 +116,7 @@ export function readHead(html: string): DocHead {
   let image = declared.ogImage ?? declared.twitterImage;
 
   if (description === null || image === null) {
-    const bodyFrom = bodyAt === -1 ? 0 : bodyAt;
+    const bodyFrom = bodyAt === -1 ? afterHead(lower) : bodyAt;
     const body = scanBody(text.slice(bodyFrom), lower.slice(bodyFrom), {
       excerpt: description === null,
       image: image === null,
@@ -119,6 +130,15 @@ export function readHead(html: string): DocHead {
 
 export function titleFromHtml(html: string): string | null {
   return readHead(html).title;
+}
+
+/**
+ * Where the body begins in a document with no `<body` tag: after `</head>`,
+ * else after `</title>`, else at the start. Without this the title's own text
+ * would lead the excerpt, and so the description.
+ */
+function afterHead(lower: string): number {
+  return closerAt(lower, "head", 0)?.end ?? closerAt(lower, "title", 0)?.end ?? 0;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -238,6 +258,10 @@ function scanBody(text: string, lower: string, wants: BodyWants): { excerpt: str
       if (excerpt.add(text.slice(Math.max(runFrom, textFrom), lt))) wantExcerpt = false;
     }
     if (textFrom === -1 && tagIs(lower, lt, "body")) textFrom = gt + 1;
+    else if (wantExcerpt && textFrom !== -1 && lt >= textFrom && !INLINE.has(tagName(lower, lt))) {
+      // A block boundary is whitespace, whether or not the author wrote any.
+      if (excerpt.add(" ")) wantExcerpt = false;
+    }
     if (wantImage && tagIs(lower, lt, "img")) {
       // Returned as written, less the ends: a URL's insides are the author's.
       const src = attributes(text.slice(lt + "<img".length, gt)).get("src")?.trim();
@@ -358,6 +382,19 @@ function nextTagStart(lower: string, from: number): number {
     if ((c >= 0x61 && c <= 0x7a) || c === 0x2f || c === 0x21 || c === 0x3f) return lt;
     i = lt + 1;
   }
+}
+
+/** The name of the tag at `lt`, opening or closing, lowercase; empty for `<!…>` and `<?…>`. */
+function tagName(lower: string, lt: number): string {
+  let from = lt + 1;
+  if (lower.charCodeAt(from) === 0x2f) from++;
+  let to = from;
+  while (to < lower.length) {
+    const c = lower.charCodeAt(to);
+    if (!((c >= 0x61 && c <= 0x7a) || (c >= 0x30 && c <= 0x39))) break;
+    to++;
+  }
+  return lower.slice(from, to);
 }
 
 /** Whether the tag opening at `lt` is `<name`, with the name ending there (`<nav` is not `<navbar`). */

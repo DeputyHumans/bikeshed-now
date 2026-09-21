@@ -5,6 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { compileBundle } = require("../lib/lib/publish.js");
+const { HEAD_SCAN_BYTES } = require("../lib/lib/head.js");
 
 /** An extracted HTML bundle whose single file is the entry. */
 function htmlBundle(entryHtml, entryRel = "index.html") {
@@ -44,5 +45,19 @@ test("a Markdown upload's H1 still wins over the fallback", () => {
 
 test("a Markdown upload with no H1 still falls back", () => {
   const compiled = compileBundle(markdownBundle("just body text, no heading"), "from-filename");
+  assert.equal(compiled.title, "from-filename");
+});
+
+test("compileBundle reads the same first 256 KiB of the entry that the document page does", () => {
+  // The handler streams HEAD_SCAN_BYTES bytes; here the whole entry is in
+  // memory, and only that prefix is decoded. The distinction shows in
+  // multi-byte text: 140,000 two-byte characters are under the scanner's
+  // character cap but over its byte cap, so a <title> after them is the
+  // page's title only if bytes past the cap were decoded.
+  const padding = `<!-- ${"é".repeat(140_000)} -->`;
+  assert.ok(Buffer.byteLength(padding, "utf8") > HEAD_SCAN_BYTES, "padding must exceed the byte cap");
+  assert.ok(padding.length < HEAD_SCAN_BYTES, "padding must stay under the character cap");
+  const html = `<!DOCTYPE html><html><head>${padding}<title>Too Late</title></head><body></body></html>`;
+  const compiled = compileBundle(htmlBundle(html), "from-filename");
   assert.equal(compiled.title, "from-filename");
 });

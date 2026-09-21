@@ -115,7 +115,12 @@ export function resolveImage(raw: string | null, ctx: ImageContext): { url: stri
     const prefix = `/content/${ctx.docId}/${ctx.versionId}/`;
     const u = new URL(raw, `${ctx.origin}${prefix}${ctx.entry}`);
     if (u.protocol !== "http:" && u.protocol !== "https:") return fallback;
-    if (u.origin !== ctx.origin) return { url: u.href, isDefault: false };
+    // Compared as the parser writes origins — lowercase host, no default
+    // port — so an origin configured as `https://Example.com` or with an
+    // explicit `:443` still takes the same-origin branch. An origin the
+    // parser rejects throws here and is the default card like any other
+    // failure.
+    if (u.origin !== new URL(ctx.origin).origin) return { url: u.href, isDefault: false };
     if (!u.pathname.startsWith(prefix)) return fallback;
     const rel = decodeURIComponent(u.pathname.slice(prefix.length));
     if (!ctx.files.includes(rel)) return fallback;
@@ -314,6 +319,43 @@ export interface ShellSource {
 /** How long one request for the shell may take before the cached copy answers instead. */
 const SHELL_FETCH_TIMEOUT_MS = 5000;
 
+/**
+ * Thrown when there is no shell to serve. `reason` is this module's own
+ * wording — the status and content type of what the origin answered, or the
+ * fetch error's class and code — so the handler can log it beside its 503
+ * without a URL or a token ever being in reach: the fetch is to the
+ * configured origin's `/`, never to a request URL.
+ */
+export class ShellNotAdopted extends Error {
+  constructor(
+    readonly reason: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`shell not adopted: ${reason}`, options);
+    this.name = "ShellNotAdopted";
+  }
+}
+
+/** The class and, when its cause carries one, the code of a fetch failure: `TypeError ECONNREFUSED`. */
+function describeFailure(error: unknown): string {
+  const name = error instanceof Error ? error.name : "Error";
+  const cause = (error as { cause?: { code?: unknown } })?.cause;
+  return typeof cause?.code === "string" ? `${name} ${cause.code}` : name;
+}
+
+/**
+ * Releases a body nobody will read. A refused response holds its connection
+ * until the body is consumed or cancelled; a stub in a test may have no body,
+ * or one that refuses to cancel, and neither is this function's problem.
+ */
+function discardBody(res: Response): void {
+  try {
+    void res.body?.cancel().catch(() => undefined);
+  } catch {
+    // Already locked or not a stream: nothing to release.
+  }
+}
+
 /** The adopted shell and the ETag Hosting gave it, for the whole process. */
 let cached: { etag: string | null; body: string } | null = null;
 let originLogged = false;
@@ -328,7 +370,7 @@ let originLogged = false;
  * page before the site is deployed, and a misconfigured origin can be a
  * stranger's site; neither may become the copy this process pins. Any other
  * outcome — non-ok, wrong type, no markers, network error, timeout — serves
- * the cached copy, or throws when there is none yet.
+ * the cached copy, or throws `ShellNotAdopted` when there is none yet.
  */
 export async function loadShell(source: ShellSource): Promise<string> {
   const log = source.log ?? console.log;
@@ -357,13 +399,15 @@ export async function loadShell(source: ShellSource): Promise<string> {
       refused = `${res.status} without the app's markers`;
     } else {
       refused = `${res.status} ${type || "(no content type)"}`;
+      // Nothing will read this body. (The markers branch has read its own.)
+      discardBody(res);
     }
   } catch (error) {
     if (cached !== null) return cached.body;
-    throw error;
+    throw new ShellNotAdopted(describeFailure(error), { cause: error });
   }
   if (cached !== null) return cached.body;
-  throw new Error(`shell not adopted: ${refused}`);
+  throw new ShellNotAdopted(refused);
 }
 
 /** Forgets the adopted shell and the logged origin, so each test starts clean. */

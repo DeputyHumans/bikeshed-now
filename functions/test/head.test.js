@@ -205,6 +205,33 @@ test("the excerpt decodes entities and collapses whitespace", () => {
   assert.equal(readHead(html).description, "Tom & Jerry — friends.");
 });
 
+test("minified markup still separates its blocks in the excerpt", () => {
+  // No whitespace between tags, so the tag itself is the only boundary.
+  const html = doc("<title>T</title>", "<h1>T</h1><p>First.</p><p>Second.</p><ul><li>one</li><li>two</li></ul>");
+  assert.equal(readHead(html).description, "First. Second. one two");
+});
+
+test("a line break separates the words on either side of it", () => {
+  const html = doc("<title>T</title>", "<h1>T</h1><p>Line one<br>Line two</p>");
+  assert.equal(readHead(html).description, "Line one Line two");
+});
+
+test("an inline element does not split the word it sits in", () => {
+  const html = doc(
+    "<title>T</title>",
+    '<h1>T</h1><p>un<em>believable</em>, <b>bold</b>ly <a href="#">linked</a><sup>1</sup>.</p>',
+  );
+  assert.equal(readHead(html).description, "unbelievable, boldly linked1.");
+});
+
+test("with neither <body> nor <h1>, the excerpt starts after the head, not at the title", () => {
+  // Nothing marks where the body begins, so the title would otherwise lead
+  // the description: "Bare Hi there.".
+  assert.equal(readHead("<html><head><title>Bare</title></head><p>Hi there.</p></html>").description, "Hi there.");
+  assert.equal(readHead("<html><title>Bare</title><p>Hi there.</p></html>").description, "Hi there.");
+  assert.equal(readHead("<p>Hi there.</p>").description, "Hi there.");
+});
+
 test("an empty body yields no description", () => {
   const html = doc("<title>T</title>", "<h1>Title</h1><div></div>");
   assert.equal(readHead(html).description, null);
