@@ -149,6 +149,7 @@ fi
 EXPECTED_BINARIES="app/public/brand/apple-touch-icon.png
 app/public/brand/icon-192.png
 app/public/brand/icon-512.png
+app/public/brand/og-default.png
 app/public/fonts/bikeshed-sans-var.woff2"
 
 ACTUAL_BINARIES="$(git ls-files | while IFS= read -r f; do
