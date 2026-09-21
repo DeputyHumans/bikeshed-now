@@ -47,3 +47,4 @@ coverage/
 
 # Claude Code — personal-only settings
 .claude/settings.local.json
+.mcp.json
