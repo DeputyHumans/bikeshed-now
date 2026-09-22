@@ -18,16 +18,19 @@ import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 /**
- * FieldValue comes from the MODULAR entry point, not `FieldValue`.
+ * FieldValue and Timestamp come from the MODULAR entry point, never through
+ * `admin.firestore.*`.
  *
  * The Functions emulator wraps `firebase-admin` in a proxy so calls reach the
  * local services, and that proxy does not carry the static namespace properties
- * onto the callable `firestore` function — so `FieldValue` is
+ * onto the callable `firestore` function — so `admin.firestore.FieldValue` is
  * `undefined` there and every write that stamps a timestamp throws. It works in
  * a deployed function, which is exactly why it survived 127 unit tests and was
- * only found by running the emulator suite.
+ * only found by running the emulator suite. `Timestamp` then went the same way
+ * on the one line that set an expiry, found the same way; `wiring.test.js`
+ * now pins the shape.
  */
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as cookie from "cookie";
 import * as mime from "mime-types";
 import { randomBytes, createHash } from "crypto";
@@ -681,7 +684,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
     expiresAt:
       expiry.value === null
         ? FieldValue.delete()
-        : admin.firestore.Timestamp.fromMillis(expiry.value),
+        : Timestamp.fromMillis(expiry.value),
     updatedAt: now(),
   };
   if (visibility === "unlisted") {

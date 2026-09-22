@@ -131,3 +131,20 @@ test("noStore is exactly private, no-store — not merely no-cache", () => {
   const fn = http.slice(http.indexOf("export function noStore"));
   assert.match(fn.slice(0, 200), /"private, no-store"/);
 });
+
+/**
+ * The Functions emulator wraps `firebase-admin` in a proxy that drops the
+ * static namespace properties off `admin.firestore`, so `admin.firestore.
+ * FieldValue` and `admin.firestore.Timestamp` are `undefined` there and fine
+ * in production (see the import comment at the top of `src/index.ts`, and
+ * CLAUDE.md). A unit suite cannot see it; the emulator finds it on the first
+ * request that reaches the line. So the shape is pinned: those classes come
+ * from the modular `firebase-admin/firestore` entry point. Type positions
+ * (`as admin.firestore.Timestamp`) are erased and are fine; what must not
+ * appear is a CALL through the namespace.
+ */
+test("no static Firestore class is reached through the admin namespace", () => {
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const calls = src.match(/admin\.firestore\.(FieldValue|Timestamp|FieldPath|GeoPoint)\s*[.(]/g);
+  assert.deepEqual(calls ?? [], []);
+});
