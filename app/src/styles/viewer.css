@@ -2,9 +2,25 @@
  * The viewer: toolbar, document frame, peer overlay, scroll rail (SPEC §6, §16).
  */
 
+/*
+ * One row per thing that can sit above the document, then the fill track.
+ *
+ * Toolbar, banners, body — and the banners exist only while something has to
+ * be said. With two tracks this was fine until a banner appeared: auto-placement
+ * handed the banners the `1fr` track, which stretched them to the whole
+ * remaining height with their bottom border as a stray rule across the page,
+ * and dropped the body into an implicit content-sized row — where the frame's
+ * `height: 100%` had nothing definite to resolve against and collapsed to the
+ * 150px an iframe is born with. Every banner did this; publishing a version
+ * was just where one reliably showed up.
+ *
+ * So the body is PINNED to the last track (`.viewer-body` below) rather than
+ * placed by its position among siblings, and the middle track costs nothing
+ * while it is empty. The same lesson `.doc-frame-wrap` records for its columns.
+ */
 .viewer {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: calc(100vh - var(--header-h));
   height: calc(100dvh - var(--header-h));
 }
@@ -19,6 +35,7 @@
  * anything is in it, so the track has to be conditional, not just its contents.
  */
 .viewer-body {
+  grid-row: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   min-height: 0;

@@ -167,6 +167,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **A banner pushed the document to the bottom of the page.** The viewer
+  grid had one row for the toolbar and one for the document, so whenever a
+  banner appeared — a newer version, an expiry, a conflict — it took the
+  document's row, stretched to the whole height with its bottom border as a
+  stray rule across the page, and left the frame a 150px strip underneath.
+  The grid now has a row for the banners, empty and free when there are
+  none, and the document is pinned to the last row rather than placed by
+  its position among its siblings.
+
 - **Selecting text on a click-driven deck advanced the slide.** A drag that
   selects a passage ends in a `click`, and a deck whose own script advances on
   click — the common hand-made shape — took it, hiding the very slide the
