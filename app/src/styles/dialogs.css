@@ -153,6 +153,12 @@
   border-radius: var(--radius-md);
   cursor: pointer;
 }
+/* The icon is a flex item beside a sentence, and left alone the flex
+   algorithm takes the sentence's width out of it: an `<svg width="18">` can
+   shrink, and the lock, the eye and the globe came out five pixels wide. So
+   the icon may not shrink, and the sentence wraps instead. */
+.visibility-option > svg { flex: none; margin-top: 1px; }
+.visibility-option > span { min-width: 0; }
 .visibility-option[data-selected="true"] {
   border-color: var(--color-accent);
   background: var(--color-accent-soft);

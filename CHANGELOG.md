@@ -186,6 +186,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **The lock, eye and globe on the visibility options were a few pixels
+  wide.** Each icon sat in a flex row beside a sentence, and the flex
+  algorithm took the sentence's width out of the icon — five to eleven pixels
+  of an eighteen-pixel mark. The icon no longer shrinks; the sentence wraps.
+
 - **Setting an expiry crashed the function under the emulator.** One line
   reached `Timestamp` through `admin.firestore`, whose static namespace the
   Functions emulator's proxy drops — the same defect `FieldValue` had, in the
