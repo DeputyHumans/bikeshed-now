@@ -273,6 +273,34 @@
 .is-presenting .viewer { height: 100vh; height: 100dvh; }
 .is-presenting .viewer-body { grid-template-columns: minmax(0, 1fr); }
 
+/* --- Printing the page ---------------------------------------------------
+ * Cmd+P is routed to the export (usePrinting), which prints the document
+ * alone. The browser's File → Print cannot be redirected, so this page has to
+ * print acceptably by itself: the same chrome presentation mode hides, plus
+ * what only matters on paper, and no viewport-height box around the frame —
+ * that height is what printed the document as one clipped strip.
+ *
+ * The frame's own height is NOT set here. Nothing in this stylesheet can see
+ * the content's height, and an iframe left at 100% of an auto chain prints as
+ * one box; usePrinting opens it to the content's scrollHeight on beforeprint.
+ */
+@media print {
+  .app-header,
+  .viewer-toolbar,
+  .viewer-banners,
+  .comments-panel,
+  .consent,
+  .slide-rail,
+  .slide-overview,
+  .selection-fab,
+  .present-counter,
+  .present-exit {
+    display: none;
+  }
+  .viewer { height: auto; }
+  .viewer-body { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Where you are in the deck, while every other piece of chrome is hidden. */
 .present-counter {
   position: fixed;

@@ -54,3 +54,48 @@ describe("the viewer grid", () => {
     expect(declaration(".viewer-body", "grid-row")).toBe(String(ABOVE_BODY.length + 1));
   });
 });
+
+/**
+ * The browser's File → Print cannot be redirected to the export, so the page
+ * has to print acceptably on its own: everything presentation mode hides is
+ * hidden on paper too, plus the rail, and the viewer's fixed viewport height —
+ * the thing that clips the frame to one box — comes off. jsdom evaluates no
+ * print media, so this reads the stylesheet.
+ */
+describe("printing the page", () => {
+  /** The rules inside `@media print { … }`, without the wrapper. */
+  const printBlock = (() => {
+    const start = VIEWER_CSS.indexOf("@media print");
+    if (start < 0) return "";
+    const open = VIEWER_CSS.indexOf("{", start);
+    let depth = 0;
+    for (let i = open; i < VIEWER_CSS.length; i++) {
+      if (VIEWER_CSS[i] === "{") depth++;
+      if (VIEWER_CSS[i] === "}" && --depth === 0) return VIEWER_CSS.slice(open + 1, i);
+    }
+    return "";
+  })();
+
+  /** Selectors of every rule in `css` whose declarations include `property: value`. */
+  const selectorsWith = (css: string, property: string, value: string) =>
+    Array.from(css.matchAll(/([^{}]+)\{([^}]*)\}/g))
+      .filter((m) => new RegExp(`${property}\\s*:\\s*${value}\\s*;`).test(m[2]))
+      .flatMap((m) => m[1].split(",").map((s) => s.trim()))
+      .filter((s) => s && !s.startsWith("@"));
+
+  it("hides on paper everything presentation mode hides, and the rail", () => {
+    const presenting = selectorsWith(VIEWER_CSS, "display", "none")
+      .filter((s) => s.startsWith(".is-presenting "))
+      .map((s) => s.replace(".is-presenting ", ""));
+    expect(presenting.length).toBeGreaterThan(0);
+
+    const printed = selectorsWith(printBlock, "display", "none");
+    for (const selector of [...presenting, ".slide-rail"]) {
+      expect(printed, `${selector} is not hidden in print`).toContain(selector);
+    }
+  });
+
+  it("lets the viewer grow to the document instead of clipping it to the viewport", () => {
+    expect(selectorsWith(printBlock, "height", "auto")).toContain(".viewer");
+  });
+});

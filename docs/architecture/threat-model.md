@@ -134,7 +134,9 @@ bundle has no JS to add inline styles of its own.
 
 **Residual, accepted.** A bundle can blank its own entire document, producing an
 empty PDF. Self-defeating; no content leaked. A cryptographic guarantee would
-need server-side rendering.
+need server-side rendering. And the browser's File → Print, which cannot be
+redirected to the export, prints the page unstamped — no new capability: the
+same reader can open the content URL or download the HTML (SPEC §20).
 
 ### Editor decoration contaminates saved bytes
 

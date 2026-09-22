@@ -177,6 +177,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   anything after a document's final forced page break opened a blank page
   carrying nothing but the stamp.
 
+- **Printing a document page printed the app.** Cmd+P produced the header,
+  the toolbar, the comments column and the document clipped to its on-screen
+  box. The shortcut now goes to the same export as "Print or save as PDF" —
+  the document alone, scrubbed and stamped — and it is heard with the focus
+  inside the document, where it usually is. File → Print, which no event can
+  redirect, prints the page with the chrome hidden and the frame opened to
+  the document's full height so it paginates, and puts the reader back where
+  they were afterwards. That path carries no stamp; nor does the content URL
+  the same reader can already open.
+
 - **A banner pushed the document to the bottom of the page.** The viewer
   grid had one row for the toolbar and one for the document, so whenever a
   banner appeared — a newer version, an expiry, a conflict — it took the

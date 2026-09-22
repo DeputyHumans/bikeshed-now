@@ -75,6 +75,11 @@ const OVERLAY_CSS = `
 @media (prefers-reduced-motion: no-preference) {
   #${PEER_LAYER_ID} .bshd-peer-caret { transition: top 120ms linear, left 120ms linear; }
 }
+/* Somebody else's caret and name are not part of a printout. The export path
+   strips this layer outright; the browser's File → Print sees the live frame. */
+@media print {
+  #${PEER_LAYER_ID} { display: none; }
+}
 `;
 
 function ensureStyles(doc: Document): void {

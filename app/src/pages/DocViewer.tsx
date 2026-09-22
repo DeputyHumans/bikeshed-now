@@ -29,6 +29,7 @@ import { useDeck } from "../viewer/useDeck";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
+import { usePrinting } from "../viewer/usePrinting";
 import type { FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
@@ -360,6 +361,29 @@ export function DocViewer() {
    * otherwise drop that keystroke on the floor — silently, since the draft that
    * remains looks perfectly healthy.
    */
+  /** The export: a scrubbed, stamped snapshot of what the frame shows (SPEC §20). */
+  const printCurrent = useCallback(() => {
+    if (!frame.doc) return;
+    void printDoc(frame.doc, {
+      baseHref: `/content/${docId}/${doc.currentVersion}/`,
+      marking: doc.meta?.marking ?? MARKING_OFF,
+      title: doc.title,
+      version: doc.currentVersion,
+      user: emailLower,
+    });
+    logEvent({ name: "export", params: { kind: "pdf" } });
+  }, [frame.doc, docId, doc.currentVersion, doc.meta?.marking, doc.title, emailLower]);
+
+  // The browser's print, both ways it is reached. Cmd+P is the export above;
+  // File → Print, which no event can redirect, prints this page with the
+  // chrome hidden and the frame opened to its full height.
+  usePrinting({
+    doc: frame.doc,
+    epoch: frame.epoch,
+    enabled: dialog === null && mode.kind === "reading",
+    onPrint: printCurrent,
+  });
+
   const stopEditing = useCallback(async () => {
     await editor.flushNow();
     setWantsEdit(false);
@@ -398,21 +422,7 @@ export function DocViewer() {
       });
     }
     entries.push(
-      {
-        id: "pdf",
-        label: "Print or save as PDF",
-        onSelect: () => {
-          if (!frame.doc) return;
-          void printDoc(frame.doc, {
-            baseHref: `/content/${docId}/${doc.currentVersion}/`,
-            marking: doc.meta?.marking ?? MARKING_OFF,
-            title: doc.title,
-            version: doc.currentVersion,
-            user: emailLower,
-          });
-          logEvent({ name: "export", params: { kind: "pdf" } });
-        },
-      },
+      { id: "pdf", label: "Print or save as PDF", onSelect: printCurrent },
       { id: "image", label: "Export an image…", onSelect: () => setDialog("image") },
       { id: "sep1", separator: true },
     );

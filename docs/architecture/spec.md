@@ -1559,6 +1559,19 @@ spill every slide across two pages. The stamp nodes go **first** in `<body>`:
 anything after a document's final forced page break opens a page of its own,
 and a fixed box is positioned the same wherever it sits.
 
+**The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
+is routed to it — heard on the frame's window as well as the app's, because
+the reader's focus is usually inside the document. File → Print fires no
+event that could be redirected, so the page prints acceptably by itself: the
+chrome presentation mode hides is hidden on paper, and the frame is opened to
+its content's full height on `beforeprint` so the document paginates rather
+than printing as one clipped box, then closed again with the reader's scroll
+position restored. That path carries **no stamp** and prints what is on
+screen, highlights included. It grants nothing the reader lacked: the content
+proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may
+read it, and "Download the HTML" hands them the file. The marking is a property
+of the export path, not an access control.
+
 Residual risk, accepted: a bundle could blank its own entire document, yielding
 an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed
 stamp would require server-side rendering; client-side print is the chosen
