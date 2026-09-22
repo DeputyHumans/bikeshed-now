@@ -39,14 +39,13 @@ import { SelectionFab } from "../components/SelectionFab";
 import { SlidePanel } from "../components/SlidePanel";
 import { SlideOverview } from "../components/SlideOverview";
 import { SharePanel } from "../components/SharePanel";
-import { VisibilityDialog } from "../components/VisibilityDialog";
 import { TrustDialog } from "../components/TrustDialog";
 import { MarkingDialog } from "../components/MarkingDialog";
 import { StatsPanel } from "../components/StatsPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
-import { expiryMs } from "../expiry";
+import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
 import type { Annotation, FolderMeta, TeamMeta } from "../types";
 
@@ -85,7 +84,6 @@ import type { Annotation, FolderMeta, TeamMeta } from "../types";
 type Dialog =
   | null
   | "share"
-  | "visibility"
   | "trust"
   | "marking"
   | "stats"
@@ -227,7 +225,7 @@ export function DocViewer() {
     doc: frame.doc,
     epoch: frame.epoch,
     // A dialog or the editor owns the keyboard while it is up: paging the deck
-    // underneath a "who can see this" dialog is somebody losing their place.
+    // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
   });
 
@@ -432,8 +430,9 @@ export function DocViewer() {
       entries.push({ id: "stats", label: "Activity", onSelect: () => setDialog("stats") });
       if (isOwner) {
         entries.push(
+          // One entry for who has access AND who can see it: they were two,
+          // and the second was found only by reading this menu.
           { id: "share", label: "Share…", onSelect: () => setDialog("share") },
-          { id: "visibility", label: "Who can see it…", onSelect: () => setDialog("visibility") },
           { id: "marking", label: "Marking on exports…", onSelect: () => setDialog("marking") },
         );
       }
@@ -523,7 +522,7 @@ export function DocViewer() {
           // who is not a member is told too, which is what the projection
           // carries the date for (SPEC §17).
           expiresAt={doc.meta?.expiresAt ?? doc.publicDoc?.expiresAt ?? null}
-          onExpiry={isOwner ? () => setDialog("visibility") : undefined}
+          onExpiry={isOwner ? () => setDialog("share") : undefined}
           peers={presence.peers}
           following={presence.following}
           onToggleFollow={presence.toggleFollow}
@@ -669,20 +668,7 @@ export function DocViewer() {
           }}
           teams={teams}
           isOwner={isOwner}
-          onClose={() => setDialog(null)}
-          onChanged={() => {}}
-        />
-      ) : null}
-
-      {dialog === "visibility" && doc.meta ? (
-        <VisibilityDialog
-          docId={docId}
-          current={{
-            visibility: doc.meta.visibility ?? "private",
-            publicEdit: doc.meta.publicEdit ?? false,
-            linkToken: doc.meta.linkToken ?? null,
-            expiresAt: expiryMs(doc.meta.expiresAt),
-          }}
+          visibility={visibilityStateOf(doc.meta)}
           onClose={() => setDialog(null)}
           onChanged={() => {}}
         />

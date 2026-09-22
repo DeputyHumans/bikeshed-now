@@ -2,7 +2,8 @@
 // Client for visibility and open editing (SPEC §17).
 
 import { post } from "./api";
-import type { Visibility } from "./types";
+import { expiryMs } from "./expiry";
+import type { DocMeta, Visibility } from "./types";
 
 export interface VisibilityState {
   visibility: Visibility;
@@ -37,6 +38,22 @@ export function setVisibility(
     { docId, visibility, publicEdit, expiresAt },
     { forbidden: "Only the document owner can change who can see this." },
   );
+}
+
+/**
+ * The triple as a record carries it. Every field is optional there, because
+ * most documents never set any of them, and what this returns is what the
+ * dialog will send back whole on the first change it makes.
+ */
+export function visibilityStateOf(
+  meta: Pick<DocMeta, "visibility" | "publicEdit" | "linkToken" | "expiresAt">,
+): VisibilityState {
+  return {
+    visibility: meta.visibility ?? "private",
+    publicEdit: meta.publicEdit ?? false,
+    linkToken: meta.linkToken ?? null,
+    expiresAt: expiryMs(meta.expiresAt),
+  };
 }
 
 /** The link to share, including the unlisted token when there is one. */

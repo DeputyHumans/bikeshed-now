@@ -32,6 +32,7 @@ import { Menu, type MenuEntry } from "../components/Menu";
 import { MoveDialog } from "../components/MoveDialog";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
+import { visibilityStateOf, type VisibilityState } from "../visibility";
 import { UploadDialog } from "../components/UploadDialog";
 import { CardSkeletons } from "../components/Spinner";
 import { useToast } from "../components/Toast";
@@ -169,7 +170,11 @@ export function DocList() {
   const [sort, setSort] = useState<SortKey>("recent");
   const [drawer, setDrawer] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sharing, setSharing] = useState<ShareTarget | null>(null);
+  // A document brings its visibility triple along; a folder has none.
+  const [sharing, setSharing] = useState<{
+    target: ShareTarget;
+    visibility?: VisibilityState;
+  } | null>(null);
   const [moving, setMoving] = useState<{
     kind: "doc" | "folder";
     id: string;
@@ -290,15 +295,19 @@ export function DocList() {
 
   const defaultMarking: Marking = account?.defaultMarking ?? MARKING_OFF;
 
-  const shareTargetFor = (doc: DocMeta): ShareTarget => ({
-    kind: "doc",
-    id: doc.docId,
-    title: doc.title,
-    ownerEmail: doc.ownerEmail,
-    viewers: doc.viewers,
-    editors: doc.editors,
-    members: doc.members,
-  });
+  const shareDoc = (doc: DocMeta) =>
+    setSharing({
+      target: {
+        kind: "doc",
+        id: doc.docId,
+        title: doc.title,
+        ownerEmail: doc.ownerEmail,
+        viewers: doc.viewers,
+        editors: doc.editors,
+        members: doc.members,
+      },
+      visibility: visibilityStateOf(doc),
+    });
 
   const docMenu = (doc: DocMeta): MenuEntry[] => {
     const isOwner = doc.ownerEmail === emailLower;
@@ -309,7 +318,7 @@ export function DocList() {
         label: "Share…",
         disabled: !isOwner,
         reason: `Only ${doc.ownerEmail} can change sharing.`,
-        onSelect: () => setSharing(shareTargetFor(doc)),
+        onSelect: () => shareDoc(doc),
       },
       {
         id: "rename",
@@ -364,13 +373,15 @@ export function DocList() {
         reason: `Only ${folder.ownerEmail} can change sharing.`,
         onSelect: () =>
           setSharing({
-            kind: "folder",
-            id: folder.folderId,
-            title: folder.name,
-            ownerEmail: folder.ownerEmail,
-            viewers: folder.viewers,
-            editors: folder.editors,
-            members: folder.members,
+            target: {
+              kind: "folder",
+              id: folder.folderId,
+              title: folder.name,
+              ownerEmail: folder.ownerEmail,
+              viewers: folder.viewers,
+              editors: folder.editors,
+              members: folder.members,
+            },
           }),
       },
       {
@@ -525,9 +536,7 @@ export function DocList() {
                 key={doc.docId}
                 doc={doc}
                 menu={docMenu(doc)}
-                onShare={
-                  doc.ownerEmail === emailLower ? () => setSharing(shareTargetFor(doc)) : undefined
-                }
+                onShare={doc.ownerEmail === emailLower ? () => shareDoc(doc) : undefined}
               />
             ))}
           </div>
@@ -568,9 +577,10 @@ export function DocList() {
 
       {sharing ? (
         <SharePanel
-          target={sharing}
+          target={sharing.target}
           teams={teams}
-          isOwner={sharing.ownerEmail === emailLower}
+          isOwner={sharing.target.ownerEmail === emailLower}
+          visibility={sharing.visibility}
           onClose={() => setSharing(null)}
           onChanged={() => {}}
         />

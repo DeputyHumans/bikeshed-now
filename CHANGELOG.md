@@ -35,8 +35,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   exists must be named in `docs/agents/agent-guide.md`. A skill naming an absent
   command is worse than no skill, because an agent believes it.
 
-- **Documents can carry an optional expiry.** The owner sets a date in "Who can
-  see this"; after it, the document is read-only and readable only by them.
+- **Documents can carry an optional expiry.** The owner sets a date in Share;
+  after it, the document is read-only and readable only by them.
   It is **not a deletion date** — this product does not delete documents, so the
   bytes, versions, annotations and comments all survive and clearing the date
   restores everything. The interface says that in those words, because "expire"
@@ -73,6 +73,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   ([ADR 0011](docs/architecture/adr/0011-document-page-through-a-function.md)).
 
 ### Changed
+
+- **Share and "Who can see it" are one dialog.** They were two, behind two
+  entries of the same menu, asking one question — who gets this — from two
+  places, and the second was found only by reading the overflow menu. "Share"
+  now holds the people and teams first, then the three visibility levels side
+  by side, the link, open editing and the expiry under its own rule. The
+  count in the footer widens with the level ("2 people, and anyone with the
+  link"). Folders keep the people-only dialog, having no visibility or expiry.
+  Every visibility change still sends the whole triple, so ticking one box
+  never clears another.
 
 - **An expiry is a chip beside the version, not a banner above the document.**
   The banner appeared for every future date, so a document set to expire next
@@ -175,6 +185,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   browser.
 
 ### Fixed
+
+- **Setting an expiry crashed the function under the emulator.** One line
+  reached `Timestamp` through `admin.firestore`, whose static namespace the
+  Functions emulator's proxy drops — the same defect `FieldValue` had, in the
+  same file, and invisible to every unit test because it is fine in
+  production. `Timestamp` now comes from `firebase-admin/firestore` too, and
+  `wiring.test.js` pins the shape so a third class cannot go the same way.
 
 - **A reader of a public document who was not a member was never told about
   its expiry.** The `public/{docId}` projection carries the date for exactly

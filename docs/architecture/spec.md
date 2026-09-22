@@ -1098,7 +1098,12 @@ and public-access-prevention; `contentProxy` stays the only path bytes take.
 ### Expiry
 
 `DocMeta.expiresAt: Timestamp | null`, default absent, set by the owner through
-`POST /visibility` alongside visibility and open editing. One rule:
+`POST /visibility` alongside visibility and open editing — from the Share
+dialog, which holds the people, the three levels, the link, open editing and
+the expiry together. There is no separate "who can see it" dialog: it was one
+question asked from two menu entries, and the second was found only by reading
+the overflow menu. Folders share the same dialog without that section, having
+no visibility and no expiry. One rule:
 
 > **An expired document is read-only, and visible only to its owner.**
 
@@ -1140,6 +1145,15 @@ Two details that are decisions rather than implementation:
   (`expiresAt`, epoch milliseconds) and the reader is told rather than shown an
   empty frame. A title outliving its content is the honest cost of having no
   cron.
+
+How the viewer says it: a chip beside the version badge — the same one the
+workspace card shows — for every future date, escalating in wording and colour
+through the last week and past the date, read from `docs/{docId}` for a member
+and from the projection for anyone else. Its tooltip, and a tap for anyone who
+cannot change the date, carry the not-deleted sentence and who can open it; the
+owner's tap opens the Share dialog. It never takes a row from the document: it
+was a banner above the frame for every future date, and a document set to
+expire next year gave up that row for eleven months.
 
 A date in the past is **refused**, not applied: accepting one would make "take
 this down now" a side effect of a typo in a year, and the intended way to take a

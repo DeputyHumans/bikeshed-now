@@ -134,9 +134,16 @@
   .member-row .share-principal { flex: 1 0 100%; }
 }
 
-/* --- Visibility ---------------------------------------------------------- */
+/* --- Visibility (SPEC §17) -----------------------------------------------
+ * A section of the share dialog, under the people, for documents only. The
+ * dialog is wide when it holds it, and the three levels sit side by side
+ * there, so a private document's whole dialog fits a laptop screen.
+ */
 
-.visibility-options { display: flex; flex-direction: column; gap: var(--s-2); }
+.visibility-section { margin-top: var(--s-4); }
+.visibility-section h3 { margin-bottom: var(--s-2); }
+.visibility-options { display: grid; gap: var(--s-2); }
+.modal-wide .visibility-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .visibility-option {
   display: flex;
   align-items: flex-start;
@@ -245,12 +252,15 @@
     max-height: 90dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
+  /* Three columns of a description each do not fit a phone. */
+  .modal-wide .visibility-options { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Expiry sits below the visibility choices and is separated by a rule rather
-   than by spacing alone: it is a different question ("until when") from the one
-   above it ("who"), and running them together is how somebody sets a date
-   believing it applies only to public links. */
+/* Expiry sits below the visibility choices, inside the same section of the
+   share dialog, and is separated by a rule rather than by spacing alone: it is
+   a different question ("until when") from the one above it ("who"), and
+   running them together is how somebody sets a date believing it applies only
+   to public links. */
 .expiry-row {
   margin-top: var(--s-4);
   padding-top: var(--s-3);

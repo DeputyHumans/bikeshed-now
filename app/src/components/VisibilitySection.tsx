@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Private, unlisted, or public — and what each actually means (SPEC §17).
+// Private, unlisted, or public — and until when — as a section of Share (SPEC §17).
 
 import { useState } from "react";
-import { Modal } from "./Modal";
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
 import { setVisibility, shareUrl, type VisibilityState } from "../visibility";
@@ -41,15 +40,20 @@ const OPTIONS: {
   },
 ];
 
-export function VisibilityDialog({
+/**
+ * A section rather than a dialog of its own. It was one — "Who can see it…",
+ * a second menu entry beside "Share…" — and the two asked one question from
+ * two places, with the second found only by reading the overflow menu. The
+ * share dialog holds it now, under the people, for documents only: a folder
+ * has no visibility and no expiry.
+ */
+export function VisibilitySection({
   docId,
   current,
-  onClose,
   onChanged,
 }: {
   docId: string;
   current: VisibilityState;
-  onClose: () => void;
   onChanged: (next: VisibilityState) => void;
 }) {
   const toast = useToast();
@@ -84,18 +88,8 @@ export function VisibilityDialog({
   const link = shareUrl(docId, state);
 
   return (
-    <Modal
-      title="Who can see this"
-      onClose={onClose}
-      footer={
-        <>
-          <span className="spacer" />
-          <button type="button" className="btn" onClick={onClose}>
-            Done
-          </button>
-        </>
-      }
-    >
+    <section aria-labelledby="visibility-heading" className="visibility-section">
+      <h3 id="visibility-heading">Who can see it</h3>
       <div className="visibility-options">
         {OPTIONS.map((option) => (
           <label
@@ -214,6 +208,6 @@ export function VisibilityDialog({
           <p className="field-hint">{expiryLabel(state.expiresAt)}</p>
         ) : null}
       </div>
-    </Modal>
+    </section>
   );
 }
