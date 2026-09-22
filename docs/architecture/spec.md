@@ -1552,6 +1552,13 @@ Rendering happens in a print iframe sandboxed `allow-same-origin allow-modals`
 with deliberately **no** `allow-scripts`. `position: fixed` repeats the stamp on
 every page. `{year}` is computed at export time.
 
+**The export imposes no page geometry.** The document's own `@page` — or,
+absent one, the print dialog — decides size and margins; `@page` cascades by
+order, so a rule of ours would beat the document's and a fixed-size deck would
+spill every slide across two pages. The stamp nodes go **first** in `<body>`:
+anything after a document's final forced page break opens a page of its own,
+and a fixed box is positioned the same wherever it sits.
+
 Residual risk, accepted: a bundle could blank its own entire document, yielding
 an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed
 stamp would require server-side rendering; client-side print is the chosen

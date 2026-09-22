@@ -176,3 +176,41 @@ describe("inerting the snapshot", () => {
     expect(out.querySelector("base")?.getAttribute("href")).toContain("/content/d/v1/");
   });
 });
+
+describe("page geometry", () => {
+  // `@page` cascades by order, so a rule of ours appended after the document's
+  // styles beat every `@page` the document declared: a deck sized
+  // `200mm 120mm; margin: 0` printed each slide across two pages. And once any
+  // CSS sets a page margin, Chrome ignores the margin the person chose in the
+  // print dialog. The document's own page, or the dialog, decides — never us.
+  it("leaves a document's own @page as the only one", () => {
+    const out = buildPrintHtml(
+      makeDoc("<section>One</section>", "<style>@page { size: 200mm 120mm; margin: 0; }</style>"),
+      { marking: MARKING },
+    );
+    expect(out.match(/@page/g)).toHaveLength(1);
+    expect(out).toContain("margin: 0");
+  });
+
+  it("adds no @page to a document that declares none", () => {
+    const out = buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING });
+    expect(out).not.toContain("@page");
+  });
+
+  it("puts the stamp before the content, so it opens no page of its own", () => {
+    // A deck ends its last slide with `page-break-after: always`. Anything
+    // after it in the DOM — a fixed box included — makes the browser open a
+    // page for it: an eight-slide deck printed nine pages, the last carrying
+    // nothing but the stamp. Fixed positioning does not care where in the
+    // body the box sits, so it goes first.
+    const out = parse(
+      buildPrintHtml(makeDoc('<section style="page-break-after: always">last</section>'), {
+        marking: MARKING,
+      }),
+    );
+    const children = Array.from(out.body.children);
+    expect(children[0].className).toBe(PRINT_MARK_CLASS);
+    expect(children[1].className).toBe(PRINT_FOOTER_CLASS);
+    expect(children.at(-1)?.tagName).toBe("SECTION");
+  });
+});

@@ -167,6 +167,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **"Print or save as PDF" overrode the document's own page layout.** The
+  export appended an `@page` margin rule of its own after the document's
+  styles, and `@page` cascades by order: a deck sized for its slides lost its
+  zero margins and printed every slide across two pages, and every document
+  lost the margin choice in the print dialog, which Chrome ignores once CSS
+  has set one. The rule is gone — the document, or the dialog, decides. The
+  marking stamp now goes first in the body rather than last, because
+  anything after a document's final forced page break opened a blank page
+  carrying nothing but the stamp.
+
 - **A banner pushed the document to the bottom of the page.** The viewer
   grid had one row for the toolbar and one for the document, so whenever a
   banner appeared — a newer version, an expiry, a conflict — it took the
