@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Everything the viewer needs to say above the document (SPEC §6a, §16, §17).
+// Everything the viewer needs to say above the document (SPEC §6a, §6c, §16).
 
 import { Icon } from "./Icon";
 
@@ -32,17 +32,6 @@ export function ViewerBanners(props: {
    */
   scriptsBuildContent?: boolean;
   onOpenTrust?: () => void;
-
-  /**
-   * "Expires in 3 days", or the expired state. Null when it never expires.
-   *
-   * `isOwner` changes the SENTENCE, not just the button. The owner is the only
-   * person who can still open an expired document, so telling a reviewer "only
-   * you can open it" would be flatly untrue for them — and the thing they
-   * actually need is who to ask.
-   */
-  expiry?: { label: string; expired: boolean; isOwner: boolean } | null;
-  onOpenVisibility?: () => void;
 }) {
   const rows: React.ReactNode[] = [];
 
@@ -113,32 +102,10 @@ export function ViewerBanners(props: {
     );
   }
 
-  if (props.expiry) {
-    rows.push(
-      <div
-        key="expiry"
-        className={props.expiry.expired ? "banner banner-warn" : "banner"}
-        role="status"
-      >
-        <Icon name="clock" size={15} />
-        <span>
-          {/* Said in full, because "Expired" alone reads as "deleted" — and
-              this product does not delete documents at all. What changed is who
-              can open it. */}
-          {!props.expiry.expired
-            ? props.expiry.label
-            : props.expiry.isOwner
-              ? "This document has expired. Only you can open it now, and it cannot be edited until you change or clear the date."
-              : "This document has expired and is no longer readable. Nothing has been deleted — its owner can restore it by changing the date."}
-        </span>
-        {props.expiry.isOwner ? (
-          <button type="button" className="btn btn-sm" onClick={props.onOpenVisibility}>
-            Change
-          </button>
-        ) : null}
-      </div>,
-    );
-  }
+  // An expiry is deliberately NOT here. It was, for every future date, and a
+  // document set to expire next year carried a banner for eleven months. It
+  // is the chip beside the version now (`ExpiryChip`), which explains itself
+  // on hover or tap and never takes a row from the document.
 
   if (rows.length === 0) return null;
   return <div className="viewer-banners">{rows}</div>;

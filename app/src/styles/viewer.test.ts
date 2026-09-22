@@ -62,26 +62,51 @@ describe("the viewer grid", () => {
  * the thing that clips the frame to one box — comes off. jsdom evaluates no
  * print media, so this reads the stylesheet.
  */
-describe("printing the page", () => {
-  /** The rules inside `@media print { … }`, without the wrapper. */
-  const printBlock = (() => {
-    const start = VIEWER_CSS.indexOf("@media print");
-    if (start < 0) return "";
-    const open = VIEWER_CSS.indexOf("{", start);
-    let depth = 0;
-    for (let i = open; i < VIEWER_CSS.length; i++) {
-      if (VIEWER_CSS[i] === "{") depth++;
-      if (VIEWER_CSS[i] === "}" && --depth === 0) return VIEWER_CSS.slice(open + 1, i);
-    }
-    return "";
-  })();
+/** The rules inside the first `@media <query> { … }` block, without the wrapper. */
+function mediaBlock(query: string): string {
+  const start = VIEWER_CSS.indexOf(`@media ${query}`);
+  if (start < 0) return "";
+  const open = VIEWER_CSS.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < VIEWER_CSS.length; i++) {
+    if (VIEWER_CSS[i] === "{") depth++;
+    if (VIEWER_CSS[i] === "}" && --depth === 0) return VIEWER_CSS.slice(open + 1, i);
+  }
+  return "";
+}
 
-  /** Selectors of every rule in `css` whose declarations include `property: value`. */
-  const selectorsWith = (css: string, property: string, value: string) =>
-    Array.from(css.matchAll(/([^{}]+)\{([^}]*)\}/g))
-      .filter((m) => new RegExp(`${property}\\s*:\\s*${value}\\s*;`).test(m[2]))
-      .flatMap((m) => m[1].split(",").map((s) => s.trim()))
-      .filter((s) => s && !s.startsWith("@"));
+/** Selectors of every rule in `css` whose declarations include `property: value`. */
+const selectorsWith = (css: string, property: string, value: string) =>
+  // Comments first, or the prose before a rule is read as part of its selector.
+  Array.from(css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^}]*)\}/g))
+    .filter((m) => new RegExp(`${property}\\s*:\\s*${value}\\s*;`).test(m[2]))
+    .flatMap((m) => m[1].split(",").map((s) => s.trim()))
+    .filter((s) => s && !s.startsWith("@"));
+
+/**
+ * The expiry chip sits on the toolbar, and on the narrowest screens the
+ * toolbar is already full: the title is dropped and the actions wrap. A
+ * nineteen-character chip there pushed the actions onto a second row — the
+ * space it was moved out of a banner to save, taken back on phones. So at
+ * that tier it goes icon-only like the secondary actions, and only there: a
+ * tier up the words are the point.
+ */
+describe("the expiry chip on a narrow toolbar", () => {
+  const LABEL = ".viewer-toolbar .expiry-chip .chip-label";
+
+  it("hides its words at 400px", () => {
+    expect(selectorsWith(mediaBlock("(max-width: 400px)"), "display", "none")).toContain(LABEL);
+  });
+
+  it("keeps them a tier up", () => {
+    expect(selectorsWith(mediaBlock("(max-width: 860px)"), "display", "none")).not.toContain(
+      LABEL,
+    );
+  });
+});
+
+describe("printing the page", () => {
+  const printBlock = mediaBlock("print");
 
   it("hides on paper everything presentation mode hides, and the rail", () => {
     const presenting = selectorsWith(VIEWER_CSS, "display", "none")

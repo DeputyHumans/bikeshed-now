@@ -2,12 +2,13 @@
 // The viewer's action row (SPEC §7).
 
 import { Breadcrumb } from "./Breadcrumb";
+import { ExpiryChip } from "./ExpiryChip";
 import { Icon, type IconName } from "./Icon";
 import { MoreMenu } from "./MoreMenu";
 import { PresenceBar } from "./PresenceBar";
 import type { MenuEntry } from "./Menu";
 import type { Peer } from "../presence";
-import type { FolderMeta } from "../types";
+import type { DocMeta, FolderMeta } from "../types";
 
 /**
  * Below 1100px the secondary actions go icon-only: the LABEL is hidden, never
@@ -56,6 +57,8 @@ export function ViewerToolbar({
   folderId,
   folders,
   versionLabel,
+  expiresAt,
+  onExpiry,
   peers,
   following,
   onToggleFollow,
@@ -83,6 +86,10 @@ export function ViewerToolbar({
   folderId: string | null;
   folders: FolderMeta[];
   versionLabel: string;
+  /** When the content stops being served; null or absent for never. */
+  expiresAt?: DocMeta["expiresAt"];
+  /** The owner's tap on the expiry chip. The toolbar does not know which dialog it opens. */
+  onExpiry?: () => void;
   peers: Peer[];
   following: string | null;
   onToggleFollow: (uid: string) => void;
@@ -116,6 +123,10 @@ export function ViewerToolbar({
         <Breadcrumb folderId={folderId} folders={folders} current={title} />
       </div>
       <span className="chip mono">{versionLabel}</span>
+      {/* Beside the version rather than a banner above the document: a date
+          is a fact about this document, and for most of its life not an
+          urgent one. */}
+      <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} />
 
       <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />
 

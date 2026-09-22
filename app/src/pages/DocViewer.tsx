@@ -46,7 +46,7 @@ import { StatsPanel } from "../components/StatsPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
-import { expiryLabel, expiryMs, isExpired } from "../expiry";
+import { expiryMs } from "../expiry";
 import type { MenuEntry } from "../components/Menu";
 import type { Annotation, FolderMeta, TeamMeta } from "../types";
 
@@ -519,6 +519,11 @@ export function DocViewer() {
           folderId={doc.meta?.folderId ?? null}
           folders={folders}
           versionLabel={doc.currentVersion}
+          // The member record, or the projection: a reader of a public document
+          // who is not a member is told too, which is what the projection
+          // carries the date for (SPEC §17).
+          expiresAt={doc.meta?.expiresAt ?? doc.publicDoc?.expiresAt ?? null}
+          onExpiry={isOwner ? () => setDialog("visibility") : undefined}
           peers={presence.peers}
           following={presence.following}
           onToggleFollow={presence.toggleFollow}
@@ -557,19 +562,6 @@ export function DocViewer() {
         offerTrust={liveTrust.shouldOffer}
         scriptsBuildContent={deck.scan.kind === "script-required"}
         onOpenTrust={() => setDialog("trust")}
-        expiry={
-          /* Shown once it HAS expired, and in the last week before — not for
-             every future date, or a document set to expire next year carries a
-             banner for eleven months and everybody stops reading banners. */
-          doc.meta && expiryLabel(doc.meta.expiresAt)
-            ? {
-                label: expiryLabel(doc.meta.expiresAt) as string,
-                expired: isExpired(doc.meta.expiresAt),
-                isOwner,
-              }
-            : null
-        }
-        onOpenVisibility={() => setDialog("visibility")}
       />
 
       {/* One source of truth for "is the panel there", because the layout and

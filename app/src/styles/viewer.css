@@ -395,4 +395,10 @@
   /* A backstop, so no future action can reintroduce the overflow: the row
      wraps to a second line rather than running off the screen. */
   .viewer-toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+  /* The expiry chip goes icon-only like the secondary actions: its words
+     are hidden, its accessible name and tooltip are not. With the title
+     gone, a "Expires Oct 3, 2027" beside the version chip is what tipped the
+     actions onto that second row. */
+  .viewer-toolbar .expiry-chip .chip-label { display: none; }
 }

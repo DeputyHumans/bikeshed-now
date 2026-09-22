@@ -74,6 +74,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **An expiry is a chip beside the version, not a banner above the document.**
+  The banner appeared for every future date, so a document set to expire next
+  year gave up a row of the document area for eleven months. The chip sits on
+  the toolbar next to the version badge — the same one the workspace card
+  shows — escalates in wording and colour through the last week and past the
+  date, explains itself on hover or on tap (nothing is deleted; who can open
+  it; who can restore it), and for the owner opens the place the date is
+  changed. Nothing about an expiry takes a row from the document any more.
+
 - **A document with nothing to say opens without the comments panel.** The
   panel was open on every document: a 340px column reading "0 open" and
   asking the reader to select a passage. It now starts collapsed and opens on
@@ -166,6 +175,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   browser.
 
 ### Fixed
+
+- **A reader of a public document who was not a member was never told about
+  its expiry.** The `public/{docId}` projection carries the date for exactly
+  that purpose (SPEC §17: "the reader is told rather than shown an empty
+  frame"), and the viewer never read it — it looked only at the member
+  record. The expiry chip reads whichever record the reader has.
 
 - **"Print or save as PDF" overrode the document's own page layout.** The
   export appended an `@page` margin rule of its own after the document's

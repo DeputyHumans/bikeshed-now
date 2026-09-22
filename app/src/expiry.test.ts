@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   endOfDayMs,
   expiringSoon,
+  expiryExplanation,
   expiryLabel,
   expiryMs,
   isExpired,
@@ -55,6 +56,51 @@ describe("what it says", () => {
     expect(expiringSoon(NOW + 30 * DAY, NOW)).toBe(false);
     expect(expiringSoon(NOW - DAY, NOW)).toBe(false);
     expect(expiringSoon(null, NOW)).toBe(false);
+  });
+});
+
+/**
+ * The sentence behind the chip — its tooltip, and the toast a tap shows to
+ * somebody who cannot change the date. This used to be a banner; the wording
+ * rules did not move with the pixels.
+ */
+describe("what it explains", () => {
+  test("nothing, when there is no expiry", () => {
+    expect(expiryExplanation(null, true, NOW)).toBeNull();
+    expect(expiryExplanation(undefined, false, NOW)).toBeNull();
+  });
+
+  test("before the date, says until when — the same day the label shows", () => {
+    const at = NOW + 60 * DAY;
+    const day = (expiryLabel(at, NOW) as string).replace(/^Expires /, "");
+    expect(expiryExplanation(at, true, NOW)).toContain(`Readable until ${day}.`);
+    expect(expiryExplanation(at, false, NOW)).toContain(`Readable until ${day}.`);
+  });
+
+  test("tells the owner it is theirs to undo, and a reader who to ask", () => {
+    // The owner is the only person who can open an expired document, so "only
+    // you can open it" is flatly untrue for anybody else — and the thing a
+    // reader actually needs is who can fix it.
+    expect(expiryExplanation(NOW + DAY, true, NOW)).toMatch(/only you can open it/);
+    expect(expiryExplanation(NOW + DAY, false, NOW)).toMatch(/only its owner can open it/);
+    expect(expiryExplanation(NOW - DAY, true, NOW)).toMatch(/only you can open it/i);
+    expect(expiryExplanation(NOW - DAY, false, NOW)).toMatch(/its owner can restore it/);
+  });
+
+  test("never claims anything was deleted", () => {
+    // "Expire" reads as "delete" to almost everybody, and this product does
+    // not delete documents at all — the versions, the comments and the bytes
+    // all survive. Every sentence has to say so, or it teaches the wrong
+    // model. The one permitted use of the word is the denial, so it is
+    // removed before checking that nothing else claims a removal.
+    for (const at of [NOW + DAY, NOW - DAY]) {
+      for (const isOwner of [true, false]) {
+        const text = expiryExplanation(at, isOwner, NOW) as string;
+        expect(text).toMatch(/nothing (is|has been) deleted/i);
+        const rest = text.replace(/nothing (is|has been) deleted/i, "");
+        expect(rest).not.toMatch(/deleted|removed|gone/i);
+      }
+    }
   });
 });
 

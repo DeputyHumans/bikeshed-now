@@ -160,6 +160,19 @@
   color: var(--color-warn);
 }
 
+/* An expiry escalates rather than shouting from the start: a date eleven months
+   out is information, the last week is a warning, and past it is a state. Each
+   step is also carried by the WORDING, so the colour is never the only signal.
+   Here rather than in workspace.css because the viewer's toolbar shows the same
+   chip (SPEC §17). It is a button — its sentence has to be reachable by a tap —
+   and `.chip` already resets everything a button would bring except the cursor. */
+button.expiry-chip { cursor: pointer; }
+.expiry-chip[data-soon] { color: var(--color-warn); }
+.expiry-chip[data-expired] {
+  color: var(--color-danger);
+  border-color: currentColor;
+}
+
 /**
  * The automation badge (SPEC §17).
  *

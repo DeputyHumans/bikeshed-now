@@ -56,11 +56,40 @@ export function expiryLabel(
   const days = Math.floor(left / DAY);
   if (days === 1) return "Expires tomorrow";
   if (days < 14) return `Expires in ${days} days`;
-  return `Expires ${new Date(at).toLocaleDateString(undefined, {
+  return `Expires ${formatDay(at)}`;
+}
+
+function formatDay(at: number): string {
+  return new Date(at).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
-  })}`;
+  });
+}
+
+/**
+ * The sentence behind the chip: its tooltip, and what a tap says to somebody
+ * who cannot change the date. Two things it always does, whatever the state:
+ * denies a deletion in those words, and tells the reader whose action this is
+ * — the owner is the only person who can open an expired document, so "only
+ * you can open it" is flatly untrue for anybody else, and the thing they
+ * actually need is who to ask.
+ */
+export function expiryExplanation(
+  value: Timestamp | number | null | undefined,
+  isOwner: boolean,
+  nowMs: number = Date.now(),
+): string | null {
+  const at = expiryMs(value);
+  if (at === null) return null;
+  if (at > nowMs) {
+    return isOwner
+      ? `Readable until ${formatDay(at)}. Nothing is deleted then — only you can open it after that, and it cannot be edited until you change or clear the date.`
+      : `Readable until ${formatDay(at)}. Nothing is deleted then — only its owner can open it after that.`;
+  }
+  return isOwner
+    ? "This document has expired. Nothing has been deleted — only you can open it now, and it cannot be edited until you change or clear the date."
+    : "This document has expired and is no longer readable. Nothing has been deleted — its owner can restore it by changing the date.";
 }
 
 /** True inside the last week, which is when a chip should start insisting. */

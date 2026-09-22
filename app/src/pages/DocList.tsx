@@ -30,12 +30,12 @@ import { FolderTree } from "../components/FolderTree";
 import { Icon } from "../components/Icon";
 import { Menu, type MenuEntry } from "../components/Menu";
 import { MoveDialog } from "../components/MoveDialog";
+import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
 import { UploadDialog } from "../components/UploadDialog";
 import { CardSkeletons } from "../components/Spinner";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
-import { expiringSoon, expiryLabel, isExpired } from "../expiry";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -44,29 +44,6 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "views", label: "Most read" },
   { value: "lastViewed", label: "Recently read" },
 ];
-
-/**
- * Shown for every document that has a date, not only the expired ones.
- *
- * A workspace is where somebody notices that a document goes away next Tuesday,
- * and the only place they would notice it without opening the document. The
- * `soon` attribute is what lets the last week look different from next year
- * without inventing a second chip.
- */
-function ExpiryChip({ doc }: { doc: DocMeta }) {
-  const label = expiryLabel(doc.expiresAt);
-  if (!label) return null;
-  return (
-    <span
-      className="chip expiry-chip"
-      data-expired={isExpired(doc.expiresAt) ? "" : undefined}
-      data-soon={expiringSoon(doc.expiresAt) ? "" : undefined}
-    >
-      <Icon name="clock" size={12} />
-      {label}
-    </span>
-  );
-}
 
 function VisibilityChip({ doc }: { doc: DocMeta }) {
   const visibility = doc.visibility ?? "private";
@@ -82,9 +59,12 @@ function VisibilityChip({ doc }: { doc: DocMeta }) {
 function DocCard({
   doc,
   menu,
+  onShare,
 }: {
   doc: DocMeta;
   menu: MenuEntry[];
+  /** The owner's way to the date behind the expiry chip; absent for anyone else. */
+  onShare?: () => void;
 }) {
   return (
     <div className="doc-card">
@@ -106,7 +86,11 @@ function DocCard({
       </div>
       <div className="doc-card-meta">
         <VisibilityChip doc={doc} />
-        <ExpiryChip doc={doc} />
+        {/* Shown for every document that has a date, not only the expired
+            ones: a workspace is where somebody notices that a document goes
+            away next Tuesday, and the only place they would without opening
+            it. */}
+        <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} />
         {doc.stats?.views ? (
           <span className="doc-card-stat numeric">
             <Icon name="eye" size={12} /> {doc.stats.views}
@@ -306,6 +290,16 @@ export function DocList() {
 
   const defaultMarking: Marking = account?.defaultMarking ?? MARKING_OFF;
 
+  const shareTargetFor = (doc: DocMeta): ShareTarget => ({
+    kind: "doc",
+    id: doc.docId,
+    title: doc.title,
+    ownerEmail: doc.ownerEmail,
+    viewers: doc.viewers,
+    editors: doc.editors,
+    members: doc.members,
+  });
+
   const docMenu = (doc: DocMeta): MenuEntry[] => {
     const isOwner = doc.ownerEmail === emailLower;
     return [
@@ -315,16 +309,7 @@ export function DocList() {
         label: "Share…",
         disabled: !isOwner,
         reason: `Only ${doc.ownerEmail} can change sharing.`,
-        onSelect: () =>
-          setSharing({
-            kind: "doc",
-            id: doc.docId,
-            title: doc.title,
-            ownerEmail: doc.ownerEmail,
-            viewers: doc.viewers,
-            editors: doc.editors,
-            members: doc.members,
-          }),
+        onSelect: () => setSharing(shareTargetFor(doc)),
       },
       {
         id: "rename",
@@ -536,7 +521,14 @@ export function DocList() {
               />
             ))}
             {visibleDocs.map((doc) => (
-              <DocCard key={doc.docId} doc={doc} menu={docMenu(doc)} />
+              <DocCard
+                key={doc.docId}
+                doc={doc}
+                menu={docMenu(doc)}
+                onShare={
+                  doc.ownerEmail === emailLower ? () => setSharing(shareTargetFor(doc)) : undefined
+                }
+              />
             ))}
           </div>
         )}
