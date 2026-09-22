@@ -176,6 +176,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   none, and the document is pinned to the last row rather than placed by
   its position among its siblings.
 
+- **Publishing a version announced it to the person who published it.** The
+  "newer version" banner fired on every change of the current version,
+  including your own commit, and offered "Open v4 / Stay here" over a frame
+  already showing v4 — the same for any reader with no version pinned, whose
+  frame already follows. It now appears only when the viewer is showing an
+  older version, and clears by itself once that reader opens the new one.
+
 - **Selecting text on a click-driven deck advanced the slide.** A drag that
   selects a passage ends in a `click`, and a deck whose own script advances on
   click — the common hand-made shape — took it, hiding the very slide the

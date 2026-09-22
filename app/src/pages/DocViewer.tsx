@@ -216,6 +216,7 @@ export function DocViewer() {
 
   const live = useLiveSync({
     meta: doc.meta,
+    shownVersion: doc.currentVersion,
     emailLower,
     isEditing: mode.kind === "editing",
     onPeerSavedDraft: frame.reload,

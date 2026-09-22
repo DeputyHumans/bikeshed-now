@@ -19,12 +19,14 @@ import type { DocMeta } from "../types";
  */
 export function useLiveSync(options: {
   meta: DocMeta | null;
+  /** The version the frame is showing — `currentVersion` as the viewer resolved it. */
+  shownVersion: string;
   emailLower: string;
   /** True when this reader is the one typing. */
   isEditing: boolean;
   onPeerSavedDraft: () => void;
 }) {
-  const { meta, emailLower, isEditing, onPeerSavedDraft } = options;
+  const { meta, shownVersion, emailLower, isEditing, onPeerSavedDraft } = options;
 
   const lastDraftAt = useRef<number>(0);
   const lastVersion = useRef<string | null>(null);
@@ -61,7 +63,15 @@ export function useLiveSync(options: {
   return {
     conflict,
     dismissConflict: () => setConflict(null),
-    newVersion,
+    /**
+     * News only to a reader who is not looking at it. With no version pinned
+     * in the URL the viewer follows `currentVersion` in the same render the
+     * snapshot lands — the reader's own commit, or a peer's publish — so the
+     * banner would offer "Open v4 / Stay here" over a frame already on v4. A
+     * reader pinned to an older version is the one it is for, and once they
+     * open the new one this clears on its own.
+     */
+    newVersion: newVersion !== null && newVersion !== shownVersion ? newVersion : null,
     dismissNewVersion: () => setNewVersion(null),
   };
 }
