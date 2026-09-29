@@ -18,6 +18,18 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **The terminal client is on npm**, as `bikeshed-now`, providing the `bikeshed`
+  command: `npm i -g bikeshed-now`, or `npx -y bikeshed-now` for one call. It was
+  previously reachable only by cloning this repository, which made every
+  `bikeshed …` line in the agent instructions unfollowable for anyone who had
+  not. Three files, no dependencies.
+  [`docs/operations/publishing-the-cli.md`](docs/operations/publishing-the-cli.md)
+  is the release recipe. The root package is renamed `bikeshed-now-source` so the
+  published name belongs to the thing that is actually published.
+- **A publish result says where to read the document.** `publish_document` and
+  `update_document` return `url`, and the CLI's `--json` carries it too. An agent
+  over MCP cannot derive it — the origin is in its client's configuration, which
+  the protocol never shows it — so it had nothing to hand back but an id.
 - **Agents can organise a workspace.** Three MCP tools — `list_folders`,
   `create_folder`, `move_document` — and the CLI commands `folders`, `mkdir` and
   `mv`. Filing a document was previously something only a person could do, which
@@ -71,6 +83,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   and `BIKESHED_PUBLIC_ORIGIN` is now load-bearing for every document page,
   because the shell is fetched from Hosting at runtime
   ([ADR 0011](docs/architecture/adr/0011-document-page-through-a-function.md)).
+
+### Fixed
+
+- **The instructions said a token publish was trusted.** It never was:
+  `publishNewDocument` writes `trusted: false` for every path a personal access
+  token can reach, and only the operator script publishes trusted. The guide, the
+  publishing skill, the spec and the threat model now say so, and a test refuses
+  the claim in any agent-facing document. A raw `<script>` in Markdown is
+  sandboxed exactly like one in HTML.
 
 ### Changed
 

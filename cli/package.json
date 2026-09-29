@@ -1,13 +1,45 @@
 {
-  "name": "bikeshed-cli",
+  "name": "bikeshed-now",
   "version": "0.1.0",
-  "private": true,
   "license": "Apache-2.0",
   "type": "module",
   "description": "Publish and revise documents on a Bikeshed deployment from the terminal.",
-  "bin": { "bikeshed": "./src/index.mjs" },
-  "engines": { "node": ">=20" },
+  "keywords": [
+    "bikeshed",
+    "documents",
+    "publishing",
+    "review",
+    "comments",
+    "mcp",
+    "agents"
+  ],
+  "homepage": "https://bikeshed.now",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DeputyHumans/bikeshed-now.git",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/DeputyHumans/bikeshed-now/issues"
+  },
+  "bin": {
+    "bikeshed": "./src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "prepack": "cp ../LICENSE ../NOTICE .",
+    "postpack": "rm -f LICENSE NOTICE"
   }
 }

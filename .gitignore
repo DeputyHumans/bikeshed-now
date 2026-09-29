@@ -48,3 +48,8 @@ coverage/
 # Claude Code — personal-only settings
 .claude/settings.local.json
 .mcp.json
+
+# Copied into the published CLI tarball by its prepack, never committed
+cli/LICENSE
+cli/NOTICE
+*.tgz

@@ -243,6 +243,9 @@ names from the channel host, which serves a different build and does not have
 them: a blank page. Preview the workspace on a channel; preview the document
 page on the live site.
 
+**The terminal client is published separately**, to npm as `bikeshed-now`, and
+a deployment is not involved: [`publishing-the-cli.md`](publishing-the-cli.md).
+
 **A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
 are part of the content hash, so bumping `markdown-it`, `turndown` or
 `turndown-plugin-gfm` changes every Markdown document's hash and the next save

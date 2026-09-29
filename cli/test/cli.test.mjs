@@ -314,6 +314,25 @@ const rpcOk = (result) => (req, res) => {
   res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { structuredContent: result } }));
 };
 
+test("the package stays publishable, and stays cheap to run once", () => {
+  // `npx bikeshed-now` is in the agent instructions a deployment serves, so the
+  // two properties that make that instruction work are asserted here: the
+  // package is not private, and installing it downloads nothing else. A single
+  // dependency turns a one-second bootstrap into a tree resolution.
+  const manifest = JSON.parse(readFileSync(join(SRC, "..", "package.json"), "utf8"));
+
+  assert.equal(manifest.private, undefined, "a private package cannot be published");
+  assert.equal(manifest.name, "bikeshed-now");
+  assert.equal(manifest.bin.bikeshed, "./src/index.mjs");
+  assert.deepEqual(manifest.dependencies, undefined, "the client has no runtime dependencies");
+  assert.ok(Array.isArray(manifest.files), "publish by allowlist, never by omission");
+  for (const required of ["src", "README.md", "LICENSE", "NOTICE"]) {
+    assert.ok(manifest.files.includes(required), `${required} is missing from files`);
+  }
+  // The npm page is the first thing somebody installing it reads.
+  assert.ok(existsSync(join(SRC, "..", "README.md")), "cli/README.md is missing");
+});
+
 test("`root` is sent as an ABSENT folder, not as a folder named root", async () => {
   await withServer(rpcOk({ id: "some-doc", folder: null }), async (origin, seen) => {
     await runAsync(["mv", "some-doc", "root", "--json"], {

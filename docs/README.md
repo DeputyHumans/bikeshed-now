@@ -13,6 +13,7 @@ including this one. Cite it as `(SPEC §N)`.
 | stop re-arguing a settled decision | [`architecture/adr/`](architecture/adr/) — eleven records, each with its reversal condition |
 | deploy or run one | [`operations/overview.md`](operations/overview.md) |
 | change a setting | [`operations/config.md`](operations/config.md) |
+| publish the terminal client to npm | [`operations/publishing-the-cli.md`](operations/publishing-the-cli.md) |
 | see it working before I believe it | [`development/verification.md`](development/verification.md) — the emulator walkthrough, and what it proves |
 | write a document that works well here | [`development/authoring-bundles.md`](development/authoring-bundles.md) |
 | drive a deployment from an agent | [`agents/agent-guide.md`](agents/agent-guide.md) — served at `/llms.txt` |

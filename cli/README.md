@@ -1,0 +1,57 @@
+# bikeshed
+
+Publish a document to a [Bikeshed](https://bikeshed.now) deployment, then read
+the comments people left on it — each one with the exact sentence it is about.
+
+Bikeshed is self-hosted. This client talks to whichever deployment you point it
+at, over HTTPS, with a personal access token that carries exactly your own
+permissions.
+
+```bash
+npm i -g bikeshed-now
+bikeshed login            # asks for the deployment and a token
+```
+
+Create a token in the deployment's interface, under **Account → Access tokens**.
+It is shown once. `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` work instead of
+`login` where an interactive command cannot run — a CI job, or an agent.
+
+## The loop
+
+```bash
+bikeshed publish proposal.md --title "Storage migration"
+# published storage-migration v1 — https://<deployment>/d/storage-migration
+
+# Somebody highlights a sentence and says what is wrong with it.
+bikeshed comments storage-migration
+
+# Fix that sentence, publish the revision, and say what you changed.
+bikeshed update storage-migration proposal.md
+bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write period."
+```
+
+Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash
+mints no new version. So `update` is safe in a loop, in CI, or after a change you
+are not sure you made.
+
+`bikeshed --help` lists the rest — listing documents, folders, and installing the
+agent skills a deployment serves.
+
+## Sharing is not automated
+
+There is no command that shares a document, changes who can read it, or sets an
+expiry. Those are decisions a person makes in the interface, deliberately.
+
+## For agents
+
+A deployment serves its own instructions at `https://<deployment>/llms.txt`, and
+the skills behind them at `/skills/index.json`. `bikeshed skills install <dir>`
+writes them where your harness reads skills from.
+
+Everything done with a token is stamped with the channel it came through, so a
+reviewer can always tell which feedback came from a person.
+
+## Licence
+
+Apache-2.0. The deployment it talks to is the same repository:
+[DeputyHumans/bikeshed-now](https://github.com/DeputyHumans/bikeshed-now).
