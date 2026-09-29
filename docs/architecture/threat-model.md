@@ -41,9 +41,12 @@ therefore owner-only; **personal** trust un-sandboxes only in the granting
 user's own browser, where the only session exposed is theirs, and is therefore
 available to any reader. Personal trust never writes the global flag.
 
-Browser uploads and duplicates are created `trusted: false`. CLI and MCP
-publishes — where the publisher is an authenticated account acting deliberately
-— are `trusted: true`.
+Browser uploads, duplicates, and every publish through a personal access token
+— the end-user CLI and MCP alike — are created `trusted: false`. A token is an
+authenticated account, but the hand on it may be an agent acting on text it was
+given, and global trust is a decision taken on behalf of every reader. Only the
+operator script, which runs with Admin credentials against Firestore directly,
+creates a document `trusted: true`.
 
 **Residual, accepted.** An editor the owner deliberately added could inject a
 `<script>` into a trusted document via devtools and commit it. This is an

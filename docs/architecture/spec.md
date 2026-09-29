@@ -321,8 +321,10 @@ the record of intent; `members` is the record of reality.
 fall back to `editors`.
 
 **`trusted`** is GLOBAL trust: it controls whether the viewer sandboxes the
-content iframe FOR EVERY READER. CLI and MCP publishes write `true`; browser
-upload and duplicate write `false`; the owner flips it via `/trust`.
+content iframe FOR EVERY READER. Every publish through `publishNewDocument` —
+browser upload, duplicate, the end-user CLI and MCP alike — creates it `false`;
+only the operator script `scripts/publish.mjs`, which runs with Admin
+credentials, creates it `true`; afterwards the owner flips it via `/trust`.
 `commitVersion` leaves it untouched, so trust PERSISTS across in-app edits.
 Missing ⇒ treated as trusted.
 

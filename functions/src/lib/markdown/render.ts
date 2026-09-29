@@ -25,9 +25,9 @@ import { MARKDOWN_THEME_CSS, MARKDOWN_THEME_ID } from "./theme";
  *
  *  2. Raw HTML flows through the EXISTING trust model rather than a new
  *     sanitizer policy. A `<script>` in the source survives into the output and
- *     the document obeys SPEC §6c: CLI-published means trusted, browser-uploaded
- *     means sandboxed with a trust prompt only if the DOM really contains
- *     script. One concept, not two.
+ *     the document obeys SPEC §6c: operator-published means trusted, everything
+ *     else — browser upload, duplicate, CLI and MCP — means sandboxed, with a
+ *     trust prompt only if the DOM really contains script. One concept, not two.
  */
 
 /**

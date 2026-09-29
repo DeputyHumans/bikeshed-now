@@ -209,10 +209,13 @@ document is shared, and the `<title>` is its default title.
 
 ### Scripts run only if somebody vouches for them
 
-A document you publish through a token is trusted, and its scripts run. A
-document somebody uploads through the browser is sandboxed until its owner says
-otherwise. If your document depends on its own JavaScript, say so in the text,
-so a reader seeing an empty box knows why.
+Everything you publish through a token is sandboxed, exactly like a browser
+upload: its scripts do not run until the owner trusts the document in the app. A
+raw `<script>` in Markdown is treated the same way as one in HTML.
+
+If your document depends on its own JavaScript, say so in the text, so a reader
+seeing an empty box knows why, and tell the owner what the script does. Whether
+to trust it is theirs to decide.
 
 ## What you cannot do, and why
 

@@ -100,10 +100,13 @@ which is the same kind of decision as sharing.
 
 ## Scripts run only if somebody vouched for them
 
-A document published through a token is trusted and its scripts run. One
-uploaded through the browser is sandboxed until its owner says otherwise. If
-your document needs its own JavaScript, say so in the text, so a reader looking
-at an empty box knows why.
+Everything you publish through a token is sandboxed, exactly like a browser
+upload: its scripts do not run until the document's owner trusts it in the app. A
+raw `<script>` in Markdown is treated the same way as one in HTML.
+
+So if your document needs its own JavaScript, say so in the text — a reader
+looking at an empty box should know why — and tell the owner what the script
+does. Whether to trust it is their decision; do not ask them for it.
 
 ## What happens next
 

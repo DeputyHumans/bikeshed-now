@@ -118,6 +118,22 @@ test("every skill's description says when to load it", async () => {
   }
 });
 
+test("no agent-facing document promises that a token publish runs scripts", async () => {
+  // `publishNewDocument` writes `trusted: false` for EVERY path a personal access
+  // token can reach — the end-user CLI and MCP alike. Only the operator script
+  // vouches, because it runs with Admin credentials and a person at the keyboard
+  // (SPEC §6c). An agent told otherwise ships a document whose scripts never run
+  // and says nothing to the reader looking at an empty box.
+  const { texts } = await documents();
+  for (const [where, text] of texts) {
+    assert.doesNotMatch(
+      text,
+      /through a token is trusted/,
+      `${where} says a token publish is trusted; publish.ts writes trusted: false`,
+    );
+  }
+});
+
 // --- They describe a surface that exists ----------------------------------
 
 test("every bikeshed command any of these documents names is a real one", async () => {

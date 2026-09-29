@@ -144,7 +144,8 @@ export interface PublishResult {
  *
  * `trusted: false` unconditionally: the publisher is not necessarily the author,
  * so the viewer sandboxes the bundle's scripts until somebody with standing says
- * otherwise. The CLI path raises it separately and deliberately (SPEC §6c).
+ * otherwise. The OPERATOR script (`scripts/publish.mjs`) raises it separately
+ * and deliberately, with Admin credentials (SPEC §6c).
  */
 export async function publishNewDocument(
   input: PublishInput,

@@ -139,7 +139,7 @@ Duplicate each HTML sample, which resets `trusted` to false, and open all three:
 |---|---|---|---|
 | scripted, untrusted | `allow-same-origin` | no | **yes** |
 | script-free, untrusted | `allow-same-origin` | — | **no** |
-| scripted, trusted (CLI) | none | yes | no |
+| scripted, trusted (operator script) | none | yes | no |
 
 The prompt appears only when the document is sandboxed **and** actually contains
 a `<script>`. That AND is why the two HTML samples differ the way they do, and
