@@ -323,7 +323,10 @@ test("the package stays publishable, and stays cheap to run once", () => {
 
   assert.equal(manifest.private, undefined, "a private package cannot be published");
   assert.equal(manifest.name, "bikeshed-now");
-  assert.equal(manifest.bin.bikeshed, "./src/index.mjs");
+  // Spelled without "./", which is what npm's own normaliser writes to the
+  // registry: the published manifest and the committed one should agree, and
+  // the leading "./" made `npm publish` warn that it had corrected the field.
+  assert.equal(manifest.bin.bikeshed, "src/index.mjs");
   assert.deepEqual(manifest.dependencies, undefined, "the client has no runtime dependencies");
   assert.ok(Array.isArray(manifest.files), "publish by allowlist, never by omission");
   for (const required of ["src", "README.md", "LICENSE", "NOTICE"]) {

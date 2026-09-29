@@ -23,7 +23,7 @@
     "url": "https://github.com/DeputyHumans/bikeshed-now/issues"
   },
   "bin": {
-    "bikeshed": "./src/index.mjs"
+    "bikeshed": "src/index.mjs"
   },
   "engines": {
     "node": ">=20"
