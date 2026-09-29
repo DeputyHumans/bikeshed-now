@@ -134,6 +134,41 @@ test("no agent-facing document promises that a token publish runs scripts", asyn
   }
 });
 
+test("the publishing skill's description says what it is used INSTEAD of", async () => {
+  // A description that matches only once Bikeshed has been chosen never loads at
+  // the moment the choice is made. The harness has its own instruction to publish
+  // finished work for other people, and it fires first; a skill that wants to be
+  // read then has to match the same moment and name what it displaces.
+  const { skills } = await documents();
+  const publishing = skills.find((skill) => skill.name === "bikeshed-publishing");
+  assert.ok(publishing, "there is no bikeshed-publishing skill");
+  assert.match(
+    publishing.description,
+    /artifact/i,
+    "the description never names the tool it is meant to be used instead of",
+  );
+});
+
+test("no frontmatter value hides a colon a YAML parser would choke on", async () => {
+  // `frontmatter()` in tools/build-agents.mjs is a line regex, not a parser, so
+  // `description: who: what` passes every check in this repository. A real YAML
+  // parser — which is what a harness loading these files uses — reads a nested
+  // mapping and rejects the file, and the skill silently never loads.
+  const { skills } = await documents();
+  for (const skill of skills) {
+    const block = skill.text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(block, `${skill.name}: no frontmatter block`);
+    for (const line of block[1].split("\n")) {
+      const value = line.replace(/^[a-z][a-z_-]*:\s*/, "");
+      if (/^["']/.test(value)) continue; // quoted, so a colon inside is safe
+      assert.ok(
+        !value.includes(": "),
+        `${skill.name}: "${value.slice(0, 48)}…" has an unquoted colon and will not parse`,
+      );
+    }
+  }
+});
+
 // --- They describe a surface that exists ----------------------------------
 
 test("every bikeshed command any of these documents names is a real one", async () => {

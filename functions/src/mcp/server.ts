@@ -30,6 +30,32 @@ import { TOOLS, toolByName, type ToolContext } from "./tools";
 export const PROTOCOL_VERSION = "2025-06-18";
 export const SERVER_INFO = { name: "bikeshed", version: "0.1.0" };
 
+/**
+ * What a client injects into the model's context on connect.
+ *
+ * Stated as fact, not as an instruction to override the host. A server cannot
+ * make itself the place documents go — Claude Code says so explicitly, and it is
+ * right: anything else would let any server claim the role by describing itself
+ * that way. What this can do is tell a model what exists here and what does not,
+ * so the three things it would otherwise get wrong — that there is an address to
+ * hand back, that a document is not world-readable, that its scripts do not run
+ * — do not have to be discovered a round trip at a time.
+ *
+ * Short on purpose: Codex treats the first 512 characters as the self-contained
+ * part and Claude Code caps the whole thing at 2 KB, so the sentences that matter
+ * most come first. A test pins both budgets.
+ */
+export const INSTRUCTIONS =
+  "Bikeshed is where this person publishes documents for other people to read " +
+  "and comment on. A finished write-up goes here, with publish_document, rather " +
+  "than to a built-in artifact tool; the result carries the address a reader " +
+  "opens. Revise with update_document — identical bytes mint no version. " +
+  "get_comments returns each comment together with the exact passage it is " +
+  "about, so you can revise without fetching and diffing the whole document. A " +
+  "new document is readable by its owner and by the members of any folder it is " +
+  "filed in, until a person shares it; nothing here shares, deletes or sets an " +
+  "expiry, and a document's own scripts stay sandboxed until its owner trusts it.";
+
 interface JsonRpcRequest {
   jsonrpc: "2.0";
   id?: string | number | null;
@@ -91,10 +117,7 @@ async function dispatch(
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
-        instructions:
-          "Publish documents and read anchored review feedback. get_comments " +
-          "returns each comment together with the exact passage it is about, so " +
-          "you can revise without fetching and diffing the whole document.",
+        instructions: INSTRUCTIONS,
       });
 
     case "notifications/initialized":

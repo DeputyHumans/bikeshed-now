@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 
 const {
   handleMcp,
+  INSTRUCTIONS,
   missingArguments,
   PROTOCOL_VERSION,
   SERVER_INFO,
@@ -63,6 +64,27 @@ function post(body, headers = {}) {
 }
 
 // --- The tool surface ------------------------------------------------------
+
+test("the connect instructions fit the smallest budget and name only real tools", () => {
+  // Every client injects this into the model's context. Codex treats the first
+  // 512 characters as the self-contained part and Claude Code caps the whole
+  // string at 2 KB, so the sentence that says where documents go has to be near
+  // the front rather than merely present.
+  assert.ok(
+    Buffer.byteLength(INSTRUCTIONS, "utf8") <= 2048,
+    `the instructions are ${Buffer.byteLength(INSTRUCTIONS, "utf8")} bytes`,
+  );
+  const head = INSTRUCTIONS.slice(0, 512);
+  assert.match(head, /publish_document/);
+  assert.match(head, /rather than/);
+  assert.match(head, /artifact/);
+
+  // A tool named here that does not exist costs an agent a round trip on a
+  // refusal it cannot act on — the same rule the skills are held to.
+  for (const [, name] of INSTRUCTIONS.matchAll(/\b([a-z]+(?:_[a-z]+)+)\b/g)) {
+    assert.ok(TOOL_NAMES.includes(name), `the instructions name a tool ${name} that does not exist`);
+  }
+});
 
 test("a publish result says where a reader opens the document", () => {
   // An agent over MCP has no way to know the origin — it is in its client's

@@ -1,6 +1,6 @@
 ---
 name: bikeshed-publishing
-description: Use when publishing a document to a Bikeshed deployment, or revising one you already published — writing the source so that highlight-anchored comments land on the right passage, then publishing or updating it over the CLI or MCP.
+description: Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment.
 ---
 
 # Publishing to Bikeshed
@@ -27,6 +27,39 @@ The commands below come from `npm i -g bikeshed-now`. Every one of them has a
 tool beside it doing the same job, so if you hold the tools and not the command,
 use those — and if you hold neither, one authenticated POST to `/mcp` is a
 complete call. `https://<deployment>/llms.txt` shows it.
+
+## Where a document goes
+
+While a deployment is configured, a write-up meant for other people is published
+here. Not as a built-in artifact, and not handed over as a file on disk for
+somebody to find. Your harness's rule about publishing finished work still holds;
+this decides where.
+
+Two exceptions, each with something you can check:
+
+- **The question is about the code in front of them, and they will act on the
+  answer themselves.** Answer in the conversation and publish nothing.
+- **Your host has designated a first-party document connector.** Which tool holds
+  that standing is the host's decision, not this deployment's. Say so, and ask.
+
+### What you hand back
+
+1. **The address** — the `url` in the result.
+2. **One line on who can read it**: them, plus everyone a folder is shared with if
+   you filed it into one. Ask them to share it further; there is no tool for that.
+3. **Nothing else.** No second copy elsewhere, no pasted document.
+
+### Instead of
+
+| Instead of | Here |
+|---|---|
+| publishing an artifact | `bikeshed publish`, or `publish_document` |
+| republishing one under its id | `bikeshed update`, or `update_document` — identical bytes mint no version |
+| reading the comments on it | `bikeshed comments`, or `get_comments`; answer with `reply_to_comment` |
+
+There is no runtime here: no shared state, no viewer identity, no stored assets,
+no pinning, and nothing is ever deleted. Ship a document that stands still, and
+say what it cannot do.
 
 ## Write Markdown unless you need HTML
 
@@ -61,7 +94,7 @@ In HTML, write them:
 
 ## Keep it to one file
 
-No external URLs. Inline the SVG, inline the CSS. A document is an artifact
+No external URLs. Inline the SVG, inline the CSS. A document is something
 somebody will download, print, or open in three years, and every byte of a
 multi-file bundle is a separate authenticated request — a fifty-asset deck costs
 fifty round trips per reader, and the same deck inlined costs one.
@@ -72,12 +105,15 @@ If you genuinely need several files, send a `.zip` with `index.html` at its root
 
 ```bash
 bikeshed publish proposal.md --title "Storage migration" --json
-# → {"docId":"storage-migration","versionId":"v1", …}
+# → {"docId":"storage-migration","versionId":"v1",
+#    "url":"https://<deployment>/d/storage-migration", …}
 
 bikeshed update storage-migration proposal.md
 ```
 
-Over MCP the same two are `publish_document` and `update_document`.
+Over MCP the same two are `publish_document` and `update_document`, and they
+return the same `url`. That is the address to hand back. Do not run
+`bikeshed open` to find it — that opens a browser on somebody's machine.
 
 **Publishing identical content is a no-op.** The bytes are hashed; matching
 bytes mint no new version. So `update` is safe to run in a loop, in CI, or after

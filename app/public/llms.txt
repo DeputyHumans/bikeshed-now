@@ -247,8 +247,8 @@ a slug derived from its text. If you are writing Markdown, just use headings.
 
 ### Keep it self-contained
 
-One file, no external URLs. A document is an artifact: somebody will download
-it, print it, or open it in three years. Every byte of a multi-file bundle is
+One file, no external URLs. A document outlives the conversation that produced
+it: somebody will download it, print it, or open it in three years. Every byte of a multi-file bundle is
 also a separate authenticated request, so a fifty-asset deck costs fifty
 round trips per reader and an inlined one costs one.
 
