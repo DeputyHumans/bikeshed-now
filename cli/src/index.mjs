@@ -130,7 +130,9 @@ async function publish(flags, [path]) {
       title: flags.title,
       folder: flags.folder,
     });
-    out(flags.json, result, () =>
+    // The address is in the human line already; `--json` carried only the id, so
+    // anything reading it had to know how to build a URL out of a docId.
+    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${result.docId}` }, () =>
       console.log(`published ${result.docId} ${result.versionId} — ${origin}/d/${result.docId}`),
     );
     return result;
@@ -154,7 +156,7 @@ async function update(flags, [id, path]) {
   const once = async () => {
     const content = readFileSync(file, "utf8");
     const result = await callTool(origin, token, "update_document", { id, content });
-    out(flags.json, result, () =>
+    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () =>
       console.log(
         result.deduped
           ? `no change — identical to ${result.versionId}`

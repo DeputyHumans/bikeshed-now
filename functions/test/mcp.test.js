@@ -10,7 +10,13 @@ const {
   PROTOCOL_VERSION,
   SERVER_INFO,
 } = require("../lib/mcp/server.js");
-const { TOOLS, TOOL_NAMES, folderPath, toolByName } = require("../lib/mcp/tools.js");
+const {
+  TOOLS,
+  TOOL_NAMES,
+  folderPath,
+  toolByName,
+  withReaderAddress,
+} = require("../lib/mcp/tools.js");
 
 /** A minimal Express-ish response that records what was sent. */
 function recorder() {
@@ -57,6 +63,46 @@ function post(body, headers = {}) {
 }
 
 // --- The tool surface ------------------------------------------------------
+
+test("a publish result says where a reader opens the document", () => {
+  // An agent over MCP has no way to know the origin — it is in its client's
+  // config, not in the protocol — so the address has to come from the server or
+  // it hands back a docId and calls that a link.
+  const previous = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://example.test";
+  try {
+    const result = withReaderAddress({ docId: "storage-migration" }, "storage-migration");
+    assert.equal(result.url, "https://example.test/d/storage-migration");
+    assert.equal(result.docId, "storage-migration", "the rest of the result survives");
+  } finally {
+    if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = previous;
+  }
+});
+
+test("an unconfigured deployment omits the address rather than guessing one", () => {
+  // A bare `/d/<id>` path looks like an address and is not one.
+  const saved = {
+    origin: process.env.BIKESHED_PUBLIC_ORIGIN,
+    gcloud: process.env.GCLOUD_PROJECT,
+    google: process.env.GOOGLE_CLOUD_PROJECT,
+  };
+  delete process.env.BIKESHED_PUBLIC_ORIGIN;
+  delete process.env.GCLOUD_PROJECT;
+  delete process.env.GOOGLE_CLOUD_PROJECT;
+  try {
+    assert.ok(!("url" in withReaderAddress({ docId: "x" }, "x")));
+  } finally {
+    for (const [key, value] of [
+      ["BIKESHED_PUBLIC_ORIGIN", saved.origin],
+      ["GCLOUD_PROJECT", saved.gcloud],
+      ["GOOGLE_CLOUD_PROJECT", saved.google],
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 test("there are exactly nine tools, and they are the nine in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [

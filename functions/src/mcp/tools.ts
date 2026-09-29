@@ -32,7 +32,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { bucketName } from "../config";
+import { bucketName, publicOrigin } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
 import {
@@ -177,6 +177,22 @@ async function recordApiRead(
   } catch {
     /* statistics are best-effort and never fail the read */
   }
+}
+
+/**
+ * A result, plus where a reader opens the document.
+ *
+ * An agent over MCP cannot work this out. The origin lives in its client's
+ * configuration, not in anything the protocol hands it, so the one thing it has
+ * to give a person back — the address — is the one thing only the server knows.
+ *
+ * Omitted rather than guessed when the deployment has no configured origin: a
+ * bare `/d/<id>` path looks like an address and is not one, and an agent that
+ * pastes it has handed over something broken (SPEC §17).
+ */
+export function withReaderAddress<T extends object>(result: T, docId: string): T {
+  const origin = publicOrigin();
+  return origin ? { ...result, url: `${origin}/d/${docId}` } : result;
 }
 
 export const TOOLS: ToolDefinition[] = [
@@ -333,7 +349,7 @@ export const TOOLS: ToolDefinition[] = [
       const compiled = compileBundle(extracted, title);
       // `via: "mcp"` is stamped here, from the endpoint, not from anything the
       // caller sent. Provenance survives the agent path (SPEC §17).
-      return publishNewDocument({
+      const published = await publishNewDocument({
         db: ctx.db,
         actor: ctx.actor,
         ownerEmail: ctx.caller.emailLower,
@@ -344,6 +360,7 @@ export const TOOLS: ToolDefinition[] = [
         parentMembership: target.membership,
         via: "mcp",
       });
+      return withReaderAddress(published, published.docId);
     },
   },
 
@@ -375,7 +392,7 @@ export const TOOLS: ToolDefinition[] = [
       if ("error" in extracted) throw new Error(extracted.error);
 
       const compiled = compileBundle(extracted, String(data.title ?? ref.id));
-      return commitNewVersion({
+      const committed = await commitNewVersion({
         db: ctx.db,
         docRef: ref,
         compiled,
@@ -384,6 +401,9 @@ export const TOOLS: ToolDefinition[] = [
         baseVersion: baseVersion || null,
         via: "mcp",
       });
+      // The id comes from the document, not from the result: an update result is
+      // about a version and does not name the document it belongs to.
+      return withReaderAddress(committed, ref.id);
     },
   },
 

@@ -277,6 +277,14 @@ const runAsync = (args, env = {}) =>
     env: { ...process.env, ...env },
   });
 
+const tryJson = (raw) => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
 async function withServer(respond, body) {
   const seen = [];
   const server = createServer((req, res) => {
@@ -285,7 +293,10 @@ async function withServer(respond, body) {
       raw += chunk;
     });
     req.on("end", () => {
-      seen.push({ url: req.url, body: raw ? JSON.parse(raw) : null });
+      // `publish` uploads raw bytes, not JSON-RPC, so the body is only parsed
+      // when it is JSON. A thrown SyntaxError here would surface as the CLI
+      // hanging on a request the server never answered.
+      seen.push({ url: req.url, body: raw ? tryJson(raw) : null });
       respond(req, res);
     });
   });
@@ -327,6 +338,69 @@ test("a destination folder is sent as the folder argument", async () => {
     assert.equal(seen[0].body.params.name, "move_document");
     assert.deepEqual(seen[0].body.params.arguments, { id: "some-doc", folder: "fold123" });
   });
+});
+
+test("`--json` says where a reader opens the document, not just its id", async () => {
+  // The human line has always printed the address; `--json` printed a docId and
+  // left whoever read it to know that a URL is the origin, then /d/, then the id.
+  const published = {
+    docId: "storage-migration",
+    versionId: "v1",
+    title: "Storage migration",
+    fileCount: 1,
+    bytes: 24,
+    format: "markdown",
+  };
+  const dir = mkdtempSync(join(tmpdir(), "bshd-publish-"));
+  const file = join(dir, "proposal.md");
+  writeFileSync(file, "# Storage migration\n");
+  try {
+    await withServer(
+      (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(published));
+      },
+      async (origin) => {
+        const { stdout } = await runAsync(["publish", file, "--json"], {
+          BIKESHED_ORIGIN: origin,
+          BIKESHED_TOKEN: "bsk_a.b",
+        });
+        const result = JSON.parse(stdout);
+        assert.equal(result.url, `${origin}/d/storage-migration`);
+        assert.equal(result.docId, "storage-migration", "the rest of the result survives");
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an address the deployment supplied wins over one the client can build", async () => {
+  // A deployment serving on a configured public origin knows its canonical
+  // address; the origin this client happens to have reached may be a channel.
+  const dir = mkdtempSync(join(tmpdir(), "bshd-update-"));
+  const file = join(dir, "proposal.md");
+  writeFileSync(file, "# Storage migration\n");
+  try {
+    await withServer(
+      rpcOk({
+        versionId: "v2",
+        fileCount: 1,
+        bytes: 24,
+        deduped: false,
+        url: "https://example.test/d/storage-migration",
+      }),
+      async (origin) => {
+        const { stdout } = await runAsync(["update", "storage-migration", file, "--json"], {
+          BIKESHED_ORIGIN: origin,
+          BIKESHED_TOKEN: "bsk_a.b",
+        });
+        assert.equal(JSON.parse(stdout).url, "https://example.test/d/storage-migration");
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("mkdir sends a parent only when one was given", async () => {
