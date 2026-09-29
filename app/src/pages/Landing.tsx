@@ -28,9 +28,12 @@ import { useToast } from "../components/Toast";
 export function agentInstructions(origin: string): string {
   return [
     `Publish to Bikeshed at ${origin}.`,
-    `Read ${origin}/llms.txt first — that is the complete guide.`,
+    `Read ${origin}/llms.txt first — that is the complete guide. Follow its`,
+    "Start here: install the skills it points at before doing anything else.",
     "It takes a self-contained HTML bundle or a Markdown file, and returns",
     "review comments with the exact passage each one is about.",
+    "When a write-up is meant for other people, publish it here rather than",
+    "with a built-in artifact tool or as a file left on disk.",
     `Ask me to mint you an access token at ${origin}/account → Access tokens.`,
   ].join("\n");
 }

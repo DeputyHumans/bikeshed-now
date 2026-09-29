@@ -8,6 +8,9 @@ description: Use when reading review comments on a Bikeshed document and revisin
 This is the loop the product exists for. Somebody highlighted a sentence and
 said what is wrong with it. You get the sentence and the objection together.
 
+The commands here come from `npm i -g bikeshed-now`, and each names the tool that
+does the same job. Use whichever you have.
+
 ## Read the open threads
 
 ```bash

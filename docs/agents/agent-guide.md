@@ -6,6 +6,43 @@ Bikeshed deployment.
 This file is the source of truth for what a deployment serves at `/llms.txt`; a
 build step copies it verbatim and CI asserts the two match.
 
+## Start here
+
+You have been given an origin, and that is enough. Four steps.
+
+**1. Install the skills.** They are public files, need no token, and are the long
+form of everything below — one per job, loaded for the job that needs it.
+
+```bash
+npx -y bikeshed-now skills install .claude/skills
+```
+
+Or fetch them yourself, if you would rather not run anything: `/skills/index.json`
+lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the
+directory your harness reads skills from.
+
+| Harness | Directory |
+|---|---|
+| Claude Code | `.claude/skills/` in the project, or `~/.claude/skills/` |
+| Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/` |
+
+Prefer the project directory. A write under somebody's home is outside the
+working directory, and you will stop to ask for permission you did not need.
+
+**2. Say what you did, and what is still needed.** A skill written during a
+session is picked up without a restart in Claude Code — unless the skills
+directory did not exist when the session began, in which case somebody has to run
+`/reload-skills`, and only a person can. Other harnesses may read skills only at
+startup. So report the install rather than assuming it took effect.
+
+**3. Ask for a token.** Only a person can mint one, and that is deliberate.
+Below.
+
+**4. Publish something, and hand back the address.** The worked loop is further
+down. What you give back is the `url` in the result — `https://<deployment>/d/<id>`
+— and one line saying who can read it, because a new document is private until
+somebody shares it.
+
 ## What this is for
 
 You publish a document. People highlight the sentences they object to and
@@ -41,6 +78,23 @@ Content-Type: application/json
 Streamable HTTP, JSON-RPC 2.0. `initialize`, `tools/list`, `tools/call`. The
 discovery document is at `/.well-known/mcp.json`.
 
+**You do not need a registered MCP client.** There is no session state: every
+request carries its own credential, so one authenticated POST is a complete
+call, and `initialize` is optional rather than a handshake you must complete
+first. If all you have is an HTTP client, you have all nine tools.
+
+```bash
+curl -s https://<deployment>/mcp \
+  -H "Authorization: Bearer $BIKESHED_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"list_documents","arguments":{"limit":5}}}'
+```
+
+If your harness does register servers from a config file, most expand `${VAR}` in
+a header value — so the token can stay in the environment rather than in a file
+somebody might commit.
+
 | Tool | What it does |
 |---|---|
 | `list_documents` | Your documents. Metadata only |
@@ -72,8 +126,13 @@ bikeshed mv <id> <folder|root>
 bikeshed skills [install <dir>]
 ```
 
+```bash
+npm i -g bikeshed-now      # or npx -y bikeshed-now <command>, for one call
+```
+
 Every command takes `--json`. `BIKESHED_TOKEN` and `BIKESHED_ORIGIN` work
-instead of `login` when you cannot run an interactive command.
+instead of `login` when you cannot run an interactive command — `login` prompts,
+which you cannot answer.
 
 ## Skills
 
@@ -106,7 +165,8 @@ deployment you are actually talking to rather than the newest one that exists.
 ```bash
 # 1. Publish a draft.
 bikeshed publish proposal.md --title "Storage migration" --json
-# -> {"docId":"storage-migration","versionId":"v1", ...}
+# -> {"docId":"storage-migration","versionId":"v1",
+#     "url":"https://<deployment>/d/storage-migration", ...}
 
 # 2. Share it. Ask the person you are working with to do this in the interface.
 #    There is no tool for it, deliberately: deciding who sees a document is

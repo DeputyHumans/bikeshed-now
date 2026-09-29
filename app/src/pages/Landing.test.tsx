@@ -194,6 +194,11 @@ describe("the agent instructions", () => {
     expect(copied).toContain("/llms.txt");
     expect(copied).toContain("HTML");
     expect(copied).toContain("Markdown");
+    // The paste is the only always-on instruction a person gives their agent, so
+    // it has to carry the two things the guide cannot make happen by itself:
+    // installing the skills, and not publishing somewhere else instead.
+    expect(copied).toContain("install the skills");
+    expect(copied).toContain("built-in artifact tool");
     expect(screen.getByText("Instructions copied")).toBeDefined();
   });
 

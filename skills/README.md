@@ -21,20 +21,50 @@ Every deployment serves its own copy, so the instructions an agent installs
 describe the deployment it is actually talking to:
 
 ```bash
-bikeshed skills                              # what this deployment publishes
-bikeshed skills install ~/.claude/skills     # write them where an agent reads
+npx -y bikeshed-now skills                        # what this deployment publishes
+npx -y bikeshed-now skills install .claude/skills
 ```
 
-By hand, from this repository or from a deployment:
+Or by hand — they are public files, listed at `/skills/index.json`, each one at
+`https://<deployment>/skills/<name>/SKILL.md`:
 
-| Harness | Where |
+| Harness | Directory |
 |---|---|
-| Claude Code | `~/.claude/skills/<name>/SKILL.md`, or `.claude/skills/` inside a project |
-| Codex, and anything reading `AGENTS.md` | link or paste the file into `AGENTS.md` |
-| Anything else | `https://<deployment>/skills/<name>/SKILL.md`, listed at `/skills/index.json` |
+| Claude Code | `.claude/skills/<name>/SKILL.md` in a project, or `~/.claude/skills/` |
+| Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/<name>/SKILL.md` |
 
 `https://<deployment>/llms.txt` is the shorter, always-loaded version. The skills
 are the long form, loaded only for the task that needs them.
+
+## Making an agent prefer this over its own publisher
+
+A skill is loaded when its description matches the task. Nothing loads one
+unconditionally, so an agent whose harness has its own way to publish a finished
+write-up — Claude Code's `Artifact` tool, for instance — may reach for that
+instead, because its own instructions tell it to.
+
+One line where your agent reads instructions from is what settles it, because it
+is *yours* rather than a server's:
+
+```
+When a write-up is meant for other people, publish it to Bikeshed with the
+bikeshed-publishing skill, not with a built-in artifact tool.
+```
+
+`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/` — wherever your harness
+looks. It is read at the start of a session, and not re-read during one.
+
+Two things that line cannot do:
+
+- **A host-designated first-party document connector outranks it.** Claude Code
+  decides what counts as first-party, and no skill or server can claim that
+  standing. If one is attached and you want documents here instead, disconnect it
+  or say so in the request.
+- **It is guidance, not a switch.** If you want the built-in tool gone, deny it in
+  your harness's settings — in Claude Code, `enableArtifact: false`, or an
+  `Artifact` entry under `permissions.deny`. On its own that only removes the tool;
+  the agent then saves a local file and calls it done. The line above is what says
+  where to publish instead, so keep both.
 
 ## Keeping them true
 

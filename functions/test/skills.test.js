@@ -179,6 +179,19 @@ test("the guide names every command the CLI advertises", () => {
   }
 });
 
+test("the guide names the package an agent installs the client from", () => {
+  // The guide tells an agent to run `npx -y <name>`. If the package is renamed
+  // and the guide is not, that instruction sends it to a registry entry that
+  // does not exist, or — worse — to somebody else's.
+  const manifest = JSON.parse(
+    readFileSync(join(ROOT, "cli", "package.json"), "utf8"),
+  );
+  assert.ok(
+    GUIDE.includes(manifest.name),
+    `docs/agents/agent-guide.md never names ${manifest.name}, the published client`,
+  );
+});
+
 test("the guide points at every skill, since it is what an agent reads first", async () => {
   const { skills } = await documents();
   for (const skill of skills) {

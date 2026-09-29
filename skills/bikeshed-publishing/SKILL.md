@@ -23,6 +23,11 @@ The token is exactly its owner: it can see what they can see and nothing more,
 and everything it does is recorded against it. There is no wider token to ask
 for.
 
+The commands below come from `npm i -g bikeshed-now`. Every one of them has a
+tool beside it doing the same job, so if you hold the tools and not the command,
+use those — and if you hold neither, one authenticated POST to `/mcp` is a
+complete call. `https://<deployment>/llms.txt` shows it.
+
 ## Write Markdown unless you need HTML
 
 Markdown is rendered server-side into a self-contained document with sections, a

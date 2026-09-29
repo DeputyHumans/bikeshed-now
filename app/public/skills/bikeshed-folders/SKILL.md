@@ -8,6 +8,9 @@ description: Use when organising a Bikeshed workspace — listing the folder tre
 A folder is where a document lives **and** an access grant. Both halves matter,
 and the second one is the one that surprises people.
 
+The commands here come from `npm i -g bikeshed-now`, and each names the tool
+that does the same job. Use whichever you have.
+
 ## Read the tree first
 
 ```bash
