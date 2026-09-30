@@ -36,6 +36,9 @@ const USAGE = `bikeshed — publish and revise documents
   bikeshed reply <id> <thread> <text>  reply in a thread
   bikeshed open <id>                   open it in a browser
 
+  Where a command takes <id> it also takes the link you were sent. An unlisted
+  document you are not a member of needs the link: its key is in it.
+
 Organising
   bikeshed folders                     the folder tree, with ids
   bikeshed mkdir <name> [--parent <id>]  create a folder
@@ -79,6 +82,26 @@ function out(json, value, human) {
     return;
   }
   human();
+}
+
+/**
+ * A document as a person holds it: its id, or the link they were sent. The link
+ * is the only place an unlisted document's key exists, so a pasted one is read
+ * for both — `…/d/<id>[/<version>]?k=<key>` — and the key goes along as the
+ * tools' `k` argument (SPEC §17).
+ */
+function docArgs(ref) {
+  if (!/^https?:\/\//i.test(ref)) return { id: ref };
+  let url;
+  try {
+    url = new URL(ref);
+  } catch {
+    fail(`not a document link: ${ref}`);
+  }
+  const match = url.pathname.match(/^\/d\/([^/]+)(?:\/[^/]+)?\/?$/);
+  if (!match) fail(`not a document link: ${ref}`);
+  const k = url.searchParams.get("k");
+  return { id: decodeURIComponent(match[1]), ...(k ? { k } : {}) };
 }
 
 // --- Commands --------------------------------------------------------------
@@ -179,14 +202,16 @@ async function publish(flags, [path]) {
   }
 }
 
-async function update(flags, [id, path]) {
-  if (!id || !path) fail("usage: bikeshed update <id> <file>");
+async function update(flags, [ref, path]) {
+  if (!ref || !path) fail("usage: bikeshed update <id> <file>");
   const { origin, token } = resolveAuth(flags);
   const file = resolve(path);
+  const doc = docArgs(ref);
+  const { id } = doc;
 
   const once = async () => {
     const content = readFileSync(file, "utf8");
-    const result = await callTool(origin, token, "update_document", { id, content });
+    const result = await callTool(origin, token, "update_document", { ...doc, content });
     out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () =>
       console.log(
         result.deduped
@@ -201,18 +226,18 @@ async function update(flags, [id, path]) {
   if (flags.watch) await watchFile(file, once);
 }
 
-async function get(flags, [id]) {
-  if (!id) fail("usage: bikeshed get <id>");
+async function get(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed get <id>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "get_document", { id });
+  const result = await callTool(origin, token, "get_document", docArgs(ref));
   out(flags.json, result, () => process.stdout.write(result.source));
 }
 
-async function comments(flags, [id]) {
-  if (!id) fail("usage: bikeshed comments <id>");
+async function comments(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed comments <id>");
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "get_comments", {
-    id,
+    ...docArgs(ref),
     includeResolved: Boolean(flags.all),
   });
   out(flags.json, result, () => {
@@ -234,11 +259,15 @@ async function comments(flags, [id]) {
   });
 }
 
-async function reply(flags, [id, threadId, ...rest]) {
+async function reply(flags, [ref, threadId, ...rest]) {
   const body = rest.join(" ");
-  if (!id || !threadId || !body) fail("usage: bikeshed reply <id> <thread> <text>");
+  if (!ref || !threadId || !body) fail("usage: bikeshed reply <id> <thread> <text>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "reply_to_comment", { id, threadId, body });
+  const result = await callTool(origin, token, "reply_to_comment", {
+    ...docArgs(ref),
+    threadId,
+    body,
+  });
   out(flags.json, result, () => console.log(`replied in ${threadId}`));
 }
 

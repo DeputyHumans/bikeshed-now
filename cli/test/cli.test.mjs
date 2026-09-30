@@ -362,6 +362,54 @@ test("a destination folder is sent as the folder argument", async () => {
   });
 });
 
+test("a pasted link is read for its id and its unlisted key", async () => {
+  // The link is the only place a person ever holds an unlisted document's key,
+  // and without it the document answers as an id that does not exist.
+  const link = "https://bikeshed.example/d/build-estimate/v2?k=tok_0123456789abcdefghijk";
+  await withServer(rpcOk({ source: "", threads: [] }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    await runAsync(["get", link, "--json"], env);
+    await runAsync(["comments", link, "--json"], env);
+    await runAsync(["reply", link, "t1", "Agreed.", "--json"], env);
+    assert.deepEqual(seen[0].body.params.arguments, {
+      id: "build-estimate",
+      k: "tok_0123456789abcdefghijk",
+    });
+    assert.deepEqual(seen[1].body.params.arguments, {
+      id: "build-estimate",
+      k: "tok_0123456789abcdefghijk",
+      includeResolved: false,
+    });
+    assert.deepEqual(seen[2].body.params.arguments, {
+      id: "build-estimate",
+      k: "tok_0123456789abcdefghijk",
+      threadId: "t1",
+      body: "Agreed.",
+    });
+  });
+});
+
+test("a bare id, or a link without a key, sends no key", async () => {
+  await withServer(rpcOk({ source: "" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    await runAsync(["get", "build-estimate", "--json"], env);
+    await runAsync(["get", "https://bikeshed.example/d/build-estimate", "--json"], env);
+    assert.deepEqual(seen[0].body.params.arguments, { id: "build-estimate" });
+    assert.deepEqual(seen[1].body.params.arguments, { id: "build-estimate" });
+  });
+});
+
+test("a link that is not a document is refused rather than sent as an id", () => {
+  assert.throws(
+    () => run(["get", "https://bikeshed.example/folder/abc"], { BIKESHED_TOKEN: "bsk_a.b" }),
+    (err) => {
+      assert.equal(err.status, 1);
+      assert.match(err.stderr, /not a document link/);
+      return true;
+    },
+  );
+});
+
 test("`--json` says where a reader opens the document, not just its id", async () => {
   // The human line has always printed the address; `--json` printed a docId and
   // left whoever read it to know that a URL is the origin, then /d/, then the id.

@@ -44,6 +44,14 @@ bikeshed publish platform.md --id 01-platform
 If the id is taken, the document is still published, at the id plus a few
 random characters, and the CLI says so on stderr.
 
+Wherever a command takes an id, it also takes the link you were sent. An
+unlisted document you are not a member of needs the link, because its key is in
+it; without the key the document answers as an id that does not exist.
+
+```bash
+bikeshed comments 'https://<deployment>/d/build-estimate?k=…'
+```
+
 `bikeshed --help` lists the rest — listing documents, folders, and installing the
 agent skills a deployment serves.
 
