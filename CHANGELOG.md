@@ -26,6 +26,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   [`docs/operations/publishing-the-cli.md`](docs/operations/publishing-the-cli.md)
   is the release recipe. The root package is renamed `bikeshed-now-source` so the
   published name belongs to the thing that is actually published.
+- **`bikeshed list --all`** (in `bikeshed-now` 0.2.0) prints every document you
+  can read, following the cursor itself, 50 rows a request. `--json` keeps the
+  shape of a single page, so a script needs no second parser.
 - **A publish result says where to read the document.** `publish_document` and
   `update_document` return `url`, and the CLI's `--json` carries it too. An agent
   over MCP cannot derive it — the origin is in its client's configuration, which
@@ -86,6 +89,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **`bikeshed list --cursor` returned the first page again** (fixed in
+  `bikeshed-now` 0.2.0). The CLI printed the cursor, parsed the flag, and never
+  sent it, so nothing past the newest page was reachable from the terminal.
+  `--limit` and `--cursor` are now in `--help`.
 - **The instructions said a token publish was trusted.** It never was:
   `publishNewDocument` writes `trusted: false` for every path a personal access
   token can reach, and only the operator script publishes trusted. The guide, the

@@ -24,7 +24,7 @@ test("the channel comes from the credential, never from the request", () => {
   // token record on the server.
   const cli = actorFrom(
     { uid: "u1", emailLower: "a@example.com", channel: "cli", tokenId: "t1" },
-    request({ "x-bikeshed-client": "bikeshed-cli/0.1.0" }),
+    request({ "x-bikeshed-client": "bikeshed-cli/0.2.0" }),
   );
   assert.equal(cli.channel, "cli");
   assert.equal(cli.tokenId, "t1");
