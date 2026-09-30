@@ -69,7 +69,14 @@ No default, and an unresolvable id is a clean error, not a stack trace.
 | Key | Used for |
 |---|---|
 | `bucket` | the private content bucket, for the operator scripts |
-| `domain` | the public domain, for printed links |
+| `domain` | the public origin, stamped into the agent instructions the app build serves |
+
+A bare domain or a full origin, either works: `example.com` and
+`https://example.com/` normalize to the same thing, and anything carrying a
+path, a query or credentials is refused rather than spliced in front of
+`/d/<id>`. It is read at **app build time** by `tools/stamp-deployment.mjs`,
+and it is how `/llms.txt` and `/skills/**` learn the address to print. Unset,
+they serve the placeholder and `npm run build:app` says so.
 
 ---
 
@@ -150,6 +157,13 @@ site — so a wrong origin means every document page answers `503`
 ([ADR 0011](../architecture/adr/0011-document-page-through-a-function.md)).
 Under the emulator it belongs in `functions/.env.local` as
 `http://127.0.0.1:5050`; see `docs/development/verification.md`.
+
+**The app build reads this name too, but from the shell, not from this file.**
+`functions/.env` is loaded by the Functions runtime; `npm --prefix app run
+build` is an ordinary Node process and never sees it, and Vite does not put
+non-`VITE_` keys into `process.env` either. So for the stamped `/llms.txt`,
+either export it in the build's own shell or — simpler, and what a deployed
+project already has — set `domain` in `config/deploy.json`.
 
 ### The bucket is never guessed
 

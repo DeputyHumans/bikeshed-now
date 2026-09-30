@@ -19,6 +19,11 @@ export BIKESHED_ORIGIN=https://<deployment>
 export BIKESHED_TOKEN=bsk_...
 ```
 
+That origin is the deployment this skill was installed from, and
+`BIKESHED_ORIGIN` outranks whatever `bikeshed login` stored. If you are working
+with a different deployment, set that one instead — or the document lands
+somewhere nobody is expecting it.
+
 The token is exactly its owner: it can see what they can see and nothing more,
 and everything it does is recorded against it. There is no wider token to ask
 for.

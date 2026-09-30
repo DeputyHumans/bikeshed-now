@@ -43,7 +43,7 @@ npm run test:rules:emulated # rules tests need the emulators; this starts them
 | Fact | File | Tracked example |
 |---|---|---|
 | Firebase project id | `.firebaserc` | `.firebaserc.example` |
-| Content bucket, public domain | `config/deploy.json` | `config/deploy.example.json` |
+| Content bucket, public origin (stamped into `/llms.txt`) | `config/deploy.json` | `config/deploy.example.json` |
 | Web SDK config, measurement id | `app/.env.local` | `app/.env.example` |
 | Bucket, origin, sign-in hint | `functions/.env` | `functions/.env.example` |
 | Console account | **nowhere** — passed as `--account` | — |
@@ -227,6 +227,17 @@ npm --prefix app run build && firebase deploy --only hosting --project <id> --ac
 Deploy **functions before hosting**. The new app may call an endpoint the old
 functions do not have; the reverse is never a problem, because an endpoint
 nobody calls yet is inert.
+
+**The hosting build stamps the agent instructions.** `/llms.txt` and
+`/skills/**` ship with this deployment's own address in place of
+`https://<deployment>`, taken from `domain` in `config/deploy.json` — or from
+`BIKESHED_PUBLIC_ORIGIN` exported in the build's shell, since `functions/.env`
+is not read here. The build prints which one it used, and prints it just as
+plainly when neither is set, in which case every agent that fetches
+`/llms.txt` is told its address is a placeholder. The hosting `predeploy` hook
+runs `node tools/stamp-deployment.mjs --check` and refuses a deploy whose
+`app/dist` was never stamped, which is the case you get by deploying without
+rebuilding.
 
 **The document page needs both.** `docShell` is a new function *and* a
 `firebase.json` rewrite for `/d/**`, and the rewrite ships with hosting.

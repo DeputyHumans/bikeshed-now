@@ -1,6 +1,7 @@
 {
   "hosting": {
     "public": "app/dist",
+    "predeploy": ["node tools/stamp-deployment.mjs --check"],
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       { "source": "/session", "function": "session" },

@@ -45,6 +45,7 @@ runs every row except 5, which needs the emulators — use
 | 9 | `npm run check:content` | every sample still demonstrates what it is there for |
 | 10 | `npm run check:licenses` | exit 0 — every dependency permissive |
 | 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agents/agent-guide.md` |
+| 12 | `npm run test:tools` | 0 failing — the served instructions carry the deployment's own address, and no `<deployment>` survives |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug

@@ -72,6 +72,28 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The build writes app/dist, which is gitignored — but a build that
+      # dirties a TRACKED file is how a deployment binding would enter the
+      # tree, and check-secrets matches by shape, so a custom domain would not
+      # be caught. Cheap, and it covers every future build step too.
+      - name: The build changed no tracked file
+        run: git diff --exit-code
+
+      - name: Tools tests
+        run: npm run test:tools
+
+      # The unit tests prove the substitution; only a real build proves the
+      # plugin is registered, that `apply: "build"` lets it run, and that it
+      # runs AFTER Vite copies app/public into app/dist. The Build step above
+      # is the unconfigured path — this is the configured one.
+      - name: The served agent instructions carry this build's origin
+        run: |
+          BIKESHED_PUBLIC_ORIGIN=https://stamp.example npm --prefix app run build
+          grep -q 'POST https://stamp.example/mcp' app/dist/llms.txt
+          grep -q 'export BIKESHED_ORIGIN=https://stamp.example' app/dist/skills/bikeshed-publishing/SKILL.md
+          ! grep -rqF '<deployment>' app/dist
+          git diff --exit-code
+
       - name: Functions tests
         run: npm --prefix functions test
 

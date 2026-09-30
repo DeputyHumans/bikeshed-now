@@ -1525,8 +1525,19 @@ folder granted, so the CLI does not accept the omission.
 ### Universal agent instructions
 
 `docs/agents/agent-guide.md` is the source of truth. A build step copies it to
-`app/public/llms.txt` and **CI asserts the two match**, so hosted instructions
-can never drift from the repo's. `/.well-known/mcp.json` advertises the endpoint.
+`app/public/llms.txt` byte for byte and **CI asserts the two match**, so hosted
+instructions can never drift from the repo's.
+
+A second, build-only step stamps the copy in `app/dist`: the token
+`https://<deployment>` becomes the deployment's own origin, resolved
+`BIKESHED_PUBLIC_ORIGIN` → the `domain` in `config/deploy.json` → nothing, in
+which case the placeholder is served as written and the build says so on one
+line. **Only `app/dist` is ever stamped.** That is what keeps `check:agents` a
+byte comparison and keeps a deployment binding out of the tree, where
+`check-secrets.sh` — which matches by shape — could not see a custom domain. A
+`<deployment>` that survives a stamp fails the build, so a placeholder written
+any other way cannot ship unresolved. `/.well-known/mcp.json` advertises the
+endpoint; every URL in it is relative and nothing stamps it.
 
 ### Skills
 
@@ -1537,8 +1548,11 @@ surface exists for. `llms.txt` is the short form every agent reads; a skill is
 the long form, loaded for the task that needs it.
 
 The same build step copies them to `app/public/skills/`, with a generated
-`index.json` built from the frontmatter, so a deployment serves the skills that
-describe **what that deployment can do**. `bikeshed skills install <dir>` writes
+`index.json` built from the frontmatter, and the same stamp reaches the
+`app/dist` copies, so a deployment serves the skills that describe **what that
+deployment can do**, at the address it is actually reachable at. The list of
+files to stamp is derived from the `skills/` directory rather than enumerated,
+so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes
 them wherever a harness reads skills from; it needs no token, because they are
 public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before
 it uses it as a directory.

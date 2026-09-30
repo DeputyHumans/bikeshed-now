@@ -3,12 +3,14 @@
 Instructions for an agent publishing documents and reading review feedback on a
 Bikeshed deployment.
 
-This file is the source of truth for what a deployment serves at `/llms.txt`; a
-build step copies it verbatim and CI asserts the two match.
+This file is the source of truth for what a deployment serves at `/llms.txt`. A
+build step copies it and CI asserts the two match; the served copy differs only
+in having this deployment's own address filled in.
 
 ## Start here
 
-You have been given an origin, and that is enough. Four steps.
+This deployment is `https://<deployment>` — the origin you fetched this from.
+Four steps.
 
 **1. Install the skills.** They are public files, need no token, and are the long
 form of everything below — one per job, loaded for the job that needs it.
@@ -128,11 +130,13 @@ bikeshed skills [install <dir>]
 
 ```bash
 npm i -g bikeshed-now      # or npx -y bikeshed-now <command>, for one call
+
+export BIKESHED_ORIGIN=https://<deployment>
+export BIKESHED_TOKEN=bsk_...
 ```
 
-Every command takes `--json`. `BIKESHED_TOKEN` and `BIKESHED_ORIGIN` work
-instead of `login` when you cannot run an interactive command — `login` prompts,
-which you cannot answer.
+Every command takes `--json`. Those two work instead of `login` when you cannot
+run an interactive command — `login` prompts, which you cannot answer.
 
 ## Skills
 

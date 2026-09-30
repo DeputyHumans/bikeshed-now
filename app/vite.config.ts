@@ -8,6 +8,7 @@ import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import { viteProxyKeys } from "../scripts/lib/endpoints.mjs";
+import { deploymentStamp } from "../tools/stamp-deployment.mjs";
 
 /**
  * In development the app runs on :5173 while the endpoints live in the Functions
@@ -68,7 +69,16 @@ function utf8Text() {
 }
 
 export default defineConfig({
-  plugins: [react(), utf8Text()],
+  /**
+   * `deploymentStamp` rewrites `https://<deployment>` in the copies of
+   * `/llms.txt` and `/skills/**` that land in `dist`, so the instructions a
+   * deployment serves name that deployment. It is a plugin rather than a step
+   * chained after `npm run build` because the documented hosting deploy runs
+   * `npm --prefix app run build` directly (docs/operations/overview.md), and a
+   * root-level step would be skipped by the one command the guide prescribes.
+   * The tracked copies under `public/` always keep the placeholder.
+   */
+  plugins: [react(), utf8Text(), deploymentStamp()],
   server: { port: 5173, proxy: devProxy() },
   build: { outDir: "dist", sourcemap: true },
   test: {

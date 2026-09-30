@@ -63,6 +63,18 @@ through `docShell` exactly as production does:
   (`demo-bikeshed`, `demo-api-key`, `demo-bikeshed-content`,
   `http://127.0.0.1:9000?ns=demo-bikeshed`) regardless of what
   `app/.env.local` holds.
+- **`config/deploy.json` stamps the emulator's `/llms.txt` too.** The same
+  build writes this deployment's real address into `app/dist/llms.txt` and
+  `app/dist/skills/**`, so on a deployer's machine the instructions you read at
+  `http://127.0.0.1:5050/llms.txt` point an agent at **production**. Add
+  `BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050` to the build above — the same
+  origin `functions/.env.local` already gives `docShell` — and the local
+  instructions describe the local deployment:
+
+  ```bash
+  env $(grep -v '^#' app/.env.example | xargs) \
+    BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050 npm run build:app
+  ```
 
 ---
 
