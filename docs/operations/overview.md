@@ -277,9 +277,11 @@ node scripts/reconcile-visibility.mjs --yes --account you@example.com --project 
 Functions first, because the new app calls `/unlock`; hosting next, because the
 `/unlock` rewrite ships with it; the rules last, because they stop serving the
 unlisted rows the old app read. The script then deletes those rows and the
-realtime key that let any account edit an unlisted open-editing document. The
-rules already refuse both; the script removes them. It is idempotent, and a
-second run reports nothing. The `--database` URL is the one the console shows
+realtime key that let any account edit an unlisted open-editing document.
+**It is not optional.** The Firestore rule already refuses the stale rows, but
+the realtime rules cannot see visibility, only the `*` key, so every key left
+behind keeps that document's live log writable by any signed-in account until
+the script removes it. It is idempotent, and a second run reports nothing. The `--database` URL is the one the console shows
 for the Realtime Database; without it the script reports that step as skipped.
 
 **The terminal client is published separately**, to npm as `bikeshed-now`, and

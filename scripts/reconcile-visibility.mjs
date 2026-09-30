@@ -19,7 +19,11 @@
  *                        any signed-in account push edits into it without the
  *                        link.
  *
- * The rules already refuse both (SPEC §17); this removes the rows themselves.
+ * The two are not equally urgent. The Firestore rule already refuses a stale
+ * `public/` row, so those are only clutter. A stale `*` key is NOT refused:
+ * the realtime rules cannot see a document's visibility, only this key, so
+ * until it is removed any signed-in account can still write into that
+ * document's live log (SPEC §16). Run this after deploying the rules.
  * Idempotent: a second run finds nothing. Like delete-version, `--dry-run`
  * READS and so needs credentials; it writes nothing.
  *
