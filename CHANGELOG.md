@@ -20,7 +20,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **A publisher can choose a document's address.** `POST /publish` takes `id`,
   `publish_document` takes an optional `id` (a schema addition), the CLI takes
-  `--id` (for the next `bikeshed-now` release), and the upload dialog has an
+  `--id` (in `bikeshed-now` 0.3.0), and the upload dialog has an
   Address field. It was previously always derived from the title, so two
   documents with one title could only be told apart by a counter. The id has to
   be what `slugify` would produce, lowercase letters, digits and inner hyphens
