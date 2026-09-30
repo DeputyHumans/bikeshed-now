@@ -53,6 +53,7 @@ Options
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
+  --all                  with list: every page; with comments: resolved too
   --watch                with publish/update: republish on every save
   --origin <url>         the deployment (default: the one you logged in to)
   --token <token>        override the stored token
@@ -106,9 +107,28 @@ async function login(flags) {
 
 async function list(flags) {
   const { origin, token } = resolveAuth(flags);
-  const args = { limit: Number(flags.limit) || 20 };
-  if (flags.cursor) args.cursor = flags.cursor;
-  const result = await callTool(origin, token, "list_documents", args);
+  const page = (limit, cursor) => {
+    const args = { limit };
+    if (cursor) args.cursor = cursor;
+    return callTool(origin, token, "list_documents", args);
+  };
+
+  let result;
+  if (flags.all) {
+    // Pages at the server's cap (LIST_LIMIT), which is the fewest round trips.
+    // The result keeps one page's shape, so `--json` needs no second parser.
+    const documents = [];
+    let cursor = flags.cursor;
+    do {
+      const next = await page(50, cursor);
+      documents.push(...next.documents);
+      cursor = next.nextCursor;
+    } while (cursor);
+    result = { documents, nextCursor: null };
+  } else {
+    result = await page(Number(flags.limit) || 20, flags.cursor);
+  }
+
   out(flags.json, result, () => {
     if (result.documents.length === 0) {
       console.log("Nothing yet. `bikeshed publish <file>` to start.");

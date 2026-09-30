@@ -452,6 +452,31 @@ test("list sends the cursor its own `… more` line tells you to pass", async ()
   });
 });
 
+test("list --all follows nextCursor to the last page and prints one list", async () => {
+  const row = (id) => ({ id, title: id, version: "v1", visibility: "private" });
+  const pages = [
+    { documents: [row("newest"), row("newer")], nextCursor: "newer" },
+    { documents: [row("oldest")], nextCursor: null },
+  ];
+  let served = 0;
+  const respond = (req, res) => rpcOk(pages[served++])(req, res);
+
+  await withServer(respond, async (origin, seen) => {
+    const { stdout } = await runAsync(["list", "--all", "--json"], {
+      BIKESHED_ORIGIN: origin,
+      BIKESHED_TOKEN: "bsk_a.b",
+    });
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0].body.params.arguments.cursor, undefined);
+    assert.equal(seen[1].body.params.arguments.cursor, "newer");
+    // The same shape as one page, so a script reads `--all` with the parser it
+    // already has, and a null cursor says there is nothing left to fetch.
+    const result = JSON.parse(stdout);
+    assert.deepEqual(result.documents.map((d) => d.id), ["newest", "newer", "oldest"]);
+    assert.equal(result.nextCursor, null);
+  });
+});
+
 // --- Skills ----------------------------------------------------------------
 
 const skillsHost = (index, text = "---\nname: x\n---\n") => (req, res) => {
