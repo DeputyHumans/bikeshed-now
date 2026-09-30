@@ -45,6 +45,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   **Operator action:** deploy functions, hosting, then rules, and run
   `scripts/reconcile-visibility.mjs` once, in the order
   [`docs/operations/overview.md`](docs/operations/overview.md) gives.
+- **Only a document's editors may move it.** `/organize` and `move_document`
+  gated a move on open editing. So any account could file someone's open-editing
+  public document into its own folder, which made it a member, with the member
+  list and the reading statistics.
 - **Write endpoints answer 404, not 403, to anyone who may not read the
   document.** The 403 confirmed that a private id existed.
 

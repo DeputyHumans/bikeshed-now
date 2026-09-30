@@ -429,6 +429,17 @@ test("the link's key, or a current grant, opens an unlisted document to an agent
   });
 });
 
+test("open editing lets a stranger edit, never move: moving makes the mover a member", async () => {
+  // Filing a document into a folder unions that folder's members into the
+  // document's. With open editing as the gate, any account could file someone's
+  // document into its own folder and read its member list and statistics.
+  const db = unlistedDb({ doc: { visibility: "public", linkToken: undefined, publicEdit: true } });
+  await assert.rejects(
+    toolByName("move_document").run({ db, caller: STRANGER }, { id: "memo", folder: "mine" }),
+    { message: "you cannot move that document" },
+  );
+});
+
 test("the key is an optional argument on every tool that reads one document", () => {
   for (const name of ["get_document", "update_document", "get_comments", "reply_to_comment"]) {
     const schema = toolByName(name).inputSchema;

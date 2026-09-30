@@ -280,7 +280,11 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
-  deletion is deliberately unsupported (`400`).
+  deletion is deliberately unsupported (`400`). Renaming a document takes
+  `canEdit`; **moving it takes `isDocEditor`**, because filing a document into a
+  folder makes that folder's members its members, and open editing would
+  otherwise let any account file someone's document into its own folder and
+  become a member.
 - **`POST /duplicate`** — `canRead`-gated (a link grant counts; `404` otherwise);
   the copy is owner-only and `trusted: false`.
 - **`POST /trust`** — owner-only global trust (§6c).
@@ -1575,7 +1579,9 @@ clearing or extending — an expiry is the reversal worth arguing for first.
 **The folder tools are an access surface, not a filing surface.** A document's
 effective members are its own grants unioned with its folder's (§13), so moving
 a document between folders changes who can read it. `move_document` therefore
-requires `canEdit` on the document and `canEditFolder` on the destination, and
+requires the real editor set (`isDocEditor`) on the document — not open
+editing, which would let any account file someone's document into its own
+folder and become a member — and `canEditFolder` on the destination, and
 goes through `persistDocMembership` so the presence mirror and the public
 projection move with it.
 

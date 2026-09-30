@@ -60,6 +60,7 @@ import {
   canEditFolder,
   canManageFolder,
   expiryMs,
+  isDocEditor,
   isExpired,
   opensEditingToAnyAccount,
   readBasis,
@@ -1547,6 +1548,15 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
 
+    // Moving is NOT editing. Filing a document into a folder makes that folder's
+    // members the document's members, so open editing — which lets any account
+    // edit — would let any account move someone's document into its own folder
+    // and become a member: member list, reading statistics, link token. Only
+    // the real editor set may move (SPEC §19).
+    if (!isDocEditor(data, uid, emailLower)) {
+      res.status(403).end();
+      return;
+    }
     const target = await resolveFolderTarget(db(), body?.targetFolderId, caller);
     if (!target.ok) {
       res.status(target.status).json({ error: target.error });

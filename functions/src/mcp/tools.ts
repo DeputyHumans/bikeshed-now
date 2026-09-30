@@ -520,9 +520,13 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"));
-      // Moving a document changes who inherits access to it, so it takes the
-      // same permission as editing it — not merely the right to read it.
-      if (!canEdit(data, ctx.caller)) throw new Error("you cannot move that document");
+      // Moving a document changes who inherits access to it: the destination
+      // folder's members become its members. So it takes the REAL editor set,
+      // not open editing — otherwise any account could file someone's
+      // open-editing document into its own folder and become a member.
+      if (!isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower)) {
+        throw new Error("you cannot move that document");
+      }
       refuseIfExpired(data);
 
       const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
