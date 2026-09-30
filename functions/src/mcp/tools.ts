@@ -49,7 +49,9 @@ import {
 } from "../lib/acl";
 import { extractBundle } from "../lib/bundle";
 import {
+  BAD_DOC_ID,
   createFolderRecord,
+  isValidDocId,
   persistDocMembership,
   resolveFolderTarget,
 } from "../lib/folders";
@@ -330,13 +332,21 @@ export const TOOLS: ToolDefinition[] = [
         content: { type: "string", description: "The document source." },
         format: { type: "string", enum: ["markdown", "html"], description: "Default markdown." },
         folder: { type: "string", description: "Destination folder id. Optional." },
+        id: {
+          type: "string",
+          description:
+            "The id to publish at, the part of the address after /d/. Optional; default is from the title. " +
+            "If it is taken, a random suffix is added, so use the docId this returns.",
+        },
       },
     },
     async run(ctx, args) {
       const title = str(args, "title");
       const content = String(args.content ?? "");
+      const wantedId = str(args, "id");
       if (!title) throw new Error("title is required");
       if (!content.trim()) throw new Error("content is empty");
+      if (wantedId && !isValidDocId(wantedId)) throw new Error(BAD_DOC_ID);
       const format = args.format === "html" ? "html" : "markdown";
       const filename = format === "html" ? "index.html" : "index.md";
 
@@ -359,6 +369,7 @@ export const TOOLS: ToolDefinition[] = [
         folderId: target.id,
         parentMembership: target.membership,
         via: "mcp",
+        ...(wantedId ? { docId: wantedId } : {}),
       });
       return withReaderAddress(published, published.docId);
     },

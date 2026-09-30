@@ -120,6 +120,12 @@ bytes mint no new version. So `update` is safe to run in a loop, in CI, or after
 a change you are not sure you made — it will tell you `no change` rather than
 filling the history with duplicates.
 
+The address comes from the title unless you choose it: `--id platform-review`,
+or `publish_document`'s `id`, publishes at `/d/platform-review` (lowercase
+letters, digits and hyphens, up to 60 characters). A taken id still publishes,
+with a few random characters added, which is one more reason to hand back the
+`url` in the result rather than an address you built yourself.
+
 Give `publish` a `--folder` (or `create_folder`'s id) when you know where it
 belongs — see the `bikeshed-folders` skill, and read its warning about what
 moving a document does to who can read it.

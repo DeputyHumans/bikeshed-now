@@ -80,11 +80,12 @@ export async function callTool(origin, token, name, args = {}) {
 }
 
 /** Upload a file as a NEW document, exactly as the browser uploader does. */
-export async function uploadFile(origin, token, path, { title, folder } = {}) {
+export async function uploadFile(origin, token, path, { title, folder, id } = {}) {
   const bytes = readFileSync(path);
   const params = new URLSearchParams({ filename: basename(path) });
   if (title) params.set("title", title);
   if (folder) params.set("folderId", folder);
+  if (id) params.set("id", id);
 
   const res = await fetch(`${origin}/publish?${params}`, {
     method: "POST",

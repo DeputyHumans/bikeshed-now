@@ -25,6 +25,7 @@ export function UploadDialog({
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
+  const [id, setId] = useState("");
   const [marking, setMarking] = useState<Marking>(accountDefaultMarking ?? MARKING_OFF);
   const [progress, setProgress] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -48,6 +49,7 @@ export function UploadDialog({
     try {
       const result = await uploadDoc(file, {
         title: title.trim() || undefined,
+        id: id.trim() || undefined,
         folderId,
         marking,
         onProgress: setProgress,
@@ -139,6 +141,27 @@ export function UploadDialog({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="From the document's <title>, else the file name"
         />
+      </div>
+
+      <div className="field">
+        <label className="field-label" htmlFor="upload-id">
+          Address
+        </label>
+        <input
+          id="upload-id"
+          className="input"
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+          placeholder="From the title"
+          autoCapitalize="off"
+          autoComplete="off"
+          spellCheck={false}
+          aria-describedby="upload-id-hint"
+        />
+        <span id="upload-id-hint" className="field-hint">
+          The part of the link after /d/. Lowercase letters, digits and hyphens.
+          If it's already taken, a few random characters are added to the end.
+        </span>
       </div>
 
       <div className="checkbox-row">

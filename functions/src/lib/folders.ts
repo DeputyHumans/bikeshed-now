@@ -18,6 +18,7 @@
  * themselves — which is what keeps the `list` rule statically provable (SPEC §5).
  */
 
+import { randomBytes } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { isTeamRef, normalizeEmail, teamIdOf } from "./access";
@@ -117,17 +118,56 @@ export function slugify(name: string): string {
   return base || "untitled";
 }
 
-/** Allocate a collision-free docId from a slug: slug, slug-2, slug-3, … */
-export async function uniqueDocId(db: Db, slug: string): Promise<string> {
-  const base = slugify(slug);
-  for (let i = 0; i < 50; i++) {
-    const candidate = i === 0 ? base : `${base}-${i + 1}`;
-    const snap = await db.collection("docs").doc(candidate).get();
-    if (!snap.exists) return candidate;
+/**
+ * True if `id` may be asked for as a docId: `slugify`'s own output space, so
+ * lowercase letters, digits and single inner hyphens, at most 60 characters.
+ *
+ * Narrower than Firestore needs, on purpose. The id is also a Realtime Database
+ * key in presence, where `.` or `#` would silently turn presence off; the app
+ * builds `/d/${docId}` without encoding it; and it is quoted into a
+ * Content-Disposition filename. Nothing here needs escaping in any of them.
+ */
+export function isValidDocId(id: string): boolean {
+  return id.length <= 60 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
+}
+
+/** What a publisher is told when `isValidDocId` refuses their id. */
+export const BAD_DOC_ID =
+  "id may use lowercase letters, digits and hyphens between them, up to 60 characters";
+
+const SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+/** Six random characters from the docId alphabet. */
+function randomSuffix(): string {
+  return Array.from(randomBytes(6), (b) => SUFFIX_ALPHABET[b % SUFFIX_ALPHABET.length]).join("");
+}
+
+/**
+ * Allocate a free docId: `wanted` itself if nobody holds it, else
+ * `wanted-<six random characters>`.
+ *
+ * The suffix is random rather than a count. A count told the publisher how
+ * many documents already held the name, and made the next one guessable. What
+ * the suffix still reveals, that `wanted` is taken, is accepted: finding it out
+ * costs the asker a document that can never be deleted (SPEC §4).
+ *
+ * `skipWanted` is for a caller that already knows `wanted` is unusable even
+ * though no document record holds it yet — see `placeNewDocument`.
+ */
+export async function uniqueDocId(
+  db: Db,
+  wanted: string,
+  skipWanted = false,
+): Promise<string> {
+  const base = slugify(wanted);
+  const free = async (id: string) => !(await db.collection("docs").doc(id).get()).exists;
+  if (!skipWanted && (await free(base))) return base;
+  // 36^6 ids per name: a single retry is already more than chance needs.
+  for (let i = 0; i < 5; i++) {
+    const candidate = `${base}-${randomSuffix()}`;
+    if (await free(candidate)) return candidate;
   }
-  // Fifty collisions on one title is effectively impossible; fall back to an
-  // opaque suffix rather than looping forever or failing the publish.
-  return `${base}-${db.collection("docs").doc().id.slice(0, 6)}`;
+  throw new Error("could not allocate a document id");
 }
 
 /**

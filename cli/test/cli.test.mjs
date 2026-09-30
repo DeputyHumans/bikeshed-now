@@ -397,6 +397,65 @@ test("`--json` says where a reader opens the document, not just its id", async (
   }
 });
 
+/** Publish `file` with `args` against a server that answers with `docId`. */
+async function publishAgainst(docId, args) {
+  const dir = mkdtempSync(join(tmpdir(), "bshd-publish-id-"));
+  const file = join(dir, "platform.md");
+  writeFileSync(file, "# 01-platform\n");
+  try {
+    let seen;
+    let output;
+    await withServer(
+      (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ docId, versionId: "v1", title: "01-platform", fileCount: 1, bytes: 14, format: "markdown" }));
+      },
+      async (origin, requests) => {
+        output = await runAsync(["publish", file, ...args], {
+          BIKESHED_ORIGIN: origin,
+          BIKESHED_TOKEN: "bsk_a.b",
+        });
+        seen = requests;
+      },
+    );
+    return { url: new URL(seen[0].url, "http://x"), ...output };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("publish --id asks the deployment for that id, and says nothing when it gets it", async () => {
+  // `--id` has to be a declared option. The parser is not strict, so an
+  // undeclared one parses as `true` and its value as a stray positional: the
+  // publish goes ahead at an id from the title and nobody is told.
+  const { url, stderr } = await publishAgainst("01-platform", ["--id", "01-platform", "--json"]);
+  assert.equal(url.pathname, "/publish");
+  assert.equal(url.searchParams.get("id"), "01-platform");
+  assert.equal(stderr, "");
+});
+
+test("publish without --id sends no id", async () => {
+  const { url } = await publishAgainst("01-platform", ["--json"]);
+  assert.equal(url.searchParams.has("id"), false);
+});
+
+test("publish --id says so when the document landed somewhere else", async () => {
+  const { stdout, stderr } = await publishAgainst("01-platform-k3x9qz", ["--id", "01-platform", "--json"]);
+  assert.match(stderr, /01-platform was not available; published at 01-platform-k3x9qz/);
+  assert.equal(JSON.parse(stdout).docId, "01-platform-k3x9qz", "stdout stays parseable");
+});
+
+test("publish --id with no value is a usage error, not a publish", () => {
+  assert.throws(
+    () => run(["publish", "whatever.md", "--id"], { BIKESHED_TOKEN: "bsk_a.b" }),
+    (err) => {
+      assert.equal(err.status, 1);
+      assert.match(err.stderr, /usage: bikeshed publish <file> --id <id>/);
+      return true;
+    },
+  );
+});
+
 test("an address the deployment supplied wins over one the client can build", async () => {
   // A deployment serving on a configured public origin knows its canonical
   // address; the origin this client happens to have reached may be a channel.

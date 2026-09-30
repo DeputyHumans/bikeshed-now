@@ -252,6 +252,27 @@ test("an empty string is missing: every required argument is an id or a body", (
   assert.equal(missingArguments(get, { id: "x" }), null);
 });
 
+test("publish_document takes an optional id, and refuses a malformed one before touching anything", async () => {
+  const tool = toolByName("publish_document");
+  assert.equal(tool.inputSchema.properties.id.type, "string");
+  assert.ok(!tool.inputSchema.required.includes("id"));
+
+  // Any database or storage access would throw here: a malformed id must be
+  // refused before the bundle is read, uploaded, or an id allocated.
+  const untouchable = new Proxy({}, {
+    get() {
+      throw new Error("touched the database");
+    },
+  });
+  await assert.rejects(
+    tool.run(
+      { db: untouchable, caller: { emailLower: "owner@example.com", uid: "u" } },
+      { title: "t", content: "# t", id: "Not An Id" },
+    ),
+    /id may use lowercase letters, digits and hyphens between them/,
+  );
+});
+
 test("optional arguments are never demanded", () => {
   assert.equal(missingArguments(toolByName("list_documents"), {}), null);
   assert.equal(missingArguments(toolByName("get_comments"), { id: "x" }), null);

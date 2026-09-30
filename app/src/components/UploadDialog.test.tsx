@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// A title is sent only when the uploader typed one (SPEC §17).
+// A title or an address is sent only when the uploader typed one (SPEC §4, §17).
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -95,5 +95,26 @@ describe("UploadDialog's title field", () => {
     await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
     const opts = uploadDoc.mock.calls[0][1];
     expect(opts.title).toBe("My doc");
+  });
+});
+
+describe("UploadDialog's address field", () => {
+  it("sends no id when nothing was typed, so the server derives one", async () => {
+    renderDialog();
+    chooseFile();
+    clickUpload();
+
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
+    expect(uploadDoc.mock.calls[0][1].id).toBeUndefined();
+  });
+
+  it("sends the typed id, trimmed", async () => {
+    renderDialog();
+    chooseFile();
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: " 01-platform " } });
+    clickUpload();
+
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
+    expect(uploadDoc.mock.calls[0][1].id).toBe("01-platform");
   });
 });

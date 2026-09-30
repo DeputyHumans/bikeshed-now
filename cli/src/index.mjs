@@ -49,6 +49,7 @@ Skills
 Options
   --json                 machine-readable output
   --title <text>         title for publish
+  --id <id>              with publish: the address, /d/<id> (default: from the title)
   --folder <id>          destination folder for publish
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
@@ -144,6 +145,7 @@ async function list(flags) {
 
 async function publish(flags, [path]) {
   if (!path) fail("usage: bikeshed publish <file>");
+  if (flags.id === true) fail("usage: bikeshed publish <file> --id <id>");
   const { origin, token } = resolveAuth(flags);
   const file = resolve(path);
 
@@ -151,7 +153,14 @@ async function publish(flags, [path]) {
     const result = await uploadFile(origin, token, file, {
       title: flags.title,
       folder: flags.folder,
+      id: flags.id,
     });
+    // A taken id still publishes, under a suffix. Said on stderr so `--json`
+    // stays parseable; "not available" also covers a deployment too old to
+    // know the parameter, which ignores it.
+    if (flags.id && result.docId !== flags.id) {
+      console.error(`${flags.id} was not available; published at ${result.docId}`);
+    }
     // The address is in the human line already; `--json` carried only the id, so
     // anything reading it had to know how to build a URL out of a docId.
     out(flags.json, { ...result, url: result.url ?? `${origin}/d/${result.docId}` }, () =>
@@ -391,6 +400,7 @@ async function main() {
       all: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
       title: { type: "string" },
+      id: { type: "string" },
       folder: { type: "string" },
       parent: { type: "string" },
       origin: { type: "string" },

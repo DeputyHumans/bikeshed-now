@@ -88,6 +88,14 @@ Part 2 matters more than it looks. The presence payload now carries a live
 selection stream, which reveals what a person is reading sentence by sentence —
 considerably more than a name.
 
+**What still leaks: whether an id is taken.** Publishing at a taken id lands the
+document at a suffixed one, so the publisher learns the id exists, even when it
+belongs to a private document they cannot read. This is accepted, not missed.
+Refusing instead would make the check free and silent. As it is, every check
+creates a document in the checker's own workspace, attributed to them, which
+cannot be deleted. The suffix is random, so it does not say how many documents
+share the name (SPEC §4).
+
 ### A public document leaks its private fields
 
 Firestore rules cannot project fields, so a naive "allow anonymous `get` when

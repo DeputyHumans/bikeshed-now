@@ -99,7 +99,7 @@ somebody might commit.
 |---|---|
 | `list_documents` | Your documents. Metadata only |
 | `get_document` | Metadata and the current **source** |
-| `publish_document` | Create a document from content you supply |
+| `publish_document` | Create a document from content you supply, optionally at an `id` you choose |
 | `update_document` | Publish a new version of one that exists |
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
@@ -112,7 +112,7 @@ somebody might commit.
 ```
 bikeshed login
 bikeshed list [--json]
-bikeshed publish <file> [--title …] [--folder …] [--watch]
+bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
 bikeshed update <id> <file> [--watch]
 bikeshed get <id>
 bikeshed comments <id> [--json]
@@ -189,6 +189,14 @@ period and its two-week window."
 **Publishing the same content twice is a no-op.** Identical bytes hash to the
 same value and no new version is minted, so it is safe to run `update` in a
 loop, in CI, or after a change you are not sure you made.
+
+**You can choose the address.** `--id platform-review`, or `publish_document`'s
+`id`, publishes at `/d/platform-review`. Use lowercase letters, digits and
+hyphens, up to 60 characters. If the id is taken, the document is still
+published, at that id plus a few random characters, and the CLI says so on
+stderr. So the address to hand back is always the `url` in the result, never
+one you built from the id you asked for. An id never changes once published: to
+put new content at the same address, `update` that document.
 
 ## Filing it somewhere changes who can read it
 

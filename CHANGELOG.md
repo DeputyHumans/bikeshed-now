@@ -18,6 +18,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **A publisher can choose a document's address.** `POST /publish` takes `id`,
+  `publish_document` takes an optional `id` (a schema addition), the CLI takes
+  `--id` (for the next `bikeshed-now` release), and the upload dialog has an
+  Address field. It was previously always derived from the title, so two
+  documents with one title could only be told apart by a counter. The id has to
+  be what `slugify` would produce, lowercase letters, digits and inner hyphens
+  up to 60 characters, and anything else is a `400` before a byte is stored
+  (SPEC §4).
 - **The terminal client is on npm**, as `bikeshed-now`, providing the `bikeshed`
   command: `npm i -g bikeshed-now`, or `npx -y bikeshed-now` for one call. It was
   previously reachable only by cloning this repository, which made every
@@ -89,6 +97,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **Two creates at one id could overwrite each other's bytes.** A new document's
+  files are stored before its record, so two publishes (or duplicates) that
+  picked the same id both wrote to its `v1`, and the loser replaced the winner's
+  bytes, which the version record promises never change, before failing with a
+  `500`. New-document writes are now create-only, and a refused write moves the
+  document to a suffixed id.
 - **`bikeshed list --cursor` returned the first page again** (fixed in
   `bikeshed-now` 0.2.0). The CLI printed the cursor, parsed the flag, and never
   sent it, so nothing past the newest page was reachable from the terminal.
@@ -101,6 +115,29 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   sandboxed exactly like one in HTML.
 
 ### Changed
+
+- **A taken id gets a random suffix, not a count.** A second document titled
+  `01-platform` now lands at `01-platform-k3x9qz`, say, rather than
+  `01-platform-2`. A count told the publisher how many documents held the name
+  and made the next id guessable. Existing ids keep their addresses. The
+  publisher still learns that the id was taken; the threat model says why that
+  is accepted.
+- **`/llms.txt` and `/skills/**` name the deployment serving them.** They
+  carried the literal `https://<deployment>` in seven places, so an agent that
+  had just fetched the instructions from a live deployment was told to POST to
+  a placeholder — and a skill, which is written into `.claude/skills/` and read
+  days later with no origin in sight, could not work the address out even in
+  principle. The app build now substitutes the real origin into `app/dist`,
+  from `BIKESHED_PUBLIC_ORIGIN` or `config/deploy.json`'s `domain`, which is
+  the first thing that has ever read that key. The guide also says which
+  deployment it is in its own first line, and its command-line stanza is
+  copy-pasteable.
+
+  The tracked copies keep the placeholder, so `check:agents` stays a byte
+  comparison and no deployment binding enters the tree — which matters because
+  `check-secrets.sh` matches by shape and a custom domain has none. A
+  `<deployment>` that survives the substitution fails the build, and the
+  hosting `predeploy` refuses to deploy an `app/dist` that was never stamped.
 
 - **Share and "Who can see it" are one dialog.** They were two, behind two
   entries of the same menu, asking one question — who gets this — from two

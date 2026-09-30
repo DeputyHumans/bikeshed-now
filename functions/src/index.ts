@@ -78,16 +78,22 @@ import {
 } from "./lib/access";
 import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import { hashBundleFiles, type BundleFile } from "./lib/hash";
-import { compileBundle, publishNewDocument } from "./lib/publish";
+import {
+  compileBundle,
+  CREATE_ONLY,
+  placeNewDocument,
+  publishNewDocument,
+} from "./lib/publish";
 import { extractBundle, zipBundle, type BundleEntry } from "./lib/bundle";
 import {
   computeDocMembership,
   createFolderRecord,
+  BAD_DOC_ID,
+  isValidDocId,
   persistDocMembership,
   recomputeSubtree,
   resolveFolderTarget,
   slugify,
-  uniqueDocId,
   wouldCycle,
   type FolderTarget,
   type Membership,
@@ -1304,6 +1310,11 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     badRequest(res, "no file uploaded");
     return;
   }
+  const wantedId = strParam(req, "id");
+  if (wantedId && !isValidDocId(wantedId)) {
+    badRequest(res, BAD_DOC_ID);
+    return;
+  }
   const filename = strParam(req, "filename");
   const extracted = extractBundle(buffer, filename, MAX_BUNDLE_BYTES);
   if ("error" in extracted) {
@@ -1334,6 +1345,7 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     parentMembership: target.membership,
     marking: jsonParam(req, "marking"),
     via: "upload",
+    ...(wantedId ? { docId: wantedId } : {}),
   }).catch((e: Error) => e);
 
   if (result instanceof Error) {
@@ -1693,23 +1705,27 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
   }
 
   const title = `${typeof src.title === "string" ? src.title : "Untitled"} (copy)`;
-  const newId = await uniqueDocId(db(), slugify(title));
   const versionId = "v1";
-  const destPrefix = `docs/${newId}/${versionId}`;
   const srcPrefix = `docs/${srcId}/${srcVersion}/`;
 
-  const [objects] = await bucket().getFiles({ prefix: srcPrefix });
-  let copied = 0;
-  for (const obj of objects) {
+  const [listed] = await bucket().getFiles({ prefix: srcPrefix });
+  const objects = listed.filter((obj) => {
     const rel = obj.name.slice(srcPrefix.length);
-    if (rel.length === 0 || rel.endsWith("/")) continue;
-    await obj.copy(`${destPrefix}/${rel}`);
-    copied++;
-  }
-  if (copied === 0) {
+    return rel.length > 0 && !rel.endsWith("/");
+  });
+  if (objects.length === 0) {
     res.status(409).json({ error: "the source has no content to copy" });
     return;
   }
+  const { docId: newId, storagePrefix: destPrefix } = await placeNewDocument(
+    db(),
+    slugify(title),
+    async (prefix) => {
+      for (const obj of objects) {
+        await obj.copy(`${prefix}/${obj.name.slice(srcPrefix.length)}`, CREATE_ONLY);
+      }
+    },
+  );
 
   const membership = computeDocMembership(caller.emailLower, [], [], parentMembership);
   const actor = actorFrom(caller, req);
@@ -1744,7 +1760,7 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
       ? { rendererVersion: v.rendererVersion }
       : {}),
     storagePrefix: destPrefix,
-    fileCount: typeof v.fileCount === "number" ? v.fileCount : copied,
+    fileCount: typeof v.fileCount === "number" ? v.fileCount : objects.length,
     bytes: typeof v.bytes === "number" ? v.bytes : 0,
     contentHash: typeof v.contentHash === "string" ? v.contentHash : "",
     ...(Array.isArray(v.files) ? { files: v.files } : {}),

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Effective membership: inheritance, team expansion, slugs, cycles (SPEC §13, §18).
+// Effective membership: inheritance, team expansion, slugs, doc ids, cycles (SPEC §4, §13, §18).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { computeMembership, slugify } = require("../lib/lib/folders.js");
+const { computeMembership, isValidDocId, slugify, uniqueDocId } = require("../lib/lib/folders.js");
 const { computeTeamMembers, referencedTeamIds } = require("../lib/lib/teams.js");
 
 const OWNER = "owner@example.com";
@@ -102,4 +102,74 @@ test("slugs are URL-safe, bounded, and never empty", () => {
   assert.equal(slugify(""), "untitled");
   assert.ok(slugify("x".repeat(200)).length <= 60);
   assert.match(slugify("Ünïcödé Ttitle"), /^[a-z0-9-]+$/);
+});
+
+test("a chosen doc id is slugify's own output space, and nothing wider", () => {
+  for (const ok of ["01-platform", "a", "q3-acquisition-memo", "x".repeat(60)]) {
+    assert.ok(isValidDocId(ok), ok);
+  }
+  // Each of these would need escaping somewhere a docId goes: a Realtime
+  // Database key, an unencoded /d/ link, a quoted download filename.
+  for (const bad of ["", "A", "01-Platform", "a--b", "-a", "a-", "a.b", "a_b", "__x__", "a/b", "a b", "x".repeat(61)]) {
+    assert.ok(!isValidDocId(bad), JSON.stringify(bad));
+  }
+});
+
+test("every valid doc id is a fixed point of slugify", () => {
+  // uniqueDocId slugifies what it is given; a valid chosen id must come out
+  // unchanged, or a publisher would get an id they did not ask for.
+  for (const id of ["01-platform", "a", "x".repeat(60), "a1-b2-c3"]) {
+    assert.equal(slugify(id), id);
+  }
+});
+
+/** Firestore reduced to the one call uniqueDocId makes: does docs/{id} exist. */
+function docsHolding(taken) {
+  const asked = [];
+  return {
+    asked,
+    collection: (name) => {
+      assert.equal(name, "docs");
+      return {
+        doc: (id) => ({
+          get: async () => {
+            asked.push(id);
+            return { exists: taken.has(id) };
+          },
+        }),
+      };
+    },
+  };
+}
+
+test("a free id is used as asked", async () => {
+  assert.equal(await uniqueDocId(docsHolding(new Set()), "01-platform"), "01-platform");
+});
+
+test("a taken id gets a random suffix, not a count", async () => {
+  /**
+   * A count told the publisher how many documents already held the name, and
+   * made the next one guessable. The suffix is six characters from the id
+   * alphabet, so the result is itself a valid id.
+   */
+  const db = docsHolding(new Set(["01-platform", "01-platform-2"]));
+  const seen = new Set();
+  for (let i = 0; i < 20; i++) {
+    const id = await uniqueDocId(db, "01-platform");
+    assert.match(id, /^01-platform-[a-z0-9]{6}$/);
+    seen.add(id);
+  }
+  assert.ok(seen.size > 15, "the suffix must vary between calls");
+});
+
+test("skipWanted never returns the bare id, even when no record holds it", async () => {
+  // The caller has just been refused by Storage at that id: bytes are there
+  // that no record accounts for yet.
+  const id = await uniqueDocId(docsHolding(new Set()), "01-platform", true);
+  assert.match(id, /^01-platform-[a-z0-9]{6}$/);
+});
+
+test("allocation gives up rather than loop when every candidate is taken", async () => {
+  const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true }) }) }) };
+  await assert.rejects(uniqueDocId(db, "01-platform"), /could not allocate a document id/);
 });

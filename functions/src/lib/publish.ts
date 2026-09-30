@@ -102,16 +102,60 @@ export function compileBundle(
   };
 }
 
+/**
+ * Write options that refuse to replace an object that already exists.
+ *
+ * A new document's bytes go in before its record does, so `currentVersion` can
+ * never point at nothing. That leaves a window in which two creates hold the
+ * same id. Without this the second one overwrites the first one's v1, bytes the
+ * version record promises never change, and only then fails. No test can stage
+ * the race on demand, so `wiring.test.js` pins that every new-document write
+ * uses this.
+ */
+export const CREATE_ONLY = { preconditionOpts: { ifGenerationMatch: 0 } };
+
+/** Storage's refusal of a CREATE_ONLY write: the object is already there. */
+export function isPreconditionFailure(e: unknown): boolean {
+  return (e as { code?: unknown } | null)?.code === 412;
+}
+
+/**
+ * Allocate an id for a NEW document and put its v1 bytes there.
+ *
+ * `put` writes under the prefix it is given, CREATE_ONLY. If Storage refuses,
+ * the id is in use even though no record says so yet: a create racing this
+ * one, or bytes a failed create left behind. Both mean "taken", so the id gets
+ * a random suffix and `put` runs once more.
+ */
+export async function placeNewDocument(
+  db: Db,
+  wanted: string,
+  put: (storagePrefix: string) => Promise<void>,
+): Promise<{ docId: string; storagePrefix: string }> {
+  const docId = await uniqueDocId(db, wanted);
+  try {
+    await put(`docs/${docId}/v1`);
+    return { docId, storagePrefix: `docs/${docId}/v1` };
+  } catch (e) {
+    if (!isPreconditionFailure(e)) throw e;
+  }
+  const retryId = await uniqueDocId(db, wanted, true);
+  await put(`docs/${retryId}/v1`);
+  return { docId: retryId, storagePrefix: `docs/${retryId}/v1` };
+}
+
 /** Upload every file of a bundle under a version prefix. */
 async function uploadBundle(
   storagePrefix: string,
   files: readonly BundleFile[],
+  preconditions: Partial<typeof CREATE_ONLY> = {},
 ): Promise<void> {
   const bucket = admin.storage().bucket(bucketName());
   for (const f of files) {
     await bucket.file(`${storagePrefix}/${f.rel}`).save(f.data, {
       contentType: mime.lookup(f.rel) || "application/octet-stream",
       resumable: false,
+      ...preconditions,
     });
   }
 }
@@ -128,6 +172,12 @@ export interface PublishInput {
   marking?: unknown;
   /** How the content arrived. Recorded on the version and never client-claimed. */
   via: "upload" | "cli" | "mcp" | "api";
+  /**
+   * The id the publisher asked for, already checked with `isValidDocId`. If it
+   * is taken the document still gets made, under a suffixed id; absent, the id
+   * comes from the title.
+   */
+  docId?: string;
 }
 
 export interface PublishResult {
@@ -152,14 +202,16 @@ export async function publishNewDocument(
 ): Promise<PublishResult> {
   const { db, compiled } = input;
   const slug = slugify(input.title);
-  const docId = await uniqueDocId(db, slug);
   const versionId = "v1";
-  const storagePrefix = `docs/${docId}/${versionId}`;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
 
   // Bytes first, then Firestore, so `currentVersion` can never point at a
   // version whose objects are missing.
-  await uploadBundle(storagePrefix, compiled.files);
+  const { docId, storagePrefix } = await placeNewDocument(
+    db,
+    input.docId ?? slug,
+    (prefix) => uploadBundle(prefix, compiled.files, CREATE_ONLY),
+  );
 
   const membership = computeDocMembership(
     input.ownerEmail,

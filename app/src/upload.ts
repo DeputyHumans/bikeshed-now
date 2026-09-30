@@ -26,6 +26,8 @@ export interface UploadResult {
 
 export interface UploadOptions {
   title?: string;
+  /** The id to publish at. Taken means a suffixed id, so read `docId` back. */
+  id?: string;
   folderId?: string | null;
   marking?: Marking;
   onProgress?: (fraction: number) => void;
@@ -36,6 +38,7 @@ export function uploadDoc(file: File, opts: UploadOptions = {}): Promise<UploadR
     const params = new URLSearchParams();
     params.set("filename", file.name);
     if (opts.title) params.set("title", opts.title);
+    if (opts.id) params.set("id", opts.id);
     if (opts.folderId) params.set("folderId", opts.folderId);
     if (opts.marking?.enabled) params.set("marking", JSON.stringify(opts.marking));
 

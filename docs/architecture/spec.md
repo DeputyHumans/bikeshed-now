@@ -242,11 +242,13 @@ mints a NEW `vN+1`.
 
 ### Workspace endpoints
 - **`POST /publish` (`createDoc`)** — raw body is the uploaded file; metadata in
-  the query string (`?filename=&title=&folderId=&marking=`). Accepts a single
+  the query string (`?filename=&title=&id=&folderId=&marking=`). Accepts a single
   `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`.
   `title` is optional: for HTML the document's own `<title>` (read by the §17
   head scanner, else `og:title`) is the default, then the file name without its
-  extension; for Markdown, the first level-one heading.
+  extension; for Markdown, the first level-one heading. `id` is optional too:
+  the docId to publish at, refused with a `400` before anything is stored if it
+  breaks the rules in §4. A taken `id` is not refused; see §4.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree.
@@ -345,6 +347,22 @@ documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
 `delete-version.mjs`, so old and new sessions are never conflated under one id.
 
 `createdAt` is set once. `updatedAt` is bumped on every publish.
+
+**A docId** is the document's address, `/d/{docId}`, and never changes. The
+publisher may ask for one (`id` on `/publish`, on `publish_document`, and
+`--id` in the CLI); otherwise it is `slugify(title)`. An asked-for id must be
+lowercase letters and digits with single hyphens between them, at most 60
+characters: exactly what `slugify` produces, because the id is also a Realtime
+Database key, an unencoded link and a quoted download filename. If the id is
+taken the document is still created, at `{id}-{six random [a-z0-9]}`. An id is
+taken if a record holds it or if bytes are already stored under it: a new
+document's bytes are written only where no object exists yet, and a refused
+write moves the document to a suffixed id.
+The publisher learns that the id was taken and nothing more; the suffix is
+random, so it no longer says how many share the name. The returned `docId` is
+the answer; callers must not assume they got what they asked for. Ids minted
+before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes
+`title` and `slug`, never the docId.
 
 ---
 
@@ -1426,7 +1444,7 @@ client onboarding is ever wanted.
 |---|---|
 | `list_documents` | the caller's documents, with visibility and current version |
 | `get_document` | metadata + current **source** (Markdown where available) |
-| `publish_document` | create a document from content |
+| `publish_document` | create a document from content, optionally at a chosen `id` (§4) |
 | `update_document` | commit a new version of an existing document |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
@@ -1492,6 +1510,11 @@ Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
 `get <slug>`, `comments <slug>`, `reply`, `open <slug>`, `folders`,
 `mkdir <name>`, `mv <slug> <folder|root>`, `skills [install <dir>]`, plus
 `publish --watch`. Every command takes `--json`.
+
+`publish --id <id>` asks for the docId. When the deployment answers with a
+different one, because the id was taken or because a deployment too old to know
+the parameter ignored it, the CLI says so on stderr, which keeps `--json` output
+parseable.
 
 `mv` requires its destination and spells the root as the literal word `root`.
 The MCP tool encodes the root as an OMITTED `folder` — JSON-RPC has no empty

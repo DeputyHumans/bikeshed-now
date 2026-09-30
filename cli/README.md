@@ -34,6 +34,16 @@ Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash
 mints no new version. So `update` is safe in a loop, in CI, or after a change you
 are not sure you made.
 
+The address comes from the title. To choose it, pass `--id`:
+
+```bash
+bikeshed publish platform.md --id 01-platform
+# published 01-platform v1 — https://<deployment>/d/01-platform
+```
+
+If the id is taken, the document is still published, at the id plus a few
+random characters, and the CLI says so on stderr.
+
 `bikeshed --help` lists the rest — listing documents, folders, and installing the
 agent skills a deployment serves.
 

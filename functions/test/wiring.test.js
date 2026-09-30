@@ -132,6 +132,37 @@ test("noStore is exactly private, no-store — not merely no-cache", () => {
   assert.match(fn.slice(0, 200), /"private, no-store"/);
 });
 
+test("every write of a new document's bytes refuses to overwrite", () => {
+  /**
+   * A new document's bytes are written before its record, so two creates can
+   * hold one id at once. Without the precondition the second overwrites the
+   * first one's v1 and only then fails. The unit suite has no Storage and the
+   * race cannot be staged on demand, so the shape is pinned here: both create
+   * paths place their bytes through `placeNewDocument`, and write with
+   * `CREATE_ONLY`, which is exactly "only if no object exists".
+   */
+  const publish = readFileSync(join(__dirname, "..", "src", "lib", "publish.ts"), "utf8");
+  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+
+  const { CREATE_ONLY } = require("../lib/lib/publish.js");
+  assert.deepEqual(CREATE_ONLY, { preconditionOpts: { ifGenerationMatch: 0 } });
+
+  const bodyOf = (src, marker) => {
+    const start = src.indexOf(marker);
+    assert.ok(start > 0, `${marker} not found`);
+    const next = src.indexOf("\nexport ", start + marker.length);
+    return src.slice(start, next === -1 ? undefined : next);
+  };
+
+  const create = bodyOf(publish, "export async function publishNewDocument(");
+  assert.match(create, /placeNewDocument\([\s\S]*uploadBundle\(prefix, compiled\.files, CREATE_ONLY\)/);
+  assert.doesNotMatch(create, /uniqueDocId\(/);
+
+  const duplicate = bodyOf(index, "export const duplicateDoc = onRequest(");
+  assert.match(duplicate, /placeNewDocument\([\s\S]*\.copy\([^;]*CREATE_ONLY\)/);
+  assert.doesNotMatch(duplicate, /uniqueDocId\(/);
+});
+
 /**
  * The Functions emulator wraps `firebase-admin` in a proxy that drops the
  * static namespace properties off `admin.firestore`, so `admin.firestore.
