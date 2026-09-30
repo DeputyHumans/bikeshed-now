@@ -96,11 +96,15 @@ Two distinct 400s so the UI can explain: `invalid email address` versus
 See §16. Without it, any signed-in account could enumerate the slug space and
 learn who reads what.
 
-**(b) Read-only byte endpoints collapse 403 into 404.** `/content/**` and
-`/download/**` return `404` for "you may not read this" and for "this does not
-exist" alike. Mutation endpoints keep `403`: the caller is acting inside their
-own workspace and already knows the id. This drops no feature and closes the
-existence oracle that an open gate would otherwise open.
+**(b) Read-only endpoints collapse 403 into 404.** `/content/**`,
+`/download/**`, `/unlock` and `/view` return `404` for "you may not read this"
+and for "this does not exist" alike. Mutation endpoints answer `403` only to a
+caller who may READ the document, who already knows the id; everyone else gets
+the same `404` as an absent id, or every write endpoint would be the existence
+check the read paths closed. This drops no feature and closes the existence
+oracle that an open gate would otherwise open. "May read" includes an unlisted
+document's key or link grant (§17), and nothing less: without them an unlisted
+document answers exactly as a private one.
 
 ---
 
@@ -127,6 +131,7 @@ rewrites require it). Export names are FIXED and are asserted to match
 | `/team-members` | `manageTeamMembers` |
 | `/tokens` | `manageTokens` |
 | `/view` | `recordView` |
+| `/unlock` | `unlockDoc` |
 | `/draft` | `saveDraft` |
 | `/commit` | `commitVersion` |
 | `/mcp` | `mcp` |
@@ -176,14 +181,17 @@ Path after `versionId` is the relative file path; default `index.html`.
 
 1. Resolve the caller: `__session` cookie, else anonymous.
 2. Load `docs/{docId}`. If absent → `404`.
-3. If the doc is non-private (§17), serve. Else require a caller who passes
-   `canRead` → otherwise **`404`** (§1.4b).
+3. Decide the caller's `readBasis` (§17): member, public, link (`?k=` matches
+   the document's token) or grant (a signed-in caller's current link grant).
+   None → **`404`** (§1.4b).
 4. Version must exist → else `404`.
 5. Stream `gs://<bucket>/docs/{docId}/{versionId}/<relPath>` with the Admin SDK.
 
 Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
-`Cache-Control: private, no-store` for gated content, `public, max-age=300` for
-non-private content; `X-Robots-Tag: noindex` when visibility is `unlisted`.
+`Cache-Control: private, no-store` for a member's or a grant's read,
+`public, max-age=300` for a read the URL alone decides — public, or unlisted
+with `k` — because a grant's URL carries no key and a shared cache keys on the
+URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
 Never send a restrictive `X-Frame-Options`/`frame-ancestors` — the content must
 embed same-origin in the app's iframe.
 
@@ -208,6 +216,24 @@ has ever been adopted from Hosting (§17); a `403` with an HTML body is the
 platform refusing the invocation, not the function answering
 (`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
 
+### `POST /unlock`
+Body `{ docId, k? }`. What a reader who is not a member may know about a
+document, and the one place an unlisted document's key is exchanged for access.
+
+`200` with the reader projection — `public/{docId}`'s fields (§17) without
+`publishedAt` — when the caller's `readBasis` is `public`, `link` or `grant`, or
+`member` of a non-private document. A signed-in caller whose basis is `link`
+gets a link grant first (§4, §17). Everything else is **one identical `404`**
+with an empty body: absent, private (to its members too, who read
+`docs/{docId}` directly), unlisted without the key or with a wrong one, and a
+grant from before the link was rotated. `400` only for a missing or malformed
+`docId`, which says nothing about any document. Expiry is not checked, as in
+the projection: the reader is told a document expired rather than shown nothing.
+
+The key travels in the body, never the query, so it stays out of request logs.
+`Cache-Control: private, no-store` on every answer. The grant is read in the
+same round trip as the document whether or not either exists.
+
 ### `POST /access`
 Body `{ docId, add?: [{ email, role: "viewer"|"editor" }], remove?: string[] }`.
 `add` entries accept a plain email or a `team:{teamId}` grant (§18).
@@ -222,8 +248,9 @@ acting `Actor` (§17). Syncs the presence mirror (§16) and the public projectio
 `200 { viewers, editors, members }`.
 
 ### `POST /draft`, `GET /draft/**`, `POST /commit`
-Editor-gated (`canEdit`), Admin-SDK only, versions immutable — a commit always
-mints a NEW `vN+1`.
+Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
+caller's link grant), Admin-SDK only, versions immutable — a commit always
+mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
 - **`POST /draft`** — `{ docId, baseVersion, entry?, html }`. `409 { currentVersion }`
   when `baseVersion !== currentVersion`. Writes `docs/{docId}/draft/{entry}` and
@@ -254,13 +281,16 @@ mints a NEW `vN+1`.
   owner-only; cascade-recomputes the whole subtree.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
   deletion is deliberately unsupported (`400`).
-- **`POST /duplicate`** — `canRead`-gated; the copy is owner-only and
-  `trusted: false`.
+- **`POST /duplicate`** — `canRead`-gated (a link grant counts; `404` otherwise);
+  the copy is owner-only and `trusted: false`.
 - **`POST /trust`** — owner-only global trust (§6c).
 - **`POST /marking`** — owner-only export marking (§20).
 - **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit? }` (§17).
-- **`POST /view` (`recordView`)** — reading heartbeat; see §4.
-- **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version.
+- **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
+  body for an unlisted document; without a read basis it is the `404` an absent
+  id gets, and nothing is counted.
+- **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version;
+  accepts `?k=` as `/content/**` does.
 
 ### Account, team and token endpoints
 - **`POST /verify/start`**, **`POST /verify/complete`** — §14.
@@ -306,12 +336,19 @@ docs/{docId}/trust/{uid}                       PersonalTrust
 docs/{docId}/viewers/{uid}                     ViewerStat
 docs/{docId}/views/{sessionId}                 ViewSession
 docs/{docId}/acl/{entryId}                     AclChange        (append-only)
+docs/{docId}/linkGrants/{uid}                  LinkGrant        (server-written)
 folders/{folderId}                             FolderMeta
 teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
-public/{docId}                                 PublicDoc        (projection)
+public/{docId}                                 PublicDoc        (projection, public only)
 ```
+
+**`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
+unlisted document's key, and `token` is the one it presented. It counts only
+while that is still `linkToken`, so rotating the link revokes every grant
+without touching one. Written only by `POST /unlock`; no client reads or writes
+it (§17).
 
 **`members`** is the EFFECTIVE read set: the union of `ownerEmail`, direct
 `viewers` and `editors`, the parent folder chain's grants, and the expansion of
@@ -637,7 +674,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,folders,hash,bundle,presence,actor,public,teams,tokens,head,html,shell}.ts
+  lib/{auth,acl,access,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens,head,html,shell}.ts
   lib/markdown/{render,serialize,slug,theme.ts}
   email/{send,cooldown,templates/*}
   mcp/{server,tools}.ts
@@ -645,9 +682,12 @@ functions/src/
 
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session
   cookie, or a personal access token.
-- `lib/acl.ts` — `canRead`, `isDocEditor`, `canEdit`, `canManageSharing`, and
-  the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules`
-  `canRead()`.** They are tested on both sides.
+- `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`,
+  `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST
+  mirror `firestore.rules` `canRead()`** for a caller with an account; they are
+  tested on both sides. `tokenMatches` is the only place a link token is
+  compared, and a wiring test holds it there.
+- `lib/linkgrant.ts` — reading and recording link grants (§17).
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
 - `lib/head.ts` — what a document's own `<head>` and first words say about it
   (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
@@ -674,7 +714,8 @@ Admin is initialized **lazily**, so every `--dry-run` path runs without
 credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
 
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
-`delete-version.mjs`. Shared helpers in `scripts/lib/`: `args`, `email`,
+`delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
+and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
 `firebase`, `hash`, `membership`, `endpoints`.
 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
@@ -1080,6 +1121,13 @@ The stale-base `409` **stays**, and now means only what it always meant:
 somebody PUBLISHED a new version while you were editing. It never described
 concurrent drafts, and no longer has to.
 
+Writes to the shared log are gated by `editAccess/{docId}`, a second mirror, of
+`editorMembers`. A **public** open-editing document also carries the key `*`:
+any verified account. An **unlisted** one never does. The realtime rules cannot
+see a link's key, so `*` there would let any account write into a document it
+cannot name; its link holders edit through `/draft` instead, which can check
+their grant, and are not merged live with the members (§17).
+
 ### The caret is still faster than the text
 
 Peer carets and selections update at 200 ms; the document merges as fast as
@@ -1090,7 +1138,8 @@ touch the document DOM (see the overlay rule above).
 ### Deliberately not built
 
 Per-character attribution or blame · cursor chat · voice and video · a live chat
-channel · presence for non-members · workspace-wide "who is online".
+channel · presence for non-members · live co-editing through an unlisted link ·
+workspace-wide "who is online".
 
 Per-character attribution is the one worth naming twice: with the edit lock gone
 there are no hand-offs to record, so `draft.editSessions` no longer answers "who
@@ -1108,7 +1157,7 @@ wrote v3" and nothing else does either. That is a known loss, recorded in ADR
 | | Who can read the bytes | Discoverable | URL |
 |---|---|---|---|
 | `private` | owner + members | no | `/d/{slug}` |
-| `unlisted` | anyone with the link | `X-Robots-Tag: noindex` | `/d/{slug}?k={token}` |
+| `unlisted` | anyone with the link | no: without `k`, indistinguishable from an absent id | `/d/{slug}?k={token}` |
 | `public` | anyone | indexed, in `sitemap.xml` | `/d/{slug}` |
 
 **The private-bucket invariant is not weakened.** The bucket keeps uniform access
@@ -1169,7 +1218,7 @@ Two details that are decisions rather than implementation:
 How the viewer says it: a chip beside the version badge — the same one the
 workspace card shows — for every future date, escalating in wording and colour
 through the last week and past the date, read from `docs/{docId}` for a member
-and from the projection for anyone else. Its tooltip, and a tap for anyone who
+and from the projection, or `/unlock`, for anyone else. Its tooltip, and a tap for anyone who
 cannot change the date, carry the not-deleted sentence and who can open it; the
 owner's tap opens the Share dialog. It never takes a row from the document: it
 was a banner above the frame for every future date, and a document set to
@@ -1182,14 +1231,58 @@ accidental expiry is not. Dates beyond a hundred years are refused for the same
 class of reason — milliseconds pasted where seconds were meant land in the year
 55000, which looks like an expiry and is not one.
 
+### An unlisted document needs its link
+
+> **Without the key, anyone who is not a member learns no more about an
+> unlisted document than about a private one.**
+
+No title, no "unlisted", no viewer chrome, and one identical `404` on every
+surface: bytes, the reader projection, the view counter, the write endpoints,
+the agent tools and the security rules. The residual is the one private
+documents already carry — publishing at a taken id reveals that it is taken
+(§4) — and nothing more.
+
+Who may read, decided once in `lib/acl.ts readBasis` and mirrored by the rules:
+
+| Basis | Who | Cached at a shared URL |
+|---|---|---|
+| `member` | owner or effective member, at any visibility | no |
+| `public` | anyone, on a public document | yes |
+| `link` | anyone whose request carries `k` equal to `linkToken` | yes: the URL carries the key |
+| `grant` | a signed-in account holding a current link grant | no: the URL carries no key |
+
+The key is compared in constant time, and an absent token never matches an
+absent key. The rules cannot see a URL, so a signed-in visitor who opens an
+unlisted document with its key is given a **link grant** by `POST /unlock` —
+`docs/{docId}/linkGrants/{uid}`, naming the token they presented — and the
+rules, the endpoints and the agent tools accept it in place of the key. It is
+what lets a link holder comment, and what lets them open the document again
+from a reply notification, which links without the key.
+
+**Rotating the link revokes everything it granted.** Making the document private
+deletes its token and making it unlisted again mints a new one, so every old
+link and every grant stops working at once, without a cleanup pass. A grant is
+per account and cannot be revoked alone; that is the reversal condition in
+[ADR 0012](adr/0012-unlisted-needs-its-link.md).
+
+Open editing on an unlisted document reaches its link holders and nobody else,
+and not through the live log (§16).
+
 ### Anonymous reads use a projection, not a rules exception
 
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
-and `stats`. A non-private document is mirrored to **`public/{docId}`** carrying
+and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
 `visibility`, `publicEdit`, `trusted`, `expiresAt`, `publishedAt` — written by the same paths that
-recompute `members`, and **deleted the instant visibility returns to private**.
+recompute `members`, and **deleted the instant it stops being public**. The rule
+allows `get` of a public row only, and no `list`: an absent id and any other row
+are the same refusal.
+
+An **unlisted** document is not mirrored. Anything in `public/` is readable by
+whoever knows an id, and once was listable by anyone at all; an unlisted
+document's title belongs to the holders of its link. They get the same fields
+from `POST /unlock`, which checks the key.
 
 Everything else under `docs/**` still requires an account, even on a public
 document. Those records carry member lists and reviewer identities; publishing a
@@ -1451,6 +1544,12 @@ client onboarding is ever wanted.
 | `move_document` | file a document into a folder, or back to the workspace root |
 | `get_comments` | **unresolved feedback, each with its anchored quote** |
 | `reply_to_comment` | respond in a thread |
+
+`get_document`, `update_document`, `get_comments` and `reply_to_comment` take an
+optional `k`: an unlisted document's key, for a caller who is not a member and
+whose account holds no link grant. Without it such a document answers exactly as
+an id that does not exist (§17). The CLI accepts the link itself wherever it
+takes an id, because the link is the only place a person holds the key.
 
 `get_comments` is what earns the whole surface. Because every annotation stores
 `exact`/`prefix`/`suffix`, a comment comes back **with the passage it is about**,

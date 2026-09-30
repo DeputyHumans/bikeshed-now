@@ -244,7 +244,11 @@ export interface TokenSummary {
   revokedAt?: Timestamp | null;
 }
 
-/** Firestore: public/{docId} — the world-readable projection (SPEC §17). */
+/**
+ * Firestore: public/{docId} — the world-readable projection of a PUBLIC
+ * document. POST /unlock returns the same shape, without `publishedAt`, to a
+ * reader holding an unlisted document's key (SPEC §17).
+ */
 export interface PublicDoc {
   docId: string;
   title: string;

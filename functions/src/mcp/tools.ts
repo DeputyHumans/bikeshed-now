@@ -48,6 +48,7 @@ import {
   type FolderAclData,
 } from "../lib/acl";
 import { extractBundle } from "../lib/bundle";
+import { linkProofFor } from "../lib/linkgrant";
 import {
   BAD_DOC_ID,
   createFolderRecord,
@@ -120,19 +121,29 @@ export function folderPath(
   return [...ancestors.map((id) => nameOf.get(id) ?? "…"), name].join("/");
 }
 
-async function loadDoc(ctx: ToolContext, slug: string) {
+/** How every tool that reads one document describes the unlisted key. */
+const LINK_KEY_DESCRIPTION =
+  "Only for an unlisted document you are not a member of: the key from its link, the value after ?k=. Without it such a document answers exactly as an id that does not exist.";
+
+/**
+ * Load a document the caller may read, or fail exactly as for an id that does
+ * not exist. `k` is an unlisted document's key; a caller whose account already
+ * holds a link grant needs none (SPEC §17).
+ */
+async function loadDoc(ctx: ToolContext, slug: string, k: string | null = null) {
   const ref = ctx.db.collection("docs").doc(slug);
   const snap = await ref.get();
   if (!snap.exists) throw new Error(`no document with id "${slug}"`);
   const data = snap.data() as DocAclData & Record<string, unknown>;
-  if (!canRead(data, ctx.caller)) throw new Error(`no document with id "${slug}"`);
+  const proof = await linkProofFor(ref, data, ctx.caller, k);
+  if (!canRead(data, ctx.caller, proof)) throw new Error(`no document with id "${slug}"`);
   // An expired document reads as absent to everyone but its owner — the same
   // answer a document they may not read gives, so expiry cannot be used to
   // confirm that a slug exists (SPEC §17).
   if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
     throw new Error(`no document with id "${slug}"`);
   }
-  return { ref, snap, data };
+  return { ref, snap, data, proof };
 }
 
 /** Writes are refused on an expired document, the owner's included. */
@@ -282,10 +293,14 @@ export const TOOLS: ToolDefinition[] = [
       properties: {
         id: { type: "string", description: "The document id, as returned by list_documents." },
         version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       const versionId = str(args, "version") || String(data.currentVersion ?? "");
       const vSnap = await ref.collection("versions").doc(versionId).get();
       if (!vSnap.exists) throw new Error(`no version "${versionId}"`);
@@ -313,7 +328,7 @@ export const TOOLS: ToolDefinition[] = [
         sourceFile: sourceRel,
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
-        canEdit: canEdit(data, ctx.caller) && !isExpired(data, Date.now()),
+        canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
         truncated,
       };
@@ -385,11 +400,15 @@ export const TOOLS: ToolDefinition[] = [
       properties: {
         id: { type: "string" },
         content: { type: "string" },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
-      if (!canEdit(data, ctx.caller)) throw new Error("you cannot edit that document");
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot edit that document");
       refuseIfExpired(data);
       const content = String(args.content ?? "");
       if (!content.trim()) throw new Error("content is empty");
@@ -539,10 +558,14 @@ export const TOOLS: ToolDefinition[] = [
       properties: {
         id: { type: "string" },
         includeResolved: { type: "boolean", description: "Default false." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
+      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       const versionId = String(data.currentVersion ?? "");
       const annRef = ref.collection("versions").doc(versionId).collection("annotations");
       const query = args.includeResolved === true ? annRef : annRef.where("resolved", "==", false);
@@ -581,10 +604,14 @@ export const TOOLS: ToolDefinition[] = [
         id: { type: "string" },
         threadId: { type: "string", description: "From get_comments." },
         body: { type: "string" },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
+      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       refuseIfExpired(data);
       const threadId = str(args, "threadId");
       const body = String(args.body ?? "").slice(0, 5000);

@@ -57,14 +57,36 @@ service cloud.firestore {
             || (d.members is list && myEmail() in d.members));
     }
 
+    // An UNLISTED document needs its link, and these rules cannot see a URL.
+    // So a signed-in visitor who opens it with the key gets a link grant from
+    // POST /unlock, naming the token they presented. It counts only while that
+    // is still the document's token: rotating the link revokes every grant
+    // without touching one. `get()` here is not subject to the grant's own
+    // rule, which denies every client read (SPEC §17).
+    function linkGrant(docId) {
+      return /databases/$(database)/documents/docs/$(docId)/linkGrants/$(request.auth.uid);
+    }
+
+    function hasLinkGrant(docId, d) {
+      return isVerifiedUser()
+        && d.get('visibility', '') == 'unlisted'
+        && d.get('linkToken', null) is string
+        && exists(linkGrant(docId))
+        && get(linkGrant(docId)).data.token == d.linkToken;
+    }
+
     // Everything a client reads DIRECTLY under docs/** requires an account,
     // even on a public document. These records carry member lists and reviewer
     // identities; publishing a document must not publish the people who read
     // and annotated it. An anonymous reader gets the world-readable
-    // public/{docId} projection plus the bytes through contentProxy, and
-    // nothing else (SPEC §17).
-    function canRead(d) {
-      return isMember(d) || (isVerifiedUser() && isNonPrivate(d));
+    // public/{docId} projection of a PUBLIC document, the reader projection of
+    // an unlisted one from POST /unlock with its key, the bytes through
+    // contentProxy, and nothing else. Mirrors functions/src/lib/acl.ts
+    // readBasis(), for a caller with an account (SPEC §17).
+    function canRead(docId, d) {
+      return isMember(d)
+        || (isVerifiedUser()
+            && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d)));
     }
 
     // The real editor set: owner, direct editors, or effective/inherited
@@ -80,11 +102,13 @@ service cloud.firestore {
             || (d.editorMembers is list && myEmail() in d.editorMembers));
     }
 
-    // `publicEdit` widens WHO MAY EDIT to "any verified account". It never
-    // relaxes isVerifiedUser(), so anonymous stays read-only everywhere.
-    function canEdit(d) {
+    // `publicEdit` widens WHO MAY EDIT to "any verified account" among those
+    // who may read — on an unlisted document, only the holders of its link. It
+    // never relaxes isVerifiedUser(), so anonymous stays read-only everywhere.
+    // Mirrors functions/src/lib/acl.ts canEdit().
+    function canEdit(docId, d) {
       return isDocEditor(d)
-        || (isVerifiedUser() && isNonPrivate(d) && d.publicEdit == true);
+        || (isNonPrivate(d) && d.get('publicEdit', false) == true && canRead(docId, d));
     }
 
     // Author fields must match the caller. The actor's `channel` is pinned to
@@ -118,6 +142,14 @@ service cloud.firestore {
 
       allow write: if false; // Admin SDK only (endpoints + admin CLIs)
 
+      // Link grants: minted by POST /unlock on seeing an unlisted document's
+      // key, and read only by the rules above. A client that could read one
+      // would learn who opened the link; one that could write one would not
+      // need the link at all.
+      match /linkGrants/{uid} {
+        allow read, write: if false;
+      }
+
       // PERSONAL trust (SPEC §6c). Lifting the sandbox for EVERYONE stays
       // owner-only through POST /trust. This subcollection is the per-account
       // opt-in: it un-sandboxes the bundle only in the granting user's own
@@ -127,7 +159,7 @@ service cloud.firestore {
       // rendering. Read is self-only: nobody needs to know who else opted in.
       match /trust/{uid} {
         allow read: if isVerifiedUser() && request.auth.uid == uid;
-        allow create, update: if canRead(docData(docId))
+        allow create, update: if canRead(docId, docData(docId))
           && request.auth.uid == uid
           && request.resource.data.uid == uid
           && request.resource.data.email == myEmail();
@@ -153,15 +185,15 @@ service cloud.firestore {
       }
 
       match /versions/{versionId} {
-        allow read: if canRead(docData(docId));
+        allow read: if canRead(docId, docData(docId));
         allow write: if false; // immutable; minted server-side only
 
         match /annotations/{annId} {
-          allow read: if canRead(docData(docId));
-          allow create: if canRead(docData(docId)) && authoredBySelf();
+          allow read: if canRead(docId, docData(docId));
+          allow create: if canRead(docId, docData(docId)) && authoredBySelf();
           // Readers may only toggle `resolved`. Author, anchor, colour, actor
           // and createdAt are immutable after creation.
-          allow update: if canRead(docData(docId))
+          allow update: if canRead(docId, docData(docId))
             && request.resource.data.authorUid == resource.data.authorUid
             && request.resource.data.authorEmail == resource.data.authorEmail
             && request.resource.data.actor == resource.data.actor
@@ -172,9 +204,9 @@ service cloud.firestore {
             && resource.data.authorUid == request.auth.uid;
 
           match /comments/{commentId} {
-            allow read: if canRead(docData(docId));
-            allow create: if canRead(docData(docId)) && authoredBySelf();
-            allow update: if canRead(docData(docId))
+            allow read: if canRead(docId, docData(docId));
+            allow create: if canRead(docId, docData(docId)) && authoredBySelf();
+            allow update: if canRead(docId, docData(docId))
               && resource.data.authorUid == request.auth.uid
               && request.resource.data.authorUid == resource.data.authorUid
               && request.resource.data.authorEmail == resource.data.authorEmail
@@ -190,11 +222,18 @@ service cloud.firestore {
     // Firestore rules cannot project fields, so "anonymous may read a public
     // doc" cannot be an exception carved into the docs/{docId} rule without
     // handing the world `members`, `viewers`, `ownerEmail` and `stats`.
-    // Instead the server mirrors ONLY the render fields here, and deletes the
-    // mirror the instant visibility returns to private. The rules that protect
-    // everything else stay exactly as they were.
+    // Instead the server mirrors ONLY the render fields of a PUBLIC document
+    // here, and deletes the mirror the instant it stops being public. The rules
+    // that protect everything else stay exactly as they were.
+    //
+    // `get` only, and only a public row. An absent id and any row that is not
+    // public — a stale mirror of a document since made unlisted — are then the
+    // same refusal, so this collection cannot confirm that an id exists.
+    // `list` is refused outright: listing it once enumerated every unlisted
+    // document's id and title. The sitemap lists it through the Admin SDK.
     match /public/{docId} {
-      allow read: if true;
+      allow get: if resource != null && resource.data.visibility == 'public';
+      allow list: if false;
       allow write: if false;
     }
 

@@ -18,6 +18,8 @@ const {
   isMember,
   isNonPrivate,
   isTeamMember,
+  opensEditingToAnyAccount,
+  readBasis,
   visibilityOf,
 } = require("../lib/lib/acl.js");
 const {
@@ -64,12 +66,77 @@ test("absent visibility means private", () => {
   assert.equal(visibilityOf(doc({ visibility: "nonsense" })), "private");
 });
 
-test("a non-private document is readable anonymously", () => {
-  for (const visibility of ["unlisted", "public"]) {
-    const d = doc({ visibility });
-    assert.equal(canRead(d, null), true, visibility);
-    assert.equal(canRead(d, STRANGER), true, visibility);
+test("a public document is readable by anyone", () => {
+  const d = doc({ visibility: "public" });
+  assert.equal(canRead(d, null), true);
+  assert.equal(canRead(d, STRANGER), true);
+  assert.equal(readBasis(d, null), "public");
+  assert.equal(readBasis(d, VIEWER), "member", "a member reads as a member whatever the level");
+});
+
+// An unlisted document needs its link. Without the key, anyone who is not a
+// member learns exactly what a private document would tell them: nothing
+// (SPEC §17).
+const TOKEN = "tok_0123456789abcdefghijk";
+
+test("an unlisted document is unreadable without its key", () => {
+  const d = doc({ visibility: "unlisted", linkToken: TOKEN });
+  assert.equal(canRead(d, null), false, "anonymous, no key");
+  assert.equal(canRead(d, STRANGER), false, "signed in, no key");
+  assert.equal(canRead(d, VIEWER), true, "a member needs no key");
+  assert.equal(readBasis(d, STRANGER), null);
+});
+
+test("the unlisted key must match exactly", () => {
+  const d = doc({ visibility: "unlisted", linkToken: TOKEN });
+  assert.equal(readBasis(d, null, { k: TOKEN }), "link");
+  assert.equal(readBasis(d, STRANGER, { k: TOKEN }), "link");
+  const refused = [
+    ["wrong", "tok_0123456789abcdefghijX"],
+    ["prefix", TOKEN.slice(0, 10)],
+    ["longer", `${TOKEN}x`],
+    ["empty", ""],
+    ["null", null],
+    ["undefined", undefined],
+    // Same length in characters, longer in bytes: a byte-length mismatch must
+    // refuse, not throw out of timingSafeEqual.
+    ["multi-byte", `${TOKEN.slice(0, -1)}é`],
+  ];
+  for (const [label, k] of refused) {
+    assert.equal(readBasis(d, null, { k }), null, label);
+    assert.equal(canRead(d, STRANGER, { k }), false, label);
   }
+});
+
+test("a document without a stored token opens to no key", () => {
+  for (const linkToken of [undefined, null, "", 12345]) {
+    const d = doc({ visibility: "unlisted", linkToken });
+    for (const k of ["", "undefined", "null", "12345"]) {
+      assert.equal(readBasis(d, null, { k }), null, `${String(linkToken)} / ${k}`);
+    }
+  }
+});
+
+test("a key opens nothing on a private or public document it was not minted for", () => {
+  // A private document keeps a stale token only by accident; it must not
+  // matter. setVisibility deletes it, but the predicate does not rely on that.
+  const priv = doc({ visibility: "private", linkToken: TOKEN });
+  assert.equal(readBasis(priv, null, { k: TOKEN }), null);
+  assert.equal(readBasis(priv, STRANGER, { grantToken: TOKEN }), null);
+});
+
+test("a link grant counts only under the current token, and only for a caller", () => {
+  const d = doc({ visibility: "unlisted", linkToken: TOKEN });
+  assert.equal(readBasis(d, STRANGER, { grantToken: TOKEN }), "grant");
+  assert.equal(readBasis(d, STRANGER, { grantToken: "tok_rotated_away_long_ago" }), null, "rotated");
+  assert.equal(readBasis(d, null, { grantToken: TOKEN }), null, "a grant belongs to an account");
+  assert.equal(readBasis(d, STRANGER, { grantToken: "" }), null);
+});
+
+test("the key ladder prefers membership, then public, then the key, then a grant", () => {
+  const d = doc({ visibility: "unlisted", linkToken: TOKEN });
+  assert.equal(readBasis(d, VIEWER, { k: TOKEN, grantToken: TOKEN }), "member");
+  assert.equal(readBasis(d, STRANGER, { k: TOKEN, grantToken: TOKEN }), "link");
 });
 
 test("membership is by uid OR by email, and is case-exact on stored values", () => {
@@ -119,6 +186,24 @@ test("publicEdit widens WHO may edit, never to anyone", () => {
 test("publicEdit on a private document does nothing", () => {
   const d = doc({ visibility: "private", publicEdit: true });
   assert.equal(canEdit(d, STRANGER), false);
+});
+
+test("publicEdit on an unlisted document needs the key or a grant", () => {
+  const d = doc({ visibility: "unlisted", linkToken: TOKEN, publicEdit: true });
+  assert.equal(canEdit(d, STRANGER), false, "no key, no editing");
+  assert.equal(canEdit(d, STRANGER, { grantToken: TOKEN }), true);
+  assert.equal(canEdit(d, STRANGER, { k: TOKEN }), true);
+  assert.equal(canEdit(d, null, { k: TOKEN }), false, "anonymous is read-only, key or not");
+  assert.equal(canEdit(d, VIEWER), true, "a viewer member edits an open-editing document");
+});
+
+test("only a PUBLIC open-editing document opens editing to any account", () => {
+  // The realtime `*` key is written from this, and the realtime rules cannot
+  // see a key. An unlisted document therefore never gets it (SPEC §16).
+  assert.equal(opensEditingToAnyAccount(doc({ visibility: "public", publicEdit: true })), true);
+  assert.equal(opensEditingToAnyAccount(doc({ visibility: "unlisted", publicEdit: true })), false);
+  assert.equal(opensEditingToAnyAccount(doc({ visibility: "private", publicEdit: true })), false);
+  assert.equal(opensEditingToAnyAccount(doc({ visibility: "public" })), false);
 });
 
 test("publicEdit does NOT make a stranger a document editor", () => {

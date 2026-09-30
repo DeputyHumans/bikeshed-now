@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client for visibility and open editing (SPEC §17).
 
-import { post } from "./api";
+import { ApiError, post } from "./api";
 import { expiryMs } from "./expiry";
-import type { DocMeta, Visibility } from "./types";
+import type { DocMeta, PublicDoc, Visibility } from "./types";
 
 export interface VisibilityState {
   visibility: Visibility;
@@ -62,4 +62,20 @@ export function shareUrl(docId: string, state: VisibilityState): string {
   return state.visibility === "unlisted" && state.linkToken
     ? `${base}?k=${state.linkToken}`
     : base;
+}
+
+/**
+ * What a reader who is not a member may know about a document, from the one
+ * endpoint that checks an unlisted document's key: the same shape as the public
+ * projection, or null — one answer for absent, private, and unlisted without
+ * the key. Signed in, presenting the key also records a link grant, which is
+ * what lets the security rules accept this reader's comments (SPEC §17).
+ */
+export async function unlockDoc(docId: string, k: string | null): Promise<PublicDoc | null> {
+  try {
+    return await post<PublicDoc>("/unlock", k ? { docId, k } : { docId });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }

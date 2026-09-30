@@ -50,6 +50,10 @@ const EDITOR = { uid: "u-editor", email: "ed@example.com" };
 const VIEWER = { uid: "u-viewer", email: "viewer@example.com" };
 const STRANGER = { uid: "u-stranger", email: "stranger@example.com" };
 const OUTSIDER = { uid: "u-outsider", email: "someone@evil.example.com" };
+/** Opened the unlisted document with its current key. */
+const GRANTED = { uid: "u-granted", email: "granted@example.com" };
+/** Opened it with a key the owner has since rotated away. */
+const STALE = { uid: "u-stale", email: "stale@example.com" };
 
 /** A verified principal. */
 const verified = (env, p) =>
@@ -152,6 +156,48 @@ describe("firestore rules", () => {
         docId: "public-doc",
         title: "Public",
         visibility: "public",
+      });
+
+      await setDoc(doc(db, "docs/unlisted-doc"), {
+        docId: "unlisted-doc",
+        title: "Unlisted",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        currentVersion: "v1",
+        viewers: [],
+        editors: [],
+        members: [OWNER.email],
+        editorMembers: [OWNER.email],
+        visibility: "unlisted",
+        linkToken: "tok-current",
+        publicEdit: true,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/unlisted-doc/versions/v1"), { versionId: "v1" });
+      await setDoc(doc(db, "docs/unlisted-doc/versions/v1/annotations/a1"), {
+        annId: "a1",
+        authorUid: OWNER.uid,
+        authorEmail: OWNER.email,
+        actor: actorFor(OWNER),
+        anchor: { elementId: "s1", exact: "text", prefix: "", suffix: "", start: 0, end: 4 },
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/unlisted-doc/linkGrants/u-granted"), {
+        uid: GRANTED.uid,
+        token: "tok-current",
+      });
+      await setDoc(doc(db, "docs/unlisted-doc/linkGrants/u-stale"), {
+        uid: STALE.uid,
+        token: "tok-old",
+      });
+      // A mirror left behind from before unlisted documents stopped being
+      // projected. The rule must not serve it, whatever the server forgot.
+      await setDoc(doc(db, "public/unlisted-doc"), {
+        docId: "unlisted-doc",
+        title: "Unlisted",
+        visibility: "unlisted",
       });
 
       await setDoc(doc(db, "folders/f1"), {
@@ -355,7 +401,7 @@ describe("firestore rules", () => {
 
   // --- Public documents ----------------------------------------------------
 
-  it("anyone reads the public projection, and nobody writes it", async () => {
+  it("anyone reads a PUBLIC projection, and nobody writes it", async () => {
     const anon = env.unauthenticatedContext().firestore();
     await assertSucceeds(getDoc(doc(anon, "public/public-doc")));
     await assertFails(setDoc(doc(anon, "public/public-doc"), { title: "x" }));
@@ -380,6 +426,100 @@ describe("firestore rules", () => {
   it("a signed-in non-member still cannot read the public document's own record", async () => {
     const db = verified(env, STRANGER).firestore();
     await assertFails(getDoc(doc(db, "docs/public-doc")));
+  });
+
+  // --- Unlisted documents need their link (SPEC §17) ------------------------
+
+  it("an unlisted row in the projection is refused exactly as an absent id", async () => {
+    // A readable row would tell a keyless visitor the title, and that the id
+    // exists — the leak this rule was changed to close.
+    for (const db of [env.unauthenticatedContext().firestore(), verified(env, STRANGER).firestore()]) {
+      await assertFails(getDoc(doc(db, "public/unlisted-doc")));
+      await assertFails(getDoc(doc(db, "public/no-such-doc")));
+    }
+  });
+
+  it("the projection cannot be listed, even filtered to public rows", async () => {
+    // Listing it once enumerated every unlisted document's id and title.
+    const anon = env.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(anon, "public")));
+    await assertFails(getDocs(query(collection(anon, "public"), where("visibility", "==", "public"))));
+    await assertFails(getDocs(collection(verified(env, STRANGER).firestore(), "public")));
+  });
+
+  it("a signed-in stranger without the link reads and writes nothing under an unlisted document", async () => {
+    for (const who of [STRANGER, STALE]) {
+      const db = verified(env, who).firestore();
+      await assertFails(getDoc(doc(db, "docs/unlisted-doc/versions/v1")), who.uid);
+      await assertFails(getDocs(collection(db, "docs/unlisted-doc/versions/v1/annotations")), who.uid);
+      await assertFails(
+        setDoc(doc(db, `docs/unlisted-doc/versions/v1/annotations/${who.uid}`), {
+          annId: who.uid,
+          authorUid: who.uid,
+          authorEmail: who.email,
+          actor: actorFor(who),
+          anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+          color: "#b5257b",
+          resolved: false,
+          createdAt: new Date(),
+        }),
+        who.uid,
+      );
+      await assertFails(
+        setDoc(doc(db, `docs/unlisted-doc/trust/${who.uid}`), { uid: who.uid, email: who.email }),
+        who.uid,
+      );
+    }
+  });
+
+  it("a current link grant reads and writes feedback as itself", async () => {
+    const db = verified(env, GRANTED).firestore();
+    await assertSucceeds(getDoc(doc(db, "docs/unlisted-doc/versions/v1")));
+    await assertSucceeds(getDocs(collection(db, "docs/unlisted-doc/versions/v1/annotations")));
+    await assertSucceeds(
+      setDoc(doc(db, "docs/unlisted-doc/versions/v1/annotations/g1"), {
+        annId: "g1",
+        authorUid: GRANTED.uid,
+        authorEmail: GRANTED.email,
+        actor: actorFor(GRANTED),
+        anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(db, "docs/unlisted-doc/versions/v1/annotations/a1/comments/c1"), {
+        authorUid: GRANTED.uid,
+        authorEmail: GRANTED.email,
+        actor: actorFor(GRANTED),
+        body: "Agreed.",
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it("a grant opens neither the record nor who read it", async () => {
+    const db = verified(env, GRANTED).firestore();
+    await assertFails(getDoc(doc(db, "docs/unlisted-doc")));
+    await assertFails(getDocs(collection(db, "docs/unlisted-doc/viewers")));
+    await assertFails(getDocs(collection(db, "docs/unlisted-doc/views")));
+  });
+
+  it("a client can neither mint a grant nor read one", async () => {
+    // Minting would make the link unnecessary; reading would say who opened it.
+    const stranger = verified(env, STRANGER).firestore();
+    await assertFails(
+      setDoc(doc(stranger, "docs/unlisted-doc/linkGrants/u-stranger"), {
+        uid: STRANGER.uid,
+        token: "tok-current",
+      }),
+    );
+    const granted = verified(env, GRANTED).firestore();
+    await assertFails(getDoc(doc(granted, "docs/unlisted-doc/linkGrants/u-granted")));
+    await assertFails(getDocs(collection(granted, "docs/unlisted-doc/linkGrants")));
+    const owner = verified(env, OWNER).firestore();
+    await assertFails(getDocs(collection(owner, "docs/unlisted-doc/linkGrants")));
   });
 
   it("open editing does not expose per-person reading history", async () => {

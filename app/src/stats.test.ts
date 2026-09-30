@@ -16,6 +16,7 @@ interface Beat {
   versionId: string;
   sessionId: string;
   ms: number;
+  k?: string;
 }
 
 function beats(): Beat[] {
@@ -61,6 +62,23 @@ describe("trackView", () => {
     // counted rather than being lost between heartbeats.
     expect(beats()[0].ms).toBe(0);
     tracker.stop();
+  });
+
+  it("carries an unlisted document's key, and sends no key field otherwise", () => {
+    // Without its key an unlisted document answers /view exactly as an absent
+    // id, so a link holder's beats must present it (SPEC §17).
+    const linked = trackView("d1", "v1", "tok_0123456789abcdefghijk");
+    vi.advanceTimersByTime(OPEN_DELAY_MS);
+    linked.stop();
+    expect(beats()[0].k).toBe("tok_0123456789abcdefghijk");
+    expect(beats().every((b) => b.k === "tok_0123456789abcdefghijk")).toBe(true);
+
+    vi.mocked(globalThis.fetch).mockClear();
+    const plain = trackView("d2", "v1");
+    vi.advanceTimersByTime(OPEN_DELAY_MS);
+    plain.stop();
+    expect(beats().length).toBeGreaterThan(0);
+    expect(beats().every((b) => !("k" in b))).toBe(true);
   });
 
   it("reports ABSOLUTE time, not a delta", () => {

@@ -132,7 +132,7 @@ and revoke it again if you would rather not leave it standing.
 
 The same grant applies to a function created **after** setup. `firebase
 deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new
-function such as `docShell`; under Domain Restricted Sharing that deploy fails
+function such as `docShell` or `unlockDoc`; under Domain Restricted Sharing that deploy fails
 at "set invoker" and the function stays private. The symptom of the missing
 grant is a `403` with an HTML body, before any code runs — every document page
 looks broken while being perfectly deployed. The repair, once the policy is
@@ -140,7 +140,13 @@ overridden:
 
 ```bash
 gcloud run services add-iam-policy-binding docshell --region=us-central1 --member=allUsers --role=roles/run.invoker
+gcloud run services add-iam-policy-binding unlockdoc --region=us-central1 --member=allUsers --role=roles/run.invoker
 ```
+
+For `unlockDoc` the symptom is narrower and easier to miss: every unlisted
+document reads "Not here" to anyone but its members, key or no key, while
+everything else works. `curl -si https://<deployment>/unlock` answers `405`
+from the function; a `403` with an HTML body is the platform refusing.
 
 ### 4. Do step 10 by hand
 
@@ -254,6 +260,28 @@ names from the channel host, which serves a different build and does not have
 them: a blank page. Preview the workspace on a channel; preview the document
 page on the live site.
 
+**Unlisted documents needing their link is a migration**
+([ADR 0012](../architecture/adr/0012-unlisted-needs-its-link.md)). Deploy in
+this order, so a link holder never lands between an app and rules that
+disagree:
+
+```bash
+firebase deploy --only functions --project <id> --account you@example.com
+curl -si https://<deployment>/unlock | head -1            # 405, not an HTML 403
+npm --prefix app run build && firebase deploy --only hosting --project <id> --account you@example.com
+firebase deploy --only firestore:rules,database --project <id> --account you@example.com
+node scripts/reconcile-visibility.mjs --dry-run --project <id> --database <rtdb-url>
+node scripts/reconcile-visibility.mjs --yes --account you@example.com --project <id> --database <rtdb-url>
+```
+
+Functions first, because the new app calls `/unlock`; hosting next, because the
+`/unlock` rewrite ships with it; the rules last, because they stop serving the
+unlisted rows the old app read. The script then deletes those rows and the
+realtime key that let any account edit an unlisted open-editing document. The
+rules already refuse both; the script removes them. It is idempotent, and a
+second run reports nothing. The `--database` URL is the one the console shows
+for the Realtime Database; without it the script reports that step as skipped.
+
 **The terminal client is published separately**, to npm as `bikeshed-now`, and
 a deployment is not involved: [`publishing-the-cli.md`](publishing-the-cli.md).
 
@@ -276,9 +304,11 @@ to surprise you.
 - **Prefer single-file documents.** A fifty-asset deck is fifty function
   invocations per reader; the same deck inlined is one.
   `docs/development/authoring-bundles.md` says so at the top.
-- **Public and unlisted content is cached** `public, max-age=300` on the
-  immutable version path, because public documents are where traffic spikes.
-  Gated content stays `private, no-store`.
+- **Public content, and unlisted content fetched with its key, is cached**
+  `public, max-age=300` on the immutable version path, because public documents
+  are where traffic spikes. Gated content, and a link holder's read on the
+  strength of their account's grant rather than a key in the URL, stays
+  `private, no-store`.
 - **Set the budget alert.** As of early 2026 a small team's usage sits inside
   the Firebase free tier; a public document that gets attention does not.
 
@@ -322,6 +352,12 @@ for at most 300 s either way, and a reload after that fetches a fresh one.
 If the leak was an ACL mistake rather than a visibility one, no cache is
 involved: gated content was never cacheable, so removing the grant is immediate.
 
+**To withdraw an unlisted link, rotate it.** Make the document private, then
+unlisted again: the new link is the only one that works, and every account that
+opened the old one loses the link grant it held, at once. There is no way to
+withdraw one account's grant alone. Content cached at the old key's URL is in
+the same five-minute window as everything else.
+
 ---
 
 ## Taking it down
@@ -354,6 +390,8 @@ written when there were two, and reported success.
 | Peer cursors missing | no Realtime Database | create one, or accept the no-op |
 | No email arriving | no `RESEND_API_KEY` | set the secret, or accept the logged no-op |
 | A reader sees 404 on a document they were granted | membership not recomputed | `set-access.mjs --doc <id> --list` shows the effective members |
+| Every unlisted document reads "Not here", even with its link | `unlockDoc` not invokable | `curl -si https://<deployment>/unlock` must answer 405; the invoker repair is under §3b |
+| One unlisted link stopped working | the owner rotated it (private, then unlisted) | the new link is in the Share dialog; the old one is meant to be dead |
 | `npm run emulators` fails to bind | another process on 8088/5050 | change the port in `firebase.json`; everything reads it from there |
 
 **Logs.** `firebase functions:log --project <id> --account you@example.com`.

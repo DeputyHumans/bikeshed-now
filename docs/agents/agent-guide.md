@@ -236,6 +236,25 @@ and the owner can move the date or clear it. If you need an expired document,
 ask them — do not republish its content as a new one and leave two documents
 where there was one.
 
+## An unlisted document needs its link
+
+A document shared as **unlisted** is readable by anyone holding its link,
+`https://<deployment>/d/<id>?k=<key>`, and by nobody else. The `id` alone is not
+enough: without the key, every tool answers exactly as it does for an id that
+does not exist.
+
+If you were given such a link, pass the key along: `k` on `get_document`,
+`get_comments`, `reply_to_comment` and `update_document`, or the whole link in
+place of the id on the command line:
+
+```bash
+bikeshed comments 'https://<deployment>/d/build-estimate?k=…'
+```
+
+Once the person whose token you hold has opened the link in a browser, their
+account holds the access and the key is no longer needed. If the owner rotates
+the link, the old key stops working. Ask for the new one; do not guess.
+
 ## Writing a document that works well here
 
 Each of the four below changes whether a feature works.

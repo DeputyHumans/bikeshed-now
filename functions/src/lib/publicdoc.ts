@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The world-readable projection of a non-private document (SPEC §17).
+// The world-readable projection of a public document, and what a reader is told (SPEC §17).
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -15,17 +15,22 @@ type Db = admin.firestore.Firestore;
  * `ownerEmail` and the full reading statistics — the entire ACL of a document
  * whose owner only meant to share the text.
  *
- * So a non-private document is MIRRORED here, carrying only what a reader needs
- * to render it, and the `docs/{docId}` rule is left exactly as it was. One new
+ * So a PUBLIC document is MIRRORED here, carrying only what a reader needs to
+ * render it, and the `docs/{docId}` rule is left exactly as it was. One new
  * collection, and no exception carved into the rule that protects everything
  * else.
  *
- * The mirror is deleted the instant visibility returns to private. That is the
+ * An UNLISTED document is not mirrored. Anything here is readable by anyone who
+ * knows an id, and an unlisted document's title — even the fact that it exists
+ * — belongs to the holders of its link. They get the same reader shape from
+ * POST /unlock, which checks the key (SPEC §17).
+ *
+ * The mirror is deleted the instant visibility stops being public. That is the
  * whole revocation path, and it is why this function is called from every place
  * that can change visibility or membership rather than from the one endpoint
  * that obviously changes it.
  */
-export interface PublicDoc {
+export interface ReaderDoc {
   docId: string;
   title: string;
   slug: string;
@@ -47,11 +52,16 @@ export interface PublicDoc {
    * cron, and it is stated in SPEC §17 rather than discovered.
    */
   expiresAt: number | null;
+}
+
+/** The mirror in `public/{docId}`: the reader shape plus when it was published. */
+export interface PublicDoc extends ReaderDoc {
+  visibility: "public";
   publishedAt: admin.firestore.Timestamp | FieldValue | null;
 }
 
-/** Fields that may appear in the projection. Anything else is a leak. */
-const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [
+/** Fields a reader may be handed. Anything else is a leak. */
+const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "docId",
   "title",
   "slug",
@@ -62,45 +72,104 @@ const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [
   "publicEdit",
   "trusted",
   "expiresAt",
-  "publishedAt",
 ];
 
+/** Fields that may appear in the world-readable projection. */
+const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [...READER_KEYS, "publishedAt"];
+
 /**
- * Build the projection from a stored document. Exported so a test can assert
- * the output keys exactly, which is the check that actually prevents a leak: a
- * future field added to DocMeta must not silently ride along.
+ * Strip anything not on the list. The types say the object has only these keys,
+ * but types are erased at runtime and these objects leave the server.
  */
+function only<T extends object>(obj: T, keys: readonly (keyof T)[]): T {
+  for (const key of Object.keys(obj)) {
+    if (!keys.includes(key as keyof T)) {
+      delete (obj as Record<string, unknown>)[key];
+    }
+  }
+  return obj;
+}
+
+/**
+ * What a reader of a non-private document is told about it: the render fields,
+ * nothing about who shares or reads it. Null for a private document. Exported so
+ * a test can assert the output keys exactly, which is the check that actually
+ * prevents a leak: a future field added to DocMeta must not silently ride along.
+ */
+export function projectReader(
+  docId: string,
+  data: Record<string, unknown>,
+): ReaderDoc | null {
+  const visibility = visibilityOf(data as DocAclData);
+  if (visibility === "private") return null;
+  return only<ReaderDoc>(
+    {
+      docId,
+      title: typeof data.title === "string" ? data.title : "Untitled",
+      slug: typeof data.slug === "string" ? data.slug : docId,
+      currentVersion:
+        typeof data.currentVersion === "string" ? data.currentVersion : "",
+      entry: typeof data.entry === "string" ? data.entry : "index.html",
+      format: data.format === "markdown" ? "markdown" : "html",
+      visibility,
+      publicEdit: data.publicEdit === true,
+      trusted: data.trusted !== false,
+      expiresAt: expiryMs(data as DocAclData),
+    },
+    READER_KEYS,
+  );
+}
+
+/** The world-readable mirror of a PUBLIC document; null for any other level. */
 export function projectPublicDoc(
   docId: string,
   data: Record<string, unknown>,
 ): PublicDoc | null {
-  const visibility = visibilityOf(data as DocAclData);
-  if (visibility === "private") return null;
-  const projection: PublicDoc = {
-    docId,
-    title: typeof data.title === "string" ? data.title : "Untitled",
-    slug: typeof data.slug === "string" ? data.slug : docId,
-    currentVersion:
-      typeof data.currentVersion === "string" ? data.currentVersion : "",
-    entry: typeof data.entry === "string" ? data.entry : "index.html",
-    format: data.format === "markdown" ? "markdown" : "html",
-    visibility,
-    publicEdit: data.publicEdit === true,
-    trusted: data.trusted !== false,
-    expiresAt: expiryMs(data as DocAclData),
-    publishedAt:
-      (data.updatedAt as admin.firestore.Timestamp | undefined) ??
-      (data.createdAt as admin.firestore.Timestamp | undefined) ??
-      null,
-  };
-  // Defensive: the type says these are the only keys, but the type is erased at
-  // runtime and this object is world-readable.
-  for (const key of Object.keys(projection)) {
-    if (!PROJECTED_KEYS.includes(key as keyof PublicDoc)) {
-      delete (projection as unknown as Record<string, unknown>)[key];
+  if (visibilityOf(data as DocAclData) !== "public") return null;
+  const reader = projectReader(docId, data);
+  if (!reader) return null;
+  return only<PublicDoc>(
+    {
+      ...reader,
+      visibility: "public",
+      publishedAt:
+        (data.updatedAt as admin.firestore.Timestamp | undefined) ??
+        (data.createdAt as admin.firestore.Timestamp | undefined) ??
+        null,
+    },
+    PROJECTED_KEYS,
+  );
+}
+
+/**
+ * The stored document with its current version's `entry` and `format` folded
+ * in. Those live on the version, not the document, so they are fetched here.
+ */
+async function withVersionFields(
+  docRef: admin.firestore.DocumentReference,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const versionId =
+    typeof data.currentVersion === "string" ? data.currentVersion : "";
+  let entry = "index.html";
+  let format: "html" | "markdown" = "html";
+  if (versionId) {
+    const vSnap = await docRef.collection("versions").doc(versionId).get();
+    if (vSnap.exists) {
+      const v = vSnap.data() || {};
+      if (typeof v.entry === "string") entry = v.entry;
+      if (v.format === "markdown") format = "markdown";
     }
   }
-  return projection;
+  return { ...data, entry, format };
+}
+
+/** The reader projection of a stored document, as POST /unlock returns it. */
+export async function readerProjection(
+  docRef: admin.firestore.DocumentReference,
+  data: Record<string, unknown>,
+): Promise<ReaderDoc | null> {
+  return projectReader(docRef.id, await withVersionFields(docRef, data));
 }
 
 /**
@@ -117,20 +186,10 @@ export async function syncPublicProjection(db: Db, docId: string): Promise<void>
     return;
   }
   const data = snap.data() || {};
-  // `entry` lives on the version, not the document, so fetch it alongside.
-  const versionId =
-    typeof data.currentVersion === "string" ? data.currentVersion : "";
-  let entry = "index.html";
-  let format: "html" | "markdown" = "html";
-  if (versionId) {
-    const vSnap = await docRef.collection("versions").doc(versionId).get();
-    if (vSnap.exists) {
-      const v = vSnap.data() || {};
-      if (typeof v.entry === "string") entry = v.entry;
-      if (v.format === "markdown") format = "markdown";
-    }
-  }
-  const projection = projectPublicDoc(docId, { ...data, entry, format });
+  const projection =
+    visibilityOf(data as DocAclData) === "public"
+      ? projectPublicDoc(docId, await withVersionFields(docRef, data))
+      : null;
   if (!projection) {
     await publicRef.delete();
     return;

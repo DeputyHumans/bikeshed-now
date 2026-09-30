@@ -3,22 +3,57 @@
 
 import { useEffect, useState } from "react";
 import { getPublicDoc, getVersion, listVersions, watchDoc } from "../firestore";
+import { unlockDoc } from "../visibility";
 import type { DocMeta, DocVersion, PublicDoc, SourceFormat } from "../types";
 
 /**
- * A reader arrives by one of three routes, and the viewer should not care which.
+ * A reader arrives by one of four routes, and the viewer should not care which.
  *
  *   A MEMBER reads `docs/{docId}` and gets everything.
- *   A SIGNED-IN NON-MEMBER on a public document cannot read that record at all —
- *     it carries the member list and the reading statistics, and Firestore
- *     rules cannot project fields — so they get the `public/{docId}` mirror.
- *   AN ANONYMOUS READER gets the same mirror.
+ *   ANYONE ELSE cannot read that record at all — it carries the member list and
+ *     the reading statistics, and Firestore rules cannot project fields — so:
+ *   on a PUBLIC document they get the `public/{docId}` mirror;
+ *   on an UNLISTED one, holding its key, they get the same shape from
+ *     POST /unlock, which checks the key and, for an account, records a grant;
+ *   and a signed-in reader who opened the link before gets it from /unlock
+ *     without the key, on the strength of that grant.
+ *
+ * Anyone else is told nothing. Without the key an unlisted document is
+ * indistinguishable from an id that does not exist (SPEC §17).
  *
  * This hook tries the full record first and falls back, so every consumer gets
  * one shape with the fields it is allowed to have and `null` for the rest. The
- * fallback is not an error path: for most readers of a public document it is
+ * fallback is not an error path: for most readers of a shared document it is
  * the normal one.
  */
+
+/** Who is asking, besides whoever the Firestore SDK is signed in as. */
+export interface ReaderAccess {
+  /** The unlisted key from the URL's `?k=`, or "" when there is none. */
+  k: string;
+  /** The signed-in account, or null for an anonymous reader. */
+  uid: string | null;
+  /** False until auth has decided who is asking; nothing is read before. */
+  settled: boolean;
+}
+
+const ANYONE: ReaderAccess = { k: "", uid: null, settled: true };
+
+/** The render fields for someone who may not read the full record, or null. */
+async function resolveReader(
+  docId: string,
+  k: string,
+  signedIn: boolean,
+): Promise<PublicDoc | null> {
+  // The key only opens anything at the one endpoint that checks it.
+  if (k) return unlockDoc(docId, k);
+  const projection = await getPublicDoc(docId);
+  if (projection) return projection;
+  // No key and no public mirror. A signed-in reader may still hold a grant
+  // from opening the link before — a reply notification links without the
+  // key. An anonymous one cannot, so they never ask.
+  return signedIn ? unlockDoc(docId, null) : null;
+}
 
 export interface ResolvedDocument {
   loading: boolean;
@@ -28,6 +63,13 @@ export interface ResolvedDocument {
   publicDoc: PublicDoc | null;
   /** Present when the document exists but this reader may not see it. */
   notFound: boolean;
+  /**
+   * The identity the current answer was worked out for: a uid, "" for an
+   * anonymous reader, null before the first answer. A reader who signs in on
+   * the page is resolved again — which is what mints their link grant — and
+   * anything that writes as them waits until this is their uid.
+   */
+  resolvedFor: string | null;
 
   title: string;
   currentVersion: string;
@@ -45,6 +87,7 @@ const EMPTY: ResolvedDocument = {
   meta: null,
   publicDoc: null,
   notFound: false,
+  resolvedFor: null,
   title: "",
   currentVersion: "",
   entry: "index.html",
@@ -55,17 +98,29 @@ const EMPTY: ResolvedDocument = {
   version: null,
 };
 
-export function useDocument(docId: string, versionId?: string): ResolvedDocument {
+export function useDocument(
+  docId: string,
+  versionId?: string,
+  access: ReaderAccess = ANYONE,
+): ResolvedDocument {
+  const { k, uid, settled } = access;
+  const who = uid ?? "";
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [publicDoc, setPublicDoc] = useState<PublicDoc | null>(null);
   const [versions, setVersions] = useState<DocVersion[]>([]);
   const [version, setVersion] = useState<DocVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Whose read of the full record was refused. The fallback runs for that
+  // identity, and again when somebody else asks — the same reader, signed in.
+  const [deniedFor, setDeniedFor] = useState<string | null>(null);
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null);
 
+  // `loading` is only ever cleared, never set again. A reader who signs in on
+  // the page is resolved a second time, and a spinner then would unmount the
+  // frame and lose the selection they signed in to comment on.
   useEffect(() => {
-    setLoading(true);
-    setNotFound(false);
+    if (!settled) return;
     let cancelled = false;
 
     const unsubscribe = watchDoc(
@@ -75,25 +130,15 @@ export function useDocument(docId: string, versionId?: string): ResolvedDocument
         if (next) {
           setMeta(next);
           setPublicDoc(null);
+          setNotFound(false);
           setLoading(false);
+          setResolvedFor(who);
         }
       },
       () => {
-        // A denied read is the expected case for a non-member on a public
-        // document, so it falls back rather than surfacing.
-        if (cancelled) return;
-        void getPublicDoc(docId)
-          .then((projection) => {
-            if (cancelled) return;
-            setPublicDoc(projection);
-            setNotFound(projection == null);
-            setLoading(false);
-          })
-          .catch(() => {
-            if (cancelled) return;
-            setNotFound(true);
-            setLoading(false);
-          });
+        // A denied read is the expected case for anyone but a member, so it
+        // falls back rather than surfacing.
+        if (!cancelled) setDeniedFor(who);
       },
     );
 
@@ -101,7 +146,24 @@ export function useDocument(docId: string, versionId?: string): ResolvedDocument
       cancelled = true;
       unsubscribe();
     };
-  }, [docId]);
+  }, [docId, who, settled]);
+
+  useEffect(() => {
+    if (!settled || deniedFor !== who) return;
+    let cancelled = false;
+    void resolveReader(docId, k, uid !== null)
+      .catch(() => null)
+      .then((projection) => {
+        if (cancelled) return;
+        setPublicDoc(projection);
+        setNotFound(projection == null);
+        setLoading(false);
+        setResolvedFor(who);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [docId, k, uid, who, deniedFor, settled]);
 
   // Version records are readable by anyone who may read the document's
   // feedback, so this simply fails quietly for an anonymous reader — who does
@@ -127,7 +189,7 @@ export function useDocument(docId: string, versionId?: string): ResolvedDocument
   }, [docId, resolvedVersionId, versions]);
 
   if (!meta && !publicDoc) {
-    return { ...EMPTY, loading, notFound };
+    return { ...EMPTY, loading, notFound, resolvedFor };
   }
 
   return {
@@ -135,6 +197,7 @@ export function useDocument(docId: string, versionId?: string): ResolvedDocument
     meta,
     publicDoc,
     notFound,
+    resolvedFor,
     title: meta?.title ?? publicDoc?.title ?? "Untitled",
     currentVersion: resolvedVersionId,
     entry: version?.entry ?? publicDoc?.entry ?? "index.html",

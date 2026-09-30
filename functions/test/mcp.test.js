@@ -341,6 +341,102 @@ test("list_documents reads format from the current version, not the document", a
   assert.equal(rows.find((r) => r.id === "a-doc-with-no-version").format, "html");
 });
 
+// --- Unlisted documents need their link (SPEC §17) -------------------------
+
+const LINK = "tok_0123456789abcdefghijk";
+const STRANGER = { uid: "u-stranger", emailLower: "stranger@example.com" };
+
+/**
+ * One unlisted document with one open thread, and optionally a link grant for
+ * the stranger. Enough of Firestore for loadDoc and get_comments.
+ */
+function unlistedDb({ grantToken = null, doc = {} } = {}) {
+  const empty = { exists: false, get: () => undefined, data: () => undefined };
+  const comments = {
+    orderBy: () => comments,
+    get: async () => ({
+      docs: [{ data: () => ({ authorEmail: "ana@example.com", body: "Too long." }) }],
+    }),
+  };
+  const annotations = {
+    where: () => annotations,
+    limit: () => annotations,
+    get: async () => ({
+      docs: [
+        {
+          id: "t1",
+          data: () => ({ anchor: { exact: "the passage" }, resolved: false }),
+          ref: { collection: () => comments },
+        },
+      ],
+    }),
+  };
+  const docRef = (id) => ({
+    id,
+    get: async () =>
+      id === "memo"
+        ? {
+            exists: true,
+            data: () => ({
+              title: "Memo",
+              currentVersion: "v1",
+              ownerUid: "u-owner",
+              ownerEmail: "owner@example.com",
+              members: ["owner@example.com"],
+              visibility: "unlisted",
+              linkToken: LINK,
+              ...doc,
+            }),
+          }
+        : empty,
+    collection: (name) => ({
+      doc: (child) =>
+        name === "linkGrants"
+          ? {
+              get: async () =>
+                child === STRANGER.uid && grantToken
+                  ? { exists: true, get: (f) => ({ uid: child, token: grantToken })[f] }
+                  : empty,
+            }
+          : { collection: () => annotations },
+    }),
+  });
+  return { collection: () => ({ doc: docRef }) };
+}
+
+async function comments(db, args) {
+  return toolByName("get_comments").run({ db, caller: STRANGER }, args);
+}
+
+test("an unlisted document answers a keyless stranger exactly as an absent id does", async () => {
+  const db = unlistedDb();
+  await assert.rejects(comments(db, { id: "memo" }), { message: 'no document with id "memo"' });
+  await assert.rejects(comments(db, { id: "nope" }), { message: 'no document with id "nope"' });
+  await assert.rejects(comments(db, { id: "memo", k: "tok_wrong_wrong_wrong_wr" }), {
+    message: 'no document with id "memo"',
+  });
+});
+
+test("the link's key, or a current grant, opens an unlisted document to an agent", async () => {
+  const withKey = await comments(unlistedDb(), { id: "memo", k: LINK });
+  assert.equal(withKey.threads[0].quote, "the passage");
+
+  const granted = await comments(unlistedDb({ grantToken: LINK }), { id: "memo" });
+  assert.equal(granted.threads.length, 1, "the account opened the link before");
+
+  await assert.rejects(comments(unlistedDb({ grantToken: "tok_rotated_away_long_ago" }), { id: "memo" }), {
+    message: 'no document with id "memo"',
+  });
+});
+
+test("the key is an optional argument on every tool that reads one document", () => {
+  for (const name of ["get_document", "update_document", "get_comments", "reply_to_comment"]) {
+    const schema = toolByName(name).inputSchema;
+    assert.equal(schema.properties.k?.type, "string", name);
+    assert.ok(!schema.required.includes("k"), `${name} must not demand a key`);
+  }
+});
+
 // --- The protocol ----------------------------------------------------------
 
 test("a request with no credential is refused before any database access", async () => {

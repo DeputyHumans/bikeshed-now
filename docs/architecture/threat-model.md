@@ -6,20 +6,24 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes | private bucket, served only by `contentProxy` and `downloadBundle`; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`, or anyone when the owner made it non-private |
+| Document bytes | private bucket, served only by `contentProxy` and `downloadBundle`; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it) |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
-| Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document |
+| Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document: a member, anyone on a public one, a link grant on an unlisted one |
+| That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link |
 | Per-person reading history | `docs/{docId}/viewers`, `/views` | owner + real editors only |
 | Personal access token secrets | nowhere — only a SHA-256 hash is stored | nobody, including the owner, after the one-time reveal |
 | The deployment's own binding (project id, bucket, keys) | gitignored files and Firebase secret manager | the operator |
 
 ## Principals
 
-- **Anonymous.** No account. Can read a non-private document's bytes through the
-  proxy and the `public/{docId}` projection. **Can never write anything**, and
-  can never read a member list, a reviewer identity, or a reading statistic.
+- **Anonymous.** No account. Can read a public document's bytes through the
+  proxy and its `public/{docId}` projection, and an unlisted document's only
+  with its key, through the proxy and `POST /unlock`. **Can never write
+  anything**, and can never read a member list, a reviewer identity, or a
+  reading statistic.
 - **Any verified account.** Passes the §1 gate. Sees only what its email is in
-  `members` for, plus non-private documents.
+  `members` for, plus public documents, plus unlisted documents it holds the key
+  to or a current link grant for.
 - **Member / editor / owner.** The ACL ladder.
 - **An agent holding a personal access token.** Exactly its owner's identity and
   exactly its owner's ACL. No service accounts, no impersonation.
@@ -73,16 +77,23 @@ that address.
 
 With no domain gate, any signed-in account could otherwise probe for documents.
 
-**Mitigation, two parts.**
+**Mitigation, three parts.**
 
-1. `/content/**` and `/download/**` collapse "you may not read this" and "this
-   does not exist" into the same **404**. Mutation endpoints keep 403, where the
-   caller is acting inside their own workspace and already knows the id.
+1. `/content/**`, `/download/**`, `/unlock` and `/view` collapse "you may not
+   read this" and "this does not exist" into the same **404**. Mutation
+   endpoints answer 403 only to a caller who may read the document, who already
+   knows the id, and 404 to everyone else.
 2. Presence is gated by a **server-maintained mirror**
    (`presenceAccess/{docId}/{emailKey}`) rather than by the identity gate. RTDB
    rules cannot query Firestore, so the authorization data has to live in RTDB.
    It fails closed: a missing entry means presence goes dark, never that a
    stranger can read it.
+
+3. **An unlisted document without its key behaves as a private one**, on every
+   one of those surfaces and in the security rules. `public/{docId}` holds
+   public documents only, allows `get` of a public row and no `list`, and the
+   realtime `*` key that opens editing to any account is written for public
+   documents only (SPEC §16, §17).
 
 Part 2 matters more than it looks. The presence payload now carries a live
 selection stream, which reveals what a person is reading sentence by sentence —
@@ -102,11 +113,35 @@ Firestore rules cannot project fields, so a naive "allow anonymous `get` when
 public" would hand the world `members`, `viewers`, `ownerEmail` and `stats`.
 
 **Mitigation.** A separate world-readable `public/{docId}` projection carrying
-only render fields, written by the same server paths that recompute `members`
-and deleted the instant visibility returns to private. The `docs/{docId}` rule
+only render fields, of public documents only, written by the same server paths
+that recompute `members` and deleted the instant a document stops being public. The `docs/{docId}` rule
 is untouched. Everything else under `docs/**` still requires an account, even on
 a public document — publishing a document must not publish the people who
 reviewed it.
+
+### An unlisted document is found or read without its link
+
+"Unlisted" once meant "readable by anyone who guesses the id". The key was
+checked by hand on three byte paths while the shared `canRead`, the security
+rules and the projection all treated unlisted as public. So anyone could list
+`public/` and read every unlisted document's id and title; any account could
+read its comments and, through the agent tools, its whole source; and the view
+counter and the write endpoints confirmed that it existed. Chosen ids made the
+id guessable as well.
+
+**Mitigation.** One predicate, `readBasis`, decides every read, and
+`tokenMatches` is the only comparison of a key, held there by a test. The rules
+cannot see a URL, so a signed-in link holder is given a **link grant** that
+names the token they presented; it lapses the moment the link is rotated. An
+unlisted document is not in `public/`, and the rule refuses a stale row and an
+absent one alike.
+
+**Residual, accepted.** A grant cannot be withdrawn from one account without
+rotating the link for everyone; that is ADR 0012's reversal condition. A link
+holder on an open-editing unlisted document edits without being merged live.
+A document once readable at a URL with its key stays in a shared cache for up
+to five minutes after the link is rotated, as any content does after it is made
+private (SPEC §17).
 
 ### A client forges provenance
 

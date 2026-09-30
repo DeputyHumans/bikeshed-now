@@ -27,10 +27,13 @@
 // selection stream reveals what someone is reading sentence by sentence, that is
 // considerably more than a name.
 //
-// `editAccess/{docId}/*` is how an OPEN-EDITING document says "any verified
-// account". `publicEdit` widens who may edit to accounts that are by definition
-// not in `editorMembers`, and `*` is safe as a key precisely because it is not a
-// legal address: the validator rejects it, so it cannot collide with a person.
+// `editAccess/{docId}/*` is how a PUBLIC open-editing document says "any
+// verified account". `publicEdit` widens who may edit to accounts that are by
+// definition not in `editorMembers`, and `*` is safe as a key precisely because
+// it is not a legal address: the validator rejects it, so it cannot collide with
+// a person. An UNLISTED open-editing document never gets it: these rules cannot
+// see a link's key, so `*` there would let any account write into a document it
+// cannot even name. Its link holders edit through /draft, which can (SPEC §16).
 //
 // `editAccess/{docId}` is the SECOND mirror, of `editorMembers`, and it exists
 // because `status/{docId}/y` carries shared document state (SPEC §6b). Gating

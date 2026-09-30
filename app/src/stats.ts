@@ -43,8 +43,11 @@ function beat(
   sessionId: string,
   ms: number,
   final: boolean,
+  k?: string,
 ): void {
-  const payload = JSON.stringify({ docId, versionId, sessionId, ms });
+  // An unlisted document's key rides along: without it, the server answers a
+  // link holder's view exactly as an id that does not exist (SPEC §17).
+  const payload = JSON.stringify({ docId, versionId, sessionId, ms, ...(k ? { k } : {}) });
 
   if (final && typeof navigator !== "undefined" && navigator.sendBeacon) {
     try {
@@ -75,7 +78,7 @@ function newSessionId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function trackView(docId: string, versionId: string): ViewTracker {
+export function trackView(docId: string, versionId: string, k?: string): ViewTracker {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return { markActive: () => {}, stop: () => {} };
   }
@@ -118,7 +121,7 @@ export function trackView(docId: string, versionId: string): ViewTracker {
     registered = true;
     // Registers the session — and so the +1 view — well before the first
     // heartbeat, so a reader who leaves after thirty seconds is still counted.
-    beat(docId, versionId, sessionId, 0, false);
+    beat(docId, versionId, sessionId, 0, false, k);
   }, OPEN_DELAY_MS);
 
   const timer = window.setInterval(() => {
@@ -126,19 +129,19 @@ export function trackView(docId: string, versionId: string): ViewTracker {
     sync();
     const ms =
       runningSince != null ? accruedMs + (Date.now() - runningSince) : accruedMs;
-    beat(docId, versionId, sessionId, ms, false);
+    beat(docId, versionId, sessionId, ms, false, k);
   }, BEAT_MS);
 
   const onVisibility = () => {
     sync();
     // Going hidden may precede the tab being discarded, so flush what we have.
     if (!isVisible() && registered) {
-      beat(docId, versionId, sessionId, settle(), true);
+      beat(docId, versionId, sessionId, settle(), true, k);
     }
   };
   const onPageHide = () => {
     if (stopped || !registered) return;
-    beat(docId, versionId, sessionId, settle(), true);
+    beat(docId, versionId, sessionId, settle(), true, k);
   };
 
   document.addEventListener("visibilitychange", onVisibility);
@@ -155,7 +158,7 @@ export function trackView(docId: string, versionId: string): ViewTracker {
       window.removeEventListener("pagehide", onPageHide);
       // Never registered means the session does not exist server-side. Beating
       // now would CREATE it, turning a two-second glance into a recorded view.
-      if (registered) beat(docId, versionId, sessionId, settle(), true);
+      if (registered) beat(docId, versionId, sessionId, settle(), true, k);
     },
   };
 }

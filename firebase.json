@@ -19,6 +19,7 @@
       { "source": "/team-members", "function": "manageTeamMembers" },
       { "source": "/tokens", "function": "manageTokens" },
       { "source": "/view", "function": "recordView" },
+      { "source": "/unlock", "function": "unlockDoc" },
       { "source": "/draft", "function": "saveDraft" },
       { "source": "/commit", "function": "commitVersion" },
       { "source": "/mcp", "function": "mcp" },

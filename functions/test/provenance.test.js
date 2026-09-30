@@ -5,7 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { actorFrom, isAutomated } = require("../lib/lib/actor.js");
-const { projectPublicDoc } = require("../lib/lib/publicdoc.js");
+const { projectPublicDoc, projectReader } = require("../lib/lib/publicdoc.js");
 const { resolveMarking, markingIsVisible, MARKING_OFF } = require("../lib/lib/marking.js");
 const { emailKey } = require("../lib/lib/presence.js");
 
@@ -118,12 +118,23 @@ function storedDoc(overrides = {}) {
 test("a private document has no projection at all", () => {
   assert.equal(projectPublicDoc("d1", storedDoc()), null, "absent visibility is private");
   assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "private" })), null);
+  assert.equal(projectReader("d1", storedDoc({ visibility: "private" })), null);
+});
+
+test("an unlisted document is never in the world-readable projection", () => {
+  // public/{docId} is readable by anyone who knows an id. An unlisted document
+  // there would tell a keyless visitor its title and that it exists — the
+  // exact thing its link is meant to guard (SPEC §17). Its readers get the
+  // same shape from POST /unlock, which checks the key.
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "unlisted" })), null);
+  assert.notEqual(projectReader("d1", storedDoc({ visibility: "unlisted" })), null);
 });
 
 test("the projection carries render fields and nothing else", () => {
   // Firestore rules cannot project fields, which is the entire reason this
   // collection exists. If a future field rides along, the world reads it.
   const p = projectPublicDoc("d1", storedDoc({ visibility: "public" }));
+  assert.ok(p, "a public document is projected");
   assert.deepEqual(Object.keys(p).sort(), [
     "currentVersion",
     "docId",
@@ -142,10 +153,33 @@ test("the projection carries render fields and nothing else", () => {
   }
 });
 
+test("the reader projection an unlisted document unlocks carries render fields and nothing else", () => {
+  // What POST /unlock returns to a link holder. Same rule: a field that rides
+  // along reaches every holder of the link.
+  const p = projectReader("d1", storedDoc({ visibility: "unlisted" }));
+  assert.ok(p, "an unlisted document has a reader projection");
+  assert.deepEqual(Object.keys(p).sort(), [
+    "currentVersion",
+    "docId",
+    "entry",
+    "expiresAt",
+    "format",
+    "publicEdit",
+    "slug",
+    "title",
+    "trusted",
+    "visibility",
+  ].sort());
+  for (const field of PRIVATE_FIELDS) {
+    assert.ok(!(field in p), `${field} leaked into the reader projection`);
+  }
+});
+
 test("the link token is never projected", () => {
-  // An unlisted document's token IS its access control. Publishing it in a
-  // world-readable document would make "unlisted" meaningless.
-  const p = projectPublicDoc("d1", storedDoc({ visibility: "unlisted" }));
+  // An unlisted document's token IS its access control. Handing it back from
+  // /unlock would let a link holder mint links after a rotation.
+  const p = projectReader("d1", storedDoc({ visibility: "unlisted" }));
+  assert.ok(p, "the check is vacuous against a null projection");
   assert.ok(!JSON.stringify(p).includes("s3cret"));
 });
 

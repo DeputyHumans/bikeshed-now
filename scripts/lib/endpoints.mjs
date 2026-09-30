@@ -45,6 +45,7 @@ export const ENDPOINTS = [
   { path: "/team-members", fn: "manageTeamMembers", match: "exact" },
   { path: "/tokens", fn: "manageTokens", match: "exact" },
   { path: "/view", fn: "recordView", match: "exact" },
+  { path: "/unlock", fn: "unlockDoc", match: "exact" },
   { path: "/draft", fn: "saveDraft", match: "exact" },
   { path: "/commit", fn: "commitVersion", match: "exact" },
   { path: "/mcp", fn: "mcp", match: "exact" },

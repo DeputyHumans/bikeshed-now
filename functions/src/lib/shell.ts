@@ -19,7 +19,7 @@
  */
 
 import { PUBLIC_CACHE_SECONDS } from "../config";
-import { type DocAclData, expiryMs, isExpired, visibilityOf } from "./acl";
+import { type DocAclData, expiryMs, isExpired, readBasis, visibilityOf } from "./acl";
 import type { DocHead } from "./head";
 import { escapeAttr, escapeText } from "./html";
 
@@ -41,7 +41,6 @@ export type ShellDecision = typeof GENERIC | DocumentDecision;
 
 /** The stored fields this decision reads, all untrusted in shape. */
 export interface ShellDoc extends DocAclData {
-  linkToken?: unknown;
   currentVersion?: unknown;
   title?: unknown;
 }
@@ -49,12 +48,12 @@ export interface ShellDoc extends DocAclData {
 /**
  * Whether to render the document's head into the shell, and for which version.
  *
- * The rules mirror `contentProxy` for an anonymous caller: private and expired
- * documents are refused (the owner included — their tab title comes from the
- * client), unlisted needs the link token, and the cache window is the content
- * window capped at the time left before expiry, so `max-age` never outlives
- * the date. A `k` that is absent must never match a token that is absent,
- * which is why both sides are checked for being a non-empty string first.
+ * The decision is `contentProxy`'s for an anonymous caller — the same
+ * `readBasis`, with no account and so no grant: private and expired documents
+ * are refused (the owner included — their tab title comes from the client),
+ * unlisted needs the link token, and the cache window is the content window
+ * capped at the time left before expiry, so `max-age` never outlives the date.
+ * A `k` that is absent never matches a token that is absent (`tokenMatches`).
  */
 export function decideShell(input: {
   doc: ShellDoc | null;
@@ -64,12 +63,10 @@ export function decideShell(input: {
 }): ShellDecision {
   const { doc, k, now } = input;
   if (doc === null) return GENERIC;
-  const visibility = visibilityOf(doc);
-  if (visibility === "private") return GENERIC;
+  const basis = readBasis(doc, null, { k });
+  if (basis !== "public" && basis !== "link") return GENERIC;
   if (isExpired(doc, now)) return GENERIC;
-  if (visibility === "unlisted") {
-    if (k.length === 0 || typeof doc.linkToken !== "string" || k !== doc.linkToken) return GENERIC;
-  }
+  const visibility = visibilityOf(doc);
   const versionId = input.versionId ?? doc.currentVersion;
   if (typeof versionId !== "string" || versionId.length === 0) return GENERIC;
 

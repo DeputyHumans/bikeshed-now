@@ -16,6 +16,38 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Security
+
+- **An unlisted document needs its link, everywhere.** Before this fix,
+  "unlisted" meant "readable by anyone who guesses the id". The key was checked
+  on three byte paths, and everything else treated unlisted as public:
+  - Anyone could list `public/` and read every unlisted document's id, title and
+    publish time.
+  - Opening one without the key drew its title, version and controls around an
+    empty frame.
+  - Any account could read and write its comments, read its whole source through
+    `get_document`, and duplicate it.
+  - Any account could edit it through the realtime log when open editing was on.
+  - `/view` and the write endpoints confirmed that it existed.
+
+  Now, without the key, it is indistinguishable from an id that does not exist
+  (SPEC §17, [ADR 0012](docs/architecture/adr/0012-unlisted-needs-its-link.md)):
+  - `public/` holds public documents only, and can no longer be listed.
+  - Unlisted readers get their fields from a new `POST /unlock`.
+  - A signed-in link holder gets a link grant, which lets them comment and lapses
+    when the link is rotated.
+  - `get_document`, `update_document`, `get_comments` and `reply_to_comment` take
+    an optional `k`, and the CLI accepts the link itself in place of an id (in
+    `bikeshed-now` 0.4.0).
+  - Link holders on an unlisted open-editing document edit through the draft
+    endpoints, not the live log.
+
+  **Operator action:** deploy functions, hosting, then rules, and run
+  `scripts/reconcile-visibility.mjs` once, in the order
+  [`docs/operations/overview.md`](docs/operations/overview.md) gives.
+- **Write endpoints answer 404, not 403, to anyone who may not read the
+  document.** The 403 confirmed that a private id existed.
+
 ### Added
 
 - **A publisher can choose a document's address.** `POST /publish` takes `id`,

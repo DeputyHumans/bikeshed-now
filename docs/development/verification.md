@@ -118,11 +118,30 @@ a slug space that often contains the confidential part.
 | `unlisted`, correct token | 200 | `public, max-age=300` | `noindex` |
 | `public` | 200 | `public, max-age=300` | — |
 
-Then check `public/{docId}`: it carries `docId, title, slug, currentVersion,
-entry, format, visibility, publicEdit, trusted, expiresAt, publishedAt` and
-**no** `members`, `viewers`, `ownerEmail` or `stats`. Set the document private
-again and the projection is gone — that is the revocation path, with the five
-minutes of CDN latency documented in `operations.md`.
+Then check `public/{docId}` for the PUBLIC row: it carries `docId, title, slug,
+currentVersion, entry, format, visibility, publicEdit, trusted, expiresAt,
+publishedAt` and **no** `members`, `viewers`, `ownerEmail` or `stats`. There is
+no row at all for the private and unlisted documents, and an anonymous `GET` of
+`public/<unlisted>` and of `public/<absent>` both come back `PERMISSION_DENIED`,
+as does listing `public`. Make the public document private again and its row is
+gone — that is the revocation path, with the five minutes of CDN latency
+documented in `operations.md`.
+
+An unlisted document's readers get those fields from `POST /unlock` instead
+(`curl -si -X POST http://127.0.0.1:5050/unlock -H 'content-type: application/json' -d '{"docId":"<slug>","k":"<token>"}'`):
+
+| | anonymous | signed-in stranger | cache-control |
+|---|---|---|---|
+| unlisted, no token | 404 | 404 | `private, no-store` |
+| unlisted, wrong token | 404 | 404 | `private, no-store` |
+| unlisted, correct token | 200 | 200, and a grant at `docs/<slug>/linkGrants/<uid>` | `private, no-store` |
+| private, or absent | 404 | 404 | `private, no-store` |
+
+After that 200, the stranger reads the unlisted document's threads and can
+comment without the token in the URL, and `/content/**` answers them
+`private, no-store`, never `public` — their URL carries no key. Make the
+document private and unlisted again, and the old token and the grant both stop
+working. `POST /view` without the token is the same 404 as an absent id.
 
 The document page follows the same five rows. `curl -sI http://127.0.0.1:5050/d/<slug>`
 (with `?k=…` for the unlisted rows), and `curl -s` for the body:

@@ -117,15 +117,24 @@ export async function getDoc(docId: string): Promise<DocMeta | null> {
 }
 
 /**
- * The world-readable projection.
+ * The world-readable projection of a PUBLIC document.
  *
  * What an anonymous reader — and a signed-in non-member — gets instead of the
  * document record, which carries member lists and reading statistics that
  * Firestore rules cannot project away (SPEC §17).
+ *
+ * The rules refuse an absent id and a document that is not public with the
+ * same permission error, so that is an answer here, not a failure: there is
+ * no projection this reader may have.
  */
 export async function getPublicDoc(docId: string): Promise<PublicDoc | null> {
-  const snap = await fbGetDoc(doc(db, "public", docId));
-  return snap.exists() ? (snap.data() as PublicDoc) : null;
+  try {
+    const snap = await fbGetDoc(doc(db, "public", docId));
+    return snap.exists() ? (snap.data() as PublicDoc) : null;
+  } catch (e) {
+    if ((e as { code?: string }).code === "permission-denied") return null;
+    throw e;
+  }
 }
 
 /** Live document metadata: how the viewer notices a peer's save or publish. */

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Access decisions for documents and folders (SPEC §2, §8, §17).
 
+import { timingSafeEqual } from "crypto";
+
 /**
  * These functions MUST mirror firestore.rules. The rules are the real boundary
  * for anything a client reads directly; these are the boundary for everything
@@ -22,6 +24,7 @@ export interface DocAclData {
   visibility?: unknown;
   publicEdit?: unknown;
   expiresAt?: unknown;
+  linkToken?: unknown;
 }
 
 function includesEmail(list: unknown, emailLower: string): boolean {
@@ -93,21 +96,82 @@ export function isMember(
 }
 
 /**
- * May this caller read the document's CONTENT?
+ * What a caller brings besides their identity to read an UNLISTED document:
+ * the key from the link (`k`), and the token their account's link grant was
+ * issued under (`docs/{id}/linkGrants/{uid}`, read by `lib/linkgrant.ts`).
+ * Neither opens anything on a private or public document.
+ */
+export interface LinkProof {
+  k?: string | null;
+  grantToken?: string | null;
+}
+
+export const NO_PROOF: LinkProof = Object.freeze({});
+
+/**
+ * Constant-time comparison of a presented token against the stored one.
  *
- * A null caller is anonymous. Anonymous may read the bytes of a non-private
- * document and nothing else — no member list, no reviewer identity, no reading
- * statistic. Those live behind an account even on a public document, because
- * publishing a document must not publish the people who reviewed it.
+ * Both must be non-empty strings: an absent stored token must never match an
+ * absent or empty key. Byte lengths are compared first because timingSafeEqual
+ * throws on unequal buffers, and a key of multi-byte characters can match the
+ * token's length in characters while differing in bytes. The length itself is
+ * not secret; every token is 22 characters.
+ */
+export function tokenMatches(stored: unknown, presented: unknown): boolean {
+  if (typeof stored !== "string" || typeof presented !== "string") return false;
+  if (stored.length === 0 || presented.length === 0) return false;
+  const a = Buffer.from(stored, "utf8");
+  const b = Buffer.from(presented, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * On what basis may this caller read the document's CONTENT? Null means not at
+ * all, and every caller that gets null answers exactly as for an id that does
+ * not exist (SPEC §1.4b, §17).
+ *
+ *   member  owner or effective member, at any visibility
+ *   public  anyone, anonymous included
+ *   link    unlisted, and the request carries the link's key
+ *   grant   unlisted, and this account presented the key before, under the
+ *           token the document holds NOW — rotating the link revokes it
+ *
+ * The distinction matters beyond yes/no: only `public` and `link` are decided
+ * by the URL alone, so only they may be cached at a shared URL.
+ *
+ * A null caller is anonymous. Anonymous may read the bytes and nothing else —
+ * no member list, no reviewer identity, no reading statistic. Those live behind
+ * an account even on a public document, because publishing a document must not
+ * publish the people who reviewed it.
+ */
+export type ReadBasis = "member" | "public" | "link" | "grant";
+
+export function readBasis(
+  doc: DocAclData | undefined | null,
+  caller: { uid: string; emailLower: string } | null,
+  proof: LinkProof = NO_PROOF,
+): ReadBasis | null {
+  if (!doc) return null;
+  if (caller && isMember(doc, caller.uid, caller.emailLower)) return "member";
+  const visibility = visibilityOf(doc);
+  if (visibility === "public") return "public";
+  if (visibility !== "unlisted") return null;
+  if (tokenMatches(doc.linkToken, proof.k)) return "link";
+  if (caller && tokenMatches(doc.linkToken, proof.grantToken)) return "grant";
+  return null;
+}
+
+/**
+ * May this caller read the document's CONTENT? Without a proof, an unlisted
+ * document is unreadable to anyone but its members, so a call site that forgets
+ * to pass one fails closed.
  */
 export function canRead(
   doc: DocAclData | undefined | null,
   caller: { uid: string; emailLower: string } | null,
+  proof: LinkProof = NO_PROOF,
 ): boolean {
-  if (!doc) return false;
-  if (isNonPrivate(doc)) return true;
-  if (!caller) return false;
-  return isMember(doc, caller.uid, caller.emailLower);
+  return readBasis(doc, caller, proof) !== null;
 }
 
 /** Owner-only: the gate for sharing, trust, visibility and marking changes. */
@@ -157,10 +221,29 @@ export function isDocEditor(
 export function canEdit(
   doc: DocAclData | undefined | null,
   caller: { uid: string; emailLower: string } | null,
+  proof: LinkProof = NO_PROOF,
 ): boolean {
   if (!doc || !caller) return false;
   if (isDocEditor(doc, caller.uid, caller.emailLower)) return true;
-  return doc.publicEdit === true && isNonPrivate(doc);
+  // Open editing widens who may edit among those who may READ: on an unlisted
+  // document that is still only the people holding its link.
+  return (
+    doc.publicEdit === true &&
+    isNonPrivate(doc) &&
+    readBasis(doc, caller, proof) !== null
+  );
+}
+
+/**
+ * Does open editing reach an account nobody can name in advance — the realtime
+ * `*` key? Only on a PUBLIC document. The realtime rules cannot see a link's
+ * key, so an unlisted document's link holders edit through the draft endpoints,
+ * which can (SPEC §16, §17).
+ */
+export function opensEditingToAnyAccount(
+  doc: DocAclData | undefined | null,
+): boolean {
+  return doc?.publicEdit === true && visibilityOf(doc) === "public";
 }
 
 // --- Folders ---------------------------------------------------------------

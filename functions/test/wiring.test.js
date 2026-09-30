@@ -104,7 +104,7 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   const { join } = require("node:path");
   const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
 
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell"]) {
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);
@@ -119,6 +119,40 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
       `${name} calls res.status() before noStore(res), so that path inherits Hosting's max-age=600`,
     );
   }
+});
+
+// --- The unlisted key has one home ------------------------------------------
+
+test("no endpoint compares a link token by hand", () => {
+  /**
+   * The bug this pins: the key was checked in three handlers, each written out
+   * by hand, while the shared `canRead` let an unlisted document through with
+   * no key at all — so every path that trusted `canRead` (the view counter,
+   * duplication, the agent tools, open editing) served an unlisted document to
+   * anyone who guessed its id. The comparison lives in `tokenMatches`, reached
+   * through `readBasis`, and nowhere else (SPEC §17).
+   */
+  const files = [
+    join(__dirname, "..", "src", "index.ts"),
+    join(__dirname, "..", "src", "lib", "shell.ts"),
+    join(__dirname, "..", "src", "mcp", "tools.ts"),
+  ];
+  for (const file of files) {
+    const src = readFileSync(file, "utf8");
+    // Either side of an equality, but not a `typeof x.linkToken === "string"`.
+    assert.doesNotMatch(src, /(?:===?|!==?)\s*[\w.?()]*\.linkToken\b/, `${file} compares a token by hand`);
+    assert.doesNotMatch(src, /\.linkToken\s*(?:===?|!==?)\s*[^"'\s=]/, `${file} compares a token by hand`);
+  }
+});
+
+test("only a public document writes the realtime key that lets any account edit", () => {
+  // The realtime rules cannot see a link's key. Handing `*` to an unlisted
+  // open-editing document let any signed-in account push edits into it blind.
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const setVisibility = onRequest(");
+  const body = src.slice(start, src.indexOf("export const", start + 10));
+  const sync = body.slice(body.indexOf("await syncPresenceAccess("));
+  assert.match(sync.slice(0, 300), /opensEditingToAnyAccount\(/);
 });
 
 test("noStore is exactly private, no-store — not merely no-cache", () => {

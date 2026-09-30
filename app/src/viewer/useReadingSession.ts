@@ -15,22 +15,24 @@ import { trackView, type ViewTracker } from "../stats";
 export function useReadingSession(options: {
   docId: string;
   versionId: string | null;
+  /** An unlisted document's key, from the URL. The server needs it to count the view. */
+  k?: string;
   doc: Document | null;
   epoch: number;
   /** Reading a draft is editing, not reading. It is not a view. */
   enabled: boolean;
 }): void {
-  const { docId, versionId, doc, epoch, enabled } = options;
+  const { docId, versionId, k, doc, epoch, enabled } = options;
   const tracker = useRef<ViewTracker | null>(null);
 
   useEffect(() => {
     if (!enabled || !versionId) return;
-    tracker.current = trackView(docId, versionId);
+    tracker.current = trackView(docId, versionId, k || undefined);
     return () => {
       tracker.current?.stop();
       tracker.current = null;
     };
-  }, [enabled, docId, versionId]);
+  }, [enabled, docId, versionId, k]);
 
   useEffect(() => {
     if (!doc || !tracker.current) return;

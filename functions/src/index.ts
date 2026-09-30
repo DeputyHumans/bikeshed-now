@@ -61,9 +61,12 @@ import {
   canManageFolder,
   expiryMs,
   isExpired,
-  isMember,
+  opensEditingToAnyAccount,
+  readBasis,
+  tokenMatches,
   visibilityOf,
   type DocAclData,
+  type LinkProof,
   type FolderAclData,
   type TeamAclData,
 } from "./lib/acl";
@@ -100,7 +103,8 @@ import {
 } from "./lib/folders";
 import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
 import { syncPresenceAccess } from "./lib/presence";
-import { syncPublicProjection } from "./lib/publicdoc";
+import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
+import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { listTokens, mintToken, revokeToken, type TokenChannel } from "./lib/tokens";
 import { renderMarkdown } from "./lib/markdown/render";
 import { htmlToMarkdown } from "./lib/markdown/serialize";
@@ -168,6 +172,20 @@ function expiredForReader(
 ): boolean {
   if (!isExpired(doc, Date.now())) return false;
   return !(caller && canManageSharing(doc, caller.emailLower));
+}
+
+/**
+ * The status for a caller refused an action on a document that exists: 404
+ * unless they may read it. A 403 confirms the id, which only a reader already
+ * knows; answering 403 to anyone else would make every write endpoint the
+ * existence check the read paths closed (SPEC §1.4b, §17).
+ */
+function refusal(
+  doc: DocAclData,
+  caller: { uid: string; emailLower: string } | null,
+  proof?: LinkProof,
+): 403 | 404 {
+  return canRead(doc, caller, proof) ? 403 : 404;
 }
 
 /** The message a write path gives, which has to say how to undo it. */
@@ -319,8 +337,9 @@ function streamObject(
  * with no domain gate, distinguishable 403s would let any signed-in account walk
  * the slug space (SPEC §1.4b).
  *
- * An unlisted document additionally requires its link token. Without that,
- * "unlisted" would mean nothing more than "guess the slug".
+ * An unlisted document additionally requires its link token, or a link grant
+ * for a signed-in caller who presented it before. Without that, "unlisted"
+ * would mean nothing more than "guess the slug" (SPEC §17).
  */
 export const contentProxy = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
@@ -353,11 +372,8 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     res.status(404).end();
     return;
   }
-  const docData = docSnap.data() as DocAclData & { linkToken?: string };
+  const docData = docSnap.data() as DocAclData;
   const visibility = visibilityOf(docData);
-  const isOwnMember = caller
-    ? isMember(docData, caller.uid, caller.emailLower)
-    : false;
 
   // Expiry is checked HERE, on the one path every byte takes, because it is not
   // in the security rules and cannot be. Same 404 as "you may not read this":
@@ -367,18 +383,11 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  if (!isOwnMember) {
-    if (visibility === "private") {
-      res.status(404).end();
-      return;
-    }
-    if (visibility === "unlisted") {
-      const key = strParam(req, "k");
-      if (!key || key !== docData.linkToken) {
-        res.status(404).end();
-        return;
-      }
-    }
+  const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
+  const basis = readBasis(docData, caller, proof);
+  if (basis === null) {
+    res.status(404).end();
+    return;
   }
 
   const versionSnap = await docSnap.ref.collection("versions").doc(versionId).get();
@@ -392,7 +401,11 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
   // force one on both. Versions are immutable, so public bytes can never be
   // stale; the real exposure is revocation latency, bounded to this window and
   // documented in docs/operations/overview.md.
-  if (visibility === "private" || isOwnMember) {
+  //
+  // Only a read decided by the URL alone may be cached at that URL. A member's
+  // or a link grant's read is decided by who is asking, and a grant's URL
+  // carries no key, so caching it would hand the bytes to anyone at that URL.
+  if (basis === "member" || basis === "grant") {
     res.setHeader("Cache-Control", "private, no-store");
   } else {
     /**
@@ -439,22 +452,15 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     res.status(404).end();
     return;
   }
-  const docData = docSnap.data() as DocAclData & { slug?: string; linkToken?: string };
+  const docData = docSnap.data() as DocAclData & { slug?: string };
   if (expiredForReader(docData, caller)) {
     res.status(404).end();
     return;
   }
-  const isOwnMember = caller ? isMember(docData, caller.uid, caller.emailLower) : false;
-  if (!isOwnMember) {
-    const visibility = visibilityOf(docData);
-    if (visibility === "private") {
-      res.status(404).end();
-      return;
-    }
-    if (visibility === "unlisted" && strParam(req, "k") !== docData.linkToken) {
-      res.status(404).end();
-      return;
-    }
+  const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
+  if (!canRead(docData, caller, proof)) {
+    res.status(404).end();
+    return;
   }
 
   const versionSnap = await docSnap.ref.collection("versions").doc(versionId).get();
@@ -585,7 +591,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
     members?: unknown;
   };
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(403).end();
+    res.status(refusal(data, caller)).end();
     return;
   }
 
@@ -680,7 +686,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData & { linkToken?: string };
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(403).end();
+    res.status(refusal(data, caller)).end();
     return;
   }
 
@@ -706,12 +712,14 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   await ref.set(update, { merge: true });
   await syncPublicProjection(db(), docId);
   // Open editing widens who may write the SHARED document too, and the RTDB
-  // gate is a mirror rather than a query, so it has to be told.
+  // gate is a mirror rather than a query, so it has to be told. Only a PUBLIC
+  // document opens it to any account: the realtime rules cannot see a link's
+  // key, so an unlisted document's link holders edit through /draft instead.
   await syncPresenceAccess(
     docId,
     asArray(data.members),
     asArray(data.editorMembers),
-    update.publicEdit === true,
+    opensEditingToAnyAccount({ ...data, ...update } as DocAclData),
   );
 
   const fresh = await ref.get();
@@ -754,8 +762,9 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     res.status(404).end();
     return;
   }
-  if (!canManageSharing(snap.data() as DocAclData, caller.emailLower)) {
-    res.status(403).end();
+  const data = snap.data() as DocAclData;
+  if (!canManageSharing(data, caller.emailLower)) {
+    res.status(refusal(data, caller)).end();
     return;
   }
 
@@ -792,8 +801,9 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
     res.status(404).end();
     return;
   }
-  if (!canManageSharing(snap.data() as DocAclData, caller.emailLower)) {
-    res.status(403).end();
+  const data = snap.data() as DocAclData;
+  if (!canManageSharing(data, caller.emailLower)) {
+    res.status(refusal(data, caller)).end();
     return;
   }
 
@@ -918,8 +928,9 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     currentVersion?: string;
     draft?: { editSessions?: unknown } | null;
   };
-  if (!canEdit(data, caller)) {
-    res.status(403).end();
+  const proof = await linkProofFor(ref, data, caller, null);
+  if (!canEdit(data, caller, proof)) {
+    res.status(refusal(data, caller, proof)).end();
     return;
   }
   // Refused for the OWNER too: an expired document is frozen, and lifting the
@@ -1028,8 +1039,9 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     currentVersion?: string;
     draft?: { baseVersion?: string; entry?: string } | null;
   };
-  if (!canEdit(docData, caller)) {
-    res.status(403).end();
+  const proof = await linkProofFor(docSnap.ref, docData, caller, null);
+  if (!canEdit(docData, caller, proof)) {
+    res.status(refusal(docData, caller, proof)).end();
     return;
   }
   if (isExpired(docData, Date.now())) {
@@ -1109,8 +1121,9 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     currentVersion?: string;
     draft?: { entry?: string; editSessions?: unknown } | null;
   };
-  if (!canEdit(data, caller)) {
-    res.status(403).end();
+  const proof = await linkProofFor(docRef, data, caller, null);
+  if (!canEdit(data, caller, proof)) {
+    res.status(refusal(data, caller, proof)).end();
     return;
   }
   // Refused for the OWNER too: an expired document is frozen, and lifting the
@@ -1512,8 +1525,9 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       editors?: unknown;
       ownerEmail?: string;
     };
-    if (!canEdit(data, caller)) {
-      res.status(403).end();
+    const proof = await linkProofFor(ref, data, caller, null);
+    if (!canEdit(data, caller, proof)) {
+      res.status(refusal(data, caller, proof)).end();
       return;
     }
 
@@ -1664,8 +1678,9 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const src = srcSnap.data() as DocAclData & { title?: string; currentVersion?: string };
-  if (!canRead(src, caller)) {
-    res.status(403).end();
+  const proof = await linkProofFor(srcSnap.ref, src, caller, null);
+  if (!canRead(src, caller, proof)) {
+    res.status(404).end();
     return;
   }
   // Duplicating reads every byte of the source, so it is a read path — and
@@ -1811,6 +1826,7 @@ const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
  */
 export const recordView = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
+  noStore(res); // before any branch can return — see noStore()
   const caller = await resolveCaller(req);
 
   const body = jsonBody(req) as {
@@ -1818,6 +1834,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     versionId?: unknown;
     sessionId?: unknown;
     ms?: unknown;
+    k?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
   const versionId = typeof body?.versionId === "string" ? body.versionId : "";
@@ -1842,7 +1859,12 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const docData = docSnap.data() as DocAclData;
-  if (!canRead(docData, caller) || expiredForReader(docData, caller)) {
+  // The same proof the content took: a view of an unlisted document without its
+  // key is a view of nothing, and answering otherwise would confirm the id.
+  const k = typeof body?.k === "string" ? body.k.trim() : null;
+  const proof = await linkProofFor(docRef, docData, caller, k);
+  const basis = readBasis(docData, caller, proof);
+  if (basis === null || expiredForReader(docData, caller)) {
     res.status(404).end();
     return;
   }
@@ -1850,11 +1872,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
   const actor = caller ? actorFrom(caller, req) : null;
   const automated = actor ? isAutomated(actor) : false;
   const via: "app" | "unlisted" | "public" =
-    caller && isMember(docData, caller.uid, caller.emailLower)
-      ? "app"
-      : visibilityOf(docData) === "unlisted"
-        ? "unlisted"
-        : "public";
+    basis === "member" ? "app" : basis === "public" ? "public" : "unlisted";
 
   const rawMs = typeof body?.ms === "number" && Number.isFinite(body.ms) ? body.ms : 0;
   const claimedMs = automated
@@ -1938,6 +1956,63 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     return;
   }
   res.status(200).json({ ms: result.ms });
+});
+
+/**
+ * POST /unlock — what a reader who is not a member is told about a document,
+ * and the one place an unlisted document's link is exchanged for access.
+ *
+ * Body `{ docId, k? }`. 200 with the reader projection (lib/publicdoc.ts) when
+ * the caller may read it: a public document, an unlisted one with its key, or
+ * an unlisted one this account holds a current link grant for. A signed-in
+ * caller who presents the key is granted, because the security rules cannot
+ * see a URL and that is how they let a link holder comment (SPEC §17).
+ *
+ * Everything else is one identical 404: absent, private — to its members too,
+ * who read `docs/{docId}` directly — unlisted without the key or with a wrong
+ * one, and a grant from before the link was rotated (SPEC §1.4b). The key
+ * travels in the body, never the query, so it stays out of request logs.
+ */
+export const unlockDoc = onRequest(PLAIN, async (req, res) => {
+  if (rejectMethod(req, res, ["POST"])) return;
+  noStore(res); // every answer, the 200 included: it may have minted a grant
+  const caller = await resolveCaller(req);
+
+  const body = jsonBody(req) as { docId?: unknown; k?: unknown } | null;
+  const docId = typeof body?.docId === "string" ? body.docId : "";
+  if (!docId || !safeSegment(docId)) {
+    badRequest(res, "invalid or missing docId");
+    return;
+  }
+  const k = typeof body?.k === "string" ? body.k.trim() : null;
+
+  // The grant is read in the same round trip whether or not the document
+  // exists, so how long the answer takes does not say which it was.
+  const docRef = db().collection("docs").doc(docId);
+  const [docSnap, grantSnap] = caller
+    ? await db().getAll(docRef, linkGrantRef(docRef, caller.uid))
+    : [await docRef.get(), null];
+  if (!docSnap.exists) {
+    res.status(404).end();
+    return;
+  }
+  const data = docSnap.data() as DocAclData & Record<string, unknown>;
+  const basis = readBasis(data, caller, { k, grantToken: grantTokenOf(grantSnap) });
+  const projection = basis === null ? null : await readerProjection(docRef, data);
+  if (!projection) {
+    res.status(404).end();
+    return;
+  }
+
+  if (
+    basis === "link" &&
+    caller &&
+    typeof data.linkToken === "string" &&
+    !tokenMatches(data.linkToken, grantTokenOf(grantSnap))
+  ) {
+    await recordLinkGrant(docRef, caller.uid, data.linkToken);
+  }
+  res.status(200).json(projection);
 });
 
 // ---------------------------------------------------------------------------

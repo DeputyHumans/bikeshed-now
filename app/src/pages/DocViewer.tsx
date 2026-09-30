@@ -96,8 +96,14 @@ export function DocViewer() {
   const toast = useToast();
   const { user, emailLower, gate } = useAuth();
   const singleColumn = useIsSingleColumn();
+  const signedIn = gate === "ready" && Boolean(user);
+  const linkKey = params.get("k") ?? "";
 
-  const doc = useDocument(docId, versionId);
+  const doc = useDocument(docId, versionId, {
+    k: linkKey,
+    uid: signedIn && user ? user.uid : null,
+    settled: gate !== "loading",
+  });
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [teams, setTeams] = useState<TeamMeta[]>([]);
   // Only for the breadcrumb. An anonymous reader of a public document has no
@@ -118,7 +124,6 @@ export function DocViewer() {
   const [railOpen, setRailOpen] = useState(true);
   const [pendingComment, setPendingComment] = useState(false);
 
-  const signedIn = gate === "ready" && Boolean(user);
   const isOwner = doc.meta?.ownerEmail === emailLower;
   const isDocEditor = Boolean(
     doc.meta &&
@@ -157,7 +162,7 @@ export function DocViewer() {
     docId,
     entry: doc.entry,
     trustToken: trust.trustToken,
-    linkToken: params.get("k") ?? undefined,
+    linkToken: linkKey || undefined,
   });
 
   // Re-derived against the live document, so the trust prompt can ask "does it
@@ -196,12 +201,16 @@ export function DocViewer() {
   // declaration order, so highlights are stripped before the shared document is
   // seeded from this DOM. Decoration reaching the CRDT does not contaminate one
   // save, it lands in every peer's copy.
+  //
+  // A member, or anyone on a PUBLIC open-editing document, shares the live log.
+  // An unlisted document's link holder cannot — the realtime rules cannot see
+  // a key — so they edit alone and publish through /draft (SPEC §16).
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
     epoch: frame.epoch,
     docId,
-    enabled: signedIn,
+    enabled: signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public"),
   });
 
   const editor = useInlineEditor({
@@ -232,6 +241,7 @@ export function DocViewer() {
   useReadingSession({
     docId,
     versionId: doc.currentVersion || null,
+    k: linkKey,
     doc: frame.doc,
     epoch: frame.epoch,
     enabled: mode.kind === "reading" && !mode.draft,
@@ -244,6 +254,9 @@ export function DocViewer() {
   // above does not apply to it.
   useDocumentTitle(doc.title);
 
+  // Subscribed again once the document is resolved as the reader signed in
+  // now: on an unlisted document, the threads become readable only after
+  // /unlock has recorded that account's grant.
   useEffect(() => {
     if (!doc.currentVersion) return;
     return listAnnotations(
@@ -257,7 +270,7 @@ export function DocViewer() {
       // closed, and the reader can still open it.
       () => setAnnotations([]),
     );
-  }, [docId, doc.currentVersion, settleComments]);
+  }, [docId, doc.currentVersion, settleComments, doc.resolvedFor]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -316,10 +329,13 @@ export function DocViewer() {
    * again", which is the version of this feature nobody uses twice.
    */
   useEffect(() => {
-    if (!pendingComment || !signedIn) return;
+    if (!pendingComment || !signedIn || !user) return;
+    // Not until the document is resolved as this account: on an unlisted
+    // document that is what records the grant the comment is written under.
+    if (doc.resolvedFor !== user.uid) return;
     setPendingComment(false);
     void startComment();
-  }, [pendingComment, signedIn, startComment]);
+  }, [pendingComment, signedIn, user, doc.resolvedFor, startComment]);
 
   const commit = useCallback(async () => {
     if (editor.saveFailed()) {
