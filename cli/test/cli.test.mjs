@@ -436,6 +436,22 @@ test("mkdir sends a parent only when one was given", async () => {
   });
 });
 
+// --- Listing ---------------------------------------------------------------
+
+test("list sends the cursor its own `… more` line tells you to pass", async () => {
+  // The hint was printed, the flag was parsed, and the value was dropped before
+  // the request — so following the hint returned the first page again, and
+  // nothing past the newest page was reachable from the terminal at all.
+  await withServer(rpcOk({ documents: [], nextCursor: null }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    await runAsync(["list", "--json"], env);
+    assert.deepEqual(seen[0].body.params.arguments, { limit: 20 });
+
+    await runAsync(["list", "--cursor", "older-doc", "--limit", "5", "--json"], env);
+    assert.deepEqual(seen[1].body.params.arguments, { limit: 5, cursor: "older-doc" });
+  });
+});
+
 // --- Skills ----------------------------------------------------------------
 
 const skillsHost = (index, text = "---\nname: x\n---\n") => (req, res) => {

@@ -51,6 +51,8 @@ Options
   --title <text>         title for publish
   --folder <id>          destination folder for publish
   --parent <id>          parent folder for mkdir
+  --limit <n>            with list: rows per page (default 20, max 50)
+  --cursor <id>          with list: the page after the one that printed it
   --watch                with publish/update: republish on every save
   --origin <url>         the deployment (default: the one you logged in to)
   --token <token>        override the stored token
@@ -104,9 +106,9 @@ async function login(flags) {
 
 async function list(flags) {
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "list_documents", {
-    limit: Number(flags.limit) || 20,
-  });
+  const args = { limit: Number(flags.limit) || 20 };
+  if (flags.cursor) args.cursor = flags.cursor;
+  const result = await callTool(origin, token, "list_documents", args);
   out(flags.json, result, () => {
     if (result.documents.length === 0) {
       console.log("Nothing yet. `bikeshed publish <file>` to start.");
