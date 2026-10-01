@@ -160,7 +160,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const syncSession = useCallback(async (next: User) => {
-    const { status, message } = await postSession(next);
+    let outcome: { status: SessionStatus; message?: string };
+    try {
+      outcome = await postSession(next);
+    } catch {
+      // A network failure is a failed session, not a reason to stay "loading":
+      // the gate below is what takes the waiting screen down again.
+      outcome = { status: "session_failed" };
+    }
+    const { status, message } = outcome;
     switch (status) {
       case "ok":
         setUser(next);
@@ -193,6 +201,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setGate("signed_out");
           return;
         }
+        // Signing in is not finished until the session cookie is set, and that
+        // is a round trip to a function that may be cold. Without this the
+        // sign-in card stays up, looking idle, after the popup has closed.
+        // Only from signed_out: a token refresh on a ready session must not
+        // take the app down to a waiting screen and back.
+        setGate((current) => (current === "signed_out" ? "loading" : current));
         await syncSession(next);
       }),
     [syncSession],
