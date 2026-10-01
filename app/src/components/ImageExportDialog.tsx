@@ -38,7 +38,8 @@ export function ImageExportDialog({
   const toast = useToast();
   const [background, setBackground] = useState<ExportBackground>("white");
   const [scale, setScale] = useState(2);
-  const [busy, setBusy] = useState(false);
+  // The node being rendered, so its own PNG button is the one that spins.
+  const [busy, setBusy] = useState<HTMLElement | SVGElement | null>(null);
 
   /**
    * Sections are the export unit, because they are also the ANCHOR unit: the
@@ -55,7 +56,7 @@ export function ImageExportDialog({
   const svgs = useMemo(() => (doc ? listSvgs(doc) : []), [doc]);
 
   const png = async (node: HTMLElement | SVGElement, name: string) => {
-    setBusy(true);
+    setBusy(node);
     try {
       await exportNodePng(node, {
         background,
@@ -70,7 +71,7 @@ export function ImageExportDialog({
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -138,7 +139,8 @@ export function ImageExportDialog({
                 <button
                   type="button"
                   className="btn btn-sm"
-                  disabled={busy}
+                  disabled={busy !== null}
+                  aria-busy={busy === section}
                   onClick={() => void png(section, `${title}-${section.id || i + 1}`)}
                 >
                   PNG
@@ -160,7 +162,8 @@ export function ImageExportDialog({
                   <button
                     type="button"
                     className="btn btn-sm"
-                    disabled={busy}
+                    disabled={busy !== null}
+                    aria-busy={busy === svg}
                     onClick={() => void png(svg, `${title}-diagram-${i + 1}`)}
                   >
                     PNG

@@ -7,7 +7,7 @@ import { useAuth, type PopupProvider } from "../auth";
 import { PasswordForm } from "../components/PasswordForm";
 import { auth } from "../firebase";
 import { Icon } from "../components/Icon";
-import { Loading, Spinner } from "../components/Spinner";
+import { Loading } from "../components/Spinner";
 import { isEmailShapeValid } from "../generated/policy";
 
 /**
@@ -85,7 +85,10 @@ export function SignUp() {
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Which request is in flight. Confirm and "Send another code" share a screen,
+  // and only the one that was pressed should say it is working.
+  const [busyOn, setBusyOn] = useState<"code" | "confirm" | "password" | null>(null);
+  const busy = busyOn !== null;
   const [sent, setSent] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [signInHint, setSignInHint] = useState("");
@@ -124,7 +127,7 @@ export function SignUp() {
   if (gate === "ready") return <Navigate to="/" replace />;
 
   const start = async () => {
-    setBusy(true);
+    setBusyOn("code");
     setNotice(null);
     try {
       const res = await callVerify("start", { email: email.trim() || undefined });
@@ -135,12 +138,12 @@ export function SignUp() {
       }
       setSent(true);
     } finally {
-      setBusy(false);
+      setBusyOn(null);
     }
   };
 
   const complete = async () => {
-    setBusy(true);
+    setBusyOn("confirm");
     setNotice(null);
     try {
       const res = await callVerify("complete", { code: code.trim() });
@@ -151,7 +154,7 @@ export function SignUp() {
       }
       await refresh();
     } finally {
-      setBusy(false);
+      setBusyOn(null);
     }
   };
 
@@ -217,7 +220,7 @@ export function SignUp() {
             <ProviderButtons onPick={(p) => void signIn(p)} busy={busy} />
             {/* Below the providers, because an address and a password is the
                 method somebody falls back to, not the one they reach for. */}
-            <PasswordForm busy={busy} setBusy={setBusy} />
+            <PasswordForm busy={busy} setBusy={(b) => setBusyOn(b ? "password" : null)} />
           </>
         ) : null}
 
@@ -248,9 +251,10 @@ export function SignUp() {
               type="button"
               className="btn btn-primary provider-btn"
               disabled={busy || !isEmailShapeValid(email)}
+              aria-busy={busyOn === "code"}
               onClick={() => void start()}
             >
-              {busy ? <Spinner /> : null} Send me a code
+              Send me a code
             </button>
           </>
         ) : null}
@@ -285,6 +289,7 @@ export function SignUp() {
                   type="button"
                   className="btn btn-primary provider-btn"
                   disabled={busy || code.length !== 6}
+                  aria-busy={busyOn === "confirm"}
                   onClick={() => void complete()}
                 >
                   Confirm
@@ -293,6 +298,7 @@ export function SignUp() {
                   type="button"
                   className="btn btn-quiet btn-sm"
                   disabled={busy}
+                  aria-busy={busyOn === "code"}
                   onClick={() => void start()}
                 >
                   Send another code
@@ -303,6 +309,7 @@ export function SignUp() {
                 type="button"
                 className="btn btn-primary provider-btn"
                 disabled={busy}
+                aria-busy={busyOn === "code"}
                 onClick={() => void start()}
               >
                 Send me a code

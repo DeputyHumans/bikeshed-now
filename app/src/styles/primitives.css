@@ -245,6 +245,38 @@ button.expiry-chip { cursor: pointer; }
   }
 }
 
+/*
+ * A button that is waiting on the server says so with `aria-busy`, and keeps
+ * its label. The ring is drawn in the button's own text colour because the
+ * accent arc of `.spinner` is invisible on a primary button, which is exactly
+ * where most waits start. On a toast the background is ink, for the same
+ * reason. The ring takes the icon's place rather than crowding in beside it.
+ */
+.btn[aria-busy="true"]::before,
+.toast .spinner {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 720ms linear infinite;
+}
+.btn[aria-busy="true"] > svg { display: none; }
+/* Working is not the same as unavailable, so a busy button is not dimmed. */
+.btn[aria-busy="true"]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn[aria-busy="true"]::before,
+  .toast .spinner {
+    animation: none;
+    border-right-color: currentColor;
+  }
+}
+
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -281,6 +313,10 @@ button.expiry-chip { cursor: pointer; }
   font-size: var(--fs-small);
 }
 .toast-error { background: var(--color-danger); }
+/* A wait that ends quickly never shows: the toast fades in only once the work
+   has outlasted a short delay. */
+.toast-busy { animation: toast-busy-in var(--t-base) var(--ease-out) var(--t-slow) both; }
+@keyframes toast-busy-in { from { opacity: 0; } }
 .toast-action {
   margin-left: auto;
   color: inherit;

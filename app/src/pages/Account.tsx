@@ -9,6 +9,7 @@ import { formatRelative, listMyTeams, saveUserProfile, watchMyTokens, watchUser 
 import { createToken, isUnused, revokeToken, type TokenChannel } from "../tokens";
 import { clampMarking, SUGGESTED_FOOTER, SUGGESTED_LABEL } from "../export/labels";
 import { Icon } from "../components/Icon";
+import { Spinner } from "../components/Spinner";
 import { TeamsSection } from "../components/TeamsSection";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
@@ -18,9 +19,17 @@ function TokenList({
   tokens,
   onRevoke,
 }: {
-  tokens: TokenSummary[];
+  /** Null until the first snapshot, which is not the same as "none". */
+  tokens: TokenSummary[] | null;
   onRevoke: (tokenId: string) => void;
 }) {
+  if (tokens === null) {
+    return (
+      <p className="field-hint">
+        <Spinner label="Loading your tokens" />
+      </p>
+    );
+  }
   if (tokens.length === 0) {
     return <p className="field-hint">No tokens yet.</p>;
   }
@@ -64,8 +73,9 @@ export function Account() {
   const toast = useToast();
 
   const [record, setRecord] = useState<UserRecord | null>(null);
-  const [teams, setTeams] = useState<TeamMeta[]>([]);
-  const [tokens, setTokens] = useState<TokenSummary[]>([]);
+  const [teams, setTeams] = useState<TeamMeta[] | null>(null);
+  const [tokens, setTokens] = useState<TokenSummary[] | null>(null);
+  const [minting, setMinting] = useState(false);
   const [minted, setMinted] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("");
   const [tokenChannel, setTokenChannel] = useState<TokenChannel>("cli");
@@ -237,15 +247,19 @@ export function Account() {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!tokenName.trim()}
-            onClick={() =>
+            // Disabled while minting, or a double click mints two tokens.
+            disabled={!tokenName.trim() || minting}
+            aria-busy={minting}
+            onClick={() => {
+              setMinting(true);
               void createToken(tokenName.trim(), tokenChannel)
                 .then((t) => {
                   setMinted(t.token);
                   setTokenName("");
                 })
                 .catch((e) => toast.error((e as Error).message))
-            }
+                .finally(() => setMinting(false));
+            }}
           >
             Create
           </button>
@@ -254,12 +268,13 @@ export function Account() {
         <TokenList
           tokens={tokens}
           onRevoke={(tokenId) =>
-            void revokeToken(tokenId)
+            void toast
+              .during("Revoking…", revokeToken(tokenId))
               .then(() => toast.show("Revoked."))
               .catch((e) => toast.error((e as Error).message))
           }
         />
-        {tokens.some(isUnused) ? (
+        {tokens?.some(isUnused) ? (
           <p className="field-hint token-unused">
             Some of these have never been used. If you do not remember creating
             one, revoke it.

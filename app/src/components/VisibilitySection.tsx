@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { Icon } from "./Icon";
+import { Spinner } from "./Spinner";
 import { useToast } from "./Toast";
 import { setVisibility, shareUrl, type VisibilityState } from "../visibility";
 import { endOfDayMs, expiryLabel, toDateInput } from "../expiry";
@@ -89,7 +90,13 @@ export function VisibilitySection({
 
   return (
     <section aria-labelledby="visibility-heading" className="visibility-section">
-      <h3 id="visibility-heading">Who can see it</h3>
+      {/* The options only move once the server has answered, so until then
+          this is what says the click registered. Beside the heading, not in
+          it, so it never becomes part of the section's name. */}
+      <div className="visibility-heading">
+        <h3 id="visibility-heading">Who can see it</h3>
+        {busy ? <Spinner label="Saving" /> : null}
+      </div>
       <div className="visibility-options">
         {OPTIONS.map((option) => (
           <label

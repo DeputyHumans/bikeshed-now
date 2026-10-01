@@ -166,6 +166,10 @@ export function DocList() {
   const [teams, setTeams] = useState<TeamMeta[]>([]);
   const [account, setAccount] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  // Folders arrive on their own listener. Until they have, a workspace holding
+  // only folders would be announced as empty.
+  const [foldersLoading, setFoldersLoading] = useState(true);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [drawer, setDrawer] = useState(false);
@@ -201,7 +205,17 @@ export function DocList() {
         setLoading(false);
       },
     );
-    const stopFolders = listMyFolders(emailLower, setFolders, () => setFolders([]));
+    const stopFolders = listMyFolders(
+      emailLower,
+      (next) => {
+        setFolders(next);
+        setFoldersLoading(false);
+      },
+      () => {
+        setFolders([]);
+        setFoldersLoading(false);
+      },
+    );
     const stopTeams = listMyTeams(emailLower, setTeams, () => setTeams([]));
     return () => {
       stopDocs();
@@ -325,7 +339,10 @@ export function DocList() {
         label: "Rename…",
         onSelect: () => {
           const name = window.prompt("New title", doc.title);
-          if (name) void renameItem("doc", doc.docId, name).catch((e) => toast.error(e.message));
+          if (name)
+            void toast
+              .during("Renaming…", renameItem("doc", doc.docId, name))
+              .catch((e) => toast.error(e.message));
         },
       },
       {
@@ -343,7 +360,8 @@ export function DocList() {
         id: "duplicate",
         label: "Duplicate",
         onSelect: () =>
-          void duplicateDoc(doc.docId, folderId)
+          void toast
+            .during("Duplicating…", duplicateDoc(doc.docId, folderId))
             .then((copy) => navigate(`/d/${copy.docId}`))
             .catch((e) => toast.error(e.message)),
       },
@@ -390,9 +408,9 @@ export function DocList() {
         onSelect: () => {
           const name = window.prompt("New name", folder.name);
           if (name)
-            void renameItem("folder", folder.folderId, name).catch((e) =>
-              toast.error(e.message),
-            );
+            void toast
+              .during("Renaming…", renameItem("folder", folder.folderId, name))
+              .catch((e) => toast.error(e.message));
         },
       },
       {
@@ -423,7 +441,12 @@ export function DocList() {
           ) {
             return;
           }
-          void deleteFolder(folder.folderId).catch((e) => toast.error(e.message));
+          // The server moves the contents up before it removes the folder, so
+          // for a moment both are on screen; saying so keeps that from looking
+          // like a glitch.
+          void toast
+            .during("Deleting the folder…", deleteFolder(folder.folderId))
+            .catch((e) => toast.error(e.message));
         },
       },
     ];
@@ -487,10 +510,15 @@ export function DocList() {
           <button
             type="button"
             className="btn btn-sm"
+            disabled={creatingFolder}
+            aria-busy={creatingFolder}
             onClick={() => {
               const name = window.prompt("Folder name");
-              if (name)
-                void createFolder(name, folderId).catch((e) => toast.error(e.message));
+              if (!name) return;
+              setCreatingFolder(true);
+              void createFolder(name, folderId)
+                .catch((e) => toast.error(e.message))
+                .finally(() => setCreatingFolder(false));
             }}
           >
             <Icon name="plus" size={15} /> Folder
@@ -500,7 +528,7 @@ export function DocList() {
           </button>
         </div>
 
-        {loading ? (
+        {loading || foldersLoading ? (
           <CardSkeletons />
         ) : visibleDocs.length === 0 && visibleFolders.length === 0 ? (
           <div className="empty-state">

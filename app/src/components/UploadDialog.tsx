@@ -79,6 +79,7 @@ export function UploadDialog({
             type="button"
             className="btn btn-primary"
             disabled={!file || progress != null}
+            aria-busy={progress != null}
             onClick={() => void upload()}
           >
             {progress != null ? "Uploading…" : "Upload"}

@@ -125,6 +125,8 @@ export interface EditToolbarProps {
   saveState: "idle" | "dirty" | "saving" | "saved" | "error";
   saveError?: string | null;
   onCommit: () => void;
+  /** A publish is in flight: the button spins, and a second press cannot start another. */
+  committing?: boolean;
   commitDisabled?: boolean;
   commitDisabledReason?: string;
   /**
@@ -179,6 +181,7 @@ export function EditToolbar({
   saveState,
   saveError,
   onCommit,
+  committing = false,
   commitDisabled,
   commitDisabledReason,
   onExit,
@@ -371,7 +374,8 @@ export function EditToolbar({
           type="button"
           className="btn btn-primary btn-sm btn-keep-label"
           onClick={onCommit}
-          disabled={commitDisabled}
+          disabled={commitDisabled || committing}
+          aria-busy={committing}
           title={commitDisabledReason}
         >
           Save as new version

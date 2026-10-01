@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
+import { Loading } from "./Spinner";
 import {
   formatDuration,
   formatRelative,
@@ -62,12 +63,16 @@ export function StatsPanel({
   const [sessions, setSessions] = useState<ViewSession[]>([]);
   const [aclChanges, setAclChanges] = useState<AclChange[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  // Until all three lists are in, "Nobody has opened it yet" would be a guess.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!canSeeDetail) return;
-    void listDocViewers(meta.docId).then(setViewers).catch(() => setViewers([]));
-    void listViewSessions(meta.docId).then(setSessions).catch(() => setSessions([]));
-    void listAclChanges(meta.docId).then(setAclChanges).catch(() => setAclChanges([]));
+    void Promise.all([
+      listDocViewers(meta.docId).then(setViewers).catch(() => setViewers([])),
+      listViewSessions(meta.docId).then(setSessions).catch(() => setSessions([])),
+      listAclChanges(meta.docId).then(setAclChanges).catch(() => setAclChanges([])),
+    ]).then(() => setLoaded(true));
   }, [meta.docId, canSeeDetail]);
 
   const stats = meta.stats;
@@ -112,6 +117,8 @@ export function StatsPanel({
         <p className="field-hint" style={{ marginTop: "var(--s-3)" }}>
           Only the owner and its editors can see who read this document.
         </p>
+      ) : !loaded ? (
+        <Loading label="Loading the activity" />
       ) : (
         <>
           <h3 style={{ marginTop: "var(--s-4)" }}>Readers</h3>

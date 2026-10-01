@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
+import { Spinner } from "./Spinner";
 import { useToast } from "./Toast";
 import { VisibilitySection } from "./VisibilitySection";
 import { setAccess } from "../access";
@@ -243,6 +244,8 @@ export function SharePanel({
               ? `${target.members.length === 1 ? "person" : "people"}${beyondThePeople(level)}`
               : `${target.members.length === 1 ? "person has" : "people have"} access`}
           </span>
+          {/* One busy flag covers every row, so one spinner says it. */}
+          {busy ? <Spinner label="Saving" /> : null}
           <span className="spacer" />
           <button type="button" className="btn" onClick={onClose}>
             Done

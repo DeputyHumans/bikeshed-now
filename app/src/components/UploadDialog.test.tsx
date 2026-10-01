@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A title or an address is sent only when the uploader typed one (SPEC §4, §17).
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UploadDialog } from "./UploadDialog";
@@ -116,5 +116,28 @@ describe("UploadDialog's address field", () => {
 
     await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
     expect(uploadDoc.mock.calls[0][1].id).toBe("01-platform");
+  });
+});
+
+describe("UploadDialog while it uploads", () => {
+  it("says the upload is working until the server has answered", async () => {
+    // Past 100% of the bytes the server is still publishing; the bar sits full
+    // and the button is what says the wait is not over.
+    let finish!: () => void;
+    uploadDoc.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ docId: "d1", versionId: "v1" } as UploadResult);
+        }),
+    );
+    renderDialog();
+    chooseFile();
+    clickUpload();
+
+    const button = screen.getByRole("button", { name: "Uploading…" }) as HTMLButtonElement;
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.disabled).toBe(true);
+
+    await act(async () => finish());
   });
 });

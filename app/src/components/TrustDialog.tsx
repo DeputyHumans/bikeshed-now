@@ -31,10 +31,11 @@ export function TrustDialog({
   onPersonalTrust: (value: boolean) => Promise<void>;
 }) {
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
+  // Which grant is in flight, so the button that was pressed is the one that spins.
+  const [busy, setBusy] = useState<"global" | "personal" | null>(null);
 
   const run = async (fn: () => Promise<unknown>, scope: "global" | "personal") => {
-    setBusy(true);
+    setBusy(scope);
     try {
       await fn();
       logEvent({ name: "trust_grant", params: { scope } });
@@ -42,7 +43,7 @@ export function TrustDialog({
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -75,7 +76,8 @@ export function TrustDialog({
           <button
             type="button"
             className="btn"
-            disabled={busy}
+            disabled={busy !== null}
+            aria-busy={busy === "personal"}
             onClick={() => void run(() => onPersonalTrust(!personallyTrusted), "personal")}
           >
             {personallyTrusted ? "Sandbox it again for me" : "Run it for me"}
@@ -94,7 +96,8 @@ export function TrustDialog({
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy}
+              disabled={busy !== null}
+              aria-busy={busy === "global"}
               onClick={() => void run(() => setTrusted(docId, true), "global")}
             >
               Trust it for everyone

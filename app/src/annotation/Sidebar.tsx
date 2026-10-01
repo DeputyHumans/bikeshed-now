@@ -85,7 +85,9 @@ function Thread({
 
   const send = async () => {
     const body = reply.trim();
-    if (!body || !uid) return;
+    // Enter reaches here without the button's `disabled`, so the guard is here:
+    // a second Enter while the first is in flight would post the reply twice.
+    if (!body || !uid || busy) return;
     setBusy(true);
     try {
       await addComment(docId, versionId, annotation.annId, body, uid, emailLower);
@@ -157,6 +159,7 @@ function Thread({
               type="button"
               className="btn btn-sm btn-primary"
               disabled={busy || !reply.trim()}
+              aria-busy={busy}
               onClick={(e) => {
                 e.stopPropagation();
                 void send();

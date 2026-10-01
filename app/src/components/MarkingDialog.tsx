@@ -62,7 +62,13 @@ export function MarkingDialog({
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy}
+            aria-busy={busy}
+            onClick={() => void save()}
+          >
             Save
           </button>
         </>

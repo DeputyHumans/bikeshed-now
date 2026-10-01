@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
+import { Spinner } from "./Spinner";
 import { useToast } from "./Toast";
 import { createTeam, deleteTeam, renameTeam, updateTeamMembers } from "../teams";
 import type { TeamMeta } from "../types";
@@ -164,6 +165,8 @@ function TeamDialog({
             {team.members.length}{" "}
             {team.members.length === 1 ? "person" : "people"}
           </span>
+          {/* One busy flag covers every control here, so one spinner says it. */}
+          {busy ? <Spinner label="Saving" /> : null}
           <span className="spacer" />
           <button type="button" className="btn" onClick={onClose}>
             Done
@@ -324,7 +327,8 @@ export function TeamsSection({
   teams,
   emailLower,
 }: {
-  teams: TeamMeta[];
+  /** Null until the first snapshot, which is not the same as "none". */
+  teams: TeamMeta[] | null;
   emailLower: string;
 }) {
   const toast = useToast();
@@ -342,7 +346,7 @@ export function TeamsSection({
    * an admin removing their own membership looks like from here.
    */
   const open = useMemo(
-    () => teams.find((t) => t.teamId === managing) ?? null,
+    () => teams?.find((t) => t.teamId === managing) ?? null,
     [teams, managing],
   );
 
@@ -373,7 +377,12 @@ export function TeamsSection({
         everything the team has been granted, immediately.
       </p>
 
-      {teams.length === 0 ? (
+      {teams === null ? (
+        // In the line the answer will take, not inline beside the button below.
+        <p className="field-hint">
+          <Spinner label="Loading your teams" />
+        </p>
+      ) : teams.length === 0 ? (
         <p className="field-hint">
           You are not in any team yet. A team is worth making when the same
           group of people keeps appearing on the same documents.
@@ -433,6 +442,7 @@ export function TeamsSection({
               type="button"
               className="btn btn-primary"
               disabled={busy || !newName.trim()}
+              aria-busy={busy}
               onClick={() => void create()}
             >
               Create

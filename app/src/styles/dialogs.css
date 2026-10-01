@@ -141,7 +141,12 @@
  */
 
 .visibility-section { margin-top: var(--s-4); }
-.visibility-section h3 { margin-bottom: var(--s-2); }
+.visibility-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
 .visibility-options { display: grid; gap: var(--s-2); }
 .modal-wide .visibility-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .visibility-option {

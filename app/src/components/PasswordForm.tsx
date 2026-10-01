@@ -138,7 +138,12 @@ export function PasswordForm({ busy, setBusy }: { busy: boolean; setBusy: (b: bo
         </p>
       ) : null}
 
-      <button type="submit" className="btn btn-primary provider-btn" disabled={!ready || busy}>
+      <button
+        type="submit"
+        className="btn btn-primary provider-btn"
+        disabled={!ready || busy}
+        aria-busy={busy}
+      >
         {mode === "signup" ? "Create account" : "Sign in"}
       </button>
 

@@ -71,6 +71,7 @@ export function MoveDialog({
             type="button"
             className="btn btn-primary"
             disabled={busy || target === currentFolderId}
+            aria-busy={busy}
             onClick={() => void move()}
           >
             Move
