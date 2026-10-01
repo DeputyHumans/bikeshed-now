@@ -32,6 +32,13 @@ export interface DocFrame {
   doc: Document | null;
   /** Increments on every load. Depend on this, never on the ref. */
   epoch: number;
+  /**
+   * True from the moment the frame is given a document to load until that
+   * document's `load` fires: on first open, and again on every remount or
+   * navigation. Not `doc === null`, which some remounts leave pointing at the
+   * previous, detached document.
+   */
+  loading: boolean;
   /** Props to spread onto the <iframe>. */
   frameProps: {
     key: string;
@@ -61,6 +68,20 @@ export function useDocFrame(options: {
   const [epoch, setEpoch] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
 
+  const key = frameKey(mode, trustToken, reloadToken);
+  const src = frameSrc(mode, docId, entry, reloadToken, linkToken);
+
+  /**
+   * Which document has finished loading, named by everything that makes the
+   * frame load a new one: its key (a remount) and its src (a navigation).
+   * Loading is then derived — the frame is loading whenever what it shows is
+   * not what it was last told to load — so no transition can forget to set it.
+   */
+  const identity = `${key} ${src}`;
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+
   /** Scroll position to restore after the next load, if any. */
   const restoreScroll = useRef<number | null>(null);
 
@@ -86,6 +107,10 @@ export function useDocFrame(options: {
   }, [captureScroll]);
 
   const onLoad = useCallback(() => {
+    // Before anything that can return early: a load that yields no readable
+    // document is still the end of the wait, and must not leave it showing.
+    setLoadedIdentity(identityRef.current);
+
     const frameDoc = ref.current?.contentDocument ?? null;
     if (!frameDoc) return;
 
@@ -119,9 +144,10 @@ export function useDocFrame(options: {
     ref,
     doc,
     epoch,
+    loading: loadedIdentity !== identity,
     frameProps: {
-      key: frameKey(mode, trustToken, reloadToken),
-      src: frameSrc(mode, docId, entry, reloadToken, linkToken),
+      key,
+      src,
       sandbox: frameSandbox(mode),
       onLoad,
     },

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // A preview runs nothing, keeps its context, and changes nothing (SPEC §6d).
 
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { SlideThumb } from "./SlideThumb";
@@ -168,5 +170,41 @@ describe("SlideThumb", () => {
     expect(frameA.style.width).toBe(frameB.style.width);
     expect(frameA.style.height).toBe(frameB.style.height);
     expect(frameA.style.width).toBe("1280px");
+  });
+});
+
+describe("SlideThumb while its preview loads", () => {
+  // jsdom applies no stylesheet, so the hiding is asserted in its two halves:
+  // the markup the selector needs, and the rule itself.
+  const SLIDES_CSS = readFileSync(join(__dirname, "../styles/slides.css"), "utf8");
+
+  it("shows a skeleton until the preview has loaded, and not after", () => {
+    const frame = thumbFrame();
+    const skeleton = frame.nextElementSibling;
+
+    expect(skeleton?.classList.contains("slide-thumb-skeleton")).toBe(true);
+    expect(frame.hasAttribute("data-painted")).toBe(false);
+
+    fireEvent.load(frame);
+
+    expect(frame.hasAttribute("data-painted")).toBe(true);
+    expect(SLIDES_CSS).toMatch(
+      /\.slide-thumb-frame\[data-painted\]\s*\+\s*\.slide-thumb-skeleton\s*\{\s*display:\s*none;/,
+    );
+  });
+
+  it("keeps the mark through an edit, so typing does not flash it back", () => {
+    const doc = deck();
+    const { container, rerender } = render(
+      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />,
+    );
+    const frame = container.querySelector("iframe")!;
+    fireEvent.load(frame);
+
+    doc.querySelector("h2")!.textContent = "One, edited";
+    rerender(<SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />);
+
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(frame.hasAttribute("data-painted")).toBe(true);
   });
 });

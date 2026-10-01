@@ -113,6 +113,10 @@ export function DocViewer() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [wantsEdit, setWantsEdit] = useState(false);
+  // Both wait on the server with nothing else on screen changing, and both
+  // would act twice on a second press.
+  const [commenting, setCommenting] = useState(false);
+  const [committing, setCommitting] = useState(false);
   // Collapsed until the first snapshot says there is a thread to read.
   const {
     open: commentsOpen,
@@ -304,6 +308,7 @@ export function DocViewer() {
     }
     const anchor = describeAnchorFromSelection(frame.doc);
     if (!anchor) return;
+    setCommenting(true);
     try {
       const annId = await createAnnotation(
         docId,
@@ -318,6 +323,8 @@ export function DocViewer() {
       setPane("comments");
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setCommenting(false);
     }
   }, [frame.doc, user, docId, doc.currentVersion, emailLower, toast]);
 
@@ -344,6 +351,7 @@ export function DocViewer() {
       toast.error("The last save did not go through. Fix that before publishing.");
       return;
     }
+    setCommitting(true);
     await editor.flushNow();
     try {
       const result = await commitVersion(docId, doc.currentVersion);
@@ -364,6 +372,8 @@ export function DocViewer() {
       if (e instanceof UnresolvedCommentsError) toast.error(e.message);
       else if (e instanceof StaleVersionError) toast.error(e.message);
       else toast.error((e as Error).message);
+    } finally {
+      setCommitting(false);
     }
   }, [editor, docId, doc.currentVersion, doc.format, navigate, toast]);
 
@@ -410,7 +420,12 @@ export function DocViewer() {
         id: "html",
         label: doc.format === "markdown" ? "Download the rendered HTML" : "Download the HTML",
         onSelect: () => {
-          void downloadEntry(docId, doc.currentVersion, doc.entry, doc.title);
+          void toast
+            .during(
+              "Downloading…",
+              downloadEntry(docId, doc.currentVersion, doc.entry, doc.title),
+            )
+            .catch((e) => toast.error((e as Error).message));
           logEvent({ name: "export", params: { kind: "html" } });
         },
       },
@@ -420,7 +435,12 @@ export function DocViewer() {
         id: "source",
         label: "Download the Markdown source",
         onSelect: () => {
-          void downloadSource(docId, doc.currentVersion, doc.version!.sourceEntry!, doc.title);
+          void toast
+            .during(
+              "Downloading…",
+              downloadSource(docId, doc.currentVersion, doc.version!.sourceEntry!, doc.title),
+            )
+            .catch((e) => toast.error((e as Error).message));
           logEvent({ name: "export", params: { kind: "html" } });
         },
       });
@@ -470,7 +490,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, frame.doc, isOwner, emailLower, navigate]);
+  }, [doc, docId, frame.doc, isOwner, emailLower, navigate, toast]);
 
   if (doc.loading) return <Loading label="Opening the document" />;
   if (doc.notFound) {
@@ -521,6 +541,7 @@ export function DocViewer() {
           sharing={shared.state}
           onCommit={() => void commit()}
           onExit={() => void stopEditing()}
+          committing={committing}
           commitDisabled={annotations.some((a) => !a.resolved)}
           commitDisabledReason={
             annotations.some((a) => !a.resolved)
@@ -617,10 +638,19 @@ export function DocViewer() {
               className="doc-frame"
               title={doc.title}
             />
+            {/* Over the frame, never in it: this is the parent's DOM, so it
+                cannot reach the document's serialized bytes. It covers every
+                load the frame makes — first open, edit mode, a trust grant, a
+                reload — which is a blank white box without it. */}
+            {frame.loading ? (
+              <div className="frame-loading">
+                <Loading label="Opening the document" />
+              </div>
+            ) : null}
             <SelectionFab
               doc={frame.doc}
               epoch={frame.epoch}
-              enabled={mode.kind === "reading"}
+              enabled={mode.kind === "reading" && !commenting}
               label={user ? "Comment" : "Sign in to comment"}
               onComment={() => void startComment()}
             />

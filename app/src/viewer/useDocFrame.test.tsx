@@ -1,0 +1,101 @@
+// SPDX-License-Identifier: Apache-2.0
+// The frame says it is loading for every load it makes, not only the first (SPEC §6a).
+
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+
+import type { FrameMode } from "./frameMode";
+import { useDocFrame } from "./useDocFrame";
+
+const READING: FrameMode = { kind: "reading", versionId: "v1", draft: false, sandboxed: false };
+
+interface Props {
+  mode: FrameMode;
+  entry: string;
+  trustToken: string;
+}
+
+/**
+ * The hook with a real, same-origin iframe behind its ref, so a load yields a
+ * real `contentDocument`. That matters for the remount cases: the obvious
+ * signal, `doc === null`, is only wrong when there IS a previous document.
+ */
+function harness(initial: Partial<Props> = {}) {
+  const iframe = document.createElement("iframe");
+  document.body.appendChild(iframe);
+  const view = renderHook((props: Props) => useDocFrame({ docId: "d1", ...props }), {
+    initialProps: { mode: READING, entry: "index.html", trustToken: "t0", ...initial },
+  });
+  (view.result.current.ref as { current: HTMLIFrameElement | null }).current = iframe;
+  const load = () => act(() => view.result.current.frameProps.onLoad());
+  return { ...view, load };
+}
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+describe("useDocFrame loading", () => {
+  it("is loading before the first load, and not after it", () => {
+    const { result, load } = harness();
+    expect(result.current.loading).toBe(true);
+
+    load();
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.doc).not.toBeNull();
+  });
+
+  it("is loading again after a reload, until that load lands", () => {
+    const { result, load } = harness();
+    load();
+
+    act(() => result.current.reload());
+    expect(result.current.loading).toBe(true);
+
+    load();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("is loading again when a trust grant remounts the frame", () => {
+    // The case `doc === null` gets wrong: a trust remount does not clear
+    // `doc`, so the previous, detached document would read as loaded.
+    const { result, rerender, load } = harness();
+    load();
+
+    rerender({ mode: READING, entry: "index.html", trustToken: "t1" });
+
+    expect(result.current.doc).not.toBeNull();
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("is loading again when the entry navigates the same frame", () => {
+    const { result, rerender, load } = harness();
+    load();
+
+    rerender({ mode: READING, entry: "slides.html", trustToken: "t0" });
+
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("is loading again on entering the editor", () => {
+    const { result, rerender, load } = harness();
+    load();
+
+    rerender({ mode: { kind: "editing", baseVersion: "v1" }, entry: "index.html", trustToken: "t0" });
+
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("ends the wait even when the load yields no readable document", () => {
+    // A frame whose document cannot be read must not leave the overlay up
+    // for good; the overlay would then be the only thing on screen.
+    const { result, load } = harness();
+    (result.current.ref as { current: HTMLIFrameElement | null }).current = null;
+
+    load();
+
+    expect(result.current.doc).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+});

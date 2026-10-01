@@ -24,6 +24,17 @@ import { buildPreviewDoc } from "../viewer/preview";
  */
 const UNMEASURED_WIDTH = 240;
 
+/**
+ * The skeleton is hidden by CSS once the preview in front of it has loaded,
+ * keyed on this attribute rather than on state. It is latched for free — an
+ * edit re-renders the same iframe, which keeps the mark, so typing does not
+ * flash "loading" over a slide that is already there — and a load that lands
+ * after a test's last assertion is not a React update at all.
+ */
+function markPainted(event: React.SyntheticEvent<HTMLIFrameElement>) {
+  event.currentTarget.setAttribute("data-painted", "");
+}
+
 export function SlideThumb({
   slide,
   baseHref,
@@ -104,6 +115,7 @@ export function SlideThumb({
           tabIndex={-1}
           sandbox="allow-same-origin"
           srcDoc={srcDoc}
+          onLoad={markPainted}
           style={{
             width: stage.width,
             height: stage.height,
@@ -111,6 +123,8 @@ export function SlideThumb({
           }}
         />
       ) : null}
+      {/* Until the preview has painted, the box would be a blank slide. */}
+      <span className="skeleton slide-thumb-skeleton" aria-hidden="true" />
     </span>
   );
 }

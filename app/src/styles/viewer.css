@@ -157,6 +157,24 @@
   background: var(--color-bg);
 }
 
+/*
+ * Covers the frame while it loads, which is otherwise a blank white box under a
+ * fully live toolbar. Below SelectionFab, and never a target: it is gone by the
+ * time there is anything to click. The short delay keeps a fast reload from
+ * flashing it.
+ */
+.frame-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  pointer-events: none;
+  animation: frame-loading-in var(--t-base) var(--ease-out) var(--t-fast) both;
+}
+@keyframes frame-loading-in { from { opacity: 0; } }
+
 /* --- Banners ------------------------------------------------------------- */
 
 .viewer-banners {
@@ -293,6 +311,7 @@
   .slide-rail,
   .slide-overview,
   .selection-fab,
+  .frame-loading,
   .present-counter,
   .present-exit {
     display: none;

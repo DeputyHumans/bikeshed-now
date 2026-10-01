@@ -78,6 +78,16 @@
   transform-origin: top left;
   pointer-events: none;
 }
+/* A child rather than a class on the box: `.slide-thumb-box`'s own background
+   sits in a later layer than `.skeleton`'s and would win. Over the preview
+   until it has loaded, then gone, so nothing keeps animating behind a slide. */
+.slide-thumb-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  pointer-events: none;
+}
+.slide-thumb-frame[data-painted] + .slide-thumb-skeleton { display: none; }
 .slide-thumb[aria-current="true"] {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px var(--color-accent-soft);
