@@ -230,3 +230,51 @@ describe("a click that carries a comment intent", () => {
     expect(advance).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("a link out of the document", () => {
+  function clickOut(doc: Document): MouseEvent {
+    const event = new (doc.defaultView!.MouseEvent)("click", { bubbles: true, cancelable: true });
+    act(() => {
+      doc.querySelector("#out")!.dispatchEvent(event);
+    });
+    return event;
+  }
+
+  it("opens beside the viewer while reading, so the document stays where it is", () => {
+    const doc = makeDoc();
+    doc.body.insertAdjacentHTML("beforeend", `<a id="out" href="https://example.com/x">out</a>`);
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    try {
+      const { unmount } = mount(doc);
+      expect(clickOut(doc).defaultPrevented).toBe(true);
+      expect(open).toHaveBeenCalledWith("https://example.com/x", "_blank", "noopener,noreferrer");
+      unmount();
+      expect(clickOut(doc).defaultPrevented).toBe(false);
+      expect(open).toHaveBeenCalledTimes(1);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("is left alone while editing, where a click places the caret", () => {
+    const doc = makeDoc();
+    doc.body.insertAdjacentHTML("beforeend", `<a id="out" href="https://example.com/x">out</a>`);
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    try {
+      renderHook(() =>
+        useAnnotationLayer({
+          mode: { kind: "editing", baseVersion: "v1" },
+          doc,
+          epoch: 1,
+          annotations: [],
+          selectedId: null,
+          onSelect: vi.fn(),
+        }),
+      );
+      expect(clickOut(doc).defaultPrevented).toBe(false);
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+    }
+  });
+});

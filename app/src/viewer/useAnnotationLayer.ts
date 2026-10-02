@@ -16,6 +16,7 @@ import { ANN_ATTR, HL_SELECTOR } from "../brand/dom";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
+import { attachOutboundLinks, openBeside } from "./outboundLinks";
 
 /**
  * LEG 1 of the four that keep decoration out of saved bytes.
@@ -67,9 +68,14 @@ export function useAnnotationLayer(options: {
     // comment on it. Reading mode only, with the rest of this effect: the edit
     // frame runs no script and the caret must never lose a click.
     const unguard = attachSelectionGuard(doc);
+    // A link out of the document opens beside it rather than replacing it in
+    // the frame. Reading only, for the same reason: in the editor a click on a
+    // link places the caret.
+    const unlink = attachOutboundLinks(doc, openBeside);
     return () => {
       detach();
       unguard();
+      unlink();
       // Both, and in this order: unwrap the marks, then remove the stylesheet.
       // Removing the stylesheet first leaves unstyled <mark> elements visible
       // for a frame.

@@ -482,8 +482,19 @@ Because it is same-origin, the parent app drives annotation directly on
   which sits above the document in the propagation path and so runs first
   whatever the document attached, and whenever; the highlight's by the
   listener that already claims it. Propagation is stopped, the default action
-  is not: a link still navigates and a `<summary>` still toggles. This is what
-  keeps a deck that advances on click (§6d) on the slide being annotated.
+  is not: a link still navigates (see the next point) and a `<summary>` still
+  toggles. This is what keeps a deck that advances on click (§6d) on the slide
+  being annotated.
+- **A link out of the document opens beside it.** A link that leaves the
+  version — another site, the app's own pages, another version — opens in a new
+  tab from the parent, with `noopener,noreferrer`, and its default action in the
+  frame is prevented. Left to the frame, a plain link replaced the document
+  inside the viewer with somebody else's page (often a framing refusal), and a
+  sandboxed frame may not open a tab at all, so `target="_blank"` did nothing.
+  A fragment link scrolls, and a link to another file of the same version — a
+  bundle's own pages — still navigates the frame. `attachOutboundLinks`, on the
+  frame window in the capture phase, reading mode only: in the editor a click
+  on a link places the caret.
   Reading mode only, with the rest of the layer: the edit frame runs no script
   and the caret must never lose a click.
 

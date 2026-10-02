@@ -147,6 +147,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **A link out of a document replaced it inside the viewer.** A plain link
+  navigated the document's frame to somebody else's page, often a refusal to be
+  framed, and `target="_blank"` did nothing at all, because a sandboxed frame
+  may not open a tab. A link that leaves the version now opens in a new tab
+  from the viewer, and the document stays. A link to a passage, or to another
+  file of the same bundle, behaves as before (SPEC §6).
 - **Revising a bundle through a token dropped its images.** `update_document`,
   and so `bikeshed update` with one file, built the new version from the sent
   file alone, so every stylesheet and image beside a bundle's entry 404ed from

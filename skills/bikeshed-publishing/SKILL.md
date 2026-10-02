@@ -249,9 +249,10 @@ place to say what is missing.
 | `<noscript>` | Shown | Hidden |
 | An embedded `<iframe>`: video, map, widget | Loads with its scripts off, so usually blank | Works |
 | A slide deck its JavaScript builds | Empty | Works |
-| `target="_blank"` links and forms | Do nothing | Work |
-| A link to another site | Opens inside the document's frame, replacing it | The same |
+| A form | Does not submit | Submits |
+| A link to another site, with `target="_blank"` or without | Opens in a new tab; the document stays | The same |
 | A link to `#id` | Scrolls | Scrolls |
+| A link to another file of the same bundle | Opens in the document's frame | The same |
 | CSS, `@font-face`, `<details>`, inline SVG, relative bundle files | Work | Work |
 | External images, stylesheets, `@import` and web fonts | Load | Load |
 
