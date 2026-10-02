@@ -337,6 +337,12 @@ raw `<script>` in Markdown is treated the same way as one in HTML. The owner can
 trust it for every reader; any reader can trust it for their own browser only.
 Once trusted, JavaScript works as it would anywhere else.
 
+**Every update you publish sandboxes it again.** Trust covers the scripts a
+person saw, so a new version through a token withdraws it, the owner's and every
+reader's, until somebody trusts it again. An update that changes nothing keeps
+it. So when you revise a document whose scripts matter, say that it needs
+trusting again.
+
 If your document depends on its own JavaScript, say so in the text, so a reader
 seeing an empty box knows why, and tell the owner what the script does. Whether
 to trust it is theirs to decide. A `<noscript>` element is shown while the

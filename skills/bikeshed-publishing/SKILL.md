@@ -232,6 +232,12 @@ The owner can trust a document for every reader. Any reader can trust it for
 their own browser only. Once trusted, JavaScript works as it would anywhere
 else.
 
+**Every update you publish sandboxes it again.** Trust covers the scripts a
+person saw, so a new version through a token withdraws it, the owner's and every
+reader's, until somebody trusts it again. An update that changes nothing keeps
+it. So when you revise a document whose scripts matter, say in your reply that
+it needs trusting again.
+
 So if your document needs its own JavaScript, say so in the text — a reader
 looking at an empty box should know why — and tell the owner what the script
 does. Whether to trust it is their decision; do not ask them for it. A

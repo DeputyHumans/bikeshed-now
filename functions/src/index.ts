@@ -62,6 +62,7 @@ import {
   expiryMs,
   isDocEditor,
   isExpired,
+  keepsTrust,
   opensEditingToAnyAccount,
   readBasis,
   tokenMatches,
@@ -88,7 +89,9 @@ import {
   placeNewDocument,
   publishNewDocument,
   readPrefix,
+  readTrustGrants,
   reviseDocument,
+  withdrawTrust,
 } from "./lib/publish";
 import {
   extractBundle,
@@ -1237,6 +1240,14 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
       const vRef = versionsRef.doc(versionId);
       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
+      // Trust carries into the new version only when its owner wrote it here.
+      // The server stores whatever HTML a draft is sent, so "in-app editing
+      // cannot add a script" was never true of anybody else's edit (SPEC §6c).
+      const keeps = keepsTrust(cur.data() as DocAclData, {
+        emailLower: caller.emailLower,
+        channel: actor.channel,
+      });
+      const grants = keeps ? [] : await readTrustGrants(tx, docRef);
       tx.set(vRef, {
         versionId,
         label: versionId,
@@ -1263,11 +1274,6 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
         {
           currentVersion: versionId,
           draft: FieldValue.delete(),
-          // `trusted` is deliberately untouched, so it PROPAGATES: a document
-          // the owner trusted stays trusted across in-app edits. Safe because
-          // platform editing is parent-driven and cannot introduce a new
-          // uploaded bundle — re-upload and duplicate both make fresh
-          // trusted:false documents.
           updatedAt: now(),
           stats: {
             commits: FieldValue.increment(1),
@@ -1277,6 +1283,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
         },
         { merge: true },
       );
+      if (!keeps) withdrawTrust(tx, docRef, grants);
     });
   } catch (e) {
     const reason = (e as Error).message;

@@ -213,3 +213,43 @@ test("no static Firestore class is reached through the admin namespace", () => {
   const calls = src.match(/admin\.firestore\.(FieldValue|Timestamp|FieldPath|GeoPoint)\s*[.(]/g);
   assert.deepEqual(calls ?? [], []);
 });
+
+// --- A version nobody vouched for is never trusted -----------------------------
+
+test("every path that mints a version decides trust inside its transaction", () => {
+  /**
+   * Trust used to carry from version to version unconditionally, on the claim
+   * that in-app editing cannot introduce a new bundle. The server never held
+   * that line: /draft stores whatever HTML a caller with canEdit sends, and
+   * update_document takes any content. On a trusted document with open
+   * editing, any signed-in account could commit a <script> that then ran in
+   * every reader's session, with the app's own origin.
+   *
+   * The transactions cannot run without Firestore, so the shape is pinned: a
+   * token update always withdraws trust, and the in-app commit withdraws it
+   * unless keepsTrust says the owner wrote it. Both withdraw it in the same
+   * transaction that moves currentVersion, so no reader can load the new
+   * version under the old trust.
+   */
+  const { readFileSync } = require("node:fs");
+  const { join } = require("node:path");
+  const slice = (src, from, to) => {
+    const start = src.indexOf(from);
+    assert.ok(start >= 0, `${from} not found`);
+    const end = src.indexOf(to, start + from.length);
+    return src.slice(start, end < 0 ? undefined : end);
+  };
+  const publish = readFileSync(join(__dirname, "..", "src", "lib", "publish.ts"), "utf8");
+  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+
+  const upload = slice(publish, "export async function commitNewVersion(", "\nexport ");
+  const inUpload = slice(upload, "runTransaction(", "\n  });\n");
+  assert.match(inUpload, /readTrustGrants\(tx, /, "a token update must read the trust grants in its transaction");
+  assert.match(inUpload, /withdrawTrust\(tx, /, "a token update must withdraw trust in its transaction");
+
+  const commit = slice(index, "export const commitVersion = onRequest(", "\nexport const ");
+  const inCommit = slice(commit, "runTransaction(", "\n    });\n");
+  assert.match(inCommit, /keepsTrust\(/, "the in-app commit must ask who wrote the version");
+  assert.match(inCommit, /readTrustGrants\(tx, /, "the in-app commit must read the trust grants in its transaction");
+  assert.match(inCommit, /withdrawTrust\(tx, /, "the in-app commit must be able to withdraw trust");
+});

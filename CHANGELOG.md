@@ -18,6 +18,19 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Security
 
+- **A trusted document no longer trusts what somebody else writes into it.**
+  Trust carried from version to version unconditionally, on the claim that
+  in-app editing cannot add a script. The server never held that line: `/draft`
+  stores whatever HTML a caller with `canEdit` sends, and `update_document`
+  takes any content. On a trusted document with open editing, any signed-in
+  account could commit a `<script>` that then ran in every reader's session,
+  same-origin with the app. Now only a version the owner wrote in the app keeps
+  trust. Any other new version, an editor's, an open editor's, or any update
+  through a token, withdraws the owner's trust and every reader's own in the
+  transaction that makes it current (SPEC §6c). A deduplicated update keeps
+  them. The cost is that a collaborator's edit to a trusted interactive
+  document has to be vouched for again.
+
 - **An unlisted document needs its link, everywhere.** Before this fix,
   "unlisted" meant "readable by anyone who guesses the id". The key was checked
   on three byte paths, and everything else treated unlisted as public:

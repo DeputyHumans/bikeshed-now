@@ -291,8 +291,8 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
   re-upload in all but name, which open editing does not extend to. `id`,
   `folderId` and `title` with it are a `400`; a refused caller gets the usual
-  `404`/`403` (§1.4b); an expired document a `409`. `trusted` is left as it is,
-  as `update_document` leaves it. Answers `{ docId, versionId, contentHash,
+  `404`/`403` (§1.4b); an expired document a `409`. A new version withdraws
+  trust, as every update through a token does (§6c). Answers `{ docId, versionId, contentHash,
   fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
@@ -593,10 +593,20 @@ The viewer surfaces trust ONLY when it would change something: the document is
 still sandboxed for this reader AND the loaded DOM actually contains `<script>`
 tags. Static uploads therefore never prompt.
 
-Trust propagates across in-app edits (`commitVersion` leaves it untouched),
-which is safe because platform editing is parent-driven and cannot introduce a
-new uploaded bundle; re-upload and duplicate both make FRESH `trusted: false`
-documents.
+**Trust carries into a new version only when the owner wrote it in the app**
+(`keepsTrust`). Any other new version withdraws both scopes, the global flag and
+every personal grant, in the same transaction that makes it current: an edit by
+an editor or an open editor, and every update through a token, which is an
+upload in all but name (`update_document`, `POST /publish?update=`). A reader
+trusted the scripts they had seen, not whatever somebody publishes next. A
+deduplicated update mints nothing and changes nothing. Re-upload and duplicate
+still make FRESH `trusted: false` documents.
+
+This replaces "trust propagates across in-app edits, because platform editing
+is parent-driven and cannot introduce a new bundle". The server never held that
+line: `/draft` stores whatever HTML a `canEdit` caller sends, so on a trusted
+document with open editing any signed-in account could commit a `<script>` that
+then ran, same-origin with the app, in every reader's session.
 
 A sandboxed document may therefore be one whose scripts were the only thing
 that would have BUILT it. The viewer distinguishes "this document has no

@@ -219,6 +219,35 @@ export async function reviseDocument(args: {
 }
 
 /**
+ * Every reader's own trust grant on a document (`docs/{docId}/trust/{uid}`).
+ *
+ * Read inside the transaction that mints a version, because a transaction
+ * reads before it writes, and so that the grants withdrawn are exactly the
+ * ones that existed when the version became current.
+ */
+export async function readTrustGrants(
+  tx: admin.firestore.Transaction,
+  docRef: admin.firestore.DocumentReference,
+): Promise<admin.firestore.DocumentReference[]> {
+  const snap = await tx.get(docRef.collection("trust"));
+  return snap.docs.map((d) => d.ref);
+}
+
+/**
+ * Withdraw every vouch for a document's scripts: the owner's, for everyone,
+ * and each reader's own. A reader trusted the scripts they had seen, not
+ * whatever somebody publishes next, so personal trust goes with global trust.
+ */
+export function withdrawTrust(
+  tx: admin.firestore.Transaction,
+  docRef: admin.firestore.DocumentReference,
+  grants: readonly admin.firestore.DocumentReference[],
+): void {
+  tx.set(docRef, { trusted: false }, { merge: true });
+  for (const grant of grants) tx.delete(grant);
+}
+
+/**
  * Write options that refuse to replace an object that already exists.
  *
  * A new document's bytes go in before its record does, so `currentVersion` can
@@ -405,6 +434,10 @@ export interface UpdateResult {
  * than editing a draft. The dedup rule is the same one the CLI and the in-app
  * commit use, which is what makes "publish the same thing twice" safe for an
  * agent that cannot remember whether it already did.
+ *
+ * A new version through here is an upload, so it is never trusted: the owner's
+ * trust and every reader's own are withdrawn with the same write that makes it
+ * current (SPEC §6c). A deduplicated update changes nothing and keeps them.
  */
 export async function commitNewVersion(args: {
   db: Db;
@@ -443,6 +476,7 @@ export async function commitNewVersion(args: {
   await db.runTransaction(async (tx) => {
     const vRef = versionsRef.doc(versionId);
     if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
+    const grants = await readTrustGrants(tx, docRef);
     tx.set(vRef, {
       versionId,
       label: versionId,
@@ -477,6 +511,7 @@ export async function commitNewVersion(args: {
       },
       { merge: true },
     );
+    withdrawTrust(tx, docRef, grants);
   });
 
   await syncPublicProjection(db, docRef.id);
