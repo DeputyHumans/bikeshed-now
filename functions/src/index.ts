@@ -130,6 +130,7 @@ import {
 } from "./lib/shell";
 import {
   badRequest,
+  contentPath,
   jsonBody,
   noStore,
   pathSegments,
@@ -339,7 +340,7 @@ function streamObject(
 }
 
 /**
- * GET /content/:docId/:versionId/<relpath, default index.html>
+ * GET /content/[~<key>/]:docId/:versionId/<relpath, default index.html>
  *
  * The one path document bytes take to a browser. Auth is resolved first, and a
  * caller who may not read gets the SAME 404 as a document that does not exist:
@@ -348,7 +349,9 @@ function streamObject(
  *
  * An unlisted document additionally requires its link token, or a link grant
  * for a signed-in caller who presented it before. Without that, "unlisted"
- * would mean nothing more than "guess the slug" (SPEC §17).
+ * would mean nothing more than "guess the slug" (SPEC §17). The token comes
+ * from the path when the viewer put it there, so that a bundle's relative
+ * files carry it too, else from `?k=`.
  */
 export const contentProxy = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
@@ -359,13 +362,12 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
   const caller = await resolveCaller(req);
 
   const segments = pathSegments(req, "content");
-  if (!segments || segments.length < 2) {
+  const parts = segments ? contentPath(segments) : null;
+  if (!parts) {
     res.status(404).end();
     return;
   }
-  const [docId, versionId] = segments;
-  const relParts = segments.slice(2);
-  const relPath = relParts.length > 0 ? relParts.join("/") : "index.html";
+  const { docId, versionId, relPath } = parts;
 
   const prefix = `docs/${docId}/${versionId}/`;
   const objectKey = `${prefix}${relPath}`;
@@ -392,7 +394,7 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
+  const proof = await linkProofFor(docSnap.ref, docData, caller, parts.k ?? strParam(req, "k"));
   const basis = readBasis(docData, caller, proof);
   if (basis === null) {
     res.status(404).end();

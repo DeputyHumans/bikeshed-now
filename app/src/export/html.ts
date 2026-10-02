@@ -8,6 +8,8 @@
  * library, no PDF library and no UI kit, which is the discipline worth keeping.
  */
 
+import { contentBase } from "../viewer/frameMode";
+
 function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -35,15 +37,18 @@ function safeFilename(name: string): string {
   return cleaned || "document";
 }
 
-/** Download the entry file, named from the document's title. */
+/**
+ * Download the entry file, named from the document's title. `linkKey` is an
+ * unlisted document's token, for a reader whose only access is the link.
+ */
 export async function downloadEntry(
   docId: string,
   versionId: string,
   entry: string,
   title: string,
-  extension = "html",
+  { extension = "html", linkKey }: { extension?: string; linkKey?: string } = {},
 ): Promise<void> {
-  const res = await fetch(`/content/${docId}/${versionId}/${entry}`, {
+  const res = await fetch(`${contentBase(docId, versionId, linkKey)}${entry}`, {
     credentials: "same-origin",
   });
   if (!res.ok) {
@@ -68,17 +73,20 @@ export function downloadSource(
   versionId: string,
   sourceEntry: string,
   title: string,
+  linkKey?: string,
 ): Promise<void> {
   const extension = sourceEntry.split(".").pop() || "md";
-  return downloadEntry(docId, versionId, sourceEntry, title, extension);
+  return downloadEntry(docId, versionId, sourceEntry, title, { extension, linkKey });
 }
 
 /** Download a multi-file bundle as a .zip, assembled by the server. */
-export function downloadZip(docId: string, versionId: string): void {
+export function downloadZip(docId: string, versionId: string, linkKey?: string): void {
   // The endpoint sets Content-Disposition, so a same-origin anchor click
-  // downloads it with the session cookie attached.
+  // downloads it with the session cookie attached. One request, so the token
+  // can ride in the query.
   const a = document.createElement("a");
-  a.href = `/download/${docId}/${versionId}`;
+  const key = linkKey ? `?k=${encodeURIComponent(linkKey)}` : "";
+  a.href = `/download/${docId}/${versionId}${key}`;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();

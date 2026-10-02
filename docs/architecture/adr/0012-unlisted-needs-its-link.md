@@ -60,6 +60,12 @@ Two alternatives were rejected:
   `private, no-store`, because their URL carries no key.
 - **The write endpoints now answer 404 to anyone who may not read.** This closes
   an existence check for private documents too.
+- **The viewer sends the key in the content path, `/content/~<k>/…`.** In
+  `?k=` it reached the entry and none of the files the entry names by relative
+  path, so a signed-out holder of the link saw a bundle's text without its
+  images or stylesheets. The key is no more exposed than before: it was already
+  in the URL, logs record both forms, and a cross-origin referrer carries
+  neither.
 
 ## What would change this
 

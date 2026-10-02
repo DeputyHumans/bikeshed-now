@@ -147,6 +147,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **A reader without an account saw an unlisted bundle without its images.**
+  The viewer carried the link's key as `?k=` on the entry, and a query string
+  belongs to one URL: every image and stylesheet the entry names by relative
+  path was requested without it and answered 404. The key now rides in the
+  content path, `/content/~<k>/<docId>/<versionId>/…`, which every relative
+  reference inherits; `?k=` is still accepted. The slide thumbnails, the print
+  export and the three downloads carry it too, and had the same fault (SPEC §2,
+  §17).
 - **A link out of a document replaced it inside the viewer.** A plain link
   navigated the document's frame to somebody else's page, often a refusal to be
   framed, and `target="_blank"` did nothing at all, because a sandboxed frame

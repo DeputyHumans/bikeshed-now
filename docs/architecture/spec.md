@@ -176,14 +176,22 @@ Clears `__session` (Max-Age=0). `204`.
 Public. Returns `{ signInHint?: string }` — a deployment-authored sentence for
 the rejection screen. **Never the allowlist.**
 
-### `GET /content/:docId/:versionId/*`
+### `GET /content/[~<k>/]:docId/:versionId/*`
 Path after `versionId` is the relative file path; default `index.html`.
+
+An unlisted document's key may come as a first path segment `~<k>`, ahead of
+the document, as well as `?k=`. The viewer puts it in the path: a query string
+belongs to one URL, so the entry got it and every file the entry names by
+relative path was requested without it, and a signed-out reader of the link got
+the text and none of its images or stylesheets. A path segment is inherited by
+every relative reference. A document id never starts with `~`, so the segment
+is unambiguous (`contentPath` in `lib/http.ts`).
 
 1. Resolve the caller: `__session` cookie, else anonymous.
 2. Load `docs/{docId}`. If absent → `404`.
-3. Decide the caller's `readBasis` (§17): member, public, link (`?k=` matches
-   the document's token) or grant (a signed-in caller's current link grant).
-   None → **`404`** (§1.4b).
+3. Decide the caller's `readBasis` (§17): member, public, link (the path's or
+   the query's `k` matches the document's token) or grant (a signed-in caller's
+   current link grant). None → **`404`** (§1.4b).
 4. Version must exist → else `404`.
 5. Stream `gs://<bucket>/docs/{docId}/{versionId}/<relPath>` with the Admin SDK.
 
@@ -1273,7 +1281,7 @@ Who may read, decided once in `lib/acl.ts readBasis` and mirrored by the rules:
 |---|---|---|
 | `member` | owner or effective member, at any visibility | no |
 | `public` | anyone, on a public document | yes |
-| `link` | anyone whose request carries `k` equal to `linkToken` | yes: the URL carries the key |
+| `link` | anyone whose request carries `k` equal to `linkToken`, in the query or, on `/content/`, as the `~<k>` path segment (§2) | yes: the URL carries the key |
 | `grant` | a signed-in account holding a current link grant | no: the URL carries no key |
 
 The key is compared in constant time, and an absent token never matches an

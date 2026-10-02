@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  contentBase,
   frameKey,
   frameSandbox,
   frameSrc,
@@ -89,9 +90,26 @@ describe("frameSrc", () => {
   it("carries the unlisted link token, encoded", () => {
     // Without it, an unlisted document is readable by anyone who guesses the
     // slug, which would make "unlisted" mean nothing.
-    expect(frameSrc(READING, "d1", "index.html", 0, "tok en/+")).toContain(
-      "?k=tok%20en%2F%2B",
+    expect(frameSrc(READING, "d1", "index.html", 0, "tok en/+")).toBe(
+      "/content/~tok%20en%2F%2B/d1/v2/index.html",
     );
+  });
+
+  it("carries the token to every file the document refers to by relative path", () => {
+    // In `?k=` the token stopped at the entry, so a signed-out reader of an
+    // unlisted bundle got its text and none of its images or stylesheets.
+    const src = new URL(frameSrc(READING, "d1", "index.html", 0, "tok_123"), "https://x.example");
+    expect(new URL("img/a.png", src).pathname).toBe("/content/~tok_123/d1/v2/img/a.png");
+    expect(new URL("../v2/style.css", src).pathname).toBe("/content/~tok_123/d1/v2/style.css");
+  });
+});
+
+describe("contentBase", () => {
+  it("is the version's directory, with the token ahead of the document when there is one", () => {
+    // The base thumbnails, print and downloads resolve against: without the
+    // token they 404 for the same reader the frame now serves.
+    expect(contentBase("d1", "v2")).toBe("/content/d1/v2/");
+    expect(contentBase("d1", "v2", "tok_123")).toBe("/content/~tok_123/d1/v2/");
   });
 });
 

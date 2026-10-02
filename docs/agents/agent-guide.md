@@ -308,9 +308,7 @@ is read, breaks when the site moves, and is missing from a download. A document
 outlives the conversation that produced it: somebody will download it, print it,
 or open it in three years. Every file of a multi-file bundle is also a separate
 authenticated request, so a fifty-asset deck costs fifty round trips per reader
-and an inlined one costs one. A signed-out reader of an unlisted link gets the
-entry file and none of the files beside it, because the key is on the page's
-address and not on the requests the page makes.
+and an inlined one costs one.
 
 Inline your SVG. Inline your CSS. Put images in `data:` URIs and use system
 fonts, or embed a font as a `data:` URI. If you genuinely need several files, send

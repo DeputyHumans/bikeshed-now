@@ -63,6 +63,20 @@ export function frameSandbox(mode: FrameMode): string | undefined {
   return mode.sandboxed ? "allow-same-origin" : undefined;
 }
 
+/**
+ * The directory a published version's files are read from.
+ *
+ * An unlisted document's token goes in the PATH, ahead of the document, not in
+ * `?k=`. A query string belongs to one URL: the entry got it, and every image
+ * and stylesheet the entry names by relative path was requested without it, so
+ * a reader with the link but no account got the text and nothing else. A path
+ * segment is inherited by every relative reference (SPEC §2, §17).
+ */
+export function contentBase(docId: string, versionId: string, linkToken?: string): string {
+  const key = linkToken ? `~${encodeURIComponent(linkToken)}/` : "";
+  return `/content/${key}${docId}/${versionId}/`;
+}
+
 /** The URL for a mode. Drafts and published versions come from different paths. */
 export function frameSrc(
   mode: FrameMode,
@@ -77,8 +91,7 @@ export function frameSrc(
     return `/draft/${docId}/${entry}?r=${epoch}`;
   }
   if (mode.draft) return `/draft/${docId}/${entry}?r=${epoch}`;
-  const key = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
-  return `/content/${docId}/${mode.versionId}/${entry}${key}`;
+  return `${contentBase(docId, mode.versionId, linkToken)}${entry}`;
 }
 
 /**

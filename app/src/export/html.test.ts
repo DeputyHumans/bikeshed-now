@@ -69,6 +69,20 @@ describe("downloads", () => {
     );
   });
 
+  it("carries an unlisted link's token, so a reader without an account can download what they read", async () => {
+    const fetchMock = vi.fn(async () => new Response("# x", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await downloadEntry("d1", "v2", "index.html", "Q3 Memo", { linkKey: "tok_123" });
+    await downloadSource("d1", "v2", "index.md", "Q3 Memo", "tok_123");
+    expect(fetchMock.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
+      "/content/~tok_123/d1/v2/index.html",
+      "/content/~tok_123/d1/v2/index.md",
+    ]);
+    expect(anchors()[1].download).toBe("Q3-Memo.md");
+    downloadZip("d1", "v2", "tok_123");
+    expect(anchors()[2].getAttribute("href")).toBe("/download/d1/v2?k=tok_123");
+  });
+
   it("sends a multi-file bundle through the server, not the browser", () => {
     // Assembling a zip client-side would mean a zip library, and the app ships
     // with none by design.

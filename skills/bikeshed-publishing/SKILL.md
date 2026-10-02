@@ -157,9 +157,7 @@ embed a font as a `data:` URI in `@font-face`.
 
 If you genuinely need several files, send a `.zip` with `index.html` at its root,
 and refer to its files by relative path: a path starting with `/` resolves
-against the deployment, not your bundle. One cost comes with it: a signed-out
-reader of an unlisted link gets the entry file and none of the files beside it,
-because the key is on the page's address and not on the requests the page makes.
+against the deployment, not your bundle.
 
 ## Publishing
 

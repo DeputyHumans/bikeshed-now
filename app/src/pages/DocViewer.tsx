@@ -30,7 +30,7 @@ import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
 import { usePrinting } from "../viewer/usePrinting";
-import type { FrameMode } from "../viewer/frameMode";
+import { contentBase, type FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
 import { ViewerToolbar } from "../components/ViewerToolbar";
@@ -389,14 +389,14 @@ export function DocViewer() {
   const printCurrent = useCallback(() => {
     if (!frame.doc) return;
     void printDoc(frame.doc, {
-      baseHref: `/content/${docId}/${doc.currentVersion}/`,
+      baseHref: contentBase(docId, doc.currentVersion, linkKey || undefined),
       marking: doc.meta?.marking ?? MARKING_OFF,
       title: doc.title,
       version: doc.currentVersion,
       user: emailLower,
     });
     logEvent({ name: "export", params: { kind: "pdf" } });
-  }, [frame.doc, docId, doc.currentVersion, doc.meta?.marking, doc.title, emailLower]);
+  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.meta?.marking, doc.title, emailLower]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the
@@ -423,7 +423,9 @@ export function DocViewer() {
           void toast
             .during(
               "Downloading…",
-              downloadEntry(docId, doc.currentVersion, doc.entry, doc.title),
+              downloadEntry(docId, doc.currentVersion, doc.entry, doc.title, {
+                linkKey: linkKey || undefined,
+              }),
             )
             .catch((e) => toast.error((e as Error).message));
           logEvent({ name: "export", params: { kind: "html" } });
@@ -438,7 +440,13 @@ export function DocViewer() {
           void toast
             .during(
               "Downloading…",
-              downloadSource(docId, doc.currentVersion, doc.version!.sourceEntry!, doc.title),
+              downloadSource(
+                docId,
+                doc.currentVersion,
+                doc.version!.sourceEntry!,
+                doc.title,
+                linkKey || undefined,
+              ),
             )
             .catch((e) => toast.error((e as Error).message));
           logEvent({ name: "export", params: { kind: "html" } });
@@ -450,7 +458,7 @@ export function DocViewer() {
         id: "zip",
         label: "Download everything as a .zip",
         onSelect: () => {
-          downloadZip(docId, doc.currentVersion);
+          downloadZip(docId, doc.currentVersion, linkKey || undefined);
           logEvent({ name: "export", params: { kind: "zip" } });
         },
       });
@@ -490,7 +498,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, frame.doc, isOwner, emailLower, navigate, toast]);
+  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast]);
 
   if (doc.loading) return <Loading label="Opening the document" />;
   if (doc.notFound) {
@@ -522,7 +530,7 @@ export function DocViewer() {
   const hasSlides = deck.slides.length > 1 && deck.paged;
   // The same base the print export uses. Without it a preview's relative
   // images resolve against the app origin and every one of them 404s.
-  const baseHref = `/content/${docId}/${doc.currentVersion}/`;
+  const baseHref = contentBase(docId, doc.currentVersion, linkKey || undefined);
   // Structural slide edits are DOM surgery: they fire no input event, so
   // autosave has to be told, and the slide list has to be read again.
   const onSlidesChanged = () => {
