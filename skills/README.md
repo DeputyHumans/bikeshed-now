@@ -11,7 +11,7 @@ so it says *when* to use the skill rather than what it contains.
 
 | Skill | Load it when |
 |---|---|
-| `bikeshed-publishing` | writing and publishing a document, or revising one |
+| `bikeshed-publishing` | writing and publishing a document, or revising one; which formats it takes and what renders, runs and loads in one |
 | `bikeshed-feedback` | reading anchored review comments and acting on them |
 | `bikeshed-folders` | organising a workspace, or moving a document |
 

@@ -54,6 +54,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **The instructions say what a document may contain.** `/llms.txt`, the
+  publishing skill and `bikeshed --help` now list the formats a deployment
+  takes and what renders, runs and loads in each. An agent had been left to
+  guess, and the natural guesses were wrong. Mermaid, math, footnotes and YAML
+  front matter show as typed. External images and fonts load; they were never
+  blocked, only discouraged. Scripts, handler attributes, `target="_blank"` and
+  forms stay off until a person trusts the document: its owner for everyone,
+  any reader for themselves. The sandbox rows were checked in Chromium against
+  the viewer's iframe attributes, and the Markdown rows against the pinned
+  renderer.
 - **`bikeshed update` revises a `.zip` bundle.** It sends the archive as bytes
   to `POST /publish?update=<id>`, which publishes a new version of that
   document with the archive as its whole bundle. That needs an editor of the

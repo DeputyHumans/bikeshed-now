@@ -1,6 +1,6 @@
 ---
 name: bikeshed-publishing
-description: Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment.
+description: Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment, including which formats it takes (Markdown, HTML, a .zip bundle) and what renders, runs or loads in one (scripts, external images and fonts, Mermaid, math, front matter).
 ---
 
 # Publishing to Bikeshed
@@ -66,6 +66,20 @@ There is no runtime here: no shared state, no viewer identity, no stored assets,
 no pinning, and nothing is ever deleted. Ship a document that stands still, and
 say what it cannot do.
 
+## What you can publish
+
+| Send | Through | What a reader gets |
+|---|---|---|
+| Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
+| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte |
+| A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
+
+Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB
+uncompressed. Markdown is read as UTF-8.
+
+Without a title from you, a Markdown document is named by its first `#` heading
+and an HTML one by its `<title>`; failing both, by the file name.
+
 ## Write Markdown unless you need HTML
 
 Markdown is rendered server-side into a self-contained document with sections, a
@@ -75,6 +89,38 @@ somebody's stylesheet.
 
 Reach for HTML when Markdown cannot say it: a slide deck, an inline diagram, a
 layout.
+
+### What Markdown renders, and what it does not
+
+The renderer is markdown-it 14.1.0 (CommonMark) with tables, strikethrough and
+task lists. Nothing else is added.
+
+**Renders:** headings (each one opens a `<section>` with an id), tables,
+`~~strikethrough~~`, `- [x]` task lists as disabled checkboxes, fenced code as
+plain monospace with no syntax colouring, links, `<https://…>` autolinks,
+images, and raw HTML, including `<svg>`, `<details>` and `<script>`.
+
+**Shows as typed, unrendered:**
+
+| You write | Readers see | Instead |
+|---|---|---|
+| YAML front matter | A horizontal rule and a heading reading `title: …` | Leave it out; pass the title |
+| A `mermaid` or other diagram fence | The diagram's source in a code block | Render it to SVG and paste the `<svg>` in |
+| `$…$` or `$$…$$` math | The dollar signs and the TeX | An SVG or image of the formula, or plain text |
+| Footnotes `[^1]` | `[^1]`, and the note as a paragraph | A numbered list under a "Notes" heading |
+| `==highlight==`, `H~2~O`, `x^2^`, `:emoji:` | The characters as typed | `<mark>`, `<sub>`, `<sup>`, the emoji itself |
+| A definition list | One paragraph | A table, or bold terms |
+| A bare URL | Unlinked text | `<https://…>` or `[text](url)` |
+| A single newline | One continuous line | Two trailing spaces, or `\` |
+| `![](data:image/svg+xml,…)` | The Markdown as typed | Raw `<img src="data:image/svg+xml,…">`, or PNG, JPEG, GIF or WebP data |
+
+A block of raw HTML ends at the first blank line, and what follows is read as
+Markdown again; only `<script>`, `<style>` and `<pre>` run to their closing tag.
+So put a pasted `<svg>` inside a `<div>`, with no blank line anywhere in it, or
+it breaks into paragraphs.
+
+The page has a light theme and a print stylesheet. It has no dark mode and no
+generated table of contents.
 
 ## The one rule that changes whether commenting works
 
@@ -99,12 +145,21 @@ In HTML, write them:
 
 ## Keep it to one file
 
-No external URLs. Inline the SVG, inline the CSS. A document is something
-somebody will download, print, or open in three years, and every byte of a
-multi-file bundle is a separate authenticated request — a fifty-asset deck costs
-fifty round trips per reader, and the same deck inlined costs one.
+No external URLs. Images, stylesheets and fonts from another site do load —
+nothing blocks them — but each one tells that site when the document is read,
+breaks when the site moves, and is missing from a download. A document is
+something somebody will download, print, or open in three years, and every file
+of a multi-file bundle is a separate authenticated request — a fifty-asset deck
+costs fifty round trips per reader, and the same deck inlined costs one.
 
-If you genuinely need several files, send a `.zip` with `index.html` at its root.
+Inline the SVG, inline the CSS. Put images in `data:` URIs. Use system fonts, or
+embed a font as a `data:` URI in `@font-face`.
+
+If you genuinely need several files, send a `.zip` with `index.html` at its root,
+and refer to its files by relative path: a path starting with `/` resolves
+against the deployment, not your bundle. One cost comes with it: a signed-out
+reader of an unlisted link gets the entry file and none of the files beside it,
+because the key is on the page's address and not on the requests the page makes.
 
 ## Publishing
 
@@ -124,6 +179,25 @@ return the same `url`. That is the address to hand back. Do not run
 bytes mint no new version. So `update` is safe to run in a loop, in CI, or after
 a change you are not sure you made — it will tell you `no change` rather than
 filling the history with duplicates.
+
+**An update keeps the document's format, and what it replaces depends on what
+you send.**
+
+- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`,
+  replaces the entry. Every file beside it is kept, so you can revise a bundle's
+  text from `get_document`'s source and its images and stylesheets stay where
+  they were.
+- **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the
+  archive leaves out is gone from the new version. This takes somebody the
+  document is shared with as an editor, not open editing.
+
+```bash
+bikeshed update platform-review deck.zip     # every file, from the archive
+bikeshed update platform-review index.html   # the entry; the rest is kept
+```
+
+An update cannot switch a document between Markdown and HTML. Publish a new
+document for that.
 
 The address comes from the title unless you choose it: `--id platform-review`,
 or `publish_document`'s `id`, publishes at `/d/platform-review` (lowercase
@@ -153,12 +227,45 @@ which is the same kind of decision as sharing.
 ## Scripts run only if somebody vouched for them
 
 Everything you publish through a token is sandboxed, exactly like a browser
-upload: its scripts do not run until the document's owner trusts it in the app. A
-raw `<script>` in Markdown is treated the same way as one in HTML.
+upload: its scripts do not run until a person trusts it in the app. A raw
+`<script>` in Markdown is treated the same way as one in HTML.
+
+The owner can trust a document for every reader. Any reader can trust it for
+their own browser only. Once trusted, JavaScript works as it would anywhere
+else.
 
 So if your document needs its own JavaScript, say so in the text — a reader
 looking at an empty box should know why — and tell the owner what the script
-does. Whether to trust it is their decision; do not ask them for it.
+does. Whether to trust it is their decision; do not ask them for it. A
+`<noscript>` element is shown while the document is sandboxed, so it is the
+place to say what is missing.
+
+### What runs and what loads in HTML
+
+| In the document | Sandboxed (the default) | Trusted, by the owner for everyone or by a reader for themselves |
+|---|---|---|
+| `<script>`, inline or `src` | Does not run | Runs |
+| `onclick` and every other handler attribute | Does not run | Runs |
+| `<noscript>` | Shown | Hidden |
+| An embedded `<iframe>`: video, map, widget | Loads with its scripts off, so usually blank | Works |
+| A slide deck its JavaScript builds | Empty | Works |
+| `target="_blank"` links and forms | Do nothing | Work |
+| A link to another site | Opens inside the document's frame, replacing it | The same |
+| A link to `#id` | Scrolls | Scrolls |
+| CSS, `@font-face`, `<details>`, inline SVG, relative bundle files | Work | Work |
+| External images, stylesheets, `@import` and web fonts | Load | Load |
+
+Declare `<meta charset="utf-8">`. HTML is served without a charset, and a
+browser left to guess may garble anything outside ASCII.
+
+### Slide decks
+
+The viewer shows a slide rail and keyboard navigation when it finds a run of
+sibling slides: elements with the class `slide`, `<section>`s carrying
+`data-title`, sibling `<section>`s that share a class or all carry an `id`, or
+Marp's output. Slides are read in document order. Each one is named by its
+`data-title`, else its first `h1`–`h3`. Write the slides into the HTML: a deck
+that builds them with JavaScript stays empty until somebody trusts it.
 
 ## What happens next
 

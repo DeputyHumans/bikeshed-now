@@ -49,6 +49,18 @@ Skills
   bikeshed skills install <dir>        write them into an agent's skills directory
                                        (Claude Code: ~/.claude/skills)
 
+What you can publish
+  .md .markdown          rendered to HTML on the server; get returns the Markdown
+  .html .htm             stored as written
+  .zip                   several files, index.html or index.md at the root
+  Up to 25 MB. An update keeps the format: a .zip replaces every file, one .md
+  or .html replaces the entry and keeps the files beside it.
+  Scripts run once a person trusts the document in the app: its owner for
+  everyone, any reader for themselves. Images, stylesheets and fonts from other
+  sites load either way. Markdown is CommonMark with tables, strikethrough and
+  task lists: Mermaid, math, footnotes and front matter show as typed. The
+  deployment's /llms.txt has the full list.
+
 Options
   --json                 machine-readable output
   --title <text>         title for publish

@@ -148,7 +148,7 @@ it.
 
 | Skill | Load it when |
 |---|---|
-| `bikeshed-publishing` | writing and publishing a document, or revising one |
+| `bikeshed-publishing` | writing and publishing a document, or revising one; which formats it takes and what renders, runs and loads in one |
 | `bikeshed-feedback` | reading anchored review comments and acting on them |
 | `bikeshed-folders` | organising a workspace, or moving a document |
 
@@ -224,6 +224,30 @@ A `…` in a path is a folder you cannot see: access flows downward, so a grant 
 a child says nothing about its parent. A folder listed without `canWrite` is one
 you may read and may not file into.
 
+## What you can publish
+
+| Send | Through | What a reader gets |
+|---|---|---|
+| Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
+| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte |
+| A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
+
+Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB
+uncompressed. Markdown is read as UTF-8.
+
+**An update keeps the document's format, and what it replaces depends on what
+you send.**
+
+- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`,
+  replaces the entry. Every file beside it is kept, so you can revise a bundle's
+  text and its images and stylesheets stay where they were.
+- **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the
+  archive leaves out is gone from the new version. This takes somebody the
+  document is shared with as an editor, not open editing.
+
+An update cannot switch a document between Markdown and HTML. Publish a new
+document for that.
+
 ## A document can have an expiry
 
 `list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or
@@ -278,13 +302,20 @@ a slug derived from its text. If you are writing Markdown, just use headings.
 
 ### Keep it self-contained
 
-One file, no external URLs. A document outlives the conversation that produced
-it: somebody will download it, print it, or open it in three years. Every byte of a multi-file bundle is
-also a separate authenticated request, so a fifty-asset deck costs fifty
-round trips per reader and an inlined one costs one.
+One file, no external URLs. Images, stylesheets and fonts from another site do
+load, because nothing blocks them. But each one tells that site when the document
+is read, breaks when the site moves, and is missing from a download. A document
+outlives the conversation that produced it: somebody will download it, print it,
+or open it in three years. Every file of a multi-file bundle is also a separate
+authenticated request, so a fifty-asset deck costs fifty round trips per reader
+and an inlined one costs one. A signed-out reader of an unlisted link gets the
+entry file and none of the files beside it, because the key is on the page's
+address and not on the requests the page makes.
 
-Inline your SVG. Inline your CSS. If you genuinely need several files, send a
-`.zip` with `index.html` at its root.
+Inline your SVG. Inline your CSS. Put images in `data:` URIs and use system
+fonts, or embed a font as a `data:` URI. If you genuinely need several files, send
+a `.zip` with `index.html` at its root and refer to its files by relative path: a
+path starting with `/` resolves against the deployment, not your bundle.
 
 ### Markdown is usually the right choice
 
@@ -296,17 +327,67 @@ and your context is not filled with three kilobytes of stylesheet.
 Use HTML when you need something Markdown cannot express: a slide deck, an
 inline diagram, a layout. Put a `<title>`, a `<meta name="description">` and
 an absolute `og:image` in its head: they become the link preview when the
-document is shared, and the `<title>` is its default title.
+document is shared, and the `<title>` is its default title. Declare
+`<meta charset="utf-8">`: HTML is served without a charset, and a browser left to
+guess may garble anything outside ASCII.
 
 ### Scripts run only if somebody vouches for them
 
 Everything you publish through a token is sandboxed, exactly like a browser
-upload: its scripts do not run until the owner trusts the document in the app. A
-raw `<script>` in Markdown is treated the same way as one in HTML.
+upload: its scripts do not run until a person trusts the document in the app. A
+raw `<script>` in Markdown is treated the same way as one in HTML. The owner can
+trust it for every reader; any reader can trust it for their own browser only.
+Once trusted, JavaScript works as it would anywhere else.
 
 If your document depends on its own JavaScript, say so in the text, so a reader
 seeing an empty box knows why, and tell the owner what the script does. Whether
-to trust it is theirs to decide.
+to trust it is theirs to decide. A `<noscript>` element is shown while the
+document is sandboxed, so it is the place to say what is missing.
+
+## What renders, what runs, what loads
+
+### Markdown
+
+The renderer is markdown-it 14.1.0 (CommonMark) with tables, strikethrough and
+task lists. Nothing else is added.
+
+**Renders:** headings (each one opens a `<section>` with an id), tables,
+`~~strikethrough~~`, `- [x]` task lists as disabled checkboxes, fenced code as
+plain monospace with no syntax colouring, links, `<https://…>` autolinks,
+images, and raw HTML, including `<svg>`, `<details>` and `<script>`.
+
+**Shows as typed, unrendered:**
+
+- YAML front matter. It becomes a horizontal rule and a heading. Leave it out
+- Mermaid, PlantUML and every other diagram fence. They show as code blocks
+- Math, `$…$` and `$$…$$`
+- Footnotes, `==highlight==`, `H~2~O`, `x^2^`, `:emoji:` shortcodes, definition lists
+- Bare URLs. Only `<https://…>` and `[text](url)` become links
+- A single newline. End the line with two spaces or `\` for a line break
+- An SVG `data:` URI in `![](…)`. Only PNG, JPEG, GIF and WebP pass
+
+For a diagram, render it to SVG yourself and paste the `<svg>` in as raw HTML,
+inside a `<div>` and with no blank line anywhere in it: a blank line ends a raw
+HTML block, and everything after it is read as Markdown again. Only `<script>`,
+`<style>` and `<pre>` run to their closing tag.
+
+The page has a light theme and a print stylesheet. It has no dark mode and no
+generated table of contents.
+
+### HTML
+
+| In the document | Sandboxed (the default) | Trusted, by the owner for everyone or by a reader for themselves |
+|---|---|---|
+| `<script>`, inline or `src` | Does not run | Runs |
+| `onclick` and every other handler attribute | Does not run | Runs |
+| `<noscript>` | Shown | Hidden |
+| An embedded `<iframe>`: video, map, widget | Loads with its scripts off, so usually blank | Works |
+| A slide deck its JavaScript builds | Empty | Works |
+| `target="_blank"` links and forms | Do nothing | Work |
+| A link to another site | Opens inside the document's frame, replacing it | The same |
+| A link to `#id` | Scrolls | Scrolls |
+| CSS, `@font-face`, `<details>`, inline SVG, relative bundle files | Work | Work |
+| External images, stylesheets, `@import` and web fonts | Load | Load |
 
 ## What you cannot do, and why
 
