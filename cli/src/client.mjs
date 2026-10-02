@@ -11,7 +11,9 @@ export const CLIENT_NAME = "bikeshed-cli/0.3.0";
  *
  *   POST /publish   takes RAW BYTES, so it is the only way to send a .zip
  *                   bundle without base64-inflating it through JSON. It is
- *                   also the exact endpoint the browser uploader calls.
+ *                   also the exact endpoint the browser uploader calls. With
+ *                   `update=<id>` it revises that document instead, which is
+ *                   how `update` sends a .zip.
  *   POST /mcp       is the API for everything else — list, read, update,
  *                   comments, reply — because those tools already exist and
  *                   adding a parallel REST surface would mean two
@@ -79,13 +81,19 @@ export async function callTool(origin, token, name, args = {}) {
   return result?.structuredContent ?? result;
 }
 
-/** Upload a file as a NEW document, exactly as the browser uploader does. */
-export async function uploadFile(origin, token, path, { title, folder, id } = {}) {
+/**
+ * Upload a file as a NEW document, exactly as the browser uploader does — or,
+ * with `update`, as a new version of that document, with `k` for an unlisted
+ * one.
+ */
+export async function uploadFile(origin, token, path, { title, folder, id, update, k } = {}) {
   const bytes = readFileSync(path);
   const params = new URLSearchParams({ filename: basename(path) });
   if (title) params.set("title", title);
   if (folder) params.set("folderId", folder);
   if (id) params.set("id", id);
+  if (update) params.set("update", update);
+  if (k) params.set("k", k);
 
   const res = await fetch(`${origin}/publish?${params}`, {
     method: "POST",

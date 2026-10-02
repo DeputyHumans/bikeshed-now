@@ -56,7 +56,7 @@ import {
   persistDocMembership,
   resolveFolderTarget,
 } from "../lib/folders";
-import { commitNewVersion, compileBundle, publishNewDocument } from "../lib/publish";
+import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { MAX_BUNDLE_BYTES } from "../config";
 
 type Db = admin.firestore.Firestore;
@@ -421,16 +421,19 @@ export const TOOLS: ToolDefinition[] = [
       const extracted = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
       if ("error" in extracted) throw new Error(extracted.error);
 
-      const compiled = compileBundle(extracted, String(data.title ?? ref.id));
-      const committed = await commitNewVersion({
+      // The sent file replaces the entry; the files beside it are carried
+      // forward, exactly as an in-app commit does (SPEC §19).
+      const committed = await reviseDocument({
         db: ctx.db,
         docRef: ref,
-        compiled,
+        baseVersion,
+        title: String(data.title ?? ref.id),
+        extracted,
         actor: ctx.actor,
         authorEmail: ctx.caller.emailLower,
-        baseVersion: baseVersion || null,
         via: "mcp",
       });
+      if ("error" in committed) throw new Error(committed.error);
       // The id comes from the document, not from the result: an update result is
       // about a version and does not name the document it belongs to.
       return withReaderAddress(committed, ref.id);

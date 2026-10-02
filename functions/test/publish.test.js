@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// compileBundle's title default, and where a new document's bytes are placed (SPEC §4, §11, §17).
+// compileBundle's title default, what an update holds, and where a new document's bytes are placed (SPEC §4, §11, §17, §19).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { compileBundle, placeNewDocument } = require("../lib/lib/publish.js");
+const { compileBundle, compileRevision, placeNewDocument } = require("../lib/lib/publish.js");
 const { HEAD_SCAN_BYTES } = require("../lib/lib/head.js");
+const { hashBundleFiles } = require("../lib/lib/hash.js");
 
 /** An extracted HTML bundle whose single file is the entry. */
 function htmlBundle(entryHtml, entryRel = "index.html") {
@@ -60,6 +61,88 @@ test("compileBundle reads the same first 256 KiB of the entry that the document 
   const html = `<!DOCTYPE html><html><head>${padding}<title>Too Late</title></head><body></body></html>`;
   const compiled = compileBundle(htmlBundle(html), "from-filename");
   assert.equal(compiled.title, "from-filename");
+});
+
+// --- What an update holds ----------------------------------------------------
+
+const MAX = 25 * 1024 * 1024;
+const file = (rel, text) => ({ rel, data: Buffer.from(text, "utf8") });
+const text = (files, rel) => files.find((f) => f.rel === rel)?.data.toString("utf8");
+const rels = (files) => files.map((f) => f.rel).sort();
+
+/** A published HTML bundle: an entry and the files it refers to. */
+const htmlBase = {
+  entry: "index.html",
+  format: "html",
+  files: [file("index.html", "<h1>v1</h1>"), file("style.css", "h1{}"), file("img/dot.svg", "<svg/>")],
+};
+
+test("an update that sends one file keeps every file beside the entry", () => {
+  // The in-app commit has always laid the edited entry over the base version's
+  // files. An update sent through a token dropped them, so a deck's images
+  // vanished on its first revision.
+  const revised = compileRevision(htmlBase, htmlBundle("<h1>v2</h1>"), "T", MAX);
+  assert.deepEqual(rels(revised.files), ["img/dot.svg", "index.html", "style.css"]);
+  assert.equal(text(revised.files, "index.html"), "<h1>v2</h1>");
+  assert.equal(text(revised.files, "style.css"), "h1{}");
+  assert.equal(revised.entry, "index.html");
+});
+
+test("a single-file update lands on the version's own entry, wherever the bundle put it", () => {
+  const base = {
+    entry: "site/page.html",
+    format: "html",
+    files: [file("site/page.html", "<p>old</p>"), file("site/a.png", "png")],
+  };
+  const revised = compileRevision(base, htmlBundle("<p>new</p>"), "T", MAX);
+  assert.deepEqual(rels(revised.files), ["site/a.png", "site/page.html"]);
+  assert.equal(text(revised.files, "site/page.html"), "<p>new</p>");
+  assert.equal(revised.entry, "site/page.html");
+});
+
+test("a Markdown update replaces its source and its rendering, and keeps the rest", () => {
+  const base = {
+    entry: "notes/readme.html",
+    sourceEntry: "notes/readme.md",
+    format: "markdown",
+    files: [
+      file("notes/readme.md", "# Old\n"),
+      file("notes/readme.html", "<h1>Old</h1>"),
+      file("notes/fig.png", "png"),
+    ],
+  };
+  const revised = compileRevision(base, markdownBundle("# New\n"), "T", MAX);
+  assert.deepEqual(rels(revised.files), ["notes/fig.png", "notes/readme.html", "notes/readme.md"]);
+  assert.equal(text(revised.files, "notes/readme.md"), "# New\n");
+  assert.match(text(revised.files, "notes/readme.html"), /<h1>New<\/h1>/);
+  assert.equal(revised.entry, "notes/readme.html");
+  assert.equal(revised.sourceEntry, "notes/readme.md");
+  assert.equal(revised.format, "markdown");
+});
+
+test("a .zip update is the whole new bundle, so a file it leaves out is gone", () => {
+  const zip = { ...htmlBundle("<h1>v2</h1>"), archive: true };
+  const revised = compileRevision(htmlBase, zip, "T", MAX);
+  assert.deepEqual(rels(revised.files), ["index.html"]);
+});
+
+test("an update in the other format is refused rather than converted", () => {
+  const refused = compileRevision(htmlBase, markdownBundle("# New\n"), "T", MAX);
+  assert.ok("error" in refused, "a Markdown update to an HTML document went through");
+  assert.match(refused.error, /HTML/);
+  assert.match(refused.error, /Markdown/);
+});
+
+test("files carried from the base count toward the size cap", () => {
+  const baseBytes = htmlBase.files.reduce((n, f) => n + f.data.length, 0);
+  const refused = compileRevision(htmlBase, htmlBundle("<h1>v1</h1>"), "T", baseBytes - 1);
+  assert.ok("error" in refused, "a bundle over the cap was accepted");
+  assert.match(refused.error, /too large/);
+});
+
+test("sending a version's own entry back hashes the same, so the update is a no-op", () => {
+  const revised = compileRevision(htmlBase, htmlBundle("<h1>v1</h1>"), "T", MAX);
+  assert.equal(hashBundleFiles(revised.files).contentHash, hashBundleFiles(htmlBase.files).contentHash);
 });
 
 // --- Placing a new document's bytes -----------------------------------------

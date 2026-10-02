@@ -21,10 +21,10 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as mime from "mime-types";
-import { bucketName } from "../config";
+import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import type { Actor } from "./actor";
 import { hashBundleFiles, type BundleFile } from "./hash";
-import type { BundleEntry } from "./bundle";
+import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
 import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
 import { renderMarkdown, titleFromMarkdown } from "./markdown/render";
 import {
@@ -100,6 +100,122 @@ export function compileBundle(
     rendererVersion: rendered.rendererVersion,
     title,
   };
+}
+
+/** What an update is laid over: the current version's files and where its entry is. */
+export interface BaseBundle {
+  files: BundleFile[];
+  entry: string;
+  sourceEntry?: string;
+  format: "html" | "markdown";
+}
+
+const FORMAT_NAME = { html: "HTML", markdown: "Markdown" } as const;
+
+/**
+ * The files a new version holds when an update arrives through a token.
+ *
+ * The in-app commit has always laid the edited entry over the base version's
+ * files (SPEC §2, `POST /commit`). Updates through a token built the version
+ * from the sent file alone, so the first revision of a bundle dropped every
+ * image and stylesheet beside its entry. They follow the commit's rule now:
+ *
+ *   - A `.zip` is the whole new bundle. A file it leaves out is gone.
+ *   - One file replaces the ENTRY, at the base version's own path, and every
+ *     other file is carried forward. The base's path rather than `index.*`,
+ *     so a nested entry's relative references still resolve and the old entry
+ *     does not survive beside the new one.
+ *
+ * The format is the document's. Converting between Markdown and HTML is not
+ * something an update should do as a side effect of a file extension.
+ */
+export function compileRevision(
+  base: BaseBundle,
+  extracted: ExtractedBundle,
+  fallbackTitle: string,
+  maxBytes: number,
+): CompiledBundle | { error: string } {
+  if (extracted.format !== base.format) {
+    return {
+      error: `this document is ${FORMAT_NAME[base.format]}, so an update to it cannot be ${FORMAT_NAME[extracted.format]}`,
+    };
+  }
+  if (extracted.archive) return withinCap(compileBundle(extracted, fallbackTitle), maxBytes);
+
+  const at = base.sourceEntry ?? (base.format === "markdown" ? "index.md" : base.entry);
+  const sent = extracted.files.find((f) => f.rel === extracted.entry);
+  const compiled = compileBundle(
+    { files: [{ rel: at, data: sent?.data ?? Buffer.alloc(0) }], entry: at, format: extracted.format },
+    fallbackTitle,
+  );
+  const byRel = new Map<string, Buffer>();
+  for (const f of base.files) byRel.set(f.rel, f.data);
+  for (const f of compiled.files) byRel.set(f.rel, f.data);
+  const files = [...byRel].map(([rel, data]) => ({ rel, data }));
+  return withinCap({ ...compiled, files }, maxBytes);
+}
+
+function withinCap(compiled: CompiledBundle, maxBytes: number): CompiledBundle | { error: string } {
+  const total = compiled.files.reduce((n, f) => n + f.data.length, 0);
+  return total > maxBytes ? { error: "bundle is too large" } : compiled;
+}
+
+/** Every object under a Storage prefix, as in-memory bundle files. */
+export async function readPrefix(prefix: string): Promise<BundleFile[]> {
+  const [objects] = await admin.storage().bucket(bucketName()).getFiles({ prefix });
+  const files: BundleFile[] = [];
+  for (const obj of objects) {
+    const rel = obj.name.slice(prefix.length);
+    if (rel.length === 0 || rel.endsWith("/")) continue;
+    const [data] = await obj.download();
+    files.push({ rel, data });
+  }
+  return files;
+}
+
+/**
+ * Mint a new version of an existing document from an update.
+ *
+ * The one implementation behind `update_document` and `POST /publish?update=`,
+ * so an update means the same thing whichever way it arrives. The caller has
+ * already decided the caller may write; this decides what the version holds.
+ */
+export async function reviseDocument(args: {
+  db: Db;
+  docRef: admin.firestore.DocumentReference;
+  baseVersion: string;
+  title: string;
+  extracted: ExtractedBundle;
+  actor: Actor;
+  authorEmail: string;
+  via: "cli" | "mcp" | "api" | "upload";
+}): Promise<UpdateResult | { error: string }> {
+  const { docRef, baseVersion, extracted } = args;
+  const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
+  const v = snap?.exists ? snap.data() ?? {} : null;
+  const entry = typeof v?.entry === "string" ? safeBundleRelPath(v.entry) : null;
+  if (!v || !entry) return { error: "this document has no current version to update" };
+
+  const sourceEntry = typeof v.sourceEntry === "string" ? safeBundleRelPath(v.sourceEntry) : null;
+  const base: BaseBundle = {
+    entry,
+    format: v.format === "markdown" ? "markdown" : "html",
+    ...(sourceEntry ? { sourceEntry } : {}),
+    // An archive replaces everything, so the base's bytes are not read for it.
+    files: extracted.archive ? [] : await readPrefix(`docs/${docRef.id}/${baseVersion}/`),
+  };
+
+  const compiled = compileRevision(base, extracted, args.title, MAX_BUNDLE_BYTES);
+  if ("error" in compiled) return compiled;
+  return commitNewVersion({
+    db: args.db,
+    docRef,
+    compiled,
+    actor: args.actor,
+    authorEmail: args.authorEmail,
+    baseVersion,
+    via: args.via,
+  });
 }
 
 /**

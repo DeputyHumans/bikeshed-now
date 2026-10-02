@@ -176,6 +176,31 @@ test("an unknown extension is refused with actionable wording", () => {
   assert.match(result.error, /\.html.*\.md.*\.zip/s);
 });
 
+test("an archive says it is one, so an update knows it carries the whole bundle", () => {
+  // A one-file .zip and a bare .html extract to the same files. Only this flag
+  // tells an update whether the sender meant "the entry" or "everything".
+  assert.equal(extractBundle(zipOf([["index.html", "<p>x</p>"]]), "b.zip", MAX).archive, true);
+  assert.equal(extractBundle(Buffer.from("<p>hi</p>"), "a.html", MAX).archive, false);
+  assert.equal(extractBundle(Buffer.from("# T\n"), "a.md", MAX).archive, false);
+});
+
+test("a corrupt archive is refused with a reason, not thrown", () => {
+  // adm-zip reads the central directory lazily, so an archive whose end record
+  // survives but whose directory does not passes the constructor and throws
+  // from the first read of its entries. Thrown, it was a 500 on upload and
+  // adm-zip's own words on the command line. Round-tripping an archive through
+  // UTF-8, as `bikeshed update` once did, damages it in exactly that way.
+  const zip = new AdmZip();
+  zip.addFile("index.html", Buffer.from("<p>x</p>"));
+  zip.addFile("a.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x80, 0x81]));
+  const damaged = Buffer.from(zip.toBuffer().toString("utf8"), "utf8");
+  let result;
+  assert.doesNotThrow(() => {
+    result = extractBundle(damaged, "b.zip", MAX);
+  });
+  assert.deepEqual(result, { error: "could not read the .zip archive" });
+});
+
 test("a mislabelled zip is sniffed by magic bytes", () => {
   const result = extractBundle(zipOf([["index.html", "<p>x</p>"]]), "bundle.html", MAX);
   assert.equal(result.entry, "index.html");

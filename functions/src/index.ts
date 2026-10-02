@@ -87,8 +87,16 @@ import {
   CREATE_ONLY,
   placeNewDocument,
   publishNewDocument,
+  readPrefix,
+  reviseDocument,
 } from "./lib/publish";
-import { extractBundle, zipBundle, type BundleEntry } from "./lib/bundle";
+import {
+  extractBundle,
+  zipBundle,
+  type BundleEntry,
+  type ExtractedBundle,
+} from "./lib/bundle";
+import type { Principal } from "./lib/auth";
 import {
   computeDocMembership,
   createFolderRecord,
@@ -841,19 +849,6 @@ async function loadVersionMeta(
   };
 }
 
-/** Every object under a Storage prefix, as in-memory bundle files. */
-async function readPrefix(prefix: string): Promise<BundleFile[]> {
-  const [objects] = await bucket().getFiles({ prefix });
-  const files: BundleFile[] = [];
-  for (const obj of objects) {
-    const rel = obj.name.slice(prefix.length);
-    if (rel.length === 0 || rel.endsWith("/")) continue;
-    const [data] = await obj.download();
-    files.push({ rel, data });
-  }
-  return files;
-}
-
 /**
  * Append this editor to the draft's session log, or extend their open entry.
  *
@@ -1310,6 +1305,9 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
  * The raw request body is the file; metadata rides in the query string. Created
  * `trusted: false`: the uploader is not necessarily the author, so the viewer
  * sandboxes its scripts until somebody with standing says otherwise (SPEC §6c).
+ *
+ * With `?update=<docId>` it publishes a new version of that document instead.
+ * See `updateFromUpload`.
  */
 export const createDoc = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
@@ -1333,6 +1331,12 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
   const extracted = extractBundle(buffer, filename, MAX_BUNDLE_BYTES);
   if ("error" in extracted) {
     badRequest(res, extracted.error);
+    return;
+  }
+
+  const updating = strParam(req, "update");
+  if (updating) {
+    await updateFromUpload(req, res, caller, updating, extracted);
     return;
   }
 
@@ -1368,6 +1372,75 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
   }
   res.status(200).json(result);
 });
+
+/**
+ * POST /publish?update=<docId> — a new version of an existing document, from
+ * raw bytes.
+ *
+ * It rides this endpoint because this is the only one that takes bytes, and a
+ * `.zip` cannot reach the tools: they take text, and an archive read as text is
+ * corrupted. What the version holds is decided by `reviseDocument`, the same
+ * rule `update_document` follows: an archive replaces the bundle, one file
+ * replaces the entry and keeps the rest (SPEC §19).
+ *
+ * It takes the real editor set, not open editing. Uploading a bundle into
+ * somebody's document is a re-upload in all but name, and open editing exists
+ * for correcting text in place, not for replacing what a document is made of.
+ */
+async function updateFromUpload(
+  req: Request,
+  res: import("express").Response,
+  caller: Principal,
+  docId: string,
+  extracted: ExtractedBundle,
+): Promise<void> {
+  if (strParam(req, "id") || strParam(req, "folderId") || strParam(req, "title")) {
+    badRequest(res, "an update keeps the document's address, folder and title");
+    return;
+  }
+  if (!safeSegment(docId)) {
+    badRequest(res, "invalid update");
+    return;
+  }
+  const docRef = db().collection("docs").doc(docId);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    res.status(404).end();
+    return;
+  }
+  const data = snap.data() as DocAclData & { currentVersion?: string; title?: string };
+  if (!isDocEditor(data, caller.uid, caller.emailLower)) {
+    const proof = await linkProofFor(docRef, data, caller, strParam(req, "k"));
+    res.status(refusal(data, caller, proof)).end();
+    return;
+  }
+  if (isExpired(data, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
+    return;
+  }
+
+  const actor = actorFrom(caller, req);
+  const result = await reviseDocument({
+    db: db(),
+    docRef,
+    baseVersion: String(data.currentVersion ?? ""),
+    title: String(data.title ?? docId),
+    extracted,
+    actor,
+    authorEmail: caller.emailLower,
+    via: isAutomated(actor) ? (actor.channel as "cli" | "mcp" | "api") : "upload",
+  }).catch((e: Error) => e);
+
+  if (result instanceof Error) {
+    res.status(500).json({ error: "could not publish the new version" });
+    return;
+  }
+  if ("error" in result) {
+    badRequest(res, result.error);
+    return;
+  }
+  res.status(200).json({ docId, ...result });
+}
 
 /** A JSON-encoded query parameter, for structured metadata on a binary upload. */
 function jsonParam(req: Request, key: string): unknown {

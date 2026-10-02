@@ -276,6 +276,16 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   extension; for Markdown, the first level-one heading. `id` is optional too:
   the docId to publish at, refused with a `400` before anything is stored if it
   breaks the rules in §4. A taken `id` is not refused; see §4.
+
+  **`?update=<docId>[&k=]`** publishes a new version of that document instead,
+  through the same `reviseDocument` as `update_document` (§19). It is the one
+  way to revise with a `.zip`, because the tools take text. It takes
+  `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
+  re-upload in all but name, which open editing does not extend to. `id`,
+  `folderId` and `title` with it are a `400`; a refused caller gets the usual
+  `404`/`403` (§1.4b); an expired document a `409`. `trusted` is left as it is,
+  as `update_document` leaves it. Answers `{ docId, versionId, contentHash,
+  fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree.
@@ -1615,6 +1625,10 @@ Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
 `get <slug>`, `comments <slug>`, `reply`, `open <slug>`, `folders`,
 `mkdir <name>`, `mv <slug> <folder|root>`, `skills [install <dir>]`, plus
 `publish --watch`. Every command takes `--json`.
+
+`update` sends one `.md` or `.html` through `update_document`, and a `.zip` —
+by name, or by the same magic-byte sniff the deployment uses — as raw bytes to
+`POST /publish?update=`. Read as text, an archive is corrupted on the way.
 
 `publish --id <id>` asks for the docId. When the deployment answers with a
 different one, because the id was taken or because a deployment too old to know

@@ -104,6 +104,13 @@ function docArgs(ref) {
   return { id: decodeURIComponent(match[1]), ...(k ? { k } : {}) };
 }
 
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+/** A .zip by name, or by the bytes the deployment itself sniffs for. */
+function isArchive(path, bytes) {
+  return /\.zip$/i.test(path) || bytes.subarray(0, 4).equals(ZIP_MAGIC);
+}
+
 // --- Commands --------------------------------------------------------------
 
 async function login(flags) {
@@ -210,8 +217,12 @@ async function update(flags, [ref, path]) {
   const { id } = doc;
 
   const once = async () => {
-    const content = readFileSync(file, "utf8");
-    const result = await callTool(origin, token, "update_document", { ...doc, content });
+    const bytes = readFileSync(file);
+    // An archive goes up as bytes, to the one endpoint that takes them. Read as
+    // text, every byte above 0x7f in it would become U+FFFD on the way.
+    const result = isArchive(file, bytes)
+      ? await uploadFile(origin, token, file, { update: id, k: doc.k })
+      : await callTool(origin, token, "update_document", { ...doc, content: bytes.toString("utf8") });
     out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () =>
       console.log(
         result.deduped

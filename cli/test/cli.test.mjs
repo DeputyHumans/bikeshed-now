@@ -532,6 +532,66 @@ test("an address the deployment supplied wins over one the client can build", as
   }
 });
 
+/**
+ * Update a document from a .zip against a server that records the raw request.
+ *
+ * Bytes are kept as a Buffer, not decoded: decoding is exactly how the bug this
+ * covers corrupted an archive, and `withServer` decodes.
+ */
+async function updateWithZip(ref) {
+  const dir = mkdtempSync(join(tmpdir(), "bshd-update-zip-"));
+  const file = join(dir, "deck.zip");
+  // A local-file header, then bytes that are not valid UTF-8. Read as text,
+  // 0xff and 0xfe become U+FFFD and the archive no longer parses.
+  const bytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80, 0x81]);
+  writeFileSync(file, bytes);
+  const seen = [];
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      seen.push({ url: new URL(req.url, "http://x"), headers: req.headers, body: Buffer.concat(chunks) });
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ docId: "deck", versionId: "v2", fileCount: 3, bytes: 9, deduped: false }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const { stdout } = await runAsync(["update", ref, file, "--json"], {
+      BIKESHED_ORIGIN: origin,
+      BIKESHED_TOKEN: "bsk_a.b",
+    });
+    return { seen, bytes, origin, result: JSON.parse(stdout) };
+  } finally {
+    server.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("update with a .zip sends its bytes, unread, as a new version of that document", async () => {
+  // It used to read the archive as UTF-8 and send the text through
+  // update_document, which turned every byte above 0x7f into U+FFFD.
+  const { seen, bytes, origin, result } = await updateWithZip("deck");
+  assert.equal(seen.length, 1);
+  const [request] = seen;
+  assert.equal(request.url.pathname, "/publish");
+  assert.equal(request.url.searchParams.get("update"), "deck");
+  assert.equal(request.url.searchParams.get("filename"), "deck.zip");
+  assert.equal(request.url.searchParams.has("id"), false, "an update must not ask for a new address");
+  assert.equal(request.headers["content-type"], "application/octet-stream");
+  assert.equal(request.headers.authorization, "Bearer bsk_a.b");
+  assert.ok(request.body.equals(bytes), "the archive was altered on the way");
+  assert.equal(result.versionId, "v2");
+  assert.equal(result.url, `${origin}/d/deck`);
+});
+
+test("update with a .zip carries an unlisted link's key", async () => {
+  const { seen } = await updateWithZip("https://bikeshed.example/d/deck?k=tok_0123456789abcdefghijk");
+  assert.equal(seen[0].url.searchParams.get("update"), "deck");
+  assert.equal(seen[0].url.searchParams.get("k"), "tok_0123456789abcdefghijk");
+});
+
 test("mkdir sends a parent only when one was given", async () => {
   await withServer(rpcOk({ folderId: "f1", name: "Reviews" }), async (origin, seen) => {
     const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };

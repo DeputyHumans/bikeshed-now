@@ -23,6 +23,12 @@ export interface ExtractedBundle {
   /** The source file the document is authored in. */
   entry: string;
   format: SourceFormat;
+  /**
+   * Whether the upload was a `.zip`. A one-file archive and a bare file extract
+   * to the same files, but an update reads them differently: an archive is the
+   * whole new bundle, a bare file replaces only the entry (SPEC §19).
+   */
+  archive: boolean;
 }
 
 /**
@@ -114,6 +120,7 @@ export function extractBundle(
         files: [{ rel: "index.md", data: buffer }],
         entry: "index.md",
         format: "markdown",
+        archive: false,
       };
     }
     if (!HTML_RE.test(name) && name.length > 0) {
@@ -126,19 +133,22 @@ export function extractBundle(
       files: [{ rel: "index.html", data: buffer }],
       entry: "index.html",
       format: "html",
+      archive: false,
     };
   }
 
-  let zip: AdmZip;
+  // The entries are read inside the guard too: adm-zip parses the central
+  // directory lazily, so a damaged one throws from here, not the constructor.
+  let entries: AdmZip.IZipEntry[];
   try {
-    zip = new AdmZip(buffer);
+    entries = new AdmZip(buffer).getEntries();
   } catch {
     return { error: "could not read the .zip archive" };
   }
 
   const files: BundleEntry[] = [];
   let total = 0;
-  for (const e of zip.getEntries()) {
+  for (const e of entries) {
     if (e.isDirectory) continue;
     if (JUNK_RE.test(e.entryName)) continue;
     const safe = safeBundleRelPath(e.entryName);
@@ -181,7 +191,7 @@ export function extractBundle(
   if (!resolved) {
     return { error: "no index.html, index.md, or single source file found in the bundle" };
   }
-  return { files: stripped, entry: resolved.entry, format: resolved.format };
+  return { files: stripped, entry: resolved.entry, format: resolved.format, archive: true };
 }
 
 /** Assemble bundle files into a .zip buffer, for download. */

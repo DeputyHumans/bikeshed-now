@@ -54,6 +54,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **`bikeshed update` revises a `.zip` bundle.** It sends the archive as bytes
+  to `POST /publish?update=<id>`, which publishes a new version of that
+  document with the archive as its whole bundle. That needs an editor of the
+  document; open editing is not enough (SPEC §2).
 - **A publisher can choose a document's address.** `POST /publish` takes `id`,
   `publish_document` takes an optional `id` (a schema addition), the CLI takes
   `--id` (in `bikeshed-now` 0.3.0), and the upload dialog has an
@@ -133,6 +137,21 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **Revising a bundle through a token dropped its images.** `update_document`,
+  and so `bikeshed update` with one file, built the new version from the sent
+  file alone, so every stylesheet and image beside a bundle's entry 404ed from
+  its first revision on. The in-app commit had always laid the edit over the
+  base version's files. Both token paths now go through one `reviseDocument`
+  that does the same: one file replaces the entry at the base version's own
+  path, a `.zip` replaces the bundle, and the format cannot change. A version
+  that already lost its files keeps what it holds, and a one-file update
+  carries forward only that; `bikeshed update` with the whole `.zip` repairs it.
+- **`bikeshed update` corrupted a `.zip`.** It read the archive as UTF-8 and
+  sent the text through `update_document`, so every byte above `0x7f` became
+  U+FFFD and the deployment answered with adm-zip's `Invalid CEN header`.
+- **A damaged `.zip` was a 500.** adm-zip parses the central directory lazily,
+  so an archive that passed its constructor threw from `getEntries()`, outside
+  the guard. It is now refused as `could not read the .zip archive`.
 - **Two creates at one id could overwrite each other's bytes.** A new document's
   files are stored before its record, so two publishes (or duplicates) that
   picked the same id both wrote to its `v1`, and the loser replaced the winner's

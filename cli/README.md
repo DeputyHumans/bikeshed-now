@@ -34,6 +34,10 @@ Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash
 mints no new version. So `update` is safe in a loop, in CI, or after a change you
 are not sure you made.
 
+A document of several files is a `.zip` with `index.html` or `index.md` at its
+root. `update` with a `.zip` replaces every file; `update` with one `.md` or
+`.html` replaces the entry and keeps the images and stylesheets beside it.
+
 The address comes from the title. To choose it, pass `--id`:
 
 ```bash
