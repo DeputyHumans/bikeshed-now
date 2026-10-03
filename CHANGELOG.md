@@ -218,6 +218,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **The `bikeshed-now` README names bikeshed.now** (in `bikeshed-now` 0.4.1).
+  Its examples showed `https://<deployment>`, a placeholder that means
+  something in a deployment's own `/llms.txt` and nothing on npm, where the
+  client's default deployment is the one a reader can actually use. It now
+  shows `https://bikeshed.now`, and says once that a self-hosted deployment
+  takes its place.
 - **A taken id gets a random suffix, not a count.** A second document titled
   `01-platform` now lands at `01-platform-k3x9qz`, say, rather than
   `01-platform-2`. A count told the publisher how many documents held the name

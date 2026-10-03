@@ -3,24 +3,26 @@
 Publish a document to a [Bikeshed](https://bikeshed.now) deployment, then read
 the comments people left on it — each one with the exact sentence it is about.
 
-Bikeshed is self-hosted. This client talks to whichever deployment you point it
-at, over HTTPS, with a personal access token that carries exactly your own
-permissions.
+It talks to [bikeshed.now](https://bikeshed.now) over HTTPS, with a personal
+access token that carries exactly your own permissions. Bikeshed is also
+self-hostable: point the client at your own deployment and everything below
+works the same, with your address in place of `https://bikeshed.now`.
 
 ```bash
 npm i -g bikeshed-now
 bikeshed login            # asks for the deployment and a token
 ```
 
-Create a token in the deployment's interface, under **Account → Access tokens**.
-It is shown once. `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` work instead of
-`login` where an interactive command cannot run — a CI job, or an agent.
+Create a token at [bikeshed.now/account](https://bikeshed.now/account) — choose
+**Command line**. It is shown once. `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` work
+instead of `login` where an interactive command cannot run — a CI job, or an
+agent.
 
 ## The loop
 
 ```bash
 bikeshed publish proposal.md --title "Storage migration"
-# published storage-migration v1 — https://<deployment>/d/storage-migration
+# published storage-migration v1 — https://bikeshed.now/d/storage-migration
 
 # Somebody highlights a sentence and says what is wrong with it.
 bikeshed comments storage-migration
@@ -42,7 +44,7 @@ The address comes from the title. To choose it, pass `--id`:
 
 ```bash
 bikeshed publish platform.md --id 01-platform
-# published 01-platform v1 — https://<deployment>/d/01-platform
+# published 01-platform v1 — https://bikeshed.now/d/01-platform
 ```
 
 If the id is taken, the document is still published, at the id plus a few
@@ -53,7 +55,7 @@ unlisted document you are not a member of needs the link, because its key is in
 it; without the key the document answers as an id that does not exist.
 
 ```bash
-bikeshed comments 'https://<deployment>/d/build-estimate?k=…'
+bikeshed comments 'https://bikeshed.now/d/build-estimate?k=…'
 ```
 
 `bikeshed --help` lists the rest — listing documents, folders, and installing the
@@ -66,8 +68,9 @@ expiry. Those are decisions a person makes in the interface, deliberately.
 
 ## For agents
 
-A deployment serves its own instructions at `https://<deployment>/llms.txt`, and
-the skills behind them at `/skills/index.json`. `bikeshed skills install <dir>`
+A deployment serves its own instructions at
+[`https://bikeshed.now/llms.txt`](https://bikeshed.now/llms.txt), and the skills
+behind them at `/skills/index.json`. `bikeshed skills install <dir>`
 writes them where your harness reads skills from.
 
 Everything done with a token is stamped with the channel it came through, so a

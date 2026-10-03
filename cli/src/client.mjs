@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-export const CLIENT_NAME = "bikeshed-cli/0.4.0";
+export const CLIENT_NAME = "bikeshed-cli/0.4.1";
 
 /**
  * Three surfaces, and the split is deliberate rather than untidy.
