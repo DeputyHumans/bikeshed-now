@@ -68,19 +68,19 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Added
 
 - **The instructions say what a document may contain.** `/llms.txt`, the
-  publishing skill and `bikeshed --help` now list the formats a deployment
-  takes and what renders, runs and loads in each. An agent had been left to
-  guess, and the natural guesses were wrong. Mermaid, math, footnotes and YAML
-  front matter show as typed. External images and fonts load; they were never
-  blocked, only discouraged. Scripts, handler attributes, `target="_blank"` and
-  forms stay off until a person trusts the document: its owner for everyone,
-  any reader for themselves. The sandbox rows were checked in Chromium against
-  the viewer's iframe attributes, and the Markdown rows against the pinned
-  renderer.
-- **`bikeshed update` revises a `.zip` bundle.** It sends the archive as bytes
-  to `POST /publish?update=<id>`, which publishes a new version of that
-  document with the archive as its whole bundle. That needs an editor of the
-  document; open editing is not enough (SPEC §2).
+  publishing skill and `bikeshed --help` (in `bikeshed-now` 0.4.0) now list
+  the formats a deployment takes and what renders, runs and loads in each. An
+  agent had been left to guess, and the natural guesses were wrong. Mermaid,
+  math, footnotes and YAML front matter show as typed. External images and
+  fonts load; they were never blocked, only discouraged. Scripts, handler
+  attributes, `target="_blank"` and forms stay off until a person trusts the
+  document: its owner for everyone, any reader for themselves. The sandbox
+  rows were checked in Chromium against the viewer's iframe attributes, and
+  the Markdown rows against the pinned renderer.
+- **`bikeshed update` revises a `.zip` bundle** (in `bikeshed-now` 0.4.0). It
+  sends the archive as bytes to `POST /publish?update=<id>`, which publishes a
+  new version of that document with the archive as its whole bundle. That
+  needs an editor of the document; open editing is not enough (SPEC §2).
 - **A publisher can choose a document's address.** `POST /publish` takes `id`,
   `publish_document` takes an optional `id` (a schema addition), the CLI takes
   `--id` (in `bikeshed-now` 0.3.0), and the upload dialog has an
@@ -160,6 +160,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **`bikeshed get` printed a long document's first 200,000 characters as if
+  they were all of it** (fixed in `bikeshed-now` 0.4.0). `get_document` cuts a
+  source at that length, to keep it from filling an agent's context, and sets
+  `truncated`. The CLI ignored the flag and exited 0, so a page with a heavy
+  `<head>` came back with no `<body>`, and an update made from that copy
+  published a version missing the rest. `get` now reads a cut source whole
+  from `/content`, and prints nothing if it cannot. `get_document` puts
+  `truncated` ahead of the source, and its description says where the cut
+  falls (SPEC §19).
 - **A reader without an account saw an unlisted bundle without its images.**
   The viewer carried the link's key as `?k=` on the entry, and a query string
   belongs to one URL: every image and stylesheet the entry names by relative
@@ -183,9 +192,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   path, a `.zip` replaces the bundle, and the format cannot change. A version
   that already lost its files keeps what it holds, and a one-file update
   carries forward only that; `bikeshed update` with the whole `.zip` repairs it.
-- **`bikeshed update` corrupted a `.zip`.** It read the archive as UTF-8 and
-  sent the text through `update_document`, so every byte above `0x7f` became
-  U+FFFD and the deployment answered with adm-zip's `Invalid CEN header`.
+- **`bikeshed update` corrupted a `.zip`** (fixed in `bikeshed-now` 0.4.0). It
+  read the archive as UTF-8 and sent the text through `update_document`, so
+  every byte above `0x7f` became U+FFFD and the deployment answered with
+  adm-zip's `Invalid CEN header`.
 - **A damaged `.zip` was a 500.** adm-zip parses the central directory lazily,
   so an archive that passed its constructor threw from `getEntries()`, outside
   the guard. It is now refused as `could not read the .zip archive`.
