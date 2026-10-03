@@ -100,7 +100,7 @@ somebody might commit.
 | Tool | What it does |
 |---|---|
 | `list_documents` | Your documents. Metadata only |
-| `get_document` | Metadata and the current **source** |
+| `get_document` | Metadata and the current **source**, cut at 200,000 characters with `truncated` set |
 | `publish_document` | Create a document from content you supply, optionally at an `id` you choose |
 | `update_document` | Publish a new version of one that exists |
 | `list_folders` | Every folder you can see, each with its full path |
@@ -137,6 +137,11 @@ export BIKESHED_TOKEN=bsk_...
 
 Every command takes `--json`. Those two work instead of `login` when you cannot
 run an interactive command — `login` prompts, which you cannot answer.
+
+`bikeshed get <id> > index.html` writes the whole source, however long it is.
+`get_document` cuts a source at 200,000 characters and sets `truncated`. Never
+send a cut source back as an update: the new version would be missing
+everything after the cut.
 
 ## Skills
 

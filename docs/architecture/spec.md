@@ -1602,7 +1602,10 @@ closes the loop this product exists for.
 Efficiency rules, because agent context is the scarce resource: `get_comments`
 returns quote, comment, author and thread id and nothing else; `list_documents`
 is metadata-only; `get_document` returns **source, never rendered HTML with its
-embedded stylesheet**; responses are capped and cursor-paginated.
+embedded stylesheet**; responses are capped and cursor-paginated. The source cap
+is 200,000 characters, and `truncated` says when it applied. The CLI does not
+inherit it: its output lands in a file, not a context, so `bikeshed get` reads a
+cut source whole through `/content`, behind the same read checks.
 
 There is no anonymous MCP access. Publishing always attributes to a real account
 and stamps `publishedVia: "mcp"`.

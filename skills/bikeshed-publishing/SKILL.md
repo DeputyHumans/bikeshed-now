@@ -184,7 +184,10 @@ you send.**
 - **One `.md` or `.html` file**, through `bikeshed update` or `update_document`,
   replaces the entry. Every file beside it is kept, so you can revise a bundle's
   text from `get_document`'s source and its images and stylesheets stay where
-  they were.
+  they were. Revise the whole source: `get_document` cuts one over 200,000
+  characters and sets `truncated`, and an update made from a cut source
+  publishes a version missing everything after the cut.
+  `bikeshed get <id> > index.html` writes it whole.
 - **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the
   archive leaves out is gone from the new version. This takes somebody the
   document is shared with as an editor, not open editing.

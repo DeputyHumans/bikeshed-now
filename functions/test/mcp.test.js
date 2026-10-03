@@ -192,6 +192,55 @@ test("get_document returns source, not rendered HTML", () => {
   assert.match(tool.description, /SOURCE/i);
 });
 
+test("get_document says a source is cut before the source starts", async () => {
+  /**
+   * An agent reads the result as JSON text, in key order. With `truncated`
+   * last, the one field saying the source was incomplete came after 200,000
+   * characters of it — and an agent that missed it and sent the source back
+   * through update_document published a version missing the rest.
+   */
+  const tool = toolByName("get_document");
+  assert.match(tool.description, /200,000 characters/);
+  assert.match(tool.description, /update_document/);
+
+  const admin = require("firebase-admin");
+  const realStorage = Object.getOwnPropertyDescriptor(admin, "storage");
+  const prevBucket = process.env.BIKESHED_BUCKET;
+  const whole = `<head><style>${"x".repeat(200_000)}</style></head><body></body>`;
+  Object.defineProperty(admin, "storage", {
+    configurable: true,
+    value: () => ({
+      bucket: () => ({ file: () => ({ download: async () => [Buffer.from(whole)] }) }),
+    }),
+  });
+  process.env.BIKESHED_BUCKET = "test-bucket";
+  try {
+    const caller = { uid: "u1", emailLower: "owner@example.com" };
+    const data = { ownerUid: "u1", members: [caller.emailLower], currentVersion: "v1", title: "Deck" };
+    const version = { exists: true, data: () => ({ entry: "index.html", format: "html" }) };
+    const ref = {
+      id: "big-deck",
+      get: async () => ({ exists: true, data: () => data }),
+      set: async () => {},
+      collection: (name) => ({
+        doc: () => (name === "versions" ? { get: async () => version } : { set: async () => {} }),
+      }),
+    };
+    const db = { collection: () => ({ doc: () => ref }) };
+
+    const result = await tool.run({ db, caller, actor: { tokenId: "t1" } }, { id: "big-deck" });
+    assert.equal(result.truncated, true);
+    assert.equal(result.source.length, 200_000);
+    const text = JSON.stringify(result);
+    assert.ok(text.indexOf('"truncated"') < text.indexOf('"source"'), "truncated must precede source");
+  } finally {
+    if (realStorage) Object.defineProperty(admin, "storage", realStorage);
+    else delete admin.storage;
+    if (prevBucket === undefined) delete process.env.BIKESHED_BUCKET;
+    else process.env.BIKESHED_BUCKET = prevBucket;
+  }
+});
+
 // --- Folder paths ----------------------------------------------------------
 
 test("a path names every level the caller can see", () => {

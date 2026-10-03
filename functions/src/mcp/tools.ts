@@ -72,7 +72,11 @@ const COMMENT_LIMIT = 50;
  * says so in `truncated` rather than quietly returning some of them.
  */
 const FOLDER_LIMIT = 200;
-/** Source is capped so one oversized document cannot consume an agent's context. */
+/**
+ * Source is capped so one oversized document cannot consume an agent's context.
+ * The CLI prints to a file or a pipe instead, so it reads a cut source whole
+ * through /content rather than inheriting this cap.
+ */
 const SOURCE_LIMIT = 200_000;
 
 export interface ToolContext {
@@ -286,7 +290,10 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_document",
     description:
-      "Fetch a document's metadata and its current SOURCE (Markdown when the document is Markdown-authored).",
+      "Fetch a document's metadata and its current SOURCE (Markdown when the document is Markdown-authored). " +
+      `A source over ${SOURCE_LIMIT.toLocaleString("en-US")} characters is cut, and \`truncated\` says so. ` +
+      "Never send a cut source back through update_document: the new version would lose everything after the cut. " +
+      "`bikeshed get` prints the whole source.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -329,8 +336,11 @@ export const TOOLS: ToolDefinition[] = [
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
         canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
-        source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
+        // Ahead of the source, not after it: an agent reads this result as JSON
+        // text in key order, and a flag after 200,000 characters of source is a
+        // flag it may never reach.
         truncated,
+        source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
       };
     },
   },

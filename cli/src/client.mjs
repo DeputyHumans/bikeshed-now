@@ -7,7 +7,7 @@ import { basename } from "node:path";
 export const CLIENT_NAME = "bikeshed-cli/0.3.0";
 
 /**
- * Two surfaces, and the split is deliberate rather than untidy.
+ * Three surfaces, and the split is deliberate rather than untidy.
  *
  *   POST /publish   takes RAW BYTES, so it is the only way to send a .zip
  *                   bundle without base64-inflating it through JSON. It is
@@ -18,11 +18,13 @@ export const CLIENT_NAME = "bikeshed-cli/0.3.0";
  *                   comments, reply — because those tools already exist and
  *                   adding a parallel REST surface would mean two
  *                   implementations of the same six operations.
+ *   GET /content    the byte path a browser reads a document through. Only
+ *                   `get` uses it, and only for a source get_document cut.
  *
- * Both carry the same Bearer token, and both stamp provenance server-side. The
- * `X-Bikeshed-Client` and `X-Bikeshed-Agent` headers are self-reported and are
- * recorded as such: they are for a human reading an activity feed, not for
- * anything that makes a decision.
+ * All three carry the same Bearer token, and provenance is stamped
+ * server-side. The `X-Bikeshed-Client` and `X-Bikeshed-Agent` headers are
+ * self-reported and are recorded as such: they are for a human reading an
+ * activity feed, not for anything that makes a decision.
  */
 
 function headers(token, extra = {}) {
@@ -108,6 +110,27 @@ export async function uploadFile(origin, token, path, { title, folder, id, updat
     throw new CliError(await readError(res, `Upload failed (${res.status}).`));
   }
   return res.json();
+}
+
+/**
+ * A document's whole source file, as bytes.
+ *
+ * get_document cuts a long source, because its result lands in an agent's
+ * context. A command's output lands in a file or a pipe, and a `get` that
+ * prints part of a file is a broken `cat`. So the cut source is read again
+ * here, through the path a browser uses: the same object, behind the same
+ * read, key and expiry checks.
+ */
+export async function fetchSource(origin, token, { id, version, sourceFile, k }) {
+  const path = [id, version, ...String(sourceFile).split("/")].map(encodeURIComponent).join("/");
+  const query = k ? `?${new URLSearchParams({ k })}` : "";
+  const res = await fetch(`${origin}/content/${path}${query}`, { headers: headers(token) });
+  if (!res.ok) {
+    throw new CliError(
+      `${id} is longer than one response, and reading the rest failed (${res.status}). Nothing was printed.`,
+    );
+  }
+  return Buffer.from(await res.arrayBuffer());
 }
 
 /**

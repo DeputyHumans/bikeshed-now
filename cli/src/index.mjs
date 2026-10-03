@@ -8,7 +8,15 @@ import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { CONFIG_PATH, readConfig, resolveAuth, writeConfig } from "./config.mjs";
-import { CliError, callTool, fetchSkill, listSkills, uploadFile, whoami } from "./client.mjs";
+import {
+  CliError,
+  callTool,
+  fetchSkill,
+  fetchSource,
+  listSkills,
+  uploadFile,
+  whoami,
+} from "./client.mjs";
 
 /**
  * This is the END-USER tool, and it is deliberately not the same thing as the
@@ -253,8 +261,25 @@ async function update(flags, [ref, path]) {
 async function get(flags, [ref]) {
   if (!ref) fail("usage: bikeshed get <id>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "get_document", docArgs(ref));
-  out(flags.json, result, () => process.stdout.write(result.source));
+  const doc = docArgs(ref);
+  const result = await callTool(origin, token, "get_document", doc);
+  // The tool cuts a long source at a fixed length. Printed as it came, the cut
+  // copy exited 0 and looked complete, and `update` with an edit of it
+  // published a version missing everything past the cut. So a cut source is
+  // read whole, or nothing is printed.
+  const whole = result.truncated
+    ? await fetchSource(origin, token, {
+        id: doc.id,
+        version: result.version,
+        sourceFile: result.sourceFile,
+        k: doc.k,
+      })
+    : null;
+  out(
+    flags.json,
+    whole ? { ...result, truncated: false, source: whole.toString("utf8") } : result,
+    () => process.stdout.write(whole ?? result.source),
+  );
 }
 
 async function comments(flags, [ref]) {

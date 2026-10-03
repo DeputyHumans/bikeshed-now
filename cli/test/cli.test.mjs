@@ -399,6 +399,95 @@ test("a bare id, or a link without a key, sends no key", async () => {
   });
 });
 
+// --- A source longer than one tool result ----------------------------------
+
+/**
+ * get_document cuts a long source at a CHARACTER count, and stdout counts
+ * bytes, so this source is full of characters UTF-8 spends two and three bytes
+ * on. The cut copy then differs from the whole one in length, and a client that
+ * printed the cut — or decoded and re-encoded the rest — fails on size, not just
+ * on content. The cut falls inside <head>, which is how it was found: a
+ * document with no <body>.
+ */
+const WHOLE = `<!doctype html><html><head><style>${"/* — é 漢 */".repeat(30_000)}</style></head><body><h1>Deck</h1></body></html>`;
+const CUT = WHOLE.slice(0, 200_000);
+
+/** Run `get` against a deployment whose get_document cut the source. */
+async function getAgainst(args, { content = (req, res) => res.end(WHOLE), result = {} } = {}) {
+  const requests = [];
+  let stdout;
+  let failure;
+  await withServer(
+    (req, res) => {
+      requests.push({ url: req.url, authorization: req.headers.authorization });
+      if (req.url.startsWith("/content/")) return content(req, res);
+      rpcOk({
+        id: "big-deck",
+        version: "v3",
+        sourceFile: "index.html",
+        truncated: true,
+        source: CUT,
+        ...result,
+      })(req, res);
+    },
+    async (origin) => {
+      try {
+        ({ stdout } = await promisify(execFile)(process.execPath, [join(SRC, "index.mjs"), "get", ...args], {
+          encoding: "buffer",
+          maxBuffer: 4 * 1024 * 1024,
+          env: { ...process.env, BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" },
+        }));
+      } catch (err) {
+        failure = err;
+      }
+    },
+  );
+  return { stdout, failure, requests };
+}
+
+test("a source get_document cut is printed whole, byte for byte", async () => {
+  assert.notEqual(Buffer.byteLength(CUT), Buffer.byteLength(WHOLE), "the fixture must be cut");
+  const { stdout, failure, requests } = await getAgainst(["big-deck"]);
+  assert.equal(failure, undefined);
+  assert.ok(stdout.equals(Buffer.from(WHOLE)), `printed ${stdout.length} bytes, not ${Buffer.byteLength(WHOLE)}`);
+  assert.equal(requests[1].url, "/content/big-deck/v3/index.html");
+  assert.equal(requests[1].authorization, "Bearer bsk_a.b");
+});
+
+test("the rest is read from the source file the tool named, with the link's key", async () => {
+  const link = "https://bikeshed.example/d/big-deck?k=tok_0123456789abcdefghijk";
+  const { requests } = await getAgainst([link], { result: { sourceFile: "slides/index.html" } });
+  assert.equal(requests[1].url, "/content/big-deck/v3/slides/index.html?k=tok_0123456789abcdefghijk");
+});
+
+test("--json carries the whole source, and no longer says it was cut", async () => {
+  const { stdout } = await getAgainst(["big-deck", "--json"]);
+  const result = JSON.parse(stdout.toString("utf8"));
+  assert.equal(result.truncated, false);
+  assert.equal(result.source, WHOLE);
+  assert.equal(result.version, "v3", "the rest of the result survives");
+});
+
+test("when the rest cannot be read, nothing is printed and the command fails", async () => {
+  const { failure } = await getAgainst(["big-deck"], {
+    content: (req, res) => {
+      res.statusCode = 404;
+      res.end();
+    },
+  });
+  assert.equal(failure?.code, 1);
+  assert.equal(failure.stdout.length, 0, "a partial source must not reach stdout");
+  assert.match(failure.stderr.toString("utf8"), /Nothing was printed/);
+});
+
+test("a source that was not cut is printed from the one tool call", async () => {
+  const { stdout, requests } = await getAgainst(["big-deck"], {
+    result: { truncated: false, source: "# Short\n" },
+  });
+  assert.equal(stdout.toString("utf8"), "# Short\n");
+  assert.equal(requests.length, 1);
+});
+
 test("a link that is not a document is refused rather than sent as an id", () => {
   assert.throws(
     () => run(["get", "https://bikeshed.example/folder/abc"], { BIKESHED_TOKEN: "bsk_a.b" }),
