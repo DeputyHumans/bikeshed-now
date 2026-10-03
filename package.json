@@ -1,6 +1,6 @@
 {
   "name": "bikeshed-now-source",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -36,7 +36,7 @@
     "emulators": "firebase emulators:start --project demo-bikeshed",
     "pretest": "npm run check:policy",
     "test": "npm run test:tools && npm run test:functions && npm run test:app && npm run test:cli",
-  "test:tools": "node --test tools/*.test.mjs",
+    "test:tools": "node --test tools/*.test.mjs",
     "test:functions": "npm --prefix functions test",
     "test:app": "npm --prefix app test",
     "test:cli": "npm --prefix cli test",

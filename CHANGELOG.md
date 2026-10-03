@@ -14,7 +14,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.2.0 — 2026-10-02
 
 ### Security
 
@@ -215,150 +215,6 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   publishing skill, the spec and the threat model now say so, and a test refuses
   the claim in any agent-facing document. A raw `<script>` in Markdown is
   sandboxed exactly like one in HTML.
-
-### Changed
-
-- **The `bikeshed-now` README names bikeshed.now** (in `bikeshed-now` 0.4.1).
-  Its examples showed `https://<deployment>`, a placeholder that means
-  something in a deployment's own `/llms.txt` and nothing on npm, where the
-  client's default deployment is the one a reader can actually use. It now
-  shows `https://bikeshed.now`, and says once that a self-hosted deployment
-  takes its place.
-- **A taken id gets a random suffix, not a count.** A second document titled
-  `01-platform` now lands at `01-platform-k3x9qz`, say, rather than
-  `01-platform-2`. A count told the publisher how many documents held the name
-  and made the next id guessable. Existing ids keep their addresses. The
-  publisher still learns that the id was taken; the threat model says why that
-  is accepted.
-- **`/llms.txt` and `/skills/**` name the deployment serving them.** They
-  carried the literal `https://<deployment>` in seven places, so an agent that
-  had just fetched the instructions from a live deployment was told to POST to
-  a placeholder — and a skill, which is written into `.claude/skills/` and read
-  days later with no origin in sight, could not work the address out even in
-  principle. The app build now substitutes the real origin into `app/dist`,
-  from `BIKESHED_PUBLIC_ORIGIN` or `config/deploy.json`'s `domain`, which is
-  the first thing that has ever read that key. The guide also says which
-  deployment it is in its own first line, and its command-line stanza is
-  copy-pasteable.
-
-  The tracked copies keep the placeholder, so `check:agents` stays a byte
-  comparison and no deployment binding enters the tree — which matters because
-  `check-secrets.sh` matches by shape and a custom domain has none. A
-  `<deployment>` that survives the substitution fails the build, and the
-  hosting `predeploy` refuses to deploy an `app/dist` that was never stamped.
-
-- **Share and "Who can see it" are one dialog.** They were two, behind two
-  entries of the same menu, asking one question — who gets this — from two
-  places, and the second was found only by reading the overflow menu. "Share"
-  now holds the people and teams first, then the three visibility levels side
-  by side, the link, open editing and the expiry under its own rule. The
-  count in the footer widens with the level ("2 people, and anyone with the
-  link"). Folders keep the people-only dialog, having no visibility or expiry.
-  Every visibility change still sends the whole triple, so ticking one box
-  never clears another.
-
-- **An expiry is a chip beside the version, not a banner above the document.**
-  The banner appeared for every future date, so a document set to expire next
-  year gave up a row of the document area for eleven months. The chip sits on
-  the toolbar next to the version badge — the same one the workspace card
-  shows — escalates in wording and colour through the last week and past the
-  date, explains itself on hover or on tap (nothing is deleted; who can open
-  it; who can restore it), and for the owner opens the place the date is
-  changed. Nothing about an expiry takes a row from the document any more.
-
-- **A document with nothing to say opens without the comments panel.** The
-  panel was open on every document: a 340px column reading "0 open" and
-  asking the reader to select a passage. It now starts collapsed and opens on
-  its own only when the version's first annotation snapshot holds an
-  unresolved thread — resolved ones are hidden until asked for, so a version
-  whose every thread is dealt with reads as done. The reader's own toggle
-  still wins over the default in either direction, a comment landing later
-  does not reopen a panel they closed, and starting a comment opens it as
-  before.
-
-- **An HTML upload's default title is its own `<title>`.** When no title is
-  given, the workspace title — and so the slug of a new document — comes from
-  the document's `<title>` rather than the file name. The upload dialog no
-  longer prefills the file name as a title, so a browser upload follows the
-  document's title exactly as CLI and MCP uploads already did; a typed title
-  still wins, and existing documents keep the titles they have.
-
-- **A deck can be moved through.** The slide navigator was edit-mode only, so a
-  reader opening a long deck got one very long scroll and no way around it. It
-  is now available while reading too, behind a toolbar toggle, alongside
-  arrow-key paging and an overview of every slide at once. Its thumbnails are
-  the slides themselves rather than an index and a title: each is the slide
-  rendered into a separate document, scaled down, sandboxed without
-  `allow-scripts` even when the document is trusted, and mounted only when
-  scrolled into view — one deck in the sample set has 48 slides and every
-  preview is an iframe.
-
-  What counts as a slide now lives in one place (`app/src/viewer/deck.ts`) and
-  is decided by an ordered list of rules rather than a selector. Measured
-  against real decks, `body > section[id]` — the old selector — matched none of
-  them, including the repo's own tour, whose sections sit inside `div.deck`. So
-  the navigator had never appeared for the one sample built to be navigated.
-  Paging is gated on measurement rather than markup: on a document whose
-  sections are taller than the viewport, taking the arrow keys would leave the
-  reader unable to scroll within a section.
-
-- **The brand guard is now `scripts/check-secrets.sh`, and matches only by
-  shape.** It used to be driven by `scripts/forbidden-terms.txt`, a committed
-  list of literal strings that must never appear. A list like that has to be in
-  the tree to be useful, so committing it published the very words it existed to
-  suppress — it was its own first leak — and it could never catch anything
-  nobody had thought to add. The four tiers that read it are gone. The five that
-  remain never needed a list of names: deployment bindings by shape, absolute
-  local paths, attribution trailers, the tracked-binary allowlist, and a new
-  credential tier covering `sk-`, GitHub and Slack tokens, AWS key ids,
-  private-key blocks, service-account JSON, and any tracked dotenv or key file.
-  `npm run check:brand` is now `npm run check:secrets`, and the guard prints
-  `check-secrets: clean`.
-- **Git history was rewritten once, before first publication.** The old guard
-  carried the suppressed company name in a comment example, sanitised in the
-  working tree but still present in five historical commits, where no tier could
-  see it — the history tier reads commit metadata, never historical file
-  content. Every commit id therefore changed. Nothing had been published at the
-  time, so no clone needed reconciling.
-- **`npm --prefix app run coverage` now runs in CI.** The step was named "App
-  tests and coverage" and the verification table promised ≥90%, but the command
-  behind both was `vitest run` with no `--coverage`, so the thresholds in
-  `app/vite.config.ts` had never once been enforced.
-- **`firebase` is a declared root devDependency.** `rules-tests/` imports it and
-  had been resolving it as an auto-installed peer of
-  `@firebase/rules-unit-testing`, which breaks under `--legacy-peer-deps`.
-- **`move_document` is an access operation, not a filing one.** A document's
-  members are its own grants unioned with its folder's, so moving it between
-  folders changes who can read it. It requires `canEdit` on the document and
-  `canEditFolder` on the destination, and goes through `persistDocMembership` so
-  the presence mirror and the public projection move with it. Both the guide and
-  the folders skill say so in those words.
-- One resolver now authorizes every "put this inside that folder" in the system.
-  `createDoc`, `createFolder`, both halves of `organize` and the MCP publish tool
-  each had their own copy of the same four steps, with three different refusal
-  messages for the same refusal — and one of them checked `editorMembers` by
-  hand rather than calling `canEditFolder`, which agreed only by accident.
-- The MCP surface is **nine tools**, not six. Tool schemas are public API
-  (see above), so this is additive: nothing existing changed shape.
-
-- **Several people can now edit one document at the same time.** Document state
-  is a Yjs CRDT bound to the DOM without a schema, so edits merge and every copy
-  converges ([ADR 0010](docs/architecture/adr/0010-crdt-for-shared-document-state.md)).
-  Hand-authored HTML still round-trips byte-identical; that property is the
-  contract, and the sample bundles are the fixtures that hold it.
-- **The single-holder edit lock is withdrawn**, along with observe mode, "Ask to
-  edit", the hand-off and the idle release. SPEC §6b and §16 are rewritten: both
-  said there was no CRDT, and both were normative.
-- `draft.editSessions` is **withdrawn**. It recorded lock hand-offs, and there
-  are none; a version no longer answers "who wrote which part of it".
-- The `app/` runtime dependency budget rises from **7 to 8** (`yjs`, MIT).
-- RTDB gains `editAccess`, a second mirror of `editorMembers`. Shared document
-  state is gated on "may edit" rather than on "may read" — gating it on the
-  presence mirror would let a read-only member push content into an editor's
-  browser.
-
-### Fixed
-
 - **The lock, eye and globe on the visibility options were a few pixels
   wide.** Each icon sat in a flex row beside a sentence, and the flex
   algorithm took the sentence's width out of the icon — five to eleven pixels
@@ -525,6 +381,147 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   say `info@bikeshed.now`. The permission address in `NOTICE` is deliberately
   unchanged — it belongs to a third party, and redirecting it would misdirect
   the request it exists to receive.
+
+### Changed
+
+- **The `bikeshed-now` README names bikeshed.now** (in `bikeshed-now` 0.4.1).
+  Its examples showed `https://<deployment>`, a placeholder that means
+  something in a deployment's own `/llms.txt` and nothing on npm, where the
+  client's default deployment is the one a reader can actually use. It now
+  shows `https://bikeshed.now`, and says once that a self-hosted deployment
+  takes its place.
+- **A taken id gets a random suffix, not a count.** A second document titled
+  `01-platform` now lands at `01-platform-k3x9qz`, say, rather than
+  `01-platform-2`. A count told the publisher how many documents held the name
+  and made the next id guessable. Existing ids keep their addresses. The
+  publisher still learns that the id was taken; the threat model says why that
+  is accepted.
+- **`/llms.txt` and `/skills/**` name the deployment serving them.** They
+  carried the literal `https://<deployment>` in seven places, so an agent that
+  had just fetched the instructions from a live deployment was told to POST to
+  a placeholder — and a skill, which is written into `.claude/skills/` and read
+  days later with no origin in sight, could not work the address out even in
+  principle. The app build now substitutes the real origin into `app/dist`,
+  from `BIKESHED_PUBLIC_ORIGIN` or `config/deploy.json`'s `domain`, which is
+  the first thing that has ever read that key. The guide also says which
+  deployment it is in its own first line, and its command-line stanza is
+  copy-pasteable.
+
+  The tracked copies keep the placeholder, so `check:agents` stays a byte
+  comparison and no deployment binding enters the tree — which matters because
+  `check-secrets.sh` matches by shape and a custom domain has none. A
+  `<deployment>` that survives the substitution fails the build, and the
+  hosting `predeploy` refuses to deploy an `app/dist` that was never stamped.
+
+- **Share and "Who can see it" are one dialog.** They were two, behind two
+  entries of the same menu, asking one question — who gets this — from two
+  places, and the second was found only by reading the overflow menu. "Share"
+  now holds the people and teams first, then the three visibility levels side
+  by side, the link, open editing and the expiry under its own rule. The
+  count in the footer widens with the level ("2 people, and anyone with the
+  link"). Folders keep the people-only dialog, having no visibility or expiry.
+  Every visibility change still sends the whole triple, so ticking one box
+  never clears another.
+
+- **An expiry is a chip beside the version, not a banner above the document.**
+  The banner appeared for every future date, so a document set to expire next
+  year gave up a row of the document area for eleven months. The chip sits on
+  the toolbar next to the version badge — the same one the workspace card
+  shows — escalates in wording and colour through the last week and past the
+  date, explains itself on hover or on tap (nothing is deleted; who can open
+  it; who can restore it), and for the owner opens the place the date is
+  changed. Nothing about an expiry takes a row from the document any more.
+
+- **A document with nothing to say opens without the comments panel.** The
+  panel was open on every document: a 340px column reading "0 open" and
+  asking the reader to select a passage. It now starts collapsed and opens on
+  its own only when the version's first annotation snapshot holds an
+  unresolved thread — resolved ones are hidden until asked for, so a version
+  whose every thread is dealt with reads as done. The reader's own toggle
+  still wins over the default in either direction, a comment landing later
+  does not reopen a panel they closed, and starting a comment opens it as
+  before.
+
+- **An HTML upload's default title is its own `<title>`.** When no title is
+  given, the workspace title — and so the slug of a new document — comes from
+  the document's `<title>` rather than the file name. The upload dialog no
+  longer prefills the file name as a title, so a browser upload follows the
+  document's title exactly as CLI and MCP uploads already did; a typed title
+  still wins, and existing documents keep the titles they have.
+
+- **A deck can be moved through.** The slide navigator was edit-mode only, so a
+  reader opening a long deck got one very long scroll and no way around it. It
+  is now available while reading too, behind a toolbar toggle, alongside
+  arrow-key paging and an overview of every slide at once. Its thumbnails are
+  the slides themselves rather than an index and a title: each is the slide
+  rendered into a separate document, scaled down, sandboxed without
+  `allow-scripts` even when the document is trusted, and mounted only when
+  scrolled into view — one deck in the sample set has 48 slides and every
+  preview is an iframe.
+
+  What counts as a slide now lives in one place (`app/src/viewer/deck.ts`) and
+  is decided by an ordered list of rules rather than a selector. Measured
+  against real decks, `body > section[id]` — the old selector — matched none of
+  them, including the repo's own tour, whose sections sit inside `div.deck`. So
+  the navigator had never appeared for the one sample built to be navigated.
+  Paging is gated on measurement rather than markup: on a document whose
+  sections are taller than the viewport, taking the arrow keys would leave the
+  reader unable to scroll within a section.
+
+- **The brand guard is now `scripts/check-secrets.sh`, and matches only by
+  shape.** It used to be driven by `scripts/forbidden-terms.txt`, a committed
+  list of literal strings that must never appear. A list like that has to be in
+  the tree to be useful, so committing it published the very words it existed to
+  suppress — it was its own first leak — and it could never catch anything
+  nobody had thought to add. The four tiers that read it are gone. The five that
+  remain never needed a list of names: deployment bindings by shape, absolute
+  local paths, attribution trailers, the tracked-binary allowlist, and a new
+  credential tier covering `sk-`, GitHub and Slack tokens, AWS key ids,
+  private-key blocks, service-account JSON, and any tracked dotenv or key file.
+  `npm run check:brand` is now `npm run check:secrets`, and the guard prints
+  `check-secrets: clean`.
+- **Git history was rewritten once, before first publication.** The old guard
+  carried the suppressed company name in a comment example, sanitised in the
+  working tree but still present in five historical commits, where no tier could
+  see it — the history tier reads commit metadata, never historical file
+  content. Every commit id therefore changed. Nothing had been published at the
+  time, so no clone needed reconciling.
+- **`npm --prefix app run coverage` now runs in CI.** The step was named "App
+  tests and coverage" and the verification table promised ≥90%, but the command
+  behind both was `vitest run` with no `--coverage`, so the thresholds in
+  `app/vite.config.ts` had never once been enforced.
+- **`firebase` is a declared root devDependency.** `rules-tests/` imports it and
+  had been resolving it as an auto-installed peer of
+  `@firebase/rules-unit-testing`, which breaks under `--legacy-peer-deps`.
+- **`move_document` is an access operation, not a filing one.** A document's
+  members are its own grants unioned with its folder's, so moving it between
+  folders changes who can read it. It requires `canEdit` on the document and
+  `canEditFolder` on the destination, and goes through `persistDocMembership` so
+  the presence mirror and the public projection move with it. Both the guide and
+  the folders skill say so in those words.
+- One resolver now authorizes every "put this inside that folder" in the system.
+  `createDoc`, `createFolder`, both halves of `organize` and the MCP publish tool
+  each had their own copy of the same four steps, with three different refusal
+  messages for the same refusal — and one of them checked `editorMembers` by
+  hand rather than calling `canEditFolder`, which agreed only by accident.
+- The MCP surface is **nine tools**, not six. Tool schemas are public API
+  (see above), so this is additive: nothing existing changed shape.
+
+- **Several people can now edit one document at the same time.** Document state
+  is a Yjs CRDT bound to the DOM without a schema, so edits merge and every copy
+  converges ([ADR 0010](docs/architecture/adr/0010-crdt-for-shared-document-state.md)).
+  Hand-authored HTML still round-trips byte-identical; that property is the
+  contract, and the sample bundles are the fixtures that hold it.
+- **The single-holder edit lock is withdrawn**, along with observe mode, "Ask to
+  edit", the hand-off and the idle release. SPEC §6b and §16 are rewritten: both
+  said there was no CRDT, and both were normative.
+- `draft.editSessions` is **withdrawn**. It recorded lock hand-offs, and there
+  are none; a version no longer answers "who wrote which part of it".
+- The `app/` runtime dependency budget rises from **7 to 8** (`yjs`, MIT).
+- RTDB gains `editAccess`, a second mirror of `editorMembers`. Shared document
+  state is gated on "may edit" rather than on "may read" — gating it on the
+  presence mirror would let a read-only member push content into an editor's
+  browser.
 
 ## 0.1.0 — 2026-09-17
 
