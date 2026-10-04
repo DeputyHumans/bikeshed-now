@@ -104,11 +104,56 @@ describe("useDocument for a reader who is not a member", () => {
     expect(visibility.unlockDoc).toHaveBeenCalledWith("memo", null);
   });
 
-  it("reads nothing until auth has decided who is asking", async () => {
-    open({ k: KEY, uid: null, settled: false });
+  it("reads nothing without a key until auth has decided who is asking", async () => {
+    open({ k: "", uid: null, settled: false });
     await new Promise((r) => setTimeout(r, 20));
     expect(firestore.watchDoc).not.toHaveBeenCalled();
+    expect(firestore.getPublicDoc).not.toHaveBeenCalled();
     expect(visibility.unlockDoc).not.toHaveBeenCalled();
+  });
+
+  it("opens a key holder's document before auth has decided, which on a phone may be never", async () => {
+    /**
+     * On every mobile browser and Safari, Firebase Auth loads Google's sign-in
+     * script before it reports anyone. While that script stalled, a key holder
+     * sat on "Opening the document" indefinitely; desktop Chrome, which skips
+     * the step, opened the same link at once. The key is checked by /unlock
+     * alone, so nothing it opens should wait for auth.
+     */
+    visibility.unlockDoc.mockResolvedValue(MEMO);
+    const { result } = open({ k: KEY, uid: null, settled: false });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.title).toBe("Build estimate");
+    expect(result.current.notFound).toBe(false);
+    expect(visibility.unlockDoc).toHaveBeenCalledWith("memo", KEY);
+    // Firestore still waits: who is reading decides what it may read.
+    expect(firestore.watchDoc).not.toHaveBeenCalled();
+  });
+
+  it("asks once for a key holder auth then finds anonymous", async () => {
+    visibility.unlockDoc.mockResolvedValue(MEMO);
+    const { result, rerender } = open({ k: KEY, uid: null, settled: false });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    rerender({ k: KEY, uid: null, settled: true });
+    await waitFor(() => expect(firestore.watchDoc).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(visibility.unlockDoc).toHaveBeenCalledTimes(1);
+    expect(result.current.title).toBe("Build estimate");
+  });
+
+  it("does not say a refused key is not here while the member read is unanswered", async () => {
+    // Firestore that never answers: a member with a stale key in their link
+    // must not be told "not here" by the unlock alone.
+    firestore.watchDoc.mockImplementation(() => () => {});
+    const { result } = open({ k: "tok_stale_stale_stale_st", uid: null, settled: true });
+
+    await waitFor(() => expect(visibility.unlockDoc).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(result.current.notFound).toBe(false);
+    expect(result.current.loading).toBe(true);
   });
 
   it("signing in on the page unlocks again as that account, without a spinner", async () => {
@@ -134,5 +179,59 @@ describe("useDocument for a reader who is not a member", () => {
     expect(loadingSeen.every((l) => l === false)).toBe(true);
     expect(visibility.unlockDoc).toHaveBeenCalledTimes(2);
     expect(result.current.title).toBe("Build estimate");
+  });
+});
+
+describe("useDocument for a member following a link with a key", () => {
+  const MEMBER_RECORD = {
+    docId: "memo",
+    title: "Build estimate (member record)",
+    currentVersion: "v2",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    firestore.getVersion.mockResolvedValue(null);
+    firestore.listVersions.mockResolvedValue([]);
+    firestore.getPublicDoc.mockResolvedValue(null);
+  });
+
+  it("keeps the member record when a refused unlock answers after it", async () => {
+    firestore.watchDoc.mockImplementation((_id: string, onData: (m: unknown) => void) => {
+      queueMicrotask(() => onData(MEMBER_RECORD));
+      return () => {};
+    });
+    let refuse: (v: null) => void = () => {};
+    visibility.unlockDoc.mockImplementation(
+      () => new Promise<null>((resolve) => (refuse = resolve)),
+    );
+    const { result } = open({ k: "tok_stale_stale_stale_st", uid: "u-member", settled: true });
+
+    await waitFor(() => expect(result.current.meta).not.toBeNull());
+    refuse(null);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(result.current.notFound).toBe(false);
+    expect(result.current.title).toBe("Build estimate (member record)");
+    expect(result.current.currentVersion).toBe("v2");
+  });
+
+  it("does not take the reader's projection over the member record that beat it", async () => {
+    firestore.watchDoc.mockImplementation((_id: string, onData: (m: unknown) => void) => {
+      queueMicrotask(() => onData(MEMBER_RECORD));
+      return () => {};
+    });
+    let answer: (v: PublicDoc) => void = () => {};
+    visibility.unlockDoc.mockImplementation(
+      () => new Promise<PublicDoc>((resolve) => (answer = resolve)),
+    );
+    const { result } = open({ k: KEY, uid: "u-member", settled: true });
+
+    await waitFor(() => expect(result.current.meta).not.toBeNull());
+    answer(MEMO);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(result.current.publicDoc).toBeNull();
+    expect(result.current.meta?.title).toBe("Build estimate (member record)");
   });
 });

@@ -14,6 +14,20 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **An unlisted document's link opens on a phone without waiting for sign-in.**
+  The viewer read nothing until auth had decided who was asking, and presented
+  the link's key only after Firestore refused the member record. On every mobile
+  browser and Safari, Firebase Auth loads Google's sign-in script before it
+  reports anyone, and Firestore waits for Auth, so while that script stalled the
+  link sat on "Opening the document" indefinitely. Desktop Chrome skips that
+  step, and opened the same link at once. A key holder now asks `/unlock`
+  straight away, and is asked again under their account once auth decides
+  (SPEC §17).
+
 ## 0.2.0 — 2026-10-02
 
 ### Security

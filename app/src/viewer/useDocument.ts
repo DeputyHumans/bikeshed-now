@@ -21,10 +21,10 @@ import type { DocMeta, DocVersion, PublicDoc, SourceFormat } from "../types";
  * Anyone else is told nothing. Without the key an unlisted document is
  * indistinguishable from an id that does not exist (SPEC §17).
  *
- * This hook tries the full record first and falls back, so every consumer gets
- * one shape with the fields it is allowed to have and `null` for the rest. The
- * fallback is not an error path: for most readers of a shared document it is
- * the normal one.
+ * This hook tries the full record first and falls back — a key holder asks for
+ * both at once — so every consumer gets one shape with the fields it is allowed
+ * to have and `null` for the rest. The fallback is not an error path: for most
+ * readers of a shared document it is the normal one.
  */
 
 /** Who is asking, besides whoever the Firestore SDK is signed in as. */
@@ -33,7 +33,7 @@ export interface ReaderAccess {
   k: string;
   /** The signed-in account, or null for an anonymous reader. */
   uid: string | null;
-  /** False until auth has decided who is asking; nothing is read before. */
+  /** False until auth has decided who is asking. Before, only a key is presented. */
   settled: boolean;
 }
 
@@ -114,6 +114,11 @@ export function useDocument(
   // Whose read of the full record was refused. The fallback runs for that
   // identity, and again when somebody else asks — the same reader, signed in.
   const [deniedFor, setDeniedFor] = useState<string | null>(null);
+  // Whom the member record was delivered for. Nothing the fallback answers
+  // afterwards for the same reader may replace it.
+  const [memberFor, setMemberFor] = useState<string | null>(null);
+  // Whose fallback came back empty. Final only together with `deniedFor`.
+  const [refusedFor, setRefusedFor] = useState<string | null>(null);
   const [resolvedFor, setResolvedFor] = useState<string | null>(null);
 
   // `loading` is only ever cleared, never set again. A reader who signs in on
@@ -133,6 +138,7 @@ export function useDocument(
           setNotFound(false);
           setLoading(false);
           setResolvedFor(who);
+          setMemberFor(who);
         }
       },
       () => {
@@ -148,22 +154,53 @@ export function useDocument(
     };
   }, [docId, who, settled]);
 
+  /**
+   * A key holder asks /unlock at once: before auth has decided, and without
+   * waiting for Firestore to refuse the member record. The key is checked
+   * there and nowhere else, so neither is needed to read what it opens — and
+   * on a phone neither answers before Google's sign-in script has loaded,
+   * because Firebase Auth sets up its popup helper ahead of reporting anyone
+   * on every mobile browser and Safari. While that script stalled, a key
+   * holder sat on "Opening the document" indefinitely, and desktop Chrome,
+   * which skips the step, opened the same link at once.
+   *
+   * Until auth decides, `who` is "", the anonymous reader. The request still
+   * carries the session cookie, so a returning account is recognised; if auth
+   * then decides on an account, `who` changes and this asks again as them.
+   */
+  const askUnlock = memberFor !== who && (k !== "" || (settled && deniedFor === who));
+
   useEffect(() => {
-    if (!settled || deniedFor !== who) return;
+    if (!askUnlock) return;
     let cancelled = false;
     void resolveReader(docId, k, uid !== null)
       .catch(() => null)
       .then((projection) => {
         if (cancelled) return;
+        if (!projection) {
+          setRefusedFor(who);
+          return;
+        }
         setPublicDoc(projection);
-        setNotFound(projection == null);
+        setNotFound(false);
         setLoading(false);
         setResolvedFor(who);
       });
     return () => {
       cancelled = true;
     };
-  }, [docId, k, uid, who, deniedFor, settled]);
+  }, [docId, k, uid, who, askUnlock]);
+
+  // Refused means "not here" only once the member read is refused as well. A
+  // key /unlock turns down may be a stale one in a member's link, and the
+  // member reads the document from Firestore regardless.
+  useEffect(() => {
+    if (refusedFor !== who || deniedFor !== who) return;
+    setPublicDoc(null);
+    setNotFound(true);
+    setLoading(false);
+    setResolvedFor(who);
+  }, [refusedFor, deniedFor, who]);
 
   // Version records are readable by anyone who may read the document's
   // feedback, so this simply fails quietly for an anonymous reader — who does
