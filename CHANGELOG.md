@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **`bikeshed fork` and `bikeshed lineage`** (in `bikeshed-now` 0.5.0). `fork`
+  takes an id or a link, and `--version`, `--folder` and `--title`; `lineage`
+  prints what a document was forked from, nearest first, and for its owner its
+  forks. `bikeshed list` marks a fork with ⑂.
 - **Fork replaces Duplicate, and remembers where it came from.** A fork is your
   own private copy of a version of any document you can read: from the
   workspace card, the viewer's toolbar and menu, `bikeshed fork` and the MCP

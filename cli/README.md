@@ -61,6 +61,24 @@ bikeshed comments 'https://bikeshed.now/d/build-estimate?k=…'
 `bikeshed --help` lists the rest — listing documents, folders, and installing the
 agent skills a deployment serves.
 
+## Forking
+
+To revise a document you can read but do not own, fork it. You get your own
+private copy, at the version you name or the current one, and it remembers what
+it was forked from.
+
+```bash
+bikeshed fork 'https://bikeshed.now/d/build-estimate?k=…'
+# forked build-estimate into build-estimate-x7k2p9 — https://bikeshed.now/d/build-estimate-x7k2p9
+bikeshed lineage build-estimate-x7k2p9
+# forked from  build-estimate v3  Build estimate   (changed since)
+```
+
+`lineage` shows each original you can open, nearest first, and whether the
+nearest has changed since you forked it. On a document you own it also counts
+its forks. The author of what you fork sees that it was forked — a count, never
+who.
+
 ## Sharing is not automated
 
 There is no command that shares a document, changes who can read it, or sets an
