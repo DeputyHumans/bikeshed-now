@@ -112,6 +112,29 @@ them, and an author field cannot be fixed without a rewrite.
 Write the body for someone reading `git log` in two years: what was wrong and
 why this fixes it, not what the diff already shows.
 
+## Every change ships a version
+
+A fix, a feature, or **any** change that touches more than documentation is
+not finished until it is released. Release it in a `chore: release X.Y.Z`
+commit after the change's own commits. Changes only to `docs/` or other `*.md`
+files are the one exception. The number is what an MCP client is told it is
+talking to, so a change without one is running under someone else's version.
+
+- **Which number.** Semver, as `CHANGELOG.md` states it. A fix, a refactor or
+  a test is a patch. A feature is a minor. Anything the changelog lists as
+  breaking is a minor while we are below 1.0.
+- **What moves, together.** `version` in `package.json`, `app/package.json`
+  and `functions/package.json`, plus their three lockfiles. Running
+  `npm version X.Y.Z --no-git-tag-version` in each directory changes both.
+  Also move `SERVER_INFO` in `functions/src/mcp/server.ts`.
+- **The changelog.** The change's own commit adds its entry under
+  `## Unreleased`, and the release commit renames that heading to
+  `## X.Y.Z — YYYY-MM-DD`.
+- **The CLI versions on its own**, and only when `cli/` changed: bump
+  `cli/package.json` and commit `chore(cli): release bikeshed-now X.Y.Z`.
+- **Tag the release commit** `vX.Y.Z` (`cli-vX.Y.Z` for the CLI). Pushing,
+  `npm publish` and deploying stay separate decisions, each asked for.
+
 ## Deployment facts stay out of the tree
 
 No tracked file may name the real project, account, bucket, SDK config or
