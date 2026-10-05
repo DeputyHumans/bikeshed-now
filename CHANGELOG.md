@@ -14,6 +14,25 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A document you trusted for yourself opens once, with its scripts running.**
+  The viewer started every reader as untrusted and did not wait to hear
+  otherwise. Whenever the document arrived before your own grant, which an
+  unlisted link makes likely because the two come from different services, it
+  loaded sandboxed, blocked its scripts, logged "Blocked script execution", and
+  then loaded again. The first load now waits for your answer. It waits only
+  when the answer could change something, never on sign-in, and for at most
+  1.5 seconds, after which it behaves as before. A frame you are already
+  reading is never taken away (SPEC §6c).
+- **Signing out forgets a grant you made.** The grant was not tied to the
+  account that made it, so it kept the document unsandboxed after sign-out or
+  a switch to another account.
+- **The trust prompt waits until it knows what you already decided**, so a
+  reader who trusted a document is not asked again while their answer loads.
+
 ## 0.3.0 — 2026-10-05
 
 ### Added

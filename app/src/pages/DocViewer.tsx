@@ -191,6 +191,8 @@ export function DocViewer() {
     entry: doc.entry,
     trustToken: trust.trustToken,
     linkToken: linkKey || undefined,
+    // Editing is always sandboxed, so no answer could change how it loads.
+    hold: mode.kind === "reading" && !trust.settled,
   });
 
   // Re-derived against the live document, so the trust prompt can ask "does it
@@ -681,12 +683,14 @@ export function DocViewer() {
             the rail took a column.
           */}
           <div className="doc-frame-stage">
-            <iframe
-              {...frame.frameProps}
-              ref={frame.ref}
-              className="doc-frame"
-              title={doc.title}
-            />
+            {frame.frameProps ? (
+              <iframe
+                {...frame.frameProps}
+                ref={frame.ref}
+                className="doc-frame"
+                title={doc.title}
+              />
+            ) : null}
             {/* Over the frame, never in it: this is the parent's DOM, so it
                 cannot reach the document's serialized bytes. It covers every
                 load the frame makes — first open, edit mode, a trust grant, a

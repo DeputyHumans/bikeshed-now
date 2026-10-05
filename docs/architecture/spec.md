@@ -596,7 +596,23 @@ is `meta.trusted !== false || personalTrust(uid)`.
 
 The viewer surfaces trust ONLY when it would change something: the document is
 still sandboxed for this reader AND the loaded DOM actually contains `<script>`
-tags. Static uploads therefore never prompt.
+tags. Static uploads therefore never prompt. Nor does a reader whose own answer
+is not in yet, who may already have decided.
+
+**The first load waits for the reader's own answer.** The sandbox is read at
+parse time, so a frame that loads before this reader's personal grant is known
+loads sandboxed, and loads again when the grant lands. A reading frame's first
+load therefore waits for that answer, within three limits:
+
+- **Only when it could matter.** The document is not globally trusted and an
+  account is known. A globally trusted document and an anonymous reader never wait.
+- **Never on auth.** A link opens before sign-in has decided (§17). A key
+  holder whose grant turns up after auth decides still loads twice.
+- **Bounded.** At most `PERSONAL_TRUST_WAIT_MS`. Past it, the frame loads
+  sandboxed and remounts when the answer lands, as it did before it waited.
+
+A frame that has loaded is never taken away to wait. A reader who signs in to
+comment keeps the document and their selection.
 
 **Trust carries into a new version only when the owner wrote it in the app**
 (`keepsTrust`). Any other new version withdraws both scopes, the global flag and

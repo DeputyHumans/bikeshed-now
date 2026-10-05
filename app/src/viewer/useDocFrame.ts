@@ -39,13 +39,17 @@ export interface DocFrame {
    * previous, detached document.
    */
   loading: boolean;
-  /** Props to spread onto the <iframe>. */
+  /**
+   * Props to spread onto the <iframe>, or null while it is held: render no
+   * iframe at all then. One rendered without a src still loads about:blank and
+   * fires `load`, and every consumer would decorate that document instead.
+   */
   frameProps: {
     key: string;
     src: string;
     sandbox?: string;
     onLoad: () => void;
-  };
+  } | null;
   /** Force a reload, even when the URL is unchanged. */
   reload: () => void;
   /** Remember the scroll position, so a reload does not lose the reader's place. */
@@ -60,8 +64,14 @@ export function useDocFrame(options: {
   entry: string;
   trustToken: string;
   linkToken?: string;
+  /**
+   * Withhold the document until the sandbox decision is final (SPEC §6c).
+   * Honoured only before the first load: once a reader has a document, taking
+   * it away to wait would lose their place and their selection.
+   */
+  hold?: boolean;
 }): DocFrame {
-  const { mode, docId, entry, trustToken, linkToken } = options;
+  const { mode, docId, entry, trustToken, linkToken, hold = false } = options;
 
   const ref = useRef<HTMLIFrameElement>(null);
   const [doc, setDoc] = useState<Document | null>(null);
@@ -140,17 +150,21 @@ export function useDocFrame(options: {
     authoredAssets.current = null;
   }, [mode.kind, mode.kind === "editing" ? mode.baseVersion : mode.versionId, reloadToken]);
 
+  const held = hold && loadedIdentity === null;
+
   return {
     ref,
     doc,
     epoch,
     loading: loadedIdentity !== identity,
-    frameProps: {
-      key,
-      src,
-      sandbox: frameSandbox(mode),
-      onLoad,
-    },
+    frameProps: held
+      ? null
+      : {
+          key,
+          src,
+          sandbox: frameSandbox(mode),
+          onLoad,
+        },
     reload,
     captureScroll,
     authoredAssets,

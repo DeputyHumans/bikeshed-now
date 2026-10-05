@@ -13,6 +13,7 @@ interface Props {
   mode: FrameMode;
   entry: string;
   trustToken: string;
+  hold?: boolean;
 }
 
 /**
@@ -27,7 +28,12 @@ function harness(initial: Partial<Props> = {}) {
     initialProps: { mode: READING, entry: "index.html", trustToken: "t0", ...initial },
   });
   (view.result.current.ref as { current: HTMLIFrameElement | null }).current = iframe;
-  const load = () => act(() => view.result.current.frameProps.onLoad());
+  const load = () =>
+    act(() => {
+      const props = view.result.current.frameProps;
+      if (!props) throw new Error("the frame is held, so there is nothing to load");
+      props.onLoad();
+    });
   return { ...view, load };
 }
 
@@ -96,6 +102,40 @@ describe("useDocFrame loading", () => {
     load();
 
     expect(result.current.doc).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+});
+
+describe("useDocFrame hold", () => {
+  it("gives a frame that has never loaded nothing to load while it is held", () => {
+    // An iframe rendered without a src still loads about:blank and fires
+    // `load`, and everything downstream would decorate that document instead.
+    const { result } = harness({ hold: true });
+
+    expect(result.current.frameProps).toBeNull();
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("hands the frame its document once the hold lifts", () => {
+    const { result, rerender } = harness({ hold: true });
+
+    rerender({ mode: READING, entry: "index.html", trustToken: "t0", hold: false });
+
+    expect(result.current.frameProps?.src).toBe("/content/d1/v1/index.html");
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("never takes back a frame that has loaded", () => {
+    // A reader who signs in to comment must keep the frame and the selection
+    // in it, so a hold that arrives after the first load changes nothing.
+    const { result, rerender, load } = harness();
+    load();
+    const key = result.current.frameProps?.key;
+
+    rerender({ mode: READING, entry: "index.html", trustToken: "t0", hold: true });
+
+    expect(result.current.frameProps).not.toBeNull();
+    expect(result.current.frameProps?.key).toBe(key);
     expect(result.current.loading).toBe(false);
   });
 });
