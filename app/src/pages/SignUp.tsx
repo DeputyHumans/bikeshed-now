@@ -2,13 +2,14 @@
 // Signing in, signing up, and email verification (SPEC §3, §14).
 
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth, type PopupProvider } from "../auth";
 import { PasswordForm } from "../components/PasswordForm";
 import { auth } from "../firebase";
 import { Icon } from "../components/Icon";
 import { Loading } from "../components/Spinner";
 import { isEmailShapeValid } from "../generated/policy";
+import { safeNext } from "../next";
 
 /**
  * Sign-in and sign-up are ONE screen, because the distinction is not one the
@@ -82,6 +83,9 @@ export function SignUp() {
     refresh,
     clearError,
   } = useAuth();
+  // Read before any early return: hook order must not change between renders.
+  const [params] = useSearchParams();
+  const next = safeNext(params.get("next"));
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -124,7 +128,9 @@ export function SignUp() {
    * hook order between renders.
    */
   if (gate === "loading") return <Loading label="Signing in" />;
-  if (gate === "ready") return <Navigate to="/" replace />;
+  // Back to what they were doing, when that was somewhere on this site — a
+  // reader who pressed Fork on a document comes back to it to finish (SPEC §21).
+  if (gate === "ready") return <Navigate to={next} replace />;
 
   const start = async () => {
     setBusyOn("code");

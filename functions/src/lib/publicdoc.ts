@@ -52,6 +52,13 @@ export interface ReaderDoc {
    * cron, and it is stated in SPEC §17 rather than discovered.
    */
   expiresAt: number | null;
+  /**
+   * That this document was forked from another, and NOTHING about which one.
+   * Enough for a reader's viewer to know a lineage is worth asking for; the
+   * parent itself is answered per caller by `POST /fork`, never mirrored
+   * (SPEC §21).
+   */
+  forked: boolean;
 }
 
 /** The mirror in `public/{docId}`: the reader shape plus when it was published. */
@@ -72,6 +79,7 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "publicEdit",
   "trusted",
   "expiresAt",
+  "forked",
 ];
 
 /** Fields that may appear in the world-readable projection. */
@@ -115,6 +123,7 @@ export function projectReader(
       publicEdit: data.publicEdit === true,
       trusted: data.trusted !== false,
       expiresAt: expiryMs(data as DocAclData),
+      forked: data.forked === true,
     },
     READER_KEYS,
   );

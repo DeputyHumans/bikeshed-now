@@ -104,7 +104,10 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   const { join } = require("node:path");
   const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
 
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc"]) {
+  // `forkDoc` serves no bytes, but its lineage answer is per caller — who may
+  // see which ancestor, and the owner's inventory — so it is held to the same
+  // rule: a cached lineage would show one reader's view of a document to the next.
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);
@@ -136,6 +139,7 @@ test("no endpoint compares a link token by hand", () => {
     join(__dirname, "..", "src", "index.ts"),
     join(__dirname, "..", "src", "lib", "shell.ts"),
     join(__dirname, "..", "src", "mcp", "tools.ts"),
+    join(__dirname, "..", "src", "lib", "fork.ts"),
   ];
   for (const file of files) {
     const src = readFileSync(file, "utf8");
@@ -192,9 +196,16 @@ test("every write of a new document's bytes refuses to overwrite", () => {
   assert.match(create, /placeNewDocument\([\s\S]*uploadBundle\(prefix, compiled\.files, CREATE_ONLY\)/);
   assert.doesNotMatch(create, /uniqueDocId\(/);
 
-  const duplicate = bodyOf(index, "export const duplicateDoc = onRequest(");
-  assert.match(duplicate, /placeNewDocument\([\s\S]*\.copy\([^;]*CREATE_ONLY\)/);
-  assert.doesNotMatch(duplicate, /uniqueDocId\(/);
+  const fork = bodyOf(
+    readFileSync(join(__dirname, "..", "src", "lib", "fork.ts"), "utf8"),
+    "export async function forkDocument(",
+  );
+  assert.match(fork, /placeNewDocument\([\s\S]*\.copy\([^;]*CREATE_ONLY\)/);
+  assert.doesNotMatch(fork, /uniqueDocId\(/);
+  // The endpoint forks only through the shared path, which is what the pin covers.
+  const endpoint = bodyOf(index, "export const forkDoc = onRequest(");
+  assert.match(endpoint, /forkDocument\(/);
+  assert.doesNotMatch(endpoint, /placeNewDocument\(|\.copy\(/);
 });
 
 /**
@@ -209,9 +220,17 @@ test("every write of a new document's bytes refuses to overwrite", () => {
  * appear is a CALL through the namespace.
  */
 test("no static Firestore class is reached through the admin namespace", () => {
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
-  const calls = src.match(/admin\.firestore\.(FieldValue|Timestamp|FieldPath|GeoPoint)\s*[.(]/g);
-  assert.deepEqual(calls ?? [], []);
+  // Every source file, not only the endpoints: the fork counter is incremented
+  // from lib/, and a library call is just as invisible to the unit suite.
+  const { readdirSync } = require("node:fs");
+  const root = join(__dirname, "..", "src");
+  const files = readdirSync(root, { recursive: true }).filter((f) => f.endsWith(".ts"));
+  assert.ok(files.includes(join("lib", "fork.ts")), "the scan must reach lib/");
+  for (const file of files) {
+    const src = readFileSync(join(root, file), "utf8");
+    const calls = src.match(/admin\.firestore\.(FieldValue|Timestamp|FieldPath|GeoPoint)\s*[.(]/g);
+    assert.deepEqual(calls ?? [], [], file);
+  }
 });
 
 // --- A version nobody vouched for is never trusted -----------------------------

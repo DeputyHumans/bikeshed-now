@@ -91,12 +91,21 @@ export interface DocMeta {
 
   /**
    * GLOBAL trust: whether the viewer sandboxes the content iframe for EVERY
-   * reader. CLI and MCP publishes write true; browser upload and duplicate
-   * write false; the owner flips it. Missing means trusted (SPEC §6c).
+   * reader. Every publish through an account — browser upload, fork, CLI and
+   * MCP — writes false; only the operator script writes true, and the owner
+   * flips it. Missing means trusted (SPEC §6c).
    */
   trusted?: boolean;
 
   marking?: Marking;
+
+  /**
+   * This document was forked from another. Deliberately the WHOLE of what the
+   * record says about it: which document is answered by POST /fork, one hop at
+   * a time and only to a caller who could open that hop, because every member
+   * of a fork reads this record (SPEC §21).
+   */
+  forked?: boolean;
 
   createdAt: Timestamp;
   /** Bumped on every publish. Deliberately NOT touched by a read. */
@@ -130,6 +139,8 @@ export interface ViewStats {
    * machine fetch (SPEC §17).
    */
   apiReads?: number;
+  /** Forks made from this document. Exact, because documents are never deleted (SPEC §21). */
+  forks?: number;
 }
 
 /** Firestore: docs/{docId}/viewers/{uid} — per-account rollup. Editor-gated. */
@@ -261,6 +272,8 @@ export interface PublicDoc {
   trusted: boolean;
   /** Epoch milliseconds, or null. Carried so an anonymous reader is told. */
   expiresAt: number | null;
+  /** That it is a fork, and nothing about of what (SPEC §21). Absent on older mirrors. */
+  forked?: boolean;
   publishedAt?: Timestamp;
 }
 
@@ -302,7 +315,8 @@ export interface DocVersion {
   contentHash: string;
   files?: string[];
   parentVersion?: string | null;
-  publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "duplicate";
+  /** "duplicate" is the legacy name of "fork", on copies made before lineage was recorded. */
+  publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "fork" | "duplicate";
   publishedByEmail?: string;
   publishedBy?: Actor;
   /** Carried from the draft: who actually wrote this version (SPEC §17). */

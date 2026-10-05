@@ -420,4 +420,6 @@
      gone, a "Expires Oct 3, 2027" beside the version chip is what tipped the
      actions onto that second row. */
   .viewer-toolbar .expiry-chip .chip-label { display: none; }
+  /* The fork chip too, for the same reason; its icon and dot stay. */
+  .viewer-toolbar .fork-chip .chip-label { display: none; }
 }

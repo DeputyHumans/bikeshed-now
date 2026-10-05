@@ -83,7 +83,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all nine tools.
+first. If all you have is an HTTP client, you have all eleven tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -102,6 +102,8 @@ somebody might commit.
 | `list_documents` | Your documents. Metadata only |
 | `get_document` | Metadata and the current **source**, cut at 200,000 characters with `truncated` set |
 | `publish_document` | Create a document from content you supply, optionally at an `id` you choose |
+| `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
+| `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
 | `update_document` | Publish a new version of one that exists |
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
@@ -116,6 +118,8 @@ bikeshed login
 bikeshed list [--json]
 bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
 bikeshed update <id> <file> [--watch]
+bikeshed fork <id> [--version …] [--folder …] [--title …]
+bikeshed lineage <id> [--json]
 bikeshed get <id>
 bikeshed comments <id> [--json]
 bikeshed reply <id> <thread> <text>
@@ -206,6 +210,28 @@ published, at that id plus a few random characters, and the CLI says so on
 stderr. So the address to hand back is always the `url` in the result, never
 one you built from the id you asked for. An id never changes once published: to
 put new content at the same address, `update` that document.
+
+## Forking someone else's document
+
+`fork_document` (or `bikeshed fork`) copies one version of a document you can
+read — the current one unless you name another — into a new **private** document
+you own. Revise the fork freely: the original is untouched. The fork takes the
+original's title unless you pass `title` (`--title`), and its address gets a few
+random characters when that title's address is taken, so hand back the `url` in
+the result.
+
+- **The author can see that it happened.** The original's owner sees a count of
+  forks, and the ones they can open. They are never told who made a fork they
+  cannot open. The person you work for may want to know that before you fork.
+- **It remembers where it came from.** `get_lineage` (`bikeshed lineage`) lists
+  what a document was forked from, nearest first, with `changedSince` on the
+  nearest — check it before you revise a fork, so you know whether the original
+  moved on. The list stops at the first document you cannot open, and
+  `moreYouCannotOpen` says it stopped. On a document you own it also counts its
+  forks, and lists the ones you can open. `list_documents` and `get_document`
+  say `forked: true` on a fork.
+- **Only the content is copied.** Comments, highlights and older versions stay
+  with the original, and the fork's scripts are sandboxed until you trust it.
 
 ## Filing it somewhere changes who can read it
 

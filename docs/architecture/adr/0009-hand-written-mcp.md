@@ -55,6 +55,9 @@ at nine tools is the same coercion nobody has asked for at six. The reversal
 conditions below are streaming, sessions and the `zod` peer, and none of them
 moved.
 
+**2026-10-05** — eleven, with `fork_document` and `get_lineage` (SPEC §21). Two
+more `required` fields; nothing above moved.
+
 ## What would change this
 
 Two things, either one sufficient. If the SDK drops the `zod` peer or ships a

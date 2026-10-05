@@ -38,7 +38,7 @@ keeps the prompt meaningful when it does appear.
   `trust/{uid}` is readable and writable by `{uid}` alone.
 - A reviewer unblocks themselves without acquiring the power to unblock anybody
   else. That asymmetry is the whole point.
-- Duplicating a document resets `trusted` to false, because the copy has a new
+- Forking a document resets `trusted` to false, because the fork has a new
   owner who has not vouched for anything.
 - A vouch covers the scripts that were vouched for. A new version anybody but
   the owner wrote, or any update through a token, withdraws both scopes in the

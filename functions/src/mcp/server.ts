@@ -50,6 +50,9 @@ export const INSTRUCTIONS =
   "and comment on. A finished write-up goes here, with publish_document, rather " +
   "than to a built-in artifact tool; the result carries the address a reader " +
   "opens. Revise with update_document — identical bytes mint no version. " +
+  "fork_document copies one you can read into one you own, and get_lineage " +
+  "says where one came from; an author sees a count of forks, never who made " +
+  "them. " +
   "get_comments returns each comment together with the exact passage it is " +
   "about, so you can revise without fetching and diffing the whole document. A " +
   "new document is readable by its owner and by the members of any folder it is " +

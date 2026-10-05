@@ -39,6 +39,8 @@ const USAGE = `bikeshed — publish and revise documents
   bikeshed list                        documents you can read
   bikeshed publish <file>              create a new document
   bikeshed update <id> <file>          publish a new version
+  bikeshed fork <id>                   your own copy, which remembers its original
+  bikeshed lineage <id>                what it was forked from; for its owner, its forks
   bikeshed get <id>                    print a document's source
   bikeshed comments <id>               unresolved feedback, with its anchored text
   bikeshed reply <id> <thread> <text>  reply in a thread
@@ -72,9 +74,10 @@ What you can publish
 
 Options
   --json                 machine-readable output
-  --title <text>         title for publish
+  --title <text>         title for publish or fork (fork default: the original's)
   --id <id>              with publish: the address, /d/<id> (default: from the title)
-  --folder <id>          destination folder for publish
+  --folder <id>          destination folder for publish or fork
+  --version <v>          with fork: the version to copy (default: current)
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
@@ -188,7 +191,8 @@ async function list(flags) {
     }
     for (const doc of result.documents) {
       const marker = doc.visibility === "private" ? " " : doc.visibility === "public" ? "◉" : "◐";
-      console.log(`${marker} ${doc.id.padEnd(34)} ${doc.version.padEnd(5)} ${doc.title}`);
+      // ⑂ marks a fork; where it came from is `bikeshed lineage`'s to say.
+      console.log(`${marker} ${doc.id.padEnd(34)} ${doc.version.padEnd(5)} ${doc.title}${doc.forked ? "  ⑂" : ""}`);
     }
     if (result.nextCursor) console.log(`\n… more: --cursor ${result.nextCursor}`);
   });
@@ -343,6 +347,71 @@ async function folders(flags) {
   });
 }
 
+/**
+ * Your own copy of a document you can read. The original's author sees that it
+ * was forked — a count, never who — and the fork records where it came from,
+ * which only people who can open the original are shown (SPEC §21).
+ */
+async function fork(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed fork <id> [--version <v>] [--folder <id>] [--title <text>]");
+  const { origin, token } = resolveAuth(flags);
+  const args = docArgs(ref);
+  if (typeof flags.version === "string") args.version = flags.version;
+  if (typeof flags.folder === "string") args.folder = flags.folder;
+  if (typeof flags.title === "string") args.title = flags.title;
+  const result = await callTool(origin, token, "fork_document", args);
+  out(flags.json, { ...result, url: result.url ?? `${origin}/d/${result.docId}` }, () =>
+    console.log(`forked ${args.id} into ${result.docId} — ${result.url ?? `${origin}/d/${result.docId}`}`),
+  );
+}
+
+/**
+ * Where a document came from, nearest first, as far as you can open, and — for
+ * its owner — what has been forked from it. The deployment decides what you may
+ * see; this only prints it (SPEC §21).
+ */
+async function lineage(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed lineage <id>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "get_lineage", docArgs(ref));
+  out(flags.json, result, () => console.log(describeLineage(result)));
+}
+
+/** The human form of a get_lineage result. */
+function describeLineage(result) {
+  const lines = [];
+  if (result.forked) {
+    if (result.forkedFrom.length === 0) {
+      lines.push("forked from a document you can't open");
+    }
+    result.forkedFrom.forEach((a, i) => {
+      const changed = a.changedSince ? "   (changed since)" : "";
+      lines.push(`${i === 0 ? "forked from" : "  which was"}  ${a.id} ${a.version}  ${a.title}${changed}`);
+    });
+    if (result.forkedFrom.length > 0 && result.moreYouCannotOpen) {
+      lines.push("  which was   forked from a document you can't open");
+    }
+  } else if (!result.forks) {
+    lines.push(`${result.id} is not a fork.`);
+  }
+  if (result.forks) {
+    const { total, youCannotOpen, listed } = result.forks;
+    if (lines.length) lines.push("");
+    if (total === 0) {
+      lines.push("Nobody has forked it yet.");
+    } else {
+      const times = total === 1 ? "once" : `${total} times`;
+      lines.push(youCannotOpen ? `forked ${times}; ${youCannotOpen} you can't open` : `forked ${times}`);
+      for (const f of listed) {
+        const when = f.forkedAt ? f.forkedAt.slice(0, 10) : "";
+        const owner = f.owner ? `  ${f.owner}` : "";
+        lines.push(`  ${f.id.padEnd(34)} ${f.visibility.padEnd(8)} ${when.padEnd(10)} ${f.title}${owner}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
 async function mkdir(flags, rest) {
   const name = rest.join(" ");
   if (!name) fail("usage: bikeshed mkdir <name> [--parent <id>]");
@@ -454,6 +523,8 @@ const COMMANDS = {
   list,
   publish,
   update,
+  fork,
+  lineage,
   get,
   comments,
   reply,
@@ -480,6 +551,7 @@ async function main() {
       title: { type: "string" },
       id: { type: "string" },
       folder: { type: "string" },
+      version: { type: "string" },
       parent: { type: "string" },
       origin: { type: "string" },
       token: { type: "string" },

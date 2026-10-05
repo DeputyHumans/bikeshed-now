@@ -222,7 +222,7 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
     const out = run(args);
     assert.match(out, /^bikeshed/);
     const commands = ["login", "publish", "update", "list", "comments", "open"];
-    for (const command of [...commands, "folders", "mkdir", "mv", "skills"]) {
+    for (const command of [...commands, "fork", "lineage", "folders", "mkdir", "mv", "skills"]) {
       assert.match(out, new RegExp(`\\b${command}\\b`), `${command} is missing from --help`);
     }
   }
@@ -359,6 +359,75 @@ test("a destination folder is sent as the folder argument", async () => {
     });
     assert.equal(seen[0].body.params.name, "move_document");
     assert.deepEqual(seen[0].body.params.arguments, { id: "some-doc", folder: "fold123" });
+  });
+});
+
+test("fork sends the document, and only the options it was given", async () => {
+  await withServer(rpcOk({ docId: "notes-x7k2p9", versionId: "v1", title: "Notes" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    await runAsync(["fork", "notes", "--json"], env);
+    await runAsync(
+      ["fork", "https://bikeshed.example/d/notes?k=tok_0123456789abcdefghijk", "--version", "v2", "--folder", "f1", "--title", "Mine", "--json"],
+      env,
+    );
+    assert.equal(seen[0].body.params.name, "fork_document");
+    // Absent, not empty: an empty folder would be refused as a missing
+    // argument, and an empty title would be an empty title.
+    assert.deepEqual(seen[0].body.params.arguments, { id: "notes" });
+    assert.deepEqual(seen[1].body.params.arguments, {
+      id: "notes",
+      k: "tok_0123456789abcdefghijk",
+      version: "v2",
+      folder: "f1",
+      title: "Mine",
+    });
+  });
+});
+
+test("lineage asks for the document a link names, with its key", async () => {
+  const answer = { id: "notes", forked: false, forkedFrom: [], moreYouCannotOpen: false };
+  await withServer(rpcOk(answer), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["lineage", "https://bikeshed.example/d/notes?k=tok_0123456789abcdefghijk"], env);
+    assert.equal(seen[0].body.params.name, "get_lineage");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "notes", k: "tok_0123456789abcdefghijk" });
+    assert.equal(stdout, "notes is not a fork.\n");
+  });
+});
+
+test("lineage prints the path nearest first, says where it stops, and counts the forks", async () => {
+  const answer = {
+    id: "gamma",
+    forked: true,
+    forkedFrom: [
+      { id: "beta", title: "Beta", version: "v1", changedSince: true },
+      { id: "alpha", title: "Alpha", version: "v2" },
+    ],
+    moreYouCannotOpen: true,
+    forks: {
+      total: 3,
+      youCannotOpen: 2,
+      listed: [{ id: "delta", title: "Delta", visibility: "public", forkedAt: "2026-10-05T09:00:00.000Z", owner: "d@example.com" }],
+    },
+  };
+  await withServer(rpcOk(answer), async (origin) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["lineage", "gamma"], env);
+    assert.equal(
+      stdout,
+      [
+        "forked from  beta v1  Beta   (changed since)",
+        "  which was  alpha v2  Alpha",
+        "  which was   forked from a document you can't open",
+        "",
+        "forked 3 times; 2 you can't open",
+        `  ${"delta".padEnd(34)} public   2026-10-05 Delta  d@example.com`,
+        "",
+      ].join("\n"),
+    );
+    // --json is the tool's answer, untouched.
+    const json = await runAsync(["lineage", "gamma", "--json"], env);
+    assert.deepEqual(JSON.parse(json.stdout), answer);
   });
 });
 

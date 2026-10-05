@@ -3,10 +3,12 @@
 
 import { Breadcrumb } from "./Breadcrumb";
 import { ExpiryChip } from "./ExpiryChip";
+import { ForkChip } from "./ForkChip";
 import { Icon, type IconName } from "./Icon";
 import { MoreMenu } from "./MoreMenu";
 import { PresenceBar } from "./PresenceBar";
 import type { MenuEntry } from "./Menu";
+import type { Lineage } from "../forks";
 import type { Peer } from "../presence";
 import type { DocMeta, FolderMeta } from "../types";
 
@@ -69,6 +71,12 @@ export function ViewerToolbar({
   onToggleEdit,
   canShare,
   onShare,
+  onFork,
+  forking,
+  forked,
+  forkCount,
+  lineage,
+  onOpenForks,
   offerTrust,
   onOpenTrust,
   hasSlides,
@@ -101,6 +109,15 @@ export function ViewerToolbar({
   /** Owner-only, matching who the server lets change an ACL. */
   canShare: boolean;
   onShare: () => void;
+  /** Fork, for a reader who is not the owner. The owner's is in the menu. */
+  onFork?: () => void;
+  forking?: boolean;
+  forked?: boolean;
+  /** Forks made from this document; passed for its owner only. */
+  forkCount?: number;
+  lineage?: Lineage | null;
+  /** Absent: no fork chip at all. */
+  onOpenForks?: () => void;
   offerTrust: boolean;
   onOpenTrust: () => void;
   /** True once the document turns out to have slides to move between. */
@@ -127,6 +144,14 @@ export function ViewerToolbar({
           is a fact about this document, and for most of its life not an
           urgent one. */}
       <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} />
+      {onOpenForks ? (
+        <ForkChip
+          forked={forked === true}
+          forkCount={forkCount ?? 0}
+          lineage={lineage ?? null}
+          onOpen={onOpenForks}
+        />
+      ) : null}
 
       <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />
 
@@ -176,7 +201,22 @@ export function ViewerToolbar({
             which change what the document IS, and sharing changes who can see
             it. Adding a fifth always-labelled action overflowed the bar at
             400px. */}
-        {canShare ? <Action icon="share" label="Share" onClick={onShare} /> : null}
+        {/* Fork takes the slot Share fills for an owner, and only for somebody
+            who is not one. Forking is the reader's way to make a document
+            theirs — the owner already has it — so the two never stand side
+            by side and no reader's bar is wider than an owner's: the 400px
+            overflow above is not reopened. The owner forks from the menu. */}
+        {canShare ? (
+          <Action icon="share" label="Share" onClick={onShare} />
+        ) : onFork ? (
+          <Action
+            icon="fork"
+            label="Fork"
+            title="Make your own copy. The author sees that it was forked."
+            onClick={onFork}
+            disabled={forking}
+          />
+        ) : null}
 
         {/* Both appear only for a document that HAS slides, so an ordinary
             document's toolbar is unchanged. */}

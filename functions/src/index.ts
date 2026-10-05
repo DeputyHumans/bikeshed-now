@@ -59,6 +59,7 @@ import {
   canRead,
   canEditFolder,
   canManageFolder,
+  expiredForReader,
   expiryMs,
   isDocEditor,
   isExpired,
@@ -85,8 +86,6 @@ import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import { hashBundleFiles, type BundleFile } from "./lib/hash";
 import {
   compileBundle,
-  CREATE_ONLY,
-  placeNewDocument,
   publishNewDocument,
   readPrefix,
   readTrustGrants,
@@ -101,7 +100,6 @@ import {
 } from "./lib/bundle";
 import type { Principal } from "./lib/auth";
 import {
-  computeDocMembership,
   createFolderRecord,
   BAD_DOC_ID,
   isValidDocId,
@@ -111,10 +109,10 @@ import {
   slugify,
   wouldCycle,
   type FolderTarget,
-  type Membership,
 } from "./lib/folders";
 import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
 import { syncPresenceAccess } from "./lib/presence";
+import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { listTokens, mintToken, revokeToken, type TokenChannel } from "./lib/tokens";
@@ -163,29 +161,6 @@ warnIfOriginUnconfigured(process.env, isEmulated(), console.warn);
 const db = () => admin.firestore();
 const bucket = () => admin.storage().bucket(bucketName());
 const now = () => FieldValue.serverTimestamp();
-
-/**
- * An expired document is READ-ONLY, and visible only to its owner.
- *
- * One sentence, enforced at every read and write path (SPEC §17 "Expiry"),
- * because expiry is not in the security rules and cannot be (see `isExpired`).
- * The owner keeps reading it because they are the one who set the date and the
- * one who can move it; locking them out of their own document would make the
- * setting unrecoverable rather than reversible. Everybody else gets the same
- * 404 a document they may not read gives them, so expiry does not become a way
- * to confirm that a slug exists.
- *
- * Writing is refused for EVERYONE, the owner included. An expired document is
- * frozen; lifting the date is what unfreezes it, and that is one action rather
- * than a special case in every write path.
- */
-function expiredForReader(
-  doc: DocAclData,
-  caller: { uid: string; emailLower: string } | null,
-): boolean {
-  if (!isExpired(doc, Date.now())) return false;
-  return !(caller && canManageSharing(doc, caller.emailLower));
-}
 
 /**
  * The status for a caller refused an action on a document that exists: 404
@@ -1305,7 +1280,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Workspace: upload, folders, organize, duplicate
+// Workspace: upload, folders, organize, fork
 // ---------------------------------------------------------------------------
 
 /**
@@ -1743,13 +1718,17 @@ export const organize = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
- * POST /duplicate — copy a document you can READ into a new one you own.
+ * POST /fork — `{ op: "create" | "lineage", docId, k?, ... }` (SPEC §21).
  *
- * The copy is `trusted: false` even when the source was trusted: otherwise
- * duplicating a trusted deck, editing it, and re-publishing would launder
- * arbitrary script into a document with somebody else's trust decision attached.
+ * `create` copies a version the caller can READ into a new private document
+ * they own: `{ versionId?, folderId?, title? }`, answering
+ * `{ docId, versionId, title }`. `lineage` answers where a document came from,
+ * as far as the caller may see, and its forks for its owner.
+ *
+ * Both answer per caller, so neither may be cached: `noStore` comes first.
  */
-export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
+export const forkDoc = onRequest(PLAIN, async (req, res) => {
+  noStore(res);
   if (rejectMethod(req, res, ["POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) {
@@ -1757,135 +1736,57 @@ export const duplicateDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const body = jsonBody(req) as { docId?: unknown; folderId?: unknown } | null;
-  const srcId = typeof body?.docId === "string" ? body.docId : "";
-  if (!srcId || !safeSegment(srcId)) {
-    badRequest(res, "invalid or missing docId");
+  const body = jsonBody(req) as {
+    op?: unknown;
+    docId?: unknown;
+    k?: unknown;
+    versionId?: unknown;
+    folderId?: unknown;
+    title?: unknown;
+  } | null;
+  const op = body?.op === "create" || body?.op === "lineage" ? body.op : "";
+  const docId = typeof body?.docId === "string" ? body.docId : "";
+  if (!op || !docId || !safeSegment(docId)) {
+    badRequest(res, "invalid op or docId");
     return;
   }
+  const k = typeof body?.k === "string" ? body.k : null;
 
-  const srcSnap = await db().collection("docs").doc(srcId).get();
-  if (!srcSnap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const src = srcSnap.data() as DocAclData & { title?: string; currentVersion?: string };
-  const proof = await linkProofFor(srcSnap.ref, src, caller, null);
-  if (!canRead(src, caller, proof)) {
-    res.status(404).end();
-    return;
-  }
-  // Duplicating reads every byte of the source, so it is a read path — and
-  // without this, copying an expired document would be a way to get its content
-  // back out from behind the date.
-  if (expiredForReader(src, caller)) {
-    res.status(404).end();
-    return;
-  }
-  const srcVersion = typeof src.currentVersion === "string" ? src.currentVersion : "";
-  if (!srcVersion || !safeSegment(srcVersion)) {
-    res.status(409).json({ error: "the source document has no published version" });
-    return;
-  }
-  const vSnap = await srcSnap.ref.collection("versions").doc(srcVersion).get();
-  if (!vSnap.exists) {
-    res.status(409).json({ error: "the source version is missing" });
-    return;
-  }
-  const v = vSnap.data() || {};
-
-  const folderId = typeof body?.folderId === "string" ? body.folderId : "";
-  let parentMembership: Membership | null = null;
-  let resolvedFolderId: string | null = null;
-  if (folderId && safeSegment(folderId)) {
-    const fSnap = await db().collection("folders").doc(folderId).get();
-    if (
-      fSnap.exists &&
-      canEditFolder(fSnap.data() as FolderAclData, caller.uid, caller.emailLower)
-    ) {
-      parentMembership = {
-        members: asArray(fSnap.data()?.members),
-        editorMembers: asArray(fSnap.data()?.editorMembers),
-      };
-      resolvedFolderId = folderId;
+  if (op === "lineage") {
+    const out = await lineageFor({ db: db(), caller, docId, k });
+    if (!out.ok) {
+      res.status(out.status).end();
+      return;
     }
-  }
-
-  const title = `${typeof src.title === "string" ? src.title : "Untitled"} (copy)`;
-  const versionId = "v1";
-  const srcPrefix = `docs/${srcId}/${srcVersion}/`;
-
-  const [listed] = await bucket().getFiles({ prefix: srcPrefix });
-  const objects = listed.filter((obj) => {
-    const rel = obj.name.slice(srcPrefix.length);
-    return rel.length > 0 && !rel.endsWith("/");
-  });
-  if (objects.length === 0) {
-    res.status(409).json({ error: "the source has no content to copy" });
+    res.status(200).json(out.lineage);
     return;
   }
-  const { docId: newId, storagePrefix: destPrefix } = await placeNewDocument(
-    db(),
-    slugify(title),
-    async (prefix) => {
-      for (const obj of objects) {
-        await obj.copy(`${prefix}/${obj.name.slice(srcPrefix.length)}`, CREATE_ONLY);
-      }
-    },
-  );
 
-  const membership = computeDocMembership(caller.emailLower, [], [], parentMembership);
-  const actor = actorFrom(caller, req);
-  const docRef = db().collection("docs").doc(newId);
-  const batch = db().batch();
-  batch.create(docRef, {
-    docId: newId,
-    title,
-    slug: slugify(title),
-    ownerUid: caller.uid,
-    ownerEmail: caller.emailLower,
-    currentVersion: versionId,
-    viewers: [],
-    editors: [],
-    members: membership.members,
-    editorMembers: membership.editorMembers,
-    folderId: resolvedFolderId,
-    visibility: "private",
-    publicEdit: false,
-    trusted: false,
-    marking: resolveMarking(null),
-    createdAt: now(),
-    updatedAt: now(),
-  });
-  batch.create(docRef.collection("versions").doc(versionId), {
-    versionId,
-    label: versionId,
-    entry: typeof v.entry === "string" ? v.entry : "index.html",
-    format: v.format === "markdown" ? "markdown" : "html",
-    ...(typeof v.sourceEntry === "string" ? { sourceEntry: v.sourceEntry } : {}),
-    ...(typeof v.rendererVersion === "string"
-      ? { rendererVersion: v.rendererVersion }
-      : {}),
-    storagePrefix: destPrefix,
-    fileCount: typeof v.fileCount === "number" ? v.fileCount : objects.length,
-    bytes: typeof v.bytes === "number" ? v.bytes : 0,
-    contentHash: typeof v.contentHash === "string" ? v.contentHash : "",
-    ...(Array.isArray(v.files) ? { files: v.files } : {}),
-    parentVersion: null,
-    publishedVia: "duplicate",
-    publishedByEmail: caller.emailLower,
-    publishedBy: actor,
-    publishedAt: now(),
-  });
+  let out: Awaited<ReturnType<typeof forkDocument>>;
   try {
-    await batch.commit();
+    out = await forkDocument({
+      db: db(),
+      bucket: bucket(),
+      caller,
+      actor: actorFrom(caller, req),
+      sourceId: docId,
+      k,
+      versionId: typeof body?.versionId === "string" ? body.versionId : null,
+      folderId: body?.folderId,
+      title: body?.title,
+    });
   } catch {
-    res.status(500).json({ error: "could not create the copy" });
+    res.status(500).json({ error: "could not create the fork" });
     return;
   }
-
-  await syncPresenceAccess(newId, membership.members, membership.editorMembers);
-  res.status(200).json({ docId: newId, versionId, title });
+  if (!out.ok) {
+    // A refused read is the bare 404 an absent id gets (SPEC §1.4b). A folder
+    // that is not there is a 404 too, but about the request, so it says so.
+    if (out.unreadable) res.status(404).end();
+    else res.status(out.status).json({ error: out.error });
+    return;
+  }
+  res.status(200).json({ docId: out.docId, versionId: out.versionId, title: out.title });
 });
 
 // ---------------------------------------------------------------------------

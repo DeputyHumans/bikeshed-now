@@ -45,6 +45,9 @@ const PATHS = {
   shield: "M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z",
   check: "m5 13 4.5 4.5L19 7",
   copy: "M9 9h10v12H9zM5 15V3h10",
+  // Two ends and the one they came from. Distinct from `copy` on purpose: a
+  // fork remembers its original, and the mark says so.
+  fork: "M7 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 7v1.5a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V7M12 11.5V17",
   trash: "M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13",
   globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18",
   team: "M8 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M17 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM15.5 15.2A5 5 0 0 1 22 20",

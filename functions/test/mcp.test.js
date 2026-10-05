@@ -17,6 +17,7 @@ const {
   folderPath,
   toolByName,
   withReaderAddress,
+  lineageForAgent,
 } = require("../lib/mcp/tools.js");
 
 /** A minimal Express-ish response that records what was sent. */
@@ -126,11 +127,13 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly nine tools, and they are the nine in the spec", () => {
+test("there are exactly eleven tools, and they are the eleven in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
     "publish_document",
+    "fork_document",
+    "get_lineage",
     "update_document",
     "list_folders",
     "create_folder",
@@ -138,7 +141,7 @@ test("there are exactly nine tools, and they are the nine in the spec", () => {
     "get_comments",
     "reply_to_comment",
   ]);
-  assert.equal(TOOLS.length, 9);
+  assert.equal(TOOLS.length, 11);
 });
 
 test("the surface has no tool that deletes or shares", () => {
@@ -149,6 +152,109 @@ test("the surface has no tool that deletes or shares", () => {
   for (const name of TOOL_NAMES) {
     assert.doesNotMatch(name, /delete|remove|share|grant|access/);
   }
+});
+
+test("fork_document needs only the document, and takes the same key the read tools do", () => {
+  const tool = toolByName("fork_document");
+  assert.deepEqual(tool.inputSchema.required, ["id"]);
+  assert.deepEqual(
+    Object.keys(tool.inputSchema.properties).sort(),
+    ["folder", "id", "k", "title", "version"],
+  );
+  assert.equal(
+    tool.inputSchema.properties.k.description,
+    toolByName("get_document").inputSchema.properties.k.description,
+  );
+  // The disclosure travels with the tool, because there is no dialog on this
+  // path to make it in.
+  assert.match(tool.description, /author sees that it was forked/);
+  assert.notEqual(missingArguments(tool, {}), null);
+});
+
+test("get_lineage needs only the document, and takes the same key the read tools do", () => {
+  const tool = toolByName("get_lineage");
+  assert.deepEqual(tool.inputSchema.required, ["id"]);
+  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ["id", "k"]);
+  assert.equal(
+    tool.inputSchema.properties.k.description,
+    toolByName("get_document").inputSchema.properties.k.description,
+  );
+});
+
+test("a lineage an agent cannot read answers exactly as an absent id", async () => {
+  const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }) };
+  await assert.rejects(
+    () => toolByName("get_lineage").run({ db, caller: { uid: "u", emailLower: "u@example.com" } }, { id: "secret-plan" }),
+    { message: 'no document with id "secret-plan"' },
+  );
+});
+
+test("lineage reaches an agent renamed and dated, with nothing added", () => {
+  const previous = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://example.test";
+  try {
+    const out = lineageForAgent("gamma", {
+      forked: true,
+      ancestors: [
+        { docId: "beta", title: "Beta", versionId: "v1", ownerEmail: "b@example.com", changed: true },
+        { docId: "alpha", title: "Alpha", versionId: "v2" },
+      ],
+      hiddenAncestor: true,
+      forks: {
+        total: 2,
+        hidden: 1,
+        visible: [{ docId: "delta", title: "Delta", visibility: "public", forkedAt: Date.UTC(2026, 9, 5) }],
+      },
+    });
+    assert.deepEqual(out, {
+      id: "gamma",
+      forked: true,
+      forkedFrom: [
+        { id: "beta", title: "Beta", version: "v1", owner: "b@example.com", changedSince: true, url: "https://example.test/d/beta" },
+        { id: "alpha", title: "Alpha", version: "v2", url: "https://example.test/d/alpha" },
+      ],
+      moreYouCannotOpen: true,
+      forks: {
+        total: 2,
+        youCannotOpen: 1,
+        listed: [
+          { id: "delta", title: "Delta", visibility: "public", forkedAt: "2026-10-05T00:00:00.000Z", url: "https://example.test/d/delta" },
+        ],
+      },
+    });
+    // Not the owner: no inventory key at all, rather than an empty one that
+    // would read as "nobody forked it".
+    assert.ok(!("forks" in lineageForAgent("gamma", { forked: true, ancestors: [], hiddenAncestor: true })));
+  } finally {
+    if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = previous;
+  }
+});
+
+test("list_documents says which rows are forks and how often each was forked, off the record", async () => {
+  const rows = [
+    { id: "a-fork", data: { forked: true, stats: { forks: 0 } } },
+    { id: "an-original", data: { stats: { forks: 2, views: 9 } } },
+    { id: "neither", data: {} },
+  ];
+  const query = {
+    where: () => query,
+    orderBy: () => query,
+    limit: () => query,
+    get: async () => ({
+      docs: rows.map((r) => ({
+        id: r.id,
+        data: () => ({ title: r.id, currentVersion: null, members: ["me@example.com"], ...r.data }),
+        ref: { collection: () => ({ doc: () => null }) },
+      })),
+    }),
+  };
+  const db = { collection: () => query, getAll: async () => [] };
+  const out = await toolByName("list_documents").run({ db, caller: { emailLower: "me@example.com" } }, {});
+  const byId = new Map(out.documents.map((d) => [d.id, d]));
+  assert.deepEqual([byId.get("a-fork").forked, byId.get("a-fork").forks], [true, 0]);
+  assert.deepEqual([byId.get("an-original").forked, byId.get("an-original").forks], [false, 2]);
+  assert.deepEqual([byId.get("neither").forked, byId.get("neither").forks], [false, 0]);
 });
 
 test("move_document treats the workspace root as an omitted argument", () => {

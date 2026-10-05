@@ -29,6 +29,7 @@ import { useDeck } from "../viewer/useDeck";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
+import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { contentBase, type FrameMode } from "../viewer/frameMode";
 
@@ -42,6 +43,7 @@ import { SharePanel } from "../components/SharePanel";
 import { TrustDialog } from "../components/TrustDialog";
 import { MarkingDialog } from "../components/MarkingDialog";
 import { StatsPanel } from "../components/StatsPanel";
+import { ForksPanel } from "../components/ForksPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
@@ -87,6 +89,7 @@ type Dialog =
   | "trust"
   | "marking"
   | "stats"
+  | "forks"
   | "image";
 
 export function DocViewer() {
@@ -138,6 +141,27 @@ export function DocViewer() {
   // Open editing widens WHO, never to anyone: a signed-in account is still
   // required, on every document, whatever its owner chose.
   const canEdit = isDocEditor || (signedIn && doc.publicEdit);
+
+  // The member record, or the projection a public or link reader gets: either
+  // says whether this is a fork, and neither says of what (SPEC §21).
+  const forked = doc.meta?.forked ?? doc.publicDoc?.forked ?? false;
+  const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
+  // A reader on an old version forks THAT one: what they see is what they get.
+  const forkVersion =
+    doc.currentVersion && headVersion && doc.currentVersion !== headVersion
+      ? doc.currentVersion
+      : undefined;
+  const { fork, forking } = useFork(docId, {
+    versionId: forkVersion,
+    linkKey,
+    uid: signedIn && user ? user.uid : null,
+    resolvedFor: doc.resolvedFor,
+  });
+  const lineage = useLineage(docId, {
+    linkKey,
+    ready: signedIn && Boolean(user) && doc.resolvedFor === user?.uid,
+    auto: forked,
+  });
 
   const trust = useDocTrust({
     docId,
@@ -469,8 +493,16 @@ export function DocViewer() {
       { id: "sep1", separator: true },
     );
 
+    entries.push({ id: "h-doc", label: "This document", heading: true });
+    // For every reader, owner and anonymous alike — a reader who is not signed
+    // in is sent to sign in and comes back to the fork (SPEC §21).
+    entries.push({
+      id: "fork",
+      label: forkVersion ? "Fork this version" : "Fork",
+      disabled: forking,
+      onSelect: fork,
+    });
     if (doc.meta) {
-      entries.push({ id: "h-doc", label: "This document", heading: true });
       entries.push({ id: "stats", label: "Activity", onSelect: () => setDialog("stats") });
       if (isOwner) {
         entries.push(
@@ -478,6 +510,7 @@ export function DocViewer() {
           // and the second was found only by reading this menu.
           { id: "share", label: "Share…", onSelect: () => setDialog("share") },
           { id: "marking", label: "Marking on exports…", onSelect: () => setDialog("marking") },
+          { id: "forks", label: "Forks…", onSelect: () => setDialog("forks") },
         );
       }
     }
@@ -498,7 +531,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast]);
+  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion]);
 
   if (doc.loading) return <Loading label="Opening the document" />;
   if (doc.notFound) {
@@ -576,6 +609,14 @@ export function DocViewer() {
           canEdit={canEdit}
           canShare={isOwner}
           onShare={() => setDialog("share")}
+          onFork={fork}
+          forking={forking}
+          forked={forked}
+          // The count is the owner's to be shown here; a member still sees it
+          // on the workspace card, as they see the view count (SPEC §21).
+          forkCount={isOwner ? (doc.meta?.stats?.forks ?? 0) : 0}
+          lineage={lineage.lineage}
+          onOpenForks={() => setDialog("forks")}
           editing={wantsEdit}
           onToggleEdit={() => void (wantsEdit ? stopEditing() : setWantsEdit(true))}
           offerTrust={liveTrust.shouldOffer}
@@ -751,6 +792,19 @@ export function DocViewer() {
         <StatsPanel
           meta={doc.meta}
           canSeeDetail={isDocEditor}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {dialog === "forks" ? (
+        <ForksPanel
+          title={doc.title}
+          forked={forked}
+          isOwner={isOwner}
+          signedIn={signedIn}
+          lineage={lineage.lineage}
+          failed={lineage.failed}
+          onRefresh={lineage.refresh}
           onClose={() => setDialog(null)}
         />
       ) : null}

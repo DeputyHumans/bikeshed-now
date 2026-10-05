@@ -74,6 +74,29 @@ export function isExpired(
   return at !== null && at <= nowMs;
 }
 
+/**
+ * An expired document is READ-ONLY, and visible only to its owner.
+ *
+ * One sentence, enforced at every read and write path (SPEC §17 "Expiry"),
+ * because expiry is not in the security rules and cannot be (see `isExpired`).
+ * The owner keeps reading it because they are the one who set the date and the
+ * one who can move it; locking them out of their own document would make the
+ * setting unrecoverable rather than reversible. Everybody else gets the same
+ * 404 a document they may not read gives them, so expiry does not become a way
+ * to confirm that a slug exists.
+ *
+ * Writing is refused for EVERYONE, the owner included. An expired document is
+ * frozen; lifting the date is what unfreezes it, and that is one action rather
+ * than a special case in every write path.
+ */
+export function expiredForReader(
+  doc: DocAclData,
+  caller: { uid: string; emailLower: string } | null,
+): boolean {
+  if (!isExpired(doc, Date.now())) return false;
+  return !(caller && canManageSharing(doc, caller.emailLower));
+}
+
 /** Absent `visibility` means private. That is what keeps the default unchanged. */
 export function visibilityOf(doc: DocAclData | null | undefined): Visibility {
   const v = doc?.visibility;

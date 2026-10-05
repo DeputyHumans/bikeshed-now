@@ -71,3 +71,85 @@ describe("the expiry on the toolbar", () => {
     expect(onExpiry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("forking from the toolbar", () => {
+  function mountWith(props: Partial<Parameters<typeof ViewerToolbar>[0]>) {
+    return render(
+      <MemoryRouter>
+        <ToastProvider>
+          <ViewerToolbar
+            title="Quarterly review"
+            folderId={null}
+            folders={[]}
+            versionLabel="v4"
+            peers={[]}
+            following={null}
+            onToggleFollow={() => {}}
+            commentsOpen={false}
+            onToggleComments={() => {}}
+            canEdit={false}
+            editing={false}
+            onToggleEdit={() => {}}
+            canShare={false}
+            onShare={() => {}}
+            offerTrust={false}
+            onOpenTrust={() => {}}
+            hasSlides={false}
+            railOpen={false}
+            onToggleRail={() => {}}
+            onOverview={() => {}}
+            onPresent={() => {}}
+            menuEntries={[]}
+            pane="doc"
+            onPane={() => {}}
+            singleColumn={false}
+            {...props}
+          />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  test("a reader gets Fork in the slot an owner's Share takes, never both", () => {
+    // The bar overflowed at 400px once already; Fork must not add a button to
+    // anybody's toolbar, only fill the one an owner has and a reader does not.
+    const onFork = vi.fn();
+    const reader = mountWith({ canShare: false, onFork });
+    const fork = screen.getByRole("button", { name: "Fork" });
+    expect(fork.getAttribute("title")).toMatch(/author sees that it was forked/);
+    fireEvent.click(fork);
+    expect(onFork).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+    reader.unmount();
+
+    mountWith({ canShare: true, onFork });
+    expect(screen.getByRole("button", { name: "Share" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Fork" })).toBeNull();
+  });
+
+  test("the fork chip says what it is in words, the change included", () => {
+    const onOpenForks = vi.fn();
+    mountWith({
+      forked: true,
+      forkCount: 2,
+      lineage: {
+        forked: true,
+        ancestors: [{ docId: "q3", title: "Q3 plan", versionId: "v2", changed: true }],
+        hiddenAncestor: false,
+      },
+      onOpenForks,
+    });
+    const chip = screen.getByRole("button", {
+      name: "Forked from Q3 plan. The original has changed since. Forked 2 times",
+    });
+    expect(chip.hasAttribute("data-changed")).toBe(true);
+    expect(chip.textContent).toBe("Fork · 2");
+    fireEvent.click(chip);
+    expect(onOpenForks).toHaveBeenCalledTimes(1);
+  });
+
+  test("a document that is neither a fork nor forked has no chip", () => {
+    const { container } = mountWith({ forked: false, forkCount: 0, onOpenForks: () => {} });
+    expect(container.querySelector(".fork-chip")).toBeNull();
+  });
+});

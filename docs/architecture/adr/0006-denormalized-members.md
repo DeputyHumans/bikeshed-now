@@ -28,7 +28,7 @@ Grants keep their structure — `viewers[]` and `editors[]` hold plain emails
 *and* `team:{teamId}` entries, so "the Design team can view this" stays legible.
 The server expands them at write time into the flat sets.
 
-Six paths recompute: `createDoc`, `duplicateDoc`, `setAccess`, `organize`,
+Six paths recompute: `createDoc`, `forkDocument`, `setAccess`, `organize`,
 `recomputeSubtree` in `folders.ts`, and the operator scripts. All six call one
 `computeMembership`, which has an exact ESM twin in `scripts/lib/membership.mjs`
 held in agreement by a parity test.

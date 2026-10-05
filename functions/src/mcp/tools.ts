@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The nine MCP tools (SPEC §19).
+// The eleven MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -56,6 +56,7 @@ import {
   persistDocMembership,
   resolveFolderTarget,
 } from "../lib/folders";
+import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { MAX_BUNDLE_BYTES } from "../config";
 
@@ -212,6 +213,53 @@ export function withReaderAddress<T extends object>(result: T, docId: string): T
   return origin ? { ...result, url: `${origin}/d/${docId}` } : result;
 }
 
+/**
+ * The lineage answer, in the vocabulary the other tools use: `id` and
+ * `version`, an ISO date, and the address a person opens for every document an
+ * agent might hand back. Nothing is added that the endpoint did not decide the
+ * caller may see; this only renames and dates it. Pure, so the shape is pinned.
+ */
+export function lineageForAgent(docId: string, lineage: Lineage) {
+  return {
+    id: docId,
+    forked: lineage.forked,
+    // Nearest first. Stops at the first document the caller cannot open.
+    forkedFrom: lineage.ancestors.map((a) =>
+      withReaderAddress(
+        {
+          id: a.docId,
+          title: a.title,
+          version: a.versionId,
+          ...(a.ownerEmail ? { owner: a.ownerEmail } : {}),
+          ...(a.changed !== undefined ? { changedSince: a.changed } : {}),
+        },
+        a.docId,
+      ),
+    ),
+    moreYouCannotOpen: lineage.hiddenAncestor,
+    ...(lineage.forks
+      ? {
+          forks: {
+            total: lineage.forks.total,
+            youCannotOpen: lineage.forks.hidden,
+            listed: lineage.forks.visible.map((f) =>
+              withReaderAddress(
+                {
+                  id: f.docId,
+                  title: f.title,
+                  visibility: f.visibility,
+                  forkedAt: f.forkedAt === null ? null : new Date(f.forkedAt).toISOString(),
+                  ...(f.ownerEmail ? { owner: f.ownerEmail } : {}),
+                },
+                f.docId,
+              ),
+            ),
+          },
+        }
+      : {}),
+  };
+}
+
 export const TOOLS: ToolDefinition[] = [
   {
     name: "list_documents",
@@ -277,6 +325,10 @@ export const TOOLS: ToolDefinition[] = [
           // make those (SPEC §19).
           expiresAt: expiryMs(v as DocAclData),
           owner: v.ownerEmail,
+          // Off the record, so free: whether it is a fork, and how many forks it
+          // has. Where they came from is get_lineage's, per caller (SPEC §21).
+          forked: v.forked === true,
+          forks: typeof v.stats?.forks === "number" ? v.stats.forks : 0,
           updatedAt: (v.updatedAt as admin.firestore.Timestamp)?.toDate?.().toISOString(),
         };
       });
@@ -336,6 +388,7 @@ export const TOOLS: ToolDefinition[] = [
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
         canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        forked: data.forked === true,
         // Ahead of the source, not after it: an agent reads this result as JSON
         // text in key order, and a flag after 200,000 characters of source is a
         // flag it may never reach.
@@ -397,6 +450,77 @@ export const TOOLS: ToolDefinition[] = [
         ...(wantedId ? { docId: wantedId } : {}),
       });
       return withReaderAddress(published, published.docId);
+    },
+  },
+
+  {
+    name: "fork_document",
+    description:
+      "Copy a document you can read into a new private one you own, and record which document it came from. " +
+      "Its author sees that it was forked, not by whom. Comments, highlights and older versions are not copied.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "The document to fork." },
+        version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
+        folder: {
+          type: "string",
+          description: "Destination folder id, from list_folders. Optional; default is the workspace root.",
+        },
+        title: { type: "string", description: "Optional; default is the original's title." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      const id = str(args, "id");
+      const out = await forkDocument({
+        db: ctx.db,
+        bucket: admin.storage().bucket(bucketName()),
+        caller: ctx.caller,
+        actor: ctx.actor,
+        sourceId: id,
+        k: str(args, "k") || null,
+        versionId: str(args, "version") || null,
+        folderId: args.folder,
+        title: str(args, "title") || undefined,
+      });
+      if (!out.ok) {
+        // A refused read answers exactly as an id that does not exist (SPEC §17).
+        throw new Error(out.unreadable ? `no document with id "${id}"` : out.error);
+      }
+      return withReaderAddress(
+        { docId: out.docId, versionId: out.versionId, title: out.title },
+        out.docId,
+      );
+    },
+  },
+
+  {
+    name: "get_lineage",
+    description:
+      "Where a document came from and, for its owner, its forks. Each original you can open is listed nearest first, " +
+      "with `changedSince` on the nearest: whether it has changed since the fork was made. The list stops at the first " +
+      "document you cannot open. Forks you cannot open are counted, never named.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "The document id." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      const id = str(args, "id");
+      const out = await lineageFor({ db: ctx.db, caller: ctx.caller, docId: id, k: str(args, "k") || null });
+      if (!out.ok) throw new Error(`no document with id "${id}"`);
+      return lineageForAgent(id, out.lineage);
     },
   },
 
@@ -664,7 +788,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is nine tools, not "some tools". */
+/** Exported for the wiring test: the surface is eleven tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

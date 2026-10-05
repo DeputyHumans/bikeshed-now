@@ -123,7 +123,7 @@ rewrites require it). Export names are FIXED and are asserted to match
 | `/folder` | `createFolder` |
 | `/folder-access` | `setFolderAccess` |
 | `/organize` | `organize` |
-| `/duplicate` | `duplicateDoc` |
+| `/fork` | `forkDoc` |
 | `/trust` | `trustDoc` |
 | `/marking` | `setMarking` |
 | `/visibility` | `setVisibility` |
@@ -303,8 +303,12 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   folder makes that folder's members its members, and open editing would
   otherwise let any account file someone's document into its own folder and
   become a member.
-- **`POST /duplicate`** — `canRead`-gated (a link grant counts; `404` otherwise);
-  the copy is owner-only and `trusted: false`.
+- **`POST /fork` (`forkDoc`)** — `{ op: "create" | "lineage", docId, k?, ... }`
+  (§21). `create` is `canRead`-gated on the source (a link grant or `k` counts;
+  `404` otherwise) and takes `versionId?`, `folderId?`, `title?`; the fork is
+  owner-only, private and `trusted: false`. `lineage` answers where a document
+  came from, as far as the caller may see, and its forks for its owner. Both
+  answer per caller, so the handler sets `noStore` first.
 - **`POST /trust`** — owner-only global trust (§6c).
 - **`POST /marking`** — owner-only export marking (§20).
 - **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit? }` (§17).
@@ -359,6 +363,7 @@ docs/{docId}/viewers/{uid}                     ViewerStat
 docs/{docId}/views/{sessionId}                 ViewSession
 docs/{docId}/acl/{entryId}                     AclChange        (append-only)
 docs/{docId}/linkGrants/{uid}                  LinkGrant        (server-written)
+forks/{forkDocId}                              ForkRecord       (server-only, §21)
 folders/{folderId}                             FolderMeta
 teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord
@@ -383,7 +388,7 @@ fall back to `editors`.
 
 **`trusted`** is GLOBAL trust: it controls whether the viewer sandboxes the
 content iframe FOR EVERY READER. Every publish through `publishNewDocument` —
-browser upload, duplicate, the end-user CLI and MCP alike — creates it `false`;
+browser upload, fork, the end-user CLI and MCP alike — creates it `false`;
 only the operator script `scripts/publish.mjs`, which runs with Admin
 credentials, creates it `true`; afterwards the owner flips it via `/trust`.
 `commitVersion` leaves it untouched, so trust PERSISTS across in-app edits.
@@ -599,7 +604,7 @@ every personal grant, in the same transaction that makes it current: an edit by
 an editor or an open editor, and every update through a token, which is an
 upload in all but name (`update_document`, `POST /publish?update=`). A reader
 trusted the scripts they had seen, not whatever somebody publishes next. A
-deduplicated update mints nothing and changes nothing. Re-upload and duplicate
+deduplicated update mints nothing and changes nothing. Re-upload and fork
 still make FRESH `trusted: false` documents.
 
 This replaces "trust propagates across in-app edits, because platform editing
@@ -1141,7 +1146,7 @@ revisions — exactly what quote-plus-position anchoring was built for.
 `functions/src/lib/presence.ts syncPresenceAccess(docId, members)` as a
 whole-node `set()` — an atomic replace, so revocations propagate. It is called
 from exactly the places that already recompute `members`: `createDoc`,
-`duplicateDoc`, `setAccess`, `organize`, `folders.ts recomputeSubtree`,
+`forkDocument`, `setAccess`, `organize`, `folders.ts recomputeSubtree`,
 `manageTeamMembers`, and the admin scripts. It no-ops when RTDB is unconfigured,
 is wrapped in try/catch, and never fails the request.
 
@@ -1243,7 +1248,9 @@ cannot get is the document.
 
 Enforced in nine places from one predicate (`isExpired` in `lib/acl.ts`):
 `contentProxy`, `downloadBundle`, `getDraft`, `saveDraft`, `commitVersion`,
-`duplicateDoc`, `recordView`, `sitemap` and `docShell`, plus the MCP tools.
+`forkDoc`, `recordView`, `sitemap` and `docShell`, plus the MCP tools. A fork
+is a read of every byte, so an expired source cannot be forked out from behind
+its date, and an expired document stops a lineage walk (§21).
 
 Two details that are decisions rather than implementation:
 
@@ -1317,7 +1324,7 @@ Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
-`visibility`, `publicEdit`, `trusted`, `expiresAt`, `publishedAt` — written by the same paths that
+`visibility`, `publicEdit`, `trusted`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
 are the same refusal.
@@ -1466,7 +1473,8 @@ created through an automation channel carry a visible "via MCP" marker.
 ### Version, edit and view provenance
 
 - Each version carries `publishedByEmail`, `publishedVia: "cli" | "upload" |
-  "editor" | "mcp" | "duplicate"`, `parentVersion`, and the full `publishedBy`
+  "editor" | "mcp" | "fork"` (`"duplicate"` on copies made before §21, which
+  record no lineage), `parentVersion`, and the full `publishedBy`
   Actor, alongside `contentHash`, `fileCount`, `bytes`, `publishedAt`, `format`
   and `rendererVersion`.
 - `draft.editSessions` is **withdrawn**. It was appended when the edit lock
@@ -1572,7 +1580,7 @@ PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked
 by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
-### MCP — nine tools
+### MCP — eleven tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1581,6 +1589,8 @@ client onboarding is ever wanted.
 | `list_documents` | the caller's documents, with visibility and current version |
 | `get_document` | metadata + current **source** (Markdown where available) |
 | `publish_document` | create a document from content, optionally at a chosen `id` (§4) |
+| `fork_document` | copy a version of a document the caller can read into one they own (§21) |
+| `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
 | `update_document` | commit a new version of an existing document |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
@@ -1653,7 +1663,8 @@ Deliberately distinct from `scripts/*.mjs`:
 | Talks to | Firestore and Storage directly | the deployment over HTTPS |
 | Purpose | provision, withdraw, tear down | publish and revise documents |
 
-Commands: `login`, `publish <file>`, `update <slug> <file>`, `list`,
+Commands: `login`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
+`lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `reply`, `open <slug>`, `folders`,
 `mkdir <name>`, `mv <slug> <folder|root>`, `skills [install <dir>]`, plus
 `publish --watch`. Every command takes `--json`.
@@ -1786,3 +1797,101 @@ capped at 300 characters and the label at 40, and control characters are
 stripped. When marking is disabled the stamp nodes are simply absent; every
 other property (sandbox, `<script>` scrub, `on*` scrub, `javascript:` scrub)
 stays unconditional.
+
+---
+
+## 21. Forks
+
+A fork is a copy of one version of a document the caller can read, made into a
+new document they own, that remembers which document it came from. It replaces
+"duplicate", which made the copy and forgot the origin.
+
+### What a fork is
+
+| | |
+|---|---|
+| Who may fork | anyone who may READ the source: `canRead`, with `k` or a link grant counting, and not expired for them (§17). A refusal is the `404` an absent id gets |
+| What is copied | the bytes of ONE version — the one asked for, current by default. Not annotations, comments, trust grants, views or other versions |
+| What it is | a new document at `v1`, owned by the caller, `private`, `trusted: false` (ADR 0002), in a folder the caller can edit or at the root. A folder they cannot edit is REFUSED, not dropped |
+| Its title | the source's, unless one is given. The id comes from it and takes the random suffix when taken (§4) |
+| Its marking | the caller's account default (§20). The source's marking is its owner's policy and does not follow the content |
+| `publishedVia` | `"fork"` on its `v1` |
+
+Everything is written in ONE batch: the fork's record, its `v1`, its
+`forks/{forkDocId}` record, and `stats.forks` incremented on the source. The
+count therefore never disagrees with the forks that exist, and because no
+document is ever deleted (§13) it stays exact.
+
+### Where the pointer lives, and why not on the fork
+
+`forks/{forkDocId}` is `{ parentId, parentVersion, parentContentHash, forkedAt }`
+and NO client may read or write it. `docs/{forkDocId}` carries only
+`forked: true`, and the public projection and the `/unlock` answer carry the same
+boolean (§17).
+
+Every member of a fork reads `docs/{forkDocId}` directly, and a docId is the slug
+of the title its document was first published under. A pointer on the record
+would hand the original's address — and so, near enough, its first title — to
+everybody the fork is later shared with, including people who hold no link to an
+unlisted original. That is precisely what an unlisted link exists to prevent.
+**Reversal condition:** a reader who should see the parent and cannot be told
+any other way — and then the answer is a per-caller endpoint, as here, never a
+field.
+
+`parentContentHash` is recorded beside `parentVersion` because a withdrawn
+version's id is re-minted by the next commit (§4): the id alone can come to name
+different bytes.
+
+### Lineage, one hop at a time
+
+`POST /fork { op: "lineage", docId, k? }` is gated like a read of `docId`, and
+answers:
+
+```ts
+{ forked: boolean;
+  ancestors: { docId; title; versionId; ownerEmail?; changed? }[];  // nearest first
+  hiddenAncestor: boolean;
+  forks?: { total; hidden; visible: { docId; title; visibility; forkedAt; ownerEmail? }[] } }
+```
+
+- **The walk stops at the first parent the caller cannot open**, and says so in
+  `hiddenAncestor`. It does not skip past it: that would tell the reader where a
+  document they were never shown came from. Capped at twenty hops.
+- **A key opens only the document it was presented for.** Parents are readable
+  by membership, public visibility, or a link grant the caller already holds.
+- **`ownerEmail`** appears only where the caller is a member of that document,
+  and could read it off the record anyway. A public reader is not told who owns
+  a public original.
+- **`changed`**, on the nearest parent only: its current version's content hash
+  differs from `parentContentHash`. Absent when either hash is unknown, because
+  "unknown" is neither answer.
+- **`forks`** is the OWNER's only. Every fork is counted; the ones the owner can
+  open — `canRead` again, so an unlisted fork only with its grant, an expired
+  one not at all — are listed. The original's owner is never told who made a
+  fork they cannot open. Cost: one query and N reads on demand, no write.
+  Past a few hundred forks a paginated panel is the fix.
+
+### Where Fork is offered
+
+| Surface | |
+|---|---|
+| Workspace card | "Fork", one click, into the folder being viewed, then opens it |
+| Viewer toolbar | "Fork", for a reader who is not the owner, in the slot Share takes for an owner — so no toolbar is wider than an owner's. Its tooltip says the author will see that it was forked |
+| Viewer menu | "Fork", or "Fork this version" on an old one, for every reader; "Forks…" for the owner |
+| Signed out | sign in, then the fork completes: the intent travels as `?fork=1` through `/signup?next=`, runs once the document has resolved as the account, and is removed before the request so a reload cannot fork twice. `next` is honoured only as a path on this origin |
+| MCP / CLI | `fork_document`; `bikeshed fork <id|link> [--version] [--folder] [--title]`. Lineage is `get_lineage` and `bikeshed lineage <id|link>`, the same answer as the panel; `list_documents` and `get_document` carry `forked`, and `list_documents` the fork count, off the record |
+
+The viewer shows a fork chip beside the version — "Fork", the owner's count, a
+dot when the original has changed — whose accessible name says all three in
+words. It asks for lineage on its own only for a fork; a document that is not
+one costs no request.
+
+### What this does not do
+
+- **No sync, no merge, no "propose back".** Merging hand-authored HTML is a
+  subsystem of its own (ADR 0007), not a feature of forking.
+- **Not a guarantee of attribution.** Download and re-upload makes a copy with
+  no lineage. The trace covers the fork path, and says no more than that.
+- **No lineage for copies made before this section.** They keep
+  `publishedVia: "duplicate"` and are neither linked nor counted.
+

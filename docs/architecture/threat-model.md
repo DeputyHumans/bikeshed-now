@@ -45,7 +45,7 @@ therefore owner-only; **personal** trust un-sandboxes only in the granting
 user's own browser, where the only session exposed is theirs, and is therefore
 available to any reader. Personal trust never writes the global flag.
 
-Browser uploads, duplicates, and every publish through a personal access token
+Browser uploads, forks, and every publish through a personal access token
 — the end-user CLI and MCP alike — are created `trusted: false`. A token is an
 authenticated account, but the hand on it may be an agent acting on text it was
 given, and global trust is a decision taken on behalf of every reader. Only the

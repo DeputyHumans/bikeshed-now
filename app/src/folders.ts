@@ -64,10 +64,3 @@ export function renameItem(
 export function deleteFolder(id: string): Promise<{ ok: true }> {
   return organize({ kind: "folder", id, op: "delete" });
 }
-
-export function duplicateDoc(
-  docId: string,
-  folderId?: string | null,
-): Promise<{ docId: string; versionId: string; title: string }> {
-  return post("/duplicate", { docId, folderId: folderId ?? null });
-}

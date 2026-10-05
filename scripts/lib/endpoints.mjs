@@ -37,7 +37,7 @@ export const ENDPOINTS = [
   { path: "/folder", fn: "createFolder", match: "exact" },
   { path: "/folder-access", fn: "setFolderAccess", match: "exact" },
   { path: "/organize", fn: "organize", match: "exact" },
-  { path: "/duplicate", fn: "duplicateDoc", match: "exact" },
+  { path: "/fork", fn: "forkDoc", match: "exact" },
   { path: "/trust", fn: "trustDoc", match: "exact" },
   { path: "/marking", fn: "setMarking", match: "exact" },
   { path: "/visibility", fn: "setVisibility", match: "exact" },

@@ -14,6 +14,35 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Fork replaces Duplicate, and remembers where it came from.** A fork is your
+  own private copy of a version of any document you can read: from the
+  workspace card, the viewer's toolbar and menu, `bikeshed fork` and the MCP
+  tool `fork_document`. Agents and the CLI read lineage too: `get_lineage` and
+  `bikeshed lineage` give the panel's answer, and `list_documents` and
+  `get_document` say which documents are forks. A signed-out reader who presses Fork signs in and comes
+  back to the fork. The fork links to its original, one hop at a time and only
+  as far as the reader could open, and says when the original has changed since.
+  The original's owner sees how many forks there are and the ones they can
+  open, never who made one they cannot. Which document a fork came from is kept
+  where no client can read it, because a docId is the slug of a title
+  (SPEC §21).
+
+### Changed
+
+- `POST /duplicate` is now `POST /fork`, and a copy's `v1` records
+  `publishedVia: "fork"`. Copies made before this keep `"duplicate"` and have
+  no lineage.
+- A fork's export marking is its new owner's account default, as for any new
+  document (SPEC §20). Duplicate had always turned it off.
+- A folder you cannot add to is refused when forking into it. Duplicate filed
+  the copy at the root instead, silently.
+- `/signup` returns a signed-in reader to `?next=` when that is a path on this
+  site, rather than always to the workspace.
+
 ## 0.2.1 — 2026-10-04
 
 ### Fixed

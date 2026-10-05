@@ -192,6 +192,13 @@ describe("firestore rules", () => {
         uid: STALE.uid,
         token: "tok-old",
       });
+      // The public document is a fork of the unlisted one. Its readers may
+      // not learn that from here: an unlisted id belongs to its link holders.
+      await setDoc(doc(db, "forks/public-doc"), {
+        parentId: "unlisted-doc",
+        parentVersion: "v1",
+        parentContentHash: "h1",
+      });
       // A mirror left behind from before unlisted documents stopped being
       // projected. The rule must not serve it, whatever the server forgot.
       await setDoc(doc(db, "public/unlisted-doc"), {
@@ -520,6 +527,22 @@ describe("firestore rules", () => {
     await assertFails(getDocs(collection(granted, "docs/unlisted-doc/linkGrants")));
     const owner = verified(env, OWNER).firestore();
     await assertFails(getDocs(collection(owner, "docs/unlisted-doc/linkGrants")));
+  });
+
+  it("no client reads or writes where a fork came from, not even an owner at either end", async () => {
+    // A docId is the slug of a title. Readable, this would hand an unlisted
+    // original's address to everybody its fork is shared with (SPEC §21).
+    for (const who of [OWNER, VIEWER, STRANGER, GRANTED]) {
+      const db = verified(env, who).firestore();
+      await assertFails(getDoc(doc(db, "forks/public-doc")));
+      await assertFails(getDocs(collection(db, "forks")));
+      await assertFails(
+        getDocs(query(collection(db, "forks"), where("parentId", "==", "unlisted-doc"))),
+      );
+      await assertFails(setDoc(doc(db, "forks/public-doc"), { parentId: "elsewhere" }));
+      await assertFails(setDoc(doc(db, "forks/a-new-fork"), { parentId: "public-doc" }));
+    }
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "forks/public-doc")));
   });
 
   it("open editing does not expose per-person reading history", async () => {

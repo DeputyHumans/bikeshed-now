@@ -12,12 +12,13 @@ import type { DocMeta, FolderMeta } from "../types";
  * snapshot has landed — the order is the whole point, since the two arrive
  * independently and either can be first.
  */
-const { listeners, createFolder } = vi.hoisted(() => ({
+const { listeners, createFolder, forkDoc } = vi.hoisted(() => ({
   listeners: {
     docs: null as ((docs: DocMeta[]) => void) | null,
     folders: null as ((folders: FolderMeta[]) => void) | null,
   },
   createFolder: vi.fn(),
+  forkDoc: vi.fn(),
 }));
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
@@ -40,11 +41,11 @@ vi.mock("../firestore", () => ({
 vi.mock("../folders", () => ({
   createFolder,
   deleteFolder: vi.fn(),
-  duplicateDoc: vi.fn(),
   renameItem: vi.fn(),
   moveItem: vi.fn(),
   setFolderAccess: vi.fn(),
 }));
+vi.mock("../forks", () => ({ forkDoc }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
 
 import { DocList } from "./DocList";
@@ -66,6 +67,7 @@ beforeEach(() => {
   listeners.docs = null;
   listeners.folders = null;
   createFolder.mockReset();
+  forkDoc.mockReset();
 });
 
 afterEach(() => {
@@ -124,5 +126,53 @@ describe("creating a folder", () => {
 
     expect(createFolder).not.toHaveBeenCalled();
     expect(button.getAttribute("aria-busy")).toBe("false");
+  });
+});
+
+function docMeta(overrides: Partial<DocMeta> = {}): DocMeta {
+  return {
+    docId: "q3-plan",
+    title: "Q3 plan",
+    slug: "q3-plan",
+    ownerUid: "u-ana",
+    ownerEmail: "ana@example.com",
+    currentVersion: "v4",
+    viewers: ["me@example.com"],
+    editors: [],
+    members: ["ana@example.com", "me@example.com"],
+    createdAt: null as never,
+    updatedAt: null as never,
+    ...overrides,
+  };
+}
+
+describe("forking from the workspace", () => {
+  it("is one click, into the folder being looked at", async () => {
+    forkDoc.mockResolvedValue({ docId: "q3-plan-x7k2p9", versionId: "v1", title: "Q3 plan" });
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Duplicate" })).toBeNull();
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "Fork" })));
+
+    expect(forkDoc).toHaveBeenCalledTimes(1);
+    expect(forkDoc).toHaveBeenCalledWith("q3-plan", { folderId: null });
+  });
+
+  it("marks a fork, and counts the forks of an original", () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() =>
+      listeners.docs!([
+        docMeta({ docId: "fork", forked: true }),
+        docMeta({ docId: "original", stats: { forks: 3 } as DocMeta["stats"] }),
+        docMeta({ docId: "plain" }),
+      ]),
+    );
+
+    expect(screen.getAllByTitle("Forked from another document")).toHaveLength(1);
+    expect(screen.getByTitle("Forked 3 times").textContent).toContain("3");
   });
 });

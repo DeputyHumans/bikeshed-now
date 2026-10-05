@@ -12,7 +12,8 @@ import {
   listMyTeams,
   watchUser,
 } from "../firestore";
-import { createFolder, deleteFolder, duplicateDoc, renameItem } from "../folders";
+import { createFolder, deleteFolder, renameItem } from "../folders";
+import { forkDoc } from "../forks";
 import {
   docsInFolder,
   filterDocs,
@@ -87,6 +88,14 @@ function DocCard({
       </div>
       <div className="doc-card-meta">
         <VisibilityChip doc={doc} />
+        {/* A fork usually carries its original's title, so in a list that
+            holds both, this mark is what tells them apart. */}
+        {doc.forked ? (
+          <span className="chip" title="Forked from another document">
+            <Icon name="fork" size={12} />
+            Fork
+          </span>
+        ) : null}
         {/* Shown for every document that has a date, not only the expired
             ones: a workspace is where somebody notices that a document goes
             away next Tuesday, and the only place they would without opening
@@ -100,6 +109,14 @@ function DocCard({
         {doc.stats?.apiReads ? (
           <span className="doc-card-stat numeric" title="Automated reads">
             <Icon name="key" size={12} /> {doc.stats.apiReads}
+          </span>
+        ) : null}
+        {doc.stats?.forks ? (
+          <span
+            className="doc-card-stat numeric"
+            title={`Forked ${doc.stats.forks === 1 ? "once" : `${doc.stats.forks} times`}`}
+          >
+            <Icon name="fork" size={12} /> {doc.stats.forks}
           </span>
         ) : null}
         <span className="doc-card-stat">{formatRelative(doc.updatedAt)}</span>
@@ -357,12 +374,14 @@ export function DocList() {
           }),
       },
       {
-        id: "duplicate",
-        label: "Duplicate",
+        // One click, into the folder being looked at, and straight into the
+        // fork: renaming and moving it are the two items above (SPEC §21).
+        id: "fork",
+        label: "Fork",
         onSelect: () =>
           void toast
-            .during("Duplicating…", duplicateDoc(doc.docId, folderId))
-            .then((copy) => navigate(`/d/${copy.docId}`))
+            .during("Forking…", forkDoc(doc.docId, { folderId }))
+            .then((fork) => navigate(`/d/${fork.docId}`))
             .catch((e) => toast.error(e.message)),
       },
       { id: "sep", separator: true },

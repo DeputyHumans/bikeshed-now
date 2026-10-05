@@ -240,6 +240,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // --- Forks (SPEC §21) -------------------------------------------------
+    // Which document a fork was made from. Server-only, like a link grant: a
+    // docId is the slug of a title, so a client that could read this would
+    // learn the original's address from a fork it was merely shared — an
+    // unlisted original's included. POST /fork answers lineage one hop at a
+    // time, and only for hops the caller could open.
+    match /forks/{forkId} {
+      allow read, write: if false;
+    }
+
     // --- Folders (SPEC §13) -----------------------------------------------
     // Sharing containers that nest. Effective `members` is denormalized
     // server-side (self + every ancestor's grants), so read/list mirror docs.

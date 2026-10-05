@@ -164,7 +164,7 @@ hide here.
 
 ### 5 · Both halves of the trust condition
 
-Duplicate each HTML sample, which resets `trusted` to false, and open all three:
+Fork each HTML sample, which resets `trusted` to false, and open all three:
 
 | | sandbox | script ran | prompt |
 |---|---|---|---|
@@ -245,6 +245,23 @@ thread. `get_document` returns Markdown **source**, never rendered HTML.
 Then check the document's stats: the agent's read landed in `stats.apiReads`
 with `ms: 0`, and `stats.views` and `totalMs` are untouched. Reading *time* is a
 human concept; a machine fetch has none.
+
+### 11 · A fork remembers its original, and says so only to who could open it
+
+Three accounts: **A** owns a public document, **B** and **C** do not.
+
+1. Signed out, open A's document and press **Fork**. Sign in as B: you land back
+   on the document and the fork opens — same title, `v1`, private, a "Fork" chip
+   beside the version. The chip's panel says "Forked from" A's document, linked.
+2. As C, open B's fork after B shares it, and fork it again. The panel shows two
+   hops. Have B make their fork private: C's panel now stops at "a document you
+   can't open", and does not name A's document behind it.
+3. As A, publish v2. B's fork shows the dot, and its panel says the original has
+   changed. A's card and toolbar say `2`, and A's panel lists B's fork only
+   while A can open it.
+4. In the Firestore emulator UI, `docs/{fork}` holds `forked: true` and nothing
+   naming its parent; the pointer is in `forks/{fork}`, which the rules suite
+   proves no client can read.
 
 ---
 

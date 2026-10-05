@@ -167,6 +167,19 @@
    chip (SPEC §17). It is a button — its sentence has to be reachable by a tap —
    and `.chip` already resets everything a button would bring except the cursor. */
 button.expiry-chip { cursor: pointer; }
+
+/* That this document is a fork, or has been forked (SPEC §21). A button for
+   the same reason as the expiry chip: the panel behind it has to be reachable
+   by a tap. The dot says "the original has changed"; so do the chip's
+   accessible name and tooltip, so the dot is never the only signal. */
+button.fork-chip { cursor: pointer; }
+.fork-chip[data-changed]::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
 .expiry-chip[data-soon] { color: var(--color-warn); }
 .expiry-chip[data-expired] {
   color: var(--color-danger);

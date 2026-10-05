@@ -95,7 +95,7 @@ no fallback at all.
 
 Scripts are allowed and work — after somebody vouches for the document.
 
-An uploaded or duplicated document renders with `sandbox="allow-same-origin"`
+An uploaded or forked document renders with `sandbox="allow-same-origin"`
 and no `allow-scripts`, so its JavaScript does not run. A **trust prompt appears
 only if the document actually contains a `<script>`**, which is why
 `design-review-shortener` never prompts and `bikeshed-tour` does. A document

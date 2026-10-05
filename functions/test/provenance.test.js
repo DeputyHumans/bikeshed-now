@@ -140,6 +140,7 @@ test("the projection carries render fields and nothing else", () => {
     "docId",
     "entry",
     "expiresAt",
+    "forked",
     "format",
     "publicEdit",
     "publishedAt",
@@ -163,6 +164,7 @@ test("the reader projection an unlisted document unlocks carries render fields a
     "docId",
     "entry",
     "expiresAt",
+    "forked",
     "format",
     "publicEdit",
     "slug",
@@ -173,6 +175,17 @@ test("the reader projection an unlisted document unlocks carries render fields a
   for (const field of PRIVATE_FIELDS) {
     assert.ok(!(field in p), `${field} leaked into the reader projection`);
   }
+});
+
+test("a fork is projected as a fork, and nothing about where it came from", () => {
+  // The parent lives in the server-only forks/ collection precisely so that
+  // neither the world nor a link holder learns it from a projection (SPEC §21).
+  const stored = storedDoc({ visibility: "public", forked: true, parentId: "layoffs-plan-q3" });
+  for (const p of [projectPublicDoc("d1", stored), projectReader("d1", { ...stored, visibility: "unlisted" })]) {
+    assert.equal(p.forked, true);
+    assert.ok(!JSON.stringify(p).includes("layoffs"), "the parent rode along");
+  }
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "public" })).forked, false);
 });
 
 test("the link token is never projected", () => {

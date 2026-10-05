@@ -64,7 +64,7 @@ function database(): admin.database.Database | null {
 /**
  * Replace the mirror for one document.
  *
- * Called from every place that recomputes `members`: createDoc, duplicateDoc,
+ * Called from every place that recomputes `members`: createDoc, forkDocument,
  * setAccess, setVisibility, organize, recomputeSubtree, manageTeamMembers, and
  * the admin scripts. Never throws: presence is a non-essential subsystem, and a
  * subsystem that can fail a share is worse than one that can go dark.
