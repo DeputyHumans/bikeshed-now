@@ -28,7 +28,7 @@ import { bearerFrom, isTokenShaped, verifyToken } from "../lib/tokens";
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 
 export const PROTOCOL_VERSION = "2025-06-18";
-export const SERVER_INFO = { name: "bikeshed", version: "0.3.1" };
+export const SERVER_INFO = { name: "bikeshed", version: "0.4.0" };
 
 /**
  * What a client injects into the model's context on connect.
