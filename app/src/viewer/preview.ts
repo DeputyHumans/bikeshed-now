@@ -220,24 +220,10 @@ function donorDisplay(view: Window, outer: Element): string | null {
 }
 
 /**
- * Build the preview as a real document and serialize it ONCE, at the end.
- *
- * Not string concatenation. The version this replaces escaped exactly one
- * character by hand and missed `&`, and preserving the ancestor chain means
- * carrying arbitrary attribute sets out of a document nobody here owns.
- * `outerHTML` runs the HTML fragment serialization algorithm, so there is no
- * hand-written escaping anywhere in this file. It also keeps namespaces and
- * case intact, which matters for `foreignObject` — case-significant in SVG,
- * and mangled by anything that rebuilds a tag from `tagName`.
- *
- * The stage size is deliberately NOT baked in here. It sizes the iframe
- * ELEMENT, so resizing the window re-lays-out the preview without changing
- * this string — which means no reload and no refetch of the document's assets.
- * Leak the stage into this string and every resize refetches every preview.
+ * What every preview shares: the document's own `html` and `body` attributes,
+ * a `<base>` at the content proxy, and its stylesheets minus ours.
  */
-export function buildPreviewDoc(slide: Slide, baseHref: string, state = ""): string {
-  const doc = slide.outer.ownerDocument;
-  const view = doc.defaultView;
+function previewShell(doc: Document, baseHref: string): Document {
   const preview = doc.implementation.createHTMLDocument("");
 
   // `html` and `body` carry more than `class`: `dir="rtl"` alone flips a deck,
@@ -265,6 +251,58 @@ export function buildPreviewDoc(slide: Slide, baseHref: string, state = ""): str
     // of the reader's frame and silently unstyles the document being read.
     preview.head.appendChild(preview.importNode(el, true));
   }
+  return preview;
+}
+
+/**
+ * The first screen of a document that is not a deck, as a separate document —
+ * the workspace card's cover.
+ *
+ * The whole body, marked as the previewed root so the same final-state rules
+ * and reveal pass apply: a page that fades its sections in on scroll would
+ * otherwise cover itself with blank. Unlike a slide, the page keeps its own
+ * body margin and background; only overflow is clipped, to the first screen.
+ * Images are lazy, so only those within that screen are fetched to lay it
+ * out — a long report's every figure is not worth a function call each.
+ */
+export function buildPagePreviewDoc(doc: Document, baseHref: string): string {
+  const preview = previewShell(doc, baseHref);
+  for (const child of Array.from(doc.body.childNodes)) {
+    preview.body.appendChild(preview.importNode(child, true));
+  }
+  preview.body.setAttribute(PREVIEW_ATTR, "");
+  for (const img of Array.from(preview.body.querySelectorAll("img"))) {
+    img.setAttribute("loading", "lazy");
+  }
+  stripDecoration(preview.documentElement);
+
+  const style = preview.createElement("style");
+  style.textContent = "html,body{overflow:hidden}" + FINAL_STATE_CSS;
+  preview.head.appendChild(style);
+
+  return `<!doctype html>${preview.documentElement.outerHTML}`;
+}
+
+/**
+ * Build the preview as a real document and serialize it ONCE, at the end.
+ *
+ * Not string concatenation. The version this replaces escaped exactly one
+ * character by hand and missed `&`, and preserving the ancestor chain means
+ * carrying arbitrary attribute sets out of a document nobody here owns.
+ * `outerHTML` runs the HTML fragment serialization algorithm, so there is no
+ * hand-written escaping anywhere in this file. It also keeps namespaces and
+ * case intact, which matters for `foreignObject` — case-significant in SVG,
+ * and mangled by anything that rebuilds a tag from `tagName`.
+ *
+ * The stage size is deliberately NOT baked in here. It sizes the iframe
+ * ELEMENT, so resizing the window re-lays-out the preview without changing
+ * this string — which means no reload and no refetch of the document's assets.
+ * Leak the stage into this string and every resize refetches every preview.
+ */
+export function buildPreviewDoc(slide: Slide, baseHref: string, state = ""): string {
+  const doc = slide.outer.ownerDocument;
+  const view = doc.defaultView;
+  const preview = previewShell(doc, baseHref);
 
   // Every ancestor between the slide and `<body>`, outermost first. An empty
   // chain is the flat case, where this emits exactly what it always did — so

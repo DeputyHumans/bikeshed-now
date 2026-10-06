@@ -26,6 +26,9 @@ import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
+import { useThumbCapture } from "../viewer/useThumbCapture";
+import { captureNeeds } from "../thumbs";
+import { isExpired } from "../expiry";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
@@ -80,7 +83,9 @@ import type { Annotation, FolderMeta, TeamMeta } from "../types";
  * `useDeck` is deliberately NOT in that list. It scrolls the document and
  * measures it and writes nothing to it, so it has no cleanup the editor could
  * race. If it ever injects a node, a class or an attribute, it moves above
- * `useInlineEditor` and into `viewer/invariant.test.tsx`'s harness.
+ * `useInlineEditor` and into `viewer/invariant.test.tsx`'s harness. The same
+ * holds for `useThumbCapture`, which reads the document to build previews and
+ * renders them in a frame of its own.
  */
 
 type Dialog =
@@ -266,6 +271,37 @@ export function DocViewer() {
     // A dialog or the editor owns the keyboard while it is up: paging the deck
     // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
+  });
+
+  // An editor's browser captures the published head's thumbnails once, for
+  // every member's workspace card and rail. Primitives only, because the
+  // record behind them changes every minute somebody reads (SPEC §2, §6d).
+  const isDeck = deck.slides.length > 1 && deck.paged;
+  const thumb = doc.meta?.thumb;
+  const thumbNeeds = captureNeeds({
+    reading: mode.kind === "reading",
+    draft: mode.kind === "reading" && mode.draft,
+    shownVersion: doc.currentVersion,
+    headVersion: doc.meta?.currentVersion ?? "",
+    isDocEditor,
+    expired: isExpired(doc.meta?.expiresAt),
+    sandboxed: mode.kind !== "reading" || mode.sandboxed,
+    globallyTrusted: doc.meta?.trusted !== false,
+    thumbVersion: thumb?.versionId ?? null,
+    hasCover: Boolean(thumb?.cover),
+    hasSlides: Boolean(thumb?.slides),
+    isDeck,
+    slideCount: deck.slides.length,
+  });
+  useThumbCapture({
+    docId,
+    version: doc.meta?.currentVersion ?? "",
+    frameDoc: frame.doc,
+    epoch: frame.epoch,
+    slides: deck.slides,
+    isDeck,
+    baseHref: contentBase(docId, doc.meta?.currentVersion ?? ""),
+    needs: thumbNeeds,
   });
 
   useReadingSession({

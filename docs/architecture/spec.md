@@ -743,6 +743,19 @@ Decoration is stripped from the copy by the same function the serializer uses:
 highlights are unwrapped to their text and our own nodes removed by value, so
 one reader's annotations never appear in a preview.
 
+The same previews are what a **stored thumbnail** (§2 `POST /thumb`) is
+captured from: in an editor's browser, once per version, rendered in a frame of
+the app's own and rasterised to JPEG. A deck's cover is its first slide and its
+rail is every slide; any other document's cover is its first screen. Every
+stored image is laid out at one fixed stage, 1280×720, whoever captured it, so
+an editor on a phone does not decide every member's cards are portrait. A
+capture happens only on the published head, read rather than edited, with no
+draft, by an editor, on a document that has not expired — and only when the
+editor's frame runs scripts exactly when everyone's does. A reader who trusted
+a document for themselves runs its scripts with their own access, and those
+scripts could paint something of theirs into the page that a stored image would
+then show to every member.
+
 Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a
 trusted document. Because a preview is a copy the app constructs and nothing
 serializes, the layout it forces on that copy is not a restyle of embedded

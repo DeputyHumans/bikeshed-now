@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
 import { hasTranslation, scanSlides, type Slide } from "./deck";
-import { FINAL_STATE_CSS, previewOverrides, revealHidden, slideStateTokens } from "./preview";
+import {
+  FINAL_STATE_CSS,
+  buildPagePreviewDoc,
+  previewOverrides,
+  revealHidden,
+  slideStateTokens,
+} from "./preview";
 
 const HIDDEN = {
   display: "none",
@@ -229,5 +235,56 @@ describe("slideStateTokens", () => {
 
   it("is empty for a deck that keeps no state on its slides", () => {
     expect(slideStateTokens(deckOf(["slide", "slide", "slide"]))).toBe("");
+  });
+});
+
+describe("buildPagePreviewDoc", () => {
+  const page = () =>
+    new DOMParser().parseFromString(
+      `<html lang="en"><head><style>body{margin:3rem}</style>` +
+        `<style data-bshd="hl-style">.bshd-hl{background:gold}</style></head>` +
+        `<body class="report"><h1>Design review</h1>` +
+        `<p>A <mark class="bshd-hl" data-bshd-ann="a1">commented</mark> line.</p>` +
+        `<img src="figures/one.svg"><section><h2>Later</h2><img src="figures/two.svg"></section>` +
+        `</body></html>`,
+      "text/html",
+    );
+  const BASE = "/content/doc1/v3/";
+  const built = (doc = page()) =>
+    new DOMParser().parseFromString(buildPagePreviewDoc(doc, BASE), "text/html");
+
+  it("is the whole page, marked as the previewed root, against the content proxy", () => {
+    const out = built();
+    expect(out.querySelector("base")?.getAttribute("href")).toBe(BASE);
+    expect(out.body.hasAttribute(PREVIEW_ATTR)).toBe(true);
+    expect(out.body.className).toBe("report");
+    expect(out.querySelector("h1")?.textContent).toBe("Design review");
+    expect(out.querySelector("section h2")?.textContent).toBe("Later");
+  });
+
+  it("fetches only what its first screen shows", () => {
+    // Lazy images below the first screen are never requested, and every
+    // request here is a function invocation.
+    const loading = Array.from(built().querySelectorAll("img")).map((img) => img.getAttribute("loading"));
+    expect(loading).toEqual(["lazy", "lazy"]);
+  });
+
+  it("keeps the page's own margins and drops the reader's highlights", () => {
+    const html = buildPagePreviewDoc(page(), BASE);
+    const out = new DOMParser().parseFromString(html, "text/html");
+    // The slide preview resets body margin; a page is laid out by it.
+    expect(html).not.toMatch(/margin:\s*0/);
+    expect(html).toContain("body{margin:3rem}");
+    expect(html).not.toContain("gold");
+    expect(out.querySelector("mark")).toBeNull();
+    expect(out.querySelector("p")?.textContent).toBe("A commented line.");
+    expect(html).toContain(FINAL_STATE_CSS);
+  });
+
+  it("leaves the page it previews untouched", () => {
+    const doc = page();
+    const before = doc.documentElement.outerHTML;
+    buildPagePreviewDoc(doc, BASE);
+    expect(doc.documentElement.outerHTML).toBe(before);
   });
 });

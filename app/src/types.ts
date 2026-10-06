@@ -113,6 +113,8 @@ export interface DocMeta {
 
   draft?: DraftMeta | null;
   stats?: ViewStats;
+  /** Which version's thumbnails are stored. Admin SDK only; never moves `updatedAt`. */
+  thumb?: DocThumb;
 }
 
 /**
@@ -123,6 +125,19 @@ export interface DocMeta {
  * nested map under set/merge, so the view writer and the edit writer cannot
  * clobber each other. Missing means treat every counter as zero.
  */
+/**
+ * `docs/{docId}.thumb` (SPEC §4): the keys a version's stored thumbnails live
+ * under. It can name an older version than `currentVersion` until an editor
+ * next opens the document.
+ */
+export interface DocThumb {
+  versionId: string;
+  /** Key of the workspace card's cover. */
+  cover?: string;
+  /** Key and count of a deck's rail images, `s0` … `s{count-1}`. */
+  slides?: { key: string; count: number };
+}
+
 export interface ViewStats {
   views: number;
   viewers: number;
