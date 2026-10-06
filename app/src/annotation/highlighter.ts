@@ -273,6 +273,33 @@ export function serializeCleanHtml(
 ): string {
   const root = doc.documentElement.cloneNode(true) as HTMLElement;
 
+  stripDecoration(root);
+
+  if (opts.authoredAssets) {
+    // A BUDGET rather than a set: a document that legitimately contains two
+    // identical <style> tags keeps both, while a third — ours, or an
+    // extension's — is dropped.
+    const budget = new Map(opts.authoredAssets);
+    for (const el of Array.from(root.querySelectorAll(ASSET_TAGS))) {
+      const left = budget.get(el.outerHTML) ?? 0;
+      if (left > 0) budget.set(el.outerHTML, left - 1);
+      else el.remove();
+    }
+  }
+
+  const prefix = doc.doctype ? "<!DOCTYPE html>\n" : "";
+  return prefix + root.outerHTML;
+}
+
+/**
+ * Remove this app's decoration from a COPY, in place. Never call it on a live
+ * document: it is what the serializer and the slide preview share so that both
+ * mean the same thing by "decoration", and both run it on a clone.
+ *
+ * Only `root`'s descendants are examined, which is every caller's case — a
+ * document element or a preview's `<html>`, neither of which is ever ours.
+ */
+export function stripDecoration(root: Element): void {
   for (const el of Array.from(root.querySelectorAll(`[${OWN_ATTR}]`))) {
     if (isOwnMarker(el)) el.remove();
   }
@@ -295,21 +322,6 @@ export function serializeCleanHtml(
   for (const el of Array.from(root.querySelectorAll(`[${EMPTY_ATTR}]`))) {
     el.removeAttribute(EMPTY_ATTR);
   }
-
-  if (opts.authoredAssets) {
-    // A BUDGET rather than a set: a document that legitimately contains two
-    // identical <style> tags keeps both, while a third — ours, or an
-    // extension's — is dropped.
-    const budget = new Map(opts.authoredAssets);
-    for (const el of Array.from(root.querySelectorAll(ASSET_TAGS))) {
-      const left = budget.get(el.outerHTML) ?? 0;
-      if (left > 0) budget.set(el.outerHTML, left - 1);
-      else el.remove();
-    }
-  }
-
-  const prefix = doc.doctype ? "<!DOCTYPE html>\n" : "";
-  return prefix + root.outerHTML;
 }
 
 /**

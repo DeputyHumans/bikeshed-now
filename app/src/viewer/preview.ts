@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The separate document a slide thumbnail renders (SPEC §6d).
 
+import { stripDecoration } from "../annotation/highlighter";
 import { OWN_SELECTOR, PREVIEW_ATTR } from "../brand/dom";
 import { hasTranslation, readComputed, type Slide, type SlideComputed } from "./deck";
 
@@ -172,6 +173,13 @@ export function buildPreviewDoc(slide: Slide, baseHref: string): string {
   const clone = preview.importNode(slide.outer, true);
   clone.setAttribute(PREVIEW_ATTR, "");
   mount.appendChild(clone);
+
+  // The head filter above keeps our STYLESHEETS out, but highlights, the peer
+  // layer and edit affordances are nodes and attributes inside the slide and on
+  // the elements copied around it. A `<mark>` with no author rule is the
+  // browser's own yellow, so without this every commented slide previews as if
+  // one reader's annotations were part of the deck.
+  stripDecoration(preview.documentElement);
 
   // `getComputedStyle` has to come from the FRAME's view. A `DOMParser`
   // document has no `defaultView` at all, which is every unit test: the

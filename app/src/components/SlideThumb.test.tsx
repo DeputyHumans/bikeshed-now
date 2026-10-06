@@ -79,6 +79,38 @@ describe("SlideThumb", () => {
     expect(frame.className).toBe("slide-thumb-frame");
   });
 
+  it("previews the slide without the reader's highlights or overlays", () => {
+    // Dropping the highlight STYLESHEET is not enough: the <mark>s are real
+    // elements in the slide, and a <mark> with no author rule is the browser's
+    // own yellow. A preview that will be stored as an image and shown to every
+    // member must carry no trace of one reader's annotations.
+    const doc = new DOMParser().parseFromString(
+      `<html><head></head><body><main class="deck">
+         <section class="slide" contenteditable="true"><h2>One</h2>
+           <p>A <mark class="bshd-hl" data-bshd-ann="a1">commented</mark> passage.</p>
+           <div ${OWN_ATTR}="peers"><i>peer cursor</i></div>
+           <span ${OWN_ATTR}="whatever">the author's own</span>
+         </section>
+         <section class="slide"><h2>Two</h2></section>
+       </main></body></html>`,
+      "text/html",
+    );
+    const { container } = render(
+      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />,
+    );
+    const html = container.querySelector("iframe")!.srcdoc;
+    const out = new DOMParser().parseFromString(html, "text/html");
+
+    expect(out.querySelector("mark")).toBeNull();
+    expect(out.querySelector("section.slide p")?.textContent).toBe("A commented passage.");
+    expect(html).not.toContain("peer cursor");
+    expect(out.querySelector("[contenteditable]")).toBeNull();
+    // Stripped by VALUE: an author who happens to use the attribute keeps it.
+    expect(out.querySelector(`[${OWN_ATTR}="whatever"]`)?.textContent).toBe("the author's own");
+    // And the reader's frame still has its highlight; only the copy lost it.
+    expect(doc.querySelector("mark.bshd-hl")).not.toBeNull();
+  });
+
   it("forces a hidden slide visible, since a deck hides all but one", () => {
     expect(thumbFrame().srcdoc).toContain("visibility:visible!important");
   });
