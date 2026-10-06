@@ -21,7 +21,7 @@ import type { DocMeta, DocThumb } from "./types";
  * the next time an editor opens its document. The server refuses any other.
  * See `THUMB_REVISION` in `functions/src/lib/thumbs.ts` for the history.
  */
-export const THUMB_REVISION = 2;
+export const THUMB_REVISION = 3;
 
 /** A deck larger than this keeps live previews; the server refuses more. */
 export const THUMB_MAX_SLIDES = 100;

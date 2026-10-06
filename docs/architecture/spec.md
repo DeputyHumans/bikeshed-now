@@ -757,7 +757,11 @@ captured from: in an editor's browser, once per version, rendered in a frame of
 the app's own and rasterised to JPEG. A deck's cover is its first slide and its
 rail is every slide; any other document's cover is its first screen. Every
 stored image is laid out at one fixed stage, 1280×720, whoever captured it, so
-an editor on a phone does not decide every member's cards are portrait. A
+an editor on a phone does not decide every member's cards are portrait — and
+shows the document as a reader who prefers light sees it, whatever the
+capturing browser prefers, so an editor running their system dark does not
+decide every member's cards are dark. A document that declares itself dark is
+dark by design and stays so; only `prefers-color-scheme` is answered. A
 capture happens only on the published head, read rather than edited, with no
 draft, by an editor, on a document that has not expired or is the editor's
 own — and only when the

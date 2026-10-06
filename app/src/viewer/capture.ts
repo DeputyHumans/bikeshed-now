@@ -150,6 +150,71 @@ export async function embedFontCss(
   return inlined.filter(Boolean).join("\n");
 }
 
+const PREFERS_DARK = /\(\s*prefers-color-scheme\s*:\s*dark\s*\)/gi;
+const PREFERS_LIGHT = /\(\s*prefers-color-scheme\s*:\s*light\s*\)/gi;
+
+/**
+ * A query's colour-scheme preference, answered as light. The replacements are
+ * conditions the capture frame settles one way forever — it is 1280 px wide,
+ * so `max-width: 0px` never holds and `min-width: 0px` always does — which
+ * keeps the rest of each query, `not` and `and` included, meaning what it did.
+ */
+function answeredLight(list: MediaList | null | undefined): void {
+  if (!list || !/prefers-color-scheme/i.test(list.mediaText)) return;
+  list.mediaText = list.mediaText
+    .replace(PREFERS_DARK, "(max-width: 0px)")
+    .replace(PREFERS_LIGHT, "(min-width: 0px)");
+}
+
+function lightRules(rules: CSSRuleList): void {
+  for (const rule of Array.from(rules)) {
+    // A media rule and an import both carry their query as `media`.
+    answeredLight((rule as CSSMediaRule).media);
+    const imported = (rule as CSSImportRule).styleSheet;
+    if (imported) lightSheet(imported);
+    const nested = (rule as CSSGroupingRule).cssRules;
+    if (nested) lightRules(nested);
+  }
+}
+
+function lightSheet(sheet: CSSStyleSheet): void {
+  let rules: CSSRuleList;
+  try {
+    rules = sheet.cssRules;
+  } catch {
+    return; // another origin's sheet: its rules are not ours to read
+  }
+  lightRules(rules);
+}
+
+/**
+ * Show the document as it looks to a reader who prefers light, whatever this
+ * browser prefers.
+ *
+ * A stored image is shown to every member, so it cannot depend on how the
+ * editor who happened to capture it has set their system: a document with its
+ * own dark palette was stored dark, for everybody, whenever that editor ran
+ * dark. The frame cannot be told what to prefer — Chrome ignores the frame
+ * element's `color-scheme` there — so the document's own queries are answered
+ * instead. Light, because it is what a document shows when nobody says
+ * otherwise. A document that declares itself dark (`color-scheme: dark`, a
+ * dark background) is dark by design and stays so; only the preference is
+ * settled.
+ */
+export function lightColorScheme(doc: Document): void {
+  // A `<link media>` or `<style media>` keeps its query on the element, and
+  // the sheet's own list follows the attribute.
+  for (const el of Array.from(doc.querySelectorAll("style[media], link[media]"))) {
+    const query = el.getAttribute("media") ?? "";
+    if (!/prefers-color-scheme/i.test(query)) continue;
+    el.setAttribute(
+      "media",
+      query.replace(PREFERS_DARK, "(max-width: 0px)").replace(PREFERS_LIGHT, "(min-width: 0px)"),
+    );
+  }
+  for (const sheet of Array.from(doc.styleSheets)) lightSheet(sheet);
+}
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /**
@@ -294,6 +359,8 @@ export function createCapturer(host: Document = document): Capturer {
 
     const doc = el.contentDocument;
     if (!doc?.body) return null;
+    // First, so everything that reads a computed style below reads the light one.
+    lightColorScheme(doc);
     revealHidden(doc);
     await Promise.race([doc.fonts.ready, timeout(SETTLE_TIMEOUT_MS, undefined)]);
     if (opts.page) await firstScreenImages(doc);

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { embedFontCss, inlineSvgStyles, isUniform } from "./capture";
+import { embedFontCss, inlineSvgStyles, isUniform, lightColorScheme } from "./capture";
 
 /** An RGBA buffer of `n` pixels, each from `colour(i)`. */
 function pixels(n: number, colour: (i: number) => [number, number, number]): Uint8ClampedArray {
@@ -118,15 +118,18 @@ describe("inlineSvgStyles", () => {
   });
 
   it("runs on every capture, after the reveal and before the image is drawn", () => {
-    // jsdom cannot rasterise, so the order is pinned on the source: run after
-    // the reveal pass, the inlined values are the revealed ones; run after the
-    // image, they would be in nobody's picture.
+    // jsdom cannot rasterise, so the order is pinned on the source. The colour
+    // scheme is settled first, so everything after computes the light values;
+    // the svg styles are inlined after the reveal pass, so they are the
+    // revealed ones; and both before the image, or they are in nobody's picture.
     const src = readFileSync(join(__dirname, "capture.ts"), "utf8");
     const body = src.slice(src.indexOf("async function capture("));
+    const scheme = body.indexOf("lightColorScheme(doc)");
     const reveal = body.indexOf("revealHidden(doc)");
     const inline = body.indexOf("inlineSvgStyles(doc");
     const draw = body.indexOf("toCanvas(");
-    expect(reveal).toBeGreaterThan(0);
+    expect(scheme).toBeGreaterThan(0);
+    expect(reveal).toBeGreaterThan(scheme);
     expect(inline).toBeGreaterThan(reveal);
     expect(draw).toBeGreaterThan(inline);
   });
@@ -136,5 +139,48 @@ describe("inlineSvgStyles", () => {
     document.body.innerHTML = `<svg><path class="f" d="M0 0h1v1z"/></svg><p id="p" class="p">text</p>`;
     inlineSvgStyles(document);
     expect(document.getElementById("p")!.getAttribute("style")).toBeNull();
+  });
+});
+
+describe("lightColorScheme", () => {
+  afterEach(() => {
+    document.head.innerHTML = "";
+  });
+
+  const media = () =>
+    Array.from(document.styleSheets).flatMap((sheet) => [
+      ...(sheet.media?.mediaText ? [`sheet ${sheet.media.mediaText}`] : []),
+      ...Array.from(sheet.cssRules).flatMap(function walk(rule): string[] {
+        const own = (rule as CSSMediaRule).media ? [(rule as CSSMediaRule).media.mediaText] : [];
+        const nested = (rule as CSSGroupingRule).cssRules;
+        return [...own, ...(nested ? Array.from(nested).flatMap(walk) : [])];
+      }),
+    ]);
+
+  // A stored image is shown to every member, so it cannot depend on whether
+  // the editor who happened to capture it runs their system dark. A document
+  // with its own dark palette was stored dark for everyone.
+  it("answers every colour-scheme preference as light, leaving the rest of each query", () => {
+    document.head.innerHTML =
+      `<style>@media (prefers-color-scheme: dark){:root{--paper:#252823}}` +
+      `@media screen and (prefers-color-scheme:light){.b{color:blue}}` +
+      `@media not (prefers-color-scheme: dark){.c{color:green}}</style>`;
+    lightColorScheme(document);
+    expect(media()).toEqual(["(max-width: 0px)", "screen and (min-width: 0px)", "not (max-width: 0px)"]);
+  });
+
+  it("reaches a preference nested in another rule, or on the sheet itself", () => {
+    document.head.innerHTML =
+      `<style>@supports (display: grid){@media (prefers-color-scheme: dark){.a{color:red}}}</style>` +
+      `<style media="(prefers-color-scheme: dark)">.d{color:white}</style>`;
+    lightColorScheme(document);
+    expect(media()).toEqual(["(max-width: 0px)"]);
+    expect(document.querySelectorAll("style")[1].getAttribute("media")).toBe("(max-width: 0px)");
+  });
+
+  it("leaves every other media query alone", () => {
+    document.head.innerHTML = `<style>@media (max-width: 600px){.a{color:red}} @media print{.b{color:black}}</style>`;
+    lightColorScheme(document);
+    expect(media()).toEqual(["(max-width: 600px)", "print"]);
   });
 });

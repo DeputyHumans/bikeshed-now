@@ -14,6 +14,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Stored thumbnails no longer take on the capturing editor's dark mode.** A
+  document with its own dark palette was captured dark whenever the editor
+  who happened to capture it ran their system dark, and every member was then
+  shown that. Captures now show every document as a reader who prefers light
+  sees it. A document that is dark by design stays dark. Thumbnails stored
+  the old way are replaced the next time an editor's workspace or viewer
+  shows them (SPEC §6d).
+
 ## 0.5.1 — 2026-10-06
 
 ### Changed
