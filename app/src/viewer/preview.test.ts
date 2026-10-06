@@ -4,8 +4,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
-import { hasTranslation } from "./deck";
-import { FINAL_STATE_CSS, previewOverrides, revealHidden } from "./preview";
+import { hasTranslation, scanSlides, type Slide } from "./deck";
+import { FINAL_STATE_CSS, previewOverrides, revealHidden, slideStateTokens } from "./preview";
 
 const HIDDEN = {
   display: "none",
@@ -183,5 +183,51 @@ describe("revealHidden", () => {
     document.body.innerHTML = `<p id="p" style="opacity:0">a</p>`;
     revealHidden(document);
     expect(marked()).toEqual([]);
+  });
+});
+
+describe("slideStateTokens", () => {
+  /** A deck whose slides carry exactly these class lists. */
+  function deckOf(classes: string[]): Slide[] {
+    const sections = classes
+      .map((c, i) => `<section class="${c}"><h2>Slide ${i + 1}</h2></section>`)
+      .join("");
+    const doc = new DOMParser().parseFromString(
+      `<body><main class="deck">${sections}</main></body>`,
+      "text/html",
+    );
+    const scan = scanSlides(doc);
+    if (scan.kind !== "slides") throw new Error("fixture is not a deck");
+    return scan.slides;
+  }
+
+  it("carries the class a deck's script moves onto the slide it shows", () => {
+    expect(slideStateTokens(deckOf(["slide active", "slide", "slide"]))).toBe("active");
+  });
+
+  it("knows a state class by its suffix, the way frameworks name them", () => {
+    // bespoke.js writes `bespoke-active`; plenty of decks write `is-active`.
+    expect(
+      slideStateTokens(deckOf(["slide is-active", "slide bespoke-active", "slide"])),
+    ).toBe("is-active bespoke-active");
+  });
+
+  it("never carries a class that is a layout, a theme or the opposite state", () => {
+    // Spreading `title-slide` or `dark` would restyle every thumbnail as the
+    // slide the reader happens to be on, and `inactive` and `past` are the
+    // states a preview is trying to get away from.
+    expect(
+      slideStateTokens(
+        deckOf([
+          "slide title-slide inactive",
+          "slide bespoke-inactive past dark",
+          "slide future cover",
+        ]),
+      ),
+    ).toBe("");
+  });
+
+  it("is empty for a deck that keeps no state on its slides", () => {
+    expect(slideStateTokens(deckOf(["slide", "slide", "slide"]))).toBe("");
   });
 });

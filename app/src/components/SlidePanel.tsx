@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { SlideThumb } from "./SlideThumb";
+import { slideStateTokens } from "../viewer/preview";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Slide, StageSize } from "../viewer/deck";
 
@@ -58,6 +59,11 @@ export function SlidePanel({
       ?.querySelector<HTMLElement>('[aria-current="true"]')
       ?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
   }, [current, reduceMotion]);
+
+  // Read every render rather than memoised on `slides`: a deck's script may
+  // set its state after the scan. A string compares equal while it is
+  // unchanged, so the previews rebuild only when the deck's state set does.
+  const state = slideStateTokens(slides);
 
   if (slides.length < 2) return null;
 
@@ -120,7 +126,7 @@ export function SlidePanel({
             setDropTarget(null);
           }}
         >
-          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} />
+          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} />
           <span className="slide-thumb-index">{i + 1}</span>
           <span className="slide-thumb-title">{slide.title}</span>
           {editable ? (

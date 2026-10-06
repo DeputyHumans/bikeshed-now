@@ -111,6 +111,24 @@ describe("SlideThumb", () => {
     expect(doc.querySelector("mark.bshd-hl")).not.toBeNull();
   });
 
+  it("gives the copy the state the deck shows its current slide in", () => {
+    // `.slide.active .bar{width:var(--w)}` is a final state no amount of forced
+    // visibility reaches; only the deck's own class does. It goes on the copy:
+    // writing it on the live slide would restyle the document being read.
+    const doc = deck();
+    const slide = firstSlide(doc);
+    const { container } = render(
+      <SlideThumb slide={slide} baseHref={BASE} stage={STAGE} state="active is-shown" />,
+    );
+    const out = new DOMParser().parseFromString(
+      container.querySelector("iframe")!.srcdoc,
+      "text/html",
+    );
+
+    expect(out.querySelector("section.slide")?.className).toBe("slide active is-shown");
+    expect(slide.outer.className).toBe("slide");
+  });
+
   it("forces a hidden slide visible, since a deck hides all but one", () => {
     expect(thumbFrame().srcdoc).toContain("visibility:visible!important");
   });

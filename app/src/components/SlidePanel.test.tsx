@@ -51,6 +51,29 @@ function panel(props: Partial<Parameters<typeof SlidePanel>[0]> = {}) {
 }
 
 describe("SlidePanel", () => {
+  it("previews every slide in the state the deck shows its current one in", () => {
+    // Only the slide on screen carries the deck's `active`, so a preview that
+    // copied each slide as it stands would leave every other one unrevealed.
+    const doc = new DOMParser().parseFromString(
+      `<body><main class="deck">
+         <section class="slide active"><h2>One</h2></section>
+         <section class="slide"><h2>Two</h2></section>
+         <section class="slide"><h2>Three</h2></section>
+       </main></body>`,
+      "text/html",
+    );
+    const scan = scanSlides(doc);
+    if (scan.kind !== "slides") throw new Error("fixture is not a deck");
+    const { container } = panel({ slides: scan.slides });
+
+    const classes = Array.from(container.querySelectorAll("iframe")).map(
+      (frame) =>
+        new DOMParser().parseFromString(frame.srcdoc, "text/html").querySelector("section")
+          ?.className,
+    );
+    expect(classes).toEqual(["slide active", "slide active", "slide active"]);
+  });
+
   it("lists every slide, numbered and named", () => {
     const { container } = panel();
     const thumbs = container.querySelectorAll(".slide-thumb");

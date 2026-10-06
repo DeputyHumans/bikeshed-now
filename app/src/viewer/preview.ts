@@ -151,6 +151,56 @@ export function revealHidden(doc: Document): void {
   for (const el of hidden) el.setAttribute(REVEAL_ATTR, "");
 }
 
+/**
+ * Class names that mean "this slide is the one being shown", exactly or as a
+ * suffix: `active`, `is-active`, bespoke's `bespoke-active`, reveal's
+ * `present`, a scroll deck's `seen`.
+ *
+ * An allowlist on purpose. Learning the state from whatever the shown slide
+ * carries that the others lack would also learn `title-slide`, `cover` and
+ * `dark` whenever the reader sits on a slide that has them, and restyle every
+ * thumbnail as that slide. A name this list misses costs a thumbnail its bars;
+ * a name it wrongly includes costs every thumbnail its layout.
+ */
+const STATE_NAMES: ReadonlySet<string> = new Set([
+  "active",
+  "current",
+  "present",
+  "visible",
+  "shown",
+  "seen",
+  "revealed",
+  "in-view",
+  "animate",
+  "animated",
+]);
+const STATE_SUFFIXES = ["-active", "-current", "-present", "-visible", "-in-view", "-seen"];
+
+function isStateToken(token: string): boolean {
+  return STATE_NAMES.has(token) || STATE_SUFFIXES.some((suffix) => token.endsWith(suffix));
+}
+
+/**
+ * The classes a deck puts on the slide it is showing, read off the live slides,
+ * as a space-separated string so it can sit in a memo dependency unchanged.
+ *
+ * Forcing visibility reaches content hidden by opacity, but not a final state
+ * of any other property — `.slide.active .bar{width:var(--w)}` grows a bar no
+ * forced opacity can fill. Giving every preview the deck's own state class
+ * lets the deck's own stylesheet put each slide in its shown state.
+ *
+ * Read, never written: these come off the reader's frame and go onto copies.
+ */
+export function slideStateTokens(slides: readonly Slide[]): string {
+  const found: string[] = [];
+  for (const slide of slides) {
+    for (const token of Array.from(slide.outer.classList)) {
+      if (isStateToken(token) && !found.includes(token)) found.push(token);
+    }
+  }
+  return found.join(" ");
+}
+
 function copyAttributes(from: Element | null, to: Element): void {
   if (!from) return;
   for (const attr of Array.from(from.attributes)) {
@@ -185,7 +235,7 @@ function donorDisplay(view: Window, outer: Element): string | null {
  * this string — which means no reload and no refetch of the document's assets.
  * Leak the stage into this string and every resize refetches every preview.
  */
-export function buildPreviewDoc(slide: Slide, baseHref: string): string {
+export function buildPreviewDoc(slide: Slide, baseHref: string, state = ""): string {
   const doc = slide.outer.ownerDocument;
   const view = doc.defaultView;
   const preview = doc.implementation.createHTMLDocument("");
@@ -242,6 +292,9 @@ export function buildPreviewDoc(slide: Slide, baseHref: string): string {
   // reader is reading, which is exactly what this design promises never to do.
   const clone = preview.importNode(slide.outer, true);
   clone.setAttribute(PREVIEW_ATTR, "");
+  // The deck's shown state (`slideStateTokens`), on the clone for the same
+  // reason as the marker.
+  for (const token of state.split(" ")) if (token) clone.classList.add(token);
   mount.appendChild(clone);
 
   // The head filter above keeps our STYLESHEETS out, but highlights, the peer

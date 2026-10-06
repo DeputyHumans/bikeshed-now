@@ -38,6 +38,26 @@ function overview(props: Partial<Parameters<typeof SlideOverview>[0]> = {}) {
 }
 
 describe("SlideOverview", () => {
+  it("previews every slide in the state the deck shows its current one in", () => {
+    const doc = new DOMParser().parseFromString(
+      `<body><main class="deck">
+         <section class="slide"><h2>One</h2></section>
+         <section class="slide is-active"><h2>Two</h2></section>
+       </main></body>`,
+      "text/html",
+    );
+    const scan = scanSlides(doc);
+    if (scan.kind !== "slides") throw new Error("fixture is not a deck");
+    const { container } = overview({ slides: scan.slides });
+
+    const classes = Array.from(container.querySelectorAll("iframe")).map(
+      (frame) =>
+        new DOMParser().parseFromString(frame.srcdoc, "text/html").querySelector("section")
+          ?.className,
+    );
+    expect(classes).toEqual(["slide is-active", "slide is-active"]);
+  });
+
   it("shows one card per slide, and says how many", () => {
     const { container, getByText } = overview();
     expect(container.querySelectorAll(".slide-overview-item")).toHaveLength(4);

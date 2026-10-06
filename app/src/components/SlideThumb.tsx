@@ -45,11 +45,14 @@ export function SlideThumb({
   slide,
   baseHref,
   stage,
+  state = "",
 }: {
   slide: Slide;
   /** `/content/{docId}/{versionId}/`, the same base the print export uses. */
   baseHref: string;
   stage: StageSize;
+  /** The deck's shown-slide classes, from `slideStateTokens`. */
+  state?: string;
 }) {
   const box = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
@@ -104,8 +107,8 @@ export function SlideThumb({
   }, []);
 
   const srcDoc = useMemo(
-    () => (visible ? buildPreviewDoc(slide, baseHref) : null),
-    [visible, slide, baseHref],
+    () => (visible ? buildPreviewDoc(slide, baseHref, state) : null),
+    [visible, slide, baseHref, state],
   );
 
   const width = boxWidth > 0 ? boxWidth : UNMEASURED_WIDTH;

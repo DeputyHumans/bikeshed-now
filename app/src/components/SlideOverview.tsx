@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { Icon } from "./Icon";
 import { SlideThumb } from "./SlideThumb";
+import { slideStateTokens } from "../viewer/preview";
 import type { Slide, StageSize } from "../viewer/deck";
 
 /**
@@ -31,6 +32,8 @@ export function SlideOverview({
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  // Every render, as in the rail: see `SlidePanel`.
+  const state = slideStateTokens(slides);
 
   /**
    * Focus moves in so the overview is keyboard-reachable the moment it opens,
@@ -81,7 +84,7 @@ export function SlideOverview({
               onClose();
             }}
           >
-            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} />
+            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} />
             <span className="slide-overview-caption">
               <span className="slide-overview-index">{i + 1}</span>
               <span className="slide-overview-title">{slide.title}</span>
