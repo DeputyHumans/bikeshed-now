@@ -29,6 +29,7 @@ export function SlidePanel({
   baseHref,
   stage,
   onGoTo,
+  images,
   onChanged,
 }: {
   slides: Slide[];
@@ -38,6 +39,8 @@ export function SlidePanel({
   baseHref: string;
   stage: StageSize;
   onGoTo: (index: number) => void;
+  /** One stored image per slide, from `storedSlideImages`; absent means live previews. */
+  images?: string[] | null;
   /** Fires after any structural edit, so the caller can rescan and mark dirty. */
   onChanged: () => void;
 }) {
@@ -126,7 +129,7 @@ export function SlidePanel({
             setDropTarget(null);
           }}
         >
-          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} />
+          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} image={images?.[i]} />
           <span className="slide-thumb-index">{i + 1}</span>
           <span className="slide-thumb-title">{slide.title}</span>
           {editable ? (

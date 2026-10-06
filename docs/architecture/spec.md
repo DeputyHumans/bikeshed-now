@@ -756,6 +756,14 @@ a document for themselves runs its scripts with their own access, and those
 scripts could paint something of theirs into the page that a stored image would
 then show to every member.
 
+Reading the published head, the rail and the overview show those **stored
+images** instead of building previews, when the record holds a rail for exactly
+this version with exactly as many slides as the deck on screen: one request per
+slide, kept by the browser for a day, rather than every slide's assets fetched
+again on every visit. Editing, a draft, another version or another slide count
+all use live previews, since the stored rail no longer describes what is on
+screen, and an image that will not load falls back to its live preview.
+
 Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a
 trusted document. Because a preview is a copy the app constructs and nothing
 serializes, the layout it forces on that copy is not a restyle of embedded

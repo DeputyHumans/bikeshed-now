@@ -41,11 +41,17 @@ function markPainted(event: React.SyntheticEvent<HTMLIFrameElement>) {
   frame.setAttribute("data-painted", "");
 }
 
+/** The stored image's twin of `markPainted`: same mark, same CSS, no reveal to run. */
+function markImagePainted(event: React.SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.setAttribute("data-painted", "");
+}
+
 export function SlideThumb({
   slide,
   baseHref,
   stage,
   state = "",
+  image,
 }: {
   slide: Slide;
   /** `/content/{docId}/{versionId}/`, the same base the print export uses. */
@@ -53,10 +59,19 @@ export function SlideThumb({
   stage: StageSize;
   /** The deck's shown-slide classes, from `slideStateTokens`. */
   state?: string;
+  /**
+   * This slide's stored image, when the version on screen has one
+   * (`storedSlideImages`). Shown instead of a live preview: one request, kept
+   * by the browser, and no preview built at all. If it will not load, the live
+   * preview takes over, so a missing image costs a thumbnail nothing.
+   */
+  image?: string;
 }) {
   const box = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [boxWidth, setBoxWidth] = useState(0);
+  const [imageFailed, setImageFailed] = useState(false);
+  const stored = image && !imageFailed ? image : null;
 
   /**
    * Mount only what is on screen. A deck can run to dozens of slides, and a
@@ -107,8 +122,8 @@ export function SlideThumb({
   }, []);
 
   const srcDoc = useMemo(
-    () => (visible ? buildPreviewDoc(slide, baseHref, state) : null),
-    [visible, slide, baseHref, state],
+    () => (visible && !stored ? buildPreviewDoc(slide, baseHref, state) : null),
+    [visible, stored, slide, baseHref, state],
   );
 
   const width = boxWidth > 0 ? boxWidth : UNMEASURED_WIDTH;
@@ -116,7 +131,18 @@ export function SlideThumb({
 
   return (
     <span ref={box} className="slide-thumb-box">
-      {srcDoc ? (
+      {stored ? (
+        <img
+          className="slide-thumb-image"
+          src={stored}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          onLoad={markImagePainted}
+          onError={() => setImageFailed(true)}
+        />
+      ) : srcDoc ? (
         <iframe
           className="slide-thumb-frame"
           title={`Slide ${slide.index + 1}`}

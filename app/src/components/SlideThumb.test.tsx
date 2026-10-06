@@ -295,3 +295,44 @@ describe("SlideThumb while its preview loads", () => {
     expect(frame.hasAttribute("data-painted")).toBe(true);
   });
 });
+
+describe("SlideThumb with a stored image", () => {
+  const SLIDES_CSS = readFileSync(join(__dirname, "../styles/slides.css"), "utf8");
+  const IMAGE = "/thumb/doc1/v3/0123456789abcdef/s0.jpg";
+
+  it("shows what was stored and builds no preview at all", () => {
+    // No preview means no srcDoc and none of the slide's assets fetched
+    // through the proxy: the image is one request, and the browser keeps it.
+    const { container } = render(
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+    );
+    const img = container.querySelector("img.slide-thumb-image")!;
+    expect(img.getAttribute("src")).toBe(IMAGE);
+    expect(img.getAttribute("alt")).toBe("");
+    expect(img.getAttribute("loading")).toBe("lazy");
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
+  it("falls back to the live preview when the stored image will not load", () => {
+    const { container } = render(
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+    );
+    fireEvent.error(container.querySelector("img.slide-thumb-image")!);
+
+    expect(container.querySelector("img.slide-thumb-image")).toBeNull();
+    expect(container.querySelector("iframe")?.srcdoc).toContain(BASE);
+  });
+
+  it("drops its skeleton once the image has loaded", () => {
+    const { container } = render(
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+    );
+    const img = container.querySelector("img.slide-thumb-image")!;
+    expect(img.nextElementSibling?.classList.contains("slide-thumb-skeleton")).toBe(true);
+    fireEvent.load(img);
+    expect(img.hasAttribute("data-painted")).toBe(true);
+    expect(SLIDES_CSS).toMatch(
+      /\.slide-thumb-image\[data-painted\]\s*\+\s*\.slide-thumb-skeleton\s*\{\s*display:\s*none;/,
+    );
+  });
+});

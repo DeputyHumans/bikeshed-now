@@ -204,5 +204,11 @@ Two consequences:
   version path) precisely because they are where traffic spikes. The trade is
   five minutes of revocation latency, documented in `docs/operations/overview.md` rather
   than discovered.
+- **Thumbnails are captured once and kept by the browser.** A workspace card's
+  cover and a published deck's rail are images an editor's browser captured
+  once per version (SPEC §2). A member's browser keeps each for a day, so the
+  workspace costs one function call per card per device per day, and a stored
+  rail one per slide, where a live rail fetched every slide's assets on every
+  visit.
 
 `docs/operations/overview.md` makes setting a GCP budget alert a numbered setup step.

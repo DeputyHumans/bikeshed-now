@@ -22,6 +22,7 @@ export function SlideOverview({
   baseHref,
   stage,
   onGoTo,
+  images,
   onClose,
 }: {
   slides: Slide[];
@@ -29,6 +30,8 @@ export function SlideOverview({
   baseHref: string;
   stage: StageSize;
   onGoTo: (index: number) => void;
+  /** One stored image per slide, from `storedSlideImages`; absent means live previews. */
+  images?: string[] | null;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -84,7 +87,7 @@ export function SlideOverview({
               onClose();
             }}
           >
-            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} />
+            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} image={images?.[i]} />
             <span className="slide-overview-caption">
               <span className="slide-overview-index">{i + 1}</span>
               <span className="slide-overview-title">{slide.title}</span>

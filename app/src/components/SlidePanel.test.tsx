@@ -46,6 +46,7 @@ function panel(props: Partial<Parameters<typeof SlidePanel>[0]> = {}) {
       stage={STAGE}
       onGoTo={props.onGoTo ?? vi.fn()}
       onChanged={props.onChanged ?? vi.fn()}
+      images={props.images}
     />,
   );
 }
@@ -162,5 +163,17 @@ describe("SlidePanel", () => {
 
     expect(Array.from(parent.children).indexOf(list[0].outer)).toBe(2);
     expect(onChanged).toHaveBeenCalled();
+  });
+});
+
+describe("SlidePanel with a stored rail", () => {
+  it("shows each slide its own stored image", () => {
+    const images = ["/thumb/d/v1/k/s0.jpg", "/thumb/d/v1/k/s1.jpg", "/thumb/d/v1/k/s2.jpg"];
+    const { container } = panel({ slides: slides(3), images });
+    const srcs = Array.from(container.querySelectorAll("img.slide-thumb-image")).map((img) =>
+      img.getAttribute("src"),
+    );
+    expect(srcs).toEqual(images);
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });

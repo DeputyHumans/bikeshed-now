@@ -14,6 +14,31 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Every workspace card shows what its document looks like.** A card leads
+  with a cover: a deck's first slide, or any other document's first screen. It
+  is captured once per version in an editor's browser, the first time one opens
+  the document, and stored, so every member sees it on every device without it
+  being rendered again; a member's browser keeps it for a day. Folders move to a
+  row of their own above the documents (SPEC §2, §6d).
+- **A published deck's slide rail loads from stored images.** One request per
+  slide, kept by the browser, instead of every slide's assets fetched again on
+  every visit. Editing and drafts keep live previews, and an image that will not
+  load falls back to one.
+
+### Fixed
+
+- **Animated decks no longer preview blank.** A deck that shows a slide's
+  content only once its script marks the slide active previewed every slide
+  but the current one as an empty page, and bars or charts that grow in as
+  empty. Previews now show each slide as it ends: animations finished, the
+  deck's own "active" class applied, and anything still hidden revealed.
+- **Comment highlights no longer appear in slide previews.** Highlighted text
+  showed in the browser's default yellow on every commented slide's thumbnail.
+
 ## 0.3.1 — 2026-10-05
 
 ### Fixed

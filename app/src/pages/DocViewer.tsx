@@ -27,7 +27,7 @@ import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
 import { useThumbCapture } from "../viewer/useThumbCapture";
-import { captureNeeds } from "../thumbs";
+import { captureNeeds, storedSlideImages } from "../thumbs";
 import { isExpired } from "../expiry";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
@@ -599,6 +599,16 @@ export function DocViewer() {
    * cannot narrow the frame into changing the answer.
    */
   const hasSlides = deck.slides.length > 1 && deck.paged;
+  // The published deck's stored rail, when this is exactly what was captured:
+  // one request per slide, kept by the browser, instead of a live preview that
+  // fetches each slide's assets again on every visit. Null while editing or on
+  // a draft, whose slides are not the stored ones.
+  const railImages = storedSlideImages(docId, doc.meta?.thumb, {
+    reading: mode.kind === "reading",
+    draft: mode.kind === "reading" && mode.draft,
+    shownVersion: doc.currentVersion,
+    slideCount: deck.slides.length,
+  });
   // The same base the print export uses. Without it a preview's relative
   // images resolve against the app origin and every one of them 404s.
   const baseHref = contentBase(docId, doc.currentVersion, linkKey || undefined);
@@ -707,6 +717,7 @@ export function DocViewer() {
               drawerOpen={singleColumn ? railOpen : undefined}
               baseHref={baseHref}
               stage={deck.stage}
+              images={railImages}
               onGoTo={deck.goTo}
               onChanged={onSlidesChanged}
             />
@@ -755,6 +766,7 @@ export function DocViewer() {
               current={deck.current}
               baseHref={baseHref}
               stage={deck.stage}
+              images={railImages}
               onGoTo={deck.goTo}
               onClose={() => deck.setOverviewOpen(false)}
             />

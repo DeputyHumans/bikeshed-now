@@ -33,6 +33,7 @@ function overview(props: Partial<Parameters<typeof SlideOverview>[0]> = {}) {
       stage={STAGE}
       onGoTo={props.onGoTo ?? vi.fn()}
       onClose={props.onClose ?? vi.fn()}
+      images={props.images}
     />,
   );
 }
@@ -102,5 +103,17 @@ describe("SlideOverview", () => {
     const { container } = overview({ current: 2 });
     const marked = container.querySelector('[aria-current="true"]')!;
     expect(document.activeElement).toBe(marked);
+  });
+});
+
+describe("SlideOverview with a stored rail", () => {
+  it("shows each slide its own stored image", () => {
+    const images = ["/thumb/d/v1/k/s0.jpg", "/thumb/d/v1/k/s1.jpg", "/thumb/d/v1/k/s2.jpg"];
+    const { container } = overview({ slides: slides(3), images });
+    const srcs = Array.from(container.querySelectorAll("img.slide-thumb-image")).map((img) =>
+      img.getAttribute("src"),
+    );
+    expect(srcs).toEqual(images);
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });

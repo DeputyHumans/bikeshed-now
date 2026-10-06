@@ -88,6 +88,17 @@
   pointer-events: none;
 }
 .slide-thumb-frame[data-painted] + .slide-thumb-skeleton { display: none; }
+/* A stored image, captured at a fixed 16:9 stage: contained, so a reader whose
+   frame is another shape sees the whole slide rather than a crop of it. */
+.slide-thumb-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.slide-thumb-image[data-painted] + .slide-thumb-skeleton { display: none; }
 .slide-thumb[aria-current="true"] {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px var(--color-accent-soft);
