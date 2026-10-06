@@ -74,6 +74,8 @@ export interface CaptureInput {
   headVersion: string;
   /** Owner, a direct editor or an effective editor. Open editing is not enough. */
   isDocEditor: boolean;
+  /** The owner alone still reads an expired document, and so its cover. */
+  isOwner: boolean;
   expired: boolean;
   /** Whether this reader's frame runs the document's scripts... */
   sandboxed: boolean;
@@ -104,7 +106,8 @@ export interface CaptureNeeds {
  *   - Only an editor: the people who can already change what the document
  *     says. Open editing admits any signed-in account, which is too wide for an
  *     image every member is shown.
- *   - Never an expired document, which is frozen for everyone.
+ *   - An expired document only by its owner, the one reader it has left; the
+ *     server shows the image to nobody else.
  *   - Only when this frame runs scripts exactly when everyone's does. A reader
  *     who trusted a document for THEMSELVES runs its scripts with their own
  *     access, and those scripts could paint something of theirs into the page
@@ -113,7 +116,7 @@ export interface CaptureNeeds {
 export function captureNeeds(input: CaptureInput): CaptureNeeds | null {
   if (!input.reading || input.draft) return null;
   if (!input.headVersion || input.shownVersion !== input.headVersion) return null;
-  if (!input.isDocEditor || input.expired) return null;
+  if (!input.isDocEditor || (input.expired && !input.isOwner)) return null;
   if (input.sandboxed === input.globallyTrusted) return null;
 
   const current =
@@ -144,8 +147,8 @@ export function storedSlideImages(
 
 /**
  * Whether this account's workspace should capture a card's cover now: it can
- * change the document, the document has not expired, and no cover is stored
- * for its current version by this capture. The same rule the viewer applies
+ * change the document, the document has not expired unless this is its owner,
+ * and no cover is stored for its current version by this capture. The same rule the viewer applies
  * to the cover (`captureNeeds`), read off the workspace's record alone.
  */
 export function coverOwed(doc: DocMeta, emailLower: string, now = Date.now()): boolean {
@@ -154,7 +157,8 @@ export function coverOwed(doc: DocMeta, emailLower: string, now = Date.now()): b
     doc.ownerEmail === emailLower ||
     Boolean(doc.editors?.includes(emailLower)) ||
     Boolean(doc.editorMembers?.includes(emailLower));
-  if (!editor || isExpired(doc.expiresAt, now)) return false;
+  if (!editor) return false;
+  if (doc.ownerEmail !== emailLower && isExpired(doc.expiresAt, now)) return false;
   const t = doc.thumb;
   return !(
     t &&

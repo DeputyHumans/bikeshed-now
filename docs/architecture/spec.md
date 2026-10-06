@@ -220,7 +220,9 @@ every member sees them without anybody rendering them again.
   any but the deployment's own is a `409`, so a page left open from an older
   release cannot store what a newer capture exists to replace. Editors only: `isDocEditor`, not open
   editing's wider `canEdit`, because a stored image is shown to every member.
-  `409` once expired, or when `v` is not `currentVersion`. Each image must be a
+  `409` once expired to the caller — to everyone but its owner, who alone
+  still reads an expired document and so may store its cover — or when `v` is
+  not `currentVersion`. Each image must be a
   JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
   image, slides at most 100. The objects go in under a key minted per upload,
   and a transaction makes that key the record's only if this kind is not yet
@@ -757,7 +759,8 @@ rail is every slide; any other document's cover is its first screen. Every
 stored image is laid out at one fixed stage, 1280×720, whoever captured it, so
 an editor on a phone does not decide every member's cards are portrait. A
 capture happens only on the published head, read rather than edited, with no
-draft, by an editor, on a document that has not expired — and only when the
+draft, by an editor, on a document that has not expired or is the editor's
+own — and only when the
 editor's frame runs scripts exactly when everyone's does. A reader who trusted
 a document for themselves runs its scripts with their own access, and those
 scripts could paint something of theirs into the page that a stored image would
@@ -769,7 +772,8 @@ in an editor's browser, one at a time: it fetches the published entry once,
 parses it without running anything, and captures the first screen of the same
 page preview — for a deck, its first slide, since a deck without its script
 shows its slides in order. It takes only what the viewer would: an editor's,
-unexpired, with no cover stored for the current version by this capture. A
+unexpired unless it is their own, with no cover stored for the current version
+by this capture. A
 document every reader runs the scripts of, and that has scripts, is left for
 an editor to open, since a capture that runs none could show everybody a page
 none of them sees; an untrusted document is sandboxed for every reader, so its
@@ -1342,7 +1346,11 @@ can move it; locking them out would make the setting unrecoverable rather than
 reversible. Everybody else gets the **same 404** a document they may not read
 gives them, so an expiry cannot be used to confirm that a slug exists. Writing
 is refused for everyone, the owner included — an expired document is frozen, and
-lifting the date is the single action that unfreezes it.
+lifting the date is the single action that unfreezes it. One exception, and
+only one: the owner's browser may still store the document's thumbnails (§2
+`POST /thumb`). A cover is not the document, nothing about the document changes,
+and the owner is the one reader an expired document has left — so the owner's
+workspace keeps recognisable cards, and nobody else is ever shown them.
 
 **Expiry is not in the security rules, and cannot be.** The workspace `list`
 rule has to be statically provable from the query's constraints (§5), and a

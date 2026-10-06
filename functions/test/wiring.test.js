@@ -321,10 +321,14 @@ test("storing thumbnails is for editors, refused once expired, and is not an edi
   // seen by every member; who may set it is who may change the document.
   assert.match(body, /isDocEditor\(data, caller\.uid, caller\.emailLower\)/);
   assert.doesNotMatch(body, /\bcanEdit\(/);
-  // Before writing anything, and again inside the transaction that decides.
+  // Expiry as a READER meets it, before writing anything and again inside the
+  // transaction that decides: refused to every editor, but not to the owner,
+  // who alone still reads an expired document and so may store its cover.
   const transaction = body.slice(body.indexOf("runTransaction("));
-  assert.ok(body.indexOf("isExpired(") < body.indexOf("runTransaction("));
-  assert.match(transaction, /isExpired\(d, Date\.now\(\)\)/);
+  const before = body.indexOf("expiredForReader(data, caller)");
+  assert.ok(before > 0 && before < body.indexOf("runTransaction("));
+  assert.match(transaction, /expiredForReader\(d, caller\)/);
+  assert.doesNotMatch(body, /\bisExpired\(/);
   assert.match(transaction, /d\.currentVersion !== versionId/);
   // A captured image is not an edit: the workspace sorts and labels by this.
   assert.doesNotMatch(body, /updatedAt/);

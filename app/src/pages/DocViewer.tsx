@@ -284,6 +284,7 @@ export function DocViewer() {
     shownVersion: doc.currentVersion,
     headVersion: doc.meta?.currentVersion ?? "",
     isDocEditor,
+    isOwner,
     expired: isExpired(doc.meta?.expiresAt),
     sandboxed: mode.kind !== "reading" || mode.sandboxed,
     globallyTrusted: doc.meta?.trusted !== false,

@@ -33,6 +33,7 @@ const OWED: CaptureInput = {
   shownVersion: "v3",
   headVersion: "v3",
   isDocEditor: true,
+  isOwner: false,
   expired: false,
   sandboxed: true,
   globallyTrusted: false,
@@ -59,7 +60,7 @@ describe("captureNeeds", () => {
     ["on an older version than the head", { shownVersion: "v2" }],
     ["before the head is known", { headVersion: "", shownVersion: "" }],
     ["for a reader who cannot change the document", { isDocEditor: false }],
-    ["once the document has expired", { expired: true }],
+    ["to an editor once the document has expired", { expired: true }],
     // Personally trusted: this frame runs scripts that every other reader's
     // does not, with this reader's access.
     ["when this frame runs scripts nobody else's does", { sandboxed: false, globallyTrusted: false }],
@@ -70,6 +71,11 @@ describe("captureNeeds", () => {
       expect(captureNeeds({ ...OWED, ...change })).toBeNull();
     });
   }
+
+  it("still owes its owner a capture once the document has expired", () => {
+    // Expired, it is readable by its owner alone, and so is its cover.
+    expect(captureNeeds({ ...OWED, expired: true, isOwner: true })).toEqual({ cover: true, slides: true });
+  });
 
   it("captures a trusted document in a frame that runs its scripts like everyone's", () => {
     expect(captureNeeds({ ...OWED, sandboxed: false, globallyTrusted: true })).toEqual({
@@ -230,6 +236,10 @@ describe("coverOwed", () => {
     expect(coverOwed(doc({ ownerEmail: "ana@example.com", editorMembers: [ME] }), ME)).toBe(true);
   });
 
+  it("is still owed to its owner once it has expired, who alone can see it", () => {
+    expect(coverOwed(doc({ expiresAt: Date.now() - 1000 }), ME)).toBe(true);
+  });
+
   it("is owed again for a newer version, or an image an older capture made", () => {
     expect(coverOwed(doc({ thumb: { versionId: "v2", rev: THUMB_REVISION, cover: KEY } }), ME)).toBe(true);
     expect(coverOwed(doc({ thumb: { versionId: "v3", cover: KEY } }), ME)).toBe(true);
@@ -239,7 +249,7 @@ describe("coverOwed", () => {
   for (const [why, over, email] of [
     ["to a reader who cannot change it", { ownerEmail: "ana@example.com", viewers: [ME] }, ME],
     ["to nobody signed in", {}, ""],
-    ["once it has expired", { expiresAt: Date.now() - 1000 }, ME],
+    ["to an editor once it has expired", { ownerEmail: "ana@example.com", editors: [ME], expiresAt: Date.now() - 1000 }, ME],
     ["when this version's cover is already stored", { thumb: { versionId: "v3", rev: THUMB_REVISION, cover: KEY } }, ME],
   ] as const) {
     it(`is not owed ${why}`, () => {

@@ -288,8 +288,8 @@ Publish `deck-animated` and sign in as its owner.
    workspace, as their owner. Within a few seconds each sends one
    `POST /thumb … kind=cover` from the workspace itself, and both cards show
    their first screen. `deck-animated`, trusted and scripted, keeps its
-   placeholder until it is opened; so does any document whose expiry has
-   passed.
+   placeholder until it is opened. A document whose expiry has passed gets a
+   cover in its owner's workspace, and stays a placeholder for its editors.
 
 ---
 

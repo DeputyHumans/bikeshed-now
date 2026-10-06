@@ -506,7 +506,8 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
  * Captured in an editor's browser, because nothing here renders a document,
  * and stored so every member's workspace shows it without anyone rendering it
  * again. Editors only — the people who can already change what the document
- * says — and never on an expired document, which is frozen for everyone.
+ * says. On an expired document, its owner only: a cover is not the document,
+ * and the owner is the one reader an expired document has left.
  *
  * Each kind is written once per version. The objects go in under a key minted
  * here; only the transaction decides whether that key becomes the record's,
@@ -553,7 +554,10 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller)).end();
     return;
   }
-  if (isExpired(data, Date.now())) {
+  // Expired as a reader meets it: an editor cannot read an expired document,
+  // so may not store its picture; its owner still reads it, and is the only
+  // one who will ever be shown the cover.
+  if (expiredForReader(data, caller)) {
     res.status(409).json({ error: EXPIRED_WRITE });
     return;
   }
@@ -580,7 +584,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
   const outcome = await db().runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
-    if (!d || d.currentVersion !== versionId || isExpired(d, Date.now())) {
+    if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
       return { stored: false, moved: true, stale: [] };
     }
     const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);

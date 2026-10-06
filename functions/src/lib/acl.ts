@@ -87,7 +87,9 @@ export function isExpired(
  *
  * Writing is refused for EVERYONE, the owner included. An expired document is
  * frozen; lifting the date is what unfreezes it, and that is one action rather
- * than a special case in every write path.
+ * than a special case in every write path. The single exception asks this
+ * question instead of `isExpired`: `saveThumbs`, because a stored cover is not
+ * the document, and the owner is the one reader it has left (SPEC §17).
  */
 export function expiredForReader(
   doc: DocAclData,

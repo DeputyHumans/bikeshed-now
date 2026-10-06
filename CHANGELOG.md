@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **An owner's expired documents get covers too.** An expired document stays
+  readable to its owner, but its card kept a placeholder for good, because no
+  thumbnail was ever stored for it. The owner's browser may now capture and
+  store its cover and rail; nobody else is shown them, and nothing else about
+  an expired document can be written (SPEC §17).
+
 ## 0.5.0 — 2026-10-06
 
 ### Added

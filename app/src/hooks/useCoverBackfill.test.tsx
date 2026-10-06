@@ -81,23 +81,27 @@ describe("useCoverBackfill", () => {
       expired: page("Expired"),
       done: page("Done"),
       owed: page("Owed"),
+      mine: page("Mine, expired"),
     });
     renderHook(() =>
       useCoverBackfill(
         [
           doc("theirs", { ownerEmail: "ana@example.com", viewers: [ME] }),
-          doc("expired", { expiresAt: Date.now() - 1000 }),
+          // An editor's, expired: frozen and unreadable to them.
+          doc("expired", { ownerEmail: "ana@example.com", editors: [ME], expiresAt: Date.now() - 1000 }),
           doc("done", { thumb: { versionId: "v2", rev: THUMB_REVISION, cover: KEY } }),
           doc("owed"),
+          // The owner's, expired: they alone still read it, so it gets a cover.
+          doc("mine", { expiresAt: Date.now() - 1000 }),
         ],
         ME,
         options,
       ),
     );
 
-    await waitFor(() => expect(options.upload).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(options.upload).toHaveBeenCalledTimes(2));
     await new Promise((r) => setTimeout(r, 30));
-    expect(captured).toEqual(["Owed"]);
+    expect(captured).toEqual(["Owed", "Mine, expired"]);
   });
 
   it("replaces a cover an older capture made", async () => {
