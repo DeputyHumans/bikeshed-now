@@ -114,6 +114,34 @@ const EXPECTATIONS = {
       "deck-quarter-review must contain NO script: it demonstrates the deck navigator, and it can only do that cleanly if it renders the same trusted or not.",
     );
   },
+  "deck-animated": (text, report) => {
+    // The deck whose slides previewed blank. Each pattern below is a different
+    // reason a thumbnail can show a slide's first frame instead of its last, so
+    // losing any one of them stops the sample proving that fix.
+    report(
+      /<script/.test(text),
+      "deck-animated must contain a script: it is what stacks the slides and moves `.active`, the state a preview never runs.",
+    );
+    report(
+      /height:\s*100vh/.test(text),
+      "deck-animated's slides must be a viewport tall, or the navigator and its thumbnails never appear.",
+    );
+    report(
+      /\.js \.slide \.anim\s*\{\s*opacity:\s*0;?\s*\}/.test(text) &&
+        // `none` excluded: the reduced-motion rule names the same selector.
+        /\.js \.slide\.active \.anim\s*\{[^}]*animation:\s*(?!none\b)[\w-]+\s/.test(text),
+      "deck-animated needs content hidden at opacity:0 that animates in only under `.slide.active`.",
+    );
+    report(
+      /\.js \.slide \.bar\s*\{[^}]*width:\s*0/.test(text) &&
+        /\.js \.slide\.active \.bar\s*\{[^}]*width:\s*var\(--w\)/.test(text),
+      "deck-animated needs bars that start at width:0 and fill only under `.slide.active`: a final state that forcing opacity cannot reach.",
+    );
+    report(
+      /\.badge\s*\{[^}]*animation:[^;}]*\d(?:\.\d+)?s[^;}]*\d(?:\.\d+)?s[^;}]*\bboth\b/.test(text),
+      "deck-animated needs a delayed animation with fill-mode `both`, which holds its element invisible until the delay runs out.",
+    );
+  },
   "design-review-shortener": (text, report) => {
     // The SCRIPT-FREE half. This is the assertion that matters most in this file.
     report(

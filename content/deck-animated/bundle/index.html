@@ -1,0 +1,268 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+
+  The ANIMATED deck sample. `deck-quarter-review` is the deck that renders the
+  same everywhere; this one is the deck most generated decks actually are, and
+  it exists because its slides used to preview blank.
+
+  Without its script it is a plain scrolling deck with everything visible, so a
+  reader who has not vouched for it still reads every word. With the script,
+  the slides stack, one is `.active` at a time, and three things are hidden
+  until that slide is shown:
+
+    - **Content gated on the slide's state.** `.js .slide .anim` starts at
+      `opacity:0` and only animates in under `.slide.active`. A preview has no
+      script, so no slide but the current one ever becomes active there.
+    - **A value that is not visibility at all.** The bars start at `width:0`
+      and grow under `.slide.active`. Forcing opacity cannot fill them; only
+      the deck's own state class can.
+    - **A delayed animation.** The badge pops in after 1.5 s, held invisible
+      by `animation-fill-mode: both` until then, on every slide, active or not.
+
+  Keep all three. Each is a different reason a thumbnail shows the first frame
+  of a slide instead of the last, and `scripts/check-content.mjs` asserts them.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch readiness</title>
+<style>
+  :root {
+    --ink: #17161f;
+    --muted: #5d5c6e;
+    --accent: #0f7b6c;
+    --accent-soft: #dff3ef;
+    --warn: #b4540a;
+    --line: #dddce6;
+    --surface: #f6f6f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 400 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+  }
+
+  /* Without the script: one slide per screen, scrolled. */
+  .deck > section {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 6vh 7vw;
+    border-bottom: 1px solid var(--line);
+  }
+  .deck > section:last-child { border-bottom: 0; }
+  .inner { width: 100%; max-width: 48rem; }
+
+  .eyebrow {
+    margin: 0 0 0.7em;
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 { font-size: clamp(2rem, 5vw, 3.3rem); line-height: 1.08; letter-spacing: -0.026em; margin: 0 0 0.3em; }
+  h2 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); line-height: 1.16; letter-spacing: -0.016em; margin: 0 0 0.7em; }
+  p { margin: 0 0 1.1em; }
+  .lede { font-size: 1.22rem; color: var(--muted); }
+  ul, ol { margin: 0 0 1.1em; padding-left: 1.2em; }
+  li { margin: 0 0 0.55em; }
+
+  .badge {
+    display: inline-block;
+    margin-bottom: 1.4em;
+    padding: 0.25em 0.8em;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 650;
+    animation: pop 0.4s ease 1.5s both;
+  }
+
+  .bars { display: grid; gap: 0.9em; margin: 0 0 1.2em; }
+  .bar-row { display: grid; grid-template-columns: 9rem 1fr 3.5rem; align-items: center; gap: 0.8em; }
+  .track { height: 1.1rem; border-radius: 4px; background: var(--surface); overflow: hidden; }
+  .bar { height: 100%; width: var(--w); background: var(--accent); border-radius: 4px; }
+  .value { font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1em; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 1em 1.1em; }
+  .card h3 { margin: 0 0 0.4em; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  .card.risk h3 { color: var(--warn); }
+
+  figure { margin: 0 0 1em; }
+
+  /*
+   * With the script: stacked, one shown at a time. Every rule that hides
+   * anything is scoped under `.js`, so a sandboxed reader sees all of it.
+   */
+  .js body { overflow: hidden; }
+  .js .deck { position: relative; height: 100vh; }
+  .js .deck > section {
+    position: absolute;
+    inset: 0;
+    border-bottom: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.35s ease, visibility 0s linear 0.35s;
+  }
+  .js .deck > section.active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.35s ease;
+  }
+
+  .js .slide .anim { opacity: 0; }
+  .js .slide.active .anim { animation: rise 0.6s ease forwards; }
+  .js .slide.active .anim:nth-child(2) { animation-delay: 0.12s; }
+  .js .slide.active .anim:nth-child(3) { animation-delay: 0.24s; }
+  .js .slide.active .anim:nth-child(4) { animation-delay: 0.36s; }
+
+  .js .slide .bar { width: 0; transition: width 0.9s ease 0.2s; }
+  .js .slide.active .bar { width: var(--w); }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .badge, .js .slide.active .anim { animation: none; opacity: 1; }
+    .js .slide .bar { transition: none; }
+  }
+
+  @media print {
+    .js body { overflow: visible; }
+    .js .deck { height: auto; }
+    .js .deck > section { position: static; opacity: 1; visibility: visible; break-after: page; }
+    .js .slide .anim, .badge { opacity: 1; animation: none; }
+    .js .slide .bar { width: var(--w); }
+  }
+</style>
+</head>
+<body>
+<main class="deck">
+
+  <section class="slide" id="cover" data-title="Launch readiness">
+    <div class="inner">
+      <span class="badge">Draft for review</span>
+      <p class="eyebrow anim">Payments console · go/no-go</p>
+      <h1 class="anim">Launch readiness</h1>
+      <p class="lede anim">What is done, what the pilot told us, and the two calls we need before the 14th.</p>
+    </div>
+  </section>
+
+  <section class="slide" id="shipped" data-title="What shipped">
+    <div class="inner">
+      <p class="eyebrow">Scope</p>
+      <h2>What shipped</h2>
+      <ul>
+        <li class="anim">Refunds from the console, partial and full, with a reason on every one.</li>
+        <li class="anim">Dispute evidence uploads, replacing the shared inbox.</li>
+        <li class="anim">Role-based access: finance can refund, support can only view.</li>
+        <li class="anim">An export that finance can open without asking engineering.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="slide" id="pilot" data-title="Pilot adoption">
+    <div class="inner">
+      <p class="eyebrow">Pilot · six weeks, four teams</p>
+      <h2>Who actually used it</h2>
+      <div class="bars" role="img" aria-label="Share of each team's refunds handled in the console">
+        <div class="bar-row"><span>Finance</span><span class="track"><span class="bar" style="--w: 92%"></span></span><span class="value">92%</span></div>
+        <div class="bar-row"><span>Support EU</span><span class="track"><span class="bar" style="--w: 71%"></span></span><span class="value">71%</span></div>
+        <div class="bar-row"><span>Support US</span><span class="track"><span class="bar" style="--w: 64%"></span></span><span class="value">64%</span></div>
+        <div class="bar-row"><span>Partnerships</span><span class="track"><span class="bar" style="--w: 23%"></span></span><span class="value">23%</span></div>
+      </div>
+      <p class="anim">Partnerships still refund by email. They need bulk refunds, which is not in this release.</p>
+    </div>
+  </section>
+
+  <section class="slide" id="risks" data-title="Risks">
+    <div class="inner">
+      <p class="eyebrow">Before we turn it on</p>
+      <h2>Risks we are carrying</h2>
+      <div class="cards">
+        <div class="card risk anim"><h3>Refund limits</h3><p>Per-role limits exist but nobody has agreed the numbers yet.</p></div>
+        <div class="card anim"><h3>Audit trail</h3><p>Every action is logged; retention matches the ledger's.</p></div>
+        <div class="card risk anim"><h3>Old inbox</h3><p>Two teams still forward disputes to it out of habit.</p></div>
+        <div class="card anim"><h3>Rollback</h3><p>A flag per team. Turning one off loses nothing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" id="decisions" data-title="Decisions needed">
+    <div class="inner">
+      <p class="eyebrow">Open</p>
+      <h2>Two decisions needed</h2>
+      <ol>
+        <li class="anim"><strong>Refund limits per role.</strong> Proposal: support up to $200, finance unlimited with a second approver above $5,000.</li>
+        <li class="anim"><strong>When the old inbox closes.</strong> Proposal: an auto-reply from launch, closed two weeks later.</li>
+      </ol>
+      <figure class="anim">
+        <svg viewBox="0 0 400 60" width="100%" role="img" aria-label="Timeline: launch, auto-reply, inbox closed">
+          <line x1="20" y1="30" x2="380" y2="30" stroke="#dddce6" stroke-width="4"/>
+          <circle cx="40" cy="30" r="9" fill="#0f7b6c"/>
+          <circle cx="200" cy="30" r="9" fill="#0f7b6c"/>
+          <circle cx="360" cy="30" r="9" fill="#b4540a"/>
+          <text x="40" y="56" font-size="12" text-anchor="middle" fill="#5d5c6e">Launch</text>
+          <text x="200" y="56" font-size="12" text-anchor="middle" fill="#5d5c6e">Auto-reply</text>
+          <text x="360" y="56" font-size="12" text-anchor="middle" fill="#5d5c6e">Inbox closed</text>
+        </svg>
+      </figure>
+    </div>
+  </section>
+
+  <section class="slide" id="next" data-title="Next steps">
+    <div class="inner">
+      <p class="eyebrow">After this review</p>
+      <h2>Next steps</h2>
+      <ul>
+        <li class="anim">Agree the limits, then set them in config before the 12th.</li>
+        <li class="anim">Turn the console on for every team on the 14th.</li>
+        <li class="anim">Scope bulk refunds with partnerships the week after.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+<script>
+  // Stacks the slides and moves `.active` with the arrow keys. Nothing here is
+  // needed to READ the deck; it only decides which slide is on screen.
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll(".deck > section"));
+    if (slides.length === 0) return;
+    document.documentElement.classList.add("js");
+    var current = 0;
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach(function (slide, i) {
+        slide.classList.toggle("active", i === current);
+      });
+    }
+    document.addEventListener("keydown", function (event) {
+      if (event.defaultPrevented) return;
+      var key = event.key;
+      if (key === "ArrowRight" || key === "PageDown" || key === " ") show(current + 1);
+      else if (key === "ArrowLeft" || key === "PageUp") show(current - 1);
+      else if (key === "Home") show(0);
+      else if (key === "End") show(slides.length - 1);
+      else return;
+      event.preventDefault();
+    });
+    show(0);
+  })();
+</script>
+</body>
+</html>

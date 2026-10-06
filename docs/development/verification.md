@@ -27,11 +27,15 @@ export GCLOUD_PROJECT=demo-bikeshed BIKESHED_BUCKET=demo-bikeshed-content
 node scripts/publish.mjs --doc bikeshed-tour            --account you@example.com
 node scripts/publish.mjs --doc design-review-shortener  --account you@example.com
 node scripts/publish.mjs --doc markdown-reference       --account you@example.com
+node scripts/publish.mjs --doc deck-animated            --account you@example.com
 ```
 
 The three samples are not decoration: **A is scripted HTML, B is script-free
 HTML, C is Markdown**, and that is exactly what makes the trust observations
-below possible. `npm run check:content` keeps them that way.
+below possible. `npm run check:content` keeps them that way. The fourth,
+`deck-animated`, is a stacked deck whose slides reveal only once shown — trust
+it, and its slide thumbnails are what show whether a preview reaches a slide's
+final state.
 
 Three prerequisites for the document page, which the Hosting emulator serves
 through `docShell` exactly as production does:

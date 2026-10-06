@@ -1,0 +1,8 @@
+{
+  "title": "Launch readiness",
+  "slug": "deck-animated",
+  "entry": "index.html",
+  "owner": "owner@example.com",
+  "viewers": ["reviewer@example.com"],
+  "label": "v1"
+}
