@@ -317,6 +317,70 @@ function streamObject(
   stream.pipe(res);
 }
 
+/** What a byte path knows once it has decided the caller may read. */
+interface ReadGate {
+  docSnap: admin.firestore.DocumentSnapshot;
+  docData: DocAclData;
+  visibility: ReturnType<typeof visibilityOf>;
+  basis: NonNullable<ReturnType<typeof readBasis>>;
+}
+
+/**
+ * May this caller read this document's bytes? Null for every "no", so the
+ * caller answers each with the same 404 (SPEC §1.4b).
+ *
+ * Expiry is checked HERE, on the one path every byte takes, because it is not
+ * in the security rules and cannot be. It shares the "you may not read this"
+ * answer: an expired document must not become a way to confirm a slug exists.
+ */
+async function readGate(
+  caller: Awaited<ReturnType<typeof resolveCaller>>,
+  docId: string,
+  linkKey: string | null,
+): Promise<ReadGate | null> {
+  const docSnap = await db().collection("docs").doc(docId).get();
+  if (!docSnap.exists) return null;
+  const docData = docSnap.data() as DocAclData;
+  if (expiredForReader(docData, caller)) return null;
+  const proof = await linkProofFor(docSnap.ref, docData, caller, linkKey);
+  const basis = readBasis(docData, caller, proof);
+  if (basis === null) return null;
+  return { docSnap, docData, visibility: visibilityOf(docData), basis };
+}
+
+/**
+ * Cache policy for a byte path's 200, set HERE rather than in firebase.json,
+ * because gated and non-private content need different answers and a Hosting
+ * header rule would force one on both. Versions are immutable, so public bytes
+ * can never be stale; the real exposure is revocation latency, bounded to this
+ * window and documented in docs/operations/overview.md.
+ *
+ * Only a read decided by the URL alone may be cached at that URL. A member's
+ * or a link grant's read is decided by who is asking, and a grant's URL
+ * carries no key, so caching it would hand the bytes to anyone at that URL.
+ */
+function setContentCache(res: import("express").Response, gate: ReadGate): void {
+  if (gate.basis === "member" || gate.basis === "grant") {
+    res.setHeader("Cache-Control", "private, no-store");
+  } else {
+    /**
+     * The window is capped at the time left before expiry.
+     *
+     * Revocation latency is a documented trade — a document made private again
+     * can be served from cache for up to five minutes. An EXPIRY is not the
+     * same thing: its moment is known in advance, so serving past it would be a
+     * choice rather than a consequence. `max-age` never outlives the date.
+     */
+    const at = expiryMs(gate.docData);
+    const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
+    const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
+    res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
+  }
+  if (gate.visibility === "unlisted") {
+    res.setHeader("X-Robots-Tag", "noindex");
+  }
+}
+
 /**
  * GET /content/[~<key>/]:docId/:versionId/<relpath, default index.html>
  *
@@ -356,63 +420,19 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const docSnap = await db().collection("docs").doc(docId).get();
-  if (!docSnap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const docData = docSnap.data() as DocAclData;
-  const visibility = visibilityOf(docData);
-
-  // Expiry is checked HERE, on the one path every byte takes, because it is not
-  // in the security rules and cannot be. Same 404 as "you may not read this":
-  // an expired document must not become a way to confirm a slug exists.
-  if (expiredForReader(docData, caller)) {
+  const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
+  if (!gate) {
     res.status(404).end();
     return;
   }
 
-  const proof = await linkProofFor(docSnap.ref, docData, caller, parts.k ?? strParam(req, "k"));
-  const basis = readBasis(docData, caller, proof);
-  if (basis === null) {
-    res.status(404).end();
-    return;
-  }
-
-  const versionSnap = await docSnap.ref.collection("versions").doc(versionId).get();
+  const versionSnap = await gate.docSnap.ref.collection("versions").doc(versionId).get();
   if (!versionSnap.exists) {
     res.status(404).end();
     return;
   }
 
-  // Cache policy is set HERE rather than in firebase.json, because gated and
-  // non-private content need different answers and a Hosting header rule would
-  // force one on both. Versions are immutable, so public bytes can never be
-  // stale; the real exposure is revocation latency, bounded to this window and
-  // documented in docs/operations/overview.md.
-  //
-  // Only a read decided by the URL alone may be cached at that URL. A member's
-  // or a link grant's read is decided by who is asking, and a grant's URL
-  // carries no key, so caching it would hand the bytes to anyone at that URL.
-  if (basis === "member" || basis === "grant") {
-    res.setHeader("Cache-Control", "private, no-store");
-  } else {
-    /**
-     * The window is capped at the time left before expiry.
-     *
-     * Revocation latency is a documented trade — a document made private again
-     * can be served from cache for up to five minutes. An EXPIRY is not the
-     * same thing: its moment is known in advance, so serving past it would be a
-     * choice rather than a consequence. `max-age` never outlives the date.
-     */
-    const at = expiryMs(docData);
-    const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
-    const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
-    res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
-  }
-  if (visibility === "unlisted") {
-    res.setHeader("X-Robots-Tag", "noindex");
-  }
+  setContentCache(res, gate);
   // Deliberately NO X-Frame-Options or frame-ancestors: the content must embed
   // same-origin in the app's iframe, which is what makes annotation possible.
 
