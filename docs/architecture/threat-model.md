@@ -6,7 +6,7 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes | private bucket, served only by `contentProxy` and `downloadBundle`; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it) |
+| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it) |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
 | Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document: a member, anyone on a public one, a link grant on an unlisted one |
 | That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link |

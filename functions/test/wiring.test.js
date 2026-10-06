@@ -31,6 +31,7 @@ test("the SPA catch-all is last, after every wildcard", () => {
   assert.equal(sources[sources.length - 1], "**");
   // An exact rewrite must precede a wildcard that would shadow it.
   assert.ok(sources.indexOf("/draft") < sources.indexOf("/draft/**"));
+  assert.ok(sources.indexOf("/thumb") < sources.indexOf("/thumb/**"));
   // The document page is a function too, and it must come before the SPA
   // catch-all or the shell is served with a generic head; after the content
   // path so byte requests are never answered with a page.
@@ -107,7 +108,7 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   // `forkDoc` serves no bytes, but its lineage answer is per caller — who may
   // see which ancestor, and the owner's inventory — so it is held to the same
   // rule: a cached lineage would show one reader's view of a document to the next.
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc"]) {
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);
@@ -271,4 +272,61 @@ test("every path that mints a version decides trust inside its transaction", () 
   assert.match(inCommit, /keepsTrust\(/, "the in-app commit must ask who wrote the version");
   assert.match(inCommit, /readTrustGrants\(tx, /, "the in-app commit must read the trust grants in its transaction");
   assert.match(inCommit, /withdrawTrust\(tx, /, "the in-app commit must be able to withdraw trust");
+});
+
+// --- Stored thumbnails ---------------------------------------------------------
+
+/** The source of one exported endpoint, up to the next export. */
+function endpointBody(name) {
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf(`export const ${name} = onRequest(`);
+  assert.ok(start > 0, `${name} not found`);
+  const next = src.indexOf("\nexport ", start + 1);
+  return src.slice(start, next === -1 ? undefined : next);
+}
+
+test("a thumbnail is read through the same gate as content, and only if the record names it", () => {
+  /**
+   * A thumbnail is the document's content, so it takes the same gate — the one
+   * that refuses an expired document, which the rules cannot. The unit suite
+   * has no request to send, so the branch is pinned by shape: the path is
+   * matched before anything is read, the gate decides, the record must name the
+   * image, and the object key is the thumbnail's own, never the version's.
+   */
+  const body = endpointBody("contentProxy");
+  const branch = body.slice(body.indexOf("if (isThumb) {"), body.indexOf("const prefix = `docs/"));
+  assert.ok(branch.length > 0, "contentProxy has no thumbnail branch");
+  const order = ["THUMB_REL.test(relPath)", "readGate(", "servableThumb(", "setThumbCache(", "streamObject("];
+  const at = order.map((needle) => branch.indexOf(needle));
+  assert.ok(at.every((i) => i >= 0), `missing one of ${order.join(", ")}`);
+  assert.deepEqual([...at].sort((a, b) => a - b), at, `out of order: ${order.join(" < ")}`);
+  assert.match(branch, /streamObject\(res, thumbObjectKey\(docId, versionId, relPath\)/);
+  // The answer, not merely the call: both must hold, or the reader gets the 404.
+  assert.ok(branch.includes("if (!gate || !servableThumb(thumb, versionId, relPath)) {"));
+});
+
+test("a member's thumbnail is kept by their browser and never by a shared cache", () => {
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const fn = src.slice(src.indexOf("function setThumbCache("), src.indexOf("GET /content/[~<key>/]"));
+  assert.match(fn, /`private, max-age=\$\{maxAge\}, immutable`/);
+  // Capped at expiry, like every other window.
+  assert.match(fn, /expiryMs\(gate\.docData\)/);
+  // Anything not decided by who is asking keeps the content policy.
+  assert.match(fn, /setContentCache\(res, gate\)/);
+});
+
+test("storing thumbnails is for editors, refused once expired, and is not an edit", () => {
+  const body = endpointBody("saveThumbs");
+  // Editors — not open editing's every signed-in account. A shared image is
+  // seen by every member; who may set it is who may change the document.
+  assert.match(body, /isDocEditor\(data, caller\.uid, caller\.emailLower\)/);
+  assert.doesNotMatch(body, /\bcanEdit\(/);
+  // Before writing anything, and again inside the transaction that decides.
+  const transaction = body.slice(body.indexOf("runTransaction("));
+  assert.ok(body.indexOf("isExpired(") < body.indexOf("runTransaction("));
+  assert.match(transaction, /isExpired\(d, Date\.now\(\)\)/);
+  assert.match(transaction, /d\.currentVersion !== versionId/);
+  // A captured image is not an edit: the workspace sorts and labels by this.
+  assert.doesNotMatch(body, /updatedAt/);
+  assert.match(body, /\.\.\.CREATE_ONLY/);
 });

@@ -22,18 +22,24 @@
       { "source": "/unlock", "function": "unlockDoc" },
       { "source": "/draft", "function": "saveDraft" },
       { "source": "/commit", "function": "commitVersion" },
+      { "source": "/thumb", "function": "saveThumbs" },
       { "source": "/mcp", "function": "mcp" },
       { "source": "/sitemap.xml", "function": "sitemap" },
       { "source": "/verify/**", "function": "verifyEmail" },
       { "source": "/download/**", "function": "downloadBundle" },
       { "source": "/draft/**", "function": "getDraft" },
       { "source": "/content/**", "function": "contentProxy" },
+      { "source": "/thumb/**", "function": "contentProxy" },
       { "source": "/d/**", "function": "docShell" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [
       {
         "source": "/content/**",
+        "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
+      },
+      {
+        "source": "/thumb/**",
         "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
       },
       {

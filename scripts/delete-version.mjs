@@ -16,8 +16,10 @@
  * ORDER IS LOAD-BEARING. `currentVersion` is repointed FIRST, in a transaction
  * that aborts if anything published mid-run, because the viewer resolves a bare
  * /d/{docId} from that field — deleting first strands every reader on a version
- * that no longer exists. Then the Storage bytes (the version record's
- * storagePrefix is the only pointer to them), then the Firestore record.
+ * that no longer exists. The same transaction clears a `thumb` record naming
+ * the version. Then the Storage bytes (the version record's storagePrefix is
+ * the only pointer to them) and the thumbnails captured from them, then the
+ * Firestore record.
  *
  * NOTE: unlike every other script here, `--dry-run` READS Firestore and Storage
  * and therefore needs credentials. A destructive preview that cannot show you
@@ -223,6 +225,13 @@ async function main() {
     );
   }
 
+  // Thumbnails captured from this version live beside it, not under it, so
+  // the prefix above does not reach them. They are its content all the same.
+  const thumbsPrefix = `docs/${docId}/thumbs/${doomed}/`;
+  const [thumbObjects] = await bucket.getFiles({ prefix: thumbsPrefix });
+  const thumbFiles = thumbObjects.filter((o) => !o.name.endsWith("/"));
+  const clearsThumb = meta.thumb?.versionId === doomed;
+
   const viewsQuery = docRef.collection("views").where("versionId", "==", doomed);
   const viewCount = values["keep-views"] ? 0 : await countOf(viewsQuery);
 
@@ -239,6 +248,10 @@ async function main() {
     `  delete Storage: gs://${bucketName}/${prefix} (${files.length} object(s), ${totalBytes} bytes)`,
   );
   for (const o of files) console.log(`      - gs://${bucketName}/${o.name}`);
+  console.log(
+    `  delete Storage: gs://${bucketName}/${thumbsPrefix} (${thumbFiles.length} thumbnail(s))`,
+  );
+  if (clearsThumb) console.log(`  clear thumb: it names ${doomed}`);
   console.log(
     `  delete Firestore: docs/${docId}/versions/${doomed} (+${annCount} annotation(s), ${commentCount} comment(s))`,
   );
@@ -278,6 +291,8 @@ async function main() {
       updatedAt: versions.find((v) => v.id === repoint).publishedAt,
     };
     if (meta.draft) update.draft = FieldValue.delete();
+    // Read fresh: a capture can land between the plan and this transaction.
+    if (fresh.data().thumb?.versionId === doomed) update.thumb = FieldValue.delete();
     if (!values["keep-stats"]) {
       update["stats.commits"] = nextCommits;
       if (nextCommits === 0) {
@@ -296,6 +311,9 @@ async function main() {
   }
   console.log(`  deleting gs://${bucketName}/${prefix} ...`);
   await bucket.deleteFiles({ prefix, force: true });
+  console.log("    done.");
+  console.log(`  deleting gs://${bucketName}/${thumbsPrefix} ...`);
+  await bucket.deleteFiles({ prefix: thumbsPrefix, force: true });
   console.log("    done.");
 
   console.log(`  deleting docs/${docId}/versions/${doomed} (recursive) ...`);

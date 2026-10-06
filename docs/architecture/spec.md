@@ -134,12 +134,14 @@ rewrites require it). Export names are FIXED and are asserted to match
 | `/unlock` | `unlockDoc` |
 | `/draft` | `saveDraft` |
 | `/commit` | `commitVersion` |
+| `/thumb` | `saveThumbs` |
 | `/mcp` | `mcp` |
 | `/sitemap.xml` | `sitemap` |
 | `/verify/**` | `verifyEmail` |
 | `/download/**` | `downloadBundle` |
 | `/draft/**` | `getDraft` |
 | `/content/**` | `contentProxy` |
+| `/thumb/**` | `contentProxy` |
 | `/d/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
 
@@ -148,7 +150,7 @@ catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
 through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
 `docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
-**`Cache-Control` for `/content/**` is set by the function, not by Hosting.**
+**`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.**
 A Hosting `headers` entry would override the function and force one policy on
 both gated and public content; §17 needs them to differ.
 
@@ -204,6 +206,30 @@ Never send a restrictive `X-Frame-Options`/`frame-ancestors` — the content mus
 embed same-origin in the app's iframe.
 
 Streamed with `file.createReadStream()`; large files are never buffered whole.
+
+### `POST /thumb`, `GET /thumb/[~<k>/]:docId/:versionId/:key/:slot.jpg`
+
+A version's **thumbnails**: a cover for its workspace card and, for a deck, one
+image per slide for the rail. Nothing here renders a document, so they are
+captured in an editor's browser from the previews §6d builds, and stored so
+every member sees them without anybody rendering them again.
+
+- **`POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,…`** — the body is the
+  JPEGs back to back, in slot order. Editors only: `isDocEditor`, not open
+  editing's wider `canEdit`, because a stored image is shown to every member.
+  `409` once expired, or when `v` is not `currentVersion`. Each image must be a
+  JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
+  image, slides at most 100. The objects go in under a key minted per upload,
+  and a transaction makes that key the record's only if this kind is not yet
+  stored for `v`; a loser deletes what it wrote. Moving the record to a new
+  version deletes the old version's thumbnails. Never touches `updatedAt`.
+- **`GET /thumb/…`** — `contentProxy`, through the same gate as `/content`: an
+  expired document's thumbnails are a `404` to everyone but its owner. Serves
+  only what `docs/{docId}.thumb` names. `Cache-Control: private,
+  max-age=min(86400, seconds to expiry), immutable` for a member's or a grant's
+  read — the key in the URL means the bytes there never change, and the window
+  bounds what a removed member's browser keeps — and the `/content` policy for
+  a read the URL alone decides.
 
 ### `GET /d/:docId[/:versionId]`
 Serves the app shell — the same bytes Hosting would serve for any client
@@ -401,6 +427,16 @@ view writer and the edit writer never clobber each other.
 `recordView` deliberately does NOT touch `updatedAt` — that field means "bumped
 on every publish", and a read must not masquerade as a publish.
 
+**`thumb`** is `{ versionId, cover?, slides?: { key, count } }`: which version's
+thumbnails are stored, and under which keys (§2 `POST /thumb`). Storage holds
+them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the
+version's prefix, never under it, because everything that reads a version (the
+next commit's content hash, a fork, the download) takes every object under
+`docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
+`updatedAt`: a captured image is not a publish. It may name an older version
+than `currentVersion` until an editor next opens the document, and the workspace
+shows that cover meanwhile.
+
 `stats.apiReads` counts automated reads. They never enter `stats.views` or
 `stats.totalMs`: reading *time* is a human concept and an agent fetching a
 document forty times would otherwise turn both into noise (§17).
@@ -409,6 +445,8 @@ document forty times would otherwise turn both into noise (§17).
 documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
 .versionId` may therefore carry a `"{versionId}-deleted"` tombstone, written by
 `delete-version.mjs`, so old and new sessions are never conflated under one id.
+Withdrawing a version also deletes its thumbnails and clears a `thumb` naming
+it, since a re-minted id would otherwise inherit them.
 
 `createdAt` is set once. `updatedAt` is bumped on every publish.
 
@@ -1275,9 +1313,10 @@ system already flows through one function. The consequence, stated rather than
 discovered: a member still sees the row, its title and its comments; what they
 cannot get is the document.
 
-Enforced in nine places from one predicate (`isExpired` in `lib/acl.ts`):
-`contentProxy`, `downloadBundle`, `getDraft`, `saveDraft`, `commitVersion`,
-`forkDoc`, `recordView`, `sitemap` and `docShell`, plus the MCP tools. A fork
+Enforced in ten places from one predicate (`isExpired` in `lib/acl.ts`):
+`contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
+`saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
+and `docShell`, plus the MCP tools. A fork
 is a read of every byte, so an expired source cannot be forked out from behind
 its date, and an expired document stops a lineage walk (§21).
 
@@ -1385,6 +1424,13 @@ Gated content: `private, no-store`. Non-private content on the immutable
 immutable so the bytes can never be stale; the real exposure is **revocation
 latency — making a document private again takes up to five minutes to
 propagate**, documented in `operations.md` beside the purge steps.
+
+Stored thumbnails (§2 `GET /thumb`) are the one gated response a browser may
+keep: `private, max-age` of at most a day, capped at expiry, and `immutable`
+because their URL names a key that is never reused. A member's workspace then
+costs no function call per card on every visit. `private` keeps them out of
+every shared cache; what the window concedes is that someone removed from a
+document keeps, for up to a day, the images their own browser already held.
 
 This is also the cost defence: every byte is proxied through a function, and
 public documents are where traffic spikes. A rate limiter is **deliberately not

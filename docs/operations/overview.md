@@ -107,8 +107,8 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 24 HTTP
-endpoints publicly invokable. "Publicly invokable" is not "public": each
+the content bucket only, never project-wide — and step 8 makes the 26 HTTP
+functions publicly invokable. "Publicly invokable" is not "public": each
 function authenticates its own caller. The Firestore trigger is deliberately
 left private.
 
@@ -132,7 +132,7 @@ and revoke it again if you would rather not leave it standing.
 
 The same grant applies to a function created **after** setup. `firebase
 deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new
-function such as `docShell` or `unlockDoc`; under Domain Restricted Sharing that deploy fails
+function such as `docShell`, `unlockDoc` or `saveThumbs`; under Domain Restricted Sharing that deploy fails
 at "set invoker" and the function stays private. The symptom of the missing
 grant is a `403` with an HTML body, before any code runs — every document page
 looks broken while being perfectly deployed. The repair, once the policy is
@@ -141,12 +141,19 @@ overridden:
 ```bash
 gcloud run services add-iam-policy-binding docshell --region=us-central1 --member=allUsers --role=roles/run.invoker
 gcloud run services add-iam-policy-binding unlockdoc --region=us-central1 --member=allUsers --role=roles/run.invoker
+gcloud run services add-iam-policy-binding savethumbs --region=us-central1 --member=allUsers --role=roles/run.invoker
 ```
 
 For `unlockDoc` the symptom is narrower and easier to miss: every unlisted
 document reads "Not here" to anyone but its members, key or no key, while
 everything else works. `curl -si https://<deployment>/unlock` answers `405`
 from the function; a `403` with an HTML body is the platform refusing.
+
+For `saveThumbs` nothing looks broken at all: documents read normally, and
+their cards and slide rails simply never gain stored thumbnails, because every
+capture an editor's browser uploads is refused before it arrives.
+`curl -si https://<deployment>/thumb` answers `405` from the function when the
+grant is in place.
 
 ### 4. Do step 10 by hand
 

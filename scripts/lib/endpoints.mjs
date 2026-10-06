@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The canonical endpoint table: one row per Cloud Function (SPEC §2).
+// The canonical endpoint table: one row per Hosting route to a Cloud Function (SPEC §2).
 
 /**
  * Why this file exists
@@ -28,6 +28,11 @@
  *
  * `devProxy: false` keeps a row out of the Vite dev proxy while Hosting still
  * rewrites it — for a function that serves a client route rather than an API.
+ *
+ * A function may have more than one row. `/thumb` is the `/draft` shape — an
+ * exact POST that writes, a prefix that reads — except that its reads are
+ * document bytes, so they go to `contentProxy`, the one path bytes take.
+ * `functionNames()` lists each function once however many rows it has.
  */
 export const ENDPOINTS = [
   { path: "/session", fn: "session", match: "exact" },
@@ -48,12 +53,14 @@ export const ENDPOINTS = [
   { path: "/unlock", fn: "unlockDoc", match: "exact" },
   { path: "/draft", fn: "saveDraft", match: "exact" },
   { path: "/commit", fn: "commitVersion", match: "exact" },
+  { path: "/thumb", fn: "saveThumbs", match: "exact" },
   { path: "/mcp", fn: "mcp", match: "exact" },
   { path: "/sitemap.xml", fn: "sitemap", match: "exact" },
   { path: "/verify", fn: "verifyEmail", match: "prefix" },
   { path: "/download", fn: "downloadBundle", match: "prefix" },
   { path: "/draft", fn: "getDraft", match: "prefix" },
   { path: "/content", fn: "contentProxy", match: "prefix" },
+  { path: "/thumb", fn: "contentProxy", match: "prefix" },
   // This function serves a CLIENT ROUTE — the app shell, with the document's
   // own head spliced in for crawlers — so the Vite dev server must keep
   // serving its own shell for `/d/*`. `devProxy: false` keeps the row out of

@@ -85,6 +85,7 @@ import {
 import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import { hashBundleFiles, type BundleFile } from "./lib/hash";
 import {
+  CREATE_ONLY,
   compileBundle,
   publishNewDocument,
   readPrefix,
@@ -92,6 +93,18 @@ import {
   reviseDocument,
   withdrawTrust,
 } from "./lib/publish";
+import {
+  THUMB_CACHE_SECONDS,
+  THUMB_REL,
+  nextThumb,
+  parseThumbUpload,
+  readThumb,
+  servableThumb,
+  thumbObjectKey,
+  thumbPrefix,
+  thumbSlots,
+  type ThumbKind,
+} from "./lib/thumbs";
 import {
   extractBundle,
   zipBundle,
@@ -382,9 +395,35 @@ function setContentCache(res: import("express").Response, gate: ReadGate): void 
 }
 
 /**
+ * A stored thumbnail is held in a member's browser for a day, not refetched on
+ * every workspace visit, which is the point of storing it. Its URL names a key
+ * the server minted, so the bytes at a URL never change and `immutable` is
+ * honest. What the window bounds is revocation, capped at expiry like every
+ * other window. A public or link read keeps the content policy, so a CDN still
+ * only ever holds what the URL alone decides.
+ */
+function setThumbCache(res: import("express").Response, gate: ReadGate): void {
+  if (gate.basis !== "member" && gate.basis !== "grant") {
+    setContentCache(res, gate);
+    return;
+  }
+  const at = expiryMs(gate.docData);
+  const left = at === null ? THUMB_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
+  const maxAge = Math.max(0, Math.min(THUMB_CACHE_SECONDS, left));
+  res.setHeader("Cache-Control", `private, max-age=${maxAge}, immutable`);
+  if (gate.visibility === "unlisted") {
+    res.setHeader("X-Robots-Tag", "noindex");
+  }
+}
+
+/**
  * GET /content/[~<key>/]:docId/:versionId/<relpath, default index.html>
+ * GET /thumb/[~<key>/]:docId/:versionId/<key>/<cover|s<n>>.jpg
  *
- * The one path document bytes take to a browser. Auth is resolved first, and a
+ * The one path document bytes take to a browser — including the thumbnails
+ * captured from them, which are the document's content too and so take the
+ * same gate: a thumbnail of an expired document is exactly as unreadable as
+ * the document (SPEC §17). Auth is resolved first, and a
  * caller who may not read gets the SAME 404 as a document that does not exist:
  * with no domain gate, distinguishable 403s would let any signed-in account walk
  * the slug space (SPEC §1.4b).
@@ -403,13 +442,33 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
 
   const caller = await resolveCaller(req);
 
-  const segments = pathSegments(req, "content");
+  const isThumb = req.path.startsWith("/thumb/");
+  const segments = pathSegments(req, isThumb ? "thumb" : "content");
   const parts = segments ? contentPath(segments) : null;
   if (!parts) {
     res.status(404).end();
     return;
   }
   const { docId, versionId, relPath } = parts;
+
+  if (isThumb) {
+    // Only a key and a slot name ever become an object key, and only one the
+    // record names is served: an image a lost race or an older version left
+    // behind has no URL that reaches it.
+    if (!THUMB_REL.test(relPath)) {
+      res.status(404).end();
+      return;
+    }
+    const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
+    const thumb = gate ? readThumb((gate.docData as { thumb?: unknown }).thumb) : null;
+    if (!gate || !servableThumb(thumb, versionId, relPath)) {
+      res.status(404).end();
+      return;
+    }
+    setThumbCache(res, gate);
+    streamObject(res, thumbObjectKey(docId, versionId, relPath), relPath, req.method === "HEAD");
+    return;
+  }
 
   const prefix = `docs/${docId}/${versionId}/`;
   const objectKey = `${prefix}${relPath}`;
@@ -437,6 +496,110 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
   // same-origin in the app's iframe, which is what makes annotation possible.
 
   streamObject(res, objectKey, relPath, req.method === "HEAD");
+});
+
+/**
+ * POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,<n>,… — store a version's
+ * thumbnails. The body is the JPEGs back to back, in slot order.
+ *
+ * Captured in an editor's browser, because nothing here renders a document,
+ * and stored so every member's workspace shows it without anyone rendering it
+ * again. Editors only — the people who can already change what the document
+ * says — and never on an expired document, which is frozen for everyone.
+ *
+ * Each kind is written once per version. The objects go in under a key minted
+ * here; only the transaction decides whether that key becomes the record's,
+ * and a loser removes what it wrote. It never touches `updatedAt`: a captured
+ * image is not an edit, and the workspace sorts and labels by that field.
+ */
+export const saveThumbs = onRequest(PLAIN, async (req, res) => {
+  if (rejectMethod(req, res, ["POST"])) return;
+  noStore(res);
+  const caller = await resolveCaller(req);
+  if (!caller) {
+    res.status(401).end();
+    return;
+  }
+
+  const docId = strParam(req, "doc");
+  const versionId = strParam(req, "v");
+  if (!docId || !safeSegment(docId) || !/^v\d+$/.test(versionId)) {
+    badRequest(res, "invalid or missing doc or v");
+    return;
+  }
+  const parsed = parseThumbUpload(rawBuffer(req), strParam(req, "kind"), strParam(req, "sizes"));
+  if ("error" in parsed) {
+    badRequest(res, parsed.error);
+    return;
+  }
+  const kind = strParam(req, "kind") as ThumbKind;
+  const count = parsed.images.length;
+
+  const docRef = db().collection("docs").doc(docId);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    res.status(404).end();
+    return;
+  }
+  const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
+  if (!isDocEditor(data, caller.uid, caller.emailLower)) {
+    res.status(refusal(data, caller)).end();
+    return;
+  }
+  if (isExpired(data, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
+    return;
+  }
+  if (data.currentVersion !== versionId) {
+    res.status(409).json({ error: "not the current version" });
+    return;
+  }
+  // Already there: say so before writing anything.
+  if (!nextThumb(readThumb(data.thumb), versionId, kind, "", count).write) {
+    res.status(200).json({ stored: false });
+    return;
+  }
+
+  const key = randomBytes(8).toString("hex");
+  const slots = thumbSlots(kind, count);
+  await Promise.all(
+    slots.map((slot, i) =>
+      bucket()
+        .file(thumbObjectKey(docId, versionId, `${key}/${slot}.jpg`))
+        .save(parsed.images[i], { contentType: "image/jpeg", resumable: false, ...CREATE_ONLY }),
+    ),
+  );
+
+  const outcome = await db().runTransaction(async (tx) => {
+    const fresh = await tx.get(docRef);
+    const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+    if (!d || d.currentVersion !== versionId || isExpired(d, Date.now())) {
+      return { stored: false, moved: true, stale: null };
+    }
+    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count);
+    if (!decision.write) return { stored: false, moved: false, stale: null };
+    tx.update(docRef, { thumb: decision.thumb });
+    return { stored: true, moved: false, stale: decision.stale };
+  });
+
+  if (!outcome.stored) {
+    await bucket()
+      .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
+      .catch(() => undefined);
+    if (outcome.moved) {
+      res.status(409).json({ error: "not the current version" });
+    } else {
+      res.status(200).json({ stored: false });
+    }
+    return;
+  }
+  // The version the record moved past: nothing can name its images any more.
+  if (outcome.stale) {
+    await bucket()
+      .deleteFiles({ prefix: thumbPrefix(docId, outcome.stale), force: true })
+      .catch(() => undefined);
+  }
+  res.status(200).json({ stored: true });
 });
 
 /**
