@@ -128,6 +128,17 @@ export const EMPTY_ATTR = "data-bshd-empty";
  */
 export const PREVIEW_ATTR = "data-bshd-preview";
 
+/**
+ * Marks an element inside a preview's slide that the page itself still hides —
+ * content a deck reveals only once its script shows the slide, which a preview
+ * never runs. The preview's stylesheet forces whatever carries it visible.
+ *
+ * Outside `OWN_MARKERS` for the same reasons as `PREVIEW_ATTR`, and needing no
+ * cleanup for the same reason: it is written only into the preview document,
+ * after it has loaded, never into the frame the reader reads.
+ */
+export const REVEAL_ATTR = "data-bshd-reveal";
+
 // --- Export stamps ---------------------------------------------------------
 
 export const PRINT_MARK_CLASS = "bshd-print-mark";

@@ -692,6 +692,19 @@ visibility — never position, inset, margin or size — and forces `display` or
 Every preview in one deck is laid out at **one** size, the reader's own frame
 viewport, so the same media queries resolve and the rail cannot go ragged.
 
+A preview shows a slide in its **final state**, not its first frame. Decks
+animate a slide's content in when the slide is shown, and a preview is never
+shown anything: it loads once and runs no script. So every animation in a
+preview is zero-length — already over, its fill mode deciding what stays — and
+transitions are off. Content a deck keeps hidden until its script marks the
+slide active never animates at all there, so once the preview has loaded,
+whatever inside the slide still computes to `opacity:0` or `visibility:hidden`
+is marked and forced visible, skipping `position:fixed` chrome with its subtree.
+Like the slide rule, only those two layout-neutral properties are forced.
+Decoration is stripped from the copy by the same function the serializer uses:
+highlights are unwrapped to their text and our own nodes removed by value, so
+one reader's annotations never appear in a preview.
+
 Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a
 trusted document. Because a preview is a copy the app constructs and nothing
 serializes, the layout it forces on that copy is not a restyle of embedded

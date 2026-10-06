@@ -2,7 +2,7 @@
 // The separate document a slide thumbnail renders (SPEC §6d).
 
 import { stripDecoration } from "../annotation/highlighter";
-import { OWN_SELECTOR, PREVIEW_ATTR } from "../brand/dom";
+import { OWN_SELECTOR, PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
 import { hasTranslation, readComputed, type Slide, type SlideComputed } from "./deck";
 
 /**
@@ -79,6 +79,76 @@ export function previewOverrides(
     decls.push("transform:none!important");
   }
   return `${SELECTOR}{${decls.join(";")}}`;
+}
+
+const REVEALED = `[${REVEAL_ATTR}][${REVEAL_ATTR}][${REVEAL_ATTR}]`;
+
+/**
+ * What makes a preview show a slide as it ENDS rather than as it begins.
+ *
+ * Decks animate a slide's content in when the slide is shown, and a preview is
+ * never shown anything: it loads once, runs no script, and is looked at from
+ * then on. So every animation is finished before it starts — a zero-length
+ * animation is already over, and its fill mode then decides what stays, which
+ * is exactly the deck's own last frame. Transitions are off for the same
+ * reason: a preview has no "before" worth easing out of.
+ *
+ * The whole preview document is ours, so the universal selector is fair game;
+ * the slide's subtree is repeated at the slide rule's weight so a deck's own
+ * `!important` animation on a class pair cannot outrank it.
+ *
+ * The second rule is the reveal pass's half (see `revealHidden`): opacity and
+ * visibility only, layout-neutral for the same reason the slide rule is.
+ */
+export const FINAL_STATE_CSS =
+  `*,*::before,*::after,${SELECTOR},${SELECTOR}::before,${SELECTOR}::after,` +
+  `${SELECTOR} *,${SELECTOR} *::before,${SELECTOR} *::after{` +
+  "animation-duration:0s!important;animation-delay:0s!important;" +
+  "animation-iteration-count:1!important;transition:none!important}" +
+  `${REVEALED}{opacity:1!important;visibility:visible!important}`;
+
+/**
+ * Mark what the loaded preview still hides inside its slide, so
+ * `FINAL_STATE_CSS` can force it visible.
+ *
+ * Freezing animations reaches the last frame only of an animation that RUNS. A
+ * deck that hides content until its script marks the slide active —
+ * `.slide .item{opacity:0}` and `.slide.active .item{…}` — gives a preview,
+ * where no script runs, nothing to finish: the content just stays hidden, and
+ * the thumbnail is blank. What is still at `opacity:0` or `visibility:hidden`
+ * once the preview has loaded is, inside a slide, content waiting for a reveal.
+ *
+ * Computed, so it has to run in the loaded preview, and it reads everything
+ * before it writes anything. One pass is enough: forcing only ever makes
+ * things visible, so nothing becomes hidden that a second pass would find.
+ *
+ * A `position:fixed` element is skipped WITH its subtree: it is the deck's
+ * chrome — a modal, a toolbar — and its children inherit its hiding, so marking
+ * them would float them free of the overlay they belong to.
+ *
+ * Only ever called on a preview document. The reader's frame has no element
+ * carrying `PREVIEW_ATTR`, so even a wrong document is left untouched.
+ */
+export function revealHidden(doc: Document): void {
+  const view = doc.defaultView;
+  const slide = doc.querySelector(`[${PREVIEW_ATTR}]`);
+  if (!view || !slide) return;
+
+  const hidden: Element[] = [];
+  const walker = doc.createTreeWalker(slide, NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      const style = view.getComputedStyle(node as Element);
+      if (style.position === "fixed") return NodeFilter.FILTER_REJECT;
+      if (style.opacity === "0" || style.visibility === "hidden") {
+        hidden.push(node as Element);
+      }
+      return NodeFilter.FILTER_SKIP;
+    },
+  });
+  // Skipping every node walks the whole subtree; only REJECT prunes. The walk
+  // itself is the read phase, so nothing is written while styles are read.
+  walker.nextNode();
+  for (const el of hidden) el.setAttribute(REVEAL_ATTR, "");
 }
 
 function copyAttributes(from: Element | null, to: Element): void {
@@ -191,7 +261,8 @@ export function buildPreviewDoc(slide: Slide, baseHref: string): string {
   const style = preview.createElement("style");
   style.textContent =
     "html,body{margin:0;padding:0;overflow:hidden;background:#fff}" +
-    previewOverrides(computed, donor);
+    previewOverrides(computed, donor) +
+    FINAL_STATE_CSS;
   // Last in head, so an `!important` tie against a guest rule of equal
   // specificity is broken by source order in our favour.
   preview.head.appendChild(style);

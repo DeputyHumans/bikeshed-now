@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Slide, StageSize } from "../viewer/deck";
-import { buildPreviewDoc } from "../viewer/preview";
+import { buildPreviewDoc, revealHidden } from "../viewer/preview";
 
 /**
  * This component owns scaling and nothing else. What a preview CONTAINS is
@@ -30,9 +30,15 @@ const UNMEASURED_WIDTH = 240;
  * edit re-renders the same iframe, which keeps the mark, so typing does not
  * flash "loading" over a slide that is already there — and a load that lands
  * after a test's last assertion is not a React update at all.
+ *
+ * The reveal pass runs first, in the PREVIEW's document, because it needs the
+ * preview's computed styles and must never see the reader's. A new `srcDoc`
+ * loads a new document, so it runs again whenever the preview is rebuilt.
  */
 function markPainted(event: React.SyntheticEvent<HTMLIFrameElement>) {
-  event.currentTarget.setAttribute("data-painted", "");
+  const frame = event.currentTarget;
+  if (frame.contentDocument) revealHidden(frame.contentDocument);
+  frame.setAttribute("data-painted", "");
 }
 
 export function SlideThumb({

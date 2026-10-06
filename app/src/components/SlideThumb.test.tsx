@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { SlideThumb } from "./SlideThumb";
 import { scanSlides, type Slide } from "../viewer/deck";
-import { HL_STYLE_ID, OWN_ATTR, PREVIEW_ATTR } from "../brand/dom";
+import { HL_STYLE_ID, OWN_ATTR, PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
 
 const BASE = "/content/doc1/v3/";
 const STAGE = { width: 1280, height: 720 };
@@ -223,6 +223,43 @@ describe("SlideThumb while its preview loads", () => {
     expect(SLIDES_CSS).toMatch(
       /\.slide-thumb-frame\[data-painted\]\s*\+\s*\.slide-thumb-skeleton\s*\{\s*display:\s*none;/,
     );
+  });
+
+  it("reveals what the loaded preview still hides before it is shown", () => {
+    // jsdom never loads `srcDoc`, so the frame's document is written here to
+    // stand in for the preview that would have loaded.
+    const frame = thumbFrame();
+    const loaded = frame.contentDocument!;
+    loaded.body.innerHTML = `<section ${PREVIEW_ATTR}=""><p id="waiting" style="opacity:0">x</p></section>`;
+
+    fireEvent.load(frame);
+
+    expect(loaded.getElementById("waiting")?.hasAttribute(REVEAL_ATTR)).toBe(true);
+    expect(frame.hasAttribute("data-painted")).toBe(true);
+  });
+
+  it("reveals inside the preview, never inside the document being read", () => {
+    // The live deck has to be in a document with a window, or a reveal aimed at
+    // it would find no computed style and silently do nothing — and this test
+    // would pass with exactly that bug in place.
+    const host = document.createElement("div");
+    host.innerHTML = `<main class="deck">
+        <section class="slide"><h2>One</h2><p style="opacity:0">waits for its slide</p></section>
+        <section class="slide"><h2>Two</h2></section>
+      </main>`;
+    document.body.appendChild(host);
+    try {
+      const before = host.innerHTML;
+      const { container } = render(
+        <SlideThumb slide={firstSlide(document)} baseHref={BASE} stage={STAGE} />,
+      );
+      fireEvent.load(container.querySelector("iframe")!);
+
+      expect(host.innerHTML).toBe(before);
+      expect(document.querySelector(`[${REVEAL_ATTR}]`)).toBeNull();
+    } finally {
+      host.remove();
+    }
   });
 
   it("keeps the mark through an edit, so typing does not flash it back", () => {
