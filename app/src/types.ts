@@ -132,6 +132,8 @@ export interface DocMeta {
  */
 export interface DocThumb {
   versionId: string;
+  /** The capture revision that made these images; absent on the first. */
+  rev?: number;
   /** Key of the workspace card's cover. */
   cover?: string;
   /** Key and count of a deck's rail images, `s0` … `s{count-1}`. */

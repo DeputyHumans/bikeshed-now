@@ -32,11 +32,26 @@ export const THUMB_MAX_SIDE = 1280;
  */
 export const THUMB_CACHE_SECONDS = 86_400;
 
+/**
+ * Which capture made a stored image. Raised whenever capture changes what an
+ * image of the same bytes looks like, so an image the old capture got wrong is
+ * replaced the next time an editor opens its document — each kind is
+ * otherwise written once per version, and a bad one would last until the next.
+ *
+ *   1  the first capture (a record with no `rev`)
+ *   2  shapes inside an svg keep the paint their stylesheet gives them
+ *
+ * The app holds the same number (`app/src/thumbs.ts`), pinned by a test.
+ */
+export const THUMB_REVISION = 2;
+
 export type ThumbKind = "cover" | "slides";
 
 /** `docs/{docId}.thumb`: which version's images exist, and under which keys. */
 export interface DocThumb {
   versionId: string;
+  /** The capture revision that made these images; absent on the first. */
+  rev?: number;
   /** Key of the grid's cover image, `cover.jpg`. */
   cover?: string;
   /** Key and count of the rail's images, `s0.jpg` … `s{count-1}.jpg`. */
@@ -76,7 +91,7 @@ export function readThumb(value: unknown): DocThumb | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
   if (typeof v.versionId !== "string") return null;
-  const thumb: DocThumb = { versionId: v.versionId };
+  const thumb: DocThumb = { versionId: v.versionId, rev: typeof v.rev === "number" ? v.rev : 1 };
   if (typeof v.cover === "string") thumb.cover = v.cover;
   const s = v.slides as Record<string, unknown> | undefined;
   if (s && typeof s.key === "string" && typeof s.count === "number") {
@@ -179,17 +194,29 @@ export function parseThumbUpload(body: Buffer | null, kind: string, sizes: strin
   return { images };
 }
 
+/**
+ * Stored images nothing can name any more: a whole version's, or one key's
+ * under a version whose newer capture replaced it.
+ */
+export interface StaleThumbs {
+  versionId: string;
+  key?: string;
+}
+
 export type ThumbDecision =
   | { write: false }
-  | { write: true; thumb: DocThumb; stale: string | null };
+  | { write: true; thumb: DocThumb; stale: StaleThumbs[] };
 
 /**
- * What `thumb` becomes when an upload of `kind` for `versionId` lands.
+ * What `thumb` becomes when an upload of `kind` for `versionId`, made by
+ * capture revision `rev`, lands.
  *
- * Each kind is written once per version: the first upload wins, and a second
- * — another editor's tab, a retry — is told it is already there. An upload
- * for a version the record has not reached yet replaces the record, and the
- * version it replaces is returned so its images can be deleted.
+ * Each kind is written once per version and revision: the first upload wins,
+ * and a second — another editor's tab, a retry — is told it is already there.
+ * A newer revision replaces an older one's record for the same version, and
+ * the keys it replaces are returned for deletion; an older revision never
+ * replaces a newer one. An upload for a version the record has not reached yet
+ * replaces the record, and the version it replaces is returned whole.
  */
 export function nextThumb(
   current: DocThumb | null,
@@ -197,15 +224,26 @@ export function nextThumb(
   kind: ThumbKind,
   key: string,
   count: number,
+  rev: number,
 ): ThumbDecision {
   const value = kind === "cover" ? { cover: key } : { slides: { key, count } };
   if (current && current.versionId === versionId) {
-    if (kind === "cover" ? current.cover : current.slides) return { write: false };
-    return { write: true, thumb: { ...current, ...value }, stale: null };
+    const held = current.rev ?? 1;
+    if (held > rev) return { write: false };
+    if (held === rev) {
+      if (kind === "cover" ? current.cover : current.slides) return { write: false };
+      return { write: true, thumb: { ...current, ...value }, stale: [] };
+    }
+    const keys = [current.cover, current.slides?.key].filter((k): k is string => Boolean(k));
+    return {
+      write: true,
+      thumb: { versionId, rev, ...value },
+      stale: keys.map((k) => ({ versionId, key: k })),
+    };
   }
   return {
     write: true,
-    thumb: { versionId, ...value },
-    stale: current && current.versionId !== versionId ? current.versionId : null,
+    thumb: { versionId, rev, ...value },
+    stale: current ? [{ versionId: current.versionId }] : [],
   };
 }

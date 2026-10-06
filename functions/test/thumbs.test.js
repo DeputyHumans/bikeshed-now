@@ -9,6 +9,7 @@ const {
   THUMB_MAX_SIDE,
   THUMB_MAX_SLIDES,
   THUMB_REL,
+  THUMB_REVISION,
   jpegSize,
   nextThumb,
   parseThumbUpload,
@@ -172,36 +173,64 @@ test("serves only the images the record names", () => {
 test("reads a stored record defensively", () => {
   assert.equal(readThumb(undefined), null);
   assert.equal(readThumb({ cover: KEY }), null);
-  assert.deepEqual(readThumb({ versionId: "v1", cover: 7, slides: { key: KEY } }), { versionId: "v1" });
+  assert.deepEqual(readThumb({ versionId: "v1", cover: 7, slides: { key: KEY } }), { versionId: "v1", rev: 1 });
 });
 
 // --- What the record becomes --------------------------------------------------
 
+const REV = THUMB_REVISION;
+
 test("the first upload of each kind for a version wins", () => {
-  const cover = { versionId: "v2", cover: KEY };
-  assert.deepEqual(nextThumb(cover, "v2", "cover", OTHER, 1), { write: false });
+  const cover = { versionId: "v2", rev: REV, cover: KEY };
+  assert.deepEqual(nextThumb(cover, "v2", "cover", OTHER, 1, REV), { write: false });
   const both = { ...cover, slides: { key: OTHER, count: 4 } };
-  assert.deepEqual(nextThumb(both, "v2", "slides", KEY, 4), { write: false });
+  assert.deepEqual(nextThumb(both, "v2", "slides", KEY, 4, REV), { write: false });
 });
 
 test("adds the other kind for the same version without disturbing the first", () => {
-  assert.deepEqual(nextThumb({ versionId: "v2", cover: KEY }, "v2", "slides", OTHER, 5), {
+  assert.deepEqual(nextThumb({ versionId: "v2", rev: REV, cover: KEY }, "v2", "slides", OTHER, 5, REV), {
     write: true,
-    thumb: { versionId: "v2", cover: KEY, slides: { key: OTHER, count: 5 } },
-    stale: null,
+    thumb: { versionId: "v2", rev: REV, cover: KEY, slides: { key: OTHER, count: 5 } },
+    stale: [],
   });
 });
 
 test("a new version replaces the record and names the old one for deletion", () => {
-  const old = { versionId: "v1", cover: KEY, slides: { key: OTHER, count: 2 } };
-  assert.deepEqual(nextThumb(old, "v2", "cover", OTHER, 1), {
+  const old = { versionId: "v1", rev: REV, cover: KEY, slides: { key: OTHER, count: 2 } };
+  assert.deepEqual(nextThumb(old, "v2", "cover", OTHER, 1, REV), {
     write: true,
-    thumb: { versionId: "v2", cover: OTHER },
-    stale: "v1",
+    thumb: { versionId: "v2", rev: REV, cover: OTHER },
+    stale: [{ versionId: "v1" }],
   });
-  assert.deepEqual(nextThumb(null, "v1", "cover", KEY, 1), {
+  assert.deepEqual(nextThumb(null, "v1", "cover", KEY, 1, REV), {
     write: true,
-    thumb: { versionId: "v1", cover: KEY },
-    stale: null,
+    thumb: { versionId: "v1", rev: REV, cover: KEY },
+    stale: [],
   });
+});
+
+test("a capture by a newer revision replaces an older one of the same version", () => {
+  // Write-once per version would otherwise keep a bad image until the next
+  // version: a logo sheet captured as black squares stayed that way.
+  const before = { versionId: "v4", cover: KEY, slides: { key: OTHER, count: 7 } };
+  assert.deepEqual(nextThumb(before, "v4", "cover", "aaaaaaaaaaaaaaaa", 1, 2), {
+    write: true,
+    thumb: { versionId: "v4", rev: 2, cover: "aaaaaaaaaaaaaaaa" },
+    // Its own key's objects only: the new cover is already under this version.
+    stale: [
+      { versionId: "v4", key: KEY },
+      { versionId: "v4", key: OTHER },
+    ],
+  });
+});
+
+test("an older revision never replaces a newer one", () => {
+  const current = { versionId: "v4", rev: 3, cover: KEY };
+  assert.deepEqual(nextThumb(current, "v4", "slides", OTHER, 2, 2), { write: false });
+  assert.deepEqual(nextThumb(current, "v4", "cover", OTHER, 1, 2), { write: false });
+});
+
+test("reads a record's revision, and calls a record without one the first", () => {
+  assert.deepEqual(readThumb({ versionId: "v1", cover: KEY }), { versionId: "v1", rev: 1, cover: KEY });
+  assert.deepEqual(readThumb({ versionId: "v1", rev: 2 }), { versionId: "v1", rev: 2 });
 });

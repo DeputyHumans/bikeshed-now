@@ -14,6 +14,14 @@ import type { DocThumb } from "./types";
  * them to it: an image the server would refuse is not worth rendering.
  */
 
+/**
+ * Which capture this app is. Raised whenever capture changes what an image of
+ * the same bytes looks like; an image stored by an older one is captured again
+ * the next time an editor opens its document. The server refuses any other.
+ * See `THUMB_REVISION` in `functions/src/lib/thumbs.ts` for the history.
+ */
+export const THUMB_REVISION = 2;
+
 /** A deck larger than this keeps live previews; the server refuses more. */
 export const THUMB_MAX_SLIDES = 100;
 
@@ -70,8 +78,9 @@ export interface CaptureInput {
   sandboxed: boolean;
   /** ...and whether every reader's does. */
   globallyTrusted: boolean;
-  /** What the record already holds. */
+  /** What the record already holds, and which capture made it. */
   thumbVersion: string | null;
+  thumbRevision: number;
   hasCover: boolean;
   hasSlides: boolean;
   /** A deck the navigator would page through, and its size. */
@@ -106,7 +115,8 @@ export function captureNeeds(input: CaptureInput): CaptureNeeds | null {
   if (!input.isDocEditor || input.expired) return null;
   if (input.sandboxed === input.globallyTrusted) return null;
 
-  const current = input.thumbVersion === input.headVersion;
+  const current =
+    input.thumbVersion === input.headVersion && input.thumbRevision === THUMB_REVISION;
   const cover = !(current && input.hasCover);
   const slides =
     input.isDeck && input.slideCount <= THUMB_MAX_SLIDES && !(current && input.hasSlides);
@@ -147,6 +157,7 @@ export async function uploadThumbs(
     v: versionId,
     kind,
     sizes: images.map((image) => image.size).join(","),
+    r: String(THUMB_REVISION),
   });
   try {
     const res = await fetch(`/thumb?${query}`, {

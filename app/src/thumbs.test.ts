@@ -9,6 +9,7 @@ import {
   THUMB_MAX_IMAGE_BYTES,
   THUMB_MAX_SLIDES,
   THUMB_PIXEL_RATIO,
+  THUMB_REVISION,
   THUMB_STAGE,
   captureNeeds,
   coverUrl,
@@ -31,6 +32,7 @@ const OWED: CaptureInput = {
   sandboxed: true,
   globallyTrusted: false,
   thumbVersion: null,
+  thumbRevision: THUMB_REVISION,
   hasCover: false,
   hasSlides: false,
   isDeck: true,
@@ -81,6 +83,14 @@ describe("captureNeeds", () => {
   it("owes everything again once the stored images are an older version's", () => {
     expect(
       captureNeeds({ ...OWED, thumbVersion: "v2", hasCover: true, hasSlides: true }),
+    ).toEqual({ cover: true, slides: true });
+  });
+
+  it("owes everything again once the stored images were made by an older capture", () => {
+    // Each kind is written once per version, so a capture that got an image
+    // wrong would otherwise be stuck with it until the next version.
+    expect(
+      captureNeeds({ ...OWED, thumbVersion: "v3", thumbRevision: THUMB_REVISION - 1, hasCover: true, hasSlides: true }),
     ).toEqual({ cover: true, slides: true });
   });
 
@@ -141,7 +151,10 @@ describe("the limits the server holds an upload to", () => {
     return Function(`return (${m[1].replace(/_/g, "")})`)() as number;
   };
 
-  it("agrees with the server on slide count and image size", () => {
+  it("agrees with the server on slide count, image size and capture revision", () => {
+    // A revision the server does not hold is refused, and a capture refused
+    // every time is a thumbnail that never appears.
+    expect(THUMB_REVISION).toBe(constant("THUMB_REVISION"));
     expect(THUMB_MAX_SLIDES).toBe(constant("THUMB_MAX_SLIDES"));
     expect(THUMB_MAX_IMAGE_BYTES).toBe(constant("THUMB_MAX_IMAGE_BYTES"));
   });
@@ -173,6 +186,7 @@ describe("uploadThumbs", () => {
       v: "v3",
       kind: "slides",
       sizes: "3,2",
+      r: String(THUMB_REVISION),
     });
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("same-origin");

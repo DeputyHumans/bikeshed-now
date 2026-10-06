@@ -22,7 +22,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   `<svg>` that take their colour from the page's stylesheet came out black in
   a captured cover or rail image: a sheet of logo marks, each drawn on a tile
   coloured by a class, captured as a grid of black squares. The live previews
-  were always right; only the stored images were wrong (SPEC §6d).
+  were always right; only the stored images were wrong (SPEC §6d). Images
+  stored by the earlier capture are replaced the next time an editor opens
+  their document, rather than lasting until its next version (SPEC §2, §4).
 
 ## 0.4.0 — 2026-10-05
 

@@ -96,6 +96,7 @@ import {
 import {
   THUMB_CACHE_SECONDS,
   THUMB_REL,
+  THUMB_REVISION,
   nextThumb,
   parseThumbUpload,
   readThumb,
@@ -499,8 +500,8 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
- * POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,<n>,… — store a version's
- * thumbnails. The body is the JPEGs back to back, in slot order.
+ * POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,<n>,…&r=<revision> — store a
+ * version's thumbnails. The body is the JPEGs back to back, in slot order.
  *
  * Captured in an editor's browser, because nothing here renders a document,
  * and stored so every member's workspace shows it without anyone rendering it
@@ -534,6 +535,12 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
   }
   const kind = strParam(req, "kind") as ThumbKind;
   const count = parsed.images.length;
+  // Only this deployment's capture. An older page still open in some tab
+  // would otherwise store the images the newer capture exists to replace.
+  if (Number(strParam(req, "r")) !== THUMB_REVISION) {
+    res.status(409).json({ error: "captured by an older version of the app" });
+    return;
+  }
 
   const docRef = db().collection("docs").doc(docId);
   const snap = await docRef.get();
@@ -555,7 +562,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     return;
   }
   // Already there: say so before writing anything.
-  if (!nextThumb(readThumb(data.thumb), versionId, kind, "", count).write) {
+  if (!nextThumb(readThumb(data.thumb), versionId, kind, "", count, THUMB_REVISION).write) {
     res.status(200).json({ stored: false });
     return;
   }
@@ -574,10 +581,10 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     const fresh = await tx.get(docRef);
     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
     if (!d || d.currentVersion !== versionId || isExpired(d, Date.now())) {
-      return { stored: false, moved: true, stale: null };
+      return { stored: false, moved: true, stale: [] };
     }
-    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count);
-    if (!decision.write) return { stored: false, moved: false, stale: null };
+    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
+    if (!decision.write) return { stored: false, moved: false, stale: [] };
     tx.update(docRef, { thumb: decision.thumb });
     return { stored: true, moved: false, stale: decision.stale };
   });
@@ -593,11 +600,11 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     }
     return;
   }
-  // The version the record moved past: nothing can name its images any more.
-  if (outcome.stale) {
-    await bucket()
-      .deleteFiles({ prefix: thumbPrefix(docId, outcome.stale), force: true })
-      .catch(() => undefined);
+  // What the record moved past — a whole older version, or an older
+  // capture's keys under this one: nothing can name those images any more.
+  for (const gone of outcome.stale) {
+    const prefix = `${thumbPrefix(docId, gone.versionId)}${gone.key ? `${gone.key}/` : ""}`;
+    await bucket().deleteFiles({ prefix, force: true }).catch(() => undefined);
   }
   res.status(200).json({ stored: true });
 });

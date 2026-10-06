@@ -329,4 +329,11 @@ test("storing thumbnails is for editors, refused once expired, and is not an edi
   // A captured image is not an edit: the workspace sorts and labels by this.
   assert.doesNotMatch(body, /updatedAt/);
   assert.match(body, /\.\.\.CREATE_ONLY/);
+  // Only this deployment's capture, decided before anything is written: an
+  // older page left open would store the images a newer capture replaces.
+  const revision = body.indexOf('Number(strParam(req, "r")) !== THUMB_REVISION');
+  assert.ok(revision > 0 && revision < body.indexOf("randomBytes("));
+  // A newer capture of the same version deletes the keys it replaced, never
+  // the version's whole prefix — its own images are already under it.
+  assert.match(body, /thumbPrefix\(docId, gone\.versionId\)\}\$\{gone\.key \? `\$\{gone\.key\}\/` : ""\}/);
 });

@@ -288,6 +288,7 @@ export function DocViewer() {
     sandboxed: mode.kind !== "reading" || mode.sandboxed,
     globallyTrusted: doc.meta?.trusted !== false,
     thumbVersion: thumb?.versionId ?? null,
+    thumbRevision: thumb?.rev ?? 1,
     hasCover: Boolean(thumb?.cover),
     hasSlides: Boolean(thumb?.slides),
     isDeck,

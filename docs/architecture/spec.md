@@ -214,15 +214,21 @@ image per slide for the rail. Nothing here renders a document, so they are
 captured in an editor's browser from the previews §6d builds, and stored so
 every member sees them without anybody rendering them again.
 
-- **`POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,…`** — the body is the
-  JPEGs back to back, in slot order. Editors only: `isDocEditor`, not open
+- **`POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,…&r=<revision>`** — the
+  body is the JPEGs back to back, in slot order. `r` is the capture revision,
+  raised whenever capture changes what an image of the same bytes looks like;
+  any but the deployment's own is a `409`, so a page left open from an older
+  release cannot store what a newer capture exists to replace. Editors only: `isDocEditor`, not open
   editing's wider `canEdit`, because a stored image is shown to every member.
   `409` once expired, or when `v` is not `currentVersion`. Each image must be a
   JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
   image, slides at most 100. The objects go in under a key minted per upload,
   and a transaction makes that key the record's only if this kind is not yet
-  stored for `v`; a loser deletes what it wrote. Moving the record to a new
-  version deletes the old version's thumbnails. Never touches `updatedAt`.
+  stored for `v` by this revision; a loser deletes what it wrote. A newer
+  revision replaces an older one's images for the same version and deletes
+  their keys, so a capture that got an image wrong is not stuck with it until
+  the next version. Moving the record to a new version deletes the old
+  version's thumbnails. Never touches `updatedAt`.
 - **`GET /thumb/…`** — `contentProxy`, through the same gate as `/content`: an
   expired document's thumbnails are a `404` to everyone but its owner. Serves
   only what `docs/{docId}.thumb` names. `Cache-Control: private,
@@ -427,8 +433,9 @@ view writer and the edit writer never clobber each other.
 `recordView` deliberately does NOT touch `updatedAt` — that field means "bumped
 on every publish", and a read must not masquerade as a publish.
 
-**`thumb`** is `{ versionId, cover?, slides?: { key, count } }`: which version's
-thumbnails are stored, and under which keys (§2 `POST /thumb`). Storage holds
+**`thumb`** is `{ versionId, rev?, cover?, slides?: { key, count } }`: which
+version's thumbnails are stored, by which capture revision (absent is the
+first), and under which keys (§2 `POST /thumb`). Storage holds
 them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the
 version's prefix, never under it, because everything that reads a version (the
 next commit's content hash, a fork, the download) takes every object under
