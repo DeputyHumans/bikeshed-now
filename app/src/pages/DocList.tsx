@@ -36,6 +36,8 @@ import { SharePanel, type ShareTarget } from "../components/SharePanel";
 import { visibilityStateOf, type VisibilityState } from "../visibility";
 import { UploadDialog } from "../components/UploadDialog";
 import { CardSkeletons } from "../components/Spinner";
+import { coverUrl } from "../thumbs";
+import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
@@ -62,14 +64,34 @@ function DocCard({
   doc,
   menu,
   onShare,
+  showCover,
 }: {
   doc: DocMeta;
   menu: MenuEntry[];
   /** The owner's way to the date behind the expiry chip; absent for anyone else. */
   onShare?: () => void;
+  /** False for an expired document read by anyone but its owner (SPEC §17). */
+  showCover: boolean;
 }) {
+  const cover = showCover ? coverUrl(doc.docId, doc.thumb) : null;
   return (
     <div className="doc-card">
+      {/* The same destination as the title, for a pointer. The title is the
+          link a keyboard and a screen reader use, so this is neither a tab
+          stop nor announced. The image is whatever version an editor last
+          captured, which can trail the head until one opens it again. */}
+      <Link
+        to={`/d/${doc.docId}`}
+        className="doc-card-thumb"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        {cover ? (
+          <img src={cover} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <Icon name="doc" size={22} />
+        )}
+      </Link>
       <div className="doc-card-head">
         <Link to={`/d/${doc.docId}`} className="doc-card-title">
           {doc.title}
@@ -569,24 +591,39 @@ export function DocList() {
             )}
           </div>
         ) : (
-          <div className="doc-grid">
-            {visibleFolders.map((folder) => (
-              <FolderCard
-                key={folder.folderId}
-                folder={folder}
-                menu={folderMenu(folder)}
-                onFiles={uploadFiles}
-              />
-            ))}
-            {visibleDocs.map((doc) => (
-              <DocCard
-                key={doc.docId}
-                doc={doc}
-                menu={docMenu(doc)}
-                onShare={doc.ownerEmail === emailLower ? () => shareDoc(doc) : undefined}
-              />
-            ))}
-          </div>
+          <>
+            {/* Two grids, not one: a folder has no cover, and in a row with
+                documents that do it would stretch to their height and stand
+                mostly empty. */}
+            {visibleFolders.length > 0 ? (
+              <div className="doc-grid">
+                {visibleFolders.map((folder) => (
+                  <FolderCard
+                    key={folder.folderId}
+                    folder={folder}
+                    menu={folderMenu(folder)}
+                    onFiles={uploadFiles}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {visibleDocs.length > 0 ? (
+              <div className="doc-grid">
+                {visibleDocs.map((doc) => {
+                  const isOwner = doc.ownerEmail === emailLower;
+                  return (
+                    <DocCard
+                      key={doc.docId}
+                      doc={doc}
+                      menu={docMenu(doc)}
+                      onShare={isOwner ? () => shareDoc(doc) : undefined}
+                      showCover={isOwner || !isExpired(doc.expiresAt)}
+                    />
+                  );
+                })}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 

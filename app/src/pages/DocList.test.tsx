@@ -176,3 +176,91 @@ describe("forking from the workspace", () => {
     expect(screen.getByTitle("Forked 3 times").textContent).toContain("3");
   });
 });
+
+describe("each document's cover", () => {
+  const KEY = "0123456789abcdef";
+  const PAST = Date.now() - 60_000;
+  const cards = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLElement>(".doc-card")).filter((card) =>
+      card.querySelector('a.doc-card-title[href^="/d/"]'),
+    );
+  const coverOf = (card: HTMLElement) => card.querySelector<HTMLImageElement>(".doc-card-thumb img");
+
+  it("shows the stored image of whichever version it was captured from", () => {
+    // The head moves on before an editor captures it again; the old cover is a
+    // better picture of the document than none.
+    const { container } = mount();
+    act(() => listeners.folders!([]));
+    act(() =>
+      listeners.docs!([docMeta({ currentVersion: "v4", thumb: { versionId: "v3", cover: KEY } })]),
+    );
+
+    const img = coverOf(cards(container)[0])!;
+    expect(img.getAttribute("src")).toBe(`/thumb/q3-plan/v3/${KEY}/cover.jpg`);
+    expect(img.getAttribute("loading")).toBe("lazy");
+    expect(img.getAttribute("alt")).toBe("");
+  });
+
+  it("opens the document, without being a second stop for the keyboard or a screen reader", () => {
+    const { container } = mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta({ thumb: { versionId: "v4", cover: KEY } })]));
+
+    const link = cards(container)[0].querySelector<HTMLAnchorElement>("a.doc-card-thumb")!;
+    expect(link.getAttribute("href")).toBe("/d/q3-plan");
+    expect(link.tabIndex).toBe(-1);
+    expect(link.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("stands a plain placeholder in for a document nobody has captured yet", () => {
+    const { container } = mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+
+    const card = cards(container)[0];
+    expect(card.querySelector(".doc-card-thumb")).not.toBeNull();
+    expect(coverOf(card)).toBeNull();
+  });
+
+  it("shows an expired document's cover to its owner, and to nobody else", () => {
+    // Expired is visible only to the owner (SPEC §17). The server refuses
+    // everyone else; the card must not even ask.
+    const { container } = mount();
+    act(() => listeners.folders!([]));
+    act(() =>
+      listeners.docs!([
+        docMeta({ docId: "theirs", title: "Theirs", expiresAt: PAST, thumb: { versionId: "v4", cover: KEY } }),
+        docMeta({
+          docId: "mine",
+          title: "Mine",
+          ownerEmail: "me@example.com",
+          expiresAt: PAST,
+          thumb: { versionId: "v4", cover: KEY },
+        }),
+      ]),
+    );
+
+    const card = (title: string) =>
+      cards(container).find((c) => c.querySelector(".doc-card-title")?.textContent === title)!;
+    expect(coverOf(card("Theirs"))).toBeNull();
+    expect(coverOf(card("Mine"))?.getAttribute("src")).toBe(`/thumb/mine/v4/${KEY}/cover.jpg`);
+  });
+
+  it("keeps folders in a grid of their own, above the documents", () => {
+    // A folder card has no cover. Sharing a row with documents that do, it
+    // would stretch to their height and stand mostly empty.
+    const { container } = mount();
+    act(() =>
+      listeners.folders!([
+        { folderId: "f1", name: "Plans", ownerEmail: "me@example.com", members: ["me@example.com"] } as never,
+      ]),
+    );
+    act(() => listeners.docs!([docMeta({ folderId: null })]));
+
+    const grids = Array.from(container.querySelectorAll(".doc-grid"));
+    expect(grids).toHaveLength(2);
+    expect(grids[0].querySelector(".doc-card-thumb")).toBeNull();
+    expect(grids[0].textContent).toContain("Plans");
+    expect(grids[1].querySelector(".doc-card-thumb")).not.toBeNull();
+  });
+});

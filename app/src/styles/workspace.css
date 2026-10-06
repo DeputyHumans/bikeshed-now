@@ -103,6 +103,37 @@
   border-color: rgba(var(--ink-rgb), 0.2);
 }
 
+/*
+ * The cover: full-bleed across the top of the card, in the shape of the stage
+ * it was captured at, cut from the top. A plain surface stands in until an
+ * editor's browser captures one. The skeleton shares the shape but not the
+ * fill, so its shimmer is not painted over.
+ */
+.doc-card-thumb,
+.doc-card-thumb-skeleton {
+  aspect-ratio: 16 / 9;
+  margin: calc(-1 * var(--s-3)) calc(-1 * var(--s-3)) 0;
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+}
+.doc-card-thumb {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+}
+.doc-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* Folders and documents are two grids; the second needs the same gap the rows do. */
+.doc-grid + .doc-grid { margin-top: var(--s-3); }
+
 .doc-card-head {
   display: flex;
   align-items: flex-start;

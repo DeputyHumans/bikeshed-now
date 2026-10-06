@@ -28,6 +28,7 @@ export function CardSkeletons({ count = 6 }: { count?: number }) {
     <div className="doc-grid" aria-hidden="true">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="doc-card">
+          <div className="skeleton doc-card-thumb-skeleton" />
           <div className="skeleton" style={{ height: 18, width: "70%" }} />
           <div className="skeleton" style={{ height: 12, width: "45%" }} />
           <div className="skeleton" style={{ height: 12, width: "60%", marginTop: "auto" }} />
