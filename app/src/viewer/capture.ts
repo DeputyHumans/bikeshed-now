@@ -150,6 +150,91 @@ export async function embedFontCss(
   return inlined.filter(Boolean).join("\n");
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * What a stylesheet sets on an SVG shape or its text: paint, line, opacity,
+ * visibility and type. Geometry is left alone — it lives in attributes, which
+ * a copy keeps anyway.
+ */
+const SVG_STYLE = [
+  "fill", "fill-opacity", "fill-rule",
+  "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin",
+  "stroke-dasharray", "stroke-dashoffset", "stroke-miterlimit",
+  "paint-order", "vector-effect", "opacity", "visibility", "display", "color",
+  "stop-color", "stop-opacity", "flood-color", "flood-opacity", "lighting-color",
+  "clip-path", "mask", "filter", "mix-blend-mode",
+  "marker-start", "marker-mid", "marker-end",
+  "font-family", "font-size", "font-style", "font-weight", "letter-spacing",
+  "text-anchor", "dominant-baseline", "text-decoration",
+] as const;
+
+/** Containers whose content renders where it stands, whatever refers to it. */
+const RENDERS_IN_PLACE = new Set([
+  "linearGradient", "radialGradient", "pattern", "clipPath", "mask", "marker", "filter",
+]);
+
+/**
+ * Content a `<use>` may draw elsewhere. A sprite is coloured through
+ * inheritance from the `<use>`, so its in-place values are the wrong ones to
+ * freeze: written onto the shape, they would override every use of it.
+ */
+function drawnByReference(el: Element): boolean {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (p.localName === "symbol") return true;
+    if (RENDERS_IN_PLACE.has(p.localName)) return false;
+    if (p.localName === "defs") return true;
+  }
+  return false;
+}
+
+/**
+ * Write what each element inside an `<svg>` computes to onto the element
+ * itself, in the capture's own copy, so the image keeps it.
+ *
+ * html-to-image copies every computed style onto every HTML element it clones,
+ * which is why a stylesheet never has to travel into the image. An `<svg>` it
+ * copies whole instead, and never visits what is inside: a shape coloured by a
+ * class rule arrives with no colour, and SVG's default fill is black. A sheet
+ * of logo marks, each drawn on a tile filled by `.f-paper`, came out as a grid
+ * of black squares — while the live preview, which has the stylesheet, was
+ * right. This does for an svg's content what the library does for HTML: shapes
+ * and text get their paint and type, and HTML inside a `foreignObject` (a Marp
+ * slide is one) gets its whole computed style, exactly as the library would.
+ *
+ * The values are the computed ones, so nothing the preview shows changes; they
+ * only stop depending on a stylesheet the image will not have. Everything is
+ * read before anything is written. `firstScreen` limits it to svgs that start
+ * within a page cover's first screen, since nothing below it is drawn.
+ */
+export function inlineSvgStyles(doc: Document, firstScreen?: number): void {
+  const view = doc.defaultView;
+  if (!view) return;
+  const roots = Array.from(doc.querySelectorAll("svg")).filter(
+    (svg) =>
+      !svg.parentElement?.closest("svg") &&
+      (firstScreen === undefined || svg.getBoundingClientRect().top < firstScreen),
+  );
+
+  const writes: [ElementCSSInlineStyle, [string, string, string][]][] = [];
+  for (const root of roots) {
+    for (const el of Array.from(root.querySelectorAll("*"))) {
+      if (drawnByReference(el)) continue;
+      const computed = view.getComputedStyle(el);
+      const names = el.namespaceURI === SVG_NS ? SVG_STYLE : Array.from(computed);
+      const entries: [string, string, string][] = [];
+      for (const name of names) {
+        const value = computed.getPropertyValue(name);
+        if (value) entries.push([name, value, computed.getPropertyPriority(name)]);
+      }
+      writes.push([el as unknown as ElementCSSInlineStyle, entries]);
+    }
+  }
+  for (const [el, entries] of writes) {
+    for (const [name, value, priority] of entries) el.style?.setProperty(name, value, priority);
+  }
+}
+
 /** The colour behind the content, since html-to-image draws the body and not the canvas. */
 function backgroundOf(doc: Document): string {
   const view = doc.defaultView;
@@ -212,6 +297,8 @@ export function createCapturer(host: Document = document): Capturer {
     revealHidden(doc);
     await Promise.race([doc.fonts.ready, timeout(SETTLE_TIMEOUT_MS, undefined)]);
     if (opts.page) await firstScreenImages(doc);
+    // Last, once the reveal pass has settled what everything computes to.
+    inlineSvgStyles(doc, opts.page ? THUMB_STAGE.height : undefined);
 
     // Every preview of one document carries the same stylesheets, so the
     // fonts are read and fetched once per capture run, not once per slide.
