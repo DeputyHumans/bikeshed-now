@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Stored thumbnails: when an editor's browser captures them, and where a reader finds them (SPEC §2, §4).
 
-import type { DocThumb } from "./types";
+import { isExpired } from "./expiry";
+import type { DocMeta, DocThumb } from "./types";
 
 /**
  * A thumbnail is captured from the previews `viewer/preview.ts` builds, in an
@@ -139,6 +140,49 @@ export function storedSlideImages(
   const { key, count } = thumb.slides;
   if (count !== view.slideCount) return null;
   return Array.from({ length: count }, (_, i) => thumbUrl(docId, thumb.versionId, key, i));
+}
+
+/**
+ * Whether this account's workspace should capture a card's cover now: it can
+ * change the document, the document has not expired, and no cover is stored
+ * for its current version by this capture. The same rule the viewer applies
+ * to the cover (`captureNeeds`), read off the workspace's record alone.
+ */
+export function coverOwed(doc: DocMeta, emailLower: string, now = Date.now()): boolean {
+  if (!emailLower || !doc.currentVersion) return false;
+  const editor =
+    doc.ownerEmail === emailLower ||
+    Boolean(doc.editors?.includes(emailLower)) ||
+    Boolean(doc.editorMembers?.includes(emailLower));
+  if (!editor || isExpired(doc.expiresAt, now)) return false;
+  const t = doc.thumb;
+  return !(
+    t &&
+    t.versionId === doc.currentVersion &&
+    t.cover &&
+    (t.rev ?? 1) === THUMB_REVISION
+  );
+}
+
+/**
+ * What this page has already uploaded, by `{docId}/{version}/{kind}`. The
+ * workspace and the viewer can both owe the same cover in one session, and the
+ * record says it is still owed until the upload's write comes back; one upload
+ * per kind per version per page is the most either should send. A refused
+ * upload is not retried by this page — the next one to open will try.
+ */
+const claimed = new Set<string>();
+
+/** True the first time a key is claimed this page, false after. */
+export function claimUpload(key: string): boolean {
+  if (claimed.has(key)) return false;
+  claimed.add(key);
+  return true;
+}
+
+/** For tests: forget every claim. */
+export function resetUploadClaims(): void {
+  claimed.clear();
 }
 
 /**

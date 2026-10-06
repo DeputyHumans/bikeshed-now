@@ -37,6 +37,7 @@ import { visibilityStateOf, type VisibilityState } from "../visibility";
 import { UploadDialog } from "../components/UploadDialog";
 import { CardSkeletons } from "../components/Spinner";
 import { coverUrl } from "../thumbs";
+import { useCoverBackfill } from "../hooks/useCoverBackfill";
 import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
 import { MARKING_OFF } from "../export/labels";
@@ -333,6 +334,11 @@ export function DocList() {
     const scoped = search ? docs : docsInFolder(docs, folderId);
     return sortDocs(filterDocs(scoped, search), sort);
   }, [docs, folderId, search, sort]);
+
+  // Covers nobody has captured yet are filled in here, for the cards on
+  // screen, by an editor's browser. The viewer captures on open; this is for
+  // every document nobody has opened since (SPEC §6d).
+  useCoverBackfill(visibleDocs, emailLower ?? "");
 
   const currentFolderName = useMemo(
     () => folders.find((f) => f.folderId === folderId)?.name ?? "Everything",

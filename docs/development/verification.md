@@ -284,6 +284,12 @@ Publish `deck-animated` and sign in as its owner.
 4. As `reviewer@example.com`, the cover and rail load, and opening the deck
    sends no `POST /thumb`. A non-member asking for the same image URL gets the
    same `404` as for one that does not exist.
+5. Publish `deck-quarter-review` and `markdown-reference` and open only the
+   workspace, as their owner. Within a few seconds each sends one
+   `POST /thumb … kind=cover` from the workspace itself, and both cards show
+   their first screen. `deck-animated`, trusted and scripted, keeps its
+   placeholder until it is opened; so does any document whose expiry has
+   passed.
 
 ---
 

@@ -16,6 +16,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **The workspace fills in covers nobody has captured.** A document only got
+  a cover when an editor opened it, so everything published before covers
+  existed showed a placeholder until somebody did. An editor's workspace now
+  captures the missing covers of the cards it shows, in the background, one at
+  a time, from each document's published first screen. A document whose
+  readers all run its scripts still waits for an editor to open it, and an
+  expired one is never captured (SPEC §6d).
+
 ### Fixed
 
 - **Stored thumbnails draw SVG artwork in its own colours.** Shapes inside an

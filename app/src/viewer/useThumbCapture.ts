@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { createCapturer, type Capturer } from "./capture";
 import type { Slide } from "./deck";
 import { buildPagePreviewDoc, buildPreviewDoc, slideStateTokens } from "./preview";
-import { uploadThumbs, type CaptureNeeds } from "../thumbs";
+import { claimUpload as claim, uploadThumbs, type CaptureNeeds } from "../thumbs";
 
 /**
  * Builds previews from the reader's frame and reads it; writes nothing to it.
@@ -21,25 +21,6 @@ import { uploadThumbs, type CaptureNeeds } from "../thumbs";
  * all, which decides between a slide cover and a page cover.
  */
 const SETTLE_MS = 2_500;
-
-/**
- * What this browser has already uploaded, by document, version and kind, for
- * the life of the page. Claimed just before the upload, so a capture cancelled
- * part-way is tried again; an upload the server refuses is not retried by every
- * re-render — the next editor to open the document will try.
- */
-const attempted = new Set<string>();
-
-/** For tests: forget every attempt. */
-export function resetCaptureAttempts(): void {
-  attempted.clear();
-}
-
-function claim(key: string): boolean {
-  if (attempted.has(key)) return false;
-  attempted.add(key);
-  return true;
-}
 
 export interface ThumbCaptureOptions {
   docId: string;

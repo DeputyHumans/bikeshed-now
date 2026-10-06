@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { scanSlides, type Slide } from "./deck";
 import type { Captured, Capturer } from "./capture";
-import { resetCaptureAttempts, useThumbCapture, type ThumbCaptureOptions } from "./useThumbCapture";
+import { useThumbCapture, type ThumbCaptureOptions } from "./useThumbCapture";
+import { resetUploadClaims } from "../thumbs";
 
 const BASE = "/content/q3-plan/v3/";
 
@@ -69,7 +70,7 @@ function options(over: Partial<ThumbCaptureOptions> = {}): ThumbCaptureOptions {
 }
 
 beforeEach(() => {
-  resetCaptureAttempts();
+  resetUploadClaims();
 });
 
 describe("useThumbCapture", () => {

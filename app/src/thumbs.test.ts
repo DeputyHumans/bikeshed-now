@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { DocMeta } from "./types";
+
 import {
   THUMB_MAX_IMAGE_BYTES,
   THUMB_MAX_SLIDES,
@@ -12,7 +14,10 @@ import {
   THUMB_REVISION,
   THUMB_STAGE,
   captureNeeds,
+  claimUpload,
+  coverOwed,
   coverUrl,
+  resetUploadClaims,
   storedSlideImages,
   thumbUrl,
   uploadThumbs,
@@ -198,5 +203,58 @@ describe("uploadThumbs", () => {
     expect(await uploadThumbs("q3-plan", "v3", "cover", [new Blob(["x"])])).toBe(false);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     expect(await uploadThumbs("q3-plan", "v3", "cover", [new Blob(["x"])])).toBe(false);
+  });
+});
+
+describe("coverOwed", () => {
+  const ME = "me@example.com";
+  const doc = (over: Partial<DocMeta> = {}): DocMeta =>
+    ({
+      docId: "q3-plan",
+      title: "Q3 plan",
+      slug: "q3-plan",
+      ownerUid: "u1",
+      ownerEmail: ME,
+      currentVersion: "v3",
+      viewers: [],
+      editors: [],
+      members: [ME],
+      createdAt: null,
+      updatedAt: null,
+      ...over,
+    }) as unknown as DocMeta;
+
+  it("is owed to its owner, and to an editor, when nothing is stored", () => {
+    expect(coverOwed(doc(), ME)).toBe(true);
+    expect(coverOwed(doc({ ownerEmail: "ana@example.com", editors: [ME] }), ME)).toBe(true);
+    expect(coverOwed(doc({ ownerEmail: "ana@example.com", editorMembers: [ME] }), ME)).toBe(true);
+  });
+
+  it("is owed again for a newer version, or an image an older capture made", () => {
+    expect(coverOwed(doc({ thumb: { versionId: "v2", rev: THUMB_REVISION, cover: KEY } }), ME)).toBe(true);
+    expect(coverOwed(doc({ thumb: { versionId: "v3", cover: KEY } }), ME)).toBe(true);
+    expect(coverOwed(doc({ thumb: { versionId: "v3", rev: THUMB_REVISION } }), ME)).toBe(true);
+  });
+
+  for (const [why, over, email] of [
+    ["to a reader who cannot change it", { ownerEmail: "ana@example.com", viewers: [ME] }, ME],
+    ["to nobody signed in", {}, ""],
+    ["once it has expired", { expiresAt: Date.now() - 1000 }, ME],
+    ["when this version's cover is already stored", { thumb: { versionId: "v3", rev: THUMB_REVISION, cover: KEY } }, ME],
+  ] as const) {
+    it(`is not owed ${why}`, () => {
+      expect(coverOwed(doc(over as Partial<DocMeta>), email)).toBe(false);
+    });
+  }
+});
+
+describe("claimUpload", () => {
+  afterEach(() => resetUploadClaims());
+
+  it("lets one upload of a kind for a version through per page, wherever it starts", () => {
+    // The workspace and the viewer can both owe the same cover in one session.
+    expect(claimUpload("q3-plan/v3/cover")).toBe(true);
+    expect(claimUpload("q3-plan/v3/cover")).toBe(false);
+    expect(claimUpload("q3-plan/v3/slides")).toBe(true);
   });
 });

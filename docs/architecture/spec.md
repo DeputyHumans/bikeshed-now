@@ -763,6 +763,18 @@ a document for themselves runs its scripts with their own access, and those
 scripts could paint something of theirs into the page that a stored image would
 then show to every member.
 
+A document nobody has opened since then would otherwise keep a placeholder
+for good, so the **workspace fills in missing covers** for the cards it shows,
+in an editor's browser, one at a time: it fetches the published entry once,
+parses it without running anything, and captures the first screen of the same
+page preview — for a deck, its first slide, since a deck without its script
+shows its slides in order. It takes only what the viewer would: an editor's,
+unexpired, with no cover stored for the current version by this capture. A
+document every reader runs the scripts of, and that has scripts, is left for
+an editor to open, since a capture that runs none could show everybody a page
+none of them sees; an untrusted document is sandboxed for every reader, so its
+first screen without scripts is exactly theirs.
+
 Reading the published head, the rail and the overview show those **stored
 images** instead of building previews, when the record holds a rail for exactly
 this version with exactly as many slides as the deck on screen: one request per

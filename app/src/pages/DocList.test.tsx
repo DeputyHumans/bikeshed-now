@@ -47,6 +47,8 @@ vi.mock("../folders", () => ({
 }));
 vi.mock("../forks", () => ({ forkDoc }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
+const { backfill } = vi.hoisted(() => ({ backfill: vi.fn() }));
+vi.mock("../hooks/useCoverBackfill", () => ({ useCoverBackfill: backfill }));
 
 import { DocList } from "./DocList";
 import { ToastProvider } from "../components/Toast";
@@ -262,5 +264,21 @@ describe("each document's cover", () => {
     expect(grids[0].querySelector(".doc-card-thumb")).toBeNull();
     expect(grids[0].textContent).toContain("Plans");
     expect(grids[1].querySelector(".doc-card-thumb")).not.toBeNull();
+  });
+});
+
+describe("filling in missing covers", () => {
+  it("hands the documents on screen, and who is looking, to the backfill", () => {
+    // Only the cards this view shows: a folder's documents, not the whole
+    // workspace, and the account whose edit rights decide what may be stored.
+    mount();
+    act(() => listeners.folders!([]));
+    act(() =>
+      listeners.docs!([docMeta({ docId: "here", folderId: null }), docMeta({ docId: "elsewhere", folderId: "f9" })]),
+    );
+
+    const [docs, email] = backfill.mock.calls[backfill.mock.calls.length - 1];
+    expect((docs as DocMeta[]).map((d) => d.docId)).toEqual(["here"]);
+    expect(email).toBe("me@example.com");
   });
 });
