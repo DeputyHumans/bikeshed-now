@@ -28,6 +28,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   highest role first. `POST /access`, `POST /folder-access` and
   `set-access.mjs --role` accept both new roles, and an invitation says what
   the role allows (SPEC §13, §18).
+- **Suggested edits.** Anyone who can suggest selects text and proposes what it
+  should say instead, or that it should go. The owner and approvers are
+  emailed, and an approver accepts or rejects it. Accepting makes the change in
+  their own editing session, so it reaches co-editors like any keystroke and
+  lands in the draft; a person still publishes it. Rejecting can say why. The
+  suggester hears either way, in the thread. A suggestion is text inside one
+  block, never formatting or structure, and a pending one can be changed or
+  withdrawn by its author. `POST /suggestion` is the one path that writes them
+  (SPEC §2, §4, §14, §22; ADR 0013).
 - **A pending suggestion holds back every new version, on every channel.**
   Publishing in the app, uploading a revision, `bikeshed update` and
   `update_document` are all refused with a `409` while a suggested edit on the

@@ -25,17 +25,33 @@ export interface CommentNoticeProps {
   url: string;
   /** Set when the comment arrived through an automation channel (SPEC §17). */
   viaChannel?: "cli" | "mcp" | "api";
+  /**
+   * Set when this comment opens a suggested edit (SPEC §22). The quote is the
+   * text it would change and `replacement` what it would become; empty means
+   * the suggestion is to delete it. A branch of this message, not a fourth one:
+   * it is still "someone said something about a passage in your document".
+   */
+  suggestion?: { replacement: string };
+}
+
+/** The change a suggestion proposes, in words, for both renderings. */
+function changeLine(s: { replacement: string }): string {
+  return s.replacement === "" ? "Suggested: delete this." : `Suggested replacement: ${s.replacement}`;
 }
 
 export function CommentNotice(p: CommentNoticeProps) {
   return (
     <Layout
       origin={p.origin}
-      preview={`${p.authorEmail} commented on ${p.docTitle}`}
-      footnote="You received this because you own this document or replied in this thread."
+      preview={`${p.authorEmail} ${p.suggestion ? "suggested an edit to" : "commented on"} ${p.docTitle}`}
+      footnote={
+        p.suggestion
+          ? "You received this because you can accept or reject edits to this document."
+          : "You received this because you own this document or replied in this thread."
+      }
     >
       <Text style={textStyles.heading}>
-        {p.authorEmail} commented on “{p.docTitle}”
+        {p.authorEmail} {p.suggestion ? "suggested an edit to" : "commented on"} “{p.docTitle}”
       </Text>
       {p.viaChannel ? (
         <Text style={{ ...textStyles.paragraph, fontSize: "13px", color: "#55526b" }}>
@@ -44,9 +60,10 @@ export function CommentNotice(p: CommentNoticeProps) {
         </Text>
       ) : null}
       {p.quote ? <Text style={textStyles.quote}>{p.quote}</Text> : null}
-      <Text style={textStyles.paragraph}>{p.body}</Text>
+      {p.suggestion ? <Text style={textStyles.paragraph}>{changeLine(p.suggestion)}</Text> : null}
+      {p.body ? <Text style={textStyles.paragraph}>{p.body}</Text> : null}
       <Button href={p.url} style={textStyles.button}>
-        Reply in context
+        {p.suggestion ? "Review it in context" : "Reply in context"}
       </Button>
     </Layout>
   );
@@ -54,13 +71,14 @@ export function CommentNotice(p: CommentNoticeProps) {
 
 export function commentNoticeText(p: CommentNoticeProps): string {
   return [
-    `${p.authorEmail} commented on "${p.docTitle}"${p.viaChannel ? ` (via ${p.viaChannel.toUpperCase()})` : ""}.`,
+    `${p.authorEmail} ${p.suggestion ? "suggested an edit to" : "commented on"} "${p.docTitle}"${p.viaChannel ? ` (via ${p.viaChannel.toUpperCase()})` : ""}.`,
     ``,
     p.quote ? `On: "${p.quote}"` : "",
+    p.suggestion ? changeLine(p.suggestion) : "",
     ``,
     p.body,
     ``,
-    `Reply in context: ${p.url}`,
+    `${p.suggestion ? "Review it in context" : "Reply in context"}: ${p.url}`,
   ]
     .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
     .join("\n");

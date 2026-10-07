@@ -312,6 +312,24 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
   clears `draft`.
 
+### `POST /suggestion`
+Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and
+the only writer of an annotation's `suggestion` field. `private, no-store`.
+Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
+`409`.
+
+| `op` | Body | Who | Refused with |
+|---|---|---|---|
+| `create` | `anchor, replacement, note?` | `canSuggest`, any channel | `403` a reader who may not suggest; `409 { currentVersion }` not the current version; `409` twenty pending by this author; `400` a bad anchor, a replacement with a line break or control character, or one equal to its quote |
+| `revise` | `annId, replacement, note?` | its author, in the app | `403` anyone else; `409` decided or claimed |
+| `withdraw` | `annId` | its author, in the app | the same; deletes the thread |
+| `claim` | `annId` | an approver, in the app | `409 { claimedBy }` another approver's live claim |
+| `accept` | `annId` | an approver, in the app | `409` no draft of this version; idempotent once accepted |
+| `reject` | `annId, reason?` | an approver, in the app | idempotent once rejected |
+
+Every op but `create` refuses a token with `403`: deciding is a person's act.
+`create` answers `{ annId, versionId }`; the others `{ state }`.
+
 ### Workspace endpoints
 - **`POST /publish` (`createDoc`)** — raw body is the uploaded file; metadata in
   the query string (`?filename=&title=&id=&folderId=&marking=`). Accepts a single
@@ -408,6 +426,14 @@ users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
 public/{docId}                                 PublicDoc        (projection, public only)
 ```
+
+**An `Annotation` with a `suggestion` field is a suggested edit** (§22):
+`suggestion: { replacement, state: "pending" | "accepted" | "rejected",
+claim?, decidedBy?, decidedAt? }`. Its `resolved` is `false` while pending and
+`true` once decided, so it counts as an open thread everywhere one is counted.
+Only `POST /suggestion` writes the field. A **`Comment`** may carry
+`opensSuggestion` (the thread's first comment) and `generated` (text the server
+wrote rather than the author), and no client may write either.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
@@ -1155,6 +1181,13 @@ The comment email is bounded **by construction rather than by infrastructure**:
 one `onDocumentCreated` trigger; recipients = owner + prior thread participants −
 the author; a per-(recipient, doc) cooldown on the user record. No queue, no
 scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`.
+
+A suggested edit is a branch of the comment email, not a fourth message. Its
+opening comment is addressed to the owner and every approver − the author,
+because only they can decide it; the notice shows the quote and the proposed
+replacement, and the author's note if there was one. A decision is a short
+comment in the thread ("Accepted." / "Rejected: …"), which reaches the
+suggester the ordinary way.
 
 Templates are react-email components rendered with `@react-email/render`, pulled
 in via a **dynamic `import()` inside the send helper** so React never loads in
@@ -2063,3 +2096,68 @@ one costs no request.
 - **No lineage for copies made before this section.** They keep
   `publishedVia: "duplicate"` and are neither linked nor counted.
 
+---
+
+## 22. Suggestions
+
+Somebody who may not edit a document — or may, and would rather ask — proposes
+a change for somebody else to decide on. People and agents alike. The decision
+behind the shape, and what would reverse it, is ADR 0013.
+
+### Who may do what
+
+| | read, comment | suggest | edit, publish | accept, reject |
+|---|---|---|---|---|
+| viewer | ✓ | | | |
+| suggester | ✓ | ✓ | | |
+| editor | ✓ | ✓ | ✓ | |
+| approver | ✓ | ✓ | ✓ | ✓ |
+| owner | ✓ | ✓ | ✓ | ✓ |
+| open editor (§17) | ✓ | ✓ | ✓ | |
+| an agent | its person's | its person's | its person's | never |
+
+Roles are granted and inherited as in §13. The author of a pending suggestion
+may change or withdraw it.
+
+### What a suggestion is
+
+One **text** replacement inside one block: the quoted text, anchored as a
+comment is (§6), and what it should become. An empty replacement deletes the
+quote. A replacement is one line of text — no line break, control character or
+bidirectional override — because anything else would insert structure when it
+is typed in. Formatting, images and structure cannot be suggested.
+
+It is stored as an annotation with a `suggestion` field (§4), so it has a
+thread, a highlight, orphan detection and the comment email for free.
+
+### Lifecycle
+
+```
+pending ──accept──▶ accepted
+   │    └─reject──▶ rejected
+   └──withdraw────▶ (deleted)
+```
+
+A **claim** is held by the approver applying it, for two minutes, and keeps
+every other decision and the author's withdrawal off it meanwhile, so two
+approvers cannot insert the same change twice. A lapsed claim is ignored.
+
+**Accepting is an edit.** The approver's browser finds the quote in the DRAFT —
+exactly, never by fuzzy match — replays the replacement with `execCommand` in
+the approver's own editing session, waits for the draft to save, and only then
+records the decision. So it reaches every co-editor through the shared state
+(§16) like a keystroke, and lands in the draft; publishing it is still "Save as
+new version". A quote that no longer matches exactly is **stale**: shown as
+such, and only rejectable.
+
+**A pending suggestion holds back every new version** (§6a). Only an approver
+clears one, so somebody who can publish but not decide is told who can.
+
+Each author may have twenty pending suggestions on one version.
+
+### Not built
+
+A suggesting mode inside the editor · structural or formatting suggestions ·
+accepting on the server · merging a stale suggestion into changed text ·
+carrying a pending suggestion to the next version · bulk accept · a
+per-document "require review" switch · deciding from an agent.

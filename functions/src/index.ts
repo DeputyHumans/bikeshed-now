@@ -59,8 +59,10 @@ import {
   canRead,
   canEditFolder,
   canManageFolder,
+  canSuggest,
   expiredForReader,
   expiryMs,
+  isDocApprover,
   isDocEditor,
   isExpired,
   keepsTrust,
@@ -95,6 +97,14 @@ import {
   withdrawTrust,
 } from "./lib/publish";
 import { pendingSuggestions, pendingSuggestionsMessage } from "./lib/review";
+import {
+  SUGGESTION_COLOR,
+  changeSuggestion,
+  createSuggestion,
+  isDecisionOp,
+  parseAnchor,
+  parseNote,
+} from "./lib/suggestions";
 import {
   THUMB_CACHE_SECONDS,
   THUMB_REL,
@@ -1479,6 +1489,180 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
 // Workspace: upload, folders, organize, fork
 // ---------------------------------------------------------------------------
 
+
+/**
+ * POST /suggestion — every change to a suggested edit (SPEC §22).
+ *
+ * `{ op, docId, versionId, k?, … }`, where `op` is
+ *
+ *   create    `anchor, replacement, note?`  anyone who may suggest, any channel
+ *   revise    `annId, replacement, note?`   its author, in the app
+ *   withdraw  `annId`                       its author, in the app
+ *   claim     `annId`                       an approver, in the app
+ *   accept    `annId`                       an approver, in the app, after applying it
+ *   reject    `annId, reason?`              an approver, in the app
+ *
+ * The only path that writes the `suggestion` field; the rules refuse every
+ * client write that names it. Deciding is a person's act — an agent proposes
+ * and never decides — so every op but `create` refuses a token.
+ *
+ * `accept` does not apply anything. The approver's browser has already made
+ * the change in their editing session and saved the draft; this records the
+ * decision, and refuses when there is no draft of this version for the change
+ * to be in (ADR 0013).
+ */
+export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
+  noStore(res); // before any branch can return — see noStore()
+  if (rejectMethod(req, res, ["POST"])) return;
+  const caller = await resolveCaller(req);
+  if (!caller) {
+    res.status(401).end();
+    return;
+  }
+
+  const body = (jsonBody(req) ?? {}) as Record<string, unknown>;
+  const op = body.op;
+  if (op !== "create" && !isDecisionOp(op)) {
+    badRequest(res, "op must be create, revise, withdraw, claim, accept or reject");
+    return;
+  }
+  const docId = typeof body.docId === "string" ? body.docId : "";
+  const versionId = typeof body.versionId === "string" ? body.versionId : "";
+  if (!docId || !safeSegment(docId) || !versionId || !safeSegment(versionId)) {
+    badRequest(res, "invalid or missing docId or versionId");
+    return;
+  }
+
+  const ref = db().collection("docs").doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    res.status(404).end();
+    return;
+  }
+  const data = snap.data() as DocAclData & {
+    currentVersion?: string;
+    draft?: { baseVersion?: unknown } | null;
+  };
+  const proof = await linkProofFor(ref, data, caller, typeof body.k === "string" ? body.k : null);
+  if (!canRead(data, caller, proof)) {
+    res.status(refusal(data, caller, proof)).end();
+    return;
+  }
+  // Frozen for everyone, the owner included, as every other write is.
+  if (isExpired(data, Date.now())) {
+    res.status(409).json({ error: EXPIRED_WRITE });
+    return;
+  }
+  const actor = actorFrom(caller, req);
+  const author = { uid: caller.uid, emailLower: caller.emailLower };
+
+  if (op === "create") {
+    if (!canSuggest(data, caller, proof)) {
+      res.status(403).json({ error: "You can read this document, but not suggest edits to it." });
+      return;
+    }
+    if (data.currentVersion !== versionId) {
+      res.status(409).json({
+        error: "This document has a newer version. Reload, then suggest the edit on it.",
+        currentVersion: data.currentVersion,
+      });
+      return;
+    }
+    const anchor = parseAnchor(body.anchor);
+    if ("error" in anchor) {
+      badRequest(res, anchor.error);
+      return;
+    }
+    if (typeof body.replacement !== "string") {
+      badRequest(res, "replacement must be a string; send an empty one to suggest a deletion");
+      return;
+    }
+    const note = parseNote(body.note);
+    if (typeof note !== "string") {
+      badRequest(res, note.error);
+      return;
+    }
+    const created = await createSuggestion({
+      db: db(),
+      docRef: ref,
+      versionId,
+      anchor,
+      replacement: body.replacement,
+      note,
+      author,
+      actor,
+      color: SUGGESTION_COLOR,
+    });
+    if ("status" in created) {
+      const { status, ...rest } = created;
+      res.status(status).json(rest);
+      return;
+    }
+    res.status(200).json({ annId: created.annId, versionId });
+    return;
+  }
+
+  // Everything else is a decision about a suggestion that exists.
+  const annId = typeof body.annId === "string" ? body.annId : "";
+  if (!annId || !safeSegment(annId)) {
+    badRequest(res, "invalid or missing annId");
+    return;
+  }
+  if (actor.channel !== "web") {
+    res.status(403).json({
+      error:
+        "Accepting, rejecting, changing or withdrawing a suggestion is done by a person, in the app.",
+    });
+    return;
+  }
+  const deciding = op === "claim" || op === "accept" || op === "reject";
+  if (deciding && !isDocApprover(data, caller.uid, caller.emailLower)) {
+    res.status(403).json({ error: "Only the owner or an approver can accept or reject a suggestion." });
+    return;
+  }
+  if ((op === "claim" || op === "accept") && data.currentVersion !== versionId) {
+    res.status(409).json({
+      error: "This document has a newer version, so this suggestion can no longer be applied.",
+      currentVersion: data.currentVersion,
+    });
+    return;
+  }
+  if (op === "accept" && data.draft?.baseVersion !== versionId) {
+    res.status(409).json({
+      error: "Apply the suggestion in the editor first: there is no draft of this version for it to be in.",
+    });
+    return;
+  }
+  const note = parseNote(body.note);
+  if (typeof note !== "string") {
+    badRequest(res, note.error);
+    return;
+  }
+  if (op === "revise" && typeof body.replacement !== "string") {
+    badRequest(res, "replacement must be a string; send an empty one to suggest a deletion");
+    return;
+  }
+
+  const changed = await changeSuggestion({
+    db: db(),
+    docRef: ref,
+    versionId,
+    annId,
+    op,
+    caller: author,
+    actor,
+    replacement: typeof body.replacement === "string" ? body.replacement : undefined,
+    note,
+    reason: typeof body.reason === "string" ? body.reason : undefined,
+  });
+  if ("status" in changed) {
+    const { status, ...rest } = changed;
+    res.status(status).json(rest);
+    return;
+  }
+  res.status(200).json(changed);
+});
+
 /**
  * POST /publish (createDoc) — a NEW document from a browser upload.
  *
@@ -2822,6 +3006,11 @@ export const onCommentCreated = onDocumentCreated(
     const recipients = new Set<string>();
     const owner = normalizeEmail(String(doc.ownerEmail || ""));
     if (owner) recipients.add(owner);
+    // A new suggestion is for the people who can decide it: only they can
+    // clear it, and until they do it holds back the next version (SPEC §22).
+    const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
+    const deciders = suggestion ? membershipOf(doc).approverMembers : [];
+    for (const e of deciders) recipients.add(normalizeEmail(e));
     for (const c of siblingSnap.docs) {
       const e = normalizeEmail(String(c.data()?.authorEmail || ""));
       if (e) recipients.add(e);
@@ -2830,7 +3019,10 @@ export const onCommentCreated = onDocumentCreated(
     if (recipients.size === 0) return;
 
     const quote = String(annSnap.data()?.anchor?.exact ?? "").slice(0, 300);
-    const body = String(comment.body ?? "").slice(0, 2000);
+    // A generated opener restates the change, which the notice shows as the
+    // change itself; only a note the author wrote is worth repeating.
+    const body =
+      suggestion && comment.generated === true ? "" : String(comment.body ?? "").slice(0, 2000);
     const title = typeof doc.title === "string" ? doc.title : docId;
     const viaChannel =
       actor && actor.channel !== "web"
@@ -2852,6 +3044,9 @@ export const onCommentCreated = onDocumentCreated(
         viaChannel,
         docId,
         versionId,
+        ...(suggestion
+          ? { suggestion: { replacement: String(suggestion.replacement ?? "").slice(0, 300) } }
+          : {}),
       });
     }
   },

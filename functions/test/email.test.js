@@ -134,6 +134,24 @@ test("the invitation says what each role may do", () => {
   assert.match(inviteText({ ...base, role: "approver" }), /accept or reject what other people suggest\./);
 });
 
+test("a suggestion's notice says what it would change, and who it is for", () => {
+  const base = {
+    origin: "https://example.test",
+    authorEmail: "sug@example.com",
+    docTitle: "Q3 memo",
+    quote: "a single weekend",
+    body: "",
+    url: "https://example.test/d/memo/v1",
+  };
+  const replace = commentNoticeText({ ...base, suggestion: { replacement: "two weekends" } });
+  assert.match(replace, /^sug@example\.com suggested an edit to "Q3 memo"\./);
+  assert.match(replace, /On: "a single weekend"\nSuggested replacement: two weekends/);
+  assert.match(replace, /Review it in context: https:\/\/example\.test\/d\/memo\/v1/);
+  assert.match(commentNoticeText({ ...base, suggestion: { replacement: "" } }), /Suggested: delete this\./);
+  // An ordinary comment reads exactly as before.
+  assert.match(commentNoticeText({ ...base, body: "Hm." }), /commented on "Q3 memo"[\s\S]*Reply in context/);
+});
+
 test("a team invitation says it is a team", () => {
   const text = inviteText({
     origin: "https://example.test",

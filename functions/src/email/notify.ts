@@ -135,10 +135,13 @@ export async function sendCommentNotice(
     quote: props.quote,
     body: props.body,
     viaChannel: props.viaChannel,
+    suggestion: props.suggestion,
   };
   await sendEmail({
     to,
-    subject: `${props.authorEmail} commented on “${props.docTitle}”`,
+    subject: props.suggestion
+      ? `${props.authorEmail} suggested an edit to “${props.docTitle}”`
+      : `${props.authorEmail} commented on “${props.docTitle}”`,
     body: React.createElement(CommentNotice, full),
     text: commentNoticeText(full),
   });

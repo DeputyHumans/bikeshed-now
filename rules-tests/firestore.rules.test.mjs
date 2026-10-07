@@ -14,6 +14,7 @@ import {
 } from "@firebase/rules-unit-testing";
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -148,6 +149,29 @@ describe("firestore rules", () => {
         createdAt: new Date(),
       });
       await setDoc(doc(db, "docs/ladder-doc/viewers/u-suggester"), { uid: SUGGESTER.uid, views: 1 });
+
+      // A suggestion, as only the server writes one, with its opening comment.
+      await setDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1"), {
+        annId: "sug1",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: actorFor(VIEWER),
+        anchor: { elementId: "s1", exact: "text", prefix: "", suffix: "", start: 0, end: 4 },
+        color: "#b5257b",
+        resolved: false,
+        createdAt: new Date(),
+        suggestion: { replacement: "words", state: "pending" },
+      });
+      await setDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/c1"), {
+        commentId: "c1",
+        body: "Suggested replacing “text” with “words”.",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: actorFor(VIEWER),
+        createdAt: new Date(),
+        opensSuggestion: true,
+        generated: true,
+      });
 
       // A document whose members entry is stored with the wrong case.
       await setDoc(doc(db, "docs/mixedcase-doc"), {
@@ -418,6 +442,107 @@ describe("firestore rules", () => {
     const theirs = verified(env, EDITOR).firestore();
     await assertFails(deleteDoc(doc(theirs, "docs/private-doc/versions/v1/annotations/a1")));
     await assertSucceeds(deleteDoc(doc(mine, "docs/private-doc/versions/v1/annotations/new1")));
+  });
+
+  // --- Suggestions (SPEC §22): POST /suggestion is the only writer ----------
+
+  const plainAnnotation = (p, annId) => ({
+    annId,
+    authorUid: p.uid,
+    authorEmail: p.email,
+    actor: actorFor(p),
+    anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+    color: "#b5257b",
+    resolved: false,
+    createdAt: new Date(),
+  });
+
+  it("no client creates a suggestion, though the same annotation without one is fine", async () => {
+    const db = verified(env, VIEWER).firestore();
+    const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/${id}`);
+    await assertFails(
+      setDoc(at("forged-sug"), {
+        ...plainAnnotation(VIEWER, "forged-sug"),
+        suggestion: { replacement: "y", state: "pending" },
+      }),
+    );
+    await assertSucceeds(setDoc(at("control-sug"), plainAnnotation(VIEWER, "control-sug")));
+  });
+
+  it("nobody resolves a suggestion from a client, owner included", async () => {
+    // `resolved` is what the publish gate counts. A reader flipping it on a
+    // suggestion would lift the gate without anybody deciding anything.
+    for (const p of [VIEWER, EDITOR, OWNER]) {
+      const db = verified(env, p).firestore();
+      await assertFails(
+        updateDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1"), { resolved: true }),
+      );
+    }
+  });
+
+  it("nobody decides a suggestion by writing its state, owner included", async () => {
+    const db = verified(env, OWNER).firestore();
+    const ref = doc(db, "docs/private-doc/versions/v1/annotations/sug1");
+    await assertFails(updateDoc(ref, { "suggestion.state": "accepted" }));
+    await assertFails(updateDoc(ref, { "suggestion.replacement": "something else" }));
+  });
+
+  it("a suggestion cannot be stripped back into a plain annotation and resolved", async () => {
+    // The one write the post-write check alone would let through: remove the
+    // field and resolve in the same update, so the result no longer looks like
+    // a suggestion at all.
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(
+      updateDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1"), {
+        suggestion: deleteField(),
+        resolved: true,
+      }),
+    );
+  });
+
+  it("a plain annotation cannot be turned into a suggestion", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(
+      updateDoc(doc(db, "docs/private-doc/versions/v1/annotations/a1"), {
+        suggestion: { replacement: "y", state: "pending" },
+      }),
+    );
+  });
+
+  it("its author withdraws a suggestion through the endpoint, not by deleting it", async () => {
+    const db = verified(env, VIEWER).firestore();
+    await assertFails(deleteDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1")));
+  });
+
+  it("anyone who reads it may discuss a suggestion", async () => {
+    const db = verified(env, EDITOR).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/r1"), {
+        commentId: "r1",
+        body: "Why this word?",
+        authorUid: EDITOR.uid,
+        authorEmail: EDITOR.email,
+        actor: actorFor(EDITOR),
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it("no client writes a comment as the server's", async () => {
+    const db = verified(env, EDITOR).firestore();
+    const base = {
+      body: "Accepted.",
+      authorUid: EDITOR.uid,
+      authorEmail: EDITOR.email,
+      actor: actorFor(EDITOR),
+      createdAt: new Date(),
+    };
+    const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/sug1/comments/${id}`);
+    await assertFails(setDoc(at("g1"), { ...base, commentId: "g1", generated: true }));
+    await assertFails(setDoc(at("g2"), { ...base, commentId: "g2", opensSuggestion: true }));
+    // Nor by editing one of its own afterwards.
+    await assertFails(updateDoc(at("r1"), { generated: true }));
+    await assertSucceeds(updateDoc(at("r1"), { body: "Why this word, here?" }));
   });
 
   it("a non-member cannot read or write feedback", async () => {

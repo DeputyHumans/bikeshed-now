@@ -53,6 +53,7 @@ export const ENDPOINTS = [
   { path: "/unlock", fn: "unlockDoc", match: "exact" },
   { path: "/draft", fn: "saveDraft", match: "exact" },
   { path: "/commit", fn: "commitVersion", match: "exact" },
+  { path: "/suggestion", fn: "manageSuggestion", match: "exact" },
   { path: "/thumb", fn: "saveThumbs", match: "exact" },
   { path: "/mcp", fn: "mcp", match: "exact" },
   { path: "/sitemap.xml", fn: "sitemap", match: "exact" },

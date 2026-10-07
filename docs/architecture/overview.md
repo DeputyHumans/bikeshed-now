@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — twelve records of about thirty lines each.
+[`adr/`](adr/) — thirteen records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -122,6 +122,10 @@ a written argument in a pull request, not a dependency.
   operations, which this architecture does not have and does not want. The
   single-holder edit lock this replaces is withdrawn; ADR 0010 records both why
   it was chosen and why it was reversed.
+- **No suggesting mode in the editor, and no structural suggestions.** A
+  suggestion is one text replacement, proposed from a selection and accepted as
+  an ordinary edit in the approver's own session; the server never applies one
+  and nothing is merged ([ADR 0013](adr/0013-suggestions-applied-as-an-edit.md)).
 - **No plugin system.** Nothing has asked for an extension point twice.
 - **No theming engine.** One palette, swapped by editing twelve tokens.
 - **No i18n.** No second locale is in sight, and retrofitting is mechanical.

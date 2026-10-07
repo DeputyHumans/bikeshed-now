@@ -192,12 +192,22 @@ service cloud.firestore {
         allow read: if canRead(docId, docData(docId));
         allow write: if false; // immutable; minted server-side only
 
+        // A SUGGESTION is an annotation with a `suggestion` field (SPEC §22).
+        // No client write may create, change or remove one: who may suggest,
+        // and who may decide, are roles the rules cannot see without reading
+        // four more arrays, so `POST /suggestion` is the only path and these
+        // clauses close every other. Without them a reader could forge a
+        // suggestion, or set `resolved` on one and lift the publish gate
+        // without anybody deciding it.
         match /annotations/{annId} {
           allow read: if canRead(docId, docData(docId));
-          allow create: if canRead(docId, docData(docId)) && authoredBySelf();
+          allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+            && !('suggestion' in request.resource.data);
           // Readers may only toggle `resolved`. Author, anchor, colour, actor
           // and createdAt are immutable after creation.
           allow update: if canRead(docId, docData(docId))
+            && !('suggestion' in resource.data)
+            && !('suggestion' in request.resource.data)
             && request.resource.data.authorUid == resource.data.authorUid
             && request.resource.data.authorEmail == resource.data.authorEmail
             && request.resource.data.actor == resource.data.actor
@@ -205,16 +215,24 @@ service cloud.firestore {
             && request.resource.data.color == resource.data.color
             && request.resource.data.createdAt == resource.data.createdAt;
           allow delete: if isVerifiedUser()
-            && resource.data.authorUid == request.auth.uid;
+            && resource.data.authorUid == request.auth.uid
+            && !('suggestion' in resource.data);
 
+          // `generated` and `opensSuggestion` mark what the server wrote for a
+          // suggestion; a client claiming either would be passing its words off
+          // as the server's.
           match /comments/{commentId} {
             allow read: if canRead(docId, docData(docId));
-            allow create: if canRead(docId, docData(docId)) && authoredBySelf();
+            allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+              && !('generated' in request.resource.data)
+              && !('opensSuggestion' in request.resource.data);
             allow update: if canRead(docId, docData(docId))
               && resource.data.authorUid == request.auth.uid
               && request.resource.data.authorUid == resource.data.authorUid
               && request.resource.data.authorEmail == resource.data.authorEmail
-              && request.resource.data.actor == resource.data.actor;
+              && request.resource.data.actor == resource.data.actor
+              && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['generated', 'opensSuggestion']);
             allow delete: if isVerifiedUser()
               && resource.data.authorUid == request.auth.uid;
           }

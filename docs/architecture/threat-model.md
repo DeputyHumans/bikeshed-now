@@ -24,7 +24,7 @@ What this system protects, from whom, and where it deliberately stops.
 - **Any verified account.** Passes the §1 gate. Sees only what its email is in
   `members` for, plus public documents, plus unlisted documents it holds the key
   to or a current link grant for.
-- **Member / editor / owner.** The ACL ladder.
+- **Viewer / suggester / editor / approver / owner.** The ACL ladder (SPEC §13).
 - **An agent holding a personal access token.** Exactly its owner's identity and
   exactly its owner's ACL. No service accounts, no impersonation.
 - **A document author.** Supplies arbitrary HTML, CSS and JavaScript, which will
@@ -158,6 +158,22 @@ rules entirely.
 `client` and `agent` are self-reported, stored verbatim, and **rendered as
 self-reported**. A badge implying verification it does not have would be worse
 than no badge.
+
+### A suggestion is forged, cleared or decided by someone who may not
+
+A reader could write an annotation that looks like a suggestion, or set
+`resolved` on a real one and lift the publish gate with nobody deciding it. An
+agent could accept its own proposal. A replacement could carry invisible
+direction marks that make a reviewer read one thing and approve another.
+
+**Mitigation.** Only `POST /suggestion` writes the `suggestion` field: the
+rules refuse every client create, update or delete that names it, before or
+after the write, and every client comment claiming `generated` or
+`opensSuggestion`. The endpoint checks the role for each op, refuses every
+decision from a token, and refuses a replacement containing a line break,
+control character or bidirectional override. Accepting applies nothing on the
+server: the approver's own session makes the edit, which an approver is
+allowed to make anyway (SPEC §22, ADR 0013).
 
 ### Zip-slip and zip bombs
 

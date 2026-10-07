@@ -22,6 +22,7 @@
       { "source": "/unlock", "function": "unlockDoc" },
       { "source": "/draft", "function": "saveDraft" },
       { "source": "/commit", "function": "commitVersion" },
+      { "source": "/suggestion", "function": "manageSuggestion" },
       { "source": "/thumb", "function": "saveThumbs" },
       { "source": "/mcp", "function": "mcp" },
       { "source": "/sitemap.xml", "function": "sitemap" },
