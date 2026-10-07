@@ -175,6 +175,25 @@ describe("useDeck", () => {
     expect(result.current.overviewOpen).toBe(false);
   });
 
+  it("closes the overview on Escape, and leaves Escape alone when it is shut", () => {
+    // The overview binds no Escape of its own (SlideOverview.test pins that),
+    // so this is the only thing that closes it from the keyboard.
+    const { doc } = mountDeck(DECK);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+
+    press(window, "o");
+    expect(result.current.overviewOpen).toBe(true);
+    const closing = press(window, "Escape");
+    expect(result.current.overviewOpen).toBe(false);
+    expect(closing.defaultPrevented).toBe(true);
+
+    // Shut, Escape is somebody else's: presentation mode's fullscreen exit, a
+    // menu, a dialog. Taking it here would swallow theirs.
+    const passing = press(window, "Escape");
+    expect(passing.defaultPrevented).toBe(false);
+    expect(result.current.overviewOpen).toBe(false);
+  });
+
   it("binds nothing while a dialog or the editor owns the keyboard", () => {
     const { doc, sections } = mountDeck(DECK);
     const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: false }));

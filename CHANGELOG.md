@@ -26,6 +26,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   document, and since 0.6.0 an approver was never told about a suggestion
   waiting for them. Signing in now writes the record, keeping any preference
   already saved, and the next email finds them (SPEC §2, §14).
+- **Escape closes a deck's slide overview.** The overview opened with `o` or
+  its toolbar button could only be closed with the mouse or `o` again; Escape
+  did nothing, although the code meant it to. With the overview shut, Escape is
+  left for presentation mode and everything else, as before (SPEC §6d).
 
 ## 0.6.0 — 2026-10-06
 

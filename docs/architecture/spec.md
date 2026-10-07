@@ -772,6 +772,9 @@ narrows the frame, so a navigator that re-decided on every resize could unmount
 itself, widen the frame, reappear, and oscillate. Keys are bound on both the
 parent and the frame document, because an iframe's key events never reach the
 parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins.
+`o` opens and closes the overview, and Escape closes it; with the overview shut,
+Escape is left untouched for whatever else is listening — presentation mode's
+fullscreen exit, a menu, a dialog.
 
 **Previews are a separate document.** The rail and the overview render each
 slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's

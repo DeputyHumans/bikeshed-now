@@ -123,6 +123,9 @@ export function useDeck({
   const [stacked, setStacked] = useState(false);
   const [stage, setStage] = useState<StageSize>(FALLBACK_STAGE);
   const [overviewOpen, setOverviewOpen] = useState(false);
+  // Read by the key handler, so opening the overview does not re-bind it.
+  const overviewOpenRef = useRef(overviewOpen);
+  overviewOpenRef.current = overviewOpen;
   const reduceMotion = usePrefersReducedMotion();
   /**
    * True while `goTo` is pressing keys into the frame. The keys it presses
@@ -274,6 +277,18 @@ export function useDeck({
       if (e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
+
+      // Escape closes the overview, and does nothing at all when it is shut.
+      // The overview binds no Escape of its own — other surfaces arm a
+      // document-level one without a focus gate — so this is the only place
+      // the key reaches it; leaving it untouched otherwise keeps presentation
+      // mode's fullscreen exit, and every other Escape, exactly as they were.
+      if (e.key === "Escape") {
+        if (!overviewOpenRef.current) return;
+        e.preventDefault();
+        setOverviewOpen(false);
+        return;
+      }
 
       if (e.key === "o" || e.key === "O") {
         e.preventDefault();
