@@ -27,6 +27,7 @@ import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
+import { useFrameFit } from "../viewer/useFrameFit";
 import { useThumbCapture } from "../viewer/useThumbCapture";
 import { captureNeeds, storedSlideImages } from "../thumbs";
 import { isExpired } from "../expiry";
@@ -337,6 +338,19 @@ export function DocViewer() {
     // A dialog or the editor owns the keyboard while it is up: paging the deck
     // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
+  });
+
+  // A deck that scales itself by script renders at full size in the
+  // script-free editor, half of it out of reach; the frame is laid out at the
+  // slides' width and scaled to the stage instead. Styles the iframe element
+  // only, never the document, so it carries no ordering obligation.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const frameFit = useFrameFit({
+    doc: frame.doc,
+    epoch: frame.epoch,
+    active: mode.kind === "editing",
+    slides: deck.slides,
+    stageRef,
   });
 
   // An editor's browser captures the published head's thumbnails once, for
@@ -940,13 +954,18 @@ export function DocViewer() {
             wrapper would put every button a rail's width too far left the moment
             the rail took a column.
           */}
-          <div className="doc-frame-stage">
+          <div
+            className="doc-frame-stage"
+            ref={stageRef}
+            style={frameFit ? { overflow: "hidden" } : undefined}
+          >
             {frame.frameProps ? (
               <iframe
                 {...frame.frameProps}
                 ref={frame.ref}
                 className="doc-frame"
                 title={doc.title}
+                style={frameFit}
               />
             ) : null}
             {/* Over the frame, never in it: this is the parent's DOM, so it

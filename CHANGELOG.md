@@ -40,6 +40,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   the published head or its draft, so proposing a change for somebody else to
   decide is a choice an editor can always make, and editing stays one click
   away (SPEC §22).
+- **A deck that scales itself fits in the editor.** Many decks size their
+  slides with their own script, and the editor never runs a document's
+  scripts, so there the slides rendered at full size and the left part of
+  every slide sat off the edge of the frame where nothing could scroll to it:
+  text there could not be edited, and a suggestion there could not be seen in
+  the review pass. While editing, the frame is now laid out at the width the
+  slides need and scaled to fit, so whole slides show as they do when reading
+  (SPEC §6a).
 
 ## 0.6.1 — 2026-10-06
 

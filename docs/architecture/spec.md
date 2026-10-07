@@ -620,6 +620,12 @@ The one path that writes content, and it is explicit and server-mediated.
   markup while the generator stays in place, so every later render appends
   another copy, and any node the script rewrites on load silently discards the
   editor's typed change.
+- A deck that sizes its slides with its own script renders at full size in the
+  script-free edit frame, and centred in a narrower frame its slides start at a
+  negative offset nothing can scroll to. While editing, the frame is laid out at
+  the width the slides' content reaches — measured once per load and latched,
+  as `paged` is — and the iframe ELEMENT is scaled to the stage
+  (`useFrameFit`). The document is not touched.
 - Containers the author left empty for their script to fill are outlined in edit
   mode. Marking is an **attribute** (`data-bshd-empty`) plus one injected
   stylesheet, **never an inserted node**, so no placeholder content can reach the
