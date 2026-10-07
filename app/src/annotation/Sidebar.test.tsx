@@ -6,11 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Annotation } from "../types";
 
-const { addComment, comments, rejectSuggestion, withdrawSuggestion } = vi.hoisted(() => ({
+const { addComment, comments, rejectSuggestion, reviseSuggestion, withdrawSuggestion } = vi.hoisted(() => ({
   addComment: vi.fn(),
   comments: { current: [] as unknown[] },
   rejectSuggestion: vi.fn(async () => ({ state: "rejected" })),
   withdrawSuggestion: vi.fn(async () => ({ state: "withdrawn" })),
+  reviseSuggestion: vi.fn(async () => ({ state: "pending" })),
 }));
 
 vi.mock("../firestore", () => ({
@@ -23,7 +24,7 @@ vi.mock("../firestore", () => ({
   formatRelative: () => "just now",
 }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
-vi.mock("../suggestions", () => ({ rejectSuggestion, withdrawSuggestion }));
+vi.mock("../suggestions", () => ({ rejectSuggestion, reviseSuggestion, withdrawSuggestion }));
 
 import { Sidebar } from "./Sidebar";
 import { ToastProvider } from "../components/Toast";
@@ -156,6 +157,19 @@ describe("a suggestion's thread", () => {
       fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
     });
     expect(withdrawSuggestion).toHaveBeenCalledWith({ docId: "d1", versionId: "v1", annId: "s1" });
+  });
+
+  it("lets its author change what they suggested, in place", async () => {
+    mountWith(SUGGESTION, { uid: "u-sug" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const field = screen.getByLabelText(/Replace/) as HTMLTextAreaElement;
+    expect(field.value).toBe("two weekends");
+    fireEvent.change(field, { target: { value: "a fortnight" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    expect(reviseSuggestion).toHaveBeenCalledWith({ docId: "d1", versionId: "v1", annId: "s1", replacement: "a fortnight" });
+    expect(screen.queryByLabelText(/Replace/)).toBeNull();
   });
 
   it("says when its text has changed underneath it", () => {

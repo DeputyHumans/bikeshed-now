@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { rangeFromAnchor } from "./anchor";
-import { alreadyApplied, exactRangeFromAnchor, suggestibleRange } from "./exact";
+import { alreadyApplied, exactRangeFromAnchor, suggestibleRange, trimToText } from "./exact";
 import type { Anchor } from "../types";
 
 function makeDoc(body: string): Document {
@@ -139,5 +139,26 @@ describe("alreadyApplied", () => {
   it("is never sure of a spot it has no context to recognise", () => {
     const doc = makeDoc(`<section id="s1"><p>two weekends</p></section>`);
     expect(alreadyApplied(doc, anchor({ exact: "x" }), "two weekends")).toBe(false);
+  });
+});
+
+describe("trimToText", () => {
+  it("drops whitespace a drag or a double-click took with it", () => {
+    const doc = makeDoc(`<p id="p">We can cut over in a single weekend.</p>`);
+    const text = doc.getElementById("p")!.firstChild!;
+    const r = doc.createRange();
+    r.setStart(text, 18);
+    r.setEnd(text, 36);
+    expect(r.toString()).toBe(" a single weekend.");
+    expect(trimToText(r).toString()).toBe("a single weekend.");
+  });
+
+  it("leaves a clean range, and an all-space one, as they are", () => {
+    const doc = makeDoc(`<p id="p">a   b</p>`);
+    const text = doc.getElementById("p")!.firstChild!;
+    const spaces = doc.createRange();
+    spaces.setStart(text, 1);
+    spaces.setEnd(text, 4);
+    expect(trimToText(spaces)).toBe(spaces);
   });
 });

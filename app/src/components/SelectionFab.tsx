@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// The "comment on this" affordance that follows a selection (SPEC §6).
+// The "comment on this" and "suggest an edit" affordance that follows a selection (SPEC §6, §22).
 
 import { useEffect, useState } from "react";
+import { suggestibleRange } from "../annotation/exact";
 import { Icon } from "./Icon";
 
 export interface FabPosition {
@@ -38,14 +39,22 @@ export function SelectionFab({
   enabled,
   onComment,
   label = "Comment",
+  suggest,
 }: {
   doc: Document | null;
   epoch: number;
   enabled: boolean;
   onComment: () => void;
   label?: string;
+  /**
+   * Offered beside Comment when this reader may suggest (SPEC §22). Never
+   * disabled outright: a selection it cannot take is said, on press, rather
+   * than greyed out — a disabled button cannot explain itself reliably.
+   */
+  suggest?: { onSuggest: () => void; onRefused: (reason: string) => void };
 }) {
   const [position, setPosition] = useState<FabPosition | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled || !doc) {
@@ -58,17 +67,21 @@ export function SelectionFab({
         setPosition(null);
         return;
       }
-      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) {
         setPosition(null);
         return;
       }
+      const verdict = suggestibleRange(range);
+      setRefusal(verdict === true ? null : verdict.reason);
       const view = doc.defaultView;
       setPosition(
-        fabPosition(rect, {
-          width: view?.innerWidth ?? 0,
-          height: view?.innerHeight ?? 0,
-        }),
+        fabPosition(
+          rect,
+          { width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 },
+          { width: suggest ? 250 : 150, height: 34 },
+        ),
       );
     };
     doc.addEventListener("selectionchange", update);
@@ -77,23 +90,54 @@ export function SelectionFab({
       doc.removeEventListener("selectionchange", update);
       doc.defaultView?.removeEventListener("scroll", update);
     };
-  }, [enabled, doc, epoch]);
+  }, [enabled, doc, epoch, suggest !== undefined]);
 
   if (!position) return null;
-  return (
+  // Pointer-down rather than click: a click first collapses the selection
+  // in some engines, and the selection is the entire point. A click with no
+  // pointer behind it (`detail` 0) is the keyboard's, and is the only click
+  // acted on, so a pointer press is never handled twice.
+  const keyboardOnly = (run: () => void) => (e: React.MouseEvent) => {
+    if (e.detail === 0) run();
+  };
+  const trySuggest = () => {
+    if (!suggest) return;
+    if (refusal) suggest.onRefused(refusal);
+    else suggest.onSuggest();
+  };
+  const commentButton = (
     <button
       type="button"
       className="selection-fab"
-      style={{ top: position.top, left: position.left }}
-      // Pointer-down rather than click: a click first collapses the selection
-      // in some engines, and the selection is the entire point.
+      style={suggest ? undefined : { top: position.top, left: position.left }}
       onPointerDown={(e) => {
         e.preventDefault();
         onComment();
       }}
+      onClick={keyboardOnly(onComment)}
     >
       <Icon name="comment" size={14} />
       {label}
     </button>
+  );
+  if (!suggest) return commentButton;
+  return (
+    <div className="selection-fab-bar" role="toolbar" aria-label="Selection" style={{ top: position.top, left: position.left }}>
+      {commentButton}
+      <button
+        type="button"
+        className="selection-fab"
+        aria-disabled={refusal ? true : undefined}
+        title={refusal ?? undefined}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          trySuggest();
+        }}
+        onClick={keyboardOnly(trySuggest)}
+      >
+        <Icon name="edit" size={14} />
+        Suggest edit
+      </button>
+    </div>
   );
 }

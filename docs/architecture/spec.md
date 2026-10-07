@@ -2155,6 +2155,22 @@ clears one, so somebody who can publish but not decide is told who can.
 
 Each author may have twenty pending suggestions on one version.
 
+### Writing one
+
+Select text while reading; the selection toolbar offers **Suggest edit** beside
+Comment to anyone who may suggest, on the published head only — not on an
+editor's view of the draft, where they can simply edit, and not once the
+document has expired. A selection it cannot take — across two paragraphs,
+holding a line break, list, table or image, or inside a figure — is refused on
+press with the reason, not greyed out. The selection is trimmed of edge
+whitespace and anchored as a comment is.
+
+The form floats over the frame, in the parent's DOM: the quote, a field
+prefilled with it (caret at the end), and an optional note. Enter submits;
+Escape cancels; a pasted line break becomes a space; empty suggests deleting
+the text. The thread opens on success. Its author may Edit it, in the panel,
+until it is decided.
+
 ### Display
 
 A pending suggestion is drawn in the reading frame by the annotation layer, as

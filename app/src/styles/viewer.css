@@ -273,6 +273,41 @@
   cursor: pointer;
 }
 
+/* Comment and Suggest edit together, placed as one. */
+.selection-fab-bar {
+  position: absolute;
+  z-index: 10;
+  display: inline-flex;
+  gap: var(--s-1);
+}
+.selection-fab-bar .selection-fab { position: static; }
+.selection-fab[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+
+/* The suggestion form, over the frame: the parent's DOM, never the document's. */
+.suggest-popover {
+  position: absolute;
+  z-index: 11;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+.suggest-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.suggest-quote {
+  overflow-wrap: anywhere;
+  font-style: italic;
+}
+.suggest-actions {
+  display: flex;
+  gap: var(--s-1);
+  margin-top: var(--s-1);
+}
+
 /* --- Presentation mode ---------------------------------------------------
  * Chrome hidden, document full-window. Driven by a state class rather than by
  * unmounting, so the frame is never remounted and the reader never loses their

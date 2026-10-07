@@ -7,7 +7,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { logEvent } from "../analytics";
 import { createAnnotation, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
-import { describeAnchorFromSelection } from "../annotation/anchor";
+import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
+import { trimToText } from "../annotation/exact";
 import { Sidebar } from "../annotation/Sidebar";
 import { commitVersion, UnresolvedCommentsError, StaleVersionError } from "../edit";
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
@@ -40,6 +41,8 @@ import { EditToolbar } from "../wysiwyg/EditToolbar";
 import { ViewerToolbar } from "../components/ViewerToolbar";
 import { ViewerBanners } from "../components/ViewerBanners";
 import { SelectionFab } from "../components/SelectionFab";
+import { SuggestPopover, popoverPosition, type PopoverPosition } from "../components/SuggestPopover";
+import { suggestEdit } from "../suggestions";
 import { SlidePanel } from "../components/SlidePanel";
 import { SlideOverview } from "../components/SlideOverview";
 import { SharePanel } from "../components/SharePanel";
@@ -52,8 +55,8 @@ import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
-import type { Annotation, FolderMeta, TeamMeta } from "../types";
-import { isApprover, isDocEditor as isDocEditorOf } from "../roles";
+import type { Anchor, Annotation, FolderMeta, TeamMeta } from "../types";
+import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf } from "../roles";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -136,6 +139,8 @@ export function DocViewer() {
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
   const [railOpen, setRailOpen] = useState(true);
   const [pendingComment, setPendingComment] = useState(false);
+  // The suggestion being written: what it quotes, and where its form floats.
+  const [suggesting, setSuggesting] = useState<{ anchor: Anchor; position: PopoverPosition } | null>(null);
 
   const isOwner = doc.meta?.ownerEmail === emailLower;
   const isDocEditor = isDocEditorOf(doc.meta, emailLower);
@@ -206,6 +211,22 @@ export function DocViewer() {
     docTrusted: doc.trusted,
     emailLower,
   });
+
+  // Who may propose an edit here, and on what. Only on the published head, which
+  // is what a suggestion is anchored to and what the server will take it on;
+  // not on an editor's view of the draft, where they can simply edit; and not
+  // once the document has expired (SPEC §22).
+  const canSuggest =
+    signedIn &&
+    canSuggestDoc(doc.meta, emailLower, canEdit) &&
+    Boolean(headVersion) &&
+    doc.currentVersion === headVersion &&
+    !(mode.kind === "reading" && mode.draft) &&
+    !isExpired(doc.meta?.expiresAt);
+
+  // A form for a frame that has since reloaded, or gone into edit mode,
+  // quotes a document that is no longer the one on screen.
+  useEffect(() => setSuggesting(null), [mode.kind, frame.epoch]);
 
   // DECLARATION ORDER MATTERS. See the note at the top of this file.
   const annotationLayer = useAnnotationLayer({
@@ -387,6 +408,50 @@ export function DocViewer() {
       setCommenting(false);
     }
   }, [frame.doc, user, docId, doc.currentVersion, emailLower, toast]);
+
+  /** Open the suggestion form on the current selection, trimmed to its text. */
+  const startSuggest = useCallback(() => {
+    const d = frame.doc;
+    const sel = d?.getSelection();
+    if (!d || !sel || sel.rangeCount === 0) return;
+    const range = trimToText(sel.getRangeAt(0));
+    const anchor = describeAnchorFromRange(d, range);
+    if (!anchor) return;
+    const view = d.defaultView;
+    setSuggesting({
+      anchor,
+      position: popoverPosition(range.getBoundingClientRect(), {
+        width: view?.innerWidth ?? 0,
+        height: view?.innerHeight ?? 0,
+      }),
+    });
+  }, [frame.doc]);
+
+  const submitSuggest = useCallback(
+    async (replacement: string, note: string) => {
+      if (!suggesting) return;
+      try {
+        const { annId } = await suggestEdit({
+          docId,
+          versionId: doc.currentVersion,
+          anchor: suggesting.anchor,
+          replacement,
+          ...(note ? { note } : {}),
+          ...(linkKey ? { k: linkKey } : {}),
+        });
+        setSuggesting(null);
+        frame.doc?.getSelection()?.removeAllRanges();
+        // Where it lands: its thread, open, so the author sees it took.
+        setSelectedId(annId);
+        setCommentsOpen(true);
+        setPane("comments");
+      } catch (e) {
+        // The form stays open with what they wrote, so a retry costs nothing.
+        toast.error((e as Error).message);
+      }
+    },
+    [suggesting, docId, doc.currentVersion, linkKey, frame.doc, setCommentsOpen, toast],
+  );
 
   /**
    * Finish a comment the reader started before signing in.
@@ -748,10 +813,25 @@ export function DocViewer() {
             <SelectionFab
               doc={frame.doc}
               epoch={frame.epoch}
-              enabled={mode.kind === "reading" && !commenting}
+              enabled={mode.kind === "reading" && !commenting && !suggesting}
               label={user ? "Comment" : "Sign in to comment"}
               onComment={() => void startComment()}
+              suggest={
+                canSuggest
+                  ? { onSuggest: startSuggest, onRefused: (reason) => toast.show(reason) }
+                  : undefined
+              }
             />
+            {suggesting ? (
+              <SuggestPopover
+                position={suggesting.position}
+                exact={suggesting.anchor.exact}
+                initial={suggesting.anchor.exact}
+                submitLabel="Suggest"
+                onSubmit={submitSuggest}
+                onCancel={() => setSuggesting(null)}
+              />
+            ) : null}
           </div>
           {presenting && hasSlides ? (
             <span className="present-counter">

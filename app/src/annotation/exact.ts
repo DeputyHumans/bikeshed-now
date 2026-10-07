@@ -175,3 +175,24 @@ export function suggestibleRange(range: Range): true | { reason: string } {
   }
   return true;
 }
+
+/**
+ * The same range without whitespace at either end. A selection made by
+ * double-clicking or dragging often takes a trailing space with it, and a
+ * quote that ends in one asks the author to retype a space they cannot see.
+ */
+export function trimToText(range: Range): Range {
+  const text = range.toString();
+  const lead = text.length - text.trimStart().length;
+  const trail = text.length - text.trimEnd().length;
+  if ((lead === 0 && trail === 0) || lead + trail >= text.length) return range;
+  const common = range.commonAncestorContainer;
+  const root = common.nodeType === Node.ELEMENT_NODE ? (common as Element) : common.parentElement;
+  if (!root) return range;
+  try {
+    const at = textPosition.fromRange(root, range);
+    return textPosition.toRange(root, { start: at.start + lead, end: at.end - trail }) ?? range;
+  } catch {
+    return range;
+  }
+}

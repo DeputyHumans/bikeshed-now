@@ -8,7 +8,8 @@ import { addComment, listComments, setResolved } from "../firestore";
 import { peerColor } from "../brand/tokens";
 import { formatRelative } from "../firestore";
 import { logEvent } from "../analytics";
-import { rejectSuggestion, withdrawSuggestion } from "../suggestions";
+import { rejectSuggestion, reviseSuggestion, withdrawSuggestion } from "../suggestions";
+import { SuggestForm } from "../components/SuggestPopover";
 import type { Annotation, Comment, Suggestion } from "../types";
 import type { Peer } from "../presence";
 
@@ -126,6 +127,7 @@ function Thread({
   // Rejecting asks for a reason, which is optional; the field opens on demand.
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [editing, setEditing] = useState(false);
   const suggestion = annotation.suggestion;
   const pending = suggestion?.state === "pending";
   const mine = Boolean(uid && annotation.authorUid === uid);
@@ -183,7 +185,22 @@ function Thread({
       style={{ ["--thread-color" as string]: peerColor(annotation.authorEmail) }}
       onClick={onSelect}
     >
-      {suggestion ? (
+      {suggestion && editing && pending ? (
+        <SuggestForm
+          exact={annotation.anchor.exact}
+          initial={suggestion.replacement}
+          submitLabel="Save"
+          onSubmit={async (replacement, note) => {
+            try {
+              await reviseSuggestion({ ...where, replacement, ...(note ? { note } : {}) });
+              setEditing(false);
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : suggestion ? (
         <SuggestionChange exact={annotation.anchor.exact} suggestion={suggestion} stale={stale} />
       ) : annotation.anchor.exact ? (
         <p className="thread-quote">
@@ -203,7 +220,7 @@ function Thread({
           </div>
         ))}
 
-      {pending && (isApprover || mine) ? (
+      {pending && !editing && (isApprover || mine) ? (
         <div className="thread-actions suggestion-actions">
           {isApprover && rejecting ? (
             <>
@@ -262,17 +279,30 @@ function Thread({
                 </button>
               ) : null}
               {mine ? (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-quiet"
-                  disabled={busy}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void act(() => withdrawSuggestion(where));
-                  }}
-                >
-                  Withdraw
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-quiet"
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-quiet"
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void act(() => withdrawSuggestion(where));
+                    }}
+                  >
+                    Withdraw
+                  </button>
+                </>
               ) : null}
             </>
           )}
