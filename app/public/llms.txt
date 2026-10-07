@@ -124,6 +124,7 @@ bikeshed lineage <id> [--json]
 bikeshed get <id>
 bikeshed comments <id> [--json]
 bikeshed reply <id> <thread> <text>
+bikeshed suggest <id> <text> (--with … | --delete) [--note …] [--prefix …] [--suffix …]
 bikeshed open <id>
 
 bikeshed folders
@@ -219,13 +220,13 @@ A person may give you "Can suggest" rather than "Can edit". Then
 which proposes new text for one passage. A person who can approve accepts or
 rejects it, and you hear which in the thread.
 
-```json
-{"name": "suggest_edit", "arguments": {
-  "id": "storage-migration",
-  "exact": "a single weekend",
-  "replacement": "two weekends, with a dual-write fortnight before them",
-  "note": "Ana pointed out the dual-write period."}}
+```bash
+bikeshed suggest storage-migration "a single weekend" \
+  --with "two weekends, with a dual-write fortnight before them" \
+  --note "Ana pointed out the dual-write period."
 ```
+
+Over MCP the same is `suggest_edit` with `exact`, `replacement` and `note`.
 
 - **Quote the passage as a reader sees it,** not your source: no Markdown, no
   HTML. `get_comments` gives you quotes in exactly that form.

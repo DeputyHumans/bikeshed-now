@@ -57,10 +57,17 @@ disagreement.
 ## If you may only suggest
 
 When `update_document` refuses and names `suggest_edit`, you were given "Can
-suggest" rather than "Can edit". Propose the change to the passage instead:
-`suggest_edit` with the quote from `get_comments` as `exact`, your new text as
-`replacement`, and a `note` saying why. Then reply in the comment's thread as
-usual. A person who can approve accepts or rejects it; `get_comments` shows its
+suggest" rather than "Can edit". Propose the change to the passage instead,
+with the quote from the comment:
+
+```bash
+bikeshed suggest storage-migration "we can cut over in a single weekend" \
+  --with "we can cut over in two weekends, after a dual-write fortnight" \
+  --note "Ana pointed out the dual-write period."
+```
+
+Over MCP: `suggest_edit`, with the quote as `exact`, your text as `replacement`
+and a `note` saying why. Then reply in the comment's thread as usual. A person who can approve accepts or rejects it; `get_comments` shows its
 `state`.
 
 Quote one paragraph at a time, exactly as a reader sees it. If the passage

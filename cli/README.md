@@ -30,6 +30,10 @@ bikeshed comments storage-migration
 # Fix that sentence, publish the revision, and say what you changed.
 bikeshed update storage-migration proposal.md
 bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write period."
+
+# Given "Can suggest" rather than "Can edit"? Propose the change instead, for a
+# person to accept or reject.
+bikeshed suggest storage-migration "a single weekend" --with "two weekends"
 ```
 
 Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash

@@ -44,6 +44,10 @@ const USAGE = `bikeshed — publish and revise documents
   bikeshed get <id>                    print a document's source
   bikeshed comments <id>               unresolved feedback, with its anchored text
   bikeshed reply <id> <thread> <text>  reply in a thread
+  bikeshed suggest <id> <text> --with <new text>
+                                       propose new text for a passage, for a
+                                       person to accept or reject (--delete to
+                                       propose removing it)
   bikeshed open <id>                   open it in a browser
 
   Where a command takes <id> it also takes the link you were sent. An unlisted
@@ -82,6 +86,11 @@ Options
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
   --all                  with list: every page; with comments: resolved too
+  --with <text>          with suggest: what the passage should say instead
+  --delete               with suggest: propose deleting the passage
+  --note <text>          with suggest: why, for whoever decides
+  --prefix <text>        with suggest: words just before a passage that repeats
+  --suffix <text>        with suggest: words just after it
   --watch                with publish/update: republish on every save
   --origin <url>         the deployment (default: the one you logged in to)
   --token <token>        override the stored token
@@ -303,6 +312,12 @@ async function comments(flags, [ref]) {
       // which passage to change without opening the document.
       console.log(`\n── ${thread.threadId}${thread.section ? `  (${thread.section})` : ""}`);
       if (thread.quote) console.log(`   “${thread.quote}”`);
+      // A suggested edit says what the passage would become, and whether a
+      // person has decided it yet (SPEC §22).
+      if (thread.suggestion) {
+        const change = thread.suggestion.replacement === "" ? "(delete it)" : `“${thread.suggestion.replacement}”`;
+        console.log(`   → ${change}  [${thread.suggestion.state}]`);
+      }
       for (const comment of thread.comments) {
         const via = comment.via && comment.via !== "web" ? ` [via ${comment.via}]` : "";
         console.log(`   ${comment.author}${via}: ${comment.body}`);
@@ -322,6 +337,34 @@ async function reply(flags, [ref, threadId, ...rest]) {
     body,
   });
   out(flags.json, result, () => console.log(`replied in ${threadId}`));
+}
+
+/**
+ * Propose new text for one passage of a document's current version. The
+ * passage is quoted as a reader sees it, which is how `comments` prints it, so
+ * a quote can go straight from one command to the other.
+ */
+async function suggest(flags, [ref, ...rest]) {
+  const exact = rest.join(" ");
+  const usage = "usage: bikeshed suggest <id> <text> (--with <new text> | --delete) [--note <why>]";
+  if (!ref || !exact) fail(usage);
+  const replacing = typeof flags.with === "string";
+  if (replacing === Boolean(flags.delete)) fail(usage);
+  // An empty --with is what an unset shell variable sends; deleting a passage
+  // has to be asked for by name.
+  if (replacing && flags.with === "") fail("an empty --with would delete the passage; say --delete if you mean that");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "suggest_edit", {
+    ...docArgs(ref),
+    exact,
+    replacement: replacing ? flags.with : "",
+    ...(typeof flags.note === "string" ? { note: flags.note } : {}),
+    ...(typeof flags.prefix === "string" ? { prefix: flags.prefix } : {}),
+    ...(typeof flags.suffix === "string" ? { suffix: flags.suffix } : {}),
+  });
+  out(flags.json, result, () =>
+    console.log(`suggested in ${result.threadId}; a person who can approve will accept or reject it`),
+  );
 }
 
 async function folders(flags) {
@@ -528,6 +571,7 @@ const COMMANDS = {
   get,
   comments,
   reply,
+  suggest,
   open,
   folders,
   mkdir,
@@ -557,6 +601,11 @@ async function main() {
       token: { type: "string" },
       limit: { type: "string" },
       cursor: { type: "string" },
+      with: { type: "string" },
+      delete: { type: "boolean", default: false },
+      note: { type: "string" },
+      prefix: { type: "string" },
+      suffix: { type: "string" },
     },
   });
 

@@ -222,7 +222,7 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
     const out = run(args);
     assert.match(out, /^bikeshed/);
     const commands = ["login", "publish", "update", "list", "comments", "open"];
-    for (const command of [...commands, "fork", "lineage", "folders", "mkdir", "mv", "skills"]) {
+    for (const command of [...commands, "fork", "lineage", "suggest", "folders", "mkdir", "mv", "skills"]) {
       assert.match(out, new RegExp(`\\b${command}\\b`), `${command} is missing from --help`);
     }
   }
@@ -901,5 +901,72 @@ test("skills does not demand a token, because skills are public", () => {
       assert.doesNotMatch(err.stderr, /bikeshed login/);
       return true;
     },
+  );
+});
+
+test("suggest sends the passage and its replacement, and only the options it was given", async () => {
+  await withServer(rpcOk({ threadId: "t9", version: "v3" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["suggest", "plan", "a", "single", "weekend", "--with", "two weekends"], env);
+    assert.equal(seen[0].body.params.name, "suggest_edit");
+    assert.deepEqual(seen[0].body.params.arguments, {
+      id: "plan",
+      exact: "a single weekend",
+      replacement: "two weekends",
+    });
+    assert.match(stdout, /suggested in t9; a person who can approve will accept or reject it/);
+
+    await runAsync(
+      ["suggest", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "yes", "--delete",
+        "--note", "Redundant.", "--suffix", " and", "--json"],
+      env,
+    );
+    assert.deepEqual(seen[1].body.params.arguments, {
+      id: "plan",
+      k: "tok_0123456789abcdefghijk",
+      exact: "yes",
+      replacement: "",
+      note: "Redundant.",
+      suffix: " and",
+    });
+  });
+});
+
+test("suggest wants exactly one of --with and --delete", () => {
+  for (const args of [
+    ["suggest", "plan", "text"],
+    ["suggest", "plan", "text", "--with", "x", "--delete"],
+    ["suggest", "plan", "--with", "x"],
+  ]) {
+    assert.throws(
+      () => run(args, { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+      (e) => e.status !== 0 && /usage: bikeshed suggest/.test(e.stderr),
+      args.join(" "),
+    );
+  }
+});
+
+test("comments prints a suggestion's change and whether it is decided", async () => {
+  const answer = {
+    id: "plan",
+    version: "v3",
+    threads: [
+      { threadId: "t1", quote: "a single weekend", section: "", resolved: false,
+        suggestion: { replacement: "two weekends", state: "pending" }, comments: [] },
+      { threadId: "t2", quote: "very", section: "", resolved: true,
+        suggestion: { replacement: "", state: "accepted" }, comments: [] },
+    ],
+  };
+  await withServer(rpcOk(answer), async (origin) => {
+    const { stdout } = await runAsync(["comments", "plan", "--all"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.match(stdout, /“a single weekend”\n   → “two weekends”  \[pending\]/);
+    assert.match(stdout, /“very”\n   → \(delete it\)  \[accepted\]/);
+  });
+});
+
+test("an empty --with is refused, since a deletion is asked for by name", () => {
+  assert.throws(
+    () => run(["suggest", "plan", "text", "--with", ""], { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+    (e) => e.status !== 0 && /say --delete if you mean that/.test(e.stderr),
   );
 });

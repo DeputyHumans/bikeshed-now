@@ -49,6 +49,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   suggestion's change and state, `get_document` says whether the caller may
   suggest, and `update_document` from someone who may only suggest names
   `suggest_edit` (SPEC §19, §22).
+- **`bikeshed suggest`** does the same from a terminal, and `bikeshed comments`
+  prints each suggestion's change and state under its quote (in `bikeshed-now`
+  0.6.0).
 - **A pending suggestion holds back every new version, on every channel.**
   Publishing in the app, uploading a revision, `bikeshed update` and
   `update_document` are all refused with a `409` while a suggested edit on the

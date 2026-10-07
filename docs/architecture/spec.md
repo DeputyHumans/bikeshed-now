@@ -1880,9 +1880,13 @@ Deliberately distinct from `scripts/*.mjs`:
 
 Commands: `login`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
 `lineage <slug>`, `list`,
-`get <slug>`, `comments <slug>`, `reply`, `open <slug>`, `folders`,
-`mkdir <name>`, `mv <slug> <folder|root>`, `skills [install <dir>]`, plus
-`publish --watch`. Every command takes `--json`.
+`get <slug>`, `comments <slug>`, `reply`, `suggest <slug> <text> (--with <text>
+| --delete)`, `open <slug>`, `folders`, `mkdir <name>`,
+`mv <slug> <folder|root>`, `skills [install <dir>]`, plus `publish --watch`.
+Every command takes `--json`. `comments` prints a suggestion's replacement and
+state under its quote. `suggest` demands exactly one of `--with` and `--delete`:
+an empty `--with` is too easy to send by accident to be the way to ask for a
+deletion.
 
 `update` sends one `.md` or `.html` through `update_document`, and a `.zip` —
 by name, or by the same magic-byte sniff the deployment uses — as raw bytes to
