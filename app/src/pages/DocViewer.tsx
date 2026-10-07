@@ -35,7 +35,7 @@ import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
 import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
-import { contentBase, type FrameMode } from "../viewer/frameMode";
+import { contentBase, readsDraft, type FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
 import { ViewerToolbar } from "../components/ViewerToolbar";
@@ -192,10 +192,15 @@ export function DocViewer() {
         : {
             kind: "reading",
             versionId: doc.currentVersion,
-            draft: Boolean(doc.meta?.draft) && canEdit,
+            draft: readsDraft({
+              hasDraft: Boolean(doc.meta?.draft),
+              canEdit,
+              shownVersion: doc.currentVersion,
+              headVersion,
+            }),
             sandboxed: !trust.trusted,
           },
-    [wantsEdit, doc.currentVersion, doc.meta?.draft, canEdit, trust.trusted],
+    [wantsEdit, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
   );
 
   const frame = useDocFrame({

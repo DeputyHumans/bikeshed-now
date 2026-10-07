@@ -24,6 +24,23 @@ export type FrameMode =
   | { kind: "editing"; baseVersion: string };
 
 /**
+ * Whether reading shows the draft rather than the version asked for.
+ *
+ * An editor reading the published head sees the draft, because that is the
+ * document as it now stands. An editor who opens an OLDER version asked for
+ * that version: the draft is built on the head, so showing it there answers a
+ * question nobody asked, under the older version's label.
+ */
+export function readsDraft(r: {
+  hasDraft: boolean;
+  canEdit: boolean;
+  shownVersion: string;
+  headVersion: string;
+}): boolean {
+  return r.hasDraft && r.canEdit && r.shownVersion !== "" && r.shownVersion === r.headVersion;
+}
+
+/**
  * The iframe's React key.
  *
  * Extracted from an inline template literal that needed three paragraphs of

@@ -24,6 +24,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   published version, until somebody publishes. Leaving now saves only an edit
   the autosave has not already taken. "Save as new version" still saves first,
   always (SPEC §6a).
+- **An editor who opens an older version sees that version.** With a draft
+  in progress, every version an editor opened showed the draft instead,
+  under the older version's label. The draft is now shown only on the
+  published head, which is the version it is built on (SPEC §6a).
 
 ## 0.6.1 — 2026-10-06
 

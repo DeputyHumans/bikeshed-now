@@ -8,6 +8,7 @@ import {
   frameSandbox,
   frameSrc,
   isEffectivelyTrusted,
+  readsDraft,
   type FrameMode,
 } from "./frameMode";
 
@@ -128,5 +129,29 @@ describe("effective trust", () => {
     // The only session exposed to that document's code is their own, which is
     // exactly why any reader may grant it to themselves.
     expect(isEffectivelyTrusted(false, true)).toBe(true);
+  });
+});
+
+describe("readsDraft", () => {
+  const HEAD = { hasDraft: true, canEdit: true, shownVersion: "v2", headVersion: "v2" };
+
+  it("shows an editor reading the head the draft", () => {
+    expect(readsDraft(HEAD)).toBe(true);
+  });
+
+  it("shows an editor who opened an older version that version, not the draft", () => {
+    expect(readsDraft({ ...HEAD, shownVersion: "v1" })).toBe(false);
+  });
+
+  it("never shows the draft to somebody who cannot edit", () => {
+    expect(readsDraft({ ...HEAD, canEdit: false })).toBe(false);
+  });
+
+  it("has nothing to show when there is no draft", () => {
+    expect(readsDraft({ ...HEAD, hasDraft: false })).toBe(false);
+  });
+
+  it("waits for the version to be known rather than guessing", () => {
+    expect(readsDraft({ ...HEAD, shownVersion: "", headVersion: "" })).toBe(false);
   });
 });
