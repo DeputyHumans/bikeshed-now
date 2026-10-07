@@ -30,6 +30,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   its toolbar button could only be closed with the mouse or `o` again; Escape
   did nothing, although the code meant it to. With the overview shut, Escape is
   left for presentation mode and everything else, as before (SPEC §6d).
+- **Two sample documents say what they do.** `deck-quarter-review`'s chart
+  sized itself with `height="auto"`, which is not a valid SVG attribute and
+  logged an error wherever the deck was shown; it is now CSS, and renders the
+  same. `markdown-reference` lists every change its first save makes,
+  including the one it left out: Markdown inside a raw HTML block comes back
+  as the HTML it renders to.
 
 ## 0.6.0 — 2026-10-06
 

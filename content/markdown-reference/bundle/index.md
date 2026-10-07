@@ -146,6 +146,7 @@ harmless and all of them visible at the version boundary:
 - Indented code becomes fenced code
 - Reference links become inline links
 - Indentation regularizes
+- Markdown written inside a raw HTML block is kept as the HTML it renders to
 
 After that first pass, saving again changes **nothing**. That idempotence is the
 contract, and it is what keeps editing a document from degrading it one save at
