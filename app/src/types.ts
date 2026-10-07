@@ -30,7 +30,8 @@ export interface Actor {
 
 export type Visibility = "private" | "unlisted" | "public";
 export type SourceFormat = "html" | "markdown";
-export type Role = "viewer" | "editor";
+/** Lowest first; each can do everything below it (SPEC §13). */
+export type Role = "viewer" | "suggester" | "editor" | "approver";
 
 /** Export marking, resolved at publish time so it is the OWNER's policy (SPEC §20). */
 export interface Marking {
@@ -55,6 +56,9 @@ export interface DocMeta {
    */
   viewers: string[];
   editors: string[];
+  /** Absent on a record written before the role existed: nobody holds it. */
+  suggesters?: string[];
+  approvers?: string[];
 
   /**
    * EFFECTIVE read set: the record of reality. Owner, direct grants, the parent
@@ -69,6 +73,9 @@ export interface DocMeta {
   members: string[];
   /** EFFECTIVE editor set. Missing on legacy records: fall back to `editors`. */
   editorMembers?: string[];
+  /** EFFECTIVE suggester and approver sets, each containing the role above it. */
+  suggesterMembers?: string[];
+  approverMembers?: string[];
 
   folderId?: string | null;
 
@@ -198,6 +205,8 @@ export interface AclChange {
   removed: string[];
   viewers: string[];
   editors: string[];
+  suggesters?: string[];
+  approvers?: string[];
 }
 
 /**
@@ -223,6 +232,8 @@ export interface FolderMeta {
   ownerEmail: string;
   viewers: string[];
   editors: string[];
+  suggesters?: string[];
+  approvers?: string[];
   members: string[];
   editorMembers: string[];
   /** Root-first folder ids: breadcrumb, subtree and cycle guard in one field. */

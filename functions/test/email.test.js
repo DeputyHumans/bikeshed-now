@@ -129,9 +129,9 @@ test("the invitation says what each role may do", () => {
     url: "https://example.test/d/memo",
   };
   assert.match(inviteText({ ...base, role: "viewer" }), /You can now read it\./);
-  assert.match(inviteText({ ...base, role: "suggester" }), /read it and suggest edits to it/);
+  assert.match(inviteText({ ...base, role: "suggester" }), /read and suggest edits to it\./);
   assert.match(inviteText({ ...base, role: "editor" }), /You can now edit it\./);
-  assert.match(inviteText({ ...base, role: "approver" }), /accept or reject the edits other people suggest/);
+  assert.match(inviteText({ ...base, role: "approver" }), /accept or reject what other people suggest\./);
 });
 
 test("a team invitation says it is a team", () => {

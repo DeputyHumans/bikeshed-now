@@ -5,6 +5,7 @@ import type { Analytics } from "firebase/analytics";
 import { app } from "./firebase";
 import { MEASUREMENT_ID, USE_EMULATORS } from "./config";
 import { readConsent } from "./consent";
+import type { Role } from "./types";
 
 /**
  * Three things here are easy to get wrong, and one of them is a real leak.
@@ -40,7 +41,7 @@ export type AnalyticsEvent =
   | { name: "comment_create"; params: Record<string, never> }
   | { name: "version_commit"; params: { format: "html" | "markdown" } }
   | { name: "export"; params: { kind: "pdf" | "png" | "svg" | "html" | "zip" } }
-  | { name: "share_grant"; params: { role: "viewer" | "editor"; principal: "person" | "team" } }
+  | { name: "share_grant"; params: { role: Role; principal: "person" | "team" } }
   | { name: "trust_grant"; params: { scope: "global" | "personal" } };
 
 let instance: Analytics | null = null;

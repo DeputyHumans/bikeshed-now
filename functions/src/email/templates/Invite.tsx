@@ -29,11 +29,11 @@ export interface InviteProps {
 export function accessPhrase(role: Role, what: string): string {
   switch (role) {
     case "approver":
-      return `edit ${what}, and accept or reject the edits other people suggest`;
+      return `edit ${what}, and accept or reject what other people suggest`;
     case "editor":
       return `edit ${what}`;
     case "suggester":
-      return `read ${what} and suggest edits to it`;
+      return `read and suggest edits to ${what}`;
     default:
       return `read ${what}`;
   }

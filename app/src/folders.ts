@@ -2,7 +2,7 @@
 // Client for the folder and organize endpoints (SPEC §2, §13).
 
 import { post } from "./api";
-import type { AccessChange } from "./access";
+import type { AccessChange, AccessState } from "./access";
 
 /**
  * folders/* is server-side only, so the workspace calls these endpoints rather
@@ -20,7 +20,7 @@ export function createFolder(
 export function setFolderAccess(
   folderId: string,
   change: AccessChange,
-): Promise<{ viewers: string[]; editors: string[] }> {
+): Promise<Omit<AccessState, "members">> {
   return post(
     "/folder-access",
     { folderId, ...change },

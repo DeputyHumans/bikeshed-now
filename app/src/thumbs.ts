@@ -2,6 +2,7 @@
 // Stored thumbnails: when an editor's browser captures them, and where a reader finds them (SPEC §2, §4).
 
 import { isExpired } from "./expiry";
+import { isDocEditor } from "./roles";
 import type { DocMeta, DocThumb } from "./types";
 
 /**
@@ -153,11 +154,7 @@ export function storedSlideImages(
  */
 export function coverOwed(doc: DocMeta, emailLower: string, now = Date.now()): boolean {
   if (!emailLower || !doc.currentVersion) return false;
-  const editor =
-    doc.ownerEmail === emailLower ||
-    Boolean(doc.editors?.includes(emailLower)) ||
-    Boolean(doc.editorMembers?.includes(emailLower));
-  if (!editor) return false;
+  if (!isDocEditor(doc, emailLower)) return false;
   if (doc.ownerEmail !== emailLower && isExpired(doc.expiresAt, now)) return false;
   const t = doc.thumb;
   return !(

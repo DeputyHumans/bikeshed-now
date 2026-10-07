@@ -13,6 +13,9 @@ import type { Role } from "./types";
 export interface AccessState {
   viewers: string[];
   editors: string[];
+  /** Always sent by a current server; optional so an older one still reads. */
+  suggesters?: string[];
+  approvers?: string[];
   members: string[];
 }
 

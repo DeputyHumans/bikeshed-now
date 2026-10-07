@@ -214,6 +214,63 @@ describe("the people, as before", () => {
     });
   });
 
+  test("all four roles are offered, and the hint says what the chosen one adds", () => {
+    renderShare({ visibility: PRIVATE });
+    const level = screen.getByRole("combobox", { name: "Access level" }) as HTMLSelectElement;
+    expect([...level.options].map((o) => o.textContent)).toEqual([
+      "Can read",
+      "Can suggest",
+      "Can edit",
+      "Can approve",
+    ]);
+    const hint = document.getElementById(level.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toMatch(/^Can read:/);
+    fireEvent.change(level, { target: { value: "approver" } });
+    expect(hint?.textContent).toMatch(/^Can approve: .*accepts or rejects/);
+  });
+
+  test("a grant goes out with the role chosen for it", async () => {
+    renderShare({ visibility: PRIVATE });
+    fireEvent.change(screen.getByRole("combobox", { name: "Access level" }), {
+      target: { value: "suggester" },
+    });
+    const input = document.querySelector("#share-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "s@example.com" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(setAccess).toHaveBeenCalledWith("d1", {
+        add: [{ principal: "s@example.com", role: "suggester" }],
+      }),
+    );
+  });
+
+  test("everyone already granted is listed under their own role, highest first", () => {
+    renderShare({
+      visibility: PRIVATE,
+      target: {
+        ...DOC,
+        viewers: ["v@example.com"],
+        suggesters: ["s@example.com"],
+        editors: ["e@example.com"],
+        approvers: ["a@example.com"],
+      },
+    });
+    const rows = screen.getAllByRole("combobox", { name: /^Access for / }) as HTMLSelectElement[];
+    expect(rows.map((r) => [r.getAttribute("aria-label") ?? r.id, r.value])).toEqual([
+      ["role-a@example.com", "approver"],
+      ["role-e@example.com", "editor"],
+      ["role-s@example.com", "suggester"],
+      ["role-v@example.com", "viewer"],
+    ]);
+  });
+
+  test("a record from before the new roles opens with nobody in them", () => {
+    // `suggesters` and `approvers` are absent, as on every older record.
+    renderShare({ visibility: PRIVATE, target: { ...DOC, viewers: ["v@example.com"] } });
+    const rows = screen.getAllByRole("combobox", { name: /^Access for / }) as HTMLSelectElement[];
+    expect(rows.map((r) => r.value)).toEqual(["viewer"]);
+  });
+
   test("somebody who is not the owner is told who is, and offered nothing else", () => {
     renderShare({ isOwner: false, visibility: UNLISTED });
     expect(screen.getByText(/Only owner@example.com can change who has access/)).toBeTruthy();

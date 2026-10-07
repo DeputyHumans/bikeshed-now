@@ -53,6 +53,7 @@ import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
 import type { Annotation, FolderMeta, TeamMeta } from "../types";
+import { isDocEditor as isDocEditorOf } from "../roles";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -137,12 +138,7 @@ export function DocViewer() {
   const [pendingComment, setPendingComment] = useState(false);
 
   const isOwner = doc.meta?.ownerEmail === emailLower;
-  const isDocEditor = Boolean(
-    doc.meta &&
-      (isOwner ||
-        doc.meta.editors?.includes(emailLower) ||
-        doc.meta.editorMembers?.includes(emailLower)),
-  );
+  const isDocEditor = isDocEditorOf(doc.meta, emailLower);
   // Open editing widens WHO, never to anyone: a signed-in account is still
   // required, on every document, whatever its owner chose.
   const canEdit = isDocEditor || (signedIn && doc.publicEdit);
@@ -813,6 +809,8 @@ export function DocViewer() {
             ownerEmail: doc.meta.ownerEmail,
             viewers: doc.meta.viewers,
             editors: doc.meta.editors,
+            suggesters: doc.meta.suggesters,
+            approvers: doc.meta.approvers,
             members: doc.meta.members,
           }}
           teams={teams}

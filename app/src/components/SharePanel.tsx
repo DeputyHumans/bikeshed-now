@@ -12,6 +12,7 @@ import { setAccess } from "../access";
 import { setFolderAccess } from "../folders";
 import { logEvent } from "../analytics";
 import type { VisibilityState } from "../visibility";
+import { GRANT_LIST, ROLES, ROLE_HINT, ROLE_LABEL, grantsOf, type RoleGrants } from "../roles";
 import type { Role, TeamMeta } from "../types";
 
 /**
@@ -33,8 +34,24 @@ export interface ShareTarget {
   ownerEmail: string;
   viewers: string[];
   editors: string[];
+  /** Absent on a record written before the role existed. */
+  suggesters?: string[];
+  approvers?: string[];
   /** Effective membership, so the expansion count is the real one. */
   members: string[];
+}
+
+/** Every role as a select option, lowest first, as the ladder reads. */
+function RoleOptions() {
+  return (
+    <>
+      {ROLES.map((r) => (
+        <option key={r} value={r}>
+          {ROLE_LABEL[r]}
+        </option>
+      ))}
+    </>
+  );
 }
 
 function PrincipalRow({
@@ -87,8 +104,7 @@ function PrincipalRow({
           disabled={disabled}
           onChange={(e) => onRole(e.target.value as Role)}
         >
-          <option value="viewer">Can read</option>
-          <option value="editor">Can edit</option>
+          <RoleOptions />
         </select>
       </span>
       <button
@@ -148,11 +164,10 @@ export function SharePanel({
   /** A document's level, link, open editing and expiry. Folders have none, and pass none. */
   visibility?: VisibilityState;
   onClose: () => void;
-  onChanged: (next: { viewers: string[]; editors: string[] }) => void;
+  onChanged: (next: RoleGrants) => void;
 }) {
   const toast = useToast();
-  const [viewers, setViewers] = useState(target.viewers);
-  const [editors, setEditors] = useState(target.editors);
+  const [grants, setGrants] = useState<RoleGrants>(() => grantsOf(target));
   const [input, setInput] = useState("");
   const [role, setRole] = useState<Role>("viewer");
   const [busy, setBusy] = useState(false);
@@ -174,12 +189,13 @@ export function SharePanel({
     return byName;
   }, [teams]);
 
+  // Highest role first: who can do the most is what the owner checks first.
   const principals = useMemo(
-    () => [
-      ...editors.map((p) => ({ principal: p, role: "editor" as Role })),
-      ...viewers.map((p) => ({ principal: p, role: "viewer" as Role })),
-    ],
-    [viewers, editors],
+    () =>
+      [...ROLES]
+        .reverse()
+        .flatMap((r) => grants[GRANT_LIST[r]].map((p) => ({ principal: p, role: r }))),
+    [grants],
   );
 
   const apply = async (change: {
@@ -192,9 +208,9 @@ export function SharePanel({
         target.kind === "doc"
           ? await setAccess(target.id, change)
           : await setFolderAccess(target.id, change);
-      setViewers(result.viewers);
-      setEditors(result.editors);
-      onChanged(result);
+      const next = grantsOf(result);
+      setGrants(next);
+      onChanged(next);
       for (const added of change.add ?? []) {
         logEvent({
           name: "share_grant",
@@ -290,11 +306,11 @@ export function SharePanel({
               <select
                 className="toolbar-select"
                 aria-label="Access level"
+                aria-describedby="share-role-hint"
                 value={role}
                 onChange={(e) => setRole(e.target.value as Role)}
               >
-                <option value="viewer">Can read</option>
-                <option value="editor">Can edit</option>
+                <RoleOptions />
               </select>
               <button
                 type="button"
@@ -305,6 +321,9 @@ export function SharePanel({
                 Add
               </button>
             </div>
+            <span className="field-hint" id="share-role-hint">
+              {ROLE_LABEL[role]}: {ROLE_HINT[role]}
+            </span>
             <span className="field-hint">
               Anything you share reaches them the moment they sign in with this
               address, whether or not they have an account yet.
