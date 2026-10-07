@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // The document viewer: composition only (SPEC §6, §6a, §6c, §16, §17).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import { logEvent } from "../analytics";
 import { createAnnotation, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
 import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
-import { trimToText } from "../annotation/exact";
+import { applySuggestion, trimToText } from "../annotation/exact";
 import { Sidebar } from "../annotation/Sidebar";
 import { commitVersion, UnresolvedCommentsError, StaleVersionError } from "../edit";
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
@@ -42,7 +42,10 @@ import { ViewerToolbar } from "../components/ViewerToolbar";
 import { ViewerBanners } from "../components/ViewerBanners";
 import { SelectionFab } from "../components/SelectionFab";
 import { SuggestPopover, popoverPosition, type PopoverPosition } from "../components/SuggestPopover";
-import { suggestEdit } from "../suggestions";
+import { acceptSuggestion, claimSuggestion, rejectSuggestion, suggestEdit } from "../suggestions";
+import { ReviewBar } from "../components/ReviewBar";
+import { acceptInSession, useSuggestionReview } from "../viewer/useSuggestionReview";
+import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import { SlidePanel } from "../components/SlidePanel";
 import { SlideOverview } from "../components/SlideOverview";
 import { SharePanel } from "../components/SharePanel";
@@ -141,6 +144,10 @@ export function DocViewer() {
   const [pendingComment, setPendingComment] = useState(false);
   // The suggestion being written: what it quotes, and where its form floats.
   const [suggesting, setSuggesting] = useState<{ anchor: Anchor; position: PopoverPosition } | null>(null);
+  // The approver's review pass, and which suggestion it is on (SPEC §22).
+  const [review, setReview] = useState<{ currentId: string | null } | null>(null);
+  const [deciding, setDeciding] = useState(false);
+  const reduceMotion = usePrefersReducedMotion();
 
   const isOwner = doc.meta?.ownerEmail === emailLower;
   const isDocEditor = isDocEditorOf(doc.meta, emailLower);
@@ -257,12 +264,13 @@ export function DocViewer() {
   // A member, or anyone on a PUBLIC open-editing document, shares the live log.
   // An unlisted document's link holder cannot — the realtime rules cannot see
   // a key — so they edit alone and publish through /draft (SPEC §16).
+  const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
     epoch: frame.epoch,
     docId,
-    enabled: signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public"),
+    enabled: shareLive,
   });
 
   const editor = useInlineEditor({
@@ -273,6 +281,26 @@ export function DocViewer() {
     authoredAssets: frame.authoredAssets,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
+
+  // AFTER the editor, deliberately, and unlike every hook above it: this one
+  // edits rather than decorates, in the session the editor owns, and marks its
+  // target without a node or an attribute (see useSuggestionReview).
+  const pendingSuggestions = useMemo(
+    () => annotations.filter((a) => a.suggestion?.state === "pending"),
+    [annotations],
+  );
+  const reviewLayer = useSuggestionReview({
+    mode,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    active: review !== null,
+    pending: pendingSuggestions,
+    currentId: review?.currentId ?? null,
+    reduceMotion,
+  });
+  // An edit made before the host is bound to the shared document is lost when
+  // it binds; alone, there is nothing to wait for.
+  const reviewReady = mode.kind === "editing" && (!shareLive || shared.bound);
 
   const live = useLiveSync({
     meta: doc.meta,
@@ -538,6 +566,85 @@ export function DocViewer() {
     setWantsEdit(false);
   }, [editor]);
 
+  // Leaving the editor ends the review pass; it lives in the editing session.
+  useEffect(() => {
+    if (!wantsEdit) setReview(null);
+  }, [wantsEdit]);
+
+  /** Open the review pass in the editor, on one suggestion or the first. */
+  const startReview = useCallback(
+    (annId?: string) => {
+      setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
+      setWantsEdit(true);
+    },
+    [pendingSuggestions],
+  );
+
+  // Somebody decided the one on screen — this browser, or another approver's
+  // — so move on; and close the pass once nothing is left to decide.
+  const lastPending = useRef(pendingSuggestions.length);
+  useEffect(() => {
+    const before = lastPending.current;
+    lastPending.current = pendingSuggestions.length;
+    if (!review) return;
+    if (pendingSuggestions.length === 0) {
+      setReview(null);
+      if (before > 0) toast.show("That was the last suggestion. Publish the result with Save as new version.");
+      return;
+    }
+    if (!pendingSuggestions.some((a) => a.annId === review.currentId)) {
+      setReview({ currentId: pendingSuggestions[0].annId });
+    }
+  }, [review, pendingSuggestions, toast]);
+
+  const suggestionWhere = useCallback(
+    (annId: string) => ({ docId, versionId: doc.currentVersion, annId, ...(linkKey ? { k: linkKey } : {}) }),
+    [docId, doc.currentVersion, linkKey],
+  );
+
+  const acceptCurrent = useCallback(
+    async (a: Annotation) => {
+      if (deciding || !a.suggestion) return;
+      setDeciding(true);
+      try {
+        const outcome = await acceptInSession({
+          claim: () => claimSuggestion(suggestionWhere(a.annId)),
+          apply: () => (frame.doc ? applySuggestion(frame.doc, a.anchor, a.suggestion!.replacement) : "failed"),
+          flush: () => editor.flushNow(),
+          saveFailed: () => editor.saveFailed(),
+          record: () => acceptSuggestion(suggestionWhere(a.annId)),
+        });
+        if (outcome === "stale") {
+          toast.error("The text has changed since this was suggested, so it can’t be applied.");
+        } else if (outcome === "failed") {
+          toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
+        } else if (outcome === "unsaved") {
+          toast.error("The change is made, but the draft didn’t save, so it isn’t accepted yet. Accept it again once it saves.");
+        }
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setDeciding(false);
+      }
+    },
+    [deciding, suggestionWhere, frame.doc, editor, toast],
+  );
+
+  const rejectCurrent = useCallback(
+    async (a: Annotation, reason: string) => {
+      if (deciding) return;
+      setDeciding(true);
+      try {
+        await rejectSuggestion({ ...suggestionWhere(a.annId), ...(reason ? { reason } : {}) });
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setDeciding(false);
+      }
+    },
+    [deciding, suggestionWhere, toast],
+  );
+
   const menuEntries: MenuEntry[] = useMemo(() => {
     const entries: MenuEntry[] = [
       { id: "h-export", label: "Download", heading: true },
@@ -696,10 +803,28 @@ export function DocViewer() {
           committing={committing}
           commitDisabled={annotations.some((a) => !a.resolved)}
           commitDisabledReason={
-            annotations.some((a) => !a.resolved)
-              ? "Resolve every comment first. Annotations belong to a version, so publishing would leave them behind."
-              : undefined
+            pendingSuggestions.length > 0
+              ? `${pendingSuggestions.length === 1 ? "1 suggested edit is" : `${pendingSuggestions.length} suggested edits are`} waiting. Only the owner or an approver can accept or reject ${pendingSuggestions.length === 1 ? "it" : "them"}.`
+              : annotations.some((a) => !a.resolved)
+                ? "Resolve every comment first. Annotations belong to a version, so publishing would leave them behind."
+                : undefined
           }
+        />
+      ) : null}
+      {editingNow ? (
+        <ReviewBar
+          pending={pendingSuggestions}
+          canDecide={isApprover(doc.meta, emailLower)}
+          reviewing={review !== null}
+          currentId={review?.currentId ?? null}
+          stale={reviewLayer.stale}
+          ready={reviewReady}
+          busy={deciding}
+          onStart={() => startReview()}
+          onGo={(annId) => setReview({ currentId: annId })}
+          onAccept={(a) => void acceptCurrent(a)}
+          onReject={(a, reason) => void rejectCurrent(a, reason)}
+          onDone={() => setReview(null)}
         />
       ) : (
         <ViewerToolbar
@@ -869,6 +994,7 @@ export function DocViewer() {
             stale={annotationLayer.stale}
             isApprover={isApprover(doc.meta, emailLower)}
             linkKey={linkKey || undefined}
+            onReview={canEdit ? startReview : undefined}
             selectedId={selectedId}
             canComment={signedIn}
             signedIn={signedIn}

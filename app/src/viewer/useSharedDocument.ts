@@ -44,6 +44,10 @@ export function useSharedDocument(options: {
   const { mode, doc, epoch, docId, enabled } = options;
   const editing = mode.kind === "editing";
   const [state, setState] = useState<ShareState>("off");
+  // Whether the host is bound yet. "off" alone cannot say: it is also what
+  // editing alone, bound, reports. Applying an edit before the bind is lost —
+  // a non-empty shared document replaces the host's children when it binds.
+  const [bound, setBound] = useState(false);
   const sync = useRef<Sync | null>(null);
 
   useEffect(() => {
@@ -67,6 +71,7 @@ export function useSharedDocument(options: {
       if (cancelled || !doc.body) return;
       bound = bindSync(ydoc.getXmlFragment("body"), doc.body);
       sync.current = bound;
+      setBound(true);
       // Without a Realtime Database there are no peers to share with, and
       // editing alone is the documented fallback rather than a failure.
       setState(log ? "shared" : "off");
@@ -82,10 +87,11 @@ export function useSharedDocument(options: {
       connection?.destroy();
       ydoc.destroy();
       setState("off");
+      setBound(false);
     };
     // `epoch` is here because a frame reload replaces the whole document, and
     // the binding is attached to a body that no longer exists after one.
   }, [editing, doc, epoch, docId, enabled]);
 
-  return { state };
+  return { state, bound };
 }

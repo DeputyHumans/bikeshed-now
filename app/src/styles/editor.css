@@ -162,3 +162,29 @@
      off screen. The overflow menu carries everything past the essentials. */
   .toolbar-group[data-overflow="true"] { display: none; }
 }
+
+/* The approver's review pass, under the editing toolbar (SPEC §22). */
+.review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-warn-soft);
+  font-size: var(--fs-small);
+}
+.review-bar.is-reviewing { background: var(--color-accent-soft); }
+.review-count { font-weight: 620; white-space: nowrap; }
+.review-change {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.review-by { color: var(--color-ink-muted); }
+.review-change del { text-decoration-color: var(--color-annotation); text-decoration-thickness: 2px; }
+.review-change ins { text-decoration: underline 2px var(--color-annotation); }
+.review-stale { color: var(--color-warn); }
+.review-actions { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.review-actions .input { flex: 1 1 10rem; min-width: 0; }

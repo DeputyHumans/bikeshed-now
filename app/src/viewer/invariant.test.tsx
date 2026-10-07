@@ -9,6 +9,7 @@ import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useInlineEditor } from "./useInlineEditor";
 import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
+import { useSuggestionReview } from "./useSuggestionReview";
 import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, INS_ATTR, OWN_ATTR, SUG_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
@@ -150,7 +151,7 @@ const ANNOTATIONS = [
  * not, and that is precisely how the peer overlay reached edit mode in a real
  * browser: the harness mirrored an order it did not contain.
  */
-function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
+function Harness({ doc, mode, reviewing = SUGGESTION.annId }: { doc: Document; mode: FrameMode; reviewing?: string | null }) {
   const [selected] = useState<string | null>(null);
   const authoredAssets = useRef<Map<string, number> | null>(null);
 
@@ -194,6 +195,17 @@ function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
     docId: "d1",
     authoredAssets,
     onStale: () => {},
+  });
+
+  // AFTER the editor, mirroring DocViewer: it edits rather than decorates, and
+  // marks its target with nothing in the document. Here so that is checked.
+  useSuggestionReview({
+    mode,
+    doc,
+    epoch: 1,
+    active: reviewing !== null,
+    pending: [SUGGESTION],
+    currentId: reviewing,
   });
 
   return (
@@ -349,6 +361,31 @@ describe("the decoration invariant", () => {
     expect(html).toContain("The first passage of the document.");
     expect(html).toContain('<section id="s2">');
     expect(html).toContain("body{margin:0}");
+  });
+
+  it("the review pass marks its target without writing to the document", async () => {
+    const doc = makeDoc();
+    const { rerender } = render(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} reviewing={null} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Every mutation from here on would be the review pass's, and it must make
+    // none: what the CRDT observer sees, every peer gets.
+    let mutations = 0;
+    const observer = new MutationObserver((records) => (mutations += records.length));
+    observer.observe(doc.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    act(() => {
+      rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} reviewing={SUGGESTION.annId} />);
+    });
+    act(() => {
+      rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} reviewing={null} />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    observer.disconnect();
+    expect(mutations).toBe(0);
+    expect(decorationIn(doc)).toEqual([]);
   });
 
   it("restores highlights when editing stops", () => {

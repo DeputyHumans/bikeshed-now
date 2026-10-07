@@ -2171,6 +2171,29 @@ Escape cancels; a pasted line break becomes a space; empty suggests deleting
 the text. The thread opens on success. Its author may Edit it, in the panel,
 until it is decided.
 
+### The review pass
+
+An approver decides suggestions in the editor, because accepting is an edit
+there. **Review** on a thread, or **Review all**, opens the editor on it; a bar
+under the editing toolbar shows the change, who suggested it, and Accept,
+Reject (with an optional reason), Previous, Next and Done. Each suggestion is
+judged against the DRAFT on screen, the text an Accept would change, so one an
+editor has already rewritten shows as stale there. The target is brought into
+view once and marked with the CSS Custom Highlight API through an adopted
+stylesheet — no node and no attribute, so nothing reaches the serializer or the
+CRDT's observer — falling back to selecting it where the API is missing.
+
+Accept waits for the editing session to have joined the shared document (an
+edit applied before the bind is lost to it), then runs claim → apply → save
+the draft → record. A failure at any step says which and records nothing, and
+accepting again after an interruption finds the change already made and only
+records it. In the editor, the same bar tells anyone who cannot decide that
+suggestions are waiting and who can clear them, which is also why "Save as new
+version" is greyed out.
+
+`useSuggestionReview` is declared AFTER `useInlineEditor`, the one viewer hook
+that is: it edits rather than decorates.
+
 ### Display
 
 A pending suggestion is drawn in the reading frame by the annotation layer, as

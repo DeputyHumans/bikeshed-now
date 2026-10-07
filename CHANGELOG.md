@@ -30,9 +30,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   the role allows (SPEC §13, §18).
 - **Suggested edits.** Anyone who can suggest selects text and proposes what it
   should say instead, or that it should go. The owner and approvers are
-  emailed, and an approver accepts or rejects it. Accepting makes the change in
-  their own editing session, so it reaches co-editors like any keystroke and
-  lands in the draft; a person still publishes it. Rejecting can say why. The
+  emailed, and an approver accepts or rejects it in a review pass in the
+  editor, one suggestion at a time. Accepting makes the change in their own
+  editing session, so it reaches co-editors like any keystroke and lands in
+  the draft, saved before it is recorded; a person still publishes it. Rejecting can say why. The
   suggester hears either way, in the thread. A suggestion is text inside one
   block, never formatting or structure, and a pending one can be changed or
   withdrawn by its author. In the document a pending suggestion is the

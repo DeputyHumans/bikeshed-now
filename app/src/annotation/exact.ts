@@ -196,3 +196,49 @@ export function trimToText(range: Range): Range {
     return range;
   }
 }
+
+export type ApplyResult = "applied" | "already-applied" | "stale" | "failed";
+
+/**
+ * Make a suggested edit in the live editing session, as a person would.
+ *
+ * The range is found exactly, in the document as it is NOW — the draft, with
+ * every co-editor's changes in it — selected, and replaced with `insertText`
+ * (or `delete` for an empty replacement). That is the same path as typing over
+ * a selection, so the CRDT carries it to every peer and autosave stores it,
+ * with nothing special about it anywhere downstream (SPEC §22).
+ *
+ *   applied          made now, and seen in place afterwards
+ *   already-applied  the replacement already stands where the quote stood —
+ *                    an earlier attempt that was not recorded; do not repeat it
+ *   stale            the quote is not unambiguously there, or now spans
+ *                    structure: nothing is touched
+ *   failed           the editor refused, or the result is not what was asked
+ */
+export function applySuggestion(doc: Document, anchor: Anchor, replacement: string): ApplyResult {
+  const range = exactRangeFromAnchor(doc, anchor);
+  if (!range) return alreadyApplied(doc, anchor, replacement) ? "already-applied" : "stale";
+  if (suggestibleRange(range) !== true) return "stale";
+
+  // The editing host must have focus for execCommand to act on the frame
+  // (the toolbar does the same before every command).
+  try {
+    doc.defaultView?.focus();
+  } catch {
+    /* a detached document has no window to focus */
+  }
+  const sel = doc.getSelection();
+  if (!sel) return "failed";
+  sel.removeAllRanges();
+  sel.addRange(range);
+  const ok =
+    replacement === ""
+      ? doc.execCommand("delete", false)
+      : doc.execCommand("insertText", false, replacement);
+  if (!ok) return "failed";
+  // Verified by its context where it has one; a quote with no context around
+  // it (a whole section's text) has nothing to recognise the spot by, and the
+  // editor's own answer is all there is.
+  const hasContext = Boolean(anchor.prefix.trim() || anchor.suffix.trim());
+  return !hasContext || alreadyApplied(doc, anchor, replacement) ? "applied" : "failed";
+}

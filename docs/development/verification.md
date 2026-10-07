@@ -291,6 +291,38 @@ Publish `deck-animated` and sign in as its owner.
    placeholder until it is opened. A document whose expiry has passed gets a
    cover in its owner's workspace, and stays a placeholder for its editors.
 
+### 13 · A suggestion is decided by an approver, as an edit everyone sees
+
+Publish `markdown-reference`. As its owner, share it with
+`sug@example.com` ("Can suggest"), `ed@example.com` ("Can edit") and
+`appr@example.com` ("Can approve"), creating the three accounts first as in
+step 0.
+
+1. As `sug@example.com`, select a few words of one paragraph. The selection
+   toolbar shows **Suggest edit** beside Comment. Select across two paragraphs
+   and press it: it explains why, and opens nothing. Select within one, press
+   it, type a replacement, press Enter. The words are struck through with the
+   replacement after them, and the thread opens, waiting.
+2. In the thread, **Edit** the replacement and save it: the struck text and the
+   inline replacement both follow.
+3. As `ed@example.com`, open the editor. The bar under the toolbar says one
+   suggested edit is waiting and that only the owner or an approver can decide
+   it; "Save as new version" is greyed out with the same reason, and
+   `POST /commit` answers `409` with `pendingSuggestions: 1`. Stay in the
+   editor.
+4. As `appr@example.com`, choose **Review** on the thread. The editor opens on
+   the suggestion, its text marked (in Chrome by the highlight API: no
+   attribute appears on it in the Elements panel). **Accept**. The network panel
+   shows `claim`, then `POST /draft`, then `accept`, in that order. In
+   `ed@example.com`'s editor, the replacement appears once.
+5. Suggest a second edit as `sug@example.com`; as the approver, **Reject…** it
+   with a reason. The suggester's thread shows "Accepted." on the first and
+   "Rejected: …" on the second.
+6. As either editor, "Save as new version" now publishes. The new version's
+   bytes contain the accepted replacement and no `data-bshd`.
+7. Tab through the suggest form and the review bar with the keyboard alone:
+   every control is reachable and works.
+
 ---
 
 ## What this walkthrough found

@@ -81,7 +81,10 @@ them out: the `FrameMode` tagged union, effect-cleanup ordering, an
 unconditional strip plus a dev-only assertion, and `serializeCleanHtml`. **Every
 hook that puts something in the document must be declared before
 `useInlineEditor`** — and must be in `viewer/invariant.test.tsx`'s harness.
-Presence was in neither, and reached edit mode in a real browser.
+Presence was in neither, and reached edit mode in a real browser. The one hook
+declared after it, `useSuggestionReview`, edits rather than decorates, and marks
+its target with the highlight API — no node, no attribute — which the harness
+checks by counting mutations.
 
 **4. `[data-bshd]` is stripped by VALUE, not presence.** Someone's document may
 legitimately contain `data-bshd="whatever"`. Only values listed in

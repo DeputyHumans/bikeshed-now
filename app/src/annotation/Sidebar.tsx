@@ -104,6 +104,7 @@ function Thread({
   emailLower,
   onSelect,
   onComposing,
+  onReview,
 }: {
   docId: string;
   versionId: string;
@@ -119,6 +120,8 @@ function Thread({
   emailLower: string;
   onSelect: () => void;
   onComposing: (threadId: string | null) => void;
+  /** Open the review pass on this suggestion, where Accept lives. */
+  onReview?: () => void;
 }) {
   const toast = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -265,6 +268,21 @@ function Thread({
             </>
           ) : (
             <>
+              {isApprover && onReview && !stale ? (
+                // Accepting is an edit, so it happens in the editor, where the
+                // change can be seen landing; this takes the approver there.
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReview();
+                  }}
+                >
+                  Review
+                </button>
+              ) : null}
               {isApprover ? (
                 <button
                   type="button"
@@ -392,6 +410,7 @@ export function Sidebar({
   onComposing,
   onSignIn,
   onClose,
+  onReview,
 }: {
   docId: string;
   versionId: string;
@@ -411,6 +430,8 @@ export function Sidebar({
   onComposing: (threadId: string | null) => void;
   onSignIn: () => void;
   onClose: () => void;
+  /** Open the approver's review pass, on one suggestion or from the first. */
+  onReview?: (annId?: string) => void;
 }) {
   const [showResolved, setShowResolved] = useState(false);
   const orphanSet = useMemo(() => new Set(orphaned), [orphaned]);
@@ -428,6 +449,11 @@ export function Sidebar({
           {pendingCount > 0 ? ` (${pendingCount} ${pendingCount === 1 ? "suggestion" : "suggestions"})` : ""}
           {annotations.length > openCount ? ` · ${annotations.length - openCount} resolved` : ""}
         </span>
+        {isApprover && onReview && pendingCount > 0 ? (
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => onReview()}>
+            Review all
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-quiet btn-sm"
@@ -464,6 +490,7 @@ export function Sidebar({
               emailLower={emailLower}
               onSelect={() => onSelect(annotation.annId)}
               onComposing={onComposing}
+              onReview={onReview ? () => onReview(annotation.annId) : undefined}
             />
           ))}
         </ul>

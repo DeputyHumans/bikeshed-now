@@ -96,7 +96,10 @@ const SUGGESTION = {
   suggestion: { replacement: "two weekends", state: "pending" },
 } as Annotation;
 
-function mountWith(annotation: Annotation, props: { uid?: string; isApprover?: boolean; stale?: string[] } = {}) {
+function mountWith(
+  annotation: Annotation,
+  props: { uid?: string; isApprover?: boolean; stale?: string[]; onReview?: (annId?: string) => void } = {},
+) {
   render(
     <ToastProvider>
       <Sidebar
@@ -116,6 +119,7 @@ function mountWith(annotation: Annotation, props: { uid?: string; isApprover?: b
         onComposing={() => {}}
         onSignIn={() => {}}
         onClose={() => {}}
+        onReview={props.onReview}
       />
     </ToastProvider>,
   );
@@ -170,6 +174,21 @@ describe("a suggestion's thread", () => {
     });
     expect(reviseSuggestion).toHaveBeenCalledWith({ docId: "d1", versionId: "v1", annId: "s1", replacement: "a fortnight" });
     expect(screen.queryByLabelText(/Replace/)).toBeNull();
+  });
+
+  it("takes an approver to the review pass, on this one or from the first", () => {
+    const onReview = vi.fn();
+    mountWith(SUGGESTION, { isApprover: true, onReview });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(onReview).toHaveBeenLastCalledWith("s1");
+    fireEvent.click(screen.getByRole("button", { name: "Review all" }));
+    expect(onReview).toHaveBeenLastCalledWith();
+  });
+
+  it("offers no review of a stale one, which can only be rejected", () => {
+    mountWith(SUGGESTION, { isApprover: true, onReview: vi.fn(), stale: ["s1"] });
+    expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reject…" })).toBeTruthy();
   });
 
   it("says when its text has changed underneath it", () => {
