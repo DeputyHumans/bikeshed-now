@@ -164,7 +164,11 @@ previews").
 Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1.
 Mints a session cookie (`createSessionCookie`, 5 days) and sets `__session` —
 the only cookie Firebase Hosting forwards to functions — as
-`HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<expiresIn s>`.
+`HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<expiresIn s>`. It also
+merges `{ uid, email }` into `users/{uid}`, the record every email finds a
+person by (§14), so an account whose address arrived verified has one from its
+first sign-in; a preference already saved there is kept, and a failed write is
+logged rather than refusing the sign-in.
 
 Response `200 { status: "ok" }`, or `200 { status: "unverified" }`,
 `403 { status: "not_allowed", message }`, `401 { status: "session_failed" }`.
@@ -1161,7 +1165,8 @@ sharing an address would be an ACL bug.
 1. Choose a provider.
 2. If no email came back, collect one.
 3. If the email is unverified, send a code and **block until verified**.
-4. Create `users/{uid}`.
+4. Create `users/{uid}` — done by `POST /session` on every sign-in, merged, so
+   it exists whichever provider verified the address (§2).
 5. Land in the workspace — **anything shared with you before you signed in is
    already listed**, because the ACL is keyed by email.
 

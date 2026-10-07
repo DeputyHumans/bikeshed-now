@@ -290,6 +290,26 @@ export const session = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  /**
+   * The account record, keyed by uid and carrying the verified address (SPEC
+   * §14, sign-up step 4). Every email that names a person finds them through
+   * it — `uidForEmail` — and skips anyone without one, silently, by design for
+   * an address with no account yet. Only the code-verification path and the
+   * account screen used to write it, so an account whose address arrived
+   * verified (Google, GitHub) had none and was never told about a comment or a
+   * suggestion. Written here, at the one door every sign-in passes, merged so
+   * a preference already saved survives. A failure is logged and does not
+   * refuse the sign-in: the cost of losing it is a missed email, not access.
+   */
+  try {
+    await db()
+      .collection("users")
+      .doc(gate.principal.uid)
+      .set({ uid: gate.principal.uid, email: gate.principal.emailLower }, { merge: true });
+  } catch (err) {
+    console.error("could not write the account record:", (err as Error)?.message ?? err);
+  }
+
   res.setHeader(
     "Set-Cookie",
     cookie.serialize(SESSION_COOKIE_NAME, sessionCookie, {

@@ -14,6 +14,19 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Comment and suggestion emails reach people who signed in with an already
+  verified address.** Every email that names a person finds them through their
+  account record, and only the email-code sign-up and the account screen
+  created one. Anyone who signed in with Google or GitHub and never changed a
+  preference had none, so they were never told about a comment on their
+  document, and since 0.6.0 an approver was never told about a suggestion
+  waiting for them. Signing in now writes the record, keeping any preference
+  already saved, and the next email finds them (SPEC §2, §14).
+
 ## 0.6.0 — 2026-10-06
 
 ### Added

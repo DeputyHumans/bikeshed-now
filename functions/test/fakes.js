@@ -208,7 +208,7 @@ function clone(v) {
  * `firebase-admin` sets `__esModule`, so compiled code reaches the module
  * object itself and a property defined here is what it calls.
  */
-async function withFakeAdmin({ db, sessions = {} }, fn) {
+async function withFakeAdmin({ db, sessions = {}, idTokens = {} }, fn) {
   const saved = ["firestore", "auth"].map((k) => [k, Object.getOwnPropertyDescriptor(admin, k)]);
   const firestore = Object.assign(() => db, admin.firestore);
   Object.defineProperty(admin, "firestore", { configurable: true, value: firestore });
@@ -219,6 +219,11 @@ async function withFakeAdmin({ db, sessions = {} }, fn) {
         if (!sessions[cookie]) throw new Error("invalid session");
         return sessions[cookie];
       },
+      verifyIdToken: async (token) => {
+        if (!idTokens[token]) throw new Error("invalid id token");
+        return idTokens[token];
+      },
+      createSessionCookie: async (token) => `cookie-for-${token}`,
     }),
   });
   try {
