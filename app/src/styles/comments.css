@@ -18,7 +18,17 @@
   border-bottom: 1px solid var(--color-line);
 }
 .comments-count { font-weight: 620; }
-.comments-head .icon-btn { margin-left: auto; }
+.comments-head .icon-btn { margin-left: auto; flex-shrink: 0; }
+.comments-review {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-3);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-accent-soft);
+  font-size: var(--fs-small);
+}
 
 .comments-list {
   flex: 1;

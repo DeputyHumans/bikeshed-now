@@ -445,15 +445,8 @@ export function Sidebar({
     <aside className="comments-panel" aria-label="Comments">
       <div className="comments-head">
         <span className="comments-count">
-          {openCount} open
-          {pendingCount > 0 ? ` (${pendingCount} ${pendingCount === 1 ? "suggestion" : "suggestions"})` : ""}
-          {annotations.length > openCount ? ` · ${annotations.length - openCount} resolved` : ""}
+          {openCount} open{annotations.length > openCount ? ` · ${annotations.length - openCount} resolved` : ""}
         </span>
-        {isApprover && onReview && pendingCount > 0 ? (
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => onReview()}>
-            Review all
-          </button>
-        ) : null}
         <button
           type="button"
           className="btn btn-quiet btn-sm"
@@ -466,6 +459,21 @@ export function Sidebar({
           <Icon name="close" />
         </button>
       </div>
+
+      {/* Its own row, so the header keeps to one line: a count, a toggle and
+          a close button that must never be squeezed to a sliver. */}
+      {pendingCount > 0 ? (
+        <div className="comments-review">
+          <span>
+            {pendingCount === 1 ? "1 suggested edit is" : `${pendingCount} suggested edits are`} waiting
+          </span>
+          {isApprover && onReview ? (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onReview()}>
+              Review all
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {visible.length === 0 ? (
         <p className="empty-state">

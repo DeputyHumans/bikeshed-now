@@ -130,7 +130,7 @@ describe("a suggestion's thread", () => {
     mountWith(SUGGESTION);
     const change = document.querySelector(".suggestion-change")!;
     expect(change.textContent).toBe("Replace a single weekend with  → two weekends");
-    expect(screen.getByText(/1 open/).textContent).toMatch(/\(1 suggestion\)/);
+    expect(screen.getByText("1 suggested edit is waiting")).toBeTruthy();
     expect(screen.getByText("Waiting for the owner or an approver.")).toBeTruthy();
   });
 
