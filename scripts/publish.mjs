@@ -236,6 +236,27 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     return;
   }
 
+  // An operator publishes past pending suggestions: Admin credentials bypass
+  // every endpoint and rule anyway, so a refusal here would be advice, not a
+  // boundary. It is said out loud instead, because each one stays behind,
+  // undecided, on a version nobody will read again (SPEC §6a, §9).
+  const before = await docRef.get();
+  const behind = before.exists ? before.data()?.currentVersion : null;
+  if (typeof behind === "string" && behind) {
+    const pending = await versionsRef
+      .doc(behind)
+      .collection("annotations")
+      .where("suggestion.state", "==", "pending")
+      .count()
+      .get();
+    const n = pending.data().count;
+    if (n > 0) {
+      console.warn(
+        `  warning: ${n} pending suggestion(s) on ${behind} stay behind on it, undecided.`,
+      );
+    }
+  }
+
   const allVersions = await versionsRef.get();
   let maxN = 0;
   for (const d of allVersions.docs) {

@@ -28,6 +28,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   highest role first. `POST /access`, `POST /folder-access` and
   `set-access.mjs --role` accept both new roles, and an invitation says what
   the role allows (SPEC §13, §18).
+- **A pending suggestion holds back every new version, on every channel.**
+  Publishing in the app, uploading a revision, `bikeshed update` and
+  `update_document` are all refused with a `409` while a suggested edit on the
+  current version is waiting for a decision, and the message says that only
+  the owner or an approver can make it. An identical update is still a no-op.
+  The operator's `publish.mjs` still publishes, and warns how many it leaves
+  behind (SPEC §6a, §9).
 
 ## 0.5.2 — 2026-10-06
 

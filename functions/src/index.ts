@@ -94,6 +94,7 @@ import {
   reviseDocument,
   withdrawTrust,
 } from "./lib/publish";
+import { pendingSuggestions, pendingSuggestionsMessage } from "./lib/review";
 import {
   THUMB_CACHE_SECONDS,
   THUMB_REL,
@@ -1320,9 +1321,17 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     .get();
   const unresolvedCount = unresolved.data().count;
   if (unresolvedCount > 0) {
+    // A pending suggestion is an open thread too, so it is in that count. Which
+    // kind it is decides who can clear it: anyone resolves a comment, and only
+    // an approver decides a suggestion — so the refusal says which.
+    const pending = await pendingSuggestions(docRef, baseVersion);
     res.status(409).json({
-      error: "Resolve all comments before publishing a new version.",
+      error:
+        pending > 0
+          ? pendingSuggestionsMessage(pending)
+          : "Resolve all comments before publishing a new version.",
       unresolvedCount,
+      pendingSuggestions: pending,
     });
     return;
   }
@@ -1604,6 +1613,10 @@ async function updateFromUpload(
 
   if (result instanceof Error) {
     res.status(500).json({ error: "could not publish the new version" });
+    return;
+  }
+  if ("status" in result) {
+    res.status(result.status).json({ error: result.error, pendingSuggestions: result.pendingSuggestions });
     return;
   }
   if ("error" in result) {

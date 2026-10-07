@@ -35,6 +35,7 @@ import {
   type Membership,
 } from "./folders";
 import { syncPresenceAccess } from "./presence";
+import { refuseIfPending, type PendingRefusal } from "./review";
 import { syncPublicProjection } from "./publicdoc";
 import { resolveMarking, type Marking } from "./marking";
 
@@ -190,7 +191,7 @@ export async function reviseDocument(args: {
   actor: Actor;
   authorEmail: string;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -445,7 +446,7 @@ export async function commitNewVersion(args: {
   authorEmail: string;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult> {
+}): Promise<UpdateResult | PendingRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
@@ -460,6 +461,11 @@ export async function commitNewVersion(args: {
       deduped: true,
     };
   }
+
+  // After the dedup above, so an identical update stays a no-op whatever is
+  // pending, and before anything is uploaded, so a refusal leaves no bytes.
+  const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
+  if (refused) return refused;
 
   const allVersions = await versionsRef.get();
   let maxN = 0;

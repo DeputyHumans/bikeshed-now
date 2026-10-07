@@ -305,7 +305,8 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   so first-edit and non-entry assets render. `private, no-store`.
 - **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no
   draft, or if any annotation on the current version is unresolved
-  (`{ unresolvedCount }`). Assembles base assets + edited entry, re-renders
+  (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds
+  it, since only an approver can clear a pending suggestion, §6a). Assembles base assets + edited entry, re-renders
   Markdown if applicable, hashes with the §9 framing, **dedups on `contentHash`**
   (identical bytes → no-op, clear the draft, `deduped: true`), else uploads and,
   in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
@@ -327,9 +328,10 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
   re-upload in all but name, which open editing does not extend to. `id`,
   `folderId` and `title` with it are a `400`; a refused caller gets the usual
-  `404`/`403` (§1.4b); an expired document a `409`. A new version withdraws
-  trust, as every update through a token does (§6c). Answers `{ docId, versionId, contentHash,
-  fileCount, bytes, deduped }`.
+  `404`/`403` (§1.4b); an expired document a `409`; a pending suggestion on the
+  current version a `409 { error, pendingSuggestions }` (§6a). A new version
+  withdraws trust, as every update through a token does (§6c). Answers
+  `{ docId, versionId, contentHash, fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree.
@@ -608,6 +610,15 @@ The one path that writes content, and it is explicit and server-mediated.
   `POST /commit`, allowed only when every comment on the current version is
   resolved. Annotations are version-scoped, so the new version starts
   comment-free and the old version keeps its comments.
+- **No version is minted while a suggestion on the current one is pending**,
+  through ANY account channel: the in-app commit, `/publish?update=`, the CLI
+  and `update_document` alike. Publishing past it would leave it undecided on a
+  version nobody reads — a rejection nobody chose to make — and only an approver
+  may decide it. The gate is asked after the content-hash dedup, so an
+  identical update stays a no-op, and before anything is uploaded
+  (`lib/review.ts`). The comment gate stays on the in-app commit alone, because
+  the agent loop revises a document in answer to its open comments and a
+  person resolves them afterwards (§19).
 
 ### 6b. Presence and live collaboration
 
@@ -890,6 +901,11 @@ and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
 They authenticate with the Admin SDK and require `--account` explicitly on every
 real run; the CLI authenticates with a personal access token over HTTPS.
+
+`publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin
+credentials bypass every endpoint and rule, so a refusal there would be advice,
+not a boundary. It prints how many pending suggestions it leaves behind on the
+version it replaces instead of saying nothing.
 
 ### 9.1 The content hash (normative byte layout)
 

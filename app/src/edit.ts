@@ -7,10 +7,12 @@ import { ConflictError, post } from "./api";
  * Content writes are server-side only, so inline editing calls these endpoints.
  * Versions stay immutable: a commit always mints a NEW version.
  *
- * The two 409s are DIFFERENT problems with different next actions, which is why
+ * The 409s are DIFFERENT problems with different next actions, which is why
  * they are separate error types rather than one message. "Somebody published
  * while you were editing" means reload; "there are open comments" means resolve
- * them. Collapsing both into a banner makes one of them undiagnosable.
+ * them; "there are pending suggestions" means an approver has to decide them,
+ * which the person publishing may not be able to do. Collapsing them into one
+ * banner makes all but one undiagnosable.
  */
 
 export class StaleVersionError extends Error {
@@ -29,8 +31,25 @@ export class UnresolvedCommentsError extends Error {
   }
 }
 
+export class PendingSuggestionsError extends Error {
+  constructor(readonly pendingSuggestions: number) {
+    super(
+      `${pendingSuggestions === 1 ? "1 suggested edit is" : `${pendingSuggestions} suggested edits are`} ` +
+        `waiting. Only the owner or an approver can accept or reject ${pendingSuggestions === 1 ? "it" : "them"}.`,
+    );
+    this.name = "PendingSuggestionsError";
+  }
+}
+
 function rethrow(e: unknown): never {
   if (e instanceof ConflictError) {
+    // First: a pending suggestion is also an unresolved thread, so it is in
+    // `unresolvedCount` too, and "resolve every comment" would send someone to
+    // a Resolve button that is not there.
+    const pending = e.detail.pendingSuggestions;
+    if (typeof pending === "number" && pending > 0) {
+      throw new PendingSuggestionsError(pending);
+    }
     if (typeof e.detail.unresolvedCount === "number") {
       throw new UnresolvedCommentsError(e.detail.unresolvedCount);
     }
