@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Opening the editor and closing it again no longer makes a draft.**
+  Leaving edit mode saved the document whether or not anything had changed,
+  and any save creates a draft — which every editor then reads instead of the
+  published version, until somebody publishes. Leaving now saves only an edit
+  the autosave has not already taken. "Save as new version" still saves first,
+  always (SPEC §6a).
+
 ## 0.6.1 — 2026-10-06
 
 ### Fixed

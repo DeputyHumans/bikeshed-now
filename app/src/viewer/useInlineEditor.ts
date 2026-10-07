@@ -55,6 +55,14 @@ export function useInlineEditor(options: {
    * success — the worst outcome available, because it looks like it worked.
    */
   const lastSaveFailed = useRef(false);
+  /**
+   * An edit this browser made that no save has taken yet. Leaving the editor
+   * saves only when this is set: a save with nothing in it still creates a
+   * draft, and a draft is what every editor then reads instead of the
+   * published version — so merely opening the editor and closing it again
+   * used to put a document into that state with nothing changed.
+   */
+  const unsaved = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -78,6 +86,9 @@ export function useInlineEditor(options: {
   const flush = useCallback(async () => {
     if (!doc || mode.kind !== "editing") return;
     setSaveState("saving");
+    // Cleared before the save rather than after it: an edit typed while this
+    // save is in flight is not in these bytes, and must still count as unsaved.
+    unsaved.current = false;
     try {
       const html = serializeCleanHtml(doc, {
         authoredAssets: authoredAssets.current ?? undefined,
@@ -87,6 +98,7 @@ export function useInlineEditor(options: {
       setSaveState("saved");
       setSaveError(null);
     } catch (e) {
+      unsaved.current = true;
       lastSaveFailed.current = true;
       setSaveState("error");
       if (e instanceof StaleVersionError) {
@@ -125,6 +137,7 @@ export function useInlineEditor(options: {
       // input rather than on save keeps what the author sees and what gets
       // stored the same thing.
       rewriteLegacyFontTags(doc);
+      unsaved.current = true;
       setSaveState("dirty");
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flushRef.current(), AUTOSAVE_MS);
@@ -145,8 +158,12 @@ export function useInlineEditor(options: {
   return {
     saveState,
     saveError,
-    /** Flush any pending edit before a commit. */
+    /** Save now, changed or not: before a commit, which publishes the draft's bytes. */
     flushNow: flush,
+    /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
+    flushUnsaved: useCallback(async () => {
+      if (unsaved.current) await flush();
+    }, [flush]),
     /** True when the last save failed: a commit must not proceed. */
     saveFailed: () => lastSaveFailed.current,
   };

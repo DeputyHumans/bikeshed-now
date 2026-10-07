@@ -562,7 +562,7 @@ export function DocViewer() {
   });
 
   const stopEditing = useCallback(async () => {
-    await editor.flushNow();
+    await editor.flushUnsaved();
     setWantsEdit(false);
   }, [editor]);
 
