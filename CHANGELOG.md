@@ -41,6 +41,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   it reads as its change and its state. One whose text has since changed says
   so and can only be rejected. `POST /suggestion` is the one path that writes
   them (SPEC §2, §4, §14, §22; ADR 0013).
+- **Agents can suggest edits too.** A twelfth MCP tool, `suggest_edit`,
+  proposes new text for one passage, quoted as a reader sees it. It is refused,
+  with what to do instead, when the passage is not there, repeats with nothing
+  to tell the copies apart, or spans more than one paragraph. An agent cannot
+  accept or reject a suggestion, its own included. `get_comments` shows each
+  suggestion's change and state, `get_document` says whether the caller may
+  suggest, and `update_document` from someone who may only suggest names
+  `suggest_edit` (SPEC §19, §22).
 - **A pending suggestion holds back every new version, on every channel.**
   Publishing in the app, uploading a revision, `bikeshed update` and
   `update_document` are all refused with a `409` while a suggested edit on the

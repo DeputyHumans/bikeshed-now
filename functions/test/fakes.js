@@ -104,20 +104,30 @@ function fakeFirestore(initial = {}) {
     };
   }
 
-  function query(path, filters = [], max = Infinity) {
+  function query(path, filters = [], max = Infinity, order = null) {
     const depth = path.split("/").length + 1;
-    const matches = () =>
-      [...store.keys()]
+    const key = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : v);
+    const matches = () => {
+      const paths = [...store.keys()]
         .filter((p) => p.startsWith(`${path}/`) && p.split("/").length === depth)
-        .filter((p) => filters.every(([f, v]) => snap(p).get(f) === v))
-        .slice(0, max)
-        .map(snap);
+        .filter((p) => filters.every(([f, v]) => snap(p).get(f) === v));
+      if (order) {
+        const [field, dir] = order;
+        paths.sort((a, b) => {
+          const x = key(snap(a).get(field));
+          const y = key(snap(b).get(field));
+          return (x < y ? -1 : x > y ? 1 : 0) * (dir === "desc" ? -1 : 1);
+        });
+      }
+      return paths.slice(0, max).map(snap);
+    };
     const q = {
       where: (field, op, value) => {
         if (op !== "==") throw new Error(`fake: only == is supported, not ${op}`);
-        return query(path, [...filters, [field, value]], max);
+        return query(path, [...filters, [field, value]], max, order);
       },
-      limit: (n) => query(path, filters, n),
+      limit: (n) => query(path, filters, n, order),
+      orderBy: (field, dir = "asc") => query(path, filters, max, [field, dir]),
       count: () => ({ get: async () => ({ data: () => ({ count: matches().length }) }) }),
       get: async () => {
         const docs = matches();

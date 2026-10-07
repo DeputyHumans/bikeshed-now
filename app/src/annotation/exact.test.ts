@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // A suggestion replaces exactly what it quoted, or nothing (SPEC §22).
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { rangeFromAnchor } from "./anchor";
 import { alreadyApplied, exactRangeFromAnchor, suggestibleRange, trimToText } from "./exact";
@@ -161,4 +163,44 @@ describe("trimToText", () => {
     spaces.setEnd(text, 4);
     expect(trimToText(spaces)).toBe(spaces);
   });
+});
+
+describe("the golden quote cases, shared with the server", () => {
+  /**
+   * The server finds an agent's quote without a DOM (functions/src/lib/quote.ts)
+   * and stores the anchor it found; this resolver must then find it in the
+   * real one. Both read one fixture, so neither can move alone.
+   */
+  const file = join(__dirname, "..", "..", "..", "functions", "test", "fixtures", "quote-vectors.json");
+  const { cases } = JSON.parse(readFileSync(file, "utf8")) as {
+    cases: {
+      name: string;
+      html: string;
+      exact: string;
+      prefix?: string;
+      suffix?: string;
+      expect: { ok?: boolean; prefix?: string; suffix?: string; error?: string };
+    }[];
+  };
+
+  it("has cases to agree on", () => {
+    expect(cases.length).toBeGreaterThan(8);
+  });
+
+  for (const c of cases) {
+    it(c.name, () => {
+      const doc = new DOMParser().parseFromString(c.html, "text/html");
+      if (c.expect.ok) {
+        const anchor = { elementId: "", exact: c.exact, prefix: c.expect.prefix!, suffix: c.expect.suffix!, start: 0, end: 0 };
+        const range = exactRangeFromAnchor(doc, anchor);
+        expect(range?.toString().replace(/\s+/g, " ").trim()).toBe(c.exact);
+        expect(suggestibleRange(range!)).toBe(true);
+      } else {
+        // Whatever the server refused, the browser would not apply either.
+        const anchor = { elementId: "", exact: c.exact, prefix: c.prefix ?? "", suffix: c.suffix ?? "", start: 0, end: 0 };
+        const range = exactRangeFromAnchor(doc, anchor);
+        expect(range === null || suggestibleRange(range) !== true).toBe(true);
+      }
+    });
+  }
 });

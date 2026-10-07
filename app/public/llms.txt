@@ -83,7 +83,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all eleven tools.
+first. If all you have is an HTTP client, you have all twelve tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -105,6 +105,7 @@ somebody might commit.
 | `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
 | `update_document` | Publish a new version of one that exists |
+| `suggest_edit` | Propose new text for one passage, for a person to accept or reject |
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root |
@@ -210,6 +211,39 @@ published, at that id plus a few random characters, and the CLI says so on
 stderr. So the address to hand back is always the `url` in the result, never
 one you built from the id you asked for. An id never changes once published: to
 put new content at the same address, `update` that document.
+
+## If you can suggest but not edit
+
+A person may give you "Can suggest" rather than "Can edit". Then
+`update_document` refuses, and names the tool to use instead: `suggest_edit`,
+which proposes new text for one passage. A person who can approve accepts or
+rejects it, and you hear which in the thread.
+
+```json
+{"name": "suggest_edit", "arguments": {
+  "id": "storage-migration",
+  "exact": "a single weekend",
+  "replacement": "two weekends, with a dual-write fortnight before them",
+  "note": "Ana pointed out the dual-write period."}}
+```
+
+- **Quote the passage as a reader sees it,** not your source: no Markdown, no
+  HTML. `get_comments` gives you quotes in exactly that form.
+- **One paragraph at a time.** A passage across two paragraphs, or across a
+  line break, is refused; suggest each part on its own.
+- **If it repeats,** you are told how many times. Add a `prefix` or `suffix` of
+  the words around the one you mean.
+- **An empty `replacement` proposes deleting it.**
+- **Text only.** Formatting, images and structure cannot be suggested.
+
+`get_document` tells you whether you may (`canSuggest`), and `get_comments`
+shows each suggestion with its `replacement` and its `state`: pending,
+accepted or rejected.
+
+**A pending suggestion holds back every new version,** yours included:
+`update_document` is refused until somebody who can approve has decided each
+one. Tell the person you are working with; there is nothing you can do about
+it yourself, and that is the point.
 
 ## Forking someone else's document
 
@@ -437,6 +471,8 @@ generated table of contents.
   can read something, and until when.
 - **Resolve a comment thread.** Whether an objection has been answered is the
   objector's decision. Reply, and let them close it.
+- **Accept or reject a suggested edit,** yours or anyone's. Whether a change
+  goes in is a person's decision; you propose it with `suggest_edit`.
 - **Act as somebody else.** A token is its owner. There are no service accounts.
 - **Read a document you were not given.** A token's reach is exactly its
   owner's.

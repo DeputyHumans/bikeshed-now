@@ -40,6 +40,7 @@ import {
   canEditFolder,
   canManageSharing,
   canRead,
+  canSuggest,
   expiryMs,
   isDocEditor,
   isExpired,
@@ -59,6 +60,8 @@ import {
 } from "../lib/folders";
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
+import { locateQuote } from "../lib/quote";
+import { SUGGESTION_COLOR, createSuggestion, parseNote } from "../lib/suggestions";
 import { MAX_BUNDLE_BYTES } from "../config";
 
 type Db = admin.firestore.Firestore;
@@ -389,6 +392,7 @@ export const TOOLS: ToolDefinition[] = [
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
         canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         forked: data.forked === true,
         // Ahead of the source, not after it: an agent reads this result as JSON
         // text in key order, and a flag after 200,000 characters of source is a
@@ -543,7 +547,13 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-      if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot edit that document");
+      if (!canEdit(data, ctx.caller, proof)) {
+        throw new Error(
+          canSuggest(data, ctx.caller, proof)
+            ? "you cannot edit that document, but you can suggest an edit to it with suggest_edit; a person accepts or rejects it"
+            : "you cannot edit that document",
+        );
+      }
       refuseIfExpired(data);
       const content = String(args.content ?? "");
       if (!content.trim()) throw new Error("content is empty");
@@ -572,6 +582,85 @@ export const TOOLS: ToolDefinition[] = [
       // The id comes from the document, not from the result: an update result is
       // about a version and does not name the document it belongs to.
       return withReaderAddress(committed, ref.id);
+    },
+  },
+
+  {
+    name: "suggest_edit",
+    description:
+      "Propose replacing a passage of a document's current version with new text, for a person to accept or reject. " +
+      "Quote the passage exactly as a reader sees it — no Markdown or HTML — within one paragraph. " +
+      "An empty replacement proposes deleting it. If the passage occurs more than once, add a few words " +
+      "before it (prefix) or after it (suffix). Accepting or rejecting is a person's decision; there is no tool for it.",
+    inputSchema: {
+      type: "object",
+      // `replacement` is required in practice but not listed: an empty string
+      // is a deletion, and the protocol layer treats "" as a missing argument.
+      required: ["id", "exact"],
+      properties: {
+        id: { type: "string" },
+        exact: { type: "string", description: "The passage, as a reader sees it, within one paragraph." },
+        replacement: { type: "string", description: "What it should say instead. Empty proposes deleting it." },
+        prefix: { type: "string", description: "Words just before the passage, to say which one when it repeats." },
+        suffix: { type: "string", description: "Words just after the passage, to say which one when it repeats." },
+        note: { type: "string", description: "Why, for whoever decides. Optional." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      if (!canSuggest(data, ctx.caller, proof)) throw new Error("you cannot suggest edits to that document");
+      refuseIfExpired(data);
+      if (typeof args.replacement !== "string") {
+        throw new Error("replacement is required: the new text, or an empty string to propose deleting the passage");
+      }
+      const note = parseNote(args.note);
+      if (typeof note !== "string") throw new Error(note.error);
+
+      // Found in the RENDERED entry, which is what a reader reads and what the
+      // browser will look in: for a Markdown document, its HTML, not its source.
+      const versionId = String(data.currentVersion ?? "");
+      const vSnap = await ref.collection("versions").doc(versionId).get();
+      const entry = String(vSnap.data()?.entry ?? "index.html");
+      let html = "";
+      try {
+        const [bytes] = await admin.storage().bucket(bucketName()).file(`docs/${ref.id}/${versionId}/${entry}`).download();
+        html = bytes.toString("utf8");
+      } catch {
+        throw new Error("could not read the current version");
+      }
+
+      const located = locateQuote(html, {
+        exact: String(args.exact ?? ""),
+        prefix: typeof args.prefix === "string" ? args.prefix : undefined,
+        suffix: typeof args.suffix === "string" ? args.suffix : undefined,
+      });
+      if ("error" in located) {
+        throw new Error(
+          located.error === "ambiguous"
+            ? `that passage occurs ${located.count} times; add a prefix or suffix of the words around the one you mean`
+            : located.error === "crosses-block"
+              ? "a suggestion changes text within one paragraph, and that passage spans more than one, or a line break; suggest each part on its own"
+              : "that passage is not in the current version; quote it as a reader sees it, without Markdown or HTML, within one paragraph",
+        );
+      }
+
+      const created = await createSuggestion({
+        db: ctx.db,
+        docRef: ref,
+        versionId,
+        anchor: located.anchor,
+        replacement: args.replacement,
+        note,
+        author: { uid: ctx.caller.uid, emailLower: ctx.caller.emailLower },
+        actor: ctx.actor,
+        color: SUGGESTION_COLOR,
+      });
+      if ("status" in created) throw new Error(created.error);
+      return withReaderAddress({ threadId: created.annId, version: versionId, quote: located.anchor.exact }, ref.id);
     },
   },
 
@@ -721,14 +810,29 @@ export const TOOLS: ToolDefinition[] = [
           quote: String(ann.anchor?.exact ?? ""),
           section: String(ann.anchor?.elementId ?? ""),
           resolved: ann.resolved === true,
-          comments: comments.docs.map((c) => {
-            const v = c.data();
-            return {
-              author: v.authorEmail,
-              via: (v.actor as Actor | undefined)?.channel ?? "web",
-              body: v.body,
-            };
-          }),
+          // A suggested edit: what the quote would become ("" deletes it), and
+          // whether a person has accepted or rejected it yet (SPEC §22).
+          ...(ann.suggestion
+            ? {
+                suggestion: {
+                  replacement: String(ann.suggestion.replacement ?? ""),
+                  state: String(ann.suggestion.state ?? "pending"),
+                },
+              }
+            : {}),
+          comments: comments.docs
+            // The server's restatement of a suggestion says nothing the
+            // `suggestion` field does not; a note its author wrote, and every
+            // decision, are kept.
+            .filter((c) => !(c.data().opensSuggestion === true && c.data().generated === true))
+            .map((c) => {
+              const v = c.data();
+              return {
+                author: v.authorEmail,
+                via: (v.actor as Actor | undefined)?.channel ?? "web",
+                body: v.body,
+              };
+            }),
         });
       }
       return { id: ref.id, version: versionId, threads };

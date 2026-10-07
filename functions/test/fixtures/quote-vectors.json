@@ -1,0 +1,78 @@
+{
+  "$comment": "Golden cases for finding an agent's quote (SPEC §22). functions/test/quote.test.js asserts locateQuote gives exactly `expect`; app/src/annotation/exact.test.ts asserts the browser's strict resolver finds `exact` with the anchor every `ok` case yields. Both sides read this file, so a change to either resolver that breaks agreement fails a test — the shared-fixture discipline of the hash pair (SPEC §9.1).",
+  "cases": [
+    {
+      "name": "a quote across inline markup",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><section id=\"s1\"><h2>Plan</h2><p>We can cut over in a <em>single</em> weekend, without downtime.</p></section></body></html>",
+      "exact": "a single weekend",
+      "expect": { "ok": true, "prefix": "We can cut over in ", "suffix": ", without downtime." }
+    },
+    {
+      "name": "entities are text once decoded",
+      "html": "<body><p>Fish &amp; chips&nbsp;today, &quot;fresh&quot;.</p></body>",
+      "exact": "Fish & chips today",
+      "expect": { "ok": true, "prefix": "", "suffix": ", \"fresh\"." }
+    },
+    {
+      "name": "reflowed whitespace is the same text",
+      "html": "<body><p>cut\n      over   in\ta weekend</p></body>",
+      "exact": "cut over in a weekend",
+      "expect": { "ok": true, "prefix": "", "suffix": "" }
+    },
+    {
+      "name": "a repeat with nothing to tell them apart",
+      "html": "<body><p>yes and yes</p></body>",
+      "exact": "yes",
+      "expect": { "error": "ambiguous", "count": 2 }
+    },
+    {
+      "name": "a repeat told apart by the context the agent gave",
+      "html": "<body><p>yes and yes</p></body>",
+      "exact": "yes",
+      "suffix": " and",
+      "expect": { "ok": true, "prefix": "", "suffix": " and yes" }
+    },
+    {
+      "name": "a quote across two paragraphs",
+      "html": "<body><p>the first para</p>\n<p>second para here</p></body>",
+      "exact": "para second",
+      "expect": { "error": "crosses-block" }
+    },
+    {
+      "name": "a quote across a line break",
+      "html": "<body><p>line one<br>line two</p></body>",
+      "exact": "one line",
+      "expect": { "error": "crosses-block" }
+    },
+    {
+      "name": "text inside a figure is not prose to suggest on",
+      "html": "<body><p>A chart:</p><svg viewBox=\"0 0 10 10\"><text x=\"1\" y=\"5\">label</text></svg></body>",
+      "exact": "label",
+      "expect": { "error": "not-found" }
+    },
+    {
+      "name": "the same word in a script is not a second reading, but context keeps the browser right",
+      "html": "<body><p>run it twice</p><script>var run = 1;</script></body>",
+      "exact": "run",
+      "expect": { "ok": true, "prefix": "", "suffix": " it twice" }
+    },
+    {
+      "name": "markup inside an attribute is not text",
+      "html": "<body><p title=\"a > b\">one <a href=\"#x\" data-note='c > d'>linked</a> word</p></body>",
+      "exact": "one linked word",
+      "expect": { "ok": true, "prefix": "", "suffix": "" }
+    },
+    {
+      "name": "a comment is not text",
+      "html": "<body><p>before<!-- hidden note --> after</p></body>",
+      "exact": "before after",
+      "expect": { "ok": true, "prefix": "", "suffix": "" }
+    },
+    {
+      "name": "a passage nobody wrote",
+      "html": "<body><p>Something else entirely.</p></body>",
+      "exact": "original words",
+      "expect": { "error": "not-found" }
+    }
+  ]
+}

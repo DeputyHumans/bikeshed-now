@@ -152,8 +152,8 @@ a written argument in a pull request, not a dependency.
 - **No OAuth 2.1 for the agent surface.** Personal access tokens, ~120 lines,
   revocable by someone who has never heard of OAuth.
 - **No destructive or sharing tools on the agent surface.** It can list, create,
-  fork and move; it cannot delete a folder, rename one, share anything, or resolve a
-  comment thread. Each is a decision a person makes, and each is stated to the
+  fork, move and suggest; it cannot delete a folder, rename one, share anything,
+  resolve a comment thread, or accept or reject a suggestion. Each is a decision a person makes, and each is stated to the
   agent in `docs/agents/agent-guide.md` rather than left to be discovered as a refusal.
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are

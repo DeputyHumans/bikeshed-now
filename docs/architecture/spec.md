@@ -1781,7 +1781,7 @@ PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked
 by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
-### MCP — eleven tools
+### MCP — twelve tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1793,14 +1793,15 @@ client onboarding is ever wanted.
 | `fork_document` | copy a version of a document the caller can read into one they own (§21) |
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
 | `update_document` | commit a new version of an existing document |
+| `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
 | `get_comments` | **unresolved feedback, each with its anchored quote** |
 | `reply_to_comment` | respond in a thread |
 
-`get_document`, `update_document`, `get_comments` and `reply_to_comment` take an
-optional `k`: an unlisted document's key, for a caller who is not a member and
+`get_document`, `update_document`, `suggest_edit`, `get_comments` and
+`reply_to_comment` take an optional `k`: an unlisted document's key, for a caller who is not a member and
 whose account holds no link grant. Without it such a document answers exactly as
 an id that does not exist (§17). The CLI accepts the link itself wherever it
 takes an id, because the link is the only place a person holds the key.
@@ -1847,6 +1848,19 @@ Three things are deliberately **absent** from the surface, and each is a stated
 refusal rather than a gap: deleting a folder (it reparents everything beneath
 it), renaming one, and sharing anything. `functions/test/mcp.test.js` asserts no
 tool name matches `delete|remove|share|grant|access`.
+
+**An agent proposes and never decides.** `suggest_edit` takes the passage as a
+reader sees it — no markup — and finds it in the current version's RENDERED
+entry without a DOM (`lib/quote.ts`): exactly, inside one block, with a prefix
+or suffix to choose between repeats. It refuses a passage that is not there,
+that repeats with nothing to tell the copies apart, or that spans a block or a
+line break, each with what to do instead. The anchor it stores is the one the
+browser's strict resolver will find; a fixture of golden cases is asserted by
+both (§22). Accepting and rejecting have no tool, and every decision op of
+`/suggestion` refuses a token; `functions/test/suggest-edit.test.js` asserts no
+tool name matches `accept|reject|approve|resolve|decide`. `get_comments` reports
+a suggestion's `replacement` and `state`; `get_document` reports `canSuggest`;
+and `update_document` from a caller who may only suggest names `suggest_edit`.
 
 One resolver authorizes every "put this inside that folder" in the system —
 `resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
@@ -1932,7 +1946,7 @@ believes it.
 OAuth 2.1 flows · service accounts · webhooks · a REST API distinct from these
 endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
 deletion, folder renaming or sharing through the agent surface · resolving a
-comment thread from an agent.
+comment thread from an agent · accepting or rejecting a suggested edit from an agent.
 
 ---
 

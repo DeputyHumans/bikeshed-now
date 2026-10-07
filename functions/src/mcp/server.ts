@@ -57,7 +57,9 @@ export const INSTRUCTIONS =
   "about, so you can revise without fetching and diffing the whole document. A " +
   "new document is readable by its owner and by the members of any folder it is " +
   "filed in, until a person shares it; nothing here shares, deletes or sets an " +
-  "expiry, and a document's own scripts stay sandboxed until its owner trusts it.";
+  "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +
+  "Where you may suggest but not edit, propose a change with suggest_edit; a " +
+  "person accepts or rejects it.";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
