@@ -4,6 +4,7 @@
 import * as admin from "firebase-admin";
 import * as React from "react";
 import { COMMENT_EMAIL_COOLDOWN_MS, publicOrigin } from "../config";
+import type { Role } from "../lib/access";
 import { documentUrl, sendEmail } from "./send";
 import { Invite, inviteText, type InviteProps } from "./templates/Invite";
 import { Verify, verifyText } from "./templates/Verify";
@@ -70,7 +71,7 @@ export async function uidForEmail(
 
 export interface InviteTarget {
   email: string;
-  role: "viewer" | "editor";
+  role: Role;
 }
 
 /**

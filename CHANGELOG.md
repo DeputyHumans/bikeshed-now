@@ -14,6 +14,19 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Two more roles: "Can suggest" and "Can approve".** Access now has four
+  levels. Each one can do everything the one below it can. A suggester can
+  read a document and propose edits to it for someone else to decide on. An
+  approver can edit, and also accept or reject other people's suggestions. A
+  role can be granted on a document, a folder or a team, and it is inherited
+  the way reading and editing already are. `POST /access`, `POST
+  /folder-access` and `set-access.mjs --role` accept both new roles, and an
+  invitation says what the role allows (SPEC §13, §18).
+
 ## 0.5.2 — 2026-10-06
 
 ### Fixed

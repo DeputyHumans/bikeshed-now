@@ -49,6 +49,8 @@ const OWNER = { uid: "u-owner", email: "owner@example.com" };
 const EDITOR = { uid: "u-editor", email: "ed@example.com" };
 const VIEWER = { uid: "u-viewer", email: "viewer@example.com" };
 const STRANGER = { uid: "u-stranger", email: "stranger@example.com" };
+const SUGGESTER = { uid: "u-suggester", email: "sug@example.com" };
+const APPROVER = { uid: "u-approver", email: "appr@example.com" };
 const OUTSIDER = { uid: "u-outsider", email: "someone@evil.example.com" };
 /** Opened the unlisted document with its current key. */
 const GRANTED = { uid: "u-granted", email: "granted@example.com" };
@@ -126,6 +128,26 @@ describe("firestore rules", () => {
       await setDoc(doc(db, "docs/private-doc/viewers/u-viewer"), { uid: VIEWER.uid, views: 1 });
       await setDoc(doc(db, "docs/private-doc/views/s1"), { sessionId: "s1", uid: VIEWER.uid });
       await setDoc(doc(db, "docs/private-doc/acl/e1"), { at: new Date(), added: [] });
+
+      // The four-role ladder (SPEC §13). The approver is deliberately NOT in
+      // editorMembers here, so the direct `approvers` clause is what is tested.
+      await setDoc(doc(db, "docs/ladder-doc"), {
+        docId: "ladder-doc",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        currentVersion: "v1",
+        viewers: [],
+        suggesters: [SUGGESTER.email],
+        editors: [],
+        approvers: [APPROVER.email],
+        members: [OWNER.email, SUGGESTER.email, APPROVER.email],
+        suggesterMembers: [OWNER.email, SUGGESTER.email, APPROVER.email],
+        editorMembers: [OWNER.email],
+        approverMembers: [OWNER.email, APPROVER.email],
+        visibility: "private",
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/ladder-doc/viewers/u-suggester"), { uid: SUGGESTER.uid, views: 1 });
 
       // A document whose members entry is stored with the wrong case.
       await setDoc(doc(db, "docs/mixedcase-doc"), {
@@ -562,6 +584,16 @@ describe("firestore rules", () => {
     const viewer = verified(env, VIEWER).firestore();
     await assertFails(getDoc(doc(viewer, "docs/private-doc/viewers/u-viewer")));
     await assertFails(getDoc(doc(viewer, "docs/private-doc/views/s1")));
+  });
+
+  it("an approver reads what editors read, and a suggester reads what viewers read", async () => {
+    // An approver edits — accepting a suggestion is an edit (SPEC §13) — so the
+    // rules must count a direct approver as an editor, exactly as acl.ts does.
+    const approver = verified(env, APPROVER).firestore();
+    await assertSucceeds(getDoc(doc(approver, "docs/ladder-doc/viewers/u-suggester")));
+    const suggester = verified(env, SUGGESTER).firestore();
+    await assertSucceeds(getDoc(doc(suggester, "docs/ladder-doc")));
+    await assertFails(getDoc(doc(suggester, "docs/ladder-doc/viewers/u-suggester")));
   });
 
   it("nobody writes statistics from a client", async () => {

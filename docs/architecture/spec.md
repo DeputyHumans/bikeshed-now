@@ -277,17 +277,19 @@ The key travels in the body, never the query, so it stays out of request logs.
 same round trip as the document whether or not either exists.
 
 ### `POST /access`
-Body `{ docId, add?: [{ email, role: "viewer"|"editor" }], remove?: string[] }`.
-`add` entries accept a plain email or a `team:{teamId}` grant (§18).
+Body `{ docId, add?: [{ email, role }], remove?: string[] }`, where `role` is
+`"viewer"`, `"suggester"`, `"editor"` or `"approver"` (§13). `add` entries
+accept a plain email or a `team:{teamId}` grant (§18).
 
 Owner-only. Applies deltas with set semantics (one role per principal; the owner
 is never removed and never stored in a role), expands team grants, folds in the
-parent folder chain, and writes `{ viewers, editors, members, editorMembers,
-updatedAt }` via the Admin SDK. Records an entry in `docs/{docId}/acl` with the
-acting `Actor` (§17). Syncs the presence mirror (§16) and the public projection
-(§17).
+parent folder chain, and writes the four grant lists `{ viewers, suggesters,
+editors, approvers }`, the four effective sets `{ members, suggesterMembers,
+editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. Records an
+entry in `docs/{docId}/acl` with the acting `Actor` (§17). Syncs the presence
+mirror (§16) and the public projection (§17).
 
-`200 { viewers, editors, members }`.
+`200 { viewers, suggesters, editors, approvers, members }`.
 
 ### `POST /draft`, `GET /draft/**`, `POST /commit`
 Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
@@ -411,14 +413,18 @@ while that is still `linkToken`, so rotating the link revokes every grant
 without touching one. Written only by `POST /unlock`; no client reads or writes
 it (§17).
 
-**`members`** is the EFFECTIVE read set: the union of `ownerEmail`, direct
-`viewers` and `editors`, the parent folder chain's grants, and the expansion of
-any `team:{id}` grant — all lowercased. It is the array the doc list queries.
-The owner is always in it. `viewers`/`editors` remain the DIRECT grants and are
-the record of intent; `members` is the record of reality.
+**`members`** is the EFFECTIVE read set: the union of `ownerEmail`, every
+direct grant list, the parent folder chain's grants, and the expansion of any
+`team:{id}` grant — all lowercased. It is the array the doc list queries. The
+owner is always in it. `viewers`, `suggesters`, `editors` and `approvers` remain
+the DIRECT grants and are the record of intent; `members` is the record of
+reality.
 
-**`editorMembers`** is the EFFECTIVE editor set. Missing on legacy records ⇒
-fall back to `editors`.
+**`suggesterMembers`**, **`editorMembers`** and **`approverMembers`** are the
+EFFECTIVE sets of the three upper roles, each containing the one above it
+(§13). `editorMembers` missing on legacy records ⇒ fall back to `editors`; the
+other two missing ⇒ empty, which is correct, since nobody held those roles
+before the sets existed.
 
 **`trusted`** is GLOBAL trust: it controls whether the viewer sandboxes the
 content iframe FOR EVERY READER. Every publish through `publishNewDocument` —
@@ -1050,9 +1056,26 @@ Documents organize into nested folders with their own sharing. Inheritance is
 **denormalized, not resolved at read time**:
 
 ```
-members       = union(self owner/viewers/editors, parent.members)
-editorMembers = union(self owner/editors,         parent.editorMembers)
+approverMembers  = union(self owner,       self approvers,  parent.approverMembers)
+editorMembers    = union(approverMembers,  self editors,    parent.editorMembers)
+suggesterMembers = union(editorMembers,    self suggesters, parent.suggesterMembers)
+members          = union(suggesterMembers, self viewers,    parent.members)
 ```
+
+Four roles, one per principal, each able to do everything below it:
+
+| Role | Grant list | Adds |
+|---|---|---|
+| viewer | `viewers` | read, comment |
+| suggester | `suggesters` | propose a text change for someone else to decide on |
+| editor | `editors` | edit live, publish a version |
+| approver | `approvers` | accept or reject suggestions |
+
+Each set is built on the one above it, so `approverMembers ⊆ editorMembers ⊆
+suggesterMembers ⊆ members` holds by construction, even under a parent whose
+record predates a set. An approver is an editor because accepting a suggestion
+is replayed as an edit in their own session; the reverse would make a role
+that could accept text it could not type.
 
 Because each node only needs its DIRECT parent's already-computed arrays, the
 cascade is a single BFS (`recomputeSubtree`), parent before child. Any
@@ -1285,7 +1308,8 @@ somebody PUBLISHED a new version while you were editing. It never described
 concurrent drafts, and no longer has to.
 
 Writes to the shared log are gated by `editAccess/{docId}`, a second mirror, of
-`editorMembers`. A **public** open-editing document also carries the key `*`:
+`editorMembers` — approvers included, since that set contains them (§13). A
+suggester is not in it, and never joins the shared log. A **public** open-editing document also carries the key `*`:
 any verified account. An **unlisted** one never does. The realtime rules cannot
 see a link's key, so `*` there would let any account write into a document it
 cannot name; its link holders edit through `/draft` instead, which can check
@@ -1633,9 +1657,10 @@ side by side.
 
 ### Grants record intent; effective sets record reality
 
-`viewers[]` / `editors[]` gain entries of the form `team:{teamId}` alongside
-plain emails, and the server **expands them at write time** into the flat
-`members[]` / `editorMembers[]` sets it already computes:
+Every grant list — `viewers[]`, `suggesters[]`, `editors[]`, `approvers[]` —
+takes entries of the form `team:{teamId}` alongside plain emails, and the server
+**expands them at write time** into the flat effective sets it already computes
+(§13):
 
 ```
 viewers: ["ana@example.com", "team:design"]     ← the durable grant

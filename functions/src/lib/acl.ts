@@ -19,8 +19,12 @@ export interface DocAclData {
   ownerUid?: string | null;
   ownerEmail?: string | null;
   members?: unknown;
+  suggesters?: unknown;
+  suggesterMembers?: unknown;
   editors?: unknown;
   editorMembers?: unknown;
+  approvers?: unknown;
+  approverMembers?: unknown;
   visibility?: unknown;
   publicEdit?: unknown;
   expiresAt?: unknown;
@@ -249,7 +253,52 @@ export function isDocEditor(
     return true;
   }
   if (includesEmail(doc.editors, emailLower)) return true;
+  // An approver edits: accepting a suggestion is replayed as an edit in their
+  // own session (SPEC §13). `editorMembers` already holds them; the direct list
+  // is checked too, as `editors` is, for a record written before that set was.
+  if (includesEmail(doc.approvers, emailLower)) return true;
   return includesEmail(doc.editorMembers, emailLower);
+}
+
+/**
+ * May this person decide on a suggestion — accept or reject it (SPEC §13)?
+ *
+ * The owner, and approvers direct or inherited. Never widened by open editing
+ * or by a link: deciding what someone else proposed is a role somebody was
+ * given, not something reachable by holding a URL.
+ */
+export function isDocApprover(
+  doc: DocAclData | undefined | null,
+  uid: string,
+  emailLower: string,
+): boolean {
+  if (!doc) return false;
+  if (doc.ownerUid != null && uid === doc.ownerUid) return true;
+  if (
+    typeof doc.ownerEmail === "string" &&
+    doc.ownerEmail.toLowerCase() === emailLower
+  ) {
+    return true;
+  }
+  if (includesEmail(doc.approvers, emailLower)) return true;
+  return includesEmail(doc.approverMembers, emailLower);
+}
+
+/**
+ * May this caller propose a change for someone else to decide on?
+ *
+ * Suggesters, and everyone who may edit — including an open editor, who could
+ * make the change outright and so loses nothing by being allowed to propose it.
+ */
+export function canSuggest(
+  doc: DocAclData | undefined | null,
+  caller: { uid: string; emailLower: string } | null,
+  proof: LinkProof = NO_PROOF,
+): boolean {
+  if (!doc || !caller) return false;
+  if (includesEmail(doc.suggesters, caller.emailLower)) return true;
+  if (includesEmail(doc.suggesterMembers, caller.emailLower)) return true;
+  return canEdit(doc, caller, proof);
 }
 
 /**

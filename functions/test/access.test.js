@@ -7,12 +7,14 @@ const assert = require("node:assert/strict");
 const {
   canEdit,
   canManageSharing,
+  canSuggest,
   canManageTeam,
   canRead,
   canEditFolder,
   canManageFolder,
   canReadFolder,
   expiryMs,
+  isDocApprover,
   isDocEditor,
   isExpired,
   isMember,
@@ -252,7 +254,92 @@ test("a team is managed by its owner or an admin", () => {
   assert.equal(isTeamMember(team, STRANGER.emailLower), false);
 });
 
+// --- Suggesting and deciding (SPEC §13) -------------------------------------
+
+const SUGGESTER = { uid: "u-suggester", emailLower: "sug@example.com" };
+const APPROVER = { uid: "u-approver", emailLower: "appr@example.com" };
+
+function ladderDoc(overrides = {}) {
+  return doc({
+    suggesters: [SUGGESTER.emailLower],
+    approvers: [APPROVER.emailLower],
+    members: [OWNER, VIEWER, SUGGESTER, EDITOR, APPROVER].map((c) => c.emailLower),
+    suggesterMembers: [OWNER, SUGGESTER, EDITOR, APPROVER].map((c) => c.emailLower),
+    editorMembers: [OWNER, EDITOR, APPROVER].map((c) => c.emailLower),
+    approverMembers: [OWNER, APPROVER].map((c) => c.emailLower),
+    ...overrides,
+  });
+}
+
+test("suggesting is for suggesters and everyone who may edit", () => {
+  const d = ladderDoc();
+  assert.equal(canSuggest(d, VIEWER), false);
+  assert.equal(canSuggest(d, SUGGESTER), true);
+  assert.equal(canSuggest(d, EDITOR), true);
+  assert.equal(canSuggest(d, APPROVER), true);
+  assert.equal(canSuggest(d, OWNER), true);
+  assert.equal(canSuggest(d, STRANGER), false);
+  assert.equal(canSuggest(d, null), false, "anonymous never suggests");
+});
+
+test("an inherited suggester suggests through suggesterMembers alone", () => {
+  const d = ladderDoc({ suggesters: [], suggesterMembers: [SUGGESTER.emailLower] });
+  assert.equal(canSuggest(d, SUGGESTER), true);
+});
+
+test("an open editor may suggest, having been able to make the change outright", () => {
+  const d = ladderDoc({ visibility: "public", publicEdit: true });
+  assert.equal(canSuggest(d, STRANGER), true);
+});
+
+test("deciding on a suggestion is for the owner and approvers, and nobody it was widened to", () => {
+  const d = ladderDoc({ visibility: "public", publicEdit: true });
+  assert.equal(isDocApprover(d, OWNER.uid, OWNER.emailLower), true);
+  assert.equal(isDocApprover(d, APPROVER.uid, APPROVER.emailLower), true);
+  assert.equal(isDocApprover(d, EDITOR.uid, EDITOR.emailLower), false, "an editor is not an approver");
+  assert.equal(isDocApprover(d, SUGGESTER.uid, SUGGESTER.emailLower), false);
+  assert.equal(isDocApprover(d, STRANGER.uid, STRANGER.emailLower), false, "open editing never reaches deciding");
+});
+
+test("an inherited approver decides through approverMembers alone", () => {
+  const d = ladderDoc({ approvers: [], approverMembers: [OWNER.emailLower, "folder@example.com"] });
+  assert.equal(isDocApprover(d, "u-folder", "folder@example.com"), true);
+});
+
+test("an approver edits, through the direct list as well as the effective set", () => {
+  // Accepting a suggestion is an edit in the approver's own session, so an
+  // approver who could not edit could not accept anything.
+  const d = ladderDoc({ editorMembers: [OWNER.emailLower, EDITOR.emailLower] });
+  assert.equal(isDocEditor(d, APPROVER.uid, APPROVER.emailLower), true);
+  assert.equal(canEdit(d, APPROVER), true);
+  assert.equal(isDocEditor(d, SUGGESTER.uid, SUGGESTER.emailLower), false);
+});
+
 // --- Grant algebra ---------------------------------------------------------
+
+test("a principal holds exactly one role, across all four lists", () => {
+  let state = applyAccessDelta({}, OWNER.emailLower, {
+    add: [{ principal: "a@example.com", role: "suggester" }],
+    remove: [],
+  });
+  assert.deepEqual(state, { viewers: [], suggesters: ["a@example.com"], editors: [], approvers: [] });
+  state = applyAccessDelta(state, OWNER.emailLower, {
+    add: [{ principal: "a@example.com", role: "approver" }],
+    remove: [],
+  });
+  assert.deepEqual(state, { viewers: [], suggesters: [], editors: [], approvers: ["a@example.com"] });
+  state = applyAccessDelta(state, OWNER.emailLower, { add: [], remove: ["a@example.com"] });
+  assert.deepEqual(state, { viewers: [], suggesters: [], editors: [], approvers: [] });
+});
+
+test("every role is accepted on the wire, and a refusal names them all", () => {
+  for (const role of ["viewer", "suggester", "editor", "approver"]) {
+    const parsed = parseAccessDelta({ add: [{ email: "a@example.com", role }] });
+    assert.ok("delta" in parsed, role);
+  }
+  const bad = parseAccessDelta({ add: [{ email: "a@example.com", role: "owner" }] });
+  assert.match(bad.error, /"viewer", "suggester", "editor", "approver"/);
+});
 
 test("a principal holds exactly one role", () => {
   const next = applyAccessDelta(

@@ -2,6 +2,7 @@
 // "Someone shared a document with you" (SPEC §14).
 
 import { Button, Text } from "@react-email/components";
+import type { Role } from "../../lib/access";
 import { Layout, textStyles } from "./Layout";
 
 /**
@@ -20,12 +21,25 @@ export interface InviteProps {
   /** The document or folder title, or the team name. */
   subjectTitle: string;
   kind: "document" | "folder" | "team";
-  role: "viewer" | "editor";
+  role: Role;
   url: string;
 }
 
+/** What a role lets its holder do with `what`, as the rest of "You can now …". */
+export function accessPhrase(role: Role, what: string): string {
+  switch (role) {
+    case "approver":
+      return `edit ${what}, and accept or reject the edits other people suggest`;
+    case "editor":
+      return `edit ${what}`;
+    case "suggester":
+      return `read ${what} and suggest edits to it`;
+    default:
+      return `read ${what}`;
+  }
+}
+
 export function Invite({ origin, inviterEmail, subjectTitle, kind, role, url }: InviteProps) {
-  const verb = role === "editor" ? "edit" : "read";
   const what =
     kind === "team"
       ? `the ${subjectTitle} team`
@@ -38,7 +52,7 @@ export function Invite({ origin, inviterEmail, subjectTitle, kind, role, url }: 
     >
       <Text style={textStyles.heading}>{inviterEmail} shared something with you</Text>
       <Text style={textStyles.paragraph}>
-        You can now {verb} {what}.
+        You can now {accessPhrase(role, what)}.
         {kind === "team"
           ? " That includes everything shared with the team, now and later."
           : ""}
@@ -60,7 +74,7 @@ export function inviteText(p: InviteProps): string {
   return [
     `${p.inviterEmail} shared ${what} with you on Bikeshed.`,
     ``,
-    `You can ${p.role === "editor" ? "edit" : "read"} it here:`,
+    `You can now ${accessPhrase(p.role, "it")}. Open it here:`,
     p.url,
     ``,
     `Sign in with the address this message was sent to.`,

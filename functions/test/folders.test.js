@@ -11,7 +11,79 @@ const { emptyGrants } = require("../lib/lib/access.js");
 const OWNER = "owner@example.com";
 
 /** A grants record with every role's list present, overriding only what a case names. */
-const g = (viewers = [], editors = []) => ({ ...emptyGrants(), viewers, editors });
+const g = (viewers = [], editors = [], more = {}) => ({ ...emptyGrants(), viewers, editors, ...more });
+
+const LADDER = ["approverMembers", "editorMembers", "suggesterMembers", "members"];
+
+/** approver ⊆ editor ⊆ suggester ⊆ member, the invariant every check relies on. */
+function assertLadder(m, label) {
+  for (let i = 0; i + 1 < LADDER.length; i++) {
+    const outer = new Set(m[LADDER[i + 1]]);
+    for (const e of m[LADDER[i]]) {
+      assert.ok(outer.has(e), `${label}: ${e} is in ${LADDER[i]} but not ${LADDER[i + 1]}`);
+    }
+  }
+}
+
+test("each role lands on its own rung and every rung below it", () => {
+  const m = computeMembership(
+    OWNER,
+    g(["v@example.com"], ["e@example.com"], {
+      suggesters: ["s@example.com"],
+      approvers: ["a@example.com"],
+    }),
+    null,
+  );
+  assert.deepEqual(m.approverMembers, ["a@example.com", OWNER]);
+  assert.deepEqual(m.editorMembers, ["a@example.com", "e@example.com", OWNER]);
+  assert.deepEqual(m.suggesterMembers, ["a@example.com", "e@example.com", OWNER, "s@example.com"]);
+  assert.deepEqual(m.members, [
+    "a@example.com",
+    "e@example.com",
+    OWNER,
+    "s@example.com",
+    "v@example.com",
+  ]);
+});
+
+test("the ladder holds for every mix of grants, parents and teams", () => {
+  // Deterministic pseudo-random cases rather than a hand-picked few: the
+  // invariant is what the rules and the endpoints lean on, so it is worth
+  // checking where nobody thought to look.
+  let seed = 7;
+  const rand = (n) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % n;
+  };
+  const people = ["a", "b", "c", "d", "team:t"].map((p) => (p.startsWith("team:") ? p : `${p}@example.com`));
+  const teams = new Map([["t", ["t1@example.com", "t2@example.com"]]]);
+  const pick = () => people.filter(() => rand(3) === 0);
+  for (let i = 0; i < 200; i++) {
+    const parentShape = rand(3);
+    const parent =
+      parentShape === 0
+        ? null
+        : parentShape === 1
+          ? computeMembership("p@example.com", g(pick(), pick(), { suggesters: pick(), approvers: pick() }), null, teams)
+          : { members: ["p@example.com", "x@example.com"], editorMembers: ["x@example.com"] }; // written before suggesters existed
+    const m = computeMembership(
+      OWNER,
+      g(pick(), pick(), { suggesters: pick(), approvers: pick() }),
+      parent,
+      teams,
+    );
+    assertLadder(m, `case ${i}`);
+  }
+});
+
+test("a parent written before the new sets existed loses nobody it held", () => {
+  const legacy = { members: ["p@example.com", "pe@example.com"], editorMembers: ["pe@example.com"] };
+  const m = computeMembership(OWNER, g(), legacy);
+  assert.ok(m.editorMembers.includes("pe@example.com"));
+  assert.ok(m.suggesterMembers.includes("pe@example.com"), "an inherited editor may suggest");
+  assert.ok(!m.suggesterMembers.includes("p@example.com"), "an inherited viewer may not");
+  assert.deepEqual(m.approverMembers, [OWNER], "nobody inherits approval that never existed");
+});
 
 test("the owner is always both a member and an editor", () => {
   const m = computeMembership(OWNER, g([], []), null);

@@ -725,9 +725,12 @@ async function logAclChange(
   });
 }
 
-/** Role of an effective member, for the invitation copy. */
+/** The highest role an effective member holds, for the invitation copy. */
 function roleOf(email: string, membership: Membership): Role {
-  return membership.editorMembers.includes(email) ? "editor" : "viewer";
+  if (membership.approverMembers.includes(email)) return "approver";
+  if (membership.editorMembers.includes(email)) return "editor";
+  if (membership.suggesterMembers.includes(email)) return "suggester";
+  return "viewer";
 }
 
 /**

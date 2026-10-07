@@ -25,12 +25,14 @@ export function normalizeEmail(email) {
 export const TEAM_PREFIX = "team:";
 
 /** Every grantable role, lowest first. Must equal ROLES in access.ts. */
-export const ROLES = ["viewer", "editor"];
+export const ROLES = ["viewer", "suggester", "editor", "approver"];
 
 /** The field each role's direct grants are stored in. Must equal GRANT_LIST in access.ts. */
 export const GRANT_LIST = {
   viewer: "viewers",
+  suggester: "suggesters",
   editor: "editors",
+  approver: "approvers",
 };
 
 function asStrings(v) {
@@ -53,7 +55,9 @@ export function grantLists(grants) {
 export function membershipOf(data) {
   return {
     members: asStrings(data?.members),
+    suggesterMembers: asStrings(data?.suggesterMembers),
     editorMembers: asStrings(data?.editorMembers),
+    approverMembers: asStrings(data?.approverMembers),
   };
 }
 
@@ -83,7 +87,7 @@ function expand(principals, teams) {
 }
 
 /**
- * members/editorMembers from a node's own grants unioned with its parent's.
+ * Every effective set from a node's own grants unioned with its parent's.
  * Must stay byte-for-byte equivalent to computeMembership in folders.ts.
  *
  * It THROWS on a missing grant list, where the TypeScript twin cannot be
@@ -97,28 +101,19 @@ export function computeMembership(ownerEmail, grants, parent = null, teams = new
       throw new Error(`computeMembership: grants.${GRANT_LIST[role]} is missing`);
     }
   }
-  const memberSet = new Set();
-  const editorSet = new Set();
-
   const owner = normalizeEmail(ownerEmail);
-  if (owner) {
-    memberSet.add(owner);
-    editorSet.add(owner);
-  }
-  for (const e of expand(grants.editors, teams)) {
-    memberSet.add(e);
-    editorSet.add(e);
-  }
-  for (const v of expand(grants.viewers, teams)) {
-    memberSet.add(v);
-  }
-  if (parent) {
-    for (const m of parent.members ?? []) memberSet.add(m);
-    for (const m of parent.editorMembers ?? []) editorSet.add(m);
-  }
+  const rung = (above, own, inherited) =>
+    new Set([...above, ...expand(own, teams), ...(inherited ?? [])]);
+
+  const approverSet = rung(owner ? [owner] : [], grants.approvers, parent?.approverMembers);
+  const editorSet = rung(approverSet, grants.editors, parent?.editorMembers);
+  const suggesterSet = rung(editorSet, grants.suggesters, parent?.suggesterMembers);
+  const memberSet = rung(suggesterSet, grants.viewers, parent?.members);
   return {
     members: [...memberSet].sort(),
+    suggesterMembers: [...suggesterSet].sort(),
     editorMembers: [...editorSet].sort(),
+    approverMembers: [...approverSet].sort(),
   };
 }
 

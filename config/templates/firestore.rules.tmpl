@@ -99,6 +99,7 @@ service cloud.firestore {
         && (request.auth.uid == d.ownerUid
             || myEmail() == d.ownerEmail
             || (d.editors is list && myEmail() in d.editors)
+            || (d.approvers is list && myEmail() in d.approvers)
             || (d.editorMembers is list && myEmail() in d.editorMembers));
     }
 

@@ -6,10 +6,15 @@
  * and a `team:{id}` grant applies to everyone in that team. Both are resolved by
  * DENORMALIZING effective membership onto every node:
  *
- *   members       = union(ownerEmail, viewers, editors, parent.members)
- *   editorMembers = union(ownerEmail, editors,          parent.editorMembers)
+ *   approverMembers  = union(ownerEmail,       approvers,  parent.approverMembers)
+ *   editorMembers    = union(approverMembers,  editors,    parent.editorMembers)
+ *   suggesterMembers = union(editorMembers,    suggesters, parent.suggesterMembers)
+ *   members          = union(suggesterMembers, viewers,    parent.members)
  *
- * with team references expanded to their members first.
+ * with team references expanded to their members first. Each set is built ON
+ * the one above it, so approver ⊆ editor ⊆ suggester ⊆ member holds by
+ * construction — including under a parent written before a set existed, whose
+ * missing array reads as empty.
  *
  * Because `parent.members` already folds in the whole ancestor chain, each node
  * needs only its DIRECT parent's computed arrays, so the cascade is a single
@@ -40,7 +45,9 @@ type Db = admin.firestore.Firestore;
 
 export interface Membership {
   members: string[];
+  suggesterMembers: string[];
   editorMembers: string[];
+  approverMembers: string[];
 }
 
 function asArray(v: unknown): string[] {
@@ -53,7 +60,9 @@ export function membershipOf(data: object | null | undefined): Membership {
   const strings = (v: unknown) => asArray(v).filter((x) => typeof x === "string");
   return {
     members: strings(record.members),
+    suggesterMembers: strings(record.suggesterMembers),
     editorMembers: strings(record.editorMembers),
+    approverMembers: strings(record.approverMembers),
   };
 }
 
@@ -74,35 +83,28 @@ function expand(principals: readonly string[], teams: TeamIndex): string[] {
   return out;
 }
 
-/** members/editorMembers from a node's own grants unioned with its parent's. */
+/** Every effective set from a node's own grants unioned with its parent's. */
 export function computeMembership(
   ownerEmail: string,
   grants: RoleGrants,
   parent: Membership | null,
   teams: TeamIndex = EMPTY_TEAM_INDEX,
 ): Membership {
-  const memberSet = new Set<string>();
-  const editorSet = new Set<string>();
-
   const owner = normalizeEmail(ownerEmail);
-  if (owner) {
-    memberSet.add(owner);
-    editorSet.add(owner);
-  }
-  for (const e of expand(grants.editors, teams)) {
-    memberSet.add(e);
-    editorSet.add(e);
-  }
-  for (const v of expand(grants.viewers, teams)) {
-    memberSet.add(v);
-  }
-  if (parent) {
-    for (const m of parent.members) memberSet.add(m);
-    for (const m of parent.editorMembers) editorSet.add(m);
-  }
+  // One rung of the ladder: everyone on the rung above, this rung's own grants,
+  // and what the parent holds at this rung.
+  const rung = (above: Iterable<string>, own: readonly string[], inherited: readonly string[]) =>
+    new Set([...above, ...expand(own, teams), ...inherited]);
+
+  const approverSet = rung(owner ? [owner] : [], grants.approvers, parent?.approverMembers ?? []);
+  const editorSet = rung(approverSet, grants.editors, parent?.editorMembers ?? []);
+  const suggesterSet = rung(editorSet, grants.suggesters, parent?.suggesterMembers ?? []);
+  const memberSet = rung(suggesterSet, grants.viewers, parent?.members ?? []);
   return {
     members: [...memberSet].sort(),
+    suggesterMembers: [...suggesterSet].sort(),
     editorMembers: [...editorSet].sort(),
+    approverMembers: [...approverSet].sort(),
   };
 }
 

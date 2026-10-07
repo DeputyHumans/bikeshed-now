@@ -116,8 +116,22 @@ test("the invitation text names the sharer, the thing, and the link", () => {
     url: "https://example.test/d/memo",
   });
   assert.match(text, /ana@example\.com shared "Q3 memo" with you/);
-  assert.match(text, /You can edit it here/);
+  assert.match(text, /You can now edit it\. Open it here/);
   assert.match(text, /https:\/\/example\.test\/d\/memo/);
+});
+
+test("the invitation says what each role may do", () => {
+  const base = {
+    origin: "https://example.test",
+    inviterEmail: "ana@example.com",
+    subjectTitle: "Q3 memo",
+    kind: "document",
+    url: "https://example.test/d/memo",
+  };
+  assert.match(inviteText({ ...base, role: "viewer" }), /You can now read it\./);
+  assert.match(inviteText({ ...base, role: "suggester" }), /read it and suggest edits to it/);
+  assert.match(inviteText({ ...base, role: "editor" }), /You can now edit it\./);
+  assert.match(inviteText({ ...base, role: "approver" }), /accept or reject the edits other people suggest/);
 });
 
 test("a team invitation says it is a team", () => {

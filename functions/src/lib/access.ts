@@ -16,8 +16,20 @@ import { isAllowedEmail } from "../generated/policy";
  */
 export const TEAM_PREFIX = "team:";
 
-/** Every grantable role, lowest first. A principal holds exactly one. */
-export const ROLES = ["viewer", "editor"] as const;
+/**
+ * Every grantable role, lowest first. A principal holds exactly one, and each
+ * role can do everything the ones below it can (SPEC §13):
+ *
+ *   viewer     read, comment
+ *   suggester  + propose a text change for someone else to decide on
+ *   editor     + edit live, publish a version
+ *   approver   + accept or reject suggestions
+ *
+ * Approver sits ABOVE editor because accepting a suggestion IS an edit: it is
+ * replayed in the approver's own editing session, so only someone who may edit
+ * can be trusted to do it.
+ */
+export const ROLES = ["viewer", "suggester", "editor", "approver"] as const;
 
 export type Role = (typeof ROLES)[number];
 
@@ -30,7 +42,9 @@ export type Role = (typeof ROLES)[number];
  */
 export const GRANT_LIST = {
   viewer: "viewers",
+  suggester: "suggesters",
   editor: "editors",
+  approver: "approvers",
 } as const satisfies Record<Role, string>;
 
 export type GrantList = (typeof GRANT_LIST)[Role];
@@ -125,7 +139,9 @@ export function applyAccessDelta(
 ): AccessState {
   const owner = normalizeEmail(ownerEmail);
   const sets = new Map(
-    ROLES.map((role) => [role, new Set(current[GRANT_LIST[role]].map(normalizePrincipal))]),
+    // A list absent from `current` reads as empty: the result always carries
+    // every list, so nothing a caller left out can be written back as missing.
+    ROLES.map((role) => [role, new Set((current[GRANT_LIST[role]] ?? []).map(normalizePrincipal))]),
   );
   const drop = (p: string) => {
     for (const set of sets.values()) set.delete(p);
