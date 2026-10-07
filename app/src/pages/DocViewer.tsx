@@ -53,7 +53,7 @@ import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
 import type { Annotation, FolderMeta, TeamMeta } from "../types";
-import { isDocEditor as isDocEditorOf } from "../roles";
+import { isApprover, isDocEditor as isDocEditorOf } from "../roles";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -786,6 +786,9 @@ export function DocViewer() {
             versionId={doc.currentVersion}
             annotations={annotations}
             orphaned={annotationLayer.orphaned}
+            stale={annotationLayer.stale}
+            isApprover={isApprover(doc.meta, emailLower)}
+            linkKey={linkKey || undefined}
             selectedId={selectedId}
             canComment={signedIn}
             signedIn={signedIn}

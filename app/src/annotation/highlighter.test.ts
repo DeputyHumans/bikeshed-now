@@ -10,6 +10,7 @@ import {
   serializeCleanHtml,
   assertNoDecoration,
 } from "./highlighter";
+import * as textPosition from "dom-anchor-text-position";
 import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
 
 /**
@@ -411,5 +412,88 @@ describe("selection and clicks", () => {
 
   it("captures an empty inventory for a document with no asset tags", () => {
     expect(captureAssetTags(makeDoc("<p>x</p>")).size).toBe(0);
+  });
+});
+
+describe("suggestion marks (SPEC §22)", () => {
+  const sugDoc = () =>
+    makeDoc(`<section id="s1"><p id="p">We can cut over in a <em>single</em> weekend.</p></section>`);
+  const rangeOverText = (doc: Document, text: string): Range => {
+    const p = doc.getElementById("p")!;
+    const start = p.textContent!.indexOf(text);
+    return textPosition.toRange(p, { start, end: start + text.length })!;
+  };
+
+  it("strikes every segment and hangs the replacement on the last one only", async () => {
+    const { SUG_ATTR, INS_ATTR } = await import("../brand/dom");
+    const doc = sugDoc();
+    highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
+      suggestion: { replacement: "two weekends" },
+    });
+    const marks = Array.from(doc.querySelectorAll(`.${HL_CLASS}`));
+    expect(marks.length).toBe(3); // "a ", "single" inside <em>, " weekend"
+    expect(marks.every((m) => m.getAttribute(SUG_ATTR) === "s1x")).toBe(true);
+    expect(marks.map((m) => m.getAttribute(INS_ATTR))).toEqual([null, null, "two weekends"]);
+  });
+
+  it("adds nothing to the document's text, which every anchor is measured against", () => {
+    const doc = sugDoc();
+    const before = doc.body.textContent;
+    highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
+      suggestion: { replacement: "two weekends" },
+    });
+    expect(doc.body.textContent).toBe(before);
+  });
+
+  it("hangs nothing on a deletion", async () => {
+    const { INS_ATTR } = await import("../brand/dom");
+    const doc = sugDoc();
+    highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", { suggestion: { replacement: "" } });
+    expect(doc.querySelector(`[${INS_ATTR}]`)).toBeNull();
+  });
+
+  it("is stripped from published bytes, with the author's words kept and the replacement nowhere", () => {
+    const doc = sugDoc();
+    ensureHighlightStyles(doc);
+    highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
+      suggestion: { replacement: "two weekends" },
+    });
+    const html = serializeCleanHtml(doc);
+    for (const trace of ["data-bshd-sug", "data-bshd-ins", "two weekends", HL_CLASS]) {
+      expect(html, trace).not.toContain(trace);
+    }
+    expect(html).toContain("We can cut over in a <em>single</em> weekend.");
+  });
+
+  it("is caught by the dev-only assertion if it ever survives", () => {
+    const doc = sugDoc();
+    highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
+      suggestion: { replacement: "two weekends" },
+    });
+    expect(() => assertNoDecoration(doc, "the test")).toThrow(/suggestion mark/);
+  });
+
+  it("a pending suggestion that no longer resolves is stale, not orphaned; a decided one is not drawn", async () => {
+    const { redrawHighlights } = await import("./highlighter");
+    const doc = sugDoc();
+    const base = {
+      authorUid: "u1",
+      authorEmail: "ana@example.com",
+      actor: { uid: "u1", email: "ana@example.com", channel: "web" as const },
+      color: "#b5257b",
+      createdAt: null as never,
+      anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+    };
+    const result = redrawHighlights(
+      doc,
+      [
+        { ...base, annId: "gone", resolved: false, suggestion: { replacement: "y", state: "pending" } },
+        { ...base, annId: "done", resolved: true, suggestion: { replacement: "y", state: "accepted" } },
+        { ...base, annId: "comment", resolved: false },
+      ],
+      () => null,
+      () => null,
+    );
+    expect(result).toEqual({ drawn: [], orphaned: ["comment"], stale: ["gone"] });
   });
 });

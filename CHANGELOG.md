@@ -35,8 +35,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   lands in the draft; a person still publishes it. Rejecting can say why. The
   suggester hears either way, in the thread. A suggestion is text inside one
   block, never formatting or structure, and a pending one can be changed or
-  withdrawn by its author. `POST /suggestion` is the one path that writes them
-  (SPEC §2, §4, §14, §22; ADR 0013).
+  withdrawn by its author. In the document a pending suggestion is the
+  struck-through text followed by what it would become; in the comments panel
+  it reads as its change and its state. One whose text has since changed says
+  so and can only be rejected. `POST /suggestion` is the one path that writes
+  them (SPEC §2, §4, §14, §22; ADR 0013).
 - **A pending suggestion holds back every new version, on every channel.**
   Publishing in the app, uploading a revision, `bikeshed update` and
   `update_document` are all refused with a `409` while a suggested edit on the

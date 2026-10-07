@@ -375,6 +375,20 @@ export interface Annotation {
   color: string;
   resolved: boolean;
   createdAt: Timestamp;
+  /** Present when this annotation is a suggested edit (SPEC §22). Server-written only. */
+  suggestion?: Suggestion;
+}
+
+export type SuggestionState = "pending" | "accepted" | "rejected";
+
+/** A proposed text replacement for the annotation's quote. Empty deletes it. */
+export interface Suggestion {
+  replacement: string;
+  state: SuggestionState;
+  /** Held by the approver applying it, so nobody else does at the same time. */
+  claim?: { uid: string; email: string; until: Timestamp };
+  decidedBy?: Actor;
+  decidedAt?: Timestamp;
 }
 
 /** Firestore: .../annotations/{annId}/comments/{commentId} */
@@ -385,6 +399,10 @@ export interface Comment {
   authorEmail: string;
   actor: Actor;
   createdAt: Timestamp;
+  /** The first comment of a suggestion's thread (SPEC §22). */
+  opensSuggestion?: boolean;
+  /** Words the server wrote — a restated change, or a decision — not the author's. */
+  generated?: boolean;
 }
 
 /** The typed outcomes of POST /session. Not error strings (SPEC §2). */

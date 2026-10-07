@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
+import { exactRangeFromAnchor } from "../annotation/exact";
 import { attachSelectionGuard } from "../annotation/clickGuard";
 import {
   attachHighlightClick,
@@ -39,10 +40,11 @@ export function useAnnotationLayer(options: {
   annotations: Annotation[];
   selectedId: string | null;
   onSelect: (annId: string) => void;
-}): { orphaned: string[] } {
+}): { orphaned: string[]; stale: string[] } {
   const { mode, doc, epoch, annotations, selectedId, onSelect } = options;
   const enabled = mode.kind === "reading";
   const [orphaned, setOrphaned] = useState<string[]>([]);
+  const [stale, setStale] = useState<string[]>([]);
   const reduceMotion = usePrefersReducedMotion();
 
   /**
@@ -86,12 +88,18 @@ export function useAnnotationLayer(options: {
 
   useEffect(() => {
     if (!enabled || !doc) return;
-    const result = redrawHighlights(doc, annotations, (anchor) =>
-      rangeFromAnchor(doc, anchor),
+    const result = redrawHighlights(
+      doc,
+      annotations,
+      (anchor) => rangeFromAnchor(doc, anchor),
+      // A suggestion is drawn only where its exact text still stands: what is
+      // struck through is what an approver would replace (SPEC §22).
+      (anchor) => exactRangeFromAnchor(doc, anchor),
     );
     // An anchor that no longer resolves is REPORTED, not swallowed: the comment
     // still has to be readable, or the feedback is simply lost.
     setOrphaned(result.orphaned);
+    setStale(result.stale);
   }, [enabled, doc, epoch, annotations]);
 
   useEffect(() => {
@@ -131,7 +139,7 @@ export function useAnnotationLayer(options: {
     wrapper.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
   }, [enabled, doc, epoch, selectedId, annotations, reduceMotion]);
 
-  return { orphaned };
+  return { orphaned, stale };
 }
 
 /** Whether the whole of an element sits inside its frame's viewport. */

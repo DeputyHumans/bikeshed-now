@@ -95,6 +95,36 @@
 
 /* "Ana is replying…" — driven by the peer's `composing` field, so a thread
    shows that somebody is already answering before they finish typing. */
+/* A suggested edit: what it would change, struck and inserted (SPEC §22). */
+.suggestion {
+  padding: var(--s-1) var(--s-2);
+  margin-bottom: var(--s-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.suggestion-change {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.suggestion-change del {
+  color: var(--color-ink-muted);
+  text-decoration-color: var(--thread-color, var(--color-annotation));
+  text-decoration-thickness: 2px;
+}
+.suggestion-change ins {
+  text-decoration: underline 2px var(--thread-color, var(--color-annotation));
+  background: var(--color-accent-soft);
+}
+.suggestion-delete { color: var(--color-ink-muted); font-style: italic; }
+.suggestion-status {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.suggestion[data-stale] .suggestion-status { color: var(--color-warn); }
+.suggestion[data-state="accepted"] .suggestion-status { color: var(--color-success); }
+.suggestion-actions .input { flex: 1 1 8rem; min-width: 0; }
+
 .thread-composing {
   display: flex;
   align-items: center;

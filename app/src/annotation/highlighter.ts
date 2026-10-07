@@ -9,7 +9,9 @@ import {
   HL_CLASS,
   HL_SELECTOR,
   HL_STYLE_ID,
+  INS_ATTR,
   OWN_ATTR,
+  SUG_ATTR,
   isOwnMarker,
   markOwn,
 } from "../brand/dom";
@@ -82,6 +84,26 @@ export function ensureHighlightStyles(doc: Document): void {
     tspan.${HL_CLASS}[data-selected="true"] {
       stroke-width: 4px;
     }
+    .${HL_CLASS}[${SUG_ATTR}] {
+      text-decoration-line: line-through;
+      text-decoration-color: var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
+      text-decoration-thickness: 2px;
+    }
+    mark.${HL_CLASS}[${INS_ATTR}]::after {
+      content: attr(${INS_ATTR});
+      /* inline-block, because a line-through propagates into every inline
+         descendant and cannot be undone there — only an atomic inline is
+         spared it. */
+      display: inline-block;
+      max-width: 100%;
+      margin-left: 0.25em;
+      padding: 0 2px;
+      border-radius: 2px;
+      white-space: pre-wrap;
+      color: inherit;
+      text-decoration: underline 2px var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
+      background: color-mix(in srgb, var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation}) 14%, transparent);
+    }
   `;
   (doc.head ?? doc.documentElement).appendChild(style);
 }
@@ -145,9 +167,10 @@ export function highlightRange(
   doc: Document,
   range: Range,
   annId: string,
-  options: { authorEmail?: string } = {},
+  options: { authorEmail?: string; suggestion?: { replacement: string } } = {},
 ): void {
   if (range.collapsed) return;
+  let lastHtmlMark: Element | null = null;
 
   openDetailsAround(range.startContainer);
   openDetailsAround(range.endContainer);
@@ -172,12 +195,20 @@ export function highlightRange(
     // The author's colour, so a highlight can be traced to a person without
     // opening the panel — the same value the chip, caret and rail marker use.
     mark.style.setProperty(AUTHOR_COLOR_VAR, color);
+    // A suggestion's text is struck through, segment by segment.
+    if (options.suggestion) mark.setAttribute(SUG_ATTR, annId);
     try {
       sub.surroundContents(mark);
+      if (mark.namespaceURI !== SVG_NS) lastHtmlMark = mark;
     } catch {
       // A boundary this sub-range cannot cleanly wrap. Skipping the fragment
       // loses part of one highlight; throwing would lose the whole document.
     }
+  }
+  // …and what it would become follows its last segment, as generated content
+  // read from an attribute (see INS_ATTR). Nothing for a deletion.
+  if (options.suggestion?.replacement && lastHtmlMark) {
+    lastHtmlMark.setAttribute(INS_ATTR, options.suggestion.replacement);
   }
 }
 
@@ -338,6 +369,7 @@ export function assertNoDecoration(doc: Document, context: string): void {
   if (!import.meta.env.DEV) return;
   const found: string[] = [];
   if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
+  if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     if (isOwnMarker(el)) found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
@@ -361,28 +393,42 @@ export function assertNoDecoration(doc: Document, context: string): void {
  *
  * It is not counted as orphaned either. Whether a settled comment's passage
  * still matches is not a question anybody needs answered.
+ *
+ * A pending SUGGESTION is resolved with `resolveSuggestion`, which is strict:
+ * it is drawn only where its exact text unambiguously still stands, because
+ * what is drawn is what an approver would replace. One that does not resolve is
+ * STALE rather than orphaned, which is a different thing to tell a reader: a
+ * comment still makes its point, a stale suggestion can no longer be applied.
  */
 export function redrawHighlights(
   doc: Document,
   annotations: Annotation[],
   resolve: (anchor: Anchor) => Range | null,
-): { drawn: string[]; orphaned: string[] } {
+  resolveSuggestion: (anchor: Anchor) => Range | null = resolve,
+): { drawn: string[]; orphaned: string[]; stale: string[] } {
   clearHighlights(doc);
   const drawn: string[] = [];
   const orphaned: string[] = [];
+  const stale: string[] = [];
   for (const ann of annotations) {
     if (ann.resolved) continue;
-    const range = resolve(ann.anchor);
+    const suggestion = ann.suggestion?.state === "pending" ? ann.suggestion : null;
+    const range = suggestion ? resolveSuggestion(ann.anchor) : resolve(ann.anchor);
     if (range) {
-      highlightRange(doc, range, ann.annId, { authorEmail: ann.authorEmail });
+      highlightRange(doc, range, ann.annId, {
+        authorEmail: ann.authorEmail,
+        ...(suggestion ? { suggestion: { replacement: suggestion.replacement } } : {}),
+      });
       drawn.push(ann.annId);
+    } else if (suggestion) {
+      stale.push(ann.annId);
     } else {
       // Reported rather than swallowed: a comment whose passage no longer
       // exists still has to be readable, or the feedback is simply lost.
       orphaned.push(ann.annId);
     }
   }
-  return { drawn, orphaned };
+  return { drawn, orphaned, stale };
 }
 
 /** Listen for clicks on a highlight. Returns a cleanup function. */

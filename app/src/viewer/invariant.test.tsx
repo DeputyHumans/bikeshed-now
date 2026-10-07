@@ -9,7 +9,7 @@ import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useInlineEditor } from "./useInlineEditor";
 import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
-import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
+import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, INS_ATTR, OWN_ATTR, SUG_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -119,9 +119,23 @@ function annotation(annId: string, elementId: string, exact: string): Annotation
   };
 }
 
+/**
+ * A pending suggestion, whose replacement is shown in the document as
+ * generated content. Its text is unmistakable on purpose: if it is ever found
+ * in the bytes, it got there as a real node, which is the way a suggestion
+ * would publish itself without anybody accepting it (SPEC §22).
+ */
+const REPLACEMENT = "UNACCEPTED-REPLACEMENT-TEXT";
+const SUGGESTION: Annotation = {
+  ...annotation("s1x", "s1", "of the document"),
+  anchor: { elementId: "s1", exact: "of the document", prefix: "The first passage ", suffix: ".", start: 18, end: 33 },
+  suggestion: { replacement: REPLACEMENT, state: "pending" },
+};
+
 const ANNOTATIONS = [
   annotation("a1", "s1", "first passage"),
   annotation("a2", "s2", "second passage"),
+  SUGGESTION,
 ];
 
 /**
@@ -192,6 +206,8 @@ function Harness({ doc, mode }: { doc: Document; mode: FrameMode }) {
 function decorationIn(doc: Document): string[] {
   const found: string[] = [];
   if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
+  if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
+  if (doc.body.textContent?.includes(REPLACEMENT)) found.push("suggested text in the document");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
@@ -218,6 +234,9 @@ describe("the decoration invariant", () => {
     );
     expect(doc.querySelectorAll(HL_SELECTOR).length).toBeGreaterThan(0);
     expect(doc.getElementById(HL_STYLE_ID)).not.toBeNull();
+    // The suggestion is drawn too, its replacement as an attribute only.
+    expect(doc.querySelector(`[${INS_ATTR}]`)?.getAttribute(INS_ATTR)).toBe(REPLACEMENT);
+    expect(doc.body.textContent).not.toContain(REPLACEMENT);
   });
 
   it("leaves NOTHING behind when edit mode starts on the SAME document", () => {
@@ -321,9 +340,11 @@ describe("the decoration invariant", () => {
 
     expect(saveDraft).toHaveBeenCalled();
     const html = saveDraft.mock.calls[0][2];
-    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, "contenteditable"]) {
+    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, SUG_ATTR, INS_ATTR, REPLACEMENT, "contenteditable"]) {
       expect(html, `the draft payload contains ${artifact}`).not.toContain(artifact);
     }
+    // The text the suggestion would replace is the author's, and stays.
+    expect(html).toContain("of the document");
     // And the author's own content is all still there.
     expect(html).toContain("The first passage of the document.");
     expect(html).toContain('<section id="s2">');

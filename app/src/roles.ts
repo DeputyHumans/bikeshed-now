@@ -75,3 +75,33 @@ export function isDocEditor(record: RoleRecord | null | undefined, emailLower: s
     has(record.editorMembers, emailLower)
   );
 }
+
+/**
+ * May this person decide on a suggestion? The owner and approvers, direct or
+ * inherited — never anyone reached through open editing or a link, mirroring
+ * `isDocApprover` in acl.ts.
+ */
+export function isApprover(record: RoleRecord | null | undefined, emailLower: string): boolean {
+  if (!record || !emailLower) return false;
+  return (
+    record.ownerEmail === emailLower ||
+    has(record.approvers, emailLower) ||
+    has(record.approverMembers, emailLower)
+  );
+}
+
+/**
+ * May this person propose an edit? Suggesters, and everyone who may edit —
+ * including an open editor, who could have made the change outright. Mirrors
+ * `canSuggest` in acl.ts; `canEdit` is the viewer's own answer to "may edit",
+ * which already folds in open editing.
+ */
+export function canSuggestDoc(
+  record: RoleRecord | null | undefined,
+  emailLower: string,
+  canEdit: boolean,
+): boolean {
+  if (canEdit) return true;
+  if (!record || !emailLower) return false;
+  return has(record.suggesters, emailLower) || has(record.suggesterMembers, emailLower);
+}

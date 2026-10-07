@@ -75,8 +75,8 @@ runtimes differ. Parity tests hold them together, and the hash pair is pinned by
 a **shared golden vector** — never by comparing the two implementations, which
 lets them drift together. Change one, change both.
 
-**3. Decoration must never reach serialized bytes.** Highlights, placeholder
-marks and the peer overlay all go into the document being edited. Four legs keep
+**3. Decoration must never reach serialized bytes.** Highlights, suggestion
+marks, placeholder marks and the peer overlay all go into the document being edited. Four legs keep
 them out: the `FrameMode` tagged union, effect-cleanup ordering, an
 unconditional strip plus a dev-only assertion, and `serializeCleanHtml`. **Every
 hook that puts something in the document must be declared before
@@ -203,6 +203,10 @@ anything outside the permissive allowlist.
   against, so it renders unstyled in a box measured from the styled frame — all
   whitespace. And the navigator is gated on `paged`, which the rail's own width
   can change: re-deciding it on resize makes the viewer oscillate.
+- **A suggestion's replacement is not in the document's text.** It is an
+  attribute on the last highlight wrapper, shown with `content: attr(…)`. A
+  text node would shift `textContent`, which every anchor is measured against,
+  and would be published by the strip that unwraps highlights.
 - **The email secret holds a single space.** `defineSecret` demands a version;
   Secret Manager refuses an empty payload. Whitespace is how a deployment says
   "email off", and `apiKey()` trims.

@@ -102,6 +102,27 @@ export function isHighlightWrapper(el: Element): boolean {
  */
 export const ANN_ATTR = "data-bshd-ann";
 
+/**
+ * Marks a highlight that belongs to a SUGGESTED EDIT, whose text it strikes
+ * through (SPEC §22). The value is the annotation id.
+ *
+ * Deliberately NOT in `OWN_MARKERS`: it sits on a highlight wrapper, which the
+ * strip legs UNWRAP through `HL_SELECTOR` — keeping the author's text — rather
+ * than delete. Put in that set, the serializer would delete the wrapper whole,
+ * and the author's words inside it with it.
+ */
+export const SUG_ATTR = "data-bshd-sug";
+
+/**
+ * The proposed replacement, as an ATTRIBUTE on the last wrapper of a
+ * suggestion, shown by the injected stylesheet as generated content
+ * (`content: attr(…)`). Never as a text node: a node would add to the
+ * document's `textContent`, which every anchor is measured against, so every
+ * comment and peer selection made while it was shown would be anchored to text
+ * that is not in the document. Outside `OWN_MARKERS` for the reason above.
+ */
+export const INS_ATTR = "data-bshd-ins";
+
 /** The author-colour custom property a highlight reads (SPEC §16). */
 export const AUTHOR_COLOR_VAR = "--bshd-author";
 

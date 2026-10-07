@@ -2155,6 +2155,26 @@ clears one, so somebody who can publish but not decide is told who can.
 
 Each author may have twenty pending suggestions on one version.
 
+### Display
+
+A pending suggestion is drawn in the reading frame by the annotation layer, as
+a highlight whose text is struck through, followed by its replacement. The
+replacement is an ATTRIBUTE on the last wrapper (`data-bshd-ins`), shown by the
+injected stylesheet as generated content — never a text node, which would
+change the `textContent` every anchor is measured against, and would survive
+the strip that unwraps highlights into the bytes. Both attributes ride on
+`HL_SELECTOR` wrappers, so the four legs of §6a remove them with no new leg
+(`brand/dom.ts`).
+
+It is drawn only where its quote resolves EXACTLY (`annotation/exact.ts`):
+whitespace normalised, context choosing between repeats, never fuzzy and
+never by position. One that does not is stale — listed, not drawn. A decided
+suggestion is resolved, and like a resolved comment is not drawn.
+
+In the panel a suggestion reads as its change — struck, then inserted, and in
+words for a screen reader — with its state. It has no Resolve button. An
+approver may Reject it, with a reason; its author may Withdraw it.
+
 ### Not built
 
 A suggesting mode inside the editor · structural or formatting suggestions ·
