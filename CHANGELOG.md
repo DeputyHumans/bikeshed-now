@@ -14,7 +14,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.6.0 — 2026-10-06
 
 ### Added
 
@@ -32,15 +32,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   should say instead, or that it should go. The owner and approvers are
   emailed, and an approver accepts or rejects it in a review pass in the
   editor, one suggestion at a time. Accepting makes the change in their own
-  editing session, so it reaches co-editors like any keystroke and lands in
-  the draft, saved before it is recorded; a person still publishes it. Rejecting can say why. The
-  suggester hears either way, in the thread. A suggestion is text inside one
-  block, never formatting or structure, and a pending one can be changed or
-  withdrawn by its author. In the document a pending suggestion is the
-  struck-through text followed by what it would become; in the comments panel
-  it reads as its change and its state. One whose text has since changed says
-  so and can only be rejected. `POST /suggestion` is the one path that writes
-  them (SPEC §2, §4, §14, §22; ADR 0013).
+  editing session, so it reaches co-editors like any keystroke and lands in the
+  draft, saved before it is recorded; a person still publishes it. Rejecting
+  can say why. The suggester hears either way, in the thread. A suggestion is
+  text inside one block, never formatting or structure, and a pending one can
+  be changed or withdrawn by its author. In the document a pending suggestion
+  is the struck-through text followed by what it would become; in the comments
+  panel it reads as its change and its state. One whose text has since changed
+  says so and can only be rejected. `POST /suggestion` is the one path that
+  writes them (SPEC §2, §4, §14, §22; ADR 0013).
 - **Agents can suggest edits too.** A twelfth MCP tool, `suggest_edit`,
   proposes new text for one passage, quoted as a reader sees it. It is refused,
   with what to do instead, when the passage is not there, repeats with nothing
