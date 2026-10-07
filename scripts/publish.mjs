@@ -30,7 +30,13 @@ import mime from "mime";
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails } from "./lib/email.mjs";
 import { hashBundle, hashBundleFiles } from "./lib/hash.mjs";
-import { computeMembership, loadFolderMembership, loadTeamIndex } from "./lib/membership.mjs";
+import {
+  computeMembership,
+  grantLists,
+  grantsOf,
+  loadFolderMembership,
+  loadTeamIndex,
+} from "./lib/membership.mjs";
 import { syncPresenceAccess } from "./lib/presence.mjs";
 import {
   REPO_ROOT,
@@ -258,15 +264,12 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   // The original of this design recomputed members here without the parent
   // folder's, so publishing into a shared folder silently revoked every
   // inherited reader.
+  // Every other role's grants are carried over as they stand: a republish that
+  // rebuilt only viewers and editors would write the rest out of membership.
+  const grants = { ...grantsOf(existing), viewers: mergedViewers, editors: mergedEditors };
   const parent = await loadFolderMembership(db, folderId);
-  const teams = await loadTeamIndex(db, mergedViewers, mergedEditors);
-  const membership = computeMembership(
-    ownerForMembers,
-    mergedViewers,
-    mergedEditors,
-    parent,
-    teams,
-  );
+  const teams = await loadTeamIndex(db, ...grantLists(grants));
+  const membership = computeMembership(ownerForMembers, grants, parent, teams);
 
   const actor = {
     // Null because an operator script authenticates with Admin credentials, not
@@ -286,10 +289,8 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
       slug,
       ...(snap.exists ? {} : { ownerUid: null, ownerEmail, createdAt: FieldValue.serverTimestamp() }),
       ...(snap.exists ? {} : { visibility: "private", publicEdit: false, folderId: null }),
-      viewers: mergedViewers,
-      editors: mergedEditors,
-      members: membership.members,
-      editorMembers: membership.editorMembers,
+      ...grants,
+      ...membership,
       currentVersion: versionId,
       // CLI provenance: the publisher is authenticated and deliberate, so the
       // bundle's own scripts run un-sandboxed. Browser uploads are the opposite

@@ -47,6 +47,7 @@ import {
   type DocAclData,
   type FolderAclData,
 } from "../lib/acl";
+import { grantsOf } from "../lib/access";
 import { extractBundle } from "../lib/bundle";
 import { linkProofFor } from "../lib/linkgrant";
 import {
@@ -679,8 +680,7 @@ export const TOOLS: ToolDefinition[] = [
         ref,
         {
           ownerEmail: String(data.ownerEmail ?? ""),
-          viewers: asArray(data.viewers),
-          editors: asArray(data.editors),
+          grants: grantsOf(data),
           folderId: target.id,
         },
         { folderId: target.id },

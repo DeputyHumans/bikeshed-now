@@ -21,7 +21,15 @@
 import { randomBytes } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { isTeamRef, normalizeEmail, teamIdOf } from "./access";
+import {
+  emptyGrants,
+  grantLists,
+  grantsOf,
+  isTeamRef,
+  normalizeEmail,
+  teamIdOf,
+  type RoleGrants,
+} from "./access";
 import { canEditFolder, type FolderAclData } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
@@ -37,6 +45,16 @@ export interface Membership {
 
 function asArray(v: unknown): string[] {
   return Array.isArray(v) ? (v as string[]) : [];
+}
+
+/** The effective membership stored on a document or folder. A missing set is empty. */
+export function membershipOf(data: object | null | undefined): Membership {
+  const record = (data ?? {}) as Record<string, unknown>;
+  const strings = (v: unknown) => asArray(v).filter((x) => typeof x === "string");
+  return {
+    members: strings(record.members),
+    editorMembers: strings(record.editorMembers),
+  };
 }
 
 /** Expand one grant list into the emails it actually names. */
@@ -59,8 +77,7 @@ function expand(principals: readonly string[], teams: TeamIndex): string[] {
 /** members/editorMembers from a node's own grants unioned with its parent's. */
 export function computeMembership(
   ownerEmail: string,
-  viewers: readonly string[],
-  editors: readonly string[],
+  grants: RoleGrants,
   parent: Membership | null,
   teams: TeamIndex = EMPTY_TEAM_INDEX,
 ): Membership {
@@ -72,11 +89,11 @@ export function computeMembership(
     memberSet.add(owner);
     editorSet.add(owner);
   }
-  for (const e of expand(editors, teams)) {
+  for (const e of expand(grants.editors, teams)) {
     memberSet.add(e);
     editorSet.add(e);
   }
-  for (const v of expand(viewers, teams)) {
+  for (const v of expand(grants.viewers, teams)) {
     memberSet.add(v);
   }
   if (parent) {
@@ -100,11 +117,7 @@ export async function loadFolderMembership(
   if (!folderId) return null;
   const snap = await db.collection("folders").doc(folderId).get();
   if (!snap.exists) return null;
-  const d = snap.data() || {};
-  return {
-    members: asArray(d.members),
-    editorMembers: asArray(d.editorMembers),
-  };
+  return membershipOf(snap.data());
 }
 
 /** A URL- and Storage-safe slug derived from a display name. */
@@ -250,10 +263,7 @@ export async function resolveFolderTarget(
   return {
     ok: true,
     id,
-    membership: {
-      members: asArray(data.members),
-      editorMembers: asArray(data.editorMembers),
-    },
+    membership: membershipOf(data),
     ancestors: asArray(data.ancestors),
   };
 }
@@ -270,7 +280,7 @@ export async function createFolderRecord(
   name: string,
   target: Extract<FolderTarget, { ok: true }>,
 ): Promise<{ folderId: string; name: string }> {
-  const membership = computeMembership(caller.emailLower, [], [], target.membership);
+  const membership = computeMembership(caller.emailLower, emptyGrants(), target.membership);
   const ancestors = target.id ? [...target.ancestors, target.id] : [];
   const ref = db.collection("folders").doc();
   await ref.set({
@@ -280,10 +290,8 @@ export async function createFolderRecord(
     parentId: target.id,
     ownerUid: caller.uid,
     ownerEmail: caller.emailLower,
-    viewers: [],
-    editors: [],
-    members: membership.members,
-    editorMembers: membership.editorMembers,
+    ...emptyGrants(),
+    ...membership,
     ancestors,
     depth: ancestors.length,
     createdAt: FieldValue.serverTimestamp(),
@@ -327,22 +335,15 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       ? await db.collection("folders").doc(parentId).get()
       : null;
     const parent: Membership | null =
-      parentSnap && parentSnap.exists
-        ? {
-            members: asArray(parentSnap.data()?.members),
-            editorMembers: asArray(parentSnap.data()?.editorMembers),
-          }
-        : null;
+      parentSnap && parentSnap.exists ? membershipOf(parentSnap.data()) : null;
     const parentAncestors =
       parentSnap && parentSnap.exists ? asArray(parentSnap.data()?.ancestors) : [];
 
-    const viewers = asArray(data.viewers);
-    const editors = asArray(data.editors);
-    const teams = await loadTeamIndex(db, viewers, editors);
+    const grants = grantsOf(data);
+    const teams = await loadTeamIndex(db, ...grantLists(grants));
     const membership = computeMembership(
       String(data.ownerEmail || ""),
-      viewers,
-      editors,
+      grants,
       parent,
       teams,
     );
@@ -350,8 +351,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
 
     await ref.set(
       {
-        members: membership.members,
-        editorMembers: membership.editorMembers,
+        ...membership,
         ancestors,
         depth: ancestors.length,
         updatedAt: FieldValue.serverTimestamp(),
@@ -370,39 +370,24 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       // round trips.
       const docTeams = await loadTeamIndex(
         db,
-        ...docSnaps.docs.flatMap((d) => [
-          asArray(d.data()?.viewers),
-          asArray(d.data()?.editors),
-        ]),
+        ...docSnaps.docs.flatMap((d) => grantLists(grantsOf(d.data()))),
       );
       const batch = db.batch();
-      const touched: { id: string; members: string[]; editorMembers: string[] }[] =
-        [];
+      const touched: { id: string; membership: Membership }[] = [];
       for (const docSnap of docSnaps.docs) {
         const dd = docSnap.data() || {};
-        const dv = asArray(dd.viewers);
-        const de = asArray(dd.editors);
         const docMembership = computeMembership(
           String(dd.ownerEmail || ""),
-          dv,
-          de,
+          grantsOf(dd),
           membership,
           docTeams,
         );
         batch.set(
           docSnap.ref,
-          {
-            members: docMembership.members,
-            editorMembers: docMembership.editorMembers,
-            updatedAt: FieldValue.serverTimestamp(),
-          },
+          { ...docMembership, updatedAt: FieldValue.serverTimestamp() },
           { merge: true },
         );
-        touched.push({
-          id: docSnap.id,
-          members: docMembership.members,
-          editorMembers: docMembership.editorMembers,
-        });
+        touched.push({ id: docSnap.id, membership: docMembership });
       }
       await batch.commit();
       // Presence is gated by a mirror of `members` in RTDB and shared document
@@ -410,7 +395,9 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       // membership must refresh BOTH — or a revoked reader keeps seeing who
       // else is in the document, and a revoked editor keeps typing into it
       // (SPEC §16).
-      for (const t of touched) await syncPresenceAccess(t.id, t.members, t.editorMembers);
+      for (const t of touched) {
+        await syncPresenceAccess(t.id, t.membership.members, t.membership.editorMembers);
+      }
     }
 
     // Enqueue child folders, recomputed against this now-fresh folder.
@@ -434,27 +421,18 @@ export async function persistDocMembership(
   docRef: admin.firestore.DocumentReference,
   fields: {
     ownerEmail: string;
-    viewers: string[];
-    editors: string[];
+    grants: RoleGrants;
     folderId: string | null;
   },
   extra: Record<string, unknown> = {},
 ): Promise<Membership> {
   const parent = await loadFolderMembership(db, fields.folderId);
-  const teams = await loadTeamIndex(db, fields.viewers, fields.editors);
-  const membership = computeMembership(
-    fields.ownerEmail,
-    fields.viewers,
-    fields.editors,
-    parent,
-    teams,
-  );
+  const teams = await loadTeamIndex(db, ...grantLists(fields.grants));
+  const membership = computeMembership(fields.ownerEmail, fields.grants, parent, teams);
   await docRef.set(
     {
-      viewers: fields.viewers,
-      editors: fields.editors,
-      members: membership.members,
-      editorMembers: membership.editorMembers,
+      ...fields.grants,
+      ...membership,
       updatedAt: FieldValue.serverTimestamp(),
       ...extra,
     },

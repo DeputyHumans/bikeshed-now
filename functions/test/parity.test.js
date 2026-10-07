@@ -75,13 +75,53 @@ const CASES = [
   },
 ];
 
+/** A case's grants with every role's list present, as both twins require. */
+function grantsFor(c) {
+  const { emptyGrants } = require("../lib/lib/access.js");
+  const grants = emptyGrants();
+  for (const list of Object.keys(grants)) if (c[list]) grants[list] = c[list];
+  return grants;
+}
+
 test("both implementations agree across the fixture table", async () => {
   const esm = await import("../../scripts/lib/membership.mjs");
   for (const c of CASES) {
     const teams = new Map(Object.entries(c.teams));
-    const fromCjs = cjs.computeMembership(c.owner, c.viewers, c.editors, c.parent, teams);
-    const fromEsm = esm.computeMembership(c.owner, c.viewers, c.editors, c.parent, teams);
+    const fromCjs = cjs.computeMembership(c.owner, grantsFor(c), c.parent, teams);
+    const fromEsm = esm.computeMembership(c.owner, grantsFor(c), c.parent, teams);
     assert.deepEqual(fromEsm, fromCjs, c.name);
+  }
+});
+
+test("both implementations name the same roles and grant lists", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const { ROLES, GRANT_LIST } = require("../lib/lib/access.js");
+  assert.deepEqual(esm.ROLES, [...ROLES]);
+  assert.deepEqual(esm.GRANT_LIST, GRANT_LIST);
+});
+
+test("both implementations read grants and membership off a record identically", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const { grantsOf } = require("../lib/lib/access.js");
+  const records = [
+    {},
+    { viewers: ["a@example.com", 7, null], editors: "not a list" },
+    { viewers: ["team:x"], editors: ["e@example.com"], members: ["m@example.com"] },
+  ];
+  for (const r of records) {
+    assert.deepEqual(esm.grantsOf(r), grantsOf(r), JSON.stringify(r));
+    assert.deepEqual(esm.membershipOf(r), cjs.membershipOf(r), JSON.stringify(r));
+  }
+});
+
+test("the ESM twin refuses a grants record that is missing a role's list", async () => {
+  // The TypeScript twin cannot be called with one; a script can. Accepting it
+  // would write that role's people out of every derived set.
+  const esm = await import("../../scripts/lib/membership.mjs");
+  for (const list of Object.keys(esm.grantsOf({}))) {
+    const grants = esm.grantsOf({});
+    delete grants[list];
+    assert.throws(() => esm.computeMembership("owner@example.com", grants), new RegExp(list));
   }
 });
 

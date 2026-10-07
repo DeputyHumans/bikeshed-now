@@ -22,6 +22,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
+import { emptyGrants } from "./access";
 import type { Actor } from "./actor";
 import { hashBundleFiles, type BundleFile } from "./hash";
 import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
@@ -360,8 +361,7 @@ export async function publishNewDocument(
 
   const membership = computeDocMembership(
     input.ownerEmail,
-    [],
-    [],
+    emptyGrants(),
     input.parentMembership,
   );
   const marking: Marking = resolveMarking(input.marking);
@@ -375,10 +375,8 @@ export async function publishNewDocument(
     ownerUid: input.ownerUid,
     ownerEmail: input.ownerEmail,
     currentVersion: versionId,
-    viewers: [],
-    editors: [],
-    members: membership.members,
-    editorMembers: membership.editorMembers,
+    ...emptyGrants(),
+    ...membership,
     folderId: input.folderId,
     visibility: "private",
     publicEdit: false,

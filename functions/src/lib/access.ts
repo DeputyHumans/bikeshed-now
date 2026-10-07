@@ -16,7 +16,49 @@ import { isAllowedEmail } from "../generated/policy";
  */
 export const TEAM_PREFIX = "team:";
 
-export type Role = "viewer" | "editor";
+/** Every grantable role, lowest first. A principal holds exactly one. */
+export const ROLES = ["viewer", "editor"] as const;
+
+export type Role = (typeof ROLES)[number];
+
+/**
+ * The field each role's direct grants are stored in, on a document and on a
+ * folder alike. Every reader of grants goes through `grantsOf`, so a field
+ * added here is a compile error at every place that builds a `RoleGrants` by
+ * hand, rather than a list that one recompute path silently drops — which
+ * revokes everyone it held (ADR 0006).
+ */
+export const GRANT_LIST = {
+  viewer: "viewers",
+  editor: "editors",
+} as const satisfies Record<Role, string>;
+
+export type GrantList = (typeof GRANT_LIST)[Role];
+
+/** A node's direct grants, one list per role. */
+export type RoleGrants = Record<GrantList, string[]>;
+
+function asStrings(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+/** The direct grants stored on a document or folder record. A missing list is empty. */
+export function grantsOf(data: object | null | undefined): RoleGrants {
+  const record = (data ?? {}) as Record<string, unknown>;
+  const out = {} as RoleGrants;
+  for (const role of ROLES) out[GRANT_LIST[role]] = asStrings(record[GRANT_LIST[role]]);
+  return out;
+}
+
+/** No grants at all: what a new document or folder starts with. */
+export function emptyGrants(): RoleGrants {
+  return grantsOf(undefined);
+}
+
+/** Every list in a grants record, for the team lookup that spans them all. */
+export function grantLists(grants: RoleGrants): string[][] {
+  return ROLES.map((role) => grants[GRANT_LIST[role]]);
+}
 
 export interface AddEntry {
   principal: string;
@@ -28,9 +70,10 @@ export interface AccessDelta {
   remove: string[];
 }
 
-export interface AccessState {
-  viewers: string[];
-  editors: string[];
+export type AccessState = RoleGrants;
+
+export function isRole(v: unknown): v is Role {
+  return typeof v === "string" && (ROLES as readonly string[]).includes(v);
 }
 
 export function isTeamRef(principal: string): boolean {
@@ -81,25 +124,28 @@ export function applyAccessDelta(
   delta: AccessDelta,
 ): AccessState {
   const owner = normalizeEmail(ownerEmail);
-  const viewers = new Set(current.viewers.map(normalizePrincipal));
-  const editors = new Set(current.editors.map(normalizePrincipal));
+  const sets = new Map(
+    ROLES.map((role) => [role, new Set(current[GRANT_LIST[role]].map(normalizePrincipal))]),
+  );
+  const drop = (p: string) => {
+    for (const set of sets.values()) set.delete(p);
+  };
 
   for (const raw of delta.remove) {
     const p = normalizePrincipal(raw);
     if (p === owner) continue; // never drop the owner
-    viewers.delete(p);
-    editors.delete(p);
+    drop(p);
   }
   for (const { principal, role } of delta.add) {
     const p = normalizePrincipal(principal);
     if (p === owner) continue; // implicit; do not duplicate into a role
-    viewers.delete(p);
-    editors.delete(p);
-    if (role === "editor") editors.add(p);
-    else viewers.add(p);
+    drop(p);
+    sets.get(role)?.add(p);
   }
 
-  return { viewers: [...viewers].sort(), editors: [...editors].sort() };
+  const out = {} as AccessState;
+  for (const role of ROLES) out[GRANT_LIST[role]] = [...(sets.get(role) ?? [])].sort();
+  return out;
 }
 
 /**
@@ -131,8 +177,8 @@ export function parseAccessDelta(
       if (typeof value !== "string" || value.trim() === "") {
         return { error: "each `add` entry needs a non-empty email or team reference" };
       }
-      if (entry.role !== "viewer" && entry.role !== "editor") {
-        return { error: '`role` must be "viewer" or "editor"' };
+      if (!isRole(entry.role)) {
+        return { error: `\`role\` must be one of ${ROLES.map((r) => `"${r}"`).join(", ")}` };
       }
       add.push({ principal: value, role: entry.role });
     }

@@ -2,7 +2,7 @@
 // Team records and the expansion of `team:{id}` grants into emails (SPEC §18).
 
 import * as admin from "firebase-admin";
-import { normalizeEmail, teamIdOf } from "./access";
+import { GRANT_LIST, ROLES, normalizeEmail, teamIdOf } from "./access";
 
 type Db = admin.firestore.Firestore;
 
@@ -63,17 +63,15 @@ export async function findGrantsForTeam(
   teamId: string,
 ): Promise<{ docIds: string[]; folderIds: string[] }> {
   const ref = `team:${teamId}`;
-  const [docViewers, docEditors, folderViewers, folderEditors] = await Promise.all([
-    db.collection("docs").where("viewers", "array-contains", ref).get(),
-    db.collection("docs").where("editors", "array-contains", ref).get(),
-    db.collection("folders").where("viewers", "array-contains", ref).get(),
-    db.collection("folders").where("editors", "array-contains", ref).get(),
-  ]);
-  const docIds = new Set<string>();
-  for (const s of [...docViewers.docs, ...docEditors.docs]) docIds.add(s.id);
-  const folderIds = new Set<string>();
-  for (const s of [...folderViewers.docs, ...folderEditors.docs]) folderIds.add(s.id);
-  return { docIds: [...docIds], folderIds: [...folderIds] };
+  const lists = ROLES.map((role) => GRANT_LIST[role]);
+  const query = (collection: string) =>
+    Promise.all(
+      lists.map((list) => db.collection(collection).where(list, "array-contains", ref).get()),
+    );
+  const [docSnaps, folderSnaps] = await Promise.all([query("docs"), query("folders")]);
+  const ids = (snaps: admin.firestore.QuerySnapshot[]) =>
+    [...new Set(snaps.flatMap((s) => s.docs.map((d) => d.id)))];
+  return { docIds: ids(docSnaps), folderIds: ids(folderSnaps) };
 }
 
 export interface TeamRecord {

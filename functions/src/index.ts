@@ -75,6 +75,7 @@ import {
 } from "./lib/acl";
 import {
   applyAccessDelta,
+  grantsOf,
   invalidPrincipals,
   normalizeEmail,
   parseAccessDelta,
@@ -117,12 +118,14 @@ import {
   createFolderRecord,
   BAD_DOC_ID,
   isValidDocId,
+  membershipOf,
   persistDocMembership,
   recomputeSubtree,
   resolveFolderTarget,
   slugify,
   wouldCycle,
   type FolderTarget,
+  type Membership,
 } from "./lib/folders";
 import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
 import { syncPresenceAccess } from "./lib/presence";
@@ -718,14 +721,13 @@ async function logAclChange(
     actor,
     added,
     removed,
-    viewers: state.viewers,
-    editors: state.editors,
+    ...state,
   });
 }
 
 /** Role of an effective member, for the invitation copy. */
-function roleOf(email: string, editorMembers: readonly string[]): Role {
-  return editorMembers.includes(email) ? "editor" : "viewer";
+function roleOf(email: string, membership: Membership): Role {
+  return membership.editorMembers.includes(email) ? "editor" : "viewer";
 }
 
 /**
@@ -779,14 +781,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   }
 
   const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(
-    {
-      viewers: asArray(data.viewers),
-      editors: asArray(data.editors),
-    },
-    String(data.ownerEmail),
-    parsed.delta,
-  );
+  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
 
   // Recompute EFFECTIVE membership rather than just writing the new grants:
   // otherwise a direct-sharing change silently drops every reader who had access
@@ -795,8 +790,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   // computes membership and everything calls it.
   const membership = await persistDocMembership(db(), ref, {
     ownerEmail: String(data.ownerEmail),
-    viewers: next.viewers,
-    editors: next.editors,
+    grants: next,
     folderId: (data.folderId as string | null) ?? null,
   });
 
@@ -809,7 +803,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   const beforeSet = new Set(beforeMembers);
   const invitees: InviteTarget[] = membership.members
     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-    .map((email) => ({ email, role: roleOf(email, membership.editorMembers) }));
+    .map((email) => ({ email, role: roleOf(email, membership) }));
   if (invitees.length > 0) {
     await sendInvitations(caller.emailLower, invitees, {
       title: typeof data.title === "string" ? data.title : docId,
@@ -818,11 +812,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
     });
   }
 
-  res.status(200).json({
-    viewers: next.viewers,
-    editors: next.editors,
-    members: membership.members,
-  });
+  res.status(200).json({ ...next, members: membership.members });
 });
 
 /**
@@ -1705,22 +1695,17 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
   }
 
   const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(
-    { viewers: asArray(data.viewers), editors: asArray(data.editors) },
-    String(data.ownerEmail),
-    parsed.delta,
-  );
+  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
 
-  await ref.set({ viewers: next.viewers, editors: next.editors, updatedAt: now() }, { merge: true });
+  await ref.set({ ...next, updatedAt: now() }, { merge: true });
   await recomputeSubtree(db(), folderId);
 
   const fresh = await ref.get();
-  const afterMembers = asArray(fresh.data()?.members);
-  const afterEditors = asArray(fresh.data()?.editorMembers);
+  const after = membershipOf(fresh.data());
   const beforeSet = new Set(beforeMembers);
-  const invitees: InviteTarget[] = afterMembers
+  const invitees: InviteTarget[] = after.members
     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-    .map((email) => ({ email, role: roleOf(email, afterEditors) }));
+    .map((email) => ({ email, role: roleOf(email, after) }));
   if (invitees.length > 0) {
     await sendInvitations(caller.emailLower, invitees, {
       title: typeof data.name === "string" ? data.name : "a folder",
@@ -1729,7 +1714,7 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
     });
   }
 
-  res.status(200).json({ viewers: next.viewers, editors: next.editors });
+  res.status(200).json(next);
 });
 
 /**
@@ -1818,8 +1803,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       ref,
       {
         ownerEmail: String(data.ownerEmail || ""),
-        viewers: asArray(data.viewers),
-        editors: asArray(data.editors),
+        grants: grantsOf(data),
         folderId: target.id,
       },
       { folderId: target.id },
@@ -1900,8 +1884,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       const dd = d.data();
       await persistDocMembership(db(), d.ref, {
         ownerEmail: String(dd.ownerEmail || ""),
-        viewers: asArray(dd.viewers),
-        editors: asArray(dd.editors),
+        grants: grantsOf(dd),
         folderId: null,
       });
     }
@@ -2423,8 +2406,7 @@ async function refanTeam(teamId: string): Promise<number> {
     const d = snap.data() || {};
     await persistDocMembership(db(), ref, {
       ownerEmail: String(d.ownerEmail || ""),
-      viewers: asArray(d.viewers),
-      editors: asArray(d.editors),
+      grants: grantsOf(d),
       folderId: (d.folderId as string | null) ?? null,
     });
   }

@@ -31,6 +31,7 @@ import {
   type Visibility,
 } from "./acl";
 import type { Actor } from "./actor";
+import { emptyGrants } from "./access";
 import { computeDocMembership, resolveFolderTarget, slugify } from "./folders";
 import { safeSegment } from "./http";
 import { linkProofFor } from "./linkgrant";
@@ -195,7 +196,7 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   const account = await db.collection("users").doc(caller.uid).get();
   const marking = resolveMarking(account.exists ? account.get("defaultMarking") : null);
 
-  const membership = computeDocMembership(caller.emailLower, [], [], target.membership);
+  const membership = computeDocMembership(caller.emailLower, emptyGrants(), target.membership);
   const now = () => FieldValue.serverTimestamp();
   const forkRef = db.collection("docs").doc(docId);
   const batch = db.batch();
@@ -206,10 +207,8 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
     ownerUid: caller.uid,
     ownerEmail: caller.emailLower,
     currentVersion: "v1",
-    viewers: [],
-    editors: [],
-    members: membership.members,
-    editorMembers: membership.editorMembers,
+    ...emptyGrants(),
+    ...membership,
     folderId: target.id,
     visibility: "private",
     publicEdit: false,

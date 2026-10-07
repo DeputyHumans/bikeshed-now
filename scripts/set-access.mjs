@@ -5,7 +5,7 @@
 /**
  * Usage:
  *   set-access.mjs --doc <docId> [--add a@x.com,team:design] [--remove b@x.com]
- *                  [--role viewer|editor] [--list] [--project <id>] [--dry-run]
+ *                  [--role <role>] [--list] [--project <id>] [--dry-run]
  *
  * This script fixes two real defects in the design it replaces, and both were
  * silent:
@@ -26,7 +26,11 @@
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails, normalizeEmail } from "./lib/email.mjs";
 import {
+  GRANT_LIST,
+  ROLES,
   computeMembership,
+  grantLists,
+  grantsOf,
   loadFolderMembership,
   loadTeamIndex,
 } from "./lib/membership.mjs";
@@ -41,7 +45,8 @@ const USAGE = `set-access.mjs — grant or revoke access to one document
   --doc <docId>        required
   --add <list>         comma-separated emails and team:<id> grants
   --remove <list>      comma-separated emails and team:<id> grants
-  --role viewer|editor which grant list to edit (default: viewer)
+  --role <role>        ${ROLES.join("|")}: which grant list to edit
+                       (default: viewer)
   --list               print the current grants and effective members, then exit
   --account <email>    console identity, required for a real run
   --project <id>       Firebase project id (default: .firebaserc)
@@ -50,7 +55,8 @@ const USAGE = `set-access.mjs — grant or revoke access to one document
   --help
 
 Membership is recomputed by the same code the server uses, including the parent
-folder's members, and all four fields are written. The owner is never removable.`;
+folder's members, and every grant and membership field is written. The owner is
+never removable.`;
 
   const { values } = parse({
     doc: { type: "string" },
@@ -66,8 +72,8 @@ folder's members, and all four fields are written. The owner is never removable.
   const dry = values["dry-run"];
   const docId = values.doc;
   if (!docId) fail("--doc <docId> is required");
-  if (values.role !== "viewer" && values.role !== "editor") {
-    fail('--role must be "viewer" or "editor"');
+  if (!ROLES.includes(values.role)) {
+    fail(`--role must be one of ${ROLES.join(", ")}`);
   }
 
   getProjectId(values.project);
@@ -107,58 +113,53 @@ folder's members, and all four fields are written. The owner is never removable.
   const cur = snap.data() || {};
 
   const ownerEmail = normalizeEmail(cur.ownerEmail || "");
-  const viewers = new Set((cur.viewers ?? []).map(String));
-  const editors = new Set((cur.editors ?? []).map(String));
+  // One role per principal, as the server's applyAccessDelta: a principal
+  // leaves every list before joining the one --role names.
+  const sets = new Map(
+    Object.entries(grantsOf(cur)).map(([list, principals]) => [list, new Set(principals)]),
+  );
+  const drop = (p) => {
+    for (const set of sets.values()) set.delete(p);
+  };
 
   for (const p of remove) {
     if (p === ownerEmail) continue; // the owner is never dropped
-    viewers.delete(p);
-    editors.delete(p);
+    drop(p);
   }
   for (const p of add) {
     if (p === ownerEmail) continue; // ownership is implicit in membership
-    viewers.delete(p);
-    editors.delete(p);
-    if (values.role === "editor") editors.add(p);
-    else viewers.add(p);
+    drop(p);
+    sets.get(GRANT_LIST[values.role]).add(p);
   }
 
-  const nextViewers = [...viewers].sort();
-  const nextEditors = [...editors].sort();
+  const grants = Object.fromEntries(
+    [...sets].map(([list, principals]) => [list, [...principals].sort()]),
+  );
   const folderId = cur.folderId ?? null;
   const parent = await loadFolderMembership(db, folderId);
-  const teams = await loadTeamIndex(db, nextViewers, nextEditors);
-  const membership = computeMembership(
-    ownerEmail,
-    nextViewers,
-    nextEditors,
-    parent,
-    teams,
-  );
+  const teams = await loadTeamIndex(db, ...grantLists(grants));
+  const membership = computeMembership(ownerEmail, grants, parent, teams);
 
   if (add.length || remove.length) {
     await docRef.set(
       {
-        viewers: nextViewers,
-        editors: nextEditors,
-        members: membership.members,
-        editorMembers: membership.editorMembers,
+        ...grants,
+        ...membership,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
     await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
-    console.log(`  updated docs/${docId} (all four membership fields + presence mirror).`);
+    console.log(`  updated docs/${docId} (every grant and membership field + presence mirror).`);
   }
 
   if (values.list) {
     console.log("  current access:");
     console.log(`    owner:         ${ownerEmail || "(unset)"}`);
     console.log(`    folder:        ${folderId ?? "(root)"}`);
-    console.log(`    viewers:       [${nextViewers.join(", ")}]`);
-    console.log(`    editors:       [${nextEditors.join(", ")}]`);
-    console.log(`    members:       [${membership.members.join(", ")}]`);
-    console.log(`    editorMembers: [${membership.editorMembers.join(", ")}]`);
+    for (const [field, list] of [...Object.entries(grants), ...Object.entries(membership)]) {
+      console.log(`    ${`${field}:`.padEnd(18)} [${list.join(", ")}]`);
+    }
   }
 }
 
