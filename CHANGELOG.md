@@ -28,6 +28,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   in progress, every version an editor opened showed the draft instead,
   under the older version's label. The draft is now shown only on the
   published head, which is the version it is built on (SPEC §6a).
+- **Unpublished edits say they are unpublished.** An editor reading a
+  document with a draft was shown the draft under the published version's
+  label, with nothing to tell the two apart. A banner now says the page is
+  unpublished edits, who saved them last and when, and that everyone else
+  still sees the published version; the label reads `v1 · draft`, and Edit
+  opens the editor where they can be published (SPEC §6a).
 
 ## 0.6.1 — 2026-10-06
 

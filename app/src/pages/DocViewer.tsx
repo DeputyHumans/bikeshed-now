@@ -6,7 +6,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import { logEvent } from "../analytics";
-import { createAnnotation, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
+import { createAnnotation, formatRelative, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
 import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
 import { applySuggestion, trimToText } from "../annotation/exact";
 import { Sidebar } from "../annotation/Sidebar";
@@ -235,6 +235,24 @@ export function DocViewer() {
     doc.currentVersion === headVersion &&
     !(mode.kind === "reading" && mode.draft) &&
     !isExpired(doc.meta?.expiresAt);
+
+  // The draft is on screen, and nothing inside the frame can say so: an
+  // editor's reading view would otherwise be indistinguishable from the
+  // published version its label names (SPEC §6a).
+  const draftRecord = doc.meta?.draft;
+  const draftOnScreen =
+    mode.kind === "reading" && mode.draft && draftRecord
+      ? (() => {
+          const relative = formatRelative(draftRecord.updatedAt);
+          return {
+            byEmail: draftRecord.updatedByEmail,
+            byYou: draftRecord.updatedByEmail?.toLowerCase() === emailLower,
+            when:
+              relative === "never" ? "" : /ago$|^just now$/.test(relative) ? relative : `on ${relative}`,
+            version: doc.currentVersion,
+          };
+        })()
+      : null;
 
   // A form for a frame that has since reloaded, or gone into edit mode,
   // quotes a document that is no longer the one on screen.
@@ -836,7 +854,7 @@ export function DocViewer() {
           title={doc.title}
           folderId={doc.meta?.folderId ?? null}
           folders={folders}
-          versionLabel={doc.currentVersion}
+          versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : doc.currentVersion}
           // The member record, or the projection: a reader of a public document
           // who is not a member is told too, which is what the projection
           // carries the date for (SPEC §17).
@@ -875,6 +893,8 @@ export function DocViewer() {
       )}
 
       <ViewerBanners
+        draft={draftOnScreen}
+        onEdit={() => setWantsEdit(true)}
         newVersion={live.newVersion}
         onOpenNewVersion={() => navigate(`/d/${docId}`)}
         onDismissNewVersion={live.dismissNewVersion}

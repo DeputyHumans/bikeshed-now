@@ -636,6 +636,14 @@ The one path that writes content, and it is explicit and server-mediated.
   frame. It is sound only because the edit frame is script-free.
 - A commit is refused when the pre-commit draft save failed. Publishing anyway
   would promote the PREVIOUS draft bytes while reporting success.
+- Leaving edit mode saves only an edit the autosave has not yet taken. Any
+  save creates a draft, so a save on the way out of an unchanged session
+  would leave a draft that differs from nothing.
+- While a draft exists, an editor reading the **published head** reads the
+  draft, under a banner that says so — who saved it last, and when — and a
+  version label that reads `vN · draft`. The banner is the only signal: the
+  frame cannot carry one. An editor who opens an older version reads that
+  version; the draft is built on the head (`readsDraft`).
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit`, allowed only when every comment on the current version is
   resolved. Annotations are version-scoped, so the new version starts

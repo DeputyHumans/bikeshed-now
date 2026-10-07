@@ -10,6 +10,13 @@ import { Icon } from "./Icon";
  */
 
 export function ViewerBanners(props: {
+  /**
+   * What is on screen is the draft, not the published version its label
+   * names. `when` is already phrased ("5m ago", "on 4 Oct 2026") or empty.
+   */
+  draft?: { byEmail: string; byYou: boolean; when: string; version: string } | null;
+  onEdit?: () => void;
+
   /** Somebody else published while this reader was looking at an older version. */
   newVersion?: string | null;
   onOpenNewVersion?: () => void;
@@ -34,6 +41,28 @@ export function ViewerBanners(props: {
   onOpenTrust?: () => void;
 }) {
   const rows: React.ReactNode[] = [];
+
+  if (props.draft) {
+    const { byEmail, byYou, when, version } = props.draft;
+    rows.push(
+      // First, because it is a fact about everything else on the page: an
+      // editor reads the work in progress, and nothing else in the frame says
+      // that it is not what everybody else sees.
+      <div key="draft" className="banner" role="status">
+        <Icon name="edit" size={15} />
+        <span>
+          You're reading unpublished edits, last saved by {byYou ? "you" : byEmail}
+          {when ? ` ${when}` : ""}. Everyone else still sees {version} until they're saved as a
+          new version.
+        </span>
+        {props.onEdit ? (
+          <button type="button" className="btn btn-sm" onClick={props.onEdit}>
+            Edit
+          </button>
+        ) : null}
+      </div>,
+    );
+  }
 
   if (props.newVersion) {
     rows.push(
