@@ -2192,9 +2192,12 @@ Each author may have twenty pending suggestions on one version.
 ### Writing one
 
 Select text while reading; the selection toolbar offers **Suggest edit** beside
-Comment to anyone who may suggest, on the published head only — not on an
-editor's view of the draft, where they can simply edit, and not once the
-document has expired. A selection it cannot take — across two paragraphs,
+Comment to anyone who may suggest, on the published head only, and not once the
+document has expired. An editor reading the draft is offered it too: whoever
+can edit chooses, each time, between proposing a change and making it, and the
+review pass judges a suggestion against that same draft (`offersSuggest`). A
+suggestion quoting text that exists only in the draft reads as stale to
+somebody reading the published version until it is accepted and published. A selection it cannot take — across two paragraphs,
 holding a line break, list, table or image, or inside a figure — is refused on
 press with the reason, not greyed out. The selection is trimmed of edge
 whitespace and anchored as a comment is.

@@ -2,7 +2,7 @@
 // What the interface reads off a record before offering anything (SPEC §13).
 
 import { describe, expect, test } from "vitest";
-import { grantsOf, isDocEditor, ROLES } from "./roles";
+import { grantsOf, isDocEditor, offersSuggest, ROLES } from "./roles";
 
 describe("grantsOf", () => {
   test("reads every role's list, and an absent or malformed one as empty", () => {
@@ -39,5 +39,39 @@ describe("isDocEditor", () => {
     expect(isDocEditor(record, "s@example.com")).toBe(false);
     expect(isDocEditor(record, "")).toBe(false);
     expect(isDocEditor(null, "owner@example.com")).toBe(false);
+  });
+});
+
+describe("offersSuggest", () => {
+  const ON_HEAD = {
+    signedIn: true,
+    maySuggest: true,
+    mode: { kind: "reading", versionId: "v2", draft: false, sandboxed: true } as const,
+    shownVersion: "v2",
+    headVersion: "v2",
+    expired: false,
+  };
+
+  test("is offered to an editor reading the draft, so editing stays a choice", () => {
+    expect(offersSuggest({ ...ON_HEAD, mode: { ...ON_HEAD.mode, draft: true } })).toBe(true);
+  });
+
+  test("is offered on the published head", () => {
+    expect(offersSuggest(ON_HEAD)).toBe(true);
+  });
+
+  test("is not offered on an older version, which no suggestion is recorded against", () => {
+    expect(offersSuggest({ ...ON_HEAD, shownVersion: "v1" })).toBe(false);
+  });
+
+  test("is not offered in the editor, or before the head is known", () => {
+    expect(offersSuggest({ ...ON_HEAD, mode: { kind: "editing", baseVersion: "v2" } })).toBe(false);
+    expect(offersSuggest({ ...ON_HEAD, shownVersion: "", headVersion: "" })).toBe(false);
+  });
+
+  test("is not offered once expired, signed out, or to a reader who may not suggest", () => {
+    expect(offersSuggest({ ...ON_HEAD, expired: true })).toBe(false);
+    expect(offersSuggest({ ...ON_HEAD, signedIn: false })).toBe(false);
+    expect(offersSuggest({ ...ON_HEAD, maySuggest: false })).toBe(false);
   });
 });

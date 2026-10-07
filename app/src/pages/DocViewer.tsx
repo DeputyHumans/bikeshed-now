@@ -59,7 +59,7 @@ import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
 import type { Anchor, Annotation, FolderMeta, TeamMeta } from "../types";
-import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf } from "../roles";
+import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest } from "../roles";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -224,17 +224,15 @@ export function DocViewer() {
     emailLower,
   });
 
-  // Who may propose an edit here, and on what. Only on the published head, which
-  // is what a suggestion is anchored to and what the server will take it on;
-  // not on an editor's view of the draft, where they can simply edit; and not
-  // once the document has expired (SPEC §22).
-  const canSuggest =
-    signedIn &&
-    canSuggestDoc(doc.meta, emailLower, canEdit) &&
-    Boolean(headVersion) &&
-    doc.currentVersion === headVersion &&
-    !(mode.kind === "reading" && mode.draft) &&
-    !isExpired(doc.meta?.expiresAt);
+  // Who may propose an edit here, and on what (SPEC §22).
+  const canSuggest = offersSuggest({
+    signedIn,
+    maySuggest: canSuggestDoc(doc.meta, emailLower, canEdit),
+    mode,
+    shownVersion: doc.currentVersion,
+    headVersion,
+    expired: isExpired(doc.meta?.expiresAt),
+  });
 
   // The draft is on screen, and nothing inside the frame can say so: an
   // editor's reading view would otherwise be indistinguishable from the

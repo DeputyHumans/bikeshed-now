@@ -2,6 +2,7 @@
 // The four roles and what a record says each person may do (SPEC §13).
 
 import type { Role } from "./types";
+import type { FrameMode } from "./viewer/frameMode";
 
 /**
  * Lowest first, each able to do everything below it. The server owns the
@@ -104,4 +105,32 @@ export function canSuggestDoc(
   if (canEdit) return true;
   if (!record || !emailLower) return false;
   return has(record.suggesters, emailLower) || has(record.suggesterMembers, emailLower);
+}
+
+/**
+ * Whether the selection toolbar offers "Suggest edit" (SPEC §22).
+ *
+ * While reading, on the published head — the version a suggestion is recorded
+ * against and the server takes it on — and not once the document has expired.
+ * An editor reading the draft is offered it like anybody else: suggesting is
+ * how someone who could edit proposes a change for somebody else to decide
+ * instead, and the review pass judges every suggestion against that draft.
+ */
+export function offersSuggest(r: {
+  signedIn: boolean;
+  /** `canSuggestDoc` for this reader. */
+  maySuggest: boolean;
+  mode: FrameMode;
+  shownVersion: string;
+  headVersion: string;
+  expired: boolean;
+}): boolean {
+  return (
+    r.signedIn &&
+    r.maySuggest &&
+    r.mode.kind === "reading" &&
+    r.headVersion !== "" &&
+    r.shownVersion === r.headVersion &&
+    !r.expired
+  );
 }

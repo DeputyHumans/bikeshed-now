@@ -34,6 +34,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   unpublished edits, who saved them last and when, and that everyone else
   still sees the published version; the label reads `v1 · draft`, and Edit
   opens the editor where they can be published (SPEC §6a).
+- **An editor can suggest while reading unpublished edits.** "Suggest edit"
+  was withheld from anyone who could edit whenever a draft existed, on the
+  reasoning that they could simply edit. It is now offered whenever reading
+  the published head or its draft, so proposing a change for somebody else to
+  decide is a choice an editor can always make, and editing stays one click
+  away (SPEC §22).
 
 ## 0.6.1 — 2026-10-06
 
