@@ -48,6 +48,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   the review pass. While editing, the frame is now laid out at the width the
   slides need and scaled to fit, so whole slides show as they do when reading
   (SPEC §6a).
+- **The review pass shows its first suggestion.** It marked the first target
+  as soon as the editor opened, and on a document edited before, joining the
+  live session a moment later rebuilt the page underneath, so that mark
+  vanished and the first suggestion showed nothing. It now waits for the
+  session, as Accept already did (SPEC §22).
 
 ## 0.6.1 — 2026-10-06
 

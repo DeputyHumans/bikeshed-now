@@ -2225,6 +2225,9 @@ editor has already rewritten shows as stale there. The target is brought into
 view once and marked with the CSS Custom Highlight API through an adopted
 stylesheet — no node and no attribute, so nothing reaches the serializer or the
 CRDT's observer — falling back to selecting it where the API is missing.
+Nothing is judged or marked until the editing session has bound: binding to a
+shared document somebody has already edited replaces the body, and a mark made
+in the nodes it removes collapses to nothing.
 
 Accept waits for the editing session to have joined the shared document (an
 edit applied before the bind is lost to it), then runs claim → apply → save

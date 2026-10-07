@@ -77,10 +77,17 @@ export function useSuggestionReview(o: {
   /** Pending suggestions, in the order they are reviewed. */
   pending: Annotation[];
   currentId: string | null;
+  /**
+   * The editing session is bound. Until it is, nothing is judged or marked:
+   * binding to a shared document that already has content REPLACES the body,
+   * and a mark made just before sits in nodes that are gone — its range
+   * collapses to an empty point, and the first target shows nothing at all.
+   */
+  ready: boolean;
   reduceMotion?: boolean;
 }): { stale: Set<string> } {
-  const { mode, doc, epoch, active, pending, currentId, reduceMotion = false } = o;
-  const on = active && mode.kind === "editing" && Boolean(doc?.body);
+  const { mode, doc, epoch, active, pending, currentId, ready, reduceMotion = false } = o;
+  const on = active && ready && mode.kind === "editing" && Boolean(doc?.body);
   const [stale, setStale] = useState<Set<string>>(new Set());
 
   // Judged against the DRAFT, the text an Accept would actually change. State

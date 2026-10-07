@@ -206,6 +206,7 @@ function Harness({ doc, mode, reviewing = SUGGESTION.annId }: { doc: Document; m
     active: reviewing !== null,
     pending: [SUGGESTION],
     currentId: reviewing,
+    ready: true,
   });
 
   return (

@@ -311,6 +311,10 @@ export function DocViewer() {
     () => annotations.filter((a) => a.suggestion?.state === "pending"),
     [annotations],
   );
+  // Whether the editing session is bound. An edit made before it is lost when
+  // it binds, and a review mark made before it vanishes with the nodes binding
+  // replaces; alone, there is nothing to wait for.
+  const reviewReady = mode.kind === "editing" && (!shareLive || shared.bound);
   const reviewLayer = useSuggestionReview({
     mode,
     doc: frame.doc,
@@ -318,11 +322,9 @@ export function DocViewer() {
     active: review !== null,
     pending: pendingSuggestions,
     currentId: review?.currentId ?? null,
+    ready: reviewReady,
     reduceMotion,
   });
-  // An edit made before the host is bound to the shared document is lost when
-  // it binds; alone, there is nothing to wait for.
-  const reviewReady = mode.kind === "editing" && (!shareLive || shared.bound);
 
   const live = useLiveSync({
     meta: doc.meta,
