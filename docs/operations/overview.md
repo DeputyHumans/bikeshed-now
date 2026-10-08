@@ -357,21 +357,32 @@ subject**: a workflow running on `refs/heads/main` of this repository. With
 no environment secrets on the free plan, that binding is what stops a
 workflow on another ref from deploying.
 
+**Read the subject from GitHub; do not write it by hand.** A repository with
+immutable subject claims has ids in its prefix,
+`repo:<owner>@<owner-id>/<repo>@<repo-id>`, rather than `repo:<owner>/<repo>`.
+A binding written in the other form matches nothing, and the deploy then fails
+at authentication with an error that never names the subject. The pool admits
+one repository by its numeric id, which a rename or a transfer cannot reuse.
+
 ```bash
 P=your-firebase-project-id
 N=$(gcloud projects describe $P --format='value(projectNumber)')
 REPO=<owner>/<repo>
+REPO_ID=$(gh api repos/$REPO --jq .id)
+SUB=$(gh api repos/$REPO/actions/oidc/customization/sub --jq '.sub_claim_prefix // empty')
+SUB=${SUB:-repo:$REPO}
 DEPLOYER=deployer@$P.iam.gserviceaccount.com
 
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com --project $P
 gcloud iam workload-identity-pools create github --project $P --location global
 gcloud iam workload-identity-pools providers create-oidc deploy --project $P --location global \
   --workload-identity-pool github --issuer-uri https://token.actions.githubusercontent.com \
-  --attribute-mapping google.subject=assertion.sub,attribute.repository=assertion.repository \
-  --attribute-condition "assertion.repository == '$REPO'"
+  --attribute-mapping google.subject=assertion.sub,attribute.repository_id=assertion.repository_id \
+  --attribute-condition "assertion.repository_id == '$REPO_ID'"
 gcloud iam service-accounts create deployer --project $P --display-name "CI deployer"
 gcloud iam service-accounts add-iam-policy-binding $DEPLOYER --project $P \
   --role roles/iam.workloadIdentityUser \
-  --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/repo:$REPO:ref:refs/heads/main"
+  --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/$SUB:ref:refs/heads/main"
 for role in cloudfunctions.admin run.admin firebasehosting.admin firebaserules.admin \
     datastore.indexAdmin firebasedatabase.admin secretmanager.viewer serviceusage.serviceUsageConsumer; do
   gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/$role --condition None
