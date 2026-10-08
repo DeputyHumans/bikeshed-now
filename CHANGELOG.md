@@ -27,6 +27,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   back exactly, each on lines of its own. The first save also joins a paragraph
   wrapped across several lines into one line, which it always did and which
   is now documented (SPEC §11).
+- **A new suggestion reaches the owner and approvers even right after a
+  comment email.** Both kinds of email shared one thirty-minute limit per
+  person and document, so a comment email held back the notice of a
+  suggestion that was blocking the next version. Suggestions now have a limit
+  of their own, so a burst of them is still a single email. Expired entries in
+  that limit are now also cleared from the account record, as was always
+  intended; they had been kept, because the write merged maps key by key
+  (SPEC §14).
 
 ## 0.6.2 — 2026-10-06
 

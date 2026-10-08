@@ -3055,7 +3055,7 @@ export const onCommentCreated = onDocumentCreated(
       // Staying silent is the right default: they were never told about the
       // document either.
       if (!uid) continue;
-      if (!(await claimCommentCooldown(db(), uid, docId))) continue;
+      if (!(await claimCommentCooldown(db(), uid, docId, suggestion ? "suggestion" : "comment"))) continue;
       await sendCommentNotice(email, {
         authorEmail,
         docTitle: title,

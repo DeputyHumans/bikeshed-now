@@ -1218,6 +1218,11 @@ replacement, and the author's note if there was one. A decision is a short
 comment in the thread ("Accepted." / "Rejected: …"), which reaches the
 suggester the ordinary way.
 
+New suggestions have a cooldown of their own, apart from comments: a waiting
+suggestion holds back the next version until somebody decides it, so a comment
+email a minute earlier must not delay the notice of one, while a burst of
+suggestions — an agent may leave twenty — is still one email per window.
+
 Templates are react-email components rendered with `@react-email/render`, pulled
 in via a **dynamic `import()` inside the send helper** so React never loads in
 `session`, `contentProxy` or any other hot path.

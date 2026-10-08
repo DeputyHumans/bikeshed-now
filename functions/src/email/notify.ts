@@ -27,14 +27,27 @@ type Db = admin.firestore.Firestore;
  * The map is pruned opportunistically: entries older than the window carry no
  * information, and a user who reviews a thousand documents should not accumulate
  * a thousand keys.
+ *
+ * Comments and suggestions are limited APART. A waiting suggestion holds back
+ * the next version until somebody decides it, so a comment email a minute
+ * earlier must not delay the notice of one (SPEC §22); and suggestions are
+ * still limited among themselves, because an agent may leave twenty at once.
  */
+export type NoticeKind = "comment" | "suggestion";
+
+/** A docId is lowercase letters, digits and hyphens, so `:` cannot collide. */
+const cooldownKey = (docId: string, kind: NoticeKind) =>
+  kind === "suggestion" ? `${docId}:suggestions` : docId;
+
 export async function claimCommentCooldown(
   db: Db,
   uid: string,
   docId: string,
+  kind: NoticeKind = "comment",
   now = Date.now(),
 ): Promise<boolean> {
   const ref = db.collection("users").doc(uid);
+  const own = cooldownKey(docId, kind);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return false;
@@ -42,16 +55,19 @@ export async function claimCommentCooldown(
     if (data.emailNotifications === false) return false;
 
     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
-    const last = Number(cooldowns[docId] ?? 0);
+    const last = Number(cooldowns[own] ?? 0);
     if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
 
-    const pruned: Record<string, number> = { [docId]: now };
+    const pruned: Record<string, number> = { [own]: now };
     for (const [key, at] of Object.entries(cooldowns)) {
-      if (key !== docId && now - Number(at) < COMMENT_EMAIL_COOLDOWN_MS) {
+      if (key !== own && now - Number(at) < COMMENT_EMAIL_COOLDOWN_MS) {
         pruned[key] = Number(at);
       }
     }
-    tx.set(ref, { emailCooldowns: pruned }, { merge: true });
+    // `update`, not a merging `set`: a merge combines maps key by key, so the
+    // expired keys this just dropped would survive the write, and the map would
+    // only ever grow. The record exists; `snap.exists` was checked above.
+    tx.update(ref, { emailCooldowns: pruned });
     return true;
   });
 }
