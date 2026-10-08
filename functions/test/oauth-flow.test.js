@@ -341,6 +341,79 @@ test("a code from a registered app cannot be redeemed as the command line", asyn
   assert.equal(r.body.error, "invalid_grant");
 });
 
+test("the command line's token can revoke itself, and do nothing else, with no session", async () => {
+  // In the order `bikeshed logout` meets it: a token from browser sign-in,
+  // then the same token asking /tokens to end it.
+  const w = world();
+  const { verifier, challenge } = pkce();
+  const params = {
+    response_type: "code",
+    client_id: "bikeshed-cli",
+    redirect_uri: "http://127.0.0.1:61234/callback",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state: "cli-state",
+    resource: RESOURCE,
+    device: "laptop",
+  };
+  const code = await approve(w, params);
+  const minted = await w.token({
+    grant_type: "authorization_code",
+    code,
+    code_verifier: verifier,
+    client_id: "bikeshed-cli",
+    redirect_uri: params.redirect_uri,
+  });
+  const cli = minted.body.access_token;
+  const asCli = (body) =>
+    w.run(() => invoke(manageTokens, { body, headers: { authorization: `Bearer ${cli}` } }));
+  const callerFor = (bearer) =>
+    w.run(() => resolveCaller({ headers: { authorization: `Bearer ${bearer}` } }));
+
+  // Another of Ana's tokens, made the usual way, which must outlive all this.
+  const other = await w.run(() =>
+    invoke(manageTokens, {
+      body: { op: "create", name: "CI", channel: "cli" },
+      headers: { cookie: "__session=ana-session" },
+    }),
+  );
+  assert.equal(other.status, 200);
+
+  // A credential still cannot mint one, or see the others.
+  assert.equal((await asCli({ op: "create", name: "more", channel: "cli" })).status, 401);
+  assert.equal((await asCli({ op: "list" })).status, 401);
+  const named = await asCli({ op: "revoke", tokenId: other.body.tokenId });
+  assert.equal(named.status, 403);
+  assert.equal((await callerFor(other.body.token)).uid, "u-ana", "a token revoked another");
+
+  const ownId = (await callerFor(cli)).tokenId;
+  const revoked = await asCli({ op: "revoke" });
+  assert.equal(revoked.status, 200);
+  assert.deepEqual(revoked.body, { revoked: true });
+  assert.equal(await callerFor(cli), null);
+  assert.equal((await w.mcp(cli)).status, 401);
+  const row = (await w.listTokens()).body.tokens.find((x) => x.tokenId === ownId);
+  assert.equal(row.revoked, true, "the account screen does not show it revoked");
+
+  // Gone is gone: asking again is a credential that no longer exists.
+  assert.equal((await asCli({ op: "revoke" })).status, 401);
+  assert.equal((await callerFor(other.body.token)).uid, "u-ana");
+});
+
+test("a connected app's grant cannot revoke anything through /tokens", async () => {
+  const w = world();
+  const { pair, tokenId } = await connect(w);
+  const secret = pair.access_token.split(".")[1];
+  for (const bearer of [pair.access_token, `bsk_${tokenId}.${secret}`]) {
+    const r = await w.run(() =>
+      invoke(manageTokens, { body: { op: "revoke" }, headers: { authorization: `Bearer ${bearer}` } }),
+    );
+    assert.equal(r.status, 401, bearer.slice(0, 4));
+  }
+  assert.equal(w.store.get(`tokens/${tokenId}`).revokedAt ?? null, null);
+  assert.equal((await w.mcp(pair.access_token)).status, 200);
+});
+
 // --- Consent -----------------------------------------------------------------
 
 test("consent takes the account's ID token, and refuses a personal token or none", async () => {

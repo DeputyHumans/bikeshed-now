@@ -16,6 +16,7 @@ import {
   fetchSource,
   listSkills,
   printable,
+  revokeOwnToken,
   uploadFile,
   whoami,
 } from "./client.mjs";
@@ -43,6 +44,7 @@ import {
 const USAGE = `bikeshed — publish and revise documents
 
   bikeshed login                       sign in through your browser (--paste for a token)
+  bikeshed logout                      sign out (revokes a token from browser sign-in)
   bikeshed list                        documents you can read
   bikeshed publish <file>              create a new document
   bikeshed update <id> <file>          publish a new version
@@ -264,7 +266,9 @@ async function browserLogin(flags) {
   });
   // Checked before it is stored, the same as a pasted one.
   await whoami(where, token);
-  writeConfig({ ...readConfig(), origin: where, token });
+  // `via` is what lets `logout` revoke this token: one made by browser sign-in
+  // belongs to this computer alone, where a pasted one may be in CI as well.
+  writeConfig({ ...readConfig(), origin: where, token, via: "browser" });
 
   // The environment outranks the file (resolveAuth), so a variable left over
   // from an earlier session would quietly keep being used instead.
@@ -302,11 +306,76 @@ async function pasteLogin(flags) {
     // Verified before it is stored, so a typo fails here rather than on the
     // next command with a confusing message.
     await whoami(where, token);
-    writeConfig({ ...readConfig(), origin: where, token });
+    writeConfig({ ...readConfig(), origin: where, token, via: "paste" });
     console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`);
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Sign this computer out.
+ *
+ * Only the SAVED sign-in, never BIKESHED_TOKEN or --token: those belong to a
+ * shell or a job, and revoking one would sign out something nobody meant to
+ * touch. A token from browser sign-in exists for this computer alone, so it is
+ * revoked on the deployment as well as forgotten here. A pasted one may be in
+ * CI too, so it is only forgotten, as is one saved before `login` recorded
+ * which kind it was (SPEC §23).
+ *
+ * The token is forgotten whatever the deployment says, and when it cannot be
+ * reached at all: after `logout`, this computer is signed out. `revoked` in
+ * --json means the deployment confirmed the token no longer works.
+ */
+async function logout(flags) {
+  const config = readConfig();
+  const origin = String(config.origin || resolveAuth().origin).replace(/\/+$/, "");
+  const shadowed = () => {
+    if (process.env.BIKESHED_TOKEN) {
+      console.error("BIKESHED_TOKEN is set in this shell, so commands here still use it. Unset it to sign out here too.");
+    }
+  };
+
+  if (!config.token) {
+    out(flags.json, { origin, revoked: false, forgot: false }, () => console.log("Not signed in on this computer."));
+    shadowed();
+    return;
+  }
+
+  let outcome = "kept";
+  let why = "You pasted it in, so something else may use it too.";
+  if (config.via === "browser") {
+    try {
+      outcome = await revokeOwnToken(origin, config.token);
+      why = `${origin} is too old to revoke a token from the command line.`;
+    } catch (e) {
+      outcome = "failed";
+      why =
+        e instanceof CliError
+          ? `${origin} did not revoke it (${printable(e.message, 80)}).`
+          : `Could not reach ${origin} to revoke it (${printable(e.cause?.code ?? e.message, 80)}).`;
+    }
+  }
+
+  const kept = { ...config, origin };
+  delete kept.token;
+  delete kept.via;
+  writeConfig(kept);
+
+  const revoked = outcome === "revoked" || outcome === "invalid";
+  out(flags.json, { origin, revoked, forgot: true }, () =>
+    console.log(
+      outcome === "revoked"
+        ? `Signed out. ${origin} revoked the token, and it is gone from this computer.`
+        : outcome === "invalid"
+          ? `Signed out. The token had already stopped working on ${origin}, and it is gone from this computer.`
+          : "Signed out. The token is gone from this computer.",
+    ),
+  );
+  if (!revoked) {
+    console.error(`${why} It still works until you revoke it at ${origin}/account, under Access tokens.`);
+  }
+  shadowed();
 }
 
 async function list(flags) {
@@ -726,6 +795,7 @@ async function watchFile(file, run) {
 
 const COMMANDS = {
   login,
+  logout,
   list,
   publish,
   update,
@@ -744,7 +814,7 @@ const COMMANDS = {
 };
 
 /** Commands that reach a deployment without authenticating as anybody. */
-const NO_TOKEN = new Set(["login", "open", "skills"]);
+const NO_TOKEN = new Set(["login", "logout", "open", "skills"]);
 
 async function main() {
   const { values, positionals } = parseArgs({

@@ -28,6 +28,10 @@ and run `bikeshed login --paste`. The token is shown once. In CI, set
 `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` instead of running `login` at all; they
 outrank whatever `login` saved.
 
+`bikeshed logout` signs this computer out. It revokes a token from browser
+sign-in as well as deleting it. A pasted token is only deleted, because CI may
+be using the same one: revoke it at `/account` once nothing needs it.
+
 ## The loop
 
 ```bash

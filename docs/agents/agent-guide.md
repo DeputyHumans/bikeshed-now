@@ -83,7 +83,8 @@ Without `--origin` (or `BIKESHED_ORIGIN`) it signs in to the CLI's default
 deployment, which is not necessarily this one. It needs no terminal of its own, so
 you can run it for them; give the command a long timeout, because it is waiting
 for a human. Over SSH, where no browser can open, `bikeshed login --paste` takes
-a token instead.
+a token instead. `bikeshed logout` signs out again. It revokes a token from
+browser sign-in and deletes it; a pasted token is deleted but not revoked.
 
 ### A token, for CI and scripts
 
@@ -147,6 +148,7 @@ somebody might commit.
 
 ```
 bikeshed login [--paste] [--no-browser]
+bikeshed logout
 bikeshed list [--json]
 bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
 bikeshed update <id> <file> [--watch]

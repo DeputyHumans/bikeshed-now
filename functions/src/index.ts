@@ -143,7 +143,15 @@ import { syncPresenceAccess } from "./lib/presence";
 import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
-import { listTokens, mintToken, revokeToken, type TokenChannel } from "./lib/tokens";
+import {
+  bearerFrom,
+  isTokenShaped,
+  listTokens,
+  mintToken,
+  revokeToken,
+  verifyToken,
+  type TokenChannel,
+} from "./lib/tokens";
 import { renderMarkdown } from "./lib/markdown/render";
 import { htmlToMarkdown } from "./lib/markdown/serialize";
 import { resolveMarking, type Marking } from "./lib/marking";
@@ -2554,15 +2562,6 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
  */
 export const manageTokens = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
-  // Deliberately session-only: minting a credential with a credential is how a
-  // leaked token becomes permanent access.
-  const cookieHeader = cookie.parse(req.headers.cookie || "")[SESSION_COOKIE_NAME];
-  const caller = cookieHeader ? await verifySessionCookie(cookieHeader) : null;
-  if (!caller) {
-    res.status(401).end();
-    return;
-  }
-
   const body = jsonBody(req) as {
     op?: unknown;
     name?: unknown;
@@ -2570,6 +2569,30 @@ export const manageTokens = onRequest(PLAIN, async (req, res) => {
     tokenId?: unknown;
   } | null;
   const op = body?.op;
+
+  // Session-only, with one exception. Minting a credential with a credential is
+  // how a leaked token becomes permanent access, and listing would show a
+  // stolen token every other one. Revoking ITSELF can only shrink access: a
+  // leaked token used that way ends itself and nothing else. It is how
+  // `bikeshed logout` signs a computer out on the server too (SPEC §23).
+  const cookieHeader = cookie.parse(req.headers.cookie || "")[SESSION_COOKIE_NAME];
+  const caller = cookieHeader ? await verifySessionCookie(cookieHeader) : null;
+  if (!caller) {
+    const bearer = bearerFrom(req.headers.authorization);
+    const presented =
+      op === "revoke" && isTokenShaped(bearer) ? await verifyToken(db(), bearer as string) : null;
+    if (!presented) {
+      res.status(401).end();
+      return;
+    }
+    if (body?.tokenId !== undefined && body.tokenId !== presented.tokenId) {
+      res.status(403).json({ error: "A token can revoke only itself." });
+      return;
+    }
+    const ok = await revokeToken(db(), presented.uid, presented.tokenId);
+    res.status(ok ? 200 : 404).json({ revoked: ok });
+    return;
+  }
 
   if (op === "list") {
     res.status(200).json({ tokens: await listTokens(db(), caller.uid) });

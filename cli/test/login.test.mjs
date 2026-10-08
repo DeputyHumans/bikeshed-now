@@ -25,7 +25,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer, request } from "node:http";
 import { connect } from "node:net";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,7 +46,9 @@ const LONG = { timeout: 20_000 };
  */
 async function withDeployment(options, body) {
   const flow = options.flow ?? {};
-  const seen = { metadata: 0, token: [], mcp: [] };
+  const seen = { metadata: 0, token: [], mcp: [], tokens: [] };
+  // Revoking TOKEN through /tokens ends it on /mcp too, as on a deployment.
+  let revoked = options.revoked ?? false;
   let origin;
   const json = (res, status, value) => {
     res.writeHead(status, { "Content-Type": "application/json" });
@@ -88,12 +90,22 @@ async function withDeployment(options, body) {
       }
       if (req.method === "POST" && req.url === "/mcp") {
         seen.mcp.push({ authorization: req.headers.authorization, body: JSON.parse(raw) });
-        if (req.headers.authorization !== `Bearer ${TOKEN}`) return json(res, 401, { error: "unauthorized" });
+        if (revoked || req.headers.authorization !== `Bearer ${TOKEN}`) return json(res, 401, { error: "unauthorized" });
         return json(res, 200, {
           jsonrpc: "2.0",
           id: 1,
           result: { structuredContent: { documents: [], nextCursor: null } },
         });
+      }
+      if (req.method === "POST" && req.url === "/tokens") {
+        seen.tokens.push({ authorization: req.headers.authorization, body: JSON.parse(raw) });
+        if (options.tokens) return options.tokens(res);
+        if (revoked || req.headers.authorization !== `Bearer ${TOKEN}`) {
+          res.writeHead(401);
+          return res.end();
+        }
+        revoked = true;
+        return json(res, 200, { revoked: true });
       }
       res.writeHead(404);
       res.end();
@@ -169,6 +181,7 @@ function runLogin(args, { env = {}, stdin = "" } = {}) {
   return {
     child,
     exited,
+    home,
     configPath: join(home, "bikeshed", "config.json"),
     /** The consent address, which is printed on a line of its own. */
     authorizeUrl: async () => new URL((await waitFor(/^ {2}(https?:\/\/\S+)$/m))[1]),
@@ -274,7 +287,7 @@ test("browser sign-in saves a token that PKCE proved belongs to this run", LONG,
 
       assert.equal(seen.mcp.length, 1, "the token is checked before it is saved");
       assert.equal(seen.mcp[0].authorization, `Bearer ${TOKEN}`);
-      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN });
+      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN, via: "browser" });
       if (process.platform !== "win32") {
         assert.equal(statSync(run.configPath).mode & 0o777, 0o600);
       }
@@ -632,10 +645,193 @@ test("--paste reads a token from stdin and checks it, in CI too", LONG, async ()
       assert.equal(code, 0, stderr);
       assert.equal(seen.metadata, 0, "--paste does not look for browser sign-in");
       assert.equal(seen.mcp[0].authorization, `Bearer ${TOKEN}`);
-      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN });
+      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN, via: "paste" });
       assert.equal(stdout.includes(TOKEN), false);
     } finally {
       run.cleanup();
+    }
+  });
+});
+
+// --- Signing out --------------------------------------------------------------
+
+/** Any other command, against the config in `home`. Spawned, for withDeployment. */
+function runCli(home, args, { env = {} } = {}) {
+  const childEnv = { ...process.env, XDG_CONFIG_HOME: home };
+  for (const name of ["CI", "BIKESHED_TOKEN", "BIKESHED_ORIGIN"]) delete childEnv[name];
+  Object.assign(childEnv, env);
+  const child = spawn(process.execPath, [join(SRC, "index.mjs"), ...args], {
+    env: childEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8").on("data", (d) => {
+    stdout += d;
+  });
+  child.stderr.setEncoding("utf8").on("data", (d) => {
+    stderr += d;
+  });
+  const watchdog = setTimeout(() => child.kill("SIGKILL"), 15_000);
+  return new Promise((resolve) =>
+    child.on("close", (code) => {
+      clearTimeout(watchdog);
+      resolve({ code, stdout, stderr });
+    }),
+  );
+}
+
+/** A config directory holding `config`, as an earlier `login` would leave it. */
+function homeWith(config) {
+  const home = mkdtempSync(join(tmpdir(), "bikeshed-logout-"));
+  if (config) {
+    mkdirSync(join(home, "bikeshed"), { recursive: true });
+    writeFileSync(join(home, "bikeshed", "config.json"), JSON.stringify(config));
+  }
+  return home;
+}
+
+const savedConfig = (home) => JSON.parse(readFileSync(join(home, "bikeshed", "config.json"), "utf8"));
+
+test("logout revokes what browser sign-in saved, and the next command has no token", LONG, async () => {
+  // The sequence a person performs, in one config directory: sign in, sign
+  // out, then try to use it.
+  const flow = {};
+  await withDeployment({ flow }, async ({ origin, seen }) => {
+    const run = runLogin(["--origin", origin, "--no-browser"]);
+    try {
+      const authorize = await run.authorizeUrl();
+      flow.challenge = authorize.searchParams.get("code_challenge");
+      flow.code = "c";
+      await visit(callbackFor(authorize, { code: "c", state: authorize.searchParams.get("state"), iss: origin }));
+      assert.equal((await run.exited).code, 0);
+
+      const out = await runCli(run.home, ["logout"]);
+      assert.equal(out.code, 0, out.stderr);
+      assert.deepEqual(seen.tokens, [{ authorization: `Bearer ${TOKEN}`, body: { op: "revoke" } }]);
+      assert.match(out.stdout, /revoked the token/);
+      assert.equal(out.stderr, "");
+      // The deployment is remembered, so the next `login` offers it again.
+      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin });
+      for (const text of [out.stdout, out.stderr]) assert.equal(text.includes(SECRET), false);
+
+      const after = await runCli(run.home, ["list"]);
+      assert.equal(after.code, 1);
+      assert.match(after.stderr, /no token/);
+    } finally {
+      run.cleanup();
+    }
+  });
+});
+
+test("a pasted token, or one saved before login said which, is forgotten and never revoked", LONG, async () => {
+  await withDeployment({}, async ({ origin, seen }) => {
+    for (const config of [{ origin, token: TOKEN, via: "paste" }, { origin, token: TOKEN }]) {
+      const home = homeWith(config);
+      try {
+        const out = await runCli(home, ["logout", "--json"]);
+        assert.equal(out.code, 0, out.stderr);
+        assert.deepEqual(JSON.parse(out.stdout), { origin, revoked: false, forgot: true });
+        assert.match(out.stderr, new RegExp(`revoke it at ${origin}/account`));
+        assert.deepEqual(savedConfig(home), { origin });
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+    assert.equal(seen.tokens.length, 0, "a pasted token may be in CI too");
+    assert.equal(seen.mcp.length, 0);
+  });
+});
+
+test("a deployment that cannot revoke from the command line is told apart from a dead token", LONG, async () => {
+  // Older deployments answer /tokens with 401 to anything but a browser
+  // session. So does a current one to a token that no longer works. Only /mcp
+  // can say which, and the advice differs.
+  const older = (res) => {
+    res.writeHead(401);
+    res.end();
+  };
+  await withDeployment({ tokens: older }, async ({ origin, seen }) => {
+    const home = homeWith({ origin, token: TOKEN, via: "browser" });
+    try {
+      const out = await runCli(home, ["logout", "--json"]);
+      assert.equal(out.code, 0, out.stderr);
+      assert.deepEqual(JSON.parse(out.stdout), { origin, revoked: false, forgot: true });
+      assert.match(out.stderr, /too old to revoke a token from the command line/);
+      assert.match(out.stderr, new RegExp(`${origin}/account`));
+      assert.equal(seen.mcp.length, 1);
+      assert.deepEqual(savedConfig(home), { origin });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+  await withDeployment({ revoked: true }, async ({ origin, seen }) => {
+    const home = homeWith({ origin, token: TOKEN, via: "browser" });
+    try {
+      const out = await runCli(home, ["logout", "--json"]);
+      assert.equal(out.code, 0, out.stderr);
+      assert.deepEqual(JSON.parse(out.stdout), { origin, revoked: true, forgot: true });
+      assert.equal(out.stderr, "", "a token that already stopped working needs no advice");
+      assert.equal(seen.tokens.length, 1);
+      assert.deepEqual(savedConfig(home), { origin });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+test("logout signs this computer out even when the deployment cannot be reached", LONG, async () => {
+  // A port that was just listening and now is not.
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await new Promise((resolve) => server.close(resolve));
+
+  const home = homeWith({ origin, token: TOKEN, via: "browser" });
+  try {
+    const out = await runCli(home, ["logout"]);
+    assert.equal(out.code, 0, out.stderr);
+    assert.match(out.stderr, /Could not reach/);
+    assert.match(out.stderr, new RegExp(`${origin}/account`));
+    assert.deepEqual(savedConfig(home), { origin });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("logout touches only the saved sign-in, never BIKESHED_TOKEN", LONG, async () => {
+  const ENV_TOKEN = `bsk_${"f".repeat(32)}.${SECRET}`;
+  await withDeployment({}, async ({ origin, seen }) => {
+    const home = homeWith({ origin, token: TOKEN, via: "browser" });
+    try {
+      const out = await runCli(home, ["logout"], { env: { BIKESHED_TOKEN: ENV_TOKEN } });
+      assert.equal(out.code, 0, out.stderr);
+      assert.deepEqual(
+        seen.tokens.map((t) => t.authorization),
+        [`Bearer ${TOKEN}`],
+        "a token from the environment was sent",
+      );
+      assert.match(out.stderr, /BIKESHED_TOKEN is set in this shell/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+
+    // Nothing saved: nothing to do, and still nothing sent.
+    const empty = homeWith(null);
+    try {
+      const bare = await runCli(empty, ["logout"]);
+      assert.equal(bare.code, 0, bare.stderr);
+      assert.match(bare.stdout, /Not signed in on this computer/);
+      assert.equal(bare.stderr, "");
+
+      const out = await runCli(empty, ["logout"], { env: { BIKESHED_TOKEN: ENV_TOKEN, BIKESHED_ORIGIN: origin } });
+      assert.equal(out.code, 0, out.stderr);
+      assert.match(out.stdout, /Not signed in on this computer/);
+      assert.match(out.stderr, /BIKESHED_TOKEN is set in this shell/);
+      assert.equal(seen.tokens.length, 1);
+      assert.equal(existsSync(join(empty, "bikeshed", "config.json")), false);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
     }
   });
 });

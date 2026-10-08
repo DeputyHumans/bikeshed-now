@@ -221,7 +221,7 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
   for (const args of [[], ["--help"]]) {
     const out = run(args);
     assert.match(out, /^bikeshed/);
-    const commands = ["login", "publish", "update", "list", "comments", "open"];
+    const commands = ["login", "logout", "publish", "update", "list", "comments", "open"];
     for (const command of [...commands, "fork", "lineage", "comment", "suggest", "folders", "mkdir", "mv", "skills"]) {
       assert.match(out, new RegExp(`\\b${command}\\b`), `${command} is missing from --help`);
     }

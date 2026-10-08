@@ -16,6 +16,20 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **`bikeshed logout`** (in `bikeshed-now` 0.10.0). It signs the computer
+  out. A token from browser sign-in is revoked on the deployment and deleted,
+  because it exists for that computer alone. A token pasted in with `--paste`
+  is only deleted, since CI may use the same one, and the command says where
+  to revoke it. `BIKESHED_TOKEN` is never touched. Against an older deployment
+  the token is deleted and the command says it still works until revoked at
+  `/account`.
+- **A personal token can revoke itself.** `POST /tokens` with
+  `{"op": "revoke"}` and the token as its bearer ends that token and nothing
+  else. Creating and listing tokens still need a browser session, so a leaked
+  token cannot mint another or list the rest.
+
 ### Fixed
 
 - **`bikeshed --help` no longer ends with a note meant for the project's

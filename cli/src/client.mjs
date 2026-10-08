@@ -225,6 +225,40 @@ export async function exchangeCode(tokenEndpoint, { code, verifier, redirectUri,
 }
 
 /** Check that a token works, and say who it belongs to. */
+/**
+ * Revoke the token being presented, and only it (SPEC §23).
+ *
+ * A 401 from /tokens means one of two things that need different advice: the
+ * token had already stopped working, or the deployment is older than a token
+ * revoking itself and still takes only a browser session there. One call with
+ * the same token to /mcp tells them apart. Returns "revoked", "invalid" or
+ * "unsupported"; a deployment that cannot be reached throws.
+ */
+export async function revokeOwnToken(origin, token) {
+  const res = await fetch(`${origin}/tokens`, {
+    method: "POST",
+    headers: headers(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ op: "revoke" }),
+  });
+  if (res.ok) return "revoked";
+  if (res.status !== 401) {
+    throw new CliError(await readError(res, `the server returned ${res.status}`));
+  }
+  const probe = await fetch(`${origin}/mcp`, {
+    method: "POST",
+    headers: headers(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "list_documents", arguments: { limit: 1 } },
+    }),
+  });
+  if (probe.status === 401) return "invalid";
+  if (probe.ok) return "unsupported";
+  throw new CliError(`the server returned ${probe.status}`);
+}
+
 export async function whoami(origin, token) {
   // list_documents is the cheapest authenticated call, and a token that can
   // list is a token that works.

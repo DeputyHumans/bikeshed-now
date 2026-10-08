@@ -392,7 +392,9 @@ Every op but `create` refuses a token with `403`: deciding is a person's act.
 ### Account, team and token endpoints
 - **`POST /verify/start`**, **`POST /verify/complete`** — §14.
 - **`POST /team`**, **`POST /team-members`** — §18.
-- **`POST /tokens`** — `{ op: "create"|"revoke"|"list", ... }` — §19.
+- **`POST /tokens`** — `{ op: "create"|"revoke"|"list", ... }` — §19. A browser
+  session for all three; a personal token as its own bearer may `revoke` itself
+  and nothing else (§23).
 - **`POST /mcp`** — streamable HTTP MCP endpoint; a personal access token or a
   connected app's access token — §19, §23.
 - **`GET /.well-known/oauth-protected-resource[/mcp]`**,
@@ -1952,7 +1954,7 @@ Deliberately distinct from `scripts/*.mjs`:
 | Talks to | Firestore and Storage directly | the deployment over HTTPS |
 | Purpose | provision, withdraw, tear down | publish and revise documents |
 
-Commands: `login`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
+Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
 `lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
 `suggest <slug> <text> (--with <text>
@@ -2393,7 +2395,7 @@ check on the raw string:
   `describe`, `approve` and `deny`.
   - It authenticates with the signed-in account's **ID token**: never the
     cookie, which can name a different account from the one on screen, and
-    never a personal token, the same rule as `POST /tokens`.
+    never a personal token, the same rule as minting at `POST /tokens`.
   - It requires a same-origin `Sec-Fetch-Site` or `Origin`, and a JSON body.
 - **Before the client and redirect URI are established**, a failure is shown to
   the person and nothing is sent anywhere. **After that**, a failure carries a
@@ -2464,7 +2466,23 @@ ignored.
 4. Accepts one `GET /callback` whose `state` and `iss` match.
 5. Exchanges the code and saves the token as before.
 
-`--paste` is the old flow. `CI` set without a flag fails at once.
+`--paste` is the old flow. `CI` set without a flag fails at once. The saved
+config records which of the two produced the token.
+
+`bikeshed logout` acts on the saved sign-in only, never `BIKESHED_TOKEN` or
+`--token`, which belong to a shell or a job:
+- A token from browser sign-in exists for this computer alone, so it is revoked
+  with `POST /tokens {op:"revoke"}` under its own bearer. The server revokes the
+  presenting token only: another `tokenId` is `403`, and `create` and `list`
+  stay session-only, because minting with a credential is how a leaked token
+  becomes permanent access, while revoking itself can only shrink it.
+- A pasted token, or one saved before the config recorded which it was, is only
+  deleted: CI may hold the same one. The command says where to revoke it.
+- A `401` from `/tokens` is either a token that already stopped working or a
+  deployment that predates self-revocation. One call to `/mcp` with the same
+  token tells them apart, because the advice differs.
+- The token is deleted whatever the outcome, an unreachable deployment
+  included, and the origin is kept for the next `login`.
 
 ### Skills as downloads
 
