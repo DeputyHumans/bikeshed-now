@@ -4,8 +4,16 @@
   "description": "Publish documents and read anchored review feedback.",
   "transport": { "type": "streamable-http", "url": "/mcp" },
   "authentication": {
-    "type": "bearer",
-    "description": "A personal access token, minted in account settings. Send it as Authorization: Bearer bsk_...",
+    "type": "oauth2",
+    "description": "Connect by signing in: an MCP client finds the sign-in from the 401 that /mcp answers.",
+    "resourceMetadata": "/.well-known/oauth-protected-resource/mcp",
+    "authorizationServer": "/.well-known/oauth-authorization-server",
+    "alternatives": [
+      {
+        "type": "bearer",
+        "description": "A personal access token, minted in account settings, for CI and scripts. Send it as Authorization: Bearer bsk_..."
+      }
+    ],
     "instructions": "/llms.txt"
   }
 }

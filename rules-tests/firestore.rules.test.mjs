@@ -280,6 +280,17 @@ describe("firestore rules", () => {
       });
       await setDoc(doc(db, "users/u-owner/tokens/tok1"), { tokenId: "tok1", name: "cli" });
       await setDoc(doc(db, "tokens/tok1"), { tokenId: "tok1", uid: OWNER.uid, hash: "h" });
+      // A connected app's grant and its pending code (SPEC §23).
+      await setDoc(doc(db, "tokens/grant1"), {
+        tokenId: "grant1",
+        kind: "oauth",
+        uid: OWNER.uid,
+        accessHash: "a",
+        refreshHash: "r",
+        nonce: "n",
+      });
+      await setDoc(doc(db, "users/u-owner/tokens/grant1"), { tokenId: "grant1", kind: "oauth", name: "Claude" });
+      await setDoc(doc(db, "oauthCodes/c1"), { uid: OWNER.uid, codeChallenge: "x" });
     });
   });
 
@@ -821,6 +832,21 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "tokens/tok1")));
     await assertFails(
       setDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok2"), { name: "x" }),
+    );
+  });
+
+  it("a connected app is listed to its owner, and its secrets and codes to nobody", async () => {
+    // The grant's hashes and nonce live only in tokens/, and an authorization
+    // code only in oauthCodes/. Both are reached through the Admin SDK alone
+    // (SPEC §23); the owner sees the mirror the account screen lists.
+    const owner = verified(env, OWNER).firestore();
+    await assertSucceeds(getDoc(doc(owner, "users/u-owner/tokens/grant1")));
+    await assertFails(getDoc(doc(owner, "tokens/grant1")));
+    await assertFails(getDoc(doc(owner, "oauthCodes/c1")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "oauthCodes/c1")));
+    await assertFails(setDoc(doc(owner, "oauthCodes/c2"), { uid: OWNER.uid }));
+    await assertFails(
+      setDoc(doc(owner, "users/u-owner/tokens/grant1"), { tokenId: "grant1", kind: "oauth", name: "Mine" }),
     );
   });
 });

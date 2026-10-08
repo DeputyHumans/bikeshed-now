@@ -24,7 +24,9 @@ import * as admin from "firebase-admin";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { actorFrom } from "../lib/actor";
-import { bearerFrom, isTokenShaped, verifyToken } from "../lib/tokens";
+import { bearerFrom, isTokenShaped, verifyToken, type VerifiedToken } from "../lib/tokens";
+import { isAccessTokenShaped, verifyAccessToken } from "../oauth/grants";
+import { allowedResources, challenge } from "../oauth/metadata";
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 
 export const PROTOCOL_VERSION = "2025-06-18";
@@ -183,13 +185,16 @@ async function dispatch(
 /**
  * Handle a POST to /mcp.
  *
- * Authentication is a personal access token, and the channel is stamped `mcp`
- * unconditionally — the endpoint knows more about the channel than the
- * credential does, so a token minted for the CLI still reads as `mcp` when it
- * arrives here. There is no anonymous MCP access: publishing always attributes
- * to a real account.
+ * Authentication is a personal access token or a connected app's access token
+ * (SPEC §23), and the channel is stamped `mcp` unconditionally — the endpoint
+ * knows more about the channel than the credential does, so a token minted for
+ * the CLI still reads as `mcp` when it arrives here. There is no anonymous MCP
+ * access: publishing always attributes to a real account.
  */
 export async function handleMcp(req: Request, res: Response): Promise<void> {
+  // The CORS middleware exposes no response headers, so without this a
+  // browser-hosted client cannot read the challenge that tells it to sign in.
+  res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
   if (req.method === "GET" || req.method === "DELETE") {
     // Streamable HTTP allows a server to decline the SSE channel. Saying so
     // explicitly is friendlier than a 404, which reads as "wrong URL".
@@ -208,14 +213,19 @@ export async function handleMcp(req: Request, res: Response): Promise<void> {
       : req.headers.authorization,
   );
   // Shape first, so a malformed credential never constructs a database handle.
-  const verified = isTokenShaped(token)
-    ? await verifyToken(admin.firestore(), token as string)
-    : null;
+  let verified: VerifiedToken | null = null;
+  if (isTokenShaped(token)) {
+    verified = await verifyToken(admin.firestore(), token as string);
+  } else if (isAccessTokenShaped(token)) {
+    verified = await verifyAccessToken(admin.firestore(), token as string, allowedResources(req));
+  }
   if (!verified) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="bikeshed"');
+    // `resource_metadata` is what lets an OAuth-capable client find the
+    // sign-in; Claude starts it only from a 401 that carries it.
+    res.setHeader("WWW-Authenticate", challenge(req, token !== null));
     res
       .status(401)
-      .json(rpcError(null, INVALID_REQUEST, "a personal access token is required"));
+      .json(rpcError(null, INVALID_REQUEST, "sign in to connect, or send a personal access token"));
     return;
   }
 

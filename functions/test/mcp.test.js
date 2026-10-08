@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The agent surface speaks JSON-RPC and has exactly nine tools (SPEC §19).
+// The agent surface speaks JSON-RPC and has exactly twelve tools (SPEC §19).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -610,8 +610,13 @@ test("a request with no credential is refused before any database access", async
   const res = recorder();
   await handleMcp(post({ jsonrpc: "2.0", id: 1, method: "initialize" }), res);
   assert.equal(res.statusCode, 401);
-  assert.equal(res.headers["www-authenticate"], 'Bearer realm="bikeshed"');
-  assert.equal(res.body.error.message, "a personal access token is required");
+  // The challenge names where to sign in (SPEC §23); oauth-flow.test.js pins
+  // the full value against a configured origin.
+  assert.match(
+    res.headers["www-authenticate"],
+    /^Bearer realm="bikeshed", resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource\/mcp"$/,
+  );
+  assert.equal(res.body.error.message, "sign in to connect, or send a personal access token");
 });
 
 test("a malformed credential is refused the same way", async () => {
@@ -621,6 +626,7 @@ test("a malformed credential is refused the same way", async () => {
     res,
   );
   assert.equal(res.statusCode, 401);
+  assert.match(res.headers["www-authenticate"], /, error="invalid_token"$/);
 });
 
 test("GET is declined explicitly rather than 404ing", async () => {
@@ -649,7 +655,13 @@ test("the published discovery document points at this endpoint", () => {
   );
   assert.equal(discovery.transport.url, "/mcp");
   assert.equal(discovery.transport.type, "streamable-http");
-  assert.equal(discovery.authentication.type, "bearer");
+  // Signing in first, a personal token beside it, and every address relative
+  // so nothing stamps the file (SPEC §19, §23).
+  const { PRM_MCP_PATH, AS_METADATA_PATH } = require("../lib/oauth/metadata.js");
+  assert.equal(discovery.authentication.type, "oauth2");
+  assert.equal(discovery.authentication.resourceMetadata, PRM_MCP_PATH);
+  assert.equal(discovery.authentication.authorizationServer, AS_METADATA_PATH);
+  assert.deepEqual(discovery.authentication.alternatives.map((a) => a.type), ["bearer"]);
   assert.equal(discovery.mcpVersion, PROTOCOL_VERSION);
   assert.equal(discovery.name, SERVER_INFO.name);
 });

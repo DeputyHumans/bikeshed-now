@@ -208,7 +208,7 @@ function clone(v) {
  * `firebase-admin` sets `__esModule`, so compiled code reaches the module
  * object itself and a property defined here is what it calls.
  */
-async function withFakeAdmin({ db, sessions = {}, idTokens = {} }, fn) {
+async function withFakeAdmin({ db, sessions = {}, idTokens = {}, users = {} }, fn) {
   const saved = ["firestore", "auth"].map((k) => [k, Object.getOwnPropertyDescriptor(admin, k)]);
   const firestore = Object.assign(() => db, admin.firestore);
   Object.defineProperty(admin, "firestore", { configurable: true, value: firestore });
@@ -224,6 +224,14 @@ async function withFakeAdmin({ db, sessions = {}, idTokens = {} }, fn) {
         return idTokens[token];
       },
       createSessionCookie: async (token) => `cookie-for-${token}`,
+      // A user record, as the gate re-check at refresh reads it. An Error in
+      // the map is thrown, so a failing Auth backend can be staged.
+      getUser: async (uid) => {
+        const user = typeof users === "function" ? users(uid) : users[uid];
+        if (user instanceof Error) throw user;
+        if (!user) throw Object.assign(new Error("no user"), { code: "auth/user-not-found" });
+        return user;
+      },
     }),
   });
   try {
@@ -252,14 +260,20 @@ function fakeToken({ uid, email, channel }) {
   };
 }
 
-/** Call an onRequest function with a JSON body; resolve to what it sent. */
-async function invoke(handler, { method = "POST", body = {}, headers = {} } = {}) {
+/**
+ * Call an onRequest function with a JSON body; resolve to what it sent.
+ *
+ * `rawBody` is the bytes as they arrived, which is what a handler that must
+ * not trust the framework's own body parsing reads.
+ */
+async function invoke(handler, { method = "POST", body = {}, headers = {}, path = "/", query = {}, rawBody } = {}) {
   const req = {
     method,
     headers,
     body,
-    query: {},
-    path: "/",
+    rawBody,
+    query,
+    path,
     get: (h) => headers[h.toLowerCase()],
     header: (h) => headers[h.toLowerCase()],
   };

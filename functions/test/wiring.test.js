@@ -108,7 +108,10 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   // `forkDoc` serves no bytes, but its lineage answer is per caller — who may
   // see which ancestor, and the owner's inventory — so it is held to the same
   // rule: a cached lineage would show one reader's view of a document to the next.
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs"]) {
+  // `mcp`, `oauth` and `oauthConsent` answer refusals — a 401, a 405 — before
+  // any handler code runs its own header, and a refusal cached for ten minutes
+  // is a sign-in that cannot be retried (SPEC §23).
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "mcp", "oauth", "oauthConsent"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);
@@ -340,4 +343,52 @@ test("storing thumbnails is for editors, refused once expired, and is not an edi
   // A newer capture of the same version deletes the keys it replaced, never
   // the version's whole prefix — its own images are already under it.
   assert.match(body, /thumbPrefix\(docId, gone\.versionId\)\}\$\{gone\.key \? `\$\{gone\.key\}\/` : ""\}/);
+});
+
+// --- Connecting an app (SPEC §23) -------------------------------------------
+
+test("the consent page and the sign-in page cannot be framed", () => {
+  /**
+   * The consent page is where a person clicks Approve, which is exactly the
+   * click a framing page wants to borrow. `/signup` is pinned too: a framed
+   * `/signup?next=/connect…` reaches the consent page by client-side
+   * navigation, which never loads `/connect` from Hosting and so never gets
+   * its headers.
+   */
+  const config = JSON.parse(readFileSync(join(__dirname, "..", "..", "firebase.json"), "utf8"));
+  const headersFor = (source) => {
+    const rule = config.hosting.headers.find((h) => h.source === source);
+    return Object.fromEntries((rule?.headers ?? []).map((h) => [h.key, h.value]));
+  };
+  for (const source of ["/connect", "/signup"]) {
+    const h = headersFor(source);
+    assert.equal(h["X-Frame-Options"], "DENY", source);
+    assert.equal(h["Content-Security-Policy"], "frame-ancestors 'none'", source);
+  }
+  assert.equal(headersFor("/connect")["Referrer-Policy"], "no-referrer");
+});
+
+test("the consent endpoint takes no cross-origin calls and no personal token", () => {
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const oauthConsent = onRequest(");
+  assert.ok(start > 0, "oauthConsent not found");
+  assert.match(src.slice(start, start + 60), /onRequest\(PLAIN,/, "oauthConsent must not enable CORS");
+  const consent = readFileSync(join(__dirname, "..", "src", "oauth", "consent.ts"), "utf8");
+  // Calls and imports only: the file explains in prose why it does not use them.
+  assert.doesNotMatch(consent, /\b(?:resolveCaller|verifySessionCookie|verifyToken)\s*\(/);
+  assert.doesNotMatch(consent, /import[^;]*\b(?:resolveCaller|verifySessionCookie|verifyToken)\b/);
+});
+
+test("the dev proxy sends discovery to the function and leaves mcp.json to Hosting", async () => {
+  // The static discovery file sits beside the OAuth metadata under
+  // /.well-known/. A prefix row there would hand it to a function that has no
+  // such route, in development and in Hosting alike.
+  const { viteProxyKeys } = await import("../../scripts/lib/endpoints.mjs");
+  const keys = viteProxyKeys();
+  const proxied = (url) => keys.some((k) => (k[0] === "^" ? new RegExp(k).test(url) : url.startsWith(k)));
+  assert.ok(proxied("/.well-known/oauth-authorization-server"));
+  assert.ok(proxied("/.well-known/oauth-protected-resource/mcp"));
+  assert.ok(proxied("/oauth/token"));
+  assert.ok(!proxied("/.well-known/mcp.json"));
+  assert.ok(!proxied("/connect"), "the consent page is the app's own route");
 });

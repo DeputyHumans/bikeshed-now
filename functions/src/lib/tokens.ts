@@ -55,6 +55,12 @@ export interface TokenSummary {
   createdAt: admin.firestore.Timestamp | null;
   lastUsedAt: admin.firestore.Timestamp | null;
   revoked: boolean;
+  /** Present for an app connected by signing in (SPEC §23); absent for a token. */
+  kind?: "oauth";
+  clientHost?: string | null;
+  clientVerified?: boolean;
+  registration?: "cimd" | "dcr";
+  expiresAt?: admin.firestore.Timestamp | null;
 }
 
 function sha256(value: string): string {
@@ -65,6 +71,50 @@ export interface MintedToken {
   tokenId: string;
   /** Shown once and never stored. */
   plaintext: string;
+}
+
+/** A token's two documents, ready to write, and its plaintext. */
+export interface PreparedToken extends MintedToken {
+  record: Record<string, unknown>;
+  mirror: Record<string, unknown>;
+}
+
+/**
+ * Build a token without writing it, so a caller can write it inside its own
+ * transaction. The OAuth token endpoint mints a CLI token in the same
+ * transaction that spends the authorization code, so a retried transaction
+ * cannot mint two (SPEC §23).
+ */
+export function prepareToken(
+  uid: string,
+  emailLower: string,
+  name: string,
+  channel: TokenChannel,
+): PreparedToken {
+  const tokenId = randomBytes(ID_BYTES).toString("hex");
+  const secret = randomBytes(SECRET_BYTES).toString("base64url");
+  const now = FieldValue.serverTimestamp();
+  return {
+    tokenId,
+    plaintext: `${PREFIX}${tokenId}.${secret}`,
+    record: {
+      tokenId,
+      uid,
+      email: emailLower,
+      name: name.slice(0, 80),
+      channel,
+      hash: sha256(secret),
+      createdAt: now,
+      revokedAt: null,
+    },
+    mirror: {
+      tokenId,
+      name: name.slice(0, 80),
+      channel,
+      createdAt: now,
+      revokedAt: null,
+    },
+  };
 }
 
 /**
@@ -83,32 +133,15 @@ export async function mintToken(
   name: string,
   channel: TokenChannel,
 ): Promise<MintedToken> {
-  const tokenId = randomBytes(ID_BYTES).toString("hex");
-  const secret = randomBytes(SECRET_BYTES).toString("base64url");
-  const plaintext = `${PREFIX}${tokenId}.${secret}`;
-  const now = FieldValue.serverTimestamp();
-
+  const prepared = prepareToken(uid, emailLower, name, channel);
   const batch = db.batch();
-  batch.set(db.collection("tokens").doc(tokenId), {
-    tokenId,
-    uid,
-    email: emailLower,
-    name: name.slice(0, 80),
-    channel,
-    hash: sha256(secret),
-    createdAt: now,
-    revokedAt: null,
-  });
-  batch.set(db.collection("users").doc(uid).collection("tokens").doc(tokenId), {
-    tokenId,
-    name: name.slice(0, 80),
-    channel,
-    createdAt: now,
-    revokedAt: null,
-  });
+  batch.set(db.collection("tokens").doc(prepared.tokenId), prepared.record);
+  batch.set(
+    db.collection("users").doc(uid).collection("tokens").doc(prepared.tokenId),
+    prepared.mirror,
+  );
   await batch.commit();
-
-  return { tokenId, plaintext };
+  return { tokenId: prepared.tokenId, plaintext: prepared.plaintext };
 }
 
 /** Revoke a token the caller owns. Idempotent. */
@@ -141,7 +174,7 @@ export async function listTokens(db: Db, uid: string): Promise<TokenSummary[]> {
     .get();
   return snap.docs.map((d) => {
     const t = d.data();
-    return {
+    const summary: TokenSummary = {
       tokenId: d.id,
       name: typeof t.name === "string" ? t.name : "",
       channel: (t.channel as TokenChannel) ?? "api",
@@ -149,6 +182,14 @@ export async function listTokens(db: Db, uid: string): Promise<TokenSummary[]> {
       lastUsedAt: (t.lastUsedAt as admin.firestore.Timestamp) ?? null,
       revoked: t.revokedAt != null,
     };
+    if (t.kind === "oauth") {
+      summary.kind = "oauth";
+      summary.clientHost = typeof t.clientHost === "string" ? t.clientHost : null;
+      summary.clientVerified = t.clientVerified === true;
+      summary.registration = t.registration === "cimd" ? "cimd" : "dcr";
+      summary.expiresAt = (t.expiresAt as admin.firestore.Timestamp) ?? null;
+    }
+    return summary;
   });
 }
 
@@ -180,8 +221,12 @@ export async function verifyToken(
 
   const snap = await db.collection("tokens").doc(tokenId).get();
   if (!snap.exists) return null;
-  const record = snap.data() as TokenRecord;
+  const record = snap.data() as TokenRecord & { kind?: string };
   if (record.revokedAt != null) return null;
+  // A connected app's grant lives in this collection too, under the same id
+  // space, and carries no `hash`. Refusing it by kind as well means a grant id
+  // dressed as a personal token is refused even if a field is ever added.
+  if (record.kind === "oauth") return null;
   if (typeof record.hash !== "string") return null;
 
   const expected = Buffer.from(record.hash, "hex");

@@ -56,6 +56,16 @@ export const ENDPOINTS = [
   { path: "/suggestion", fn: "manageSuggestion", match: "exact" },
   { path: "/thumb", fn: "saveThumbs", match: "exact" },
   { path: "/mcp", fn: "mcp", match: "exact" },
+  // Apps that connect by signing in (SPEC §23). Exact rows, never a
+  // `/.well-known/**` prefix: the static `/.well-known/mcp.json` lives beside
+  // them and must keep coming from Hosting, in production and in the dev proxy.
+  { path: "/.well-known/oauth-protected-resource", fn: "oauth", match: "exact" },
+  { path: "/.well-known/oauth-protected-resource/mcp", fn: "oauth", match: "exact" },
+  { path: "/.well-known/oauth-authorization-server", fn: "oauth", match: "exact" },
+  { path: "/.well-known/openid-configuration", fn: "oauth", match: "exact" },
+  { path: "/oauth/register", fn: "oauth", match: "exact" },
+  { path: "/oauth/token", fn: "oauth", match: "exact" },
+  { path: "/oauth/consent", fn: "oauthConsent", match: "exact" },
   { path: "/sitemap.xml", fn: "sitemap", match: "exact" },
   { path: "/verify", fn: "verifyEmail", match: "prefix" },
   { path: "/download", fn: "downloadBundle", match: "prefix" },

@@ -14,6 +14,39 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Apps connect by signing in.** Paste a deployment's `/mcp` address into
+  Claude (web, Desktop, mobile or Code), ChatGPT, Cursor or VS Code. A browser
+  window asks you to sign in if you need to, says which app is asking and
+  where it will send you back to, and asks you to approve. Nothing is copied
+  by hand. The deployment is its own OAuth 2.1 authorization server: it
+  advertises itself from the `401` that `/mcp` answers, identifies Claude,
+  ChatGPT and Claude Code by their published metadata, and lets other apps
+  register without storing anything. A connected app gets a one-hour token
+  that works on `/mcp` alone, renewed by a refresh token that rotates on
+  every use and lapses after 90 days unused. Whether the account may still
+  connect is checked again at every renewal, so disabling it, changing its
+  address or "sign out everywhere" ends the connection within the hour. A
+  connected app is listed under Access tokens and disconnected with the same
+  Revoke button. New endpoints: `/.well-known/oauth-protected-resource`,
+  `/.well-known/oauth-authorization-server`, `/oauth/register`,
+  `/oauth/token` and `/oauth/consent`, served by two new functions, `oauth`
+  and `oauthConsent` (SPEC §2, §23; ADR 0014).
+
+### Changed
+
+- **`/mcp`'s `401` now says where to sign in.** It carries
+  `resource_metadata`, adds `error="invalid_token"` when a credential was
+  presented, exposes the header to browser clients, and is never cached.
+  Personal access tokens work exactly as before.
+- **`/.well-known/mcp.json` describes signing in first.** Its
+  `authentication.type` is `oauth2`, with the protected-resource and
+  authorization-server paths, and a personal token listed under
+  `alternatives`.
+
 ## 0.6.5 — 2026-10-08
 
 ### Changed
