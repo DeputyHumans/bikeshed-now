@@ -216,6 +216,8 @@ export function Landing() {
       <footer className="landing-footer">
         <p>Self-hosted. Apache-2.0. v0.1.0. The rough edges are honest ones.</p>
         <p className="landing-footer-nav">
+          {/* Plain, like the /llms.txt link: /docs is answered by Hosting. */}
+          <a href="/docs">Docs</a>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
         </p>

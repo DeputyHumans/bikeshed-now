@@ -19,28 +19,36 @@ export function Header() {
         <Wordmark variant={compact ? "mark" : "full"} />
       </Link>
       <div className="header-spacer" />
-      {gate === "ready" && user ? (
-        <div className="header-actions">
-          <span className="header-email" title={emailLower}>
-            {emailLower}
-          </span>
-          <Link to="/account" className="btn btn-quiet btn-sm">
-            Account
-          </Link>
-          <button
-            type="button"
-            className="btn btn-sm"
-            disabled={signingOut}
-            aria-busy={signingOut}
-            onClick={() => {
-              setSigningOut(true);
-              void signOut().finally(() => setSigningOut(false));
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
+      <div className="header-actions">
+        {/* A plain link, never a router <Link>: /docs is a Hosting redirect to
+            the published guide, and a client-side navigation would meet the
+            SPA's catch-all route instead and land on /. */}
+        <a href="/docs" className="btn btn-quiet btn-sm">
+          Docs
+        </a>
+        {gate === "ready" && user ? (
+          <>
+            <span className="header-email" title={emailLower}>
+              {emailLower}
+            </span>
+            <Link to="/account" className="btn btn-quiet btn-sm">
+              Account
+            </Link>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={signingOut}
+              aria-busy={signingOut}
+              onClick={() => {
+                setSigningOut(true);
+                void signOut().finally(() => setSigningOut(false));
+              }}
+            >
+              Sign out
+            </button>
+          </>
+        ) : null}
+      </div>
     </header>
   );
 }

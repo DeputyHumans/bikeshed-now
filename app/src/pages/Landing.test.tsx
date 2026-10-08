@@ -15,12 +15,12 @@ import type { AuthGate } from "../auth";
  * required because vi.mock's factory runs above every other statement in the
  * file, and a plain const would still be in the temporal dead zone.
  */
-const auth = vi.hoisted(() => ({ gate: "loading" as AuthGate }));
+const auth = vi.hoisted(() => ({ gate: "loading" as AuthGate, user: null as { uid: string } | null }));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
     gate: auth.gate,
-    user: null,
+    user: auth.user,
     emailLower: "",
     signOut: vi.fn(),
   }),
@@ -62,6 +62,7 @@ const hero = () =>
 
 beforeEach(() => {
   auth.gate = "loading";
+  auth.user = null;
 });
 
 describe("who gets the landing page", () => {
@@ -165,6 +166,56 @@ describe("the sequences a real visitor performs", () => {
     );
     expect(screen.getByText("SIGN-IN SCREEN")).toBeDefined();
     expect(hero()).toBeNull();
+  });
+});
+
+/**
+ * A router <Link> renders the same `href="/docs"` as a plain anchor, so the
+ * attribute proves nothing. What differs is the click: a Link cancels it and
+ * navigates inside the app, where /docs meets the catch-all route and lands on
+ * /. Only a click the page lets through reaches Hosting's redirect to the
+ * guide. A listener on window runs after React's, so it sees that decision,
+ * then cancels the click itself because jsdom cannot navigate.
+ */
+function letsThrough(link: HTMLElement): boolean {
+  let through = false;
+  const look = (e: Event) => {
+    through = !e.defaultPrevented;
+    e.preventDefault();
+  };
+  window.addEventListener("click", look);
+  try {
+    fireEvent.click(link);
+  } finally {
+    window.removeEventListener("click", look);
+  }
+  return through;
+}
+
+describe("the Docs link", () => {
+  it("is in the header and the landing footer for a signed-out visitor", () => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    const links = screen.getAllByRole("link", { name: "Docs" });
+    expect(links).toHaveLength(2);
+    expect(links[0].closest("header")).not.toBeNull();
+    expect(links[1].closest("footer")).not.toBeNull();
+    for (const link of links) {
+      expect(link.getAttribute("href")).toBe("/docs");
+      expect(letsThrough(link)).toBe(true);
+    }
+  });
+
+  it("stays in the header once signed in, where there is no landing page", () => {
+    auth.gate = "ready";
+    auth.user = { uid: "u1" };
+    renderAt("/");
+    expect(screen.getByText("WORKSPACE")).toBeDefined();
+    const links = screen.getAllByRole("link", { name: "Docs" });
+    expect(links).toHaveLength(1);
+    expect(links[0].closest("header")).not.toBeNull();
+    expect(links[0].getAttribute("href")).toBe("/docs");
+    expect(letsThrough(links[0])).toBe(true);
   });
 });
 
