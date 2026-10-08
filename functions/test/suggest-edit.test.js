@@ -77,7 +77,7 @@ async function withBucket(fn) {
 
 test("no tool decides anything a person decides", () => {
   // An agent proposes; accepting, rejecting and resolving are a person's acts
-  // (SPEC §19). Whoever adds a thirteenth tool meets this first.
+  // (SPEC §19). Whoever adds a fourteenth tool meets this first.
   for (const name of TOOL_NAMES) {
     assert.doesNotMatch(name, /accept|reject|approve|resolve|decide/);
   }

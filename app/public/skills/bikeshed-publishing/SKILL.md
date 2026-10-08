@@ -76,7 +76,7 @@ Two exceptions, each with something you can check:
 |---|---|
 | publishing an artifact | `bikeshed publish`, or `publish_document` |
 | republishing one under its id | `bikeshed update`, or `update_document` — identical bytes mint no version |
-| reading the comments on it | `bikeshed comments`, or `get_comments`; answer with `reply_to_comment` |
+| reading the comments on it | `bikeshed comments`, or `get_comments`; answer with `reply_to_comment`, raise a new point with `add_comment` |
 | copying someone else's document to revise | `bikeshed fork`, or `fork_document`; `get_lineage` says what it came from and whether that changed. Its author sees that it was forked |
 
 There is no runtime here: no shared state, no viewer identity, no stored assets,

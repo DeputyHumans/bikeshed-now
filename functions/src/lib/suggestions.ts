@@ -35,7 +35,10 @@ export const SUGGESTION_LIMITS = {
 } as const;
 
 /** The annotation colour, as `TOKENS.annotation` in app/src/brand/tokens.ts. */
-export const SUGGESTION_COLOR = "#b5257b";
+export const ANNOTATION_COLOR = "#b5257b";
+
+/** A suggestion is drawn in the colour every other thread is. */
+export const SUGGESTION_COLOR = ANNOTATION_COLOR;
 
 export type SuggestionState = "pending" | "accepted" | "rejected";
 

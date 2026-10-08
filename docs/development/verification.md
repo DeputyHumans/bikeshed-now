@@ -238,8 +238,9 @@ Mint a token in account settings, then:
 
 ```
 tools/list      → list_documents, get_document, publish_document,
-                  update_document, get_comments, reply_to_comment
+                  update_document, get_comments, add_comment, reply_to_comment, …
 get_comments    → each thread with the exact passage it is anchored to
+add_comment     → a new thread on a quoted passage, highlighted exactly in the viewer
 reply_to_comment → posts, and is stamped via: "mcp"
 ```
 

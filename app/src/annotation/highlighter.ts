@@ -394,17 +394,21 @@ export function assertNoDecoration(doc: Document, context: string): void {
  * It is not counted as orphaned either. Whether a settled comment's passage
  * still matches is not a question anybody needs answered.
  *
- * A pending SUGGESTION is resolved with `resolveSuggestion`, which is strict:
+ * A pending SUGGESTION is resolved with `resolveExact`, which is strict:
  * it is drawn only where its exact text unambiguously still stands, because
  * what is drawn is what an approver would replace. One that does not resolve is
  * STALE rather than orphaned, which is a different thing to tell a reader: a
  * comment still makes its point, a stale suggestion can no longer be applied.
+ *
+ * A `strict` anchor goes through the same resolver, for a different reason:
+ * the server found it by its quote, so its offsets mean nothing in the page.
+ * It is still a comment, so one that does not resolve is orphaned.
  */
 export function redrawHighlights(
   doc: Document,
   annotations: Annotation[],
   resolve: (anchor: Anchor) => Range | null,
-  resolveSuggestion: (anchor: Anchor) => Range | null = resolve,
+  resolveExact: (anchor: Anchor) => Range | null = resolve,
 ): { drawn: string[]; orphaned: string[]; stale: string[] } {
   clearHighlights(doc);
   const drawn: string[] = [];
@@ -413,7 +417,10 @@ export function redrawHighlights(
   for (const ann of annotations) {
     if (ann.resolved) continue;
     const suggestion = ann.suggestion?.state === "pending" ? ann.suggestion : null;
-    const range = suggestion ? resolveSuggestion(ann.anchor) : resolve(ann.anchor);
+    // An agent's comment is resolved strictly too: its anchor was found by its
+    // quote without a DOM, so a position fallback would point at the wrong words.
+    const strict = suggestion !== null || ann.anchor.strict === true;
+    const range = strict ? resolveExact(ann.anchor) : resolve(ann.anchor);
     if (range) {
       highlightRange(doc, range, ann.annId, {
         authorEmail: ann.authorEmail,

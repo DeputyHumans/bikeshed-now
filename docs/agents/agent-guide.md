@@ -140,6 +140,7 @@ somebody might commit.
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root |
 | `get_comments` | Unresolved feedback, each with its anchored quote |
+| `add_comment` | Start a thread on one passage |
 | `reply_to_comment` | Reply in a thread |
 
 ### Command line
@@ -153,6 +154,7 @@ bikeshed fork <id> [--version …] [--folder …] [--title …]
 bikeshed lineage <id> [--json]
 bikeshed get <id>
 bikeshed comments <id> [--json]
+bikeshed comment <id> <text> --body … [--prefix …] [--suffix …]
 bikeshed reply <id> <thread> <text>
 bikeshed suggest <id> <text> (--with … | --delete) [--note …] [--prefix …] [--suffix …]
 bikeshed open <id>
@@ -245,6 +247,30 @@ published, at that id plus a few random characters, and the CLI says so on
 stderr. So the address to hand back is always the `url` in the result, never
 one you built from the id you asked for. An id never changes once published: to
 put new content at the same address, `update` that document.
+
+## Raising something new
+
+A reply answers a thread that exists. To raise a point nobody has made yet —
+a question about a figure, a claim you cannot verify, a passage that
+contradicts another — start a thread on the passage it is about:
+
+```bash
+bikeshed comment storage-migration "every team will be moved by the 30th" \
+  --body "Payments has not agreed a date. Is the 30th confirmed for them?"
+```
+
+Over MCP the same is `add_comment` with `exact` and `body`. Anyone who can read
+a document can comment on it, so `canEdit` does not matter here.
+
+- **Quote the passage as a reader sees it,** within one paragraph, exactly as
+  for a suggestion below. If it repeats, add a `prefix` or `suffix`.
+- **One point per thread.** A reader resolves a thread when its point is dealt
+  with; two points in one thread leave one of them hanging.
+- **A thread stays on the version it was opened on.** Once a new version is
+  published, `get_comments` no longer lists it and nobody can reply to it. So
+  do not open threads on your own draft that you mean to answer by revising
+  it: revise it. A person saving a new version in the app has to resolve
+  every open thread first, yours included.
 
 ## If you can suggest but not edit
 
@@ -367,8 +393,8 @@ enough: without the key, every tool answers exactly as it does for an id that
 does not exist.
 
 If you were given such a link, pass the key along: `k` on `get_document`,
-`get_comments`, `reply_to_comment` and `update_document`, or the whole link in
-place of the id on the command line:
+`get_comments`, `add_comment`, `reply_to_comment`, `suggest_edit` and
+`update_document`, or the whole link in place of the id on the command line:
 
 ```bash
 bikeshed comments 'https://<deployment>/d/build-estimate?k=…'

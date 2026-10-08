@@ -1,6 +1,6 @@
 ---
 name: bikeshed-feedback
-description: Use when reading review comments on a Bikeshed document and revising it — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document.
+description: Use when reading review comments on a Bikeshed document and revising it, or when raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way.
 ---
 
 # Reading feedback on Bikeshed
@@ -53,6 +53,24 @@ merely edited nearby.
 If you disagree, say that in the thread and leave the passage alone. A comment
 is a request, not an instruction, and silently overwriting it loses the
 disagreement.
+
+## Raise something new
+
+To make a point nobody has made yet, start a thread on the passage it is about:
+
+```bash
+bikeshed comment storage-migration "we can cut over in a single weekend" \
+  --body "Does this include the dual-write fortnight?"
+```
+
+Over MCP: `add_comment`, with the passage as `exact` and what you have to say
+as `body`. Quote it as a reader sees it, within one paragraph; if it repeats, a
+`prefix` or `suffix` says which. Anyone who can read the document can comment.
+
+One point per thread, because a person resolves a thread when its point is
+dealt with. A thread stays on the version it was opened on: once a new version
+is published, `get_comments` no longer lists it. So on your own draft, revise
+rather than leave yourself a note.
 
 ## If you may only suggest
 

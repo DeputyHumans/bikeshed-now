@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The agent surface speaks JSON-RPC and has exactly twelve tools (SPEC §19).
+// The agent surface speaks JSON-RPC and has exactly thirteen tools (SPEC §19).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly twelve tools, and they are the twelve in the spec", () => {
+test("there are exactly thirteen tools, and they are the thirteen in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -140,9 +140,10 @@ test("there are exactly twelve tools, and they are the twelve in the spec", () =
     "create_folder",
     "move_document",
     "get_comments",
+    "add_comment",
     "reply_to_comment",
   ]);
-  assert.equal(TOOLS.length, 12);
+  assert.equal(TOOLS.length, 13);
 });
 
 test("the surface has no tool that deletes or shares", () => {
@@ -597,7 +598,7 @@ test("open editing lets a stranger edit, never move: moving makes the mover a me
 });
 
 test("the key is an optional argument on every tool that reads one document", () => {
-  for (const name of ["get_document", "update_document", "get_comments", "reply_to_comment"]) {
+  for (const name of ["get_document", "update_document", "suggest_edit", "get_comments", "add_comment", "reply_to_comment"]) {
     const schema = toolByName(name).inputSchema;
     assert.equal(schema.properties.k?.type, "string", name);
     assert.ok(!schema.required.includes("k"), `${name} must not demand a key`);

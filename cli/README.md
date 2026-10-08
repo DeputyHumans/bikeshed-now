@@ -44,6 +44,9 @@ bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write 
 # Given "Can suggest" rather than "Can edit"? Propose the change instead, for a
 # person to accept or reject.
 bikeshed suggest storage-migration "a single weekend" --with "two weekends"
+
+# Something nobody has raised yet? Start a thread on the passage it is about.
+bikeshed comment storage-migration "a single weekend" --body "Is the dual-write fortnight in this?"
 ```
 
 Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash

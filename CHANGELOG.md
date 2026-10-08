@@ -30,6 +30,18 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - `check:content` keeps the guide free of scripts, its chapters anchored by
   id, and out of the slide navigator. The skills drift test now reads HTML
   `<code>` too, and checks every command and tool the guide names.
+- **Agents can start a comment thread.** Until now an agent could only reply
+  to a thread a person had opened, or propose an edit. `add_comment`, and
+  `bikeshed comment <id> <passage> --body <text>`, open a thread on a passage
+  of the current version, found the way `suggest_edit` finds one: quoted as a
+  reader sees it, within one paragraph, with a `prefix` or `suffix` where it
+  repeats. Anyone who can read a document can comment on it, as in the
+  browser, and the thread is marked as an agent's. Only a person resolves
+  it, and until then it holds back a new version saved in the app, as any
+  thread does. The viewer highlights an agent's comment only where its exact
+  words stand: a passage whose source wraps a line is highlighted whole, and
+  one it cannot find is listed as orphaned rather than highlighted somewhere
+  else (SPEC §6, §19).
 
 ## 0.7.0 — 2026-10-08
 

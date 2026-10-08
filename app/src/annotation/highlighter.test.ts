@@ -405,6 +405,59 @@ describe("selection and clicks", () => {
     expect(result.drawn).toEqual([]);
   });
 
+  describe("an agent's comment, anchored on the server (SPEC §19)", () => {
+    // What `add_comment` stores: found by quote in the block's text, whitespace
+    // collapsed, measured against <body>, offsets local to the paragraph.
+    const agentAnchor = (exact: string, prefix: string, suffix: string, start: number) => ({
+      elementId: "",
+      exact,
+      prefix,
+      suffix,
+      start,
+      end: start + exact.length,
+      strict: true,
+    });
+    // Hand-written HTML wraps its lines, so the raw text has a newline and an
+    // indent where a reader sees one space.
+    const wrapped = () =>
+      makeDoc(
+        `<p>Rollout notes for the payments migration.</p>\n` +
+          `<p>Every team will be\n      moved by the 30th without interruption.</p>`,
+      );
+    const draw = async (doc: Document, anchor: ReturnType<typeof agentAnchor>) => {
+      const { redrawHighlights } = await import("./highlighter");
+      const { rangeFromAnchor } = await import("./anchor");
+      const { exactRangeFromAnchor } = await import("./exact");
+      // The two resolvers useAnnotationLayer passes, not stand-ins.
+      return redrawHighlights(
+        doc,
+        [{ annId: "agent", resolved: false, anchor, authorEmail: "agent@example.com" }] as never,
+        (a) => rangeFromAnchor(doc, a),
+        (a) => exactRangeFromAnchor(doc, a),
+      );
+    };
+    const drawnText = (doc: Document) =>
+      Array.from(doc.querySelectorAll(`mark.${HL_CLASS}`))
+        .map((m) => m.textContent)
+        .join("")
+        .replace(/\s+/g, " ");
+
+    it("highlights exactly the quoted words where the source wraps the line", async () => {
+      const doc = wrapped();
+      const result = await draw(doc, agentAnchor("will be moved by the 30th", "Every team ", " without interruption.", 11));
+      expect(result.drawn).toEqual(["agent"]);
+      expect(drawnText(doc)).toBe("will be moved by the 30th");
+    });
+
+    it("is orphaned, not drawn at its offsets, when the quote is not there", async () => {
+      const doc = wrapped();
+      const result = await draw(doc, agentAnchor("Finance moves first", "", "", 11));
+      expect(result.orphaned).toEqual(["agent"]);
+      expect(result.drawn).toEqual([]);
+      expect(doc.querySelectorAll(`mark.${HL_CLASS}`)).toHaveLength(0);
+    });
+  });
+
   it("clearHighlights is safe on a document with none", () => {
     const doc = makeDoc("<p>x</p>");
     expect(() => clearHighlights(doc)).not.toThrow();

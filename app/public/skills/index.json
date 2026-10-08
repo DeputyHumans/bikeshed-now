@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "bikeshed-feedback",
-      "description": "Use when reading review comments on a Bikeshed document and revising it — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document.",
+      "description": "Use when reading review comments on a Bikeshed document and revising it, or when raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way.",
       "path": "skills/bikeshed-feedback/SKILL.md",
       "archive": "skills/bikeshed-feedback.zip"
     },

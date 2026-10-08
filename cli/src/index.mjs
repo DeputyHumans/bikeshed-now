@@ -57,6 +57,8 @@ const USAGE = `bikeshed — publish and revise documents
   bikeshed lineage <id>                what it was forked from; for its owner, its forks
   bikeshed get <id>                    print a document's source
   bikeshed comments <id>               unresolved feedback, with its anchored text
+  bikeshed comment <id> <text> --body <comment>
+                                       start a thread on a passage
   bikeshed reply <id> <thread> <text>  reply in a thread
   bikeshed suggest <id> <text> --with <new text>
                                        propose new text for a passage, for a
@@ -476,6 +478,29 @@ async function comments(flags, [ref]) {
   });
 }
 
+/**
+ * Start a thread on one passage of a document's current version. The passage
+ * is quoted as a reader sees it, as with `suggest`; what to say about it is a
+ * named flag, so the two pieces of free text never run together.
+ */
+async function comment(flags, [ref, ...rest]) {
+  const exact = rest.join(" ");
+  const usage = "usage: bikeshed comment <id> <text> --body <comment> [--prefix …] [--suffix …]";
+  if (!ref || !exact) fail(usage);
+  // An empty --body is what an unset shell variable sends; a thread that says
+  // nothing is a highlight somebody has to resolve for no reason.
+  if (typeof flags.body !== "string" || !flags.body.trim()) fail(usage);
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "add_comment", {
+    ...docArgs(ref),
+    exact,
+    body: flags.body,
+    ...(typeof flags.prefix === "string" ? { prefix: flags.prefix } : {}),
+    ...(typeof flags.suffix === "string" ? { suffix: flags.suffix } : {}),
+  });
+  out(flags.json, result, () => console.log(`opened ${result.threadId}`));
+}
+
 async function reply(flags, [ref, threadId, ...rest]) {
   const body = rest.join(" ");
   if (!ref || !threadId || !body) fail("usage: bikeshed reply <id> <thread> <text>");
@@ -719,6 +744,7 @@ const COMMANDS = {
   lineage,
   get,
   comments,
+  comment,
   reply,
   suggest,
   open,
@@ -755,6 +781,7 @@ async function main() {
       paste: { type: "boolean", default: false },
       "no-browser": { type: "boolean", default: false },
       note: { type: "string" },
+      body: { type: "string" },
       prefix: { type: "string" },
       suffix: { type: "string" },
     },

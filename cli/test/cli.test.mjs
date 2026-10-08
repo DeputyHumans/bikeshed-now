@@ -222,7 +222,7 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
     const out = run(args);
     assert.match(out, /^bikeshed/);
     const commands = ["login", "publish", "update", "list", "comments", "open"];
-    for (const command of [...commands, "fork", "lineage", "suggest", "folders", "mkdir", "mv", "skills"]) {
+    for (const command of [...commands, "fork", "lineage", "comment", "suggest", "folders", "mkdir", "mv", "skills"]) {
       assert.match(out, new RegExp(`\\b${command}\\b`), `${command} is missing from --help`);
     }
   }
@@ -381,6 +381,42 @@ test("fork sends the document, and only the options it was given", async () => {
       folder: "f1",
       title: "Mine",
     });
+  });
+});
+
+test("comment sends the passage, what to say about it, and the link's key", async () => {
+  const answer = { threadId: "a7Kd", version: "v1", quote: "a single weekend" };
+  await withServer(rpcOk(answer), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(
+      ["comment", "https://bikeshed.example/d/notes?k=tok_0123456789abcdefghijk", "a", "single", "weekend", "--body", "Which one?", "--prefix", "cut over in "],
+      env,
+    );
+    assert.equal(seen[0].body.params.name, "add_comment");
+    assert.deepEqual(seen[0].body.params.arguments, {
+      id: "notes",
+      k: "tok_0123456789abcdefghijk",
+      exact: "a single weekend",
+      body: "Which one?",
+      prefix: "cut over in ",
+    });
+    assert.equal(stdout, "opened a7Kd\n");
+  });
+});
+
+test("comment without something to say is a usage error, and sends nothing", async () => {
+  await withServer(rpcOk({}), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    // An unset shell variable sends an empty --body; a thread that says nothing
+    // is one somebody has to resolve for no reason.
+    for (const args of [["comment", "notes", "a passage"], ["comment", "notes", "a passage", "--body", "  "], ["comment", "notes", "--body", "x"]]) {
+      await assert.rejects(runAsync(args, env), (err) => {
+        assert.equal(err.code, 1);
+        assert.match(err.stderr, /usage: bikeshed comment <id> <text> --body <comment>/);
+        return true;
+      });
+    }
+    assert.equal(seen.length, 0);
   });
 });
 

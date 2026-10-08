@@ -575,6 +575,14 @@ Because it is same-origin, the parent app drives annotation directly on
   a redraw for a peer's comment landing must not pull back a reader who has
   scrolled on. The thread card does the same in the panel, in the other
   direction.
+- **A `strict` anchor is never resolved by position.** An agent's comment
+  (§19) is anchored on the server, by its quote, without a DOM: `elementId` is
+  empty, `exact` is whitespace-collapsed, and its offsets are local to one
+  block rather than positions in the body. So it is rehydrated with the
+  strict resolver suggestions use (§22) — the exact text, whitespace
+  normalised, or nothing — and one that does not resolve is orphaned. The
+  fuzzy resolver would truncate a quote whose source wraps a line, and its
+  position fallback would highlight the wrong words.
 - **A resolved annotation is not drawn.** Resolving is how a reader says a
   passage is dealt with, so its mark comes off the prose; the thread stays in
   the panel and can be reopened there. A resolved annotation is skipped before
@@ -1833,7 +1841,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — twelve tools
+### MCP — thirteen tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1850,10 +1858,11 @@ scripts and anything that cannot open a browser.
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
 | `get_comments` | **unresolved feedback, each with its anchored quote** |
+| `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
 
-`get_document`, `update_document`, `suggest_edit`, `get_comments` and
-`reply_to_comment` take an optional `k`: an unlisted document's key, for a caller who is not a member and
+`get_document`, `update_document`, `suggest_edit`, `get_comments`,
+`add_comment` and `reply_to_comment` take an optional `k`: an unlisted document's key, for a caller who is not a member and
 whose account holds no link grant. Without it such a document answers exactly as
 an id that does not exist (§17). The CLI accepts the link itself wherever it
 takes an id, because the link is the only place a person holds the key.
@@ -1914,6 +1923,16 @@ tool name matches `accept|reject|approve|resolve|decide`. `get_comments` reports
 a suggestion's `replacement` and `state`; `get_document` reports `canSuggest`;
 and `update_document` from a caller who may only suggest names `suggest_edit`.
 
+**An agent raises points as well as answering them.** `add_comment` finds its
+passage exactly as `suggest_edit` does, with the same refusals, and writes the
+annotation and its first comment in one batch, stamped with the caller's
+actor. Anyone who can read a document may comment on it, as in the browser.
+The anchor is stored with `strict: true`, because its offsets mean nothing in
+the page (§6). Nothing caps how many threads an agent opens, as nothing caps a
+person. Only a person resolves one. Like every thread it stays on its version,
+and it holds back a new version saved in the app, but not `update_document`:
+the comment gate is the in-app commit's alone (`lib/review.ts`).
+
 One resolver authorizes every "put this inside that folder" in the system —
 `resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
 `createFolder`, both halves of `organize`, and the three MCP tools. It
@@ -1932,7 +1951,8 @@ Deliberately distinct from `scripts/*.mjs`:
 
 Commands: `login`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
 `lineage <slug>`, `list`,
-`get <slug>`, `comments <slug>`, `reply`, `suggest <slug> <text> (--with <text>
+`get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
+`suggest <slug> <text> (--with <text>
 | --delete)`, `open <slug>`, `folders`, `mkdir <name>`,
 `mv <slug> <folder|root>`, `skills [install <dir>]`, plus `publish --watch`.
 Every command takes `--json`. `comments` prints a suggestion's replacement and

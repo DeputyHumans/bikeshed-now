@@ -376,6 +376,12 @@ export interface Anchor {
   /** Position fallback, relative to the elementId root. */
   start: number;
   end: number;
+  /**
+   * Found by its quote on the server, with no DOM (an agent's comment, SPEC
+   * §19). Its offsets are a hint inside one block, not positions in the page,
+   * so it is resolved by its exact text or not at all — never by position.
+   */
+  strict?: boolean;
 }
 
 /** Firestore: docs/{docId}/versions/{versionId}/annotations/{annId} */

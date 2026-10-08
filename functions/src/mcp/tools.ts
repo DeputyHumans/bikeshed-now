@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The eleven MCP tools (SPEC §19).
+// The thirteen MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -61,7 +61,7 @@ import {
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { locateQuote } from "../lib/quote";
-import { SUGGESTION_COLOR, createSuggestion, parseNote } from "../lib/suggestions";
+import { ANNOTATION_COLOR, SUGGESTION_COLOR, createSuggestion, parseNote } from "../lib/suggestions";
 import { MAX_BUNDLE_BYTES } from "../config";
 
 type Db = admin.firestore.Firestore;
@@ -153,6 +153,47 @@ async function loadDoc(ctx: ToolContext, slug: string, k: string | null = null) 
     throw new Error(`no document with id "${slug}"`);
   }
   return { ref, snap, data, proof };
+}
+
+/**
+ * Find an agent's quoted passage in a document's current version.
+ *
+ * Looked for in the RENDERED entry, which is what a reader reads and what the
+ * browser will look in: for a Markdown document, its HTML, not its source.
+ * `crossesBlock` is the one refusal that differs by tool, because what to do
+ * about a passage spanning two paragraphs depends on what is being done to it.
+ */
+async function locateInCurrentVersion(
+  ref: admin.firestore.DocumentReference,
+  versionId: string,
+  args: Record<string, unknown>,
+  crossesBlock: string,
+) {
+  const vSnap = await ref.collection("versions").doc(versionId).get();
+  const entry = String(vSnap.data()?.entry ?? "index.html");
+  let html = "";
+  try {
+    const [bytes] = await admin.storage().bucket(bucketName()).file(`docs/${ref.id}/${versionId}/${entry}`).download();
+    html = bytes.toString("utf8");
+  } catch {
+    throw new Error("could not read the current version");
+  }
+
+  const located = locateQuote(html, {
+    exact: String(args.exact ?? ""),
+    prefix: typeof args.prefix === "string" ? args.prefix : undefined,
+    suffix: typeof args.suffix === "string" ? args.suffix : undefined,
+  });
+  if ("error" in located) {
+    throw new Error(
+      located.error === "ambiguous"
+        ? `that passage occurs ${located.count} times; add a prefix or suffix of the words around the one you mean`
+        : located.error === "crosses-block"
+          ? crossesBlock
+          : "that passage is not in the current version; quote it as a reader sees it, without Markdown or HTML, within one paragraph",
+    );
+  }
+  return { versionId, anchor: located.anchor };
 }
 
 /** Writes are refused on an expired document, the owner's included. */
@@ -620,39 +661,18 @@ export const TOOLS: ToolDefinition[] = [
       const note = parseNote(args.note);
       if (typeof note !== "string") throw new Error(note.error);
 
-      // Found in the RENDERED entry, which is what a reader reads and what the
-      // browser will look in: for a Markdown document, its HTML, not its source.
-      const versionId = String(data.currentVersion ?? "");
-      const vSnap = await ref.collection("versions").doc(versionId).get();
-      const entry = String(vSnap.data()?.entry ?? "index.html");
-      let html = "";
-      try {
-        const [bytes] = await admin.storage().bucket(bucketName()).file(`docs/${ref.id}/${versionId}/${entry}`).download();
-        html = bytes.toString("utf8");
-      } catch {
-        throw new Error("could not read the current version");
-      }
-
-      const located = locateQuote(html, {
-        exact: String(args.exact ?? ""),
-        prefix: typeof args.prefix === "string" ? args.prefix : undefined,
-        suffix: typeof args.suffix === "string" ? args.suffix : undefined,
-      });
-      if ("error" in located) {
-        throw new Error(
-          located.error === "ambiguous"
-            ? `that passage occurs ${located.count} times; add a prefix or suffix of the words around the one you mean`
-            : located.error === "crosses-block"
-              ? "a suggestion changes text within one paragraph, and that passage spans more than one, or a line break; suggest each part on its own"
-              : "that passage is not in the current version; quote it as a reader sees it, without Markdown or HTML, within one paragraph",
-        );
-      }
+      const { versionId, anchor } = await locateInCurrentVersion(
+        ref,
+        String(data.currentVersion ?? ""),
+        args,
+        "a suggestion changes text within one paragraph, and that passage spans more than one, or a line break; suggest each part on its own",
+      );
 
       const created = await createSuggestion({
         db: ctx.db,
         docRef: ref,
         versionId,
-        anchor: located.anchor,
+        anchor,
         replacement: args.replacement,
         note,
         author: { uid: ctx.caller.uid, emailLower: ctx.caller.emailLower },
@@ -660,7 +680,7 @@ export const TOOLS: ToolDefinition[] = [
         color: SUGGESTION_COLOR,
       });
       if ("status" in created) throw new Error(created.error);
-      return withReaderAddress({ threadId: created.annId, version: versionId, quote: located.anchor.exact }, ref.id);
+      return withReaderAddress({ threadId: created.annId, version: versionId, quote: anchor.exact }, ref.id);
     },
   },
 
@@ -840,8 +860,72 @@ export const TOOLS: ToolDefinition[] = [
   },
 
   {
+    name: "add_comment",
+    description:
+      "Start a new comment thread on a passage of a document's current version. " +
+      "Quote the passage exactly as a reader sees it — no Markdown or HTML — within one paragraph. " +
+      "If it occurs more than once, add a few words before it (prefix) or after it (suffix). " +
+      "A thread belongs to the version it was opened on: get_comments stops listing it once a new version is published, " +
+      "and a person resolves it; there is no tool for that. " +
+      "To answer a thread that already exists, use reply_to_comment.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "exact", "body"],
+      properties: {
+        id: { type: "string" },
+        exact: { type: "string", description: "The passage, as a reader sees it, within one paragraph." },
+        body: { type: "string", description: "The comment." },
+        prefix: { type: "string", description: "Words just before the passage, to say which one when it repeats." },
+        suffix: { type: "string", description: "Words just after the passage, to say which one when it repeats." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      refuseIfExpired(data);
+      const body = String(args.body ?? "").trim().slice(0, 5000);
+      if (!body) throw new Error("body is empty");
+
+      const { versionId, anchor } = await locateInCurrentVersion(
+        ref,
+        String(data.currentVersion ?? ""),
+        args,
+        "a comment is anchored to text within one paragraph, and that passage spans more than one, or a line break; quote the part you mean",
+      );
+
+      // `strict` because this anchor was found by its quote with no DOM, so its
+      // offsets are a block-local hint, not positions in the page. A viewer
+      // that fell back to them would highlight the wrong words; one that
+      // resolves the quote exactly or not at all shows an orphan instead.
+      const annRef = ref.collection("versions").doc(versionId).collection("annotations").doc();
+      const commentRef = annRef.collection("comments").doc();
+      const author = {
+        authorUid: ctx.caller.uid,
+        authorEmail: ctx.caller.emailLower,
+        actor: ctx.actor,
+        createdAt: FieldValue.serverTimestamp(),
+      };
+      // One batch: a thread with no comment in it is a highlight that says nothing.
+      const batch = ctx.db.batch();
+      batch.create(annRef, {
+        annId: annRef.id,
+        anchor: { ...anchor, strict: true },
+        ...author,
+        color: ANNOTATION_COLOR,
+        resolved: false,
+      });
+      batch.create(commentRef, { commentId: commentRef.id, body, ...author });
+      await batch.commit();
+      return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
+    },
+  },
+
+  {
     name: "reply_to_comment",
-    description: "Add a reply to an existing comment thread.",
+    description: "Add a reply to an existing comment thread. To start a new one, use add_comment.",
     inputSchema: {
       type: "object",
       required: ["id", "threadId", "body"],
@@ -892,7 +976,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is eleven tools, not "some tools". */
+/** Exported for the wiring test: the surface is thirteen tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;
