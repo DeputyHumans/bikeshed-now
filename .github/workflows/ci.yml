@@ -91,7 +91,12 @@ jobs:
           BIKESHED_PUBLIC_ORIGIN=https://stamp.example npm --prefix app run build
           grep -q 'POST https://stamp.example/mcp' app/dist/llms.txt
           grep -q 'export BIKESHED_ORIGIN=https://stamp.example' app/dist/skills/bikeshed-publishing/SKILL.md
-          ! grep -rqF '<deployment>' app/dist
+          # Not `! grep`: bash's -e ignores a negated command, so written that
+          # way this line could never fail the step.
+          if grep -rqF '<deployment>' app/dist; then
+            echo "app/dist still names <deployment>"
+            exit 1
+          fi
           git diff --exit-code
 
       - name: Functions tests

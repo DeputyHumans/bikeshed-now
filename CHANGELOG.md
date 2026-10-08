@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A CI check for unstamped agent instructions could never fail.** The step
+  that builds with a test origin ended with `! grep … app/dist`. Bash's `-e`
+  ignores a negated command, so a build still holding a `<deployment>`
+  placeholder would have passed. It is now an explicit test that exits
+  non-zero. Today's build has no placeholder left, so the check passes on its
+  merits.
+
 ## 0.6.3 — 2026-10-08
 
 ### Fixed
