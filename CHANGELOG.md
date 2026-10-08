@@ -35,6 +35,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   `/.well-known/oauth-authorization-server`, `/oauth/register`,
   `/oauth/token` and `/oauth/consent`, served by two new functions, `oauth`
   and `oauthConsent` (SPEC §2, §23; ADR 0014).
+- **A consent page at `/connect`.** It shows who is asking: a verified host
+  for Claude, ChatGPT and Claude Code, and otherwise the address you will be
+  sent back to, with the app's own name marked as unchecked. It warns when
+  that address is a program on your computer, lists what the app can and
+  cannot do, and names the account it will act as, with a way to switch.
+  The request is taken out of the address bar before anything else can read
+  it, and survives signing in. The page refuses to run inside a frame, and
+  Approve stays disabled until the page has had your attention for a moment.
+  It never sends you anywhere you did not press a button for (SPEC §23).
 
 ### Changed
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The app shell and routing (SPEC §7).
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "./auth";
@@ -15,6 +15,8 @@ import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
 import { SignUp } from "./pages/SignUp";
 import { Account } from "./pages/Account";
+import { Connect } from "./pages/Connect";
+import { captureAuthorizeRequest } from "./oauth";
 
 /**
  * Publish the header's MEASURED height as `--header-h`, so every full-height
@@ -82,6 +84,27 @@ function RequireAccount({
   return <>{children}</>;
 }
 
+/**
+ * `/connect`, where an app asks to be connected (SPEC §23).
+ *
+ * The query is captured and stripped DURING RENDER, in a state initialiser,
+ * and outside the sign-in gate. Both are load-bearing. `useRouteAnalytics`
+ * runs as an effect of App, and a page inside `RequireAccount` is not mounted
+ * while the gate is still loading, so an effect in the page would strip the URL
+ * after analytics had already seen `client_id`, `redirect_uri` and `state` in
+ * `document.location`. And because this route stays mounted while the gate
+ * goes to signed out and back, the request survives a sign-in and "Switch
+ * account" without being read from the URL again.
+ */
+export function ConnectRoute() {
+  const [request] = useState(captureAuthorizeRequest);
+  return (
+    <RequireAccount>
+      <Connect request={request} />
+    </RequireAccount>
+  );
+}
+
 /** Redirect a bare /d/:docId once a version is known, so links stay stable. */
 function ViewerRoute() {
   const params = useParams();
@@ -131,6 +154,7 @@ export function App() {
               able to read the policy without signing in first. */}
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/connect" element={<ConnectRoute />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <CookieConsent />

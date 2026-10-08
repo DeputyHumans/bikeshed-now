@@ -1,0 +1,87 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The consent screen at /connect, and the connect guide on the account page (SPEC §23).
+ *
+ * The card is the sign-in card (`.auth-screen`, `.auth-card`, layout.css) made
+ * a little wider, so the destination host fits on one line more often. The
+ * destination is the one thing on the page set large: it is where the person's
+ * access is about to go, and the part a phishing page cannot fake.
+ */
+
+.connect-card { width: min(480px, 100%); }
+
+.connect-from {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
+}
+.connect-from .chip { margin-left: var(--s-1); }
+.connect-name { color: var(--color-ink); font-weight: 600; }
+
+.connect-destination {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.connect-host {
+  font-size: var(--fs-h3);
+  font-weight: 650;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.connect-subhead {
+  margin-bottom: var(--s-1);
+  font-size: var(--fs-small);
+  font-weight: 620;
+}
+.connect-list {
+  margin: 0;
+  padding-left: var(--s-4);
+  font-size: var(--fs-small);
+}
+.connect-list li + li { margin-top: 2px; }
+.connect-list-not { color: var(--color-ink-muted); }
+
+.connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+/* --- On the account page ------------------------------------------------- */
+
+.connect-guide {
+  margin-top: var(--s-3);
+  border-top: 1px solid var(--color-line);
+}
+.connect-guide details {
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--fs-small);
+}
+.connect-guide summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.connect-guide details > :not(summary) { margin-top: var(--s-2); }
+.connect-guide code { overflow-wrap: anywhere; }
+
+.connect-skills {
+  list-style: none;
+  margin: var(--s-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.connect-skills a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-weight: 600;
+}

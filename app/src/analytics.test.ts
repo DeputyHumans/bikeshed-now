@@ -53,6 +53,13 @@ describe("routePattern", () => {
     expect(routePattern("/account")).toBe("/account");
     expect(routePattern("/signup")).toBe("/signup");
   });
+
+  it("reduces the consent route to its first segment, whatever follows", () => {
+    // The authorize query is stripped before analytics starts (App.tsx), and
+    // the pattern must not carry anything appended to the path either.
+    expect(routePattern("/connect")).toBe("/connect");
+    expect(routePattern("/connect/x")).toBe("/connect");
+  });
 });
 
 describe("buildEvent", () => {
