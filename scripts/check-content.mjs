@@ -68,6 +68,55 @@ function checkUniversal(name, file, text) {
   );
 }
 
+/**
+ * The two published guides, content/docs and content/docs-developers, are not
+ * samples, but they are checked like them, and by the same rules: what makes
+ * one a good document to read and comment on in the viewer makes the other one.
+ */
+function guideRules(name) {
+  return (source, report) => {
+    // Comments never render, and the guide's own header describes these very
+    // rules in their own syntax, so the checks read the markup without them.
+    const text = source.replace(/<!--[\s\S]*?-->/g, "");
+    // Each guide is published through the CLI, so it arrives sandboxed, and
+    // the first thing a newcomer would meet is a prompt to trust it. Hence no
+    // script at all, and no inline handler, which is a script by another name.
+    report(
+      !/<script/i.test(text),
+      `${name} must contain NO script: it is published through the CLI, so a script would greet every newcomer with a trust prompt.`,
+    );
+    report(
+      !/<[^>]*\son[a-z]+\s*=/i.test(text),
+      `${name} must contain no inline on…= handler: it is a script, and the guide runs none.`,
+    );
+    // Each chapter is what a comment anchors to. One without an id scopes its
+    // comments to <body>, where any edit above shifts them all.
+    const chapters = text.match(/<[a-z]+\b[^>]*\bclass="chapter\b[^>]*>/g) || [];
+    const anonymous = chapters.filter((tag) => !/\bid="[^"]+"/.test(tag));
+    report(
+      chapters.length >= 5 && anonymous.length === 0,
+      `${name} has ${chapters.length} chapters, ${anonymous.length} without an id: a chapter's comments anchor to its id.`,
+    );
+    // The guide is prose, so it must never look like a deck. A run of sibling
+    // id-bearing <section>s is how the viewer finds slides (viewer/deck.ts),
+    // and whether it then pages depends only on the reader's window height —
+    // on a laptop these chapters ARE about a screen tall. So the shape a deck
+    // has is ruled out here, rather than measured on one screen.
+    report(
+      !/<(?:section|article)\b/.test(text) && !/\bclass="(?:[^"]*\s)?slide(?:\s[^"]*)?"/.test(text),
+      `${name} must not use <section>, <article> or a "slide" class: those are what make the viewer treat a document as slides.`,
+    );
+    // The universal rule stops third-party fetches. This one is stricter: the
+    // only thing the guide may fetch at all is this deployment's own typeface.
+    const urls = [...text.matchAll(/url\(\s*['"]?([^'")\s]+)/g)].map((m) => m[1]);
+    const strays = urls.filter((url) => !url.startsWith("/fonts/"));
+    report(
+      strays.length === 0,
+      `${name} fetches ${strays.join(", ")}: the only url() it may use is the deployment's own /fonts/.`,
+    );
+  };
+}
+
 const EXPECTATIONS = {
   "bikeshed-tour": (text, report) => {
     // The SCRIPTED half of the trust condition.
@@ -170,48 +219,8 @@ const EXPECTATIONS = {
       "markdown-reference must contain a <script> inside its raw-HTML block: it is the sample that proves the trust model reaches Markdown documents too.",
     );
   },
-  docs: (source, report) => {
-    // Comments never render, and the guide's own header describes these very
-    // rules in their own syntax, so the checks read the markup without them.
-    const text = source.replace(/<!--[\s\S]*?-->/g, "");
-    // Not a sample: the user guide a deployment opens at /docs. It is
-    // published through the CLI, so it arrives sandboxed, and the first thing a
-    // newcomer would meet is a prompt to trust it. Hence no script at all —
-    // and no inline handler, which is a script by another name.
-    report(
-      !/<script/i.test(text),
-      "docs must contain NO script: it is published through the CLI, so a script would greet every newcomer with a trust prompt.",
-    );
-    report(
-      !/<[^>]*\son[a-z]+\s*=/i.test(text),
-      "docs must contain no inline on…= handler: it is a script, and the guide runs none.",
-    );
-    // Each chapter is what a comment anchors to. One without an id scopes its
-    // comments to <body>, where any edit above shifts them all.
-    const chapters = text.match(/<[a-z]+\b[^>]*\bclass="chapter\b[^>]*>/g) || [];
-    const anonymous = chapters.filter((tag) => !/\bid="[^"]+"/.test(tag));
-    report(
-      chapters.length >= 5 && anonymous.length === 0,
-      `docs has ${chapters.length} chapters, ${anonymous.length} without an id: a chapter's comments anchor to its id.`,
-    );
-    // The guide is prose, so it must never look like a deck. A run of sibling
-    // id-bearing <section>s is how the viewer finds slides (viewer/deck.ts),
-    // and whether it then pages depends only on the reader's window height —
-    // on a laptop these chapters ARE about a screen tall. So the shape a deck
-    // has is ruled out here, rather than measured on one screen.
-    report(
-      !/<(?:section|article)\b/.test(text) && !/\bclass="(?:[^"]*\s)?slide(?:\s[^"]*)?"/.test(text),
-      "docs must not use <section>, <article> or a `slide` class: those are what make the viewer treat a document as slides.",
-    );
-    // The universal rule stops third-party fetches. This one is stricter: the
-    // only thing the guide may fetch at all is this deployment's own typeface.
-    const urls = [...text.matchAll(/url\(\s*['"]?([^'")\s]+)/g)].map((m) => m[1]);
-    const strays = urls.filter((url) => !url.startsWith("/fonts/"));
-    report(
-      strays.length === 0,
-      `docs fetches ${strays.join(", ")}: the only url() it may use is the deployment's own /fonts/.`,
-    );
-  },
+  docs: guideRules("docs"),
+  "docs-developers": guideRules("docs-developers"),
 };
 
 for (const name of readdirSync(CONTENT)) {

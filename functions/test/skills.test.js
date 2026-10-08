@@ -105,12 +105,13 @@ async function documents() {
       ["docs/agents/agent-guide.md", GUIDE],
       ["skills/README.md", readFileSync(join(ROOT, "skills", "README.md"), "utf8")],
       ...skills.map((s) => [`skills/${s.name}/SKILL.md`, s.text]),
-      // The user guide a deployment opens at /docs. People read it, but its
-      // reference tables make the same claims about the surface.
-      [
-        "content/docs/bundle/index.html",
-        readFileSync(join(ROOT, "content", "docs", "bundle", "index.html"), "utf8"),
-      ],
+      // The guides a deployment opens at /docs and /docs/developers. People
+      // read them, but the developer guide makes the same claims about the
+      // surface, and the user guide must go on naming none it gets wrong.
+      ...["docs", "docs-developers"].map((id) => [
+        `content/${id}/bundle/index.html`,
+        readFileSync(join(ROOT, "content", id, "bundle", "index.html"), "utf8"),
+      ]),
     ],
   };
 }

@@ -1,0 +1,10 @@
+{
+  "title": "Bikeshed for developers",
+  "slug": "docs-developers",
+  "entry": "index.html",
+  "owner": "owner@example.com",
+  "viewers": [
+    "reviewer@example.com"
+  ],
+  "label": "v1"
+}

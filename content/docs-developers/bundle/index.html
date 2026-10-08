@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bikeshed for developers</title>
+<meta name="description" content="Connect an agent, publish from a terminal, and run the comment loop from code. The technical guide.">
+<!--
+  SPDX-License-Identifier: Apache-2.0
+
+  The technical guide a deployment opens at /docs/developers (SPEC §2).
+
+  The companion to content/docs, which explains the product to the people
+  using it and names no command. Everything a developer needs is here instead.
+  It is published as an ordinary document and follows the same three rules:
+
+    - No script. A document published through the CLI starts sandboxed, and
+      a document with no scripts never asks anybody to trust it.
+    - Every chapter carries an id, so a comment anchors to its chapter.
+    - Chapters are divs, never <section> or <article>, and no class name a
+      deck framework uses, so the viewer never mistakes the guide for slides.
+
+  The stylesheet is the user guide's, copied: a document cannot share a file
+  with another document. Keep the two in step.
+-->
+<style>
+@font-face {
+  font-family: "Bikeshed Sans";
+  src: url("/fonts/bikeshed-sans-var.woff2") format("woff2-variations"),
+       url("/fonts/bikeshed-sans-var.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-02AF, U+1E00-1E9F, U+2000-206F, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f4f3f8;
+  --line: rgba(26, 26, 38, 0.14);
+  --ink: #1a1a26;
+  --muted: #55526b;
+  --accent: #4b3dd1;
+  --accent-soft: #edeafb;
+  --on-accent: #ffffff;
+  --annotation: #b5257b;
+  --danger: #b02318;
+  --sans: "Bikeshed Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --shadow-sm: 0 1px 3px rgba(26, 26, 38, 0.08), 0 1px 2px rgba(26, 26, 38, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 26, 38, 0.1), 0 1px 3px rgba(26, 26, 38, 0.06);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 17px/1.6 var(--sans);
+}
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+}
+.chapter { margin: 0 0 96px; }
+.chapter:last-child { margin-bottom: 48px; }
+
+h1, h2, h3 { margin: 0; font-weight: 650; text-wrap: balance; }
+h1 {
+  font-size: clamp(2.1rem, 1.6rem + 2.4vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin-bottom: 20px;
+}
+h2 {
+  font-size: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin-bottom: 12px;
+}
+h3 { font-size: 1.05rem; line-height: 1.3; margin-bottom: 6px; }
+p { margin: 0 0 16px; }
+p, li, dd { max-width: 64ch; }
+a { color: var(--accent); text-underline-offset: 2px; }
+strong { font-weight: 650; }
+
+code, kbd, pre { font-family: var(--mono); }
+code {
+  font-size: 0.86em;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+pre {
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+pre code { padding: 0; border: 0; background: none; font-size: inherit; white-space: pre; }
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 6px;
+  font-size: 0.8em;
+  line-height: 1.6;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+/* The one-sentence answer every chapter opens with. */
+.answer {
+  font-size: clamp(1.08rem, 1rem + 0.4vw, 1.25rem);
+  line-height: 1.45;
+  font-weight: 600;
+  margin-bottom: 28px;
+  max-width: 52ch;
+}
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.muted { color: var(--muted); }
+.ticks { margin: 0; padding: 0 0 0 20px; }
+.ticks li { margin: 0 0 10px; }
+.ticks li::marker { color: var(--muted); }
+
+figure { margin: 0 0 32px; }
+figcaption {
+  margin-top: 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+  max-width: 64ch;
+}
+.panel {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hide-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- The opening ------------------------------------------------------- */
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 40px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.wordmark svg { width: 28px; height: 28px; }
+.tld, .stop { color: var(--accent); }
+.lead {
+  font-size: clamp(1.15rem, 1rem + 0.7vw, 1.45rem);
+  line-height: 1.45;
+  max-width: 34ch;
+  margin-bottom: 12px;
+}
+
+.loop ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+}
+.loop li {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.loop li + li::before {
+  content: "→";
+  content: "→" / "";
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.loop b { display: block; font-size: 1.1rem; font-weight: 650; margin-bottom: 4px; }
+.loop span { display: block; font-size: 0.86rem; line-height: 1.45; color: var(--muted); }
+/* The comment is the step that usually gets lost, and the revision is the one
+   any agent can take, so those two are the ones that are marked. */
+.loop .is-comment { border: 2px solid var(--annotation); }
+.loop .is-comment b { color: var(--annotation); }
+.loop .is-agent { border: 2px solid var(--accent); }
+.loop .is-agent b { color: var(--accent); }
+.loop-again {
+  position: relative;
+  height: 22px;
+  margin: 0 12.5% 0;
+  border: 2px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+}
+.loop-again span {
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  transform: translateX(-50%);
+  padding: 0 10px;
+  background: var(--bg);
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.loop figcaption { margin-top: 24px; }
+
+.dogfood {
+  margin: 0 0 32px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--annotation);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+}
+.dogfood p { margin: 0; }
+.hl {
+  border: 1px solid var(--annotation);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.toc a {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.86rem;
+  text-decoration: none;
+}
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- Where it fits ----------------------------------------------------- */
+
+.lanes {
+  display: grid;
+  grid-template-columns: 6.5rem repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, auto);
+  gap: 8px 12px;
+}
+.lane-row { grid-column: 1 / -1; border-radius: 8px; background: var(--surface); }
+.lane-name {
+  grid-column: 1;
+  align-self: center;
+  padding-left: 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.r1 { grid-row: 1; }
+.r2 { grid-row: 2; }
+.r3 { grid-row: 3; }
+.c1 { grid-column: 2; }
+.c2 { grid-column: 3; }
+.c3 { grid-column: 4; }
+.c4 { grid-column: 5; }
+.lane-step {
+  margin: 8px 0;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.lane-step .n {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 16px;
+}
+.cards > div { min-width: 0; }
+.cards .icon { color: var(--accent); margin-bottom: 10px; }
+.cards p { margin: 0; font-size: 0.94rem; }
+
+/* --- Start ------------------------------------------------------------- */
+
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+}
+.ways > div { min-width: 0; display: flex; flex-direction: column; }
+.ways h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ways .icon { color: var(--accent); }
+.ways ol { margin: 0; padding-left: 20px; font-size: 0.94rem; }
+.ways li { margin-bottom: 8px; }
+.ways p { font-size: 0.86rem; margin: 0; }
+
+/* --- Comments: a still of the real interaction --------------------------
+   The highlight is an OUTLINE over a transparent background, the way the
+   viewer draws it. A fill would advertise something that does not exist. */
+
+.mock {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.mock-prose { margin: 0; line-height: 1.75; }
+.thread { display: flex; flex-direction: column; gap: 8px; }
+.comment {
+  padding: 12px 16px;
+  border-left: 3px solid var(--annotation);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.88rem;
+}
+.comment p { margin: 0; }
+.who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px !important;
+  font-weight: 650;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* --- Suggestions ------------------------------------------------------- */
+
+.suggestion del {
+  text-decoration-color: var(--annotation);
+  text-decoration-thickness: 2px;
+  color: var(--muted);
+}
+.suggestion ins {
+  text-decoration: none;
+  border-bottom: 2px solid var(--accent);
+}
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+}
+.review .note { flex: 1 1 16rem; color: var(--muted); }
+.btn {
+  display: inline-block;
+  padding: 4px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font-weight: 600;
+}
+.btn-primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+
+/* --- Sharing ----------------------------------------------------------- */
+
+.ladder {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.ladder > div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.ladder > div:first-child { background: var(--surface); }
+.ladder h3 { display: flex; align-items: center; gap: 8px; }
+.ladder .icon { color: var(--accent); width: 20px; height: 20px; }
+.ladder p { margin: 0; font-size: 0.86rem; color: var(--muted); }
+.ladder-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.table-wrap { overflow-x: auto; margin: 0 0 24px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td {
+  padding: 8px 16px 8px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+thead th {
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+tbody th { font-weight: 650; white-space: nowrap; }
+.roles td { text-align: center; }
+.roles thead th:not(:first-child) { text-align: center; }
+.yes { font-weight: 700; }
+.no { color: var(--muted); }
+
+/* --- Versions ---------------------------------------------------------- */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  position: relative;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 15px;
+  border-top: 2px solid var(--line);
+}
+.timeline li { position: relative; min-width: 0; }
+.dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--bg);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.timeline .draft .dot { border-style: dashed; border-color: var(--muted); color: var(--muted); }
+.timeline .current .dot { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.timeline b { display: block; margin: 10px 0 2px; font-size: 0.9rem; }
+.timeline .desc { display: block; font-size: 0.84rem; line-height: 1.45; color: var(--muted); }
+.gate {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.88rem;
+}
+.gate ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 24px; }
+
+/* --- Agents ------------------------------------------------------------ */
+
+.headline {
+  max-width: 52ch;
+  margin-bottom: 40px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+  font-size: 1.05rem;
+}
+.agent-loop {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+.agent-loop li {
+  position: relative;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.agent-loop li + li::before {
+  content: "→";
+  content: "→" / "";
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.agent-loop b { display: block; font-size: 1.1rem; font-weight: 650; color: var(--accent); margin-bottom: 4px; }
+.agent-loop span { display: block; font-size: 0.88rem; line-height: 1.45; margin-bottom: 10px; }
+.agent-loop code { font-size: 0.74rem; }
+.agent-loop + .loop-again { margin: 0 16.7%; }
+.aside { margin-top: 16px; font-size: 0.9rem; color: var(--muted); }
+.inbox { margin-top: 32px; padding: 20px 24px; }
+.inbox-title {
+  margin: 0 0 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.inbox-item { padding: 12px 0 12px 16px; border-left: 3px solid var(--annotation); font-size: 0.92rem; }
+.inbox-item + .inbox-item { margin-top: 12px; }
+.inbox-item p { margin: 0 0 4px; }
+.inbox-item b { margin-right: 6px; }
+.inbox-item .quote { color: var(--muted); }
+.can {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.can > div { min-width: 0; padding: 16px 20px; border-radius: 12px; background: var(--surface); }
+.can p { margin: 0; font-size: 0.92rem; }
+
+/* --- Present and export ------------------------------------------------ */
+
+.export {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.page {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 28px 24px 40px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+}
+.page .bar { height: 8px; margin-bottom: 10px; border-radius: 4px; background: var(--surface); }
+.page .bar.title { width: 55%; height: 14px; margin-bottom: 18px; background: var(--line); }
+.page .bar.short { width: 70%; }
+.stamp {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.page-foot {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 12px;
+  font-size: 0.66rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+dl { margin: 0; }
+dt { font-weight: 650; }
+dd { margin: 0 0 14px; font-size: 0.94rem; }
+.keys dd { color: var(--muted); }
+
+.notes dt { font-size: 1rem; }
+.notes dd { margin-bottom: 18px; }
+
+footer {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+footer p { margin: 0 0 6px; }
+
+/* --- Narrow frames ------------------------------------------------------
+   The guide is read inside the viewer, beside a comment panel, so these
+   respond to the FRAME's width, which is narrower than the window. */
+
+@media (max-width: 860px) {
+  .loop ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .loop li:nth-child(3)::before { content: none; }
+  .loop-again { display: none; }
+  .mock, .export { grid-template-columns: minmax(0, 1fr); }
+  .agent-loop { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .agent-loop li + li::before { content: "↓"; content: "↓" / ""; left: 20px; top: -21px; transform: none; }
+  .agent-loop + .loop-again { display: none; }
+}
+
+@media (max-width: 600px) {
+  main { padding: 32px 16px 64px; }
+  .chapter { margin-bottom: 64px; }
+  .loop ol { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .loop li + li::before { content: "↓"; content: "↓" / ""; left: 20px; top: -21px; transform: none; }
+  .loop li:nth-child(3)::before { content: "↓"; content: "↓" / ""; }
+  .lanes { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .lane-row, .lane-name { display: none; }
+  .lane-step { grid-row: auto; grid-column: 1; }
+  .lane-step .hide-text { position: static; width: auto; height: auto; clip: auto; font-weight: 650; }
+  .ladder { grid-template-columns: minmax(0, 1fr); }
+  .ladder-axis { display: none; }
+  .timeline { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-left: 0; }
+  .timeline::before { left: 15px; right: auto; top: 16px; bottom: 16px; border-top: 0; border-left: 2px solid var(--line); }
+  .timeline li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; }
+  .timeline .dot { grid-row: span 2; align-self: start; }
+  .timeline b { margin-top: 4px; }
+  .roles th, .roles td { padding-right: 10px; }
+  footer { padding-left: 16px; padding-right: 16px; }
+}
+
+@media print {
+  body { font-size: 11pt; }
+  main { padding: 0; }
+  .toc, .dogfood { display: none; }
+  .chapter { margin-bottom: 32pt; }
+  figure, .panel, .cards > div, .ways > div, tr, dd { break-inside: avoid; }
+  .panel, .comment, .lane-step, .agent-loop li, .page { box-shadow: none; }
+  a { color: inherit; }
+}
+/* --- Developer guide only ----------------------------------------------- */
+
+.term { margin-top: 32px; }
+.subhead { margin: 32px 0 12px; }
+.reference h3 { margin: 32px 0 8px; }
+.reference td:first-child, .connect td:first-child { white-space: nowrap; }
+.connect td code { white-space: normal; }
+</style>
+</head>
+<body>
+<main>
+
+<div class="chapter" id="top">
+  <p class="wordmark">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <path d="M4 14 16 4l12 10" stroke-width="2.6"/>
+      <path d="M6.5 15v13M25.5 15v13" stroke-width="2.6"/>
+      <path d="M11 18.5h10M11 26.5h10" stroke-width="2"/>
+      <path d="M11 22.5h7" stroke-width="2" stroke="#b5257b"/>
+    </svg>
+    <span>bikeshed<span class="tld">.now</span></span>
+  </p>
+
+  <p class="eyebrow">The technical guide</p>
+  <h1>Bikeshed for developers<span class="stop">.</span></h1>
+  <p class="lead">Connect an agent, publish from a terminal, and run the comment loop from code.</p>
+  <p class="headline"><strong>Any agent can close the loop.</strong> <code>get_comments</code> hands it every open thread with its passage, whoever wrote it. It revises, answers with <code>reply_to_comment</code>, and publishes with <code>update_document</code>.</p>
+
+  <div class="dogfood">
+    <p><strong>New to Bikeshed?</strong> <a href="/docs">How Bikeshed works</a> explains it without any of this. Agents read <a href="/llms.txt">/llms.txt</a>, which covers the same ground written for them.</p>
+  </div>
+
+  <nav class="toc" aria-label="In this guide">
+    <ol>
+      <li><a href="#connect">Connect</a></li>
+      <li><a href="#cli">Command line</a></li>
+      <li><a href="#loop">The loop</a></li>
+      <li><a href="#tools">Agent tools</a></li>
+      <li><a href="#formats">What you can publish</a></li>
+      <li><a href="#limits">What agents cannot do</a></li>
+      <li><a href="#reference">Command reference</a></li>
+    </ol>
+  </nav>
+</div>
+
+<div class="chapter" id="connect">
+  <p class="eyebrow">01</p>
+  <h2>Connect an agent</h2>
+  <p class="answer">An agent connects by address: this site's, followed by <code>/mcp</code>. A person approves it once, in the browser.</p>
+
+  <div class="table-wrap connect">
+    <table>
+      <thead><tr><th scope="col">Where it runs</th><th scope="col">What you do</th></tr></thead>
+      <tbody>
+        <tr><td>Claude (web, Desktop, mobile)</td><td>Settings → Connectors → <strong>Add custom connector</strong>, paste the address, sign in when asked</td></tr>
+        <tr><td>ChatGPT</td><td>Settings → Apps &amp; Connectors → Advanced → <strong>Developer mode</strong>, then create a connector with the address</td></tr>
+        <tr><td>Claude Code</td><td><code>claude mcp add --transport http bikeshed &lt;address&gt;/mcp</code>, then <code>/mcp</code> to sign in</td></tr>
+        <tr><td>Cursor, VS Code</td><td>Add a server entry with just the address. It signs in on first use.</td></tr>
+        <tr><td>A shell</td><td><code>npx -y bikeshed-now login --origin &lt;address&gt;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Each of those opens a page here that names the app, says where it will send you back to and what it will be able to do, and asks you to approve. Then install the skills, which teach the agent each job in detail:</p>
+<pre><code>npx -y bikeshed-now skills install .claude/skills</code></pre>
+  <ul class="ticks">
+    <li>Codex, Gemini CLI, Cursor, Copilot and others read <code>.agents/skills</code>. In Claude's own apps, upload each skill's zip from <code>/skills/&lt;name&gt;.zip</code> in Settings.</li>
+    <li><strong>For CI and scripts,</strong> where no browser opens, create a personal access token at Account → Access tokens and send it as <code>Authorization: Bearer bsk_…</code>. It is shown once.</li>
+    <li>Either way, a credential carries exactly its owner's identity and permissions, and disconnecting it is one click in Account.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="cli">
+  <p class="eyebrow">02</p>
+  <h2>The command line</h2>
+  <p class="answer"><code>bikeshed</code> does from a terminal what an agent does over MCP. It needs Node 22 or later.</p>
+
+<pre><code>npm i -g bikeshed-now
+bikeshed login                       # opens the browser; --paste for a token over SSH
+bikeshed publish plan.md --id q3-plan
+bikeshed update q3-plan plan.md --watch   # republish on every save</code></pre>
+
+  <ul class="ticks">
+    <li><code>bikeshed login</code> signs in to the CLI's default deployment unless you pass <code>--origin</code> or set <code>BIKESHED_ORIGIN</code>.</li>
+    <li>Where a command takes an id, it also takes the link you were sent. An unlisted document needs the link: its key is in it.</li>
+    <li><code>--json</code> on any command prints machine-readable output. <code>BIKESHED_TOKEN</code> overrides the stored sign-in, and <code>BIKESHED_AGENT</code> names the agent, shown to readers as self-reported.</li>
+  </ul>
+  <p>Every command is in the <a href="#reference">reference</a> below, and <code>bikeshed --help</code> lists every option.</p>
+</div>
+
+<div class="chapter" id="loop">
+  <p class="eyebrow">03</p>
+  <h2>The review loop</h2>
+  <p class="answer">Pick up, work through, publish. Any agent that can edit the document can run it, whoever published the version before.</p>
+
+  <figure>
+    <ol class="agent-loop">
+      <li>
+        <b>Pick up</b>
+        <span>Every open thread, whoever wrote it, each with the exact words it is about.</span>
+        <code>bikeshed comments</code> <code>get_comments</code>
+      </li>
+      <li>
+        <b>Work through</b>
+        <span>Rewrite those passages, then say what changed in each thread.</span>
+        <code>bikeshed reply</code> <code>reply_to_comment</code>
+      </li>
+      <li>
+        <b>Publish</b>
+        <span>The next version. Identical content changes nothing.</span>
+        <code>bikeshed update</code> <code>update_document</code>
+      </li>
+    </ol>
+    <div class="loop-again" aria-hidden="true"><span>and again, as new comments arrive</span></div>
+<pre class="term"><code>$ bikeshed comments storage-migration
+
+── a7Kd…  (rollout-plan)
+   “we can cut over in a single weekend”
+   ana@example.com: This assumes no dual-write period. There is one.
+
+── Qm3x…  (costs)
+   “about $40 a month”
+   sam@example.com: Does that include egress?
+   lee@example.com [via mcp]: It does not. Egress adds about $15.</code></pre>
+    <figcaption>What an agent picks up: a person's comment, and another agent's answer in a person's thread, each tied to its passage and section.</figcaption>
+  </figure>
+
+  <p>The same loop, from a terminal:</p>
+<pre><code>bikeshed comments storage-migration
+# revise proposal.md, then answer each thread
+bikeshed reply storage-migration a7Kd… "Rewritten for the dual-write fortnight."
+bikeshed update storage-migration proposal.md</code></pre>
+
+  <ul class="ticks">
+    <li><strong>Reply before you publish.</strong> A thread belongs to the version it was written on, and <code>reply_to_comment</code> looks in the current version only. Once <code>update_document</code> has made a new version current, a reply to an older thread fails with <code>no such thread</code>.</li>
+    <li>Identical content is a no-op, so an update is safe to retry or to run in a loop.</li>
+    <li>With <em>Can suggest</em> rather than <em>Can edit</em>, <code>update_document</code> is refused. Propose each change with <code>suggest_edit</code> or <code>bikeshed suggest</code>, quoting the passage as a reader sees it, one paragraph at a time. An empty replacement proposes deleting it.</li>
+    <li>A pending suggestion blocks every new version, from any channel, until a person who can approve decides it.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="tools">
+  <p class="eyebrow">04</p>
+  <h2>Agent tools</h2>
+  <p class="answer">Thirteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>list_documents</code></td><td>Documents you can read, newest first</td></tr>
+        <tr><td><code>get_document</code></td><td>A document's metadata and current source; over 200,000 characters it is cut, and says so</td></tr>
+        <tr><td><code>publish_document</code></td><td>Create a document from content you supply</td></tr>
+        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op</td></tr>
+        <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, each with its quote, its section and every comment, marked with the channel it came through</td></tr>
+        <tr><td><code>add_comment</code></td><td>Start a thread on a passage of the current version, quoted as a reader sees it, within one paragraph</td></tr>
+        <tr><td><code>reply_to_comment</code></td><td>Add a reply to a thread in the current version</td></tr>
+        <tr><td><code>suggest_edit</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
+        <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
+        <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
+        <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
+        <tr><td><code>create_folder</code></td><td>Create a folder</td></tr>
+        <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">The discovery document is at <code>/.well-known/mcp.json</code>. Never send a cut source back through <code>update_document</code>: it would publish the cut.</p>
+</div>
+
+<div class="chapter" id="formats">
+  <p class="eyebrow">05</p>
+  <h2>What you can publish</h2>
+  <p class="answer">HTML as written, Markdown rendered on the server, or a zip of several files, up to 25 MB.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">File</th><th scope="col">What happens</th></tr></thead>
+      <tbody>
+        <tr><td><code>.md</code> <code>.markdown</code></td><td>Rendered to HTML on the server; <code>get_document</code> returns the Markdown</td></tr>
+        <tr><td><code>.html</code> <code>.htm</code></td><td>Stored as written</td></tr>
+        <tr><td><code>.zip</code></td><td>Several files, with <code>index.html</code> or <code>index.md</code> at the root</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ul class="ticks">
+    <li><strong>Put an id on every section.</strong> A comment anchors to the nearest element with an id. Without one it anchors to the whole page, and any edit above shifts it. Markdown headings get ids for free.</li>
+    <li>An update keeps the format: a zip replaces every file, and one <code>.md</code> or <code>.html</code> replaces the entry and keeps the files beside it.</li>
+    <li>Markdown is CommonMark with tables, strikethrough and task lists. Mermaid, math, footnotes and front matter show as typed.</li>
+    <li>Scripts run once a person trusts the document: its owner for everyone, any reader for themselves. Each version published through the CLI or MCP sandboxes it again. Images, stylesheets and fonts from other sites load either way.</li>
+    <li>Choose the address with <code>--id</code>, or <code>id</code> in <code>publish_document</code>: lowercase letters, digits and hyphens, up to 60 characters. A taken id gets a few random characters added, so hand back the <code>url</code> the result returns, never one built from the id you asked for.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="limits">
+  <p class="eyebrow">06</p>
+  <h2>What agents cannot do</h2>
+  <p class="answer">Anything that is a decision a person should make on purpose.</p>
+
+  <ul class="ticks">
+    <li>Share a document, or change who can see it.</li>
+    <li>Set or clear an expiry.</li>
+    <li>Rename or delete a folder.</li>
+    <li>Resolve a thread, or accept or reject a suggestion.</li>
+    <li>Delete a document. Nobody can: a single version can be withdrawn only by whoever runs the deployment.</li>
+  </ul>
+  <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
+</div>
+
+<div class="chapter reference" id="reference">
+  <p class="eyebrow">07</p>
+  <h2>Command reference</h2>
+  <p class="answer">Every <code>bikeshed</code> command, in one place.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>bikeshed login</code></td><td>Sign in through your browser (<code>--paste</code> for a token)</td></tr>
+        <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
+        <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
+        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt;</code></td><td>Publish a new version</td></tr>
+        <tr><td><code>bikeshed get &lt;id&gt;</code></td><td>Print a document's source</td></tr>
+        <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
+        <tr><td><code>bikeshed comment &lt;id&gt; &lt;text&gt; --body &lt;comment&gt;</code></td><td>Start a thread on a passage</td></tr>
+        <tr><td><code>bikeshed reply &lt;id&gt; &lt;thread&gt; &lt;text&gt;</code></td><td>Reply in a thread</td></tr>
+        <tr><td><code>bikeshed suggest &lt;id&gt; &lt;text&gt; --with &lt;new&gt;</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
+        <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
+        <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>
+        <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
+        <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids</td></tr>
+        <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
+        <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
+        <tr><td><code>bikeshed skills install &lt;dir&gt;</code></td><td>Write the skills into an agent's skills directory</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Where a command takes an id, it also takes the link you were sent. <code>bikeshed --help</code> lists every option.</p>
+
+</div>
+
+</main>
+<footer>
+  <p>Reading rather than building? <a href="/docs">How Bikeshed works</a> covers the product in plain words.</p>
+  <p>Something wrong on this page? Select it and comment.</p>
+</footer>
+</body>
+</html>

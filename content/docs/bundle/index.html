@@ -572,8 +572,21 @@ tbody th { font-weight: 650; white-space: nowrap; }
 .agent-loop span { display: block; font-size: 0.88rem; line-height: 1.45; margin-bottom: 10px; }
 .agent-loop code { font-size: 0.74rem; }
 .agent-loop + .loop-again { margin: 0 16.7%; }
-.term { margin-top: 32px; }
-.subhead { margin: 32px 0 12px; }
+.aside { margin-top: 16px; font-size: 0.9rem; color: var(--muted); }
+.inbox { margin-top: 32px; padding: 20px 24px; }
+.inbox-title {
+  margin: 0 0 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.inbox-item { padding: 12px 0 12px 16px; border-left: 3px solid var(--annotation); font-size: 0.92rem; }
+.inbox-item + .inbox-item { margin-top: 12px; }
+.inbox-item p { margin: 0 0 4px; }
+.inbox-item b { margin-right: 6px; }
+.inbox-item .quote { color: var(--muted); }
 .can {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
@@ -633,11 +646,6 @@ dd { margin: 0 0 14px; font-size: 0.94rem; }
 
 .notes dt { font-size: 1rem; }
 .notes dd { margin-bottom: 18px; }
-
-/* --- Reference --------------------------------------------------------- */
-
-.reference h3 { margin: 32px 0 8px; }
-.reference td:first-child { white-space: nowrap; }
 
 footer {
   max-width: 60rem;
@@ -740,7 +748,6 @@ footer p { margin: 0 0 6px; }
       <li><a href="#agents">Agents</a></li>
       <li><a href="#present">Export</a></li>
       <li><a href="#limits">Good to know</a></li>
-      <li><a href="#reference">Reference</a></li>
     </ol>
   </nav>
 </div>
@@ -780,7 +787,7 @@ footer p { margin: 0 0 6px; }
     <div class="panel">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
       <h3>It is a deck</h3>
-      <p>Upload the HTML as it is. If each section is about a screen tall, you get a slide list.</p>
+      <p>Upload the deck as it is. If each slide is about a screen tall, you get a slide list.</p>
     </div>
   </div>
 </div>
@@ -788,33 +795,27 @@ footer p { margin: 0 0 6px; }
 <div class="chapter" id="start">
   <p class="eyebrow">02</p>
   <h2>Start in five minutes</h2>
-  <p class="answer">Three ways in. Use the one you are already in.</p>
+  <p class="answer">Two ways in: the browser, or the agent you already work with.</p>
 
   <div class="ways">
     <div class="panel">
       <h3><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>In the browser</h3>
       <ol>
         <li>Sign in with Google, GitHub or an email address.</li>
-        <li>Upload a <code>.html</code>, <code>.md</code> or <code>.zip</code>, or drop it on the workspace.</li>
+        <li>Upload a web page, a Markdown file or a zip, or drop it on the workspace.</li>
         <li>Open <strong>Share</strong>, add people, and send the link.</li>
       </ol>
     </div>
     <div class="panel">
-      <h3><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 8 4 4-4 4M12 16h7"/></svg>In a terminal</h3>
-<pre><code>npm i -g bikeshed-now
-bikeshed login
-bikeshed publish plan.md</code></pre>
-      <p class="muted"><code>bikeshed login</code> opens your browser to approve it. For a site other than its default, add <code>--origin</code> and the address. Node 22 or later.</p>
-    </div>
-    <div class="panel">
       <h3><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5M9 13h.01M15 13h.01M9.5 16h5"/></svg>Through your agent</h3>
       <ol>
-        <li>Point it at <a href="/llms.txt">/llms.txt</a>, the complete guide written for agents.</li>
-        <li>Add this site's <code>/mcp</code> address as a connector, then sign in and approve.</li>
+        <li>Ask it to read <a href="/llms.txt">this site's guide for agents</a>.</li>
+        <li>It tells you how to connect it. You add Bikeshed in its settings and approve it in your browser.</li>
         <li>Ask it to publish. It gives you back the link.</li>
       </ol>
     </div>
   </div>
+  <p class="aside">Working from a terminal, or wiring this into scripts? The <a href="/docs/developers">guide for developers</a> has the details.</p>
 </div>
 
 <div class="chapter" id="comments">
@@ -950,61 +951,41 @@ bikeshed publish plan.md</code></pre>
 <div class="chapter" id="agents">
   <p class="eyebrow">07</p>
   <h2>Agents close the loop</h2>
-  <p class="answer">Any agent you give access to can pick up the open comments, from people or from other agents, work through them, and publish the next version.</p>
+  <p class="answer">Any agent you connect can pick up the open comments, from people or from other agents, work through them, and publish the next version.</p>
 
   <figure>
     <ol class="agent-loop">
-      <li>
-        <b>Pick up</b>
-        <span>Every open thread, whoever wrote it, each with the exact words it is about.</span>
-        <code>bikeshed comments</code> <code>get_comments</code>
-      </li>
-      <li>
-        <b>Work through</b>
-        <span>Rewrite those passages, then say what changed in each thread.</span>
-        <code>bikeshed reply</code> <code>reply_to_comment</code>
-      </li>
-      <li>
-        <b>Publish</b>
-        <span>The next version. Identical content changes nothing.</span>
-        <code>bikeshed update</code> <code>update_document</code>
-      </li>
+      <li><b>Pick up</b><span>Every open comment, whoever wrote it, with the exact words it is about.</span></li>
+      <li><b>Work through</b><span>It rewrites those passages and answers each comment in its thread.</span></li>
+      <li><b>Publish</b><span>The next version goes up, and its discussion starts fresh.</span></li>
     </ol>
     <div class="loop-again" aria-hidden="true"><span>and again, as new comments arrive</span></div>
-<pre class="term"><code>$ bikeshed comments storage-migration
-
-── a7Kd…  (rollout-plan)
-   “we can cut over in a single weekend”
-   ana@example.com: This assumes no dual-write period. There is one.
-
-── Qm3x…  (costs)
-   “about $40 a month”
-   sam@example.com: Does that include egress?
-   lee@example.com [via mcp]: It does not. Egress adds about $15.</code></pre>
-    <figcaption>What an agent picks up: a person's comment, and another agent's answer in a person's thread, each tied to its passage and section.</figcaption>
+    <div class="panel inbox">
+      <p class="inbox-title">What the agent picks up</p>
+      <div class="inbox-item">
+        <p class="quote">“we launch on the 30th”</p>
+        <p><b>Ana</b> Marketing needs two more weeks.</p>
+      </div>
+      <div class="inbox-item">
+        <p class="quote">“about $40 a month”</p>
+        <p><b>Sam</b> Is that per person?</p>
+        <p><b>research-agent</b> <span class="badge">via MCP</span> Per team. Per person it is about $4.</p>
+      </div>
+    </div>
+    <figcaption>Two open threads: one from a person, and one a person asked and another agent answered. Each arrives with the words it is about.</figcaption>
   </figure>
 
   <ul class="ticks">
-    <li><strong>Any agent, not only the author.</strong> Claude, Codex, Cursor or a script: whatever is connected as someone who can edit the document can take over where another left off.</li>
-    <li><strong>Reply, then publish.</strong> A new version starts with no comments, and the old threads stay with the old version, so an agent answers in them first.</li>
+    <li><strong>Any agent, not only the one that wrote it.</strong> Claude, ChatGPT, Cursor or another: whichever agent is connected as someone who can edit the document can take over where another left off.</li>
+    <li><strong>It answers before it publishes.</strong> Each version keeps its own comments, so the agent replies in the threads first, and reviewers see what changed and why.</li>
     <li>An agent that <em>Can suggest</em> but not edit proposes each change as a suggested edit instead, and a person decides.</li>
     <li>A suggestion still waiting holds back the next version until somebody who can approve decides it.</li>
   </ul>
 
-  <h3 class="subhead">Setting one up</h3>
-  <ol class="ticks">
-    <li>Point it at <a href="/llms.txt">/llms.txt</a>.</li>
-    <li>Have it install the skills, which teach it each job in detail:
-<pre><code>npx -y bikeshed-now skills install .claude/skills</code></pre>
-      Other harnesses read <code>.agents/skills</code>.</li>
-    <li>Connect it. Add this site's address followed by <code>/mcp</code> as a connector: in Claude, Settings → Connectors; in Claude Code, <code>claude mcp add --transport http bikeshed &lt;address&gt;/mcp</code>. You sign in and approve it on a page that names the app.</li>
-    <li>For CI and scripts, where no browser opens, create a token at Account → Access tokens instead.</li>
-  </ol>
-
   <div class="can">
     <div>
       <h3>Agents can</h3>
-      <p>List, read, publish and update documents. Fork them. Suggest edits. Create folders and move documents into them. Read comments and reply.</p>
+      <p>Read documents, publish new ones and new versions of them. Fork them. Suggest edits. Make folders and file documents in them. Read comments, start a thread on a passage, and reply.</p>
     </div>
     <div>
       <h3>Only a person can</h3>
@@ -1012,7 +993,7 @@ bikeshed publish plan.md</code></pre>
     </div>
   </div>
 
-  <p>A connection can do what you can and nothing more, and disconnecting it is one click in Account. You can always tell what an agent did. Everything it does carries the channel it came through, such as <span class="badge">via MCP</span>, taken from its credential rather than claimed.</p>
+  <p>A connection can do what you can and nothing more, and you can disconnect it in Account with one click. You can always tell what an agent did: everything it does is labelled with how it came in, such as <span class="badge">via MCP</span>.</p>
 </div>
 
 <div class="chapter" id="present">
@@ -1037,11 +1018,11 @@ bikeshed publish plan.md</code></pre>
 
     <dl class="keys">
       <dt>Slides and All slides</dt>
-      <dd>The slide list, or every slide at once (<kbd>O</kbd>). <kbd>→</kbd> <kbd>Space</kbd> forward, <kbd>←</kbd> back.</dd>
+      <dd>The slide list, or every slide at once (<kbd>O</kbd>). <kbd>→</kbd> or <kbd>Space</kbd> goes forward, <kbd>←</kbd> back, <kbd>Home</kbd> and <kbd>End</kbd> to either end.</dd>
       <dt>Present</dt>
       <dd>Full screen, without the app around it, with a slide counter.</dd>
       <dt>Download</dt>
-      <dd>The HTML, plus the Markdown source of a Markdown document or a <code>.zip</code> of a bundle. <em>Print or save as PDF</em>. <em>Export an image…</em> of one section or one diagram.</dd>
+      <dd>The page itself, its Markdown source if it has one, or all of its files in a zip. <em>Print or save as PDF</em>. <em>Export an image…</em> of one section or one diagram.</dd>
     </dl>
   </div>
 </div>
@@ -1056,84 +1037,18 @@ bikeshed publish plan.md</code></pre>
     <dd>Nothing deletes a document. Whoever runs this site can withdraw a single version.</dd>
     <dt>An expiry ends access, not the document.</dt>
     <dd>Set <em>Stop being readable after</em> in Share. After that date only you can open it, and clearing the date restores everything.</dd>
-    <dt>Scripts wait for a person.</dt>
-    <dd>A document's own scripts stay off until somebody allows them: <em>Run it for me</em>, for yourself, or <em>Trust it for everyone</em>, if you own it. A new version published by an agent or the CLI switches them off again.</dd>
+    <dt>Interactive pages wait for a person.</dt>
+    <dd>A page's own scripts stay off until somebody allows them: <em>Run it for me</em>, for yourself, or <em>Trust it for everyone</em>, if you own it. A new version from an agent switches them off again.</dd>
     <dt>What you can upload.</dt>
-    <dd><code>.html</code>, <code>.md</code>, or a <code>.zip</code> with <code>index.html</code> or <code>index.md</code> at the root, up to 25 MB. Markdown renders tables, strikethrough and task lists.</dd>
+    <dd>A web page, a Markdown file, or a zip of a page with the files it uses, up to 25 MB.</dd>
     <dt>Forks are visible.</dt>
     <dd><strong>Fork</strong> makes your own private copy. Its author sees that it was forked, not by whom.</dd>
   </dl>
 </div>
 
-<div class="chapter reference" id="reference">
-  <p class="eyebrow">10</p>
-  <h2>Reference</h2>
-  <p class="answer">The commands, agent tools and keys, in one place.</p>
-
-  <h3>The <code>bikeshed</code> command</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
-      <tbody>
-        <tr><td><code>bikeshed login</code></td><td>Sign in through your browser (<code>--paste</code> for a token)</td></tr>
-        <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
-        <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
-        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt;</code></td><td>Publish a new version</td></tr>
-        <tr><td><code>bikeshed get &lt;id&gt;</code></td><td>Print a document's source</td></tr>
-        <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
-        <tr><td><code>bikeshed reply &lt;id&gt; &lt;thread&gt; &lt;text&gt;</code></td><td>Reply in a thread</td></tr>
-        <tr><td><code>bikeshed suggest &lt;id&gt; &lt;text&gt; --with &lt;new&gt;</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
-        <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
-        <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>
-        <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
-        <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids</td></tr>
-        <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
-        <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
-        <tr><td><code>bikeshed skills install &lt;dir&gt;</code></td><td>Write the skills into an agent's skills directory</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="muted">Where a command takes an id, it also takes the link you were sent. <code>bikeshed --help</code> lists every option.</p>
-
-  <h3>Agent tools, over MCP</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead>
-      <tbody>
-        <tr><td><code>list_documents</code></td><td>Documents you can read, newest first</td></tr>
-        <tr><td><code>get_document</code></td><td>A document's metadata and current source</td></tr>
-        <tr><td><code>publish_document</code></td><td>Create a document from content you supply</td></tr>
-        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op</td></tr>
-        <tr><td><code>get_comments</code></td><td>Unresolved feedback, each with the exact passage it is anchored to</td></tr>
-        <tr><td><code>reply_to_comment</code></td><td>Add a reply to a comment thread</td></tr>
-        <tr><td><code>suggest_edit</code></td><td>Propose new text for a passage, for a person to decide</td></tr>
-        <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
-        <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
-        <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
-        <tr><td><code>create_folder</code></td><td>Create a folder</td></tr>
-        <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <h3>Keys in a deck</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th scope="col">Keys</th><th scope="col">What they do</th></tr></thead>
-      <tbody>
-        <tr><td><kbd>→</kbd> <kbd>↓</kbd> <kbd>PageDown</kbd> <kbd>Space</kbd></td><td>Next slide</td></tr>
-        <tr><td><kbd>←</kbd> <kbd>↑</kbd> <kbd>PageUp</kbd></td><td>Previous slide</td></tr>
-        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>First or last slide</td></tr>
-        <tr><td><kbd>O</kbd></td><td>Every slide at once</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Close the overview</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
 </main>
 <footer>
-  <p>Agents: the complete guide is at <a href="/llms.txt">/llms.txt</a>.</p>
+  <p>Developers: the command line, agent tools and connection details are in the <a href="/docs/developers">guide for developers</a>.</p>
   <p>Something wrong on this page? Select it and comment.</p>
 </footer>
 </body>
