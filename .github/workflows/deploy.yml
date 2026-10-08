@@ -1,0 +1,163 @@
+# SPDX-License-Identifier: Apache-2.0
+# Deploys production from main once the verification table has passed (SPEC §12).
+#
+# Every push to main or develop runs ci.yml first, as a called workflow, so ci.yml
+# keeps its promise that no CI job holds a credential. Only a push to main goes
+# on to deploy. develop gets CI alone until a staging project exists; the
+# PRODUCTION_ prefix on every secret leaves room for a STAGING_ job beside this
+# one.
+#
+# The production credential is scoped on Google's side, not GitHub's. This
+# organization's plan has no branch protection and no environment secrets for a
+# private repository, so the deployer service account trusts exactly one OIDC
+# subject: a workflow running on refs/heads/main of this repository. A workflow
+# on any other ref cannot mint the token, whatever it is edited to say.
+#
+# Set the repository variable DEPLOY_PAUSED to `true` to hold deploys while CI
+# keeps running — for a migration whose order is not this one
+# (docs/operations/overview.md, "Continuous deployment").
+
+name: deploy
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a deploy halfway: functions live and hosting not is the state the
+# order below exists to avoid. A burst of pushes still collapses to one pending
+# run, so the newest commit is the one that ships and an older one can never
+# deploy after it.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_AUDIT: "false"
+  # The version local deploys have been made with. Pinned, because a CLI release
+  # that changes deploy behaviour should arrive as a reviewed diff here.
+  FIREBASE_TOOLS_VERSION: 15.25.1
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  production:
+    name: deploy production
+    needs: ci
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ secrets.PRODUCTION_FIREBASE_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 20 because firebase.json deploys the nodejs20 runtime, and the
+      # functions build should run on the runtime it is built for.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            functions/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm --prefix app ci
+          npm --prefix functions ci
+
+      # Three of the four gitignored files a hand deploy reads from the
+      # deployer's disk; the fourth, .firebaserc, is `--project` here. The
+      # origin is masked before the build, which prints it.
+      - name: Write this deployment's configuration
+        env:
+          APP_ENV: ${{ secrets.PRODUCTION_APP_ENV }}
+          FUNCTIONS_ENV: ${{ secrets.PRODUCTION_FUNCTIONS_ENV }}
+          DEPLOY_JSON: ${{ secrets.PRODUCTION_DEPLOY_JSON }}
+        run: |
+          printf '%s\n' "$APP_ENV" > app/.env.local
+          printf '%s\n' "$FUNCTIONS_ENV" > functions/.env
+          printf '%s\n' "$DEPLOY_JSON" > config/deploy.json
+          origin=$(node --input-type=module -e 'import { resolveOrigin } from "./tools/stamp-deployment.mjs"; process.stdout.write(resolveOrigin().origin)')
+          if [ -n "$origin" ]; then
+            echo "::add-mask::$origin"
+            echo "::add-mask::${origin#*://}"
+          fi
+          echo "ORIGIN=$origin" >> "$GITHUB_ENV"
+
+      - name: Build against this deployment
+        run: npm run build
+
+      # Before authenticating: a refusal here leaves nothing half-deployed.
+      - name: Preflight
+        run: node tools/deploy-preflight.mjs --project "$PROJECT"
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.PRODUCTION_WIF_PROVIDER }}
+          service_account: ${{ secrets.PRODUCTION_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Install the Firebase CLI
+        run: npm install --global "firebase-tools@$FIREBASE_TOOLS_VERSION"
+
+      # Functions first: the new app may call an endpoint the old functions do
+      # not have, never the reverse. By NAME, so a function this release removed
+      # cannot abort a non-interactive deploy; it is pruned after hosting below.
+      - name: Deploy functions
+        run: |
+          only=$(node --input-type=module -e 'import { functionNames } from "./scripts/lib/endpoints.mjs"; process.stdout.write(functionNames().map((n) => "functions:" + n).join(","))')
+          firebase deploy --only "$only" --project "$PROJECT" --non-interactive
+
+      # Before hosting, so no visitor ever loads an app newer than the rules it
+      # is written against. RTDB rules only where an instance exists, as
+      # scripts/setup.mjs decides it; an error listing them fails the job rather
+      # than quietly skipping them.
+      - name: Deploy rules and indexes
+        run: |
+          targets="firestore:rules,firestore:indexes,storage"
+          instances=$(firebase database:instances:list --project "$PROJECT" --json --non-interactive \
+            | node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                const r = JSON.parse(s);
+                if (r.status !== "success") { console.error(r.error ?? s); process.exit(1); }
+                process.stdout.write(String(r.result.length));
+              })')
+          if [ "$instances" -gt 0 ]; then targets="$targets,database"; fi
+          echo "deploying $targets"
+          firebase deploy --only "$targets" --project "$PROJECT" --non-interactive
+
+      - name: Deploy hosting
+        run: firebase deploy --only hosting --project "$PROJECT" --non-interactive
+
+      # Deletes only functions missing from the source; every function deployed
+      # above reports "Skipped (No changes detected)". Hosting has already
+      # dropped the rewrites to anything deleted here, so nothing routes to it.
+      - name: Prune functions this release removed
+        run: firebase deploy --only functions --force --project "$PROJECT" --non-interactive
+
+      # What a green deploy cannot show: that the live index is this build, and
+      # that the functions are invokable. A missing allUsers invoker answers 403
+      # with an HTML body before any of our code runs.
+      - name: Smoke test
+        run: |
+          entry=$(grep -o 'src="/assets/index-[^"]*\.js"' app/dist/index.html | head -1)
+          [ -n "$entry" ] || { echo "no entry script in app/dist/index.html"; exit 1; }
+          for _ in $(seq 1 12); do
+            if curl -fsS "$ORIGIN/" | grep -qF "$entry"; then live=1; break; fi
+            sleep 5
+          done
+          [ -n "${live:-}" ] || { echo "the live index does not reference $entry"; exit 1; }
+          status=$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/unlock")
+          [ "$status" = "405" ] || { echo "GET /unlock answered $status, not 405"; exit 1; }
+          echo "live index is this build; functions are invokable"

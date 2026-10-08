@@ -245,6 +245,10 @@ Deploy **functions before hosting**. The new app may call an endpoint the old
 functions do not have; the reverse is never a problem, because an endpoint
 nobody calls yet is inert.
 
+With [continuous deployment](#continuous-deployment) set up, a push to `main`
+does all of this, and the rules too. These commands are for a deployment
+without it, or for a migration while it is paused.
+
 **The hosting build stamps the agent instructions.** `/llms.txt` and
 `/skills/**` ship with this deployment's own address in place of
 `https://<deployment>`, taken from `domain` in `config/deploy.json` — or from
@@ -305,6 +309,116 @@ mints a new version. That is correct — the rendering is part of the artifact �
 but it is a decision, which is why all three are pinned to exact versions and
 `rendererVersion` is recorded on each version record
 ([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
+
+### Continuous deployment
+
+`.github/workflows/deploy.yml` deploys production on every push to `main`
+that passes all three CI jobs. A push to `develop` runs CI and stops there,
+until a staging project exists ([below](#staging-later)).
+
+**Pushing `main` is deploying.** Nothing asks for approval in between: on
+GitHub's free plan a private repository has no branch protection and no
+environment approvals. CI is the only gate.
+
+One run, in order:
+
+| Step | Why there |
+|---|---|
+| Write `app/.env.local`, `functions/.env` and `config/deploy.json` from secrets, then build | The same files a hand deploy reads; `--project` stands in for `.firebaserc` |
+| `tools/deploy-preflight.mjs` | Refuses a bundle built for another project or the emulators, a missing origin, an unstamped `app/dist`, and functions told a different origin. All of this happens before any credential exists |
+| Functions, **by name** | First, as above. By name, so a function the release removed cannot abort a non-interactive deploy |
+| Firestore rules and indexes, Storage rules, RTDB rules if an instance exists | Before hosting, so no visitor loads an app newer than its rules |
+| Hosting | |
+| `--only functions --force` | Deletes the functions the release removed, once hosting has dropped their rewrites |
+| Smoke test | The live index references this build's entry script, and `GET /unlock` answers `405` rather than the platform's HTML `403` |
+
+A deploy is never cancelled halfway. Pushes queue, and a burst of them
+collapses to the newest. Every step is idempotent, so a run that failed
+partway is fixed by re-running it: `gh run rerun <id> --failed`.
+
+**What it does not do:**
+- Data migrations, such as `reconcile-visibility.mjs` above.
+- The `allUsers` invoker repair under Domain Restricted Sharing ([§3b](#3b-what-setup-does-that-is-not-obvious)).
+- Setting `RESEND_API_KEY`.
+- `npm publish`.
+
+**Pausing it.** Some migrations need a different order: the unlisted-documents
+one above puts the rules last. For those, set
+`gh variable set DEPLOY_PAUSED --body true` and CI keeps running while the
+deploy job is skipped. Deploy by hand, then run `gh variable delete
+DEPLOY_PAUSED`. A push made while paused is not deployed when you unpause, so
+deploy it with `gh workflow run deploy.yml --ref main`.
+
+#### One-time setup
+
+No key is created, so none can leak. The deployer service account trusts
+GitHub's OIDC token through Workload Identity Federation, and only from **one
+subject**: a workflow running on `refs/heads/main` of this repository. With
+no environment secrets on the free plan, that binding is what stops a
+workflow on another ref from deploying.
+
+```bash
+P=your-firebase-project-id
+N=$(gcloud projects describe $P --format='value(projectNumber)')
+REPO=<owner>/<repo>
+DEPLOYER=deployer@$P.iam.gserviceaccount.com
+
+gcloud iam workload-identity-pools create github --project $P --location global
+gcloud iam workload-identity-pools providers create-oidc deploy --project $P --location global \
+  --workload-identity-pool github --issuer-uri https://token.actions.githubusercontent.com \
+  --attribute-mapping google.subject=assertion.sub,attribute.repository=assertion.repository \
+  --attribute-condition "assertion.repository == '$REPO'"
+gcloud iam service-accounts create deployer --project $P --display-name "CI deployer"
+gcloud iam service-accounts add-iam-policy-binding $DEPLOYER --project $P \
+  --role roles/iam.workloadIdentityUser \
+  --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/repo:$REPO:ref:refs/heads/main"
+for role in cloudfunctions.admin run.admin firebasehosting.admin firebaserules.admin \
+    datastore.indexAdmin firebasedatabase.admin secretmanager.viewer serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/$role --condition None
+done
+gcloud iam service-accounts add-iam-policy-binding $N-compute@developer.gserviceaccount.com --project $P \
+  --role roles/iam.serviceAccountUser --member serviceAccount:$DEPLOYER
+```
+
+| Role | For |
+|---|---|
+| `cloudfunctions.admin` | Creating and updating functions |
+| `run.admin` | Granting `allUsers` invoker on a newly created function |
+| `iam.serviceAccountUser`, on the runtime account only | Deploying functions that run as it |
+| `firebasehosting.admin` | Hosting |
+| `firebaserules.admin` | Firestore and Storage rules |
+| `datastore.indexAdmin` | Firestore indexes |
+| `firebasedatabase.admin` | RTDB rules, and listing instances to decide whether to deploy them |
+| `secretmanager.viewer` | `defineSecret`: a deploy checks that the secret has a version |
+| `serviceusage.serviceUsageConsumer` | Calling those APIs on the project's quota |
+
+IAM is invisible locally, so a missing role first appears as a
+`PERMISSION_DENIED` naming its permission in the failing step. Grant that
+role, add it to the list above, and re-run.
+
+Then the six repository secrets. They are secrets rather than variables so that
+the build log masks them, and these logs become public if the repository does.
+`app/.env.local` must be the production one: the preflight refuses an
+emulator config.
+
+```bash
+gh secret set PRODUCTION_FIREBASE_PROJECT --body "$P"
+gh secret set PRODUCTION_WIF_PROVIDER --body "projects/$N/locations/global/workloadIdentityPools/github/providers/deploy"
+gh secret set PRODUCTION_DEPLOY_SERVICE_ACCOUNT --body "$DEPLOYER"
+gh secret set PRODUCTION_APP_ENV < app/.env.local
+gh secret set PRODUCTION_FUNCTIONS_ENV < functions/.env
+gh secret set PRODUCTION_DEPLOY_JSON < config/deploy.json
+```
+
+When one of those files changes, set its secret again. The pipeline reads only
+the secret, never your disk.
+
+#### Staging, later
+
+1. A second project brought up with `scripts/setup.mjs`.
+2. The setup above run against it, with `refs/heads/develop` in the binding.
+3. `STAGING_*` secrets.
+4. A second job in `deploy.yml` that runs on `develop` and reads them.
 
 ---
 

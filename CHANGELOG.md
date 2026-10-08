@@ -16,6 +16,22 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **Every push to `main` that passes CI now deploys production.** A new
+  workflow, `deploy.yml`, runs the existing checks and then deploys functions,
+  the security rules and indexes, and hosting, in that order. It then deletes
+  any function the release removed, and checks that the live site serves the
+  build it just made. The rules used to be a separate manual step, and
+  0.6.0's never went live. The deploy signs in to Google without a stored key,
+  and only a workflow running on `main` can sign in at all. Before it does, it
+  refuses a build configured for another project or for the emulators, a
+  build never stamped with its address, and functions given a different
+  address. Setting `DEPLOY_PAUSED` holds it for a migration that
+  needs another order. Setup is under "Continuous deployment" in
+  `docs/operations/overview.md`. `develop` runs CI only until a staging
+  project exists.
+
 ### Fixed
 
 - **A CI check for unstamped agent instructions could never fail.** The step

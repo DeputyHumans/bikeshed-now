@@ -142,8 +142,10 @@ talking to, so a change without one is running under someone else's version.
   `## X.Y.Z — YYYY-MM-DD`.
 - **The CLI versions on its own**, and only when `cli/` changed: bump
   `cli/package.json` and commit `chore(cli): release bikeshed-now X.Y.Z`.
-- **Tag the release commit** `vX.Y.Z` (`cli-vX.Y.Z` for the CLI). Pushing,
-  `npm publish` and deploying stay separate decisions, each asked for.
+- **Tag the release commit** `vX.Y.Z` (`cli-vX.Y.Z` for the CLI). **Pushing
+  `main` is deploying production**: `.github/workflows/deploy.yml` ships every
+  push that passes CI, so ask for a push as you would for a deploy. `npm
+  publish` stays a separate decision, also asked for.
 
 ## Deployment facts stay out of the tree
 

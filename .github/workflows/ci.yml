@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The verification table in CONTRIBUTING.md, run on every push (SPEC §12).
+# The verification table in CONTRIBUTING.md, run on every push and pull request (SPEC §12).
 #
 # Job boundaries follow failure MODES, not convenience, so a red check tells you
 # what kind of thing broke before you open it: `build` means the code is wrong,
@@ -9,14 +9,17 @@
 #
 # Every job is credential-free. Nothing here can reach a real backend:
 # `demo-bikeshed` is an emulator-only project id.
+#
+# A push to main or develop runs this through deploy.yml, which calls it and
+# deploys only once all three jobs pass. That is why there is no `push` trigger
+# here: one would run the same checks twice for every push.
 
 name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
