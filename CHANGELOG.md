@@ -56,6 +56,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   `/skills/index.json` names it as `archive`. The predeploy check refuses a
   zip that differs by one byte from the file beside it, and the skills are
   held to Claude's limits on names and descriptions (SPEC §23).
+- **`bikeshed login` signs in through the browser.** It prints an address,
+  opens it, and waits up to five minutes for you to approve; the token it
+  receives is an ordinary personal access token, saved as before. It needs no
+  terminal of its own, so an agent can run it for you. `--paste` keeps the old
+  way, for SSH and for deployments older than this one; in CI it stops at once
+  and says to set the two variables (in `bikeshed-now` 0.8.0).
 
 ### Changed
 
@@ -67,6 +73,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   `authentication.type` is `oauth2`, with the protected-resource and
   authorization-server paths, and a personal token listed under
   `alternatives`.
+
+### Fixed
+
+- **`bikeshed open` crashed on Windows.** It ran `start`, which is a
+  `cmd.exe` builtin rather than a program, and had nothing listening for the
+  failure. It now opens the link the way `login` does (in `bikeshed-now`
+  0.8.0).
 
 ## 0.6.5 — 2026-10-08
 

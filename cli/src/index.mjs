@@ -11,12 +11,26 @@ import { CONFIG_PATH, readConfig, resolveAuth, writeConfig } from "./config.mjs"
 import {
   CliError,
   callTool,
+  exchangeCode,
   fetchSkill,
   fetchSource,
   listSkills,
+  printable,
   uploadFile,
   whoami,
 } from "./client.mjs";
+import {
+  CLI_CLIENT_ID,
+  LOGIN_TIMEOUT_MS,
+  authorizeUrl,
+  canOpenBrowser,
+  createPkce,
+  createState,
+  deviceName,
+  discover,
+  listenForCallback,
+  openBrowser,
+} from "./login.mjs";
 
 /**
  * This is the END-USER tool, and it is deliberately not the same thing as the
@@ -35,7 +49,7 @@ import {
 
 const USAGE = `bikeshed — publish and revise documents
 
-  bikeshed login                       store a personal access token
+  bikeshed login                       sign in through your browser (--paste for a token)
   bikeshed list                        documents you can read
   bikeshed publish <file>              create a new document
   bikeshed update <id> <file>          publish a new version
@@ -92,6 +106,8 @@ Options
   --prefix <text>        with suggest: words just before a passage that repeats
   --suffix <text>        with suggest: words just after it
   --watch                with publish/update: republish on every save
+  --paste                with login: paste a token made at /account instead
+  --no-browser           with login: print the sign-in link without opening it
   --origin <url>         the deployment (default: the one you logged in to)
   --token <token>        override the stored token
   --help                 this
@@ -146,7 +162,140 @@ function isArchive(path, bytes) {
 
 // --- Commands --------------------------------------------------------------
 
+/**
+ * Sign in. Through the browser by default, by pasting a token with --paste.
+ *
+ * The browser flow needs no terminal on stdin, on purpose: an agent's shell
+ * has none, and an agent running `npx -y bikeshed-now login` on a person's
+ * behalf is the case it exists for. The person approves in their own browser;
+ * the agent never sees the token, and neither does anybody reading its
+ * output. So the address goes to stderr, stdout stays parseable for --json,
+ * and the token is never printed.
+ */
 async function login(flags) {
+  if (flags.paste) return pasteLogin(flags);
+  // A job runner has no browser and no person to approve. Waiting five minutes
+  // to say so would be the slowest possible way to fail.
+  if (isCi(process.env.CI) && !flags["no-browser"]) {
+    fail("In CI, set BIKESHED_TOKEN and BIKESHED_ORIGIN.");
+  }
+  return browserLogin(flags);
+}
+
+function isCi(value) {
+  return Boolean(value) && value !== "0" && value.toLowerCase() !== "false";
+}
+
+async function browserLogin(flags) {
+  const interactive = Boolean(process.stdin.isTTY);
+  let where = resolveAuth(flags).origin;
+  if (interactive && !flags.origin) {
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    try {
+      where = (await rl.question(`Deployment [${where}]: `)).trim() || where;
+    } finally {
+      rl.close();
+    }
+  }
+  try {
+    const url = new URL(where);
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
+    where = url.origin;
+  } catch {
+    fail(`not a deployment address: ${where} (try https://bikeshed.now)`);
+  }
+
+  const meta = await discover(where);
+  if (!meta) {
+    // A deployment from before browser sign-in. A person at a terminal can
+    // still paste; anything else is told how, rather than left at a prompt
+    // nobody will answer.
+    if (interactive) {
+      console.error(`${where} predates browser sign-in, so this will ask for a token instead.\n`);
+      return pasteLogin({ ...flags, origin: where });
+    }
+    fail(`${where} predates browser sign-in. Create a token at ${where}/account and run \`bikeshed login --paste\`.`);
+  }
+
+  const { verifier, challenge } = createPkce();
+  const state = createState();
+  const timeoutMs = Number(process.env.BIKESHED_LOGIN_TIMEOUT_MS) || LOGIN_TIMEOUT_MS;
+  const callback = await listenForCallback({ state, issuer: meta.issuer, timeoutMs });
+  const resource = `${where}/mcp`;
+  const url = authorizeUrl(meta.authorization_endpoint, {
+    clientId: CLI_CLIENT_ID,
+    redirectUri: callback.redirectUri,
+    challenge,
+    state,
+    resource,
+    device: deviceName(),
+  });
+
+  const onInterrupt = () => {
+    callback.close();
+    console.error("\nCancelled. Nothing was saved.");
+    process.exit(130);
+  };
+  process.once("SIGINT", onInterrupt);
+
+  let answer;
+  try {
+    const here = canOpenBrowser();
+    const opening = !flags["no-browser"] && here && openBrowser(url);
+    console.error(
+      opening
+        ? `Opening your browser to sign in to ${where}. If it does not open, visit:`
+        : `To sign in to ${where}, open this in your browser:`,
+    );
+    console.error(`\n  ${url}\n`);
+    if (!flags["no-browser"] && !here) {
+      // The redirect comes back to 127.0.0.1 on THIS machine, which a browser
+      // on another one cannot reach.
+      console.error("If your browser is on another computer, it cannot reach back here: use `bikeshed login --paste` instead.");
+    }
+    console.error("Waiting for you to approve… (Ctrl-C to cancel)");
+    answer = await callback.result;
+  } finally {
+    process.off("SIGINT", onInterrupt);
+  }
+
+  if (answer.error) {
+    if (answer.error === "access_denied") fail("You chose not to connect. Nothing was saved.");
+    fail(`Sign-in did not finish: ${printable(answer.description ?? answer.error)}. Nothing was saved.`);
+  }
+
+  const token = await exchangeCode(meta.token_endpoint, {
+    code: answer.code,
+    verifier,
+    redirectUri: callback.redirectUri,
+    clientId: CLI_CLIENT_ID,
+    resource,
+  });
+  // Checked before it is stored, the same as a pasted one.
+  await whoami(where, token);
+  writeConfig({ ...readConfig(), origin: where, token });
+
+  // The environment outranks the file (resolveAuth), so a variable left over
+  // from an earlier session would quietly keep being used instead.
+  // A BIKESHED_ORIGIN naming this same deployment changes nothing.
+  const shadowing = [];
+  if (process.env.BIKESHED_TOKEN) shadowing.push("BIKESHED_TOKEN");
+  if (process.env.BIKESHED_ORIGIN && process.env.BIKESHED_ORIGIN.replace(/\/+$/, "") !== where) {
+    shadowing.push("BIKESHED_ORIGIN");
+  }
+  if (shadowing.length === 1) {
+    console.error(`${shadowing[0]} is set in this shell, and it outranks what was just saved. Unset it to use this sign-in.`);
+  } else if (shadowing.length === 2) {
+    console.error("BIKESHED_TOKEN and BIKESHED_ORIGIN are set in this shell, and they outrank what was just saved. Unset them to use this sign-in.");
+  }
+
+  out(flags.json, { origin: where, saved: CONFIG_PATH, via: "browser" }, () =>
+    console.log(`Signed in to ${where}. Saved to ${CONFIG_PATH} (readable only by you).`),
+  );
+}
+
+/** Paste a token made at /account. The flow from before browser sign-in. */
+async function pasteLogin(flags) {
   const { origin } = resolveAuth(flags);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -532,10 +681,10 @@ async function open(flags, [id]) {
   if (!id) fail("usage: bikeshed open <id>");
   const { origin } = resolveAuth(flags);
   const url = `${origin}/d/${id}`;
-  const { spawn } = await import("node:child_process");
-  const opener =
-    process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  spawn(opener, [url], { stdio: "ignore", detached: true }).unref();
+  // Best effort, and the address is printed either way. This used to spawn
+  // `start`, which is a cmd.exe builtin rather than a program, so on Windows
+  // the spawn failed and, with nothing listening for the error, crashed.
+  openBrowser(url);
   console.log(url);
 }
 
@@ -603,6 +752,8 @@ async function main() {
       cursor: { type: "string" },
       with: { type: "string" },
       delete: { type: "boolean", default: false },
+      paste: { type: "boolean", default: false },
+      "no-browser": { type: "boolean", default: false },
       note: { type: "string" },
       prefix: { type: "string" },
       suffix: { type: "string" },

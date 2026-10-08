@@ -165,6 +165,65 @@ export async function fetchSkill(origin, skill) {
   return res.text();
 }
 
+/**
+ * Text a server chose, made safe to print in a terminal: control characters
+ * (an escape sequence can rewrite what a terminal shows) go, and it is cut to
+ * a line's worth.
+ */
+export function printable(text, max = 200) {
+  const clean = String(text ?? "").replace(/[\p{Cc}\p{Cf}]/gu, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** The only thing the token endpoint may hand the CLI: a personal access token. */
+const ACCESS_TOKEN_RE = /^bsk_[0-9a-f]{32}\.[A-Za-z0-9_-]{20,64}$/;
+
+/**
+ * Trade a browser sign-in's code for a token (SPEC §23).
+ *
+ * Form-encoded, as OAuth defines the token request. Redirects are refused: a
+ * token endpoint that moves is not one to send a code and its verifier after.
+ * Whatever comes back has to be shaped like a personal access token before it
+ * is stored, because it is about to be saved as one and sent on every call.
+ */
+export async function exchangeCode(tokenEndpoint, { code, verifier, redirectUri, clientId, resource }) {
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    code_verifier: verifier,
+    resource,
+  });
+  let res;
+  try {
+    res = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body,
+      redirect: "error",
+    });
+  } catch (e) {
+    throw new CliError(`could not finish signing in: ${e.cause?.code ?? e.message}. Nothing was saved.`);
+  }
+  const answer = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const error = typeof answer?.error === "string" ? answer.error : `HTTP ${res.status}`;
+    const detail = answer?.error_description ? `: ${printable(answer.error_description)}` : "";
+    const advice =
+      error === "invalid_grant"
+        ? "The sign-in code expired or was already used."
+        : "The deployment refused the sign-in.";
+    throw new CliError(`${advice} Nothing was saved; run \`bikeshed login\` again. (${printable(error, 60)}${detail})`);
+  }
+  const token = answer?.access_token;
+  if (typeof token !== "string" || !ACCESS_TOKEN_RE.test(token)) {
+    throw new CliError("The deployment answered with something that is not a Bikeshed token. Nothing was saved.");
+  }
+  return token;
+}
+
 /** Check that a token works, and say who it belongs to. */
 export async function whoami(origin, token) {
   // list_documents is the cheapest authenticated call, and a token that can

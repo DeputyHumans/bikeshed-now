@@ -10,13 +10,23 @@ works the same, with your address in place of `https://bikeshed.now`.
 
 ```bash
 npm i -g bikeshed-now
-bikeshed login            # asks for the deployment and a token
+bikeshed login            # signs you in through your browser
 ```
 
-Create a token at [bikeshed.now/account](https://bikeshed.now/account) — choose
-**Command line**. It is shown once. `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` work
-instead of `login` where an interactive command cannot run — a CI job, or an
-agent.
+`login` opens your browser at the deployment. Sign in if you need to, click
+Approve, and the terminal saves a token that only you can read. It prints the
+link as well, for when no browser opens. Pass `--origin <url>` for your own
+deployment, or `--no-browser` to open the link yourself. An agent can run
+`npx -y bikeshed-now login` for you: you approve in your browser, and the token
+never appears in its output.
+
+The browser has to be on the same computer as the terminal, because it hands
+the sign-in back to a port on `127.0.0.1`. Over SSH, or against a deployment
+too old to offer browser sign-in, create a token at
+[bikeshed.now/account](https://bikeshed.now/account), choose **Command line**,
+and run `bikeshed login --paste`. The token is shown once. In CI, set
+`BIKESHED_ORIGIN` and `BIKESHED_TOKEN` instead of running `login` at all; they
+outrank whatever `login` saved.
 
 ## The loop
 
