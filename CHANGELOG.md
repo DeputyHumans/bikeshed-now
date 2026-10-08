@@ -28,6 +28,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **The workflows' own actions run on Node 24 too.** `checkout`, `setup-node`
   and `setup-java` moved to newer major versions. The old ones ran on Node 20,
   whatever Node they installed for the build.
+- **`bikeshed` needs Node 22 or later** (in `bikeshed-now` 0.7.0). Node 20
+  reached end of life on 2026-04-30, and CI no longer tests the CLI on it. On
+  Node 20, npm now warns at install time that the package does not support it.
 
 ## 0.6.4 — 2026-10-08
 
