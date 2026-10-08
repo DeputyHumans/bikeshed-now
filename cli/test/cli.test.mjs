@@ -225,6 +225,9 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
     for (const command of [...commands, "fork", "lineage", "comment", "suggest", "folders", "mkdir", "mv", "skills"]) {
       assert.match(out, new RegExp(`\\b${command}\\b`), `${command} is missing from --help`);
     }
+    // Whoever installs this package has none of the repository's maintenance
+    // scripts, so a note about them is only a puzzle in somebody's terminal.
+    assert.doesNotMatch(out, /\bscripts\/|\boperator\b|admin credentials/i);
   }
 });
 

@@ -33,15 +33,8 @@ import {
 } from "./login.mjs";
 
 /**
- * This is the END-USER tool, and it is deliberately not the same thing as the
- * scripts in `scripts/`. Conflating the two is how somebody runs a teardown
- * against production, so the difference is stated in `--help`, in the README,
- * and here:
- *
- *   scripts/*.mjs   whoever owns the deployment. Admin credentials. Talks to
- *                   Firestore and Storage directly. Provisions and withdraws.
- *   bikeshed        any signed-up user. A personal access token. Talks to the
- *                   deployment over HTTPS. Publishes and revises documents.
+ * A person's own client: their personal access token, over HTTPS, able to do
+ * exactly what they can do in the browser and nothing more.
  *
  * Every command takes `--json`, so it composes inside a script or an agent's
  * shell without anybody parsing human-readable output.
@@ -116,10 +109,6 @@ Options
 
 Environment
   BIKESHED_ORIGIN, BIKESHED_TOKEN, BIKESHED_AGENT
-
-This is the end-user tool. The scripts in scripts/ are the OPERATOR tools: they
-use admin credentials, talk to the database directly, and can tear a deployment
-down. They are not the same thing.
 `;
 
 function fail(message) {
