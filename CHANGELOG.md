@@ -44,6 +44,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   it, and survives signing in. The page refuses to run inside a frame, and
   Approve stays disabled until the page has had your attention for a moment.
   It never sends you anywhere you did not press a button for (SPEC §23).
+- **"Connect an app" on the account screen.** The address to paste, with a
+  copy button and the steps for Claude, ChatGPT, Claude Code, Cursor and
+  VS Code, and the command for a terminal. Connected apps appear in the
+  Access tokens list as apps, with the host they came from and when they
+  were last used, and Revoke disconnects one. The landing page's "copy for
+  your agent" text now asks for a connection rather than a token.
 
 ### Changed
 

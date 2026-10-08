@@ -223,7 +223,20 @@ describe("the agent instructions", () => {
   it("builds every reference from the origin it is given", () => {
     const text = agentInstructions("https://example.test");
     expect(text).toContain("https://example.test/llms.txt");
-    expect(text).toContain("https://example.test/account");
+    expect(text).toContain("https://example.test/mcp");
+    // The CLI defaults to another deployment, so the login names this one.
+    expect(text).toContain("bikeshed-now login --origin https://example.test");
     expect(text).not.toContain("bikeshed.now");
+  });
+
+  /**
+   * An agent told to ask for a token asks for one, and a person pastes a
+   * credential into a chat. Connecting by address needs neither (SPEC §23).
+   */
+  it("asks for a connector or a browser login, never a minted token", () => {
+    const text = agentInstructions("https://example.test");
+    expect(text).toContain("as a connector");
+    expect(text).not.toMatch(/mint/i);
+    expect(text).not.toMatch(/access token/i);
   });
 });

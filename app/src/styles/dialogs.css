@@ -234,6 +234,20 @@
 .token-row[data-revoked="true"] { opacity: 0.5; }
 .token-unused { color: var(--color-warn); }
 
+/* The address an app is connected by (SPEC §23). Quiet on purpose: unlike a
+   freshly minted token it is not a secret and is not shown only once, so it
+   does not borrow .token-reveal's accent. */
+.connect-url {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.connect-url .token-value { font-size: var(--fs-small); }
+
 /* --- Image export -------------------------------------------------------- */
 
 .bg-choices { display: flex; gap: var(--s-2); }

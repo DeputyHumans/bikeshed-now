@@ -273,14 +273,28 @@ export interface UserRecord {
   updatedAt?: Timestamp;
 }
 
-/** Firestore: users/{uid}/tokens/{tokenId} — metadata only; never the secret. */
+/**
+ * Firestore: users/{uid}/tokens/{tokenId} — metadata only; never the secret.
+ *
+ * A connected app (SPEC §23) is a row here too, with `kind: "oauth"`, so the
+ * same list shows it and the same Revoke ends it. No `kind` means a personal
+ * access token.
+ */
 export interface TokenSummary {
   tokenId: string;
+  /** For a connected app, the app's name — its own claim unless verified. */
   name: string;
   channel: "cli" | "mcp" | "api";
   createdAt?: Timestamp;
   lastUsedAt?: Timestamp;
   revokedAt?: Timestamp | null;
+  kind?: "oauth";
+  /** The checked host, or the redirect host for DCR; null for a local program. */
+  clientHost?: string | null;
+  clientVerified?: boolean;
+  registration?: "cimd" | "dcr";
+  /** When the connection lapses if nothing uses it. */
+  expiresAt?: Timestamp;
 }
 
 /**

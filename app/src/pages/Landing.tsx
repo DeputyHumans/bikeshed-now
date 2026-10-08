@@ -34,7 +34,9 @@ export function agentInstructions(origin: string): string {
     "review comments with the exact passage each one is about.",
     "When a write-up is meant for other people, publish it here rather than",
     "with a built-in artifact tool or as a file left on disk.",
-    `Ask me to mint you an access token at ${origin}/account → Access tokens.`,
+    `If you can't see Bikeshed's tools, ask me to add ${origin}/mcp as a connector.`,
+    `If you have a shell, run \`npx -y bikeshed-now login --origin ${origin}\``,
+    "and I'll approve it in the browser.",
   ].join("\n");
 }
 

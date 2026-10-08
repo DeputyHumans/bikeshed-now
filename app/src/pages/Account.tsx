@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The account screen: preferences, teams, and access tokens (SPEC §14, §15, §18, §19).
+// The account screen: preferences, teams, connected apps and access tokens (SPEC §14, §15, §18, §19, §23).
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -31,40 +31,204 @@ function TokenList({
     );
   }
   if (tokens.length === 0) {
-    return <p className="field-hint">No tokens yet.</p>;
+    return <p className="field-hint">No tokens or connected apps yet.</p>;
   }
   return (
     <ul className="token-list">
-      {tokens.map((token) => (
-        <li key={token.tokenId} className="token-row" data-revoked={Boolean(token.revokedAt)}>
-          <Icon name="key" size={15} />
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <strong>{token.name}</strong>
-            <span className="field-hint" style={{ display: "block" }}>
-              {token.channel} · created {formatRelative(token.createdAt)} ·{" "}
-              {token.revokedAt ? (
-                "revoked"
-              ) : token.lastUsedAt ? (
-                `last used ${formatRelative(token.lastUsedAt)}`
-              ) : (
-                // Surfaced deliberately: a token nobody has used is the one
-                // worth revoking, and it is invisible unless something says so.
-                <span className="token-unused">never used</span>
-              )}
+      {tokens.map((token) => {
+        // A connected app (SPEC §23) shares the row and the Revoke, but says
+        // where it lives rather than which channel it uses. Its name is the
+        // app's own claim unless its host was checked, so it is quoted then.
+        const app = token.kind === "oauth";
+        return (
+          <li
+            key={token.tokenId}
+            className="token-row"
+            data-kind={app ? "app" : "token"}
+            data-revoked={Boolean(token.revokedAt)}
+          >
+            <Icon name={app ? "link" : "key"} size={15} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong>{app && !token.clientVerified ? <q>{token.name}</q> : token.name}</strong>
+              <span className="field-hint" style={{ display: "block" }}>
+                {app ? (
+                  <>
+                    {token.clientHost ? (
+                      <>
+                        <span className="mono">{token.clientHost}</span> ·{" "}
+                      </>
+                    ) : null}
+                    connected {formatRelative(token.createdAt)} ·{" "}
+                  </>
+                ) : (
+                  <>
+                    {token.channel} · created {formatRelative(token.createdAt)} ·{" "}
+                  </>
+                )}
+                {token.revokedAt ? (
+                  "revoked"
+                ) : token.lastUsedAt ? (
+                  `last used ${formatRelative(token.lastUsedAt)}`
+                ) : (
+                  // Surfaced deliberately: a token nobody has used is the one
+                  // worth revoking, and it is invisible unless something says so.
+                  <span className="token-unused">never used</span>
+                )}
+              </span>
             </span>
-          </span>
-          {!token.revokedAt ? (
-            <button
-              type="button"
-              className="btn btn-sm btn-danger"
-              onClick={() => onRevoke(token.tokenId)}
-            >
-              Revoke
-            </button>
-          ) : null}
-        </li>
-      ))}
+            {!token.revokedAt ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => onRevoke(token.tokenId)}
+              >
+                Revoke
+              </button>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+interface SkillArchive {
+  name: string;
+  description: string;
+  archive: string;
+}
+
+/** Only a zip under /skills/, named the way the build names one. */
+const ARCHIVE_PATH = /^skills\/[a-z0-9][a-z0-9-]*\.zip$/;
+
+function isSkillArchive(entry: unknown): entry is SkillArchive {
+  const e = entry as Partial<SkillArchive> | null;
+  return (
+    typeof e?.name === "string" &&
+    typeof e.description === "string" &&
+    typeof e.archive === "string" &&
+    ARCHIVE_PATH.test(e.archive)
+  );
+}
+
+/**
+ * The skill zips, from the same index the CLI reads. Empty when the index is
+ * missing or unreadable, which hides the block rather than showing an error:
+ * a deployment built before the zips existed simply has none to offer.
+ */
+function useSkillArchives(): SkillArchive[] {
+  const [skills, setSkills] = useState<SkillArchive[]>([]);
+  useEffect(() => {
+    let live = true;
+    fetch("/skills/index.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((index: { skills?: unknown } | null) => {
+        const list = Array.isArray(index?.skills) ? index.skills : [];
+        if (live) setSkills(list.filter(isSkillArchive));
+      })
+      .catch(() => {
+        if (live) setSkills([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return skills;
+}
+
+/**
+ * Connecting an app by its address (SPEC §23). Built from the LIVE origin:
+ * Bikeshed is self-hosted, so a literal host would be wrong on every
+ * deployment but one.
+ */
+function ConnectSection() {
+  const toast = useToast();
+  const origin = window.location.origin;
+  const url = `${origin}/mcp`;
+  const skills = useSkillArchives();
+
+  return (
+    <section style={{ marginTop: "var(--s-5)" }}>
+      <h2>Connect an app</h2>
+      <p className="field-hint">
+        Add Bikeshed to Claude, ChatGPT or your editor with this address. You sign
+        in and approve once, and there's nothing to paste after that.
+      </p>
+      <div className="connect-url">
+        <span className="token-value mono">{url}</span>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url);
+            toast.show("Address copied");
+          }}
+        >
+          <Icon name="copy" size={14} /> Copy
+        </button>
+      </div>
+
+      <div className="connect-guide">
+        <details>
+          <summary>Claude</summary>
+          <p>
+            On the web, in the desktop app or on your phone: Settings → Connectors
+            → Add custom connector. Paste the address, and sign in when it asks.
+          </p>
+        </details>
+        <details>
+          <summary>ChatGPT</summary>
+          <p>
+            Settings → Apps &amp; Connectors → Advanced, and turn on Developer
+            mode. Then create a connector with the address.
+          </p>
+        </details>
+        <details>
+          <summary>Claude Code</summary>
+          <p>
+            Run <code className="mono">claude mcp add --transport http bikeshed {url}</code>,
+            then <code className="mono">/mcp</code> in Claude Code to sign in.
+          </p>
+        </details>
+        <details>
+          <summary>Cursor or VS Code</summary>
+          <p>
+            Add a server whose only setting is its <code className="mono">url</code>, set to
+            the address. It asks you to sign in the first time you use it.
+          </p>
+        </details>
+        <details>
+          <summary>Terminal</summary>
+          <p>
+            Run <code className="mono">npx -y bikeshed-now login --origin {origin}</code>.
+            It opens your browser so you can approve it here.
+          </p>
+        </details>
+      </div>
+
+      {skills.length > 0 ? (
+        <div style={{ marginTop: "var(--s-4)" }}>
+          <h3>Skills for Claude</h3>
+          <p className="field-hint">
+            Each one teaches Claude part of how Bikeshed works. Download it, then
+            add it in Claude's settings under Skills.
+          </p>
+          <ul className="connect-skills">
+            {skills.map((skill) => (
+              <li key={skill.name}>
+                <a href={`/${skill.archive}`} download>
+                  <Icon name="download" size={14} />
+                  {skill.name}
+                </a>
+                <span className="field-hint" style={{ display: "block" }}>
+                  {skill.description}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -192,9 +356,13 @@ export function Account() {
 
       <TeamsSection teams={teams} emailLower={emailLower} />
 
+      <ConnectSection />
+
       <section style={{ marginTop: "var(--s-5)" }}>
         <h2>Access tokens</h2>
         <p className="field-hint">
+          Tokens are for scripts, CI and anything that can't open a browser. Apps
+          you connect are listed here too.{" "}
           {/* The security property, stated where somebody is about to create
               one: a token is not a lesser credential. */}
           A token can do exactly what you can do, and nothing more. Everything it
