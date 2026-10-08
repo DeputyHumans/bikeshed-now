@@ -363,6 +363,8 @@ immutable subject claims has ids in its prefix,
 A binding written in the other form matches nothing, and the deploy then fails
 at authentication with an error that never names the subject. The pool admits
 one repository by its numeric id, which a rename or a transfer cannot reuse.
+Keep the braces in `${SUB}:ref`: in zsh, macOS's default shell, `$SUB:r` is
+a modifier, and the binding comes out ending in `…ef:refs/heads/main`.
 
 ```bash
 P=your-firebase-project-id
@@ -382,7 +384,7 @@ gcloud iam workload-identity-pools providers create-oidc deploy --project $P --l
 gcloud iam service-accounts create deployer --project $P --display-name "CI deployer"
 gcloud iam service-accounts add-iam-policy-binding $DEPLOYER --project $P \
   --role roles/iam.workloadIdentityUser \
-  --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/$SUB:ref:refs/heads/main"
+  --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/${SUB}:ref:refs/heads/main"
 for role in cloudfunctions.admin run.admin firebasehosting.admin firebaserules.admin \
     datastore.indexAdmin firebasedatabase.admin secretmanager.viewer serviceusage.serviceUsageConsumer; do
   gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/$role --condition None
