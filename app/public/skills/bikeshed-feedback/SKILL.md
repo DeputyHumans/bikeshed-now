@@ -36,15 +36,17 @@ the others, and each one carries:
 what "this paragraph is too strong" refers to. Search your source for the quote,
 change that passage, leave the rest alone.
 
-## Revise, then say what you did
+## Revise, say what you did, then publish
 
 ```bash
-bikeshed update storage-migration proposal.md
 bikeshed reply storage-migration a7Kd… "Rewritten to describe the dual-write \
 period and its two-week window."
+bikeshed update storage-migration proposal.md
 ```
 
-Over MCP: `update_document` then `reply_to_comment`.
+Over MCP: `reply_to_comment`, then `update_document`. In that order: a thread
+belongs to the version it was written on, and once the update makes a new
+version current, `reply_to_comment` answers "no such thread".
 
 Reply in the thread rather than only changing the text. A reviewer who sees the
 document quietly change cannot tell whether you understood the objection or

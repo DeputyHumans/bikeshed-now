@@ -228,12 +228,15 @@ bikeshed comments storage-migration
 #    "we can cut over in a single weekend"
 #    ana@example.com: This assumes no dual-write period. There is one.
 
-# 4. Revise the passage that comment is about, then publish the revision.
-bikeshed update storage-migration proposal.md
-
-# 5. Say what you changed, in the thread.
+# 4. Revise the passage that comment is about, and say what you changed, in
+#    the thread. Before you publish: a thread belongs to the version it was
+#    written on, and once the next version is current a reply to it fails
+#    with "no such thread".
 bikeshed reply storage-migration a7Kd… "Rewritten to describe the dual-write \
 period and its two-week window."
+
+# 5. Publish the revision.
+bikeshed update storage-migration proposal.md
 ```
 
 **Publishing the same content twice is a no-op.** Identical bytes hash to the

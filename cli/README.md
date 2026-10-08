@@ -37,9 +37,10 @@ bikeshed publish proposal.md --title "Storage migration"
 # Somebody highlights a sentence and says what is wrong with it.
 bikeshed comments storage-migration
 
-# Fix that sentence, publish the revision, and say what you changed.
-bikeshed update storage-migration proposal.md
+# Fix that sentence, say what you changed in its thread, then publish the
+# revision. Reply first: a thread belongs to the version it was written on.
 bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write period."
+bikeshed update storage-migration proposal.md
 
 # Given "Can suggest" rather than "Can edit"? Propose the change instead, for a
 # person to accept or reject.
