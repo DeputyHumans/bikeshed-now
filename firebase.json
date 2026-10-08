@@ -3,6 +3,10 @@
     "public": "app/dist",
     "predeploy": ["node tools/stamp-deployment.mjs --check"],
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "redirects": [
+      { "source": "/docs", "destination": "/d/docs", "type": 302 },
+      { "source": "/docs/", "destination": "/d/docs", "type": 302 }
+    ],
     "rewrites": [
       { "source": "/session", "function": "session" },
       { "source": "/config", "function": "appConfig" },

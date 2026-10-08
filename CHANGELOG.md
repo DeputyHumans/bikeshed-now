@@ -14,6 +14,23 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **A user guide at `/docs`.** `/docs` redirects (`302`) to `/d/docs`, a
+  public document published from `content/docs/bundle/index.html`, so the
+  guide is read in the viewer and takes comments like any other document. It
+  shows the loop for people and for agents, and says plainly that any
+  connected agent can pick up the comments, from people or from other agents,
+  reply, and publish the next version. A **Docs** link sits in the header on
+  every page and in the landing page's footer. A deployment that has not
+  published the guide answers `/docs` with "Not here"
+  (`docs/operations/overview.md`; SPEC §2).
+- `check:content` keeps the guide free of scripts, its chapters anchored by
+  id, and out of the slide navigator. The skills drift test now reads HTML
+  `<code>` too, and checks every command and tool the guide names.
+
 ## 0.7.0 — 2026-10-08
 
 ### Added

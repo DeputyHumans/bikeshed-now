@@ -150,6 +150,14 @@ catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
 through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
 `docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
+**`/docs` is a redirect, not a rewrite.** Hosting answers `/docs` and `/docs/`
+with `302` to `/d/docs`; redirects are applied before static files and
+rewrites. The user guide is an ordinary published document whose source is
+`content/docs/bundle/index.html`, so it is read in the viewer and takes comments
+like any other. Temporary rather than `301`, because a browser keeps a `301` for
+good. A deployment that has not published the guide answers `/docs` with the
+document page's "Not here", and under Vite dev there is no redirect at all.
+
 **`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.**
 A Hosting `headers` entry would override the function and force one policy on
 both gated and public content; §17 needs them to differ.
