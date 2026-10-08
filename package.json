@@ -14,7 +14,7 @@
     "url": "https://github.com/DeputyHumans/bikeshed-now/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build:policy": "node tools/build-policy.mjs",

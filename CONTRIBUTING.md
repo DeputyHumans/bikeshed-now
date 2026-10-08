@@ -9,7 +9,7 @@ code is `docs/architecture/overview.md` — in particular the **"What this is no
 Nothing here requires a Firebase account or a credit card. Everything runs
 against the emulators.
 
-You need Node 20 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
+You need Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
 JRE. The emulators are a Java process rather than a Node one, which is the one
 prerequisite `npm install` cannot hand you.
 

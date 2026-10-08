@@ -12,7 +12,7 @@ once it has been named.
 ## Before the first publish
 
 An npm account with 2FA, added to the package as an owner. `npm whoami` should
-answer. Node 20, as everywhere here.
+answer. Node 24, as everywhere here.
 
 The first publish claims the name. It is the one step that cannot be rehearsed,
 so read the file list before running it.

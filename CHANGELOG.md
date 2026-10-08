@@ -14,6 +14,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **Cloud Functions run on Node 24.** Google retires the Node 20 runtime on
+  2026-10-30, and from then on no functions deploy succeeds. Node 24 is the
+  current long-term-support line, and Cloud Functions supports it until 2028.
+  Every function redeploys on the first deploy after this release, because
+  the runtime is part of each one. Development and CI moved with it: `.nvmrc`,
+  both workflows and the contributor docs now say 24. The source tree accepts
+  Node 22 or later, since Node 20 reached end of life in April.
+
 ## 0.6.4 — 2026-10-08
 
 ### Added

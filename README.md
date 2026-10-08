@@ -10,7 +10,7 @@ feedback through the same interface people do, and are visibly marked as agents.
 
 Self-hosted on Firebase. Apache-2.0.
 
-Needs Node 20 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
+Needs Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
 JRE — the emulators are a Java process, not a Node one.
 
 ```bash
