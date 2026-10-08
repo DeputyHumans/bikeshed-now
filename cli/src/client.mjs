@@ -4,7 +4,14 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-export const CLIENT_NAME = "bikeshed-cli/0.10.0";
+/**
+ * This package's version, from the package.json npm ships beside `src/`. Read
+ * rather than written here, so `--version` and the client header cannot drift
+ * from what was installed.
+ */
+export const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+
+export const CLIENT_NAME = `bikeshed-cli/${VERSION}`;
 
 /**
  * Three surfaces, and the split is deliberate rather than untidy.

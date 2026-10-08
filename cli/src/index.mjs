@@ -10,6 +10,7 @@ import { createInterface } from "node:readline/promises";
 import { CONFIG_PATH, readConfig, resolveAuth, writeConfig } from "./config.mjs";
 import {
   CliError,
+  VERSION,
   callTool,
   exchangeCode,
   fetchSkill,
@@ -41,7 +42,7 @@ import {
  * shell without anybody parsing human-readable output.
  */
 
-const USAGE = `bikeshed — publish and revise documents
+const USAGE = `bikeshed ${VERSION} — publish and revise documents
 
   bikeshed login                       sign in through your browser (--paste for a token)
   bikeshed logout                      sign out (revokes a token from browser sign-in)
@@ -92,7 +93,8 @@ Options
   --title <text>         title for publish or fork (fork default: the original's)
   --id <id>              with publish: the address, /d/<id> (default: from the title)
   --folder <id>          destination folder for publish or fork
-  --version <v>          with fork: the version to copy (default: current)
+  --version <v>          with fork: the version to copy (default: current);
+                         on its own, which version of bikeshed this is
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
@@ -847,6 +849,14 @@ async function main() {
   });
 
   const [name, ...rest] = positionals;
+  // On its own, --version is about this program; after `fork` it names the
+  // version of a document to copy, which is why it is not checked first.
+  // Declared as taking a value for fork's sake, it swallows a `--json` that
+  // follows it, so that value is read back as the flag it was.
+  if (!name && !values.help && (values.version !== undefined || values.v)) {
+    out(values.json || values.version === "--json", { version: VERSION }, () => console.log(`bikeshed ${VERSION}`));
+    return;
+  }
   if (values.help || !name) {
     console.log(USAGE);
     return;

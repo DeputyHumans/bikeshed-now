@@ -231,13 +231,26 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
   }
 });
 
+test("--version and -v say which version is installed, and so does the client header", async () => {
+  // Read from the package, never written down twice: a release that bumps
+  // package.json and forgets a constant would announce the old number.
+  const { version } = JSON.parse(readFileSync(join(SRC, "..", "package.json"), "utf8"));
+  assert.match(version, /^\d+\.\d+\.\d+/);
+  assert.equal(run(["--version"]), `bikeshed ${version}\n`);
+  assert.equal(run(["-v"]), `bikeshed ${version}\n`);
+  assert.deepEqual(JSON.parse(run(["--version", "--json"])), { version });
+  assert.ok(run(["--help"]).startsWith(`bikeshed ${version} — `), "--help does not say which version");
+  const { CLIENT_NAME } = await import(`${SRC}/client.mjs`);
+  assert.equal(CLIENT_NAME, `bikeshed-cli/${version}`);
+});
+
 test("an unknown command exits non-zero and shows the usage", () => {
   assert.throws(
     () => run(["frobnicate"]),
     (err) => {
       assert.equal(err.status, 1);
       assert.match(err.stderr, /unknown command: frobnicate/);
-      assert.match(err.stderr, /bikeshed —/);
+      assert.match(err.stderr, /publish and revise documents/);
       return true;
     },
   );

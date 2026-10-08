@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **`bikeshed --version`** (in `bikeshed-now` 0.11.0). It prints which
+  version is installed, and `--help` now opens with the same number. Both
+  come from the package itself, as does the client name the CLI reports to
+  the server, so a release can no longer bump one and forget the other.
+  After `fork`, `--version` still names the version of a document to copy.
+
 ## 0.9.0 — 2026-10-08
 
 ### Added

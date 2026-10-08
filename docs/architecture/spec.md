@@ -1960,7 +1960,9 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <sl
 `suggest <slug> <text> (--with <text>
 | --delete)`, `open <slug>`, `folders`, `mkdir <name>`,
 `mv <slug> <folder|root>`, `skills [install <dir>]`, plus `publish --watch`.
-Every command takes `--json`. `comments` prints a suggestion's replacement and
+Every command takes `--json`. `--version` on its own prints the CLI's version,
+read from its own `package.json`, which is also the version its
+`X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and
 state under its quote. `suggest` demands exactly one of `--with` and `--delete`:
 an empty `--with` is too easy to send by accident to be the way to ask for a
 deletion.
