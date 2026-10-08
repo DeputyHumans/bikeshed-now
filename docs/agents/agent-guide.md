@@ -21,7 +21,8 @@ npx -y bikeshed-now skills install .claude/skills
 
 Or fetch them yourself, if you would rather not run anything: `/skills/index.json`
 lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the
-directory your harness reads skills from.
+directory your harness reads skills from. In Claude's own apps, where a person
+uploads skills in Settings, each one is also a zip at `/skills/<name>.zip`.
 
 | Harness | Directory |
 |---|---|
@@ -37,8 +38,9 @@ directory did not exist when the session began, in which case somebody has to ru
 `/reload-skills`, and only a person can. Other harnesses may read skills only at
 startup. So report the install rather than assuming it took effect.
 
-**3. Ask for a token.** Only a person can mint one, and that is deliberate.
-Below.
+**3. Get connected.** If you can already call `publish_document`, you are. If
+not, a person connects you, by signing in. That is deliberate: nothing an agent
+can do on its own produces a credential. Below.
 
 **4. Publish something, and hand back the address.** The worked loop is further
 down. What you give back is the `url` in the result — `https://<deployment>/d/<id>`
@@ -55,17 +57,45 @@ one is about**, and revise.
 do not have to fetch the document and diff it to work out what "this paragraph
 is too strong" refers to.
 
-## Getting a token
+## Getting connected
 
-Ask the person you are working with to create one at `/account` -> **Access
-tokens** -> *Agent (MCP)*. It is shown once.
+Ask the person you are working with to connect you. The address is always
+`https://<deployment>/mcp`; what they do with it depends on where you run.
 
-A token carries **exactly its owner's identity and permissions**. It cannot see
-more than they can, and everything it does is recorded against it. If it
-leaks, "what did this token touch" is one query, and revoking it is one click.
-Do not ask for a token with wider access; there is no such thing.
+| Where you run | What the person does |
+|---|---|
+| Claude (web, Desktop, mobile) | Settings → Connectors → **Add custom connector**, paste the address, sign in when asked |
+| ChatGPT | Settings → Apps & Connectors → Advanced → **Developer mode**, then create a connector with the address |
+| Claude Code | `claude mcp add --transport http bikeshed https://<deployment>/mcp`, then `/mcp` to sign in |
+| Cursor, VS Code | add a server entry with just the address; it signs in on first use |
+| A shell, with the CLI | `npx -y bikeshed-now login --origin https://<deployment>` |
 
-Send it as `Authorization: Bearer bsk_...`.
+Each of those opens a page on this deployment that says which app is asking,
+where it will send the person back to, and what it will be able to do, and asks
+them to approve. An app that supports MCP authorization finds that page by
+itself from the `401` that `/mcp` answers.
+
+### From a terminal
+
+`bikeshed login --origin https://<deployment>` prints an address, opens the
+browser if it can, and waits up to five minutes for the person to approve.
+Without `--origin` (or `BIKESHED_ORIGIN`) it signs in to the CLI's default
+deployment, which is not necessarily this one. It needs no terminal of its own, so
+you can run it for them; give the command a long timeout, because it is waiting
+for a human. Over SSH, where no browser can open, `bikeshed login --paste` takes
+a token instead.
+
+### A token, for CI and scripts
+
+Where no browser will ever open, ask the person to create a personal access
+token at `/account` -> **Access tokens**. It is shown once. Send it as
+`Authorization: Bearer bsk_...`.
+
+Either way, a credential carries **exactly its owner's identity and
+permissions**. It cannot see more than they can, and everything it does is
+recorded against it. If it leaks, "what did this touch" is one query, and
+disconnecting it is one click on the same list. Do not ask for wider access;
+there is no such thing.
 
 ## Two interfaces, same capabilities
 
@@ -115,7 +145,7 @@ somebody might commit.
 ### Command line
 
 ```
-bikeshed login
+bikeshed login [--paste] [--no-browser]
 bikeshed list [--json]
 bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
 bikeshed update <id> <file> [--watch]
@@ -141,8 +171,9 @@ export BIKESHED_ORIGIN=https://<deployment>
 export BIKESHED_TOKEN=bsk_...
 ```
 
-Every command takes `--json`. Those two work instead of `login` when you cannot
-run an interactive command — `login` prompts, which you cannot answer.
+Every command takes `--json`. `login` signs in through the browser and waits
+for a person to approve, so run it with a long timeout. The two variables work
+instead of `login` where no browser will ever open, such as CI.
 
 `bikeshed get <id> > index.html` writes the whole source, however long it is.
 `get_document` cuts a source at 200,000 characters and sets `truncated`. Never
@@ -170,7 +201,9 @@ bikeshed skills install ~/.claude/skills     # write them where an agent reads
 
 They are also plain files: `/skills/index.json` lists them, and each one is at
 `/skills/<name>/SKILL.md`. Fetch them directly if your harness reads skills from
-somewhere else, or paste one into an `AGENTS.md`.
+somewhere else, or paste one into an `AGENTS.md`. Each index entry also names an
+`archive`, `/skills/<name>.zip`, which is what a person uploads in Claude's own
+apps under Settings → Capabilities → Skills.
 
 Each deployment serves its own copy, so what you install describes the
 deployment you are actually talking to rather than the newest one that exists.
@@ -474,7 +507,8 @@ generated table of contents.
   objector's decision. Reply, and let them close it.
 - **Accept or reject a suggested edit,** yours or anyone's. Whether a change
   goes in is a person's decision; you propose it with `suggest_edit`.
-- **Act as somebody else.** A token is its owner. There are no service accounts.
+- **Act as somebody else.** A token or a connected app is its owner. There are no
+  service accounts and no scopes.
 - **Read a document you were not given.** A token's reach is exactly its
   owner's.
 

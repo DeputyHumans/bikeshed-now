@@ -132,7 +132,7 @@ and revoke it again if you would rather not leave it standing.
 
 The same grant applies to a function created **after** setup. `firebase
 deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new
-function such as `docShell`, `unlockDoc`, `saveThumbs` or `manageSuggestion`; under Domain Restricted Sharing that deploy fails
+function such as `docShell`, `unlockDoc`, `saveThumbs`, `manageSuggestion`, `oauth` or `oauthConsent`; under Domain Restricted Sharing that deploy fails
 at "set invoker" and the function stays private. The symptom of the missing
 grant is a `403` with an HTML body, before any code runs — every document page
 looks broken while being perfectly deployed. The repair, once the policy is
@@ -143,6 +143,8 @@ gcloud run services add-iam-policy-binding docshell --region=us-central1 --membe
 gcloud run services add-iam-policy-binding unlockdoc --region=us-central1 --member=allUsers --role=roles/run.invoker
 gcloud run services add-iam-policy-binding savethumbs --region=us-central1 --member=allUsers --role=roles/run.invoker
 gcloud run services add-iam-policy-binding managesuggestion --region=us-central1 --member=allUsers --role=roles/run.invoker
+gcloud run services add-iam-policy-binding oauth --region=us-central1 --member=allUsers --role=roles/run.invoker
+gcloud run services add-iam-policy-binding oauthconsent --region=us-central1 --member=allUsers --role=roles/run.invoker
 ```
 
 For `unlockDoc` the symptom is narrower and easier to miss: every unlisted
@@ -152,6 +154,14 @@ from the function; a `403` with an HTML body is the platform refusing.
 For `manageSuggestion` it is every suggested edit failing to save, and every
 Accept and Reject failing, while comments work; `curl -si
 https://<deployment>/suggestion` answers `405` from the function.
+
+For `oauth` it is every app that connects by signing in failing to find the
+sign-in. Claude reports "Couldn't reach the MCP server", while personal tokens
+keep working. `curl -si https://<deployment>/.well-known/oauth-authorization-server`
+answers JSON from the function when the grant is in place. For `oauthConsent`
+it is the consent page saying it could not load the request, every time;
+`curl -si -X POST https://<deployment>/oauth/consent` answers `403` JSON from
+the function, and a `403` with an HTML body from the platform.
 
 For `saveThumbs` nothing looks broken at all: documents read normally, and
 their cards and slide rails simply never gain stored thumbnails, because every

@@ -32,6 +32,11 @@ Or by hand — they are public files, listed at `/skills/index.json`, each one a
 |---|---|
 | Claude Code | `.claude/skills/<name>/SKILL.md` in a project, or `~/.claude/skills/` |
 | Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/<name>/SKILL.md` |
+| Claude (web, Desktop) | download `https://<deployment>/skills/<name>.zip` and upload it under Settings → Capabilities → Skills |
+
+The zips are linked from the account screen too, beside the address to connect
+an app with. Each holds `<name>/SKILL.md` and nothing else, packed from the
+copy the deployment serves.
 
 `https://<deployment>/llms.txt` is the shorter, always-loaded version. The skills
 are the long form, loaded only for the task that needs them.
@@ -79,6 +84,12 @@ not merely written.
 - every MCP tool it names is one the server actually serves,
 - every skill is named in `docs/agents/agent-guide.md`, which is what a deployment
   serves at `/llms.txt`.
+
+It also holds each skill to Claude's upload limits (a name of at most 64
+lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a
+description of at most 1,024 characters), and opens every zip with an
+independent reader. The predeploy check refuses a zip whose `SKILL.md` differs
+by one byte from the file served beside it.
 
 `npm run check:agents` separately asserts that the copies under
 `app/public/skills/` are byte-identical to these, the same way `AGENTS.md` and

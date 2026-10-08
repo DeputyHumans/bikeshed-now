@@ -323,6 +323,33 @@ step 0.
 7. Tab through the suggest form and the review bar with the keyboard alone:
    every control is reachable and works.
 
+### 14 · An app connects by signing in, and the account screen can disconnect it
+
+Run this step through Hosting at `:5050`, not Vite at `:5173`. The Vite proxy
+rewrites `Host`, so in development the issuer would name `:5050` while the
+page and its sign-in belong to `:5173`. In the emulator the issuer is the
+request's own origin (SPEC §23).
+
+1. `curl -si -X POST http://127.0.0.1:5050/mcp` answers `401`. Its
+   `WWW-Authenticate` names
+   `resource_metadata="http://127.0.0.1:5050/.well-known/oauth-protected-resource/mcp"`,
+   and it sends `Cache-Control: private, no-store`.
+2. Fetch both metadata documents with `curl -s`. The protected resource's
+   `authorization_servers[0]` equals the server metadata's `issuer` exactly.
+   `/.well-known/mcp.json` still comes from Hosting.
+3. Point the MCP Inspector at `http://127.0.0.1:5050/mcp`, in direct mode. It
+   registers, opens `/connect`, and the consent page shows the redirect host
+   with the app's name marked as not checked. The address bar shows `/connect`
+   with no query. **Approve**. The Inspector lists twelve tools.
+4. On the account screen the app appears under Access tokens as connected.
+   **Revoke** it. The Inspector's next call answers `401` and offers to sign in
+   again.
+5. `bikeshed login --origin http://127.0.0.1:5050` prints the address,
+   opens the browser, and shows the "program on this computer" warning.
+   **Approve**. The terminal says it is signed in, and `bikeshed whoami` works.
+6. Download a skill from the account screen. `unzip -l` lists
+   `<name>/SKILL.md` and nothing else.
+
 ---
 
 ## What this walkthrough found

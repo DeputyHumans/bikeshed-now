@@ -11,8 +11,24 @@ something those anchors can hold on to.
 
 ## Before anything else
 
-You need a deployment and a personal access token. Ask the person you are
-working with to create one at `/account` → **Access tokens**; it is shown once.
+If you can call `publish_document`, you are already connected. Skip ahead.
+
+If you cannot, ask the person you are working with to connect you. Either of
+these is a minute, and neither involves copying a secret:
+
+- **In an app** (Claude, ChatGPT, Cursor, VS Code): add
+  `https://<deployment>/mcp` as a connector, or as a remote MCP server, and
+  sign in when it asks. In Claude Code that is
+  `claude mcp add --transport http bikeshed https://<deployment>/mcp`, then
+  `/mcp` to sign in.
+- **From a shell**: run
+  `npx -y bikeshed-now login --origin https://<deployment>`. It prints an
+  address, opens the browser, and waits for the person to approve. Give the
+  command a long timeout; it is waiting for a human. Keep `--origin`: without
+  it, the command signs in to the CLI's default deployment, not this one.
+
+For CI, or anywhere a browser cannot open, a personal access token still works.
+The person mints one at `/account` → **Access tokens**:
 
 ```bash
 export BIKESHED_ORIGIN=https://<deployment>
@@ -24,9 +40,9 @@ That origin is the deployment this skill was installed from, and
 with a different deployment, set that one instead — or the document lands
 somewhere nobody is expecting it.
 
-The token is exactly its owner: it can see what they can see and nothing more,
-and everything it does is recorded against it. There is no wider token to ask
-for.
+Either way, the credential is exactly its owner: it can see what they can see
+and nothing more, and everything it does is recorded against it. There is no
+wider access to ask for.
 
 The commands below come from `npm i -g bikeshed-now`. Every one of them has a
 tool beside it doing the same job, so if you hold the tools and not the command,
