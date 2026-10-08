@@ -14,6 +14,20 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **`bikeshed login` no longer asks which deployment** (in `bikeshed-now`
+  0.12.0). In a terminal it stopped at `Deployment [https://bikeshed.now]:`
+  before signing in. It now uses `--origin`, then `BIKESHED_ORIGIN`, then the
+  deployment of the last sign-in, then `https://bikeshed.now`, the same order
+  as every other command, and its first line says which. `login --paste`
+  reads only the token from stdin. Without `--origin` it used to read the
+  first line as the address, so a piped token was taken for one and printed
+  back inside the `/account` link. A script that piped the address first
+  should pass `--origin` instead.
+
 ## 0.9.1 — 2026-10-08
 
 ### Added

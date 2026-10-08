@@ -2461,7 +2461,8 @@ ignored.
 
 ### The command line
 
-`bikeshed login`:
+`bikeshed login` never asks which deployment. It takes `--origin`, then
+`BIKESHED_ORIGIN`, then the saved one, then the default, and names it. Then it:
 1. Reads the authorization-server metadata.
 2. Listens on `127.0.0.1` on an ephemeral port.
 3. Opens `/connect` with PKCE, `state` and `device`.

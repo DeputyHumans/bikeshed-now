@@ -183,15 +183,9 @@ function isCi(value) {
 
 async function browserLogin(flags) {
   const interactive = Boolean(process.stdin.isTTY);
+  // Never asked: --origin, BIKESHED_ORIGIN, the last sign-in, then the default,
+  // the same order as every other command. The line below names it.
   let where = resolveAuth(flags).origin;
-  if (interactive && !flags.origin) {
-    const rl = createInterface({ input: process.stdin, output: process.stderr });
-    try {
-      where = (await rl.question(`Deployment [${where}]: `)).trim() || where;
-    } finally {
-      rl.close();
-    }
-  }
   try {
     const url = new URL(where);
     if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
@@ -291,16 +285,17 @@ async function browserLogin(flags) {
   );
 }
 
-/** Paste a token made at /account. The flow from before browser sign-in. */
+/**
+ * Paste a token made at /account. The flow from before browser sign-in.
+ *
+ * Only the token is read from stdin. Asking for the deployment first read a
+ * piped token as the address, and printed it back inside the /account link.
+ */
 async function pasteLogin(flags) {
-  const { origin } = resolveAuth(flags);
+  const { origin: where } = resolveAuth(flags);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    const where =
-      flags.origin ||
-      (await rl.question(`Deployment [${origin}]: `)).trim() ||
-      origin;
-    console.log(`\nCreate a token at ${where}/account — choose "Command line".`);
+    console.log(`Create a token at ${where}/account — choose "Command line".`);
     console.log("It is shown once, so copy it now.\n");
     const token = (await rl.question("Token: ")).trim();
     if (!token) fail("no token given");

@@ -653,6 +653,23 @@ test("--paste reads a token from stdin and checks it, in CI too", LONG, async ()
   });
 });
 
+test("--paste without --origin asks only for the token, and uses the default deployment", LONG, async () => {
+  // The deployment has a default and a flag; asking for it as well meant the
+  // first line on stdin, which is the token, was read as an address.
+  await withDeployment({}, async ({ origin, seen }) => {
+    const run = runLogin(["--paste"], { env: { BIKESHED_ORIGIN: origin }, stdin: `${TOKEN}\n` });
+    try {
+      const { code, stdout, stderr } = await run.exited;
+      assert.equal(code, 0, stderr);
+      assert.doesNotMatch(stdout, /Deployment \[/);
+      assert.equal(seen.mcp[0].authorization, `Bearer ${TOKEN}`);
+      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN, via: "paste" });
+    } finally {
+      run.cleanup();
+    }
+  });
+});
+
 // --- Signing out --------------------------------------------------------------
 
 /** Any other command, against the config in `home`. Spawned, for withDeployment. */
