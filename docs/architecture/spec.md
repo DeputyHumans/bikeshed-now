@@ -1076,10 +1076,17 @@ The editor still edits the rendered DOM via `execCommand`. Two changes:
   dependency budget at seven.
 
 **Normalization is visible at version boundaries.** The first save normalizes
-(`*` bullets → `-`, setext → ATX). After that first pass it MUST be idempotent:
+(`*` bullets → `-`, setext → ATX, and a hard-wrapped paragraph becomes one
+line). After that first pass it MUST be idempotent:
 `md → html → md'`, then `md' → html' → md''` with `md' === md''`. That property
 is the contract, and it is what keeps editing a Markdown document from slowly
 destroying it.
+
+Normalization MUST NOT be lossy, and raw text is where it most easily is: the
+text inside an author's `<script>`, `<style>` and `<textarea>` comes back
+byte for byte, each on lines of its own where it stood as a block. Whitespace
+there is meaning — a line break ends a script's `//` comment — and the HTML to
+Markdown converter collapses whitespace in every other text node.
 
 ---
 

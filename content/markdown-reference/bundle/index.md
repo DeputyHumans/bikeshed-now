@@ -141,6 +141,7 @@ the document is reopened, this opens itself so the highlight is visible.
 Editing this document and saving it once will change a few things, all of them
 harmless and all of them visible at the version boundary:
 
+- A paragraph wrapped across several lines becomes one line
 - `*` bullets become `-`
 - Setext headings become `#` headings
 - Indented code becomes fenced code

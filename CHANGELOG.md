@@ -14,6 +14,20 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Editing a Markdown document no longer breaks its scripts, stylesheets or
+  text boxes.** The first save after an edit anywhere in the document put a
+  raw HTML `<script>` onto one line, so a `//` comment swallowed the code after
+  it and the script stopped working; turned an author's `<style>` into a
+  paragraph of visible CSS; squeezed a `<textarea>`'s value; and ran such blocks
+  together on one line. Every later save kept the damage. Their text now comes
+  back exactly, each on lines of its own. The first save also joins a paragraph
+  wrapped across several lines into one line, which it always did and which
+  is now documented (SPEC §11).
+
 ## 0.6.2 — 2026-10-06
 
 ### Fixed

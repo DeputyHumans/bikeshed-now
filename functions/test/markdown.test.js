@@ -84,6 +84,108 @@ test("raw HTML the author wrote is never silently dropped", () => {
   assert.match(out, /<script>go\(\)<\/script>/);
 });
 
+// --- Raw text: script, style, textarea --------------------------------------
+//
+// Turndown collapses whitespace in every text node before any rule runs, and
+// exempts only <pre>. Inside these three elements the text is not prose: a
+// script's line breaks end its `//` comments, a textarea's are its value. Each
+// case below was broken on the first save, and stably so afterwards.
+
+const RAW = [
+  "# T",
+  "",
+  "<script>",
+  "// The next line is the only one that does anything.",
+  'document.getElementById("out").textContent = "ran";',
+  "</script>",
+  "",
+  "<style>",
+  ".box {",
+  "  color: red;",
+  "}",
+  "</style>",
+  "",
+  "<textarea>line one",
+  "  line two</textarea>",
+  "",
+].join("\n");
+
+test("a script keeps its line breaks, so a // comment still ends at its line", () => {
+  const out = htmlToMarkdown(renderMarkdown(RAW).html);
+  assert.ok(
+    out.includes('<script>\n// The next line is the only one that does anything.\ndocument.getElementById("out").textContent = "ran";\n</script>'),
+    `the script changed:\n${out}`,
+  );
+});
+
+test("an author's <style> stays a stylesheet, not prose", () => {
+  const out = htmlToMarkdown(renderMarkdown(RAW).html);
+  assert.ok(out.includes("<style>\n.box {\n  color: red;\n}\n</style>"), `the style block changed:\n${out}`);
+  const again = renderMarkdown(out).html;
+  assert.ok(!/<p>[^<]*\.box \{/.test(again), "the CSS came back as a paragraph of visible text");
+});
+
+test("a textarea keeps its value exactly", () => {
+  const out = htmlToMarkdown(renderMarkdown(RAW).html);
+  assert.ok(out.includes("<textarea>line one\n  line two</textarea>"), `the textarea changed:\n${out}`);
+});
+
+test("raw-text blocks keep their own lines, so each renders as its own block", () => {
+  const out = htmlToMarkdown(renderMarkdown(RAW).html);
+  assert.match(out, /<\/script>\n\n<style>/, "the script and the style were run together");
+  assert.match(out, /<\/style>\n\n<textarea>/, "the style and the textarea were run together");
+});
+
+test("raw text survives every later save unchanged", () => {
+  const first = htmlToMarkdown(renderMarkdown(RAW).html);
+  const second = htmlToMarkdown(renderMarkdown(first).html);
+  assert.equal(second, first);
+  assert.ok(first.startsWith("# T\n\n<script>\n// The next line"), first);
+});
+
+test("a script inside a paragraph stays inside it, line breaks and all", () => {
+  const source = "# T\n\nBefore <script>x = 1;\n// c\ny = 2;</script> after.\n";
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes("Before <script>x = 1;\n// c\ny = 2;</script> after."), `the paragraph changed:\n${out}`);
+  assert.equal(htmlToMarkdown(renderMarkdown(out).html), out);
+});
+
+test("a script nested in the author's own element keeps its line breaks too", () => {
+  const source = '# T\n\n<div class="widget">\n<script>\n// one\nrun();\n</script>\n</div>\n';
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes("<script>\n// one\nrun();\n</script>"), `the nested script changed:\n${out}`);
+});
+
+test("a <script> written inside a comment is part of the comment, untouched", () => {
+  const source = "# T\n\n<!-- disabled:\n<script>\n// off\nrun();\n</script>\n-->\n\nBody.\n";
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes("<!-- disabled:\n<script>\n// off\nrun();\n</script>\n-->"), `the comment changed:\n${out}`);
+  assert.ok(!out.includes("bshd-raw"), "a parked token leaked");
+});
+
+test("a <!-- inside a script is script text, not a comment", () => {
+  const source = '# T\n\n<script>\nvar s = "<!-- not a comment -->";\nrun(s);\n</script>\n';
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes('<script>\nvar s = "<!-- not a comment -->";\nrun(s);\n</script>'), `the script changed:\n${out}`);
+});
+
+test("raw text keeps its trailing spaces and its runs of blank lines", () => {
+  // The output is tidied — trailing spaces stripped, blank lines squeezed — and
+  // inside a textarea or a script those are the author's, so tidying must not
+  // reach them.
+  const source = "# T\n\n<textarea>one  \n\n\n\ntwo</textarea>\n";
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes("<textarea>one  \n\n\n\ntwo</textarea>"), `the textarea changed:\n${JSON.stringify(out)}`);
+});
+
+test("a comment that merely mentions <script> does not swallow the real script after it", () => {
+  const source = "# T\n\n<!-- remember the <script> tag below -->\n\n<script>\n// real\nrun();\n</script>\n\nAfter.\n";
+  const out = htmlToMarkdown(renderMarkdown(source).html);
+  assert.ok(out.includes("<!-- remember the <script> tag below -->"), `the comment changed:\n${out}`);
+  assert.ok(out.includes("<script>\n// real\nrun();\n</script>"), `the script changed:\n${out}`);
+  assert.ok(out.includes("After."), `text after the script was lost:\n${out}`);
+});
+
 test("the renderer's own stylesheet never reaches the author's source", () => {
   const out = htmlToMarkdown(renderMarkdown("# T\n\nBody.\n").html);
   assert.ok(!out.includes("box-sizing"), "the embedded theme leaked into the Markdown");

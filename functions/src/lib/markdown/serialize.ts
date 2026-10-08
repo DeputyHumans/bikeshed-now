@@ -22,16 +22,17 @@ const turndownGfm = require("turndown-plugin-gfm") as {
  * ------------------------------
  * `md -> html -> md'` may normalize: `*` bullets become `-`, setext headings
  * become ATX, an indented code block becomes a fenced one, a reference link
- * becomes inline. That first pass is visible at a version boundary, which is the
- * honest place for it.
+ * becomes inline, a hard-wrapped paragraph becomes one line. That first pass is
+ * visible at a version boundary, which is the honest place for it.
  *
  * `md' -> html' -> md''` must change NOTHING. Idempotence after the first pass
  * is the whole contract, and it is what keeps editing a Markdown document from
  * degrading it one save at a time.
  *
- * Normalization must also never be LOSSY. Two bugs of that shape are fixed
- * explicitly below — strikethrough emitted with a single tilde, and raw HTML
- * silently dropped — because both are idempotent while still destroying the
+ * Normalization must also never be LOSSY. Bugs of that shape are fixed
+ * explicitly below — strikethrough emitted with a single tilde, raw HTML
+ * silently dropped, and raw text (a script, a stylesheet, a textarea) collapsed
+ * onto one line — because each is idempotent while still destroying the
  * author's content on the first save, which is the worst possible combination.
  */
 
@@ -65,6 +66,30 @@ const COMMENT_SENTINEL = "#";
 
 /** Document scaffolding that carries no authored content. */
 const DOCUMENT_CHROME = ["head", "title", "meta", "link", "base"];
+
+/**
+ * Elements whose content is raw text rather than prose. Turndown collapses
+ * whitespace in every text node before any rule runs, exempting only `<pre>`,
+ * and in these the whitespace is meaning: a script's line break ends its `//`
+ * comment, and a textarea's text is its value. So their text is parked as a
+ * token with no whitespace in it and restored after turndown and `tidy` have
+ * both finished (`parkRawText`, `restoreRawText`).
+ */
+const RAW_TEXT = new Set(["script", "style", "textarea"]);
+
+/** The token raw text travels as. Base64 has no whitespace and no `)`. */
+const RAW_TOKEN = /^bshd-raw\(([A-Za-z0-9+/=]*)\)$/;
+
+/**
+ * Where a raw-text element stands as a block of its own. Markdown-it puts an
+ * HTML block directly in the body, a heading's section or a blockquote; turndown
+ * parses inside its own `x-turndown` root. Anywhere else — a paragraph, a cell,
+ * a list item — it is inline, and moving it out would split the text around it.
+ */
+const BLOCK_PARENTS = new Set([
+  "x-turndown", "body", "main", "section", "article", "aside", "header",
+  "footer", "nav", "div", "blockquote", "details", "figure",
+]);
 
 /**
  * The minimum of a DOM node these rules touch.
@@ -145,7 +170,7 @@ function createService(): TurndownService {
   });
 
   // The renderer's own stylesheet. Author <style> blocks are kept verbatim by
-  // the predicate below; only ours is dropped, and only by id.
+  // `rawText` below; only ours is dropped, and only by id.
   service.addRule("dropOwnTheme", {
     filter: nodeFilter(
       (node) => tagOf(node) === "style" && node.id === MARKDOWN_THEME_ID,
@@ -245,6 +270,27 @@ function createService(): TurndownService {
     },
   });
 
+  /**
+   * An author's script, stylesheet or textarea, verbatim, and on lines of its
+   * own where it stood as a block. Without this, `<style>` — which the renderer
+   * also generates, for its theme — fell through to turndown's default and its
+   * CSS came out as a paragraph of visible text; and the other two, inline to
+   * turndown, ran together with whatever block followed them. Their text is
+   * still the parked token here; `restoreRawText` puts it back.
+   */
+  service.addRule("rawText", {
+    filter: nodeFilter(
+      (node) => RAW_TEXT.has(tagOf(node)) && node.id !== MARKDOWN_THEME_ID,
+    ),
+    replacement: (_content, node) => {
+      const n = asNode(node);
+      const html = n.outerHTML ?? "";
+      return BLOCK_PARENTS.has(tagOf(n.parentNode ?? { nodeName: "" }))
+        ? `\n\n${html}\n\n`
+        : html;
+    },
+  });
+
   // Everything the renderer does not generate is the author's raw HTML, and is
   // emitted verbatim. Turndown's default would print an unknown element's text
   // content, quietly turning an inline <svg> or a <script> into stray prose.
@@ -268,6 +314,35 @@ function parkComments(html: string): string {
   });
 }
 
+/**
+ * Swap the text inside every script, style and textarea for a token turndown
+ * cannot collapse. Comments are matched in the same pass and left alone, so a
+ * `<script>` written inside a comment is not touched — `parkComments` carries
+ * the comment whole — and a `<!--` inside a script is never seen as one.
+ * Safe on the string for the reason `parkComments` is: markdown-it escapes `<`
+ * in code, so every match here is markup the author wrote.
+ */
+function parkRawText(html: string): string {
+  return html.replace(
+    /<!--[\s\S]*?-->|<(script|style|textarea)(\b[^>]*)>([\s\S]*?)<\/\1\s*>/gi,
+    (all, tag: string | undefined, attrs: string, text: string) =>
+      tag === undefined
+        ? all
+        : `<${tag}${attrs}>bshd-raw(${Buffer.from(text, "utf8").toString("base64")})</${tag}>`,
+  );
+}
+
+/** Put parked raw text back, exactly, after `tidy` has had its say. */
+function restoreRawText(markdown: string): string {
+  return markdown.replace(
+    /(<(script|style|textarea)\b[^>]*>)(bshd-raw\([A-Za-z0-9+/=]*\))(<\/\2>)/gi,
+    (all, open: string, _tag: string, token: string, close: string) => {
+      const m = RAW_TOKEN.exec(token);
+      return m ? `${open}${Buffer.from(m[1], "base64").toString("utf8")}${close}` : all;
+    },
+  );
+}
+
 let service: TurndownService | null = null;
 
 /** Collapse runs of blank lines and normalize the trailing newline. */
@@ -288,5 +363,7 @@ function tidy(markdown: string): string {
  */
 export function htmlToMarkdown(html: string): string {
   if (!service) service = createService();
-  return tidy(service.turndown(parkComments(html ?? "")));
+  // Raw text is restored LAST: `tidy` strips trailing spaces and squeezes blank
+  // lines, and inside a script or a textarea those are the author's.
+  return restoreRawText(tidy(service.turndown(parkComments(parkRawText(html ?? "")))));
 }
