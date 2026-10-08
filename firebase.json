@@ -5,7 +5,8 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "redirects": [
       { "source": "/docs", "destination": "/d/docs", "type": 302 },
-      { "source": "/docs/", "destination": "/d/docs", "type": 302 }
+      { "source": "/docs/", "destination": "/d/docs", "type": 302 },
+      { "source": "/docs/developers", "destination": "/d/docs-developers", "type": 302 }
     ],
     "rewrites": [
       { "source": "/session", "function": "session" },

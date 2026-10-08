@@ -150,13 +150,16 @@ catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
 through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
 `docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
-**`/docs` is a redirect, not a rewrite.** Hosting answers `/docs` and `/docs/`
-with `302` to `/d/docs`; redirects are applied before static files and
-rewrites. The user guide is an ordinary published document whose source is
-`content/docs/bundle/index.html`, so it is read in the viewer and takes comments
-like any other. Temporary rather than `301`, because a browser keeps a `301` for
-good. A deployment that has not published the guide answers `/docs` with the
-document page's "Not here", and under Vite dev there is no redirect at all.
+**`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers
+`/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302`
+to `/d/docs-developers`; redirects are applied before static files and
+rewrites. Each guide is an ordinary published document whose source is
+`content/<id>/bundle/index.html`, so it is read in the viewer and takes
+comments like any other. The user guide names no command; the developer guide
+holds the command line, the agent tools and the loop an agent runs. Temporary
+rather than `301`, because a browser keeps a `301` for good. A deployment that
+has not published a guide answers its shortcut with the document page's "Not
+here", and under Vite dev there is no redirect at all.
 
 **`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.**
 A Hosting `headers` entry would override the function and force one policy on

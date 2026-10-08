@@ -40,24 +40,27 @@ test("the SPA catch-all is last, after every wildcard", () => {
 });
 
 /**
- * `/docs` is a redirect, not a page: the user guide is an ordinary published
- * document, `content/docs`, and the shortcut points at its id. A 302 rather
- * than a 301 because browsers keep a 301 for good, so a guide that ever moved
- * would stay unreachable for everybody who had followed the old one.
+ * `/docs` and `/docs/developers` are redirects, not pages: each guide is an
+ * ordinary published document in `content/`, and the shortcut points at its id.
+ * A 302 rather than a 301 because browsers keep a 301 for good, so a guide that
+ * ever moved would stay unreachable for everybody who had followed the old one.
  */
-test("/docs redirects, temporarily, to the published user guide", () => {
+test("/docs and /docs/developers redirect, temporarily, to the published guides", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   assert.deepEqual(firebase.hosting.redirects, [
     { source: "/docs", destination: "/d/docs", type: 302 },
     { source: "/docs/", destination: "/d/docs", type: 302 },
+    { source: "/docs/developers", destination: "/d/docs-developers", type: 302 },
   ]);
-  // The id in the destination is the directory publish.mjs reads, so the
+  // The id in each destination is the directory publish.mjs reads, so a
   // shortcut and its source cannot drift apart unnoticed.
-  const id = firebase.hosting.redirects[0].destination.split("/").pop();
-  assert.ok(
-    existsSync(join(ROOT, "content", id, "bundle", "index.html")),
-    `/docs points at /d/${id}, but content/${id}/bundle/index.html does not exist`,
-  );
+  for (const { source, destination } of firebase.hosting.redirects) {
+    const id = destination.split("/").pop();
+    assert.ok(
+      existsSync(join(ROOT, "content", id, "bundle", "index.html")),
+      `${source} points at /d/${id}, but content/${id}/bundle/index.html does not exist`,
+    );
+  }
 });
 
 test("every table entry is exported by the built functions bundle", async () => {

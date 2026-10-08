@@ -18,18 +18,21 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
-- **A user guide at `/docs`.** `/docs` redirects (`302`) to `/d/docs`, a
-  public document published from `content/docs/bundle/index.html`, so the
-  guide is read in the viewer and takes comments like any other document. It
-  shows the loop for people and for agents, and says plainly that any
-  connected agent can pick up the comments, from people or from other agents,
-  reply, and publish the next version. A **Docs** link sits in the header on
-  every page and in the landing page's footer. A deployment that has not
-  published the guide answers `/docs` with "Not here"
-  (`docs/operations/overview.md`; SPEC §2).
-- `check:content` keeps the guide free of scripts, its chapters anchored by
-  id, and out of the slide navigator. The skills drift test now reads HTML
-  `<code>` too, and checks every command and tool the guide names.
+- **A user guide at `/docs`, and a guide for developers at
+  `/docs/developers`.** Each redirects (`302`) to a public document published
+  from `content/`, so the guides are read in the viewer and take comments like
+  any other document. The user guide explains the product in plain words and
+  names no command, and says plainly that any connected agent can pick up the
+  comments, from people or from other agents, reply, and publish the next
+  version. The developer guide holds the rest: connecting an agent, the
+  command line, the loop with the calls that run it, the agent tools,
+  formats and limits. A **Docs** link sits in the header on every page and in
+  the landing page's footer. A deployment that has not published a guide
+  answers its shortcut with "Not here" (`docs/operations/overview.md`;
+  SPEC §2).
+- `check:content` keeps both guides free of scripts, their chapters anchored
+  by id, and out of the slide navigator. The skills drift test now reads HTML
+  `<code>` too, and checks every command and tool the guides name.
 - **Agents can start a comment thread.** Until now an agent could only reply
   to a thread a person had opened, or propose an edit. `add_comment`, and
   `bikeshed comment <id> <passage> --body <text>`, open a thread on a passage

@@ -223,27 +223,31 @@ Membership is recomputed by the same code the server uses, including the parent
 folder's members, and all four membership fields are written together
 ([ADR 0006](../architecture/adr/0006-denormalized-members.md)).
 
-### The user guide at `/docs`
+### The guides at `/docs` and `/docs/developers`
 
-`/docs` is a Hosting redirect (`302`) to `/d/docs` on every deployment. The
-guide is an ordinary document whose source is `content/docs/bundle/index.html`,
-so until a deployment publishes it, `/docs` lands on "Not here".
+Every deployment redirects (`302`) `/docs` to `/d/docs` and `/docs/developers`
+to `/d/docs-developers`. Both are ordinary documents whose sources are
+`content/docs` and `content/docs-developers`, so until a deployment publishes
+them, both land on "Not here".
 
-Publish it once, signed in as the person who will own it:
+Publish each once, signed in as the person who will own them:
 
 ```bash
 bikeshed login --origin https://<deployment>
 bikeshed get docs     # must fail: an existing docs is somebody else's document
 bikeshed publish content/docs/bundle/index.html --id docs --title "How Bikeshed works"
+bikeshed get docs-developers     # must fail too
+bikeshed publish content/docs-developers/bundle/index.html --id docs-developers --title "Bikeshed for developers"
 ```
 
-The `url` it returns must end in `/d/docs`. A taken id gets a suffix instead, and
-the redirect would point at nothing. Then, in the app, Share → Who can see it →
-**Public**: no tool can make that change, deliberately. A public document takes
-comments from anyone signed in, so the guide collects its own corrections.
+Each `url` it returns must end in the id you asked for. A taken id gets a
+suffix instead, and the redirect would point at nothing. Then, in the app,
+Share → Who can see it → **Public** on each: no tool can make that change,
+deliberately. A public document takes comments from anyone signed in, so the
+guides collect their own corrections.
 
-To publish a change, `bikeshed update docs content/docs/bundle/index.html`;
-identical bytes publish nothing. Under `vite` dev there is no redirect, and
+To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or
+the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and
 `/docs` lands on `/`. The Hosting emulator honours it, but only one started
 after the change: a running one keeps the configuration it started with.
 
