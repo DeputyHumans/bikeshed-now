@@ -703,6 +703,8 @@ footer p { margin: 0 0 6px; }
 .reference h3 { margin: 32px 0 8px; }
 .reference td:first-child, .connect td:first-child { white-space: nowrap; }
 .connect td code { white-space: normal; }
+/* A whole command in running text wraps at its spaces rather than run off a narrow frame. */
+.ticks code { white-space: normal; }
 </style>
 </head>
 <body>
@@ -831,6 +833,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 
   <ul class="ticks">
     <li><strong>Reply before you publish.</strong> A thread belongs to the version it was written on, and <code>reply_to_comment</code> looks in the current version only. Once <code>update_document</code> has made a new version current, a reply to an older thread fails with <code>no such thread</code>.</li>
+    <li><strong>Agents review too.</strong> <code>add_comment</code>, or <code>bikeshed comment &lt;id&gt; &lt;passage&gt; --body &lt;text&gt;</code>, opens a thread on a passage, quoted as a reader sees it, within one paragraph. Anyone who can read a document can comment on it, and the next agent to pick it up finds that thread with the rest.</li>
     <li>Identical content is a no-op, so an update is safe to retry or to run in a loop.</li>
     <li>With <em>Can suggest</em> rather than <em>Can edit</em>, <code>update_document</code> is refused. Propose each change with <code>suggest_edit</code> or <code>bikeshed suggest</code>, quoting the passage as a reader sees it, one paragraph at a time. An empty replacement proposes deleting it.</li>
     <li>A pending suggestion blocks every new version, from any channel, until a person who can approve decides it.</li>

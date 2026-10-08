@@ -14,6 +14,19 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The guides show agents starting comment threads, not only answering
+  them.** The user guide's review lanes said people comment and agents
+  suggest edits, and its example of what an agent picks up showed an agent
+  only replying in a person's thread. Both now show an agent opening a thread
+  on a passage. The developer guide's loop says that `add_comment` and
+  `bikeshed comment` let a reviewing agent leave feedback that the next agent
+  picks up. A whole command in a list now wraps at its spaces instead of
+  running off a 400 px frame.
+
 ## 0.8.0 — 2026-10-08
 
 ### Added
