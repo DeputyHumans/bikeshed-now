@@ -59,11 +59,11 @@ jobs:
     env:
       PROJECT: ${{ secrets.PRODUCTION_FIREBASE_PROJECT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Node 24 because firebase.json deploys the nodejs24 runtime, and the
       # functions build should run on the runtime it is built for.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

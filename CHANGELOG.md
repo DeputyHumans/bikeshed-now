@@ -25,6 +25,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   the runtime is part of each one. Development and CI moved with it: `.nvmrc`,
   both workflows and the contributor docs now say 24. The source tree accepts
   Node 22 or later, since Node 20 reached end of life in April.
+- **The workflows' own actions run on Node 24 too.** `checkout`, `setup-node`
+  and `setup-java` moved to newer major versions. The old ones ran on Node 20,
+  whatever Node they installed for the build.
 
 ## 0.6.4 — 2026-10-08
 
