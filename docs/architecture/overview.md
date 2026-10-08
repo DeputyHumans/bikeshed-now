@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — thirteen records of about thirty lines each.
+[`adr/`](adr/) — fourteen records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -149,8 +149,11 @@ a written argument in a pull request, not a dependency.
   at all without a queue. The visible cost is that the world-readable projection
   of a public document keeps its title after the content stops being served, and
   SPEC §17 says so rather than leaving it to be found.
-- **No OAuth 2.1 for the agent surface.** Personal access tokens, ~120 lines,
-  revocable by someone who has never heard of OAuth.
+- **No scopes on the agent surface.** An app connects by signing in, and a
+  person can still mint a personal access token for a script. Either way the
+  credential is exactly its owner, and it is revoked from one list by someone
+  who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014
+  records why that changed and what it cost.
 - **No destructive or sharing tools on the agent surface.** It can list, create,
   fork, move and suggest; it cannot delete a folder, rename one, share anything,
   resolve a comment thread, or accept or reject a suggestion. Each is a decision a person makes, and each is stated to the

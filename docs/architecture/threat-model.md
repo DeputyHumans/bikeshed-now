@@ -25,8 +25,9 @@ What this system protects, from whom, and where it deliberately stops.
   `members` for, plus public documents, plus unlisted documents it holds the key
   to or a current link grant for.
 - **Viewer / suggester / editor / approver / owner.** The ACL ladder (SPEC §13).
-- **An agent holding a personal access token.** Exactly its owner's identity and
-  exactly its owner's ACL. No service accounts, no impersonation.
+- **An agent holding a personal access token, or an app connected by signing
+  in** (SPEC §23). Exactly its owner's identity and exactly its owner's ACL. No
+  service accounts, no impersonation, no scopes.
 - **A document author.** Supplies arbitrary HTML, CSS and JavaScript, which will
   be rendered in a frame on this origin. Treated as hostile by default.
 - **The deployment operator.** Owns the data. Not in the threat model.
@@ -239,6 +240,78 @@ actively switched off, which makes it a real trap rather than a theoretical one.
 ACL, so there is no escalation path to widen. `tokenId` is stamped on everything
 the token touches, so "what did this token do" is one query and revocation does
 not disturb the owner's other clients.
+
+### An app is connected that the person did not mean to connect
+
+Consent phishing. The registration endpoint is open, so anyone can register a
+client called "Claude" that sends codes to their own server. A link to the
+consent page is then all it takes to ask (SPEC §23).
+
+**Mitigation.**
+- **The page leads with what is verified.** A metadata-document client is shown
+  as "from {host}", which is the host we fetched. A self-registered client is
+  shown by its redirect host, with its name labelled as chosen by the app.
+- **The destination is always visible**, as a hostname in punycode. A loopback
+  destination gets its own warning.
+- **Names are cleaned** of control and format characters, so a right-to-left
+  override cannot disguise one.
+- **It never redirects without a person's click**, on success or on error.
+- **The ID token on the request** binds the grant to the account the page
+  shows.
+
+**Residual, accepted.** A person who approves a well-labelled request from an
+attacker has connected the attacker. Revoke, on the account screen, is the
+remedy, and the row there names the host.
+
+### The consent click is borrowed
+
+Clickjacking, including the double-click variant, where a window opens beneath
+the second click.
+
+**Mitigation.**
+- **The frame headers.** `/connect` sends `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`, and so does `/signup`, whose `?next=` reaches the
+  consent page by client-side navigation.
+- **The page itself** refuses to render in a frame.
+- **Approve is never focused by default**, and stays disabled until the page
+  has had focus for a second and seen a pointer or key event.
+
+A trusted document runs unsandboxed on this origin and could post to
+`/oauth/consent` as it can post to `/tokens`. It would need the account's ID
+token, which lives in the app's storage, so this is the session-theft case at
+the top of this file, not a new one.
+
+### The authorization server is made to fetch something internal
+
+A client metadata document's URL is chosen by whoever asks, and the server
+fetches it. That is SSRF by design.
+
+**Mitigation.**
+- **The URL:** https on 443, a hostname rather than an IP literal, and no
+  internal-looking suffixes.
+- **The connection:** the address the socket connects to must be public, which
+  is checked inside its own `lookup`. That closes DNS rebinding. Mapped,
+  NAT64 and 6to4 addresses are judged by what they carry.
+- **The response:** no redirects are followed, the timeout is 5 s and the body
+  is capped at 16 KB.
+- **Where it runs:** only from `/oauth/consent`, behind a signed-in account.
+
+### A refresh token or code is stolen and replayed
+
+**Mitigation.**
+- **Access tokens last an hour**, and refresh tokens rotate on every use.
+- **Replaying a spent refresh token or code revokes the grant.** The exception
+  is a retry inside 60 s, which receives the identical pair, so a client's
+  timeout cannot fork the chain into a false alarm.
+- **Revocation requires possession** of the spent secret. The `tokenId` is
+  visible to readers, so a guessed secret must never be able to disconnect
+  anyone.
+- **A failure of ours is never `invalid_grant`.**
+
+**Residual, accepted.**
+- Theft is detected only one rotation deep.
+- A disabled account keeps up to an hour of access, until the next refresh
+  fails the gate.
 
 ## Out of scope, stated so it is a decision
 

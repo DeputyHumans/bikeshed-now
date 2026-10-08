@@ -38,9 +38,11 @@ inline SVG, a folded tree and a scroll observer survives a round trip through
 the editor, because the editor works on the authored markup rather than
 importing it into a schema.
 
-**Agents are first-class, and visibly agents.** A personal access token, nine
-MCP tools, a terminal client, and three packaged skills a deployment serves to
-whatever agent asks for them. Everything an agent does is stamped with the
+**Agents are first-class, and visibly agents.** Paste the deployment's `/mcp`
+address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal
+access token for a script. Twelve MCP tools, a terminal client that signs in
+through the browser, and three packaged skills a deployment serves to whatever
+agent asks for them. Everything an agent does is stamped with the
 channel it came through — derived from the credential, not claimed — so a
 reviewer can always tell which feedback came from a person. Agent reads are
 counted separately so they do not distort anybody's statistics.
@@ -101,7 +103,7 @@ named differently and say so in their own help.
 | | `scripts/*.mjs` | `bikeshed` |
 |---|---|---|
 | Who | whoever owns the deployment | any signed-up user |
-| Credential | Admin SDK, `--account` required on every real run | a personal access token |
+| Credential | Admin SDK, `--account` required on every real run | a personal access token, from `bikeshed login` in the browser |
 | Talks to | Firestore and Storage directly | the deployment over HTTPS |
 | Purpose | provision, publish, withdraw, tear down | publish and revise documents |
 
@@ -152,7 +154,7 @@ Each of these is a decision with a reason in `docs/architecture/overview.md`, no
 
 no operational transform · no plugin system · no theming engine · no i18n · no
 multi-tenancy · no SSO or SCIM · no search index · no mobile app · no admin
-console · no rate limiter · no document deletion · no OAuth for the agent
+console · no rate limiter · no document deletion · no scopes on the agent
 surface · no service accounts · no unique-visitor tracking
 
 If you need directory sync, cross-document search or per-character blame, you

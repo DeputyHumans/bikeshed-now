@@ -382,7 +382,13 @@ Every op but `create` refuses a token with `403`: deciding is a person's act.
 - **`POST /verify/start`**, **`POST /verify/complete`** — §14.
 - **`POST /team`**, **`POST /team-members`** — §18.
 - **`POST /tokens`** — `{ op: "create"|"revoke"|"list", ... }` — §19.
-- **`POST /mcp`** — streamable HTTP MCP endpoint, PAT-authenticated — §19.
+- **`POST /mcp`** — streamable HTTP MCP endpoint; a personal access token or a
+  connected app's access token — §19, §23.
+- **`GET /.well-known/oauth-protected-resource[/mcp]`**,
+  **`GET /.well-known/oauth-authorization-server`**, **`POST /oauth/register`**,
+  **`POST /oauth/token`** — the `oauth` function — §23.
+- **`POST /oauth/consent`** — the `oauthConsent` function, signed-in account's
+  ID token only — §23.
 - **`GET /sitemap.xml`** — public documents only.
 
 ---
@@ -1815,6 +1821,10 @@ PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked
 by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
+*That upgrade has been taken* (ADR 0014): apps now connect by signing in, as
+§23 specifies. Personal tokens are unchanged and remain the credential for CI,
+scripts and anything that cannot open a browser.
+
 ### MCP — twelve tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
@@ -1981,7 +1991,7 @@ believes it.
 
 ### Not built
 
-OAuth 2.1 flows · service accounts · webhooks · a REST API distinct from these
+Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
 endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
 deletion, folder renaming or sharing through the agent surface · resolving a
 comment thread from an agent · accepting or rejecting a suggested edit from an agent.
@@ -2278,3 +2288,162 @@ A suggesting mode inside the editor · structural or formatting suggestions ·
 accepting on the server · merging a stale suggestion into changed text ·
 carrying a pending suggestion to the next version · bulk accept · a
 per-document "require review" switch · deciding from an agent.
+
+---
+
+## 23. Connecting an app by signing in
+
+An app that speaks MCP connects by its address, `https://<deployment>/mcp`: the
+person pastes it, signs in if they need to, and approves. This deployment is
+the authorization server (OAuth 2.1, the MCP authorization specification). It
+is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR
+0014).
+
+### Discovery
+
+| Path | Answers |
+|---|---|
+| `/.well-known/oauth-protected-resource` and `…/mcp` | RFC 9728. `resource` is `https://<host>/mcp` for the host the request used, `authorization_servers` is `[issuer]`. `private, no-store` |
+| `/.well-known/oauth-authorization-server` | RFC 8414. The same on every host. `public, max-age=300` |
+| `/.well-known/openid-configuration` | a JSON 404. This is not OpenID Connect |
+
+- **The issuer** is `publicOrigin()`, a string with no trailing slash, compared
+  byte for byte. In the emulator it is the request's own origin.
+- **The host** comes from `X-Forwarded-Host` only when it is one of this
+  deployment's hosts: the configured domain, `<project>.web.app` or
+  `<project>.firebaseapp.com`, computed at runtime. Otherwise the configured
+  host is used. `Host` is never read.
+- **The metadata advertises:**
+  - S256 only, and token-endpoint auth `none`
+  - `client_id_metadata_document_supported` and
+    `authorization_response_iss_parameter_supported`
+  - no `scopes_supported`
+
+A refused `/mcp` request answers `401` with
+`WWW-Authenticate: Bearer realm="bikeshed", resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`.
+`error="invalid_token"` is added when a credential was presented. Every `/mcp`
+response sets `Access-Control-Expose-Headers: WWW-Authenticate` and
+`private, no-store`.
+
+### Who is asking
+
+| `client_id` | Registration | What the consent page may say |
+|---|---|---|
+| an https URL with a path | **metadata document**, fetched, `client_id` must equal the URL | "from {host}" — the host is verified |
+| `bsdcr_…` | **stateless registration** from `POST /oauth/register`: the name and redirect URIs, encoded, unsigned, re-validated on every use | the redirect host first; the name is "chosen by the app, not checked" |
+| `bikeshed-cli` | **built in**; loopback redirects to `127.0.0.1` or `[::1]` only | "Bikeshed's command line", and the device it reports |
+
+- **The metadata fetch** is the one outbound request. It goes over https on
+  443 to a hostname, never an IP literal. The address the socket connects to
+  must be public, which is checked in its own `lookup`. No redirects are
+  followed, the timeout is 5 s, and the body is capped at 16 KB. It runs only
+  from `/oauth/consent`, behind sign-in.
+- **What is validated** is only what is used. A document that requires a
+  client secret is refused; anything else unused is ignored.
+- **Names** lose every control and format character (`\p{Cf}`) before they
+  are shown.
+
+**Redirect URIs** are decided on the parsed scheme, after a printable-ASCII
+check on the raw string:
+- **Allowed:** `https:`; `http:` on a loopback host; an app's own scheme.
+- **Refused:** `javascript`, `data`, `vbscript`, `blob`, `file`, `about` and
+  their kind; fragments; userinfo.
+- **Matching** is exact, except that a loopback redirect matches any port
+  (RFC 8252). `localhost` and `127.0.0.1` are not interchangeable.
+
+### Consent
+
+`authorization_endpoint` is `/connect`, an app route.
+
+- **The query is captured once, during render,** above the sign-in gate. It is
+  kept in session storage for ten minutes and stripped from the address bar
+  before analytics can read `document.location`.
+- **`POST /oauth/consent {action, params}`** handles three actions:
+  `describe`, `approve` and `deny`.
+  - It authenticates with the signed-in account's **ID token**: never the
+    cookie, which can name a different account from the one on screen, and
+    never a personal token, the same rule as `POST /tokens`.
+  - It requires a same-origin `Sec-Fetch-Site` or `Origin`, and a JSON body.
+- **Before the client and redirect URI are established**, a failure is shown to
+  the person and nothing is sent anywhere. **After that**, a failure carries a
+  `back` URL, which is followed only when the person presses the button. The
+  page never redirects by itself.
+- **What the page shows:**
+  - who is asking and where the person will be sent back to, as a hostname
+  - a warning for a program on this computer
+  - what the app can and cannot do, which is §19's list
+  - the account it will act as
+- **What the page refuses:**
+  - it does not render inside a frame
+  - Approve stays disabled until the page has had focus for a second and a
+    pointer or key event
+- **`/connect` and `/signup` both send** `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`. `/signup` is included because `?next=` reaches the
+  consent page without loading it from Hosting.
+- **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every
+  authorization response carries `iss` (RFC 9207).
+
+### Tokens
+
+A grant is a row in `tokens/` with `kind: "oauth"` and channel `mcp`, mirrored
+to `users/{uid}/tokens/` so the account screen lists it and Revoke ends it.
+
+| | Shape | Life |
+|---|---|---|
+| access | `bsa_<tokenId>.<secret>` | one hour; `/mcp` only, and only for the resource it was issued for |
+| refresh | `bsr_<tokenId>.<secret>` | rotates on every use; lapses after 90 days unused |
+
+A grant never has a `hash` field, so it cannot pass as a personal token, and
+`resolveCaller` does not know the `bsa_` prefix.
+
+`POST /oauth/token` reads the raw form body; a repeated parameter is
+`invalid_request`. JSON is accepted as well. `scope` and `client_assertion` are
+ignored.
+
+- **Code exchange:**
+  - Every check runs before the code is spent: client, `redirect_uri` when
+    sent, `resource` when sent, and PKCE. A wrong verifier costs nothing.
+  - The code is spent in the transaction that mints the grant.
+- **Rotation:** the new secrets are `HMAC(spent secret, nonce‖label)`. A retry
+  of the same spend within 60 s receives the identical pair, so a timeout cannot
+  fork the chain. Outside that window, replaying the previous refresh token or
+  the code revokes the grant.
+- **Revocation requires possession.** A wrong secret for a known `tokenId`
+  changes nothing.
+- **The gate is re-checked at every refresh:**
+  - not disabled
+  - `emailVerified`
+  - the same lowercased address
+  - `isAllowedEmail`
+  - `tokensValidAfterTime` not after the grant was created
+
+  A closed gate revokes the grant. A failed lookup is `500 server_error` and
+  revokes nothing, because a client told `invalid_grant` discards the connection.
+- **The command line** goes through the same consent and receives an ordinary
+  personal token (channel `cli`, named from the device it reports), with no
+  refresh token. It calls endpoints other than `/mcp`, and parallel processes
+  would trip reuse detection.
+
+### The command line
+
+`bikeshed login`:
+1. Reads the authorization-server metadata.
+2. Listens on `127.0.0.1` on an ephemeral port.
+3. Opens `/connect` with PKCE, `state` and `device`.
+4. Accepts one `GET /callback` whose `state` and `iss` match.
+5. Exchanges the code and saves the token as before.
+
+`--paste` is the old flow. `CI` set without a flag fails at once.
+
+### Skills as downloads
+
+Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`.
+This is the shape Claude's skill upload takes. The zip is packed from the
+**stamped** file after the build, stored rather than compressed, and verified
+byte for byte by the predeploy check.
+
+### Not built
+
+Scopes · consent remembered across requests · token introspection or
+revocation endpoints (Revoke is the account screen) · `private_key_jwt` client
+authentication · OpenID Connect · a stored client registry.
