@@ -3,9 +3,11 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { cpSync, mkdtempSync, readFileSync, rmSync } = require("node:fs");
 const { execFileSync } = require("node:child_process");
+const { tmpdir } = require("node:os");
 const { join } = require("node:path");
+const AdmZip = require("adm-zip");
 
 const ROOT = join(__dirname, "..", "..");
 
@@ -57,10 +59,16 @@ function codeSpans(text) {
   return spans;
 }
 
+/**
+ * `bikeshed <word>` in code, except where the word is an address: the server
+ * name in `claude mcp add --transport http bikeshed https://…/mcp` is followed
+ * by the URL, and reading `https` as a command would fail every document that
+ * shows a person how to connect.
+ */
 function commandsIn(text) {
   const found = new Set();
   for (const span of codeSpans(text)) {
-    for (const m of span.matchAll(/\bbikeshed ([a-z][a-z-]*)/g)) found.add(m[1]);
+    for (const m of span.matchAll(/\bbikeshed (?!https?:)([a-z][a-z-]*)/g)) found.add(m[1]);
   }
   return found;
 }
@@ -169,7 +177,37 @@ test("no frontmatter value hides a colon a YAML parser would choke on", async ()
   }
 });
 
+test("every skill fits Claude's skill upload", async () => {
+  // Settings → Capabilities → Skills refuses a SKILL.md whose name is over 64
+  // characters, is anything but lowercase letters, digits and hyphens, or
+  // contains a reserved word; and one whose description is over 1,024
+  // characters. A refusal there is a person's dead end, not an agent's.
+  const { skills } = await documents();
+  for (const skill of skills) {
+    const name = skill.declaredName;
+    assert.ok(name.length <= 64, `${skill.name}: name is over Claude's 64 characters`);
+    assert.match(name, /^[a-z0-9-]+$/, `${skill.name}: Claude takes only a-z, 0-9 and -`);
+    assert.doesNotMatch(name, /claude|anthropic/i, `${skill.name}: the name uses a reserved word`);
+    assert.ok(
+      skill.description.length <= 1024,
+      `${skill.name}: description is over Claude's 1,024 characters`,
+    );
+  }
+});
+
 // --- They describe a surface that exists ----------------------------------
+
+test("an address after `bikeshed` is not a command, and a misnamed command still is", () => {
+  // The connect line names the server `bikeshed` and then gives its address.
+  assert.deepEqual(
+    [...commandsIn("`claude mcp add --transport http bikeshed https://<deployment>/mcp`")],
+    [],
+  );
+  assert.deepEqual([...commandsIn("`bikeshed http-proxy`")], ["http-proxy"]);
+  // The control: the exception is for an address, not for anything unknown.
+  assert.deepEqual([...commandsIn("`bikeshed rename draft.md`")], ["rename"]);
+  assert.equal(advertisedCommands().has("rename"), false);
+});
 
 test("every bikeshed command any of these documents names is a real one", async () => {
   const advertised = advertisedCommands();
@@ -249,6 +287,47 @@ test("the served index lists exactly the skills in the tree", async () => {
     // The path is what `bikeshed skills install` fetches and then writes to
     // disk, so it must stay a plain relative path with no way out of it.
     assert.equal(entry.path, `skills/${entry.name}/SKILL.md`);
+    // Where the Claude upload is downloaded from; packed into app/dist only.
+    assert.equal(entry.archive, `skills/${entry.name}.zip`);
     assert.match(entry.name, /^[a-z0-9][a-z0-9-]*$/);
+  }
+});
+
+test("each skill's zip opens in another reader as its folder and its stamped SKILL.md", async () => {
+  // adm-zip is a second implementation, so this cannot pass merely because the
+  // writer and tools/zip.mjs's reader agree with each other. The dist is a copy
+  // of app/public stamped the way a configured build stamps it, so the archive
+  // is checked against the bytes a deployment actually serves beside it.
+  const { servedDocuments, stampDist } = await import("../../tools/stamp-deployment.mjs");
+  const { skills } = await documents();
+  const base = mkdtempSync(join(tmpdir(), "bikeshed-skillzip-"));
+  const dist = join(base, "dist");
+  try {
+    for (const rel of servedDocuments()) {
+      cpSync(join(ROOT, "app", "public", rel), join(dist, rel));
+    }
+    stampDist(dist, "https://stamp.example");
+
+    for (const skill of skills) {
+      const zip = new AdmZip(join(dist, "skills", `${skill.name}.zip`));
+      const entries = zip.getEntries();
+      assert.deepEqual(
+        entries.map((e) => e.entryName),
+        [`${skill.name}/`, `${skill.name}/SKILL.md`],
+        `${skill.name}.zip holds something other than its folder and SKILL.md`,
+      );
+      const [folder, file] = entries;
+      assert.equal(folder.isDirectory, true);
+      assert.equal(file.isDirectory, false);
+      for (const entry of entries) assert.equal(entry.header.method, 0, "stored, not deflated");
+      assert.equal(file.attr >>> 16, 0o100644);
+      assert.equal(folder.attr >>> 16, 0o040755);
+
+      const served = readFileSync(join(dist, "skills", skill.name, "SKILL.md"));
+      assert.equal(file.getData().equals(served), true, `${skill.name}.zip is not the served SKILL.md`);
+      assert.equal(served.toString("utf8").includes("<deployment>"), false);
+    }
+  } finally {
+    rmSync(base, { recursive: true, force: true });
   }
 });

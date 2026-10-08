@@ -16,9 +16,10 @@
  *     with, or none. `docShell` fetches the app shell from
  *     BIKESHED_PUBLIC_ORIGIN and fails closed on anything that is not the app,
  *     so every `/d/**` page would answer 503;
- *   - an `app/dist` that was never stamped. The hosting `predeploy` hook
- *     refuses that too, but only at the hosting step — after functions and
- *     rules are already live.
+ *   - an `app/dist` that was never stamped, or whose skill archives are
+ *     missing or older than the stamp. The hosting `predeploy` hook refuses
+ *     both too, but only at the hosting step — after functions and rules are
+ *     already live.
  *
  * Refusals never quote the values they compared. The binding stays out of the
  * tree, and out of the build log as well.
@@ -88,11 +89,22 @@ export function refusals({ project, appEnv, functionsEnv, dist, env = process.en
     }
   }
 
-  const { ok, origin, unstamped } = checkDist(dist, env, root);
+  const { origin, unstamped, archives } = checkDist(dist, env, root);
   if (!origin) {
     out.push("no public origin: set `domain` in config/deploy.json");
-  } else if (!ok) {
+  } else if (unstamped.length > 0) {
     out.push(`${unstamped.join(", ")} still name <deployment>: rebuild before deploying`);
+  }
+  // A separate refusal, because it is a separate fault: the downloads are
+  // missing or were packed from text the stamp has since rewritten. A dist that
+  // was never stamped at all gets the one line above, not both — its archives
+  // are being compared against a SKILL.md that is itself wrong, and the remedy
+  // for the two is the same rebuild.
+  if (archives.length > 0 && unstamped.length === 0) {
+    out.push(
+      `${archives.join(", ")} missing, unreadable, or not holding the SKILL.md served ` +
+        "beside it: rebuild before deploying",
+    );
   }
 
   if (origin) {

@@ -101,15 +101,30 @@ export function readSkills() {
       description: fields.description ?? "",
       declaredName: fields.name ?? "",
       path: `skills/${name}/SKILL.md`,
+      // Packed into app/dist by tools/stamp-deployment.mjs from the stamped
+      // SKILL.md, for Claude's skill upload. Not in app/public, so not written
+      // here: a zip of the unstamped text would be the wrong download.
+      archive: `skills/${name}.zip`,
       text,
     };
   });
 }
 
-/** The discovery document, formatted exactly as it is written and compared. */
+/**
+ * The discovery document, formatted exactly as it is written and compared.
+ *
+ * `archive` is additive: `bikeshed skills install` reads only `path`.
+ */
 function skillIndex(skills) {
   return `${JSON.stringify(
-    { skills: skills.map(({ name, description, path }) => ({ name, description, path })) },
+    {
+      skills: skills.map(({ name, description, path, archive }) => ({
+        name,
+        description,
+        path,
+        archive,
+      })),
+    },
     null,
     2,
   )}\n`;

@@ -3,7 +3,15 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -13,15 +21,21 @@ import {
   checkDist,
   deploymentStamp,
   normalizeOrigin,
+  packSkills,
   resolveOrigin,
   servedDocuments,
+  skillArchives,
   stamp,
   stampDist,
 } from "./stamp-deployment.mjs";
+import { readStoredZip } from "./zip.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** A throwaway `dist` holding every document a deployment serves. */
+/**
+ * A throwaway `dist` holding every document a deployment serves, and the skill
+ * archives an unconfigured build packs from them.
+ */
 function fakeDist(body = `see ${TOKEN}/d/x`) {
   const base = mkdtempSync(join(tmpdir(), "bikeshed-stamp-"));
   const dist = join(base, "dist");
@@ -30,6 +44,7 @@ function fakeDist(body = `see ${TOKEN}/d/x`) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, body);
   }
+  packSkills(dist);
   return { base, dist };
 }
 
@@ -227,7 +242,49 @@ test("the check passes a stamped dist and fails an unstamped one", () => {
   const result = checkDist(raw.dist, env, ROOT);
   assert.equal(result.ok, false);
   assert.deepEqual(result.unstamped, servedDocuments());
+  // Packed from the unstamped text it sits beside, so the archives are not
+  // what is wrong here, and are not reported as if they were.
+  assert.deepEqual(result.archives, []);
   rmSync(raw.base, { recursive: true, force: true });
+});
+
+test("an archive packed before the stamp fails the check", () => {
+  // What a packer in a plugin of its own would produce: Rollup runs separate
+  // plugins' writeBundle hooks in parallel, so it could zip SKILL.md before the
+  // stamp rewrote it. Every served document names the origin, so only the
+  // archives can be what the check refuses.
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist } = fakeDist();
+  for (const rel of servedDocuments()) {
+    const path = join(dist, rel);
+    writeFileSync(path, stamp(readFileSync(path, "utf8"), "https://h.example"));
+  }
+
+  const result = checkDist(dist, env, ROOT);
+  assert.deepEqual(result.unstamped, []);
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    result.archives,
+    skillArchives().map((a) => a.path),
+  );
+  // And the archive really does still hold the placeholder the check caught.
+  const [, file] = readStoredZip(readFileSync(join(dist, skillArchives()[0].path)));
+  assert.equal(file.data.toString("utf8").includes("<deployment>"), true);
+
+  // Re-stamping re-packs, which is the only route to an archive the check passes.
+  stampDist(dist, "https://h.example");
+  assert.equal(checkDist(dist, env, ROOT).ok, true);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("an archive holding anything but its folder and SKILL.md fails the check", () => {
+  const { base, dist } = fakeDist();
+  const empty = mkdtempSync(join(tmpdir(), "bikeshed-root-"));
+  const [first] = skillArchives();
+  writeFileSync(join(dist, first.path), "not a zip");
+  assert.deepEqual(checkDist(dist, {}, empty).archives, [first.path]);
+  rmSync(base, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true });
 });
 
 test("a deployment with no origin configured deploys its placeholders", () => {
@@ -236,6 +293,62 @@ test("a deployment with no origin configured deploys its placeholders", () => {
   assert.equal(checkDist(raw.dist, {}, empty).ok, true);
   rmSync(raw.base, { recursive: true, force: true });
   rmSync(empty, { recursive: true, force: true });
+});
+
+test("no origin still packs, and a missing zip fails the check", () => {
+  // A deployment with no custom domain still offers the downloads; skipping
+  // the pack along with the stamp would serve the SPA's HTML at /skills/*.zip.
+  const base = mkdtempSync(join(tmpdir(), "bikeshed-stamp-"));
+  const dist = join(base, "dist");
+  for (const rel of servedDocuments()) {
+    mkdirSync(dirname(join(dist, rel)), { recursive: true });
+    writeFileSync(join(dist, rel), `see ${TOKEN}/d/x`);
+  }
+  const empty = mkdtempSync(join(tmpdir(), "bikeshed-root-"));
+  const plugin = deploymentStamp({
+    env: {},
+    root: empty,
+    log: { log: () => {}, warn: () => {} },
+  });
+  plugin.configResolved({ root: base, build: { outDir: "dist" } });
+  plugin.writeBundle();
+
+  const archives = skillArchives();
+  assert.ok(archives.length > 0, "there are no skills to pack");
+  for (const { path } of archives) {
+    assert.equal(existsSync(join(dist, path)), true, `${path} was not packed`);
+  }
+  assert.deepEqual(checkDist(dist, {}, empty), {
+    ok: true,
+    origin: "",
+    source: "",
+    unstamped: [],
+    archives: [],
+  });
+
+  rmSync(join(dist, archives[0].path));
+  const result = checkDist(dist, {}, empty);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.archives, [archives[0].path]);
+  rmSync(base, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true });
+});
+
+test("every archive in index.json exists in dist", () => {
+  // The index is what tells a person (and the CLI) where the download is; the
+  // pack is what puts one there. Two derivations of one path, held together.
+  const index = JSON.parse(readFileSync(join(ROOT, "app", "public", "skills", "index.json"), "utf8"));
+  const { base, dist } = fakeDist();
+  const listed = index.skills.map((s) => s.archive);
+  assert.deepEqual(listed, index.skills.map((s) => `skills/${s.name}.zip`));
+  for (const archive of listed) {
+    assert.equal(existsSync(join(dist, archive)), true, `index.json lists ${archive}, which is never packed`);
+  }
+  const packed = readdirSync(join(dist, "skills"))
+    .filter((f) => f.endsWith(".zip"))
+    .map((f) => `skills/${f}`);
+  assert.deepEqual(packed.sort(), [...listed].sort());
+  rmSync(base, { recursive: true, force: true });
 });
 
 // --- Wiring ----------------------------------------------------------------
@@ -288,7 +401,7 @@ test("driving the plugin stamps the output directory", () => {
   rmSync(base, { recursive: true, force: true });
 });
 
-test("an unconfigured build warns and changes nothing", () => {
+test("an unconfigured build warns and stamps nothing", () => {
   const { base, dist } = fakeDist();
   const before = readFileSync(join(dist, "llms.txt"), "utf8");
   const empty = mkdtempSync(join(tmpdir(), "bikeshed-root-"));

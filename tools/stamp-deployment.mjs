@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Resolve `https://<deployment>` to this deployment's own origin, in app/dist (SPEC §19).
+// Resolve `https://<deployment>` to this deployment's own origin in app/dist, and pack the skill downloads (SPEC §19).
 
 /**
  * Why this exists, and why it writes only to the BUILD OUTPUT.
@@ -22,6 +22,8 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { readStoredZip, storedZip } from "./zip.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -168,6 +170,23 @@ export function servedDocuments(root = ROOT) {
   ];
 }
 
+/**
+ * The archive each skill is downloaded as, for Claude's skill upload, and the
+ * two entries it must hold: the skill's folder and its `SKILL.md`.
+ *
+ * Not among `servedDocuments`, which are the files `app/public` holds and the
+ * stamp rewrites. An archive exists only in `dist`, packed from the copy the
+ * stamp has already rewritten.
+ */
+export function skillArchives(root = ROOT) {
+  return skillNames(root).map((name) => ({
+    name,
+    path: `skills/${name}.zip`,
+    skill: `skills/${name}/SKILL.md`,
+    entries: [`${name}/`, `${name}/SKILL.md`],
+  }));
+}
+
 /** Refuse anything but a build output, so the tree can never be the target. */
 function assertBuildOutput(distDir) {
   if (basename(distDir) !== "dist") {
@@ -176,8 +195,37 @@ function assertBuildOutput(distDir) {
 }
 
 /**
- * Rewrite every served document in place. Returns what changed, for the caller
- * to report — a stamp nobody can see happen is one nobody notices failing.
+ * Write each skill's archive from the `SKILL.md` in `distDir` — which, once
+ * `stampDist` has run, is the stamped one. Returns the archives written.
+ */
+export function packSkills(distDir) {
+  assertBuildOutput(distDir);
+  const archives = [];
+  for (const { path, skill, entries } of skillArchives()) {
+    const source = join(distDir, skill);
+    if (!existsSync(source)) {
+      throw new Error(`${skill} is missing from ${distDir} — the build did not copy app/public`);
+    }
+    const [folder, file] = entries;
+    writeFileSync(
+      join(distDir, path),
+      storedZip([{ name: folder }, { name: file, data: readFileSync(source) }]),
+    );
+    archives.push(path);
+  }
+  return archives;
+}
+
+/**
+ * Rewrite every served document in place, THEN pack the skill archives from
+ * what was written. Returns what changed, for the caller to report — a stamp
+ * nobody can see happen is one nobody notices failing.
+ *
+ * Packing is the last step of stamping rather than a step beside it, so there
+ * is no way to stamp a dist and leave its archives holding the text from before.
+ * A separate Vite plugin could not promise that: Rollup runs the `writeBundle`
+ * hooks of different plugins in parallel, so a packer of its own could read
+ * `SKILL.md` before this had rewritten it.
  */
 export function stampDist(distDir, origin) {
   assertBuildOutput(distDir);
@@ -197,32 +245,73 @@ export function stampDist(distDir, origin) {
     total += count;
   }
 
-  return { files, total };
+  return { files, total, archives: packSkills(distDir) };
+}
+
+/**
+ * Every skill archive in `distDir` that is missing, unreadable, holds anything
+ * but its two entries, or holds a `SKILL.md` that is not byte-for-byte the one
+ * served beside it. That last is what an archive packed before the stamp looks
+ * like: a download telling an agent to publish to `<deployment>`.
+ */
+function badArchives(distDir) {
+  const bad = [];
+  for (const { path, skill, entries } of skillArchives()) {
+    const archive = join(distDir, path);
+    const source = join(distDir, skill);
+    if (!existsSync(archive) || !existsSync(source)) {
+      bad.push(path);
+      continue;
+    }
+    let read;
+    try {
+      read = readStoredZip(readFileSync(archive));
+    } catch {
+      bad.push(path);
+      continue;
+    }
+    const [folder, file] = read;
+    const shaped =
+      read.length === entries.length &&
+      folder.name === entries[0] &&
+      folder.data.length === 0 &&
+      file.name === entries[1];
+    if (!shaped || !file.data.equals(readFileSync(source))) bad.push(path);
+  }
+  return bad;
 }
 
 /**
  * The deploy gate. There is no `hosting.predeploy` that rebuilds — the
  * documented deploy is `npm --prefix app run build && firebase deploy --only
  * hosting`, two commands somebody types — so this asserts that what is about to
- * be uploaded was in fact stamped.
+ * be uploaded was in fact stamped, and that its skill archives say the same.
  *
- * Silent when nothing is configured: a deployment with no custom domain serves
- * the placeholder on purpose, and refusing to deploy it would be wrong.
+ * The placeholders are not checked when nothing is configured: a deployment
+ * with no custom domain serves them on purpose, and refusing to deploy it would
+ * be wrong. The archives are checked whatever the origin, because a missing or
+ * stale one is wrong on every deployment.
  */
 export function checkDist(distDir, env = process.env, root = ROOT) {
   const { origin, source } = resolveOrigin(env, root);
-  if (!origin) {
-    return { ok: true, origin, source, unstamped: [] };
-  }
   assertBuildOutput(distDir);
   const unstamped = [];
-  for (const rel of servedDocuments()) {
-    const path = join(distDir, rel);
-    if (!existsSync(path) || readFileSync(path, "utf8").includes(BARE_TOKEN)) {
-      unstamped.push(rel);
+  if (origin) {
+    for (const rel of servedDocuments()) {
+      const path = join(distDir, rel);
+      if (!existsSync(path) || readFileSync(path, "utf8").includes(BARE_TOKEN)) {
+        unstamped.push(rel);
+      }
     }
   }
-  return { ok: unstamped.length === 0, origin, source, unstamped };
+  const archives = badArchives(distDir);
+  return {
+    ok: unstamped.length === 0 && archives.length === 0,
+    origin,
+    source,
+    unstamped,
+    archives,
+  };
 }
 
 /**
@@ -260,12 +349,16 @@ export function deploymentStamp({ env, root, log = console } = {}) {
             '<deployment> (set "domain" in config/deploy.json, or export ' +
             "BIKESHED_PUBLIC_ORIGIN before building)",
         );
+        // Nothing to stamp, but the downloads still have to exist.
+        const archives = packSkills(outDir);
+        log.log(`stamp: packed ${archives.length} skill archive(s)`);
         return;
       }
-      const { files, total } = stampDist(outDir, origin);
+      const { files, total, archives } = stampDist(outDir, origin);
       log.log(
         `stamp: ${total} address(es) in ${files.length} served files now say ${origin} (${source})`,
       );
+      log.log(`stamp: packed ${archives.length} skill archive(s)`);
     },
   };
 }
@@ -279,19 +372,27 @@ function run() {
   const distDir = args.find((a) => !a.startsWith("--")) ?? join(ROOT, "app", "dist");
 
   if (check) {
-    const { ok, origin, source, unstamped } = checkDist(distDir);
-    if (!origin) {
-      console.log("stamp: no deployment origin configured — nothing to check");
-      return;
+    const { ok, origin, source, unstamped, archives } = checkDist(distDir);
+    if (unstamped.length > 0) {
+      console.error(
+        `stamp: ${unstamped.join(", ")} still name <deployment>, but ${source} says ${origin}.`,
+      );
+    }
+    if (archives.length > 0) {
+      console.error(
+        `stamp: ${archives.join(", ")} missing, unreadable, or not holding the SKILL.md ` +
+          "served beside it.",
+      );
     }
     if (!ok) {
-      console.error(
-        `stamp: ${unstamped.join(", ")} still name <deployment>, but ${source} says ${origin}.\n` +
-          "run `npm --prefix app run build` before deploying hosting.",
-      );
+      console.error("run `npm --prefix app run build` before deploying hosting.");
       process.exit(1);
     }
-    console.log(`stamp: ${distDir} names ${origin}`);
+    console.log(
+      origin
+        ? `stamp: ${distDir} names ${origin}, and its skill archives match`
+        : "stamp: no deployment origin configured — the skill archives match, nothing else to check",
+    );
     return;
   }
 
@@ -301,10 +402,13 @@ function run() {
       "stamp: no deployment origin (set `domain` in config/deploy.json) — " +
         "the served instructions will keep saying <deployment>",
     );
+    const archives = packSkills(distDir);
+    console.log(`stamp: packed ${archives.length} skill archive(s)`);
     return;
   }
-  const { total } = stampDist(distDir, origin);
+  const { total, archives } = stampDist(distDir, origin);
   console.log(`stamp: ${total} address(es) now say ${origin}, from ${source}`);
+  console.log(`stamp: packed ${archives.length} skill archive(s)`);
 }
 
 if (RUN_DIRECTLY) run();

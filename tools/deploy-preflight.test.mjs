@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { parseEnv, refusals } from "./deploy-preflight.mjs";
-import { TOKEN, servedDocuments, stampDist } from "./stamp-deployment.mjs";
+import { TOKEN, servedDocuments, skillArchives, stampDist } from "./stamp-deployment.mjs";
 
 const ORIGIN = "https://h.example";
 
@@ -122,6 +122,29 @@ test("an unstamped build is refused", () => {
   const out = check({}, { stamped: false });
   assert.equal(out.length, 1);
   assert.match(out[0], /still name <deployment>/);
+});
+
+test("a skill zip that differs from the SKILL.md beside it is refused on its own line", () => {
+  // Stamped, so the "still name <deployment>" refusal cannot be what fires: the
+  // zip is the only thing wrong, and the refusal has to say so (SPEC §23).
+  const f = fixture();
+  try {
+    const [first] = skillArchives();
+    writeFileSync(join(f.dist, first.path), "stale");
+    const out = refusals({
+      project: "acme-prod",
+      appEnv: GOOD_ENV,
+      functionsEnv: GOOD_FUNCTIONS_ENV,
+      dist: f.dist,
+      env: { BIKESHED_PUBLIC_ORIGIN: ORIGIN },
+      root: f.root,
+    });
+    assert.equal(out.length, 1);
+    assert.ok(out[0].includes(first.path), out[0]);
+    assert.doesNotMatch(out[0], /still name/);
+  } finally {
+    rmSync(f.base, { recursive: true, force: true });
+  }
 });
 
 test("functions told no origin are refused", () => {

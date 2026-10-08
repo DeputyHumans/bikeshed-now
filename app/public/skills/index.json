@@ -3,17 +3,20 @@
     {
       "name": "bikeshed-feedback",
       "description": "Use when reading review comments on a Bikeshed document and revising it — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document.",
-      "path": "skills/bikeshed-feedback/SKILL.md"
+      "path": "skills/bikeshed-feedback/SKILL.md",
+      "archive": "skills/bikeshed-feedback.zip"
     },
     {
       "name": "bikeshed-folders",
       "description": "Use when organising a Bikeshed workspace — listing the folder tree, creating folders, and filing documents into them. Read this before moving a document, because a folder decides who can read what is inside it.",
-      "path": "skills/bikeshed-folders/SKILL.md"
+      "path": "skills/bikeshed-folders/SKILL.md",
+      "archive": "skills/bikeshed-folders.zip"
     },
     {
       "name": "bikeshed-publishing",
       "description": "Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment, including which formats it takes (Markdown, HTML, a .zip bundle) and what renders, runs or loads in one (scripts, external images and fonts, Mermaid, math, front matter).",
-      "path": "skills/bikeshed-publishing/SKILL.md"
+      "path": "skills/bikeshed-publishing/SKILL.md",
+      "archive": "skills/bikeshed-publishing.zip"
     }
   ]
 }

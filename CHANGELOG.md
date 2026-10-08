@@ -50,6 +50,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   Access tokens list as apps, with the host they came from and when they
   were last used, and Revoke disconnects one. The landing page's "copy for
   your agent" text now asks for a connection rather than a token.
+- **Each skill is a download, for Claude's skill upload.** `/skills/<name>.zip`
+  holds `<name>/SKILL.md`, packed from the copy the deployment serves after
+  its address is filled in, and is linked from the account screen.
+  `/skills/index.json` names it as `archive`. The predeploy check refuses a
+  zip that differs by one byte from the file beside it, and the skills are
+  held to Claude's limits on names and descriptions (SPEC §23).
 
 ### Changed
 
