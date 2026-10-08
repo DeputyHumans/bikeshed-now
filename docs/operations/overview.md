@@ -107,7 +107,7 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 26 HTTP
+the content bucket only, never project-wide — and step 8 makes the 27 HTTP
 functions publicly invokable. "Publicly invokable" is not "public": each
 function authenticates its own caller. The Firestore trigger is deliberately
 left private.
@@ -386,28 +386,43 @@ gcloud iam service-accounts add-iam-policy-binding $DEPLOYER --project $P \
   --role roles/iam.workloadIdentityUser \
   --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/${SUB}:ref:refs/heads/main"
 for role in cloudfunctions.admin run.admin firebasehosting.admin firebaserules.admin \
-    datastore.indexAdmin firebasedatabase.admin secretmanager.viewer serviceusage.serviceUsageConsumer; do
-  gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/$role --condition None
+    datastore.indexAdmin firebasedatabase.admin firebasestorage.viewer secretmanager.viewer \
+    serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/${role} --condition None
 done
-gcloud iam service-accounts add-iam-policy-binding $N-compute@developer.gserviceaccount.com --project $P \
-  --role roles/iam.serviceAccountUser --member serviceAccount:$DEPLOYER
+for sa in ${N}-compute@developer.gserviceaccount.com ${P}@appspot.gserviceaccount.com; do
+  gcloud iam service-accounts add-iam-policy-binding ${sa} --project $P \
+    --role roles/iam.serviceAccountUser --member serviceAccount:$DEPLOYER
+done
+DEFAULT_BUCKET=$(gcloud storage buckets list --project $P --format='value(name)' | grep -E '(firebasestorage[.]app|appspot[.]com)$')
+gcloud storage buckets add-iam-policy-binding gs://${DEFAULT_BUCKET} \
+  --member serviceAccount:$DEPLOYER --role roles/storage.bucketViewer
 ```
 
-| Role | For |
-|---|---|
-| `cloudfunctions.admin` | Creating and updating functions |
-| `run.admin` | Granting `allUsers` invoker on a newly created function |
-| `iam.serviceAccountUser`, on the runtime account only | Deploying functions that run as it |
-| `firebasehosting.admin` | Hosting |
-| `firebaserules.admin` | Firestore and Storage rules |
-| `datastore.indexAdmin` | Firestore indexes |
-| `firebasedatabase.admin` | RTDB rules, and listing instances to decide whether to deploy them |
-| `secretmanager.viewer` | `defineSecret`: a deploy checks that the secret has a version |
-| `serviceusage.serviceUsageConsumer` | Calling those APIs on the project's quota |
+| Role | Scope | For |
+|---|---|---|
+| `cloudfunctions.admin` | project | Creating and updating functions |
+| `run.admin` | project | Granting `allUsers` invoker on a newly created function |
+| `firebasehosting.admin` | project | Hosting |
+| `firebaserules.admin` | project | Firestore and Storage rules |
+| `datastore.indexAdmin` | project | Firestore indexes. The API checks `datastore.schemas.*`, which this role holds |
+| `firebasedatabase.admin` | project | RTDB rules, and listing instances to decide whether to deploy them |
+| `firebasestorage.viewer` | project | Finding the default bucket the Storage rules belong to |
+| `secretmanager.viewer` | project | `defineSecret`: a deploy checks that the secret has a version |
+| `serviceusage.serviceUsageConsumer` | project | Calling those APIs on the project's quota |
+| `iam.serviceAccountUser` | the runtime account | Deploying functions that run as it |
+| `iam.serviceAccountUser` | the App Engine default account | firebase-tools refuses every functions deploy without `actAs` on it, even though no function runs as it |
+| `storage.bucketViewer` | the default bucket only | The Storage API reads the bucket as the caller. Without this it answers 404, and firebase-tools reports "Firebase Storage has not been set up" |
 
-IAM is invisible locally, so a missing role first appears as a
-`PERMISSION_DENIED` naming its permission in the failing step. Grant that
-role, add it to the list above, and re-run.
+The last three were each found by a failed first deploy, and only the first of
+those failures named the permission it lacked. IAM is invisible locally. A
+missing role appears as a failing step, so grant the role, add it to this
+table, and re-run with `gh run rerun <id> --failed`.
+
+The pipeline deploys Storage rules unconditionally, so a project must have
+Firebase Storage set up: a default bucket must exist. The rules deny
+everything, and the app never reads that bucket; document bytes live in the
+content bucket and go through `contentProxy`.
 
 Then the six repository secrets. They are secrets rather than variables so that
 the build log masks them, and these logs become public if the repository does.
