@@ -56,7 +56,21 @@ function codeSpans(text) {
   const spans = [];
   for (const m of text.matchAll(/```[a-z]*\n([\s\S]*?)```/g)) spans.push(m[1]);
   for (const m of text.matchAll(/`([^`\n]+)`/g)) spans.push(m[1]);
+  // The user guide is HTML, where code is an element rather than backticks.
+  // Without this, adding it below would check nothing and pass.
+  for (const m of text.matchAll(/<code\b[^>]*>([\s\S]*?)<\/code>/g)) spans.push(decodeEntities(m[1]));
   return spans;
+}
+
+/** Enough of HTML's entities for code: `&lt;id&gt;` must read as `<id>`. */
+function decodeEntities(html) {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 /**
@@ -91,6 +105,12 @@ async function documents() {
       ["docs/agents/agent-guide.md", GUIDE],
       ["skills/README.md", readFileSync(join(ROOT, "skills", "README.md"), "utf8")],
       ...skills.map((s) => [`skills/${s.name}/SKILL.md`, s.text]),
+      // The user guide a deployment opens at /docs. People read it, but its
+      // reference tables make the same claims about the surface.
+      [
+        "content/docs/bundle/index.html",
+        readFileSync(join(ROOT, "content", "docs", "bundle", "index.html"), "utf8"),
+      ],
     ],
   };
 }
