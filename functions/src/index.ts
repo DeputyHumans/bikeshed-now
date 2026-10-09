@@ -1526,16 +1526,21 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
  *   create    `anchor, replacement, note?`  anyone who may suggest, any channel
  *   revise    `annId, replacement, note?`   its author, any channel
  *   withdraw  `annId`                       its author, any channel
- *   claim     `annId`                       an approver, in the app
- *   accept    `annId`                       an approver, in the app, after applying it
+ *   claim     `annId, replacement?`         an approver, in the app
+ *   release   `annId`                       an approver, their own claim, in the app
+ *   accept    `annId, replacement?`         an approver, in the app, after applying it
  *   reject    `annId, reason?`              an approver, in the app
+ *
+ * A claim or an accept that names the replacement being applied is refused
+ * when its author has changed it since: what goes into the draft and what is
+ * recorded as accepted are then the same text.
  *
  * The only path that writes the `suggestion` field; the rules refuse every
  * client write that names it. Deciding is a person's act — an agent proposes
- * and never decides — so claim, accept and reject refuse a token. Revise and
- * withdraw change only the caller's own pending proposal and destroy nothing
- * (the earlier text is kept, and a withdrawn thread stays), so a token may do
- * either.
+ * and never decides — so claim, release, accept and reject refuse a token.
+ * Revise and withdraw change only the caller's own pending proposal and
+ * destroy nothing (the earlier text is kept, and a withdrawn thread stays), so
+ * a token may do either.
  *
  * `accept` does not apply anything. The approver's browser has already made
  * the change in their editing session and saved the draft; this records the
@@ -1554,7 +1559,7 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
   const body = (jsonBody(req) ?? {}) as Record<string, unknown>;
   const op = body.op;
   if (op !== "create" && !isDecisionOp(op)) {
-    badRequest(res, "op must be create, revise, withdraw, claim, accept or reject");
+    badRequest(res, "op must be create, revise, withdraw, claim, release, accept or reject");
     return;
   }
   const docId = typeof body.docId === "string" ? body.docId : "";
@@ -1639,7 +1644,7 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
     badRequest(res, "invalid or missing annId");
     return;
   }
-  const deciding = op === "claim" || op === "accept" || op === "reject";
+  const deciding = op === "claim" || op === "release" || op === "accept" || op === "reject";
   if (deciding && actor.channel !== "web") {
     res.status(403).json({ error: "Accepting or rejecting a suggestion is done by a person, in the app." });
     return;
@@ -1664,6 +1669,10 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
   const note = parseNote(body.note);
   if (typeof note !== "string") {
     badRequest(res, note.error);
+    return;
+  }
+  if ((op === "revise" || op === "claim" || op === "accept") && body.replacement !== undefined && typeof body.replacement !== "string") {
+    badRequest(res, "replacement must be a string");
     return;
   }
   if (op === "revise" && typeof body.replacement !== "string") {

@@ -177,6 +177,13 @@ test("one author may have twenty pending on a version, and no more", async () =>
 
 // --- Deciding --------------------------------------------------------------
 
+test("a quote of nothing but whitespace is refused", async () => {
+  const w = world();
+  const r = await create(w, w.as(SUGGESTER), { anchor: { ...ANCHOR, exact: " \n\t " } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /exact/);
+});
+
 test("no decision comes from a token, not even an approver's", async () => {
   const w = world();
   const annId = await suggested(w);
@@ -276,6 +283,43 @@ test("a claim keeps a second approver off until it lapses, so a change is applie
   const a = w.ann(annId);
   a.suggestion.claim.until = require("firebase-admin").firestore.Timestamp.fromMillis(Date.now() - 1);
   assert.equal((await w.call(w.as(OWNER), { op: "claim", annId })).status, 200);
+});
+
+test("a claim or an accept for a replacement its author has since changed is refused", async () => {
+  // The approver applies the replacement on their screen. A revision landing
+  // first meant the old text went into the draft and was recorded as accepted.
+  const w = world();
+  const annId = await suggested(w);
+  assert.equal((await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: "a fortnight" })).status, 200);
+  const stale = await w.call(w.as(APPROVER), { op: "claim", annId, replacement: "two weekends" });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.changed, true);
+  assert.equal(w.ann(annId).suggestion.claim, undefined, "nothing claimed on a mistaken reading");
+  assert.equal((await w.call(w.as(APPROVER), { op: "claim", annId, replacement: "a fortnight" })).status, 200);
+
+  // The claim lapses while the approver works, and the author revises again.
+  w.ann(annId).suggestion.claim.until = require("firebase-admin").firestore.Timestamp.fromMillis(Date.now() - 1);
+  assert.equal((await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: "three weeks" })).status, 200);
+  withDraft(w);
+  const late = await w.call(w.as(APPROVER), { op: "accept", annId, replacement: "a fortnight" });
+  assert.equal(late.status, 409, "what is in the draft is not what would be recorded");
+  assert.equal(w.ann(annId).suggestion.state, "pending");
+  assert.equal((await w.call(w.as(APPROVER), { op: "accept", annId, replacement: "three weeks" })).status, 200);
+});
+
+test("an approver lets go of their own claim when the change could not be made, and only their own", async () => {
+  const w = world();
+  const annId = await suggested(w);
+  assert.equal((await w.call(w.as(APPROVER), { op: "claim", annId })).status, 200);
+  const other = await w.call(w.as(OWNER), { op: "release", annId });
+  assert.equal(other.status, 409, "nobody lets go of somebody else's claim");
+  assert.ok(w.ann(annId).suggestion.claim);
+  assert.equal((await w.call(w.as(APPROVER), { op: "release", annId })).status, 200);
+  assert.equal(w.ann(annId).suggestion.claim, undefined);
+  // Free at once: no two-minute wait for the next approver, or for the author.
+  assert.equal((await w.call(w.as(SUGGESTER), { op: "withdraw", annId })).status, 200);
+  assert.equal((await w.call(w.as(APPROVER), { op: "release", annId })).status, 200, "harmless once decided");
+  assert.equal((await w.call(w.bearer.approver, { op: "release", annId })).status, 403, "a person's step, in the app");
 });
 
 test("claiming and accepting are refused once the version has moved on", async () => {

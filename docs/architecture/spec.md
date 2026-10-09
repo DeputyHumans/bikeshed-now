@@ -2252,7 +2252,11 @@ pending ──accept──▶ accepted
 
 A **claim** is held by the approver applying it, for two minutes, and keeps
 every other decision and the author's withdrawal off it meanwhile, so two
-approvers cannot insert the same change twice. A lapsed claim is ignored.
+approvers cannot insert the same change twice. A lapsed claim is ignored, and
+the approver lets go of theirs at once when nothing could be applied after
+all. A claim and an accept name the replacement being applied, and are
+refused if its author has changed it since: the text put into the draft and
+the text recorded as accepted are always the same.
 
 **Withdrawing closes, it does not delete.** A withdrawn suggestion keeps its
 quote, its replacement and its whole thread, and is resolved as a decided one

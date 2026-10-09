@@ -43,7 +43,7 @@ import { ViewerToolbar } from "../components/ViewerToolbar";
 import { ViewerBanners } from "../components/ViewerBanners";
 import { SelectionFab } from "../components/SelectionFab";
 import { SuggestPopover, popoverPosition, type PopoverPosition } from "../components/SuggestPopover";
-import { acceptSuggestion, claimSuggestion, rejectSuggestion, suggestEdit } from "../suggestions";
+import { acceptSuggestion, claimSuggestion, rejectSuggestion, releaseSuggestion, suggestEdit } from "../suggestions";
 import { ReviewBar } from "../components/ReviewBar";
 import {
   acceptInSession,
@@ -674,7 +674,8 @@ export function DocViewer() {
       try {
         const outcome = await acceptInSession({
           check: () => (frame.doc ? resolveSuggestion(frame.doc, a.anchor, a.suggestion!.replacement).state : "stale"),
-          claim: () => claimSuggestion(suggestionWhere(a.annId)),
+          claim: () => claimSuggestion({ ...suggestionWhere(a.annId), replacement: a.suggestion!.replacement }),
+          release: () => releaseSuggestion(suggestionWhere(a.annId)),
           apply: () => (frame.doc ? applySuggestion(frame.doc, a.anchor, a.suggestion!.replacement) : "failed"),
           flush: () => editor.flushNow(),
           saveFailed: () => editor.saveFailed(),
@@ -683,7 +684,7 @@ export function DocViewer() {
             // from pending can arrive before the response, and end the pass
             // first. By now the change is in the saved draft either way.
             acceptedInPass.current = true;
-            return acceptSuggestion(suggestionWhere(a.annId));
+            return acceptSuggestion({ ...suggestionWhere(a.annId), replacement: a.suggestion!.replacement });
           },
         });
         if (outcome === "stale") {

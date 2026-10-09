@@ -104,6 +104,8 @@ export function parseAnchor(raw: unknown): SuggestionAnchor | { error: string } 
     return v;
   };
   const exact = str("exact", SUGGESTION_LIMITS.exact, true);
+  // Nothing a browser could find, or a reader see, so nothing anyone could apply.
+  if (typeof exact === "string" && exact.trim() === "") return { error: "anchor.exact is only whitespace" };
   const prefix = str("prefix", SUGGESTION_LIMITS.context);
   const suffix = str("suffix", SUGGESTION_LIMITS.context);
   const elementId = str("elementId", SUGGESTION_LIMITS.context);
@@ -237,6 +239,18 @@ interface StoredSuggestion {
   };
 }
 
+/** A refusal when the approver is applying a replacement the author has since changed. */
+function changedSince(s: StoredSuggestion, applying: string | undefined): Refusal | null {
+  const now = String(s.suggestion?.replacement ?? "");
+  if (applying === undefined || applying === now) return null;
+  return {
+    status: 409,
+    error: "Its author has changed it since you opened it. Look at it again before you decide.",
+    changed: true,
+    replacement: now,
+  };
+}
+
 /** The live claim on a suggestion, unless it is the caller's own or has lapsed. */
 function claimedByOther(s: StoredSuggestion, uid: string, nowMs: number): string | null {
   const claim = s.suggestion?.claim;
@@ -245,7 +259,7 @@ function claimedByOther(s: StoredSuggestion, uid: string, nowMs: number): string
   return until > nowMs ? String(claim.email ?? "someone else") : null;
 }
 
-export const DECISION_OPS = ["revise", "withdraw", "claim", "accept", "reject"] as const;
+export const DECISION_OPS = ["revise", "withdraw", "claim", "release", "accept", "reject"] as const;
 
 export type DecisionOp = (typeof DECISION_OPS)[number];
 
@@ -260,8 +274,14 @@ export function isDecisionOp(v: unknown): v is DecisionOp {
  *   revise    author, pending, unclaimed      → new replacement and note; the old kept
  *   withdraw  author, pending, unclaimed      → withdrawn
  *   claim     approver, pending               → others are kept off for a while
+ *   release   approver, their own claim       → the others let back on at once
  *   accept    approver, pending, not claimed by someone else → accepted
  *   reject    approver, pending, not claimed by someone else → rejected
+ *
+ * `replacement` is the new text for a revise. For a claim or an accept it is
+ * what the approver is applying, when they say: either is refused if the
+ * author has changed it since, so the text put into the draft and the text
+ * recorded as accepted cannot differ.
  *
  * Withdraw, accept and reject each close the thread for good and are
  * idempotent for their own outcome, so a retry after a dropped response
@@ -303,7 +323,9 @@ export async function changeSuggestion(args: {
     if (
       (op === "accept" && state === "accepted") ||
       (op === "reject" && state === "rejected") ||
-      (op === "withdraw" && state === "withdrawn")
+      (op === "withdraw" && state === "withdrawn") ||
+      // Nothing to let go of once it is decided: a release is never a conflict.
+      (op === "release" && state !== "pending")
     ) {
       return { state };
     }
@@ -378,6 +400,8 @@ export async function changeSuggestion(args: {
         return { state: "withdrawn" as SuggestionState };
       }
       case "claim": {
+        const changed = changedSince(s, args.replacement);
+        if (changed) return changed;
         tx.update(annRef, {
           "suggestion.claim": {
             uid: caller.uid,
@@ -387,8 +411,17 @@ export async function changeSuggestion(args: {
         });
         return { state: "pending" };
       }
+      case "release": {
+        // `claimedByOther` above has refused anybody else's live claim.
+        if (s.suggestion.claim) tx.update(annRef, { "suggestion.claim": FieldValue.delete() });
+        return { state: "pending" };
+      }
       case "accept":
       case "reject": {
+        if (op === "accept") {
+          const changed = changedSince(s, args.replacement);
+          if (changed) return changed;
+        }
         const next: SuggestionState = op === "accept" ? "accepted" : "rejected";
         tx.update(annRef, {
           "suggestion.state": next,

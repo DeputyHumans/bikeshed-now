@@ -31,6 +31,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   "is applying it…" notice also stayed after the claim had lapsed. They are now
   disabled for exactly as long as the claim holds (SPEC §22).
 
+- **What an approver applies is what is recorded as accepted.** Claim and
+  accept named only the suggestion. If its author revised it after the
+  approver's screen showed it, the old text went into the draft and the new one
+  was recorded as accepted. Both now name the replacement being applied, and
+  are refused if it has changed. An approver also lets go of a claim at once
+  when nothing could be applied, rather than keeping everyone off it for two
+  minutes, and a quote of nothing but whitespace is refused (SPEC §22).
+
 ## 0.10.0 — 2026-10-08
 
 ### Added

@@ -212,6 +212,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     const outcome = await acceptInSession({
       check: () => "pending",
       claim: async () => void order.push("claim"),
+      release: async () => {},
       apply: () => (order.push("apply"), applySuggestion(a.doc, ANCHOR, "two weekends")),
       flush: async () => {
         order.push("save");
@@ -233,6 +234,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     const outcome = await acceptInSession({
       check: () => "pending",
       claim: async () => void order.push("claim"),
+      release: async () => {},
       apply: () => "applied",
       flush: async () => void order.push("save"),
       saveFailed: () => true,
@@ -248,13 +250,16 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
       const outcome = await acceptInSession({
         check: () => "pending",
         claim: async () => void order.push("claim"),
+        release: async () => void order.push("release"),
         apply: () => result,
         flush: async () => void order.push("save"),
         saveFailed: () => false,
         record: async () => void order.push("record"),
       });
       expect(outcome).toBe(result);
-      expect(order).toEqual(["claim"]);
+      // Its claim let go at once: two minutes of other approvers, and the
+      // author, kept off a suggestion nobody is applying.
+      expect(order).toEqual(["claim", "release"]);
     }
   });
 
@@ -265,6 +270,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     const outcome = await acceptInSession({
       check: () => "pending",
       claim: async () => void order.push("claim"),
+      release: async () => {},
       apply: () => (order.push("apply"), "applied"),
       flush: async () => void order.push("save"),
       saveFailed: () => false,
@@ -284,6 +290,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     const outcome = await acceptInSession({
       check: () => "stale",
       claim: async () => void order.push("claim"),
+      release: async () => {},
       apply: () => (order.push("apply"), "applied"),
       flush: async () => void order.push("save"),
       saveFailed: () => false,
@@ -300,6 +307,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     const outcome = await acceptInSession({
       check: () => resolveSuggestion(a.doc, ANCHOR, "two weekends").state,
       claim: async () => {},
+      release: async () => {},
       apply: () => applySuggestion(a.doc, ANCHOR, "two weekends"),
       flush: async () => {},
       saveFailed: () => false,
@@ -318,6 +326,7 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
         claim: async () => {
           throw new Error("appr@example.com is applying it right now");
         },
+        release: async () => {},
         apply: () => (order.push("apply"), "applied"),
         flush: async () => void order.push("save"),
         saveFailed: () => false,

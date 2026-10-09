@@ -38,13 +38,24 @@ export function withdrawSuggestion(where: Where & { annId: string }): Changed {
   return post("/suggestion", { op: "withdraw", ...where }, { forbidden: AUTHOR });
 }
 
-/** Keep other approvers off it while this browser applies it. */
-export function claimSuggestion(where: Where & { annId: string }): Changed {
+/**
+ * Keep other approvers off it while this browser applies it. `replacement` is
+ * the text being applied: refused if its author has changed it since.
+ */
+export function claimSuggestion(where: Where & { annId: string; replacement: string }): Changed {
   return post("/suggestion", { op: "claim", ...where }, { forbidden: DECIDERS });
 }
 
-/** Record an acceptance whose edit this browser has already made and saved. */
-export function acceptSuggestion(where: Where & { annId: string }): Changed {
+/** Let go of this browser's claim when nothing could be applied after all. */
+export function releaseSuggestion(where: Where & { annId: string }): Changed {
+  return post("/suggestion", { op: "release", ...where }, { forbidden: DECIDERS });
+}
+
+/**
+ * Record an acceptance whose edit this browser has already made and saved,
+ * of exactly `replacement`: refused if its author has changed it since.
+ */
+export function acceptSuggestion(where: Where & { annId: string; replacement: string }): Changed {
   return post("/suggestion", { op: "accept", ...where }, { forbidden: DECIDERS });
 }
 

@@ -152,7 +152,8 @@ export type AcceptOutcome = ApplyResult | "unsaved" | "unrecorded";
  * Accept one suggestion, in the only order that survives every interruption:
  *
  *   0. check   that there is something to apply, before keeping anyone off it;
- *   1. claim   other approvers are kept off it, so it is applied once;
+ *   1. claim   other approvers are kept off it, so it is applied once — and
+ *              let go of at once if, after all, nothing could be applied;
  *   2. apply   the edit, in this session, reaching every peer;
  *   3. save    the draft, durably, before anything says it happened;
  *   4. record  the decision.
@@ -165,6 +166,7 @@ export type AcceptOutcome = ApplyResult | "unsaved" | "unrecorded";
 export async function acceptInSession(steps: {
   check: () => Resolution["state"];
   claim: () => Promise<unknown>;
+  release: () => Promise<unknown>;
   apply: () => ApplyResult;
   flush: () => Promise<unknown>;
   saveFailed: () => boolean;
@@ -173,7 +175,11 @@ export async function acceptInSession(steps: {
   if (steps.check() === "stale") return "stale";
   await steps.claim();
   const applied = steps.apply();
-  if (applied === "stale" || applied === "failed" || applied === "unverified") return applied;
+  if (applied === "stale" || applied === "failed" || applied === "unverified") {
+    // Best effort: a claim that is not let go of lapses on its own.
+    await steps.release().catch(() => {});
+    return applied;
+  }
   await steps.flush();
   if (steps.saveFailed()) return "unsaved";
   try {
