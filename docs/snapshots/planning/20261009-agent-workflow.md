@@ -628,7 +628,7 @@ first, they move with it.
 
 | Stage | Contents | Release |
 |---|---|---|
-| 0a. Docs true today | The fifteen corrections below; `open` and `mv` take links (D5); the consent page says what a connected agent can do since 0.11; tests holding the developer guide's tool table and command reference, and SPEC §19's table, to every tool and command; `--help` held to the CLI's command table | 0.11.2, and CLI 0.14.1 |
+| 0a. Docs true today | The fifteen corrections below; `open` and `mv` take links (D5); the consent page says what a connected agent can do since 0.11; tests holding the developer guide's tool table and command reference, and SPEC §19's table, to every tool and command; `--help` held to the CLI's command table; SPEC §2 and §8 held to the endpoint table and the source tree | 0.11.2, and CLI 0.14.1 |
 | 0b. Rules | D4 | 0.11.3 |
 | 1. Guidance true today | §1 with what exists (the Stage 1 filing rule); §2; §3; §4.8 on `get_comments` with its mitigations and the deciding rules; §6 | 0.11.4: `llms.txt` and `skills/index.json` deploy |
 | 2. Filing and safety | `get_folder`; `readers`, `shared`, `folder` and `access` fields; `url` on `get_document`; `requestedId` and `idTaken`; `baseVersion`; `threadsLeftBehind`; D3; `INSTRUCTIONS`; SPEC; guidance deltas | 0.12.0: tool schemas are breaking, per `CHANGELOG.md` |
@@ -650,7 +650,7 @@ table is unguarded, so the stage's own review is the guard.
 
 | Stage | Documents updated in the same commits |
 |---|---|
-| 0a | The consent page (`app/src/pages/Connect.tsx`, SPEC §23's "§19's list"); developer guide command reference (`revise`, `withdraw`); `verification.md` (no `bikeshed whoami`); SPEC §2 table (`/suggestion`, the OAuth rewrites), §8 file list, §12 checks, §19 `get_comments` shape and cap, §19 `resolveFolderTarget` callers; ADR counts in `docs/README.md` and `overview.md`; `README.md`'s last-tag line; `docs/operations/overview.md` (function count, teardown list, what `content/` holds); `CONTRIBUTING.md` (walkthrough length, dependency count); ADR 0009's tool log; `suggest-edit.test.js`'s header |
+| 0a | The consent page (`app/src/pages/Connect.tsx`, SPEC §23's "§19's list"); developer guide command reference (`revise`, `withdraw`); `verification.md` (no `bikeshed whoami`); SPEC §2 table (`/suggestion`, the OAuth rewrites), §8 file list, §12 checks, §19 `get_comments` shape and cap, §19 `resolveFolderTarget` callers; ADR counts in `docs/README.md` and `overview.md`; `README.md`'s last-tag line; `docs/operations/overview.md` (function count, teardown list); `overview.md`'s repository map (what `content/` holds); `CONTRIBUTING.md` (walkthrough length, dependency count); ADR 0009's tool log; `suggest-edit.test.js`'s header |
 | 0b | Rules template comments; SPEC §4 (annotation and comment fields), §6, §17 (provenance); `threat-model.md` (forged provenance); `CONTRIBUTING.md` (rules); CHANGELOG |
 | 1 | Agent guide and `llms.txt`; the three skills and `skills/README.md` (`index.json` regenerates); **both guide bundles** (developer #loop and #tools; user #start, #share and "Agents can"); `cli/README.md`; the landing page's copy-for-agent text if it covers the loop |
 | 2 | Everything Stage 1 touched, for the new fields and `get_folder`; `INSTRUCTIONS` (measured against its budget); tool descriptions in `tools.ts`; SPEC §4 (taken ids), §13, §19 (table, `k` list, what a read returns); `threat-model.md` (`idTaken`); the consent page; `verification.md`; CHANGELOG |

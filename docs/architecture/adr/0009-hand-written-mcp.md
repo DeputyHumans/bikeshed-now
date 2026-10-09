@@ -58,6 +58,14 @@ moved.
 **2026-10-05** — eleven, with `fork_document` and `get_lineage` (SPEC §21). Two
 more `required` fields; nothing above moved.
 
+**2026-10-06** — twelve, with `suggest_edit` (SPEC §22).
+
+**2026-10-08** — thirteen with `add_comment`, fifteen with `revise_suggestion`
+and `withdraw_suggestion`, and twenty-one with the decisions ADR 0015 lets an
+agent make (`accept_suggestion`, `reject_suggestion`, `resolve_thread`,
+`reopen_thread`, `commit_draft`) and `rename_document`. Still one `required`
+check per tool; streaming, sessions and the `zod` peer have not moved.
+
 ## What would change this
 
 Two things, either one sufficient. If the SDK drops the `zod` peer or ships a

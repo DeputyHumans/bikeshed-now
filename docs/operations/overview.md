@@ -107,7 +107,7 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 27 HTTP
+the content bucket only, never project-wide — and step 8 makes the 29 HTTP
 functions publicly invokable. "Publicly invokable" is not "public": each
 function authenticates its own caller. The Firestore trigger is deliberately
 left private.
@@ -560,8 +560,8 @@ node scripts/teardown.mjs --yes --account you@example.com --project <id> --dry-r
 node scripts/teardown.mjs --yes --account you@example.com --project <id> --functions
 ```
 
-Deletes `docs/**`, `folders/**`, `teams/**`, `tokens/**`, `public/**` and
-`users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths;
+Deletes `docs/**`, `forks/**`, `folders/**`, `teams/**`, `tokens/**`,
+`public/**` and `users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths;
 optionally the deployed functions. **Never deletes the project.**
 
 The function list comes from `scripts/lib/endpoints.mjs`, the same table

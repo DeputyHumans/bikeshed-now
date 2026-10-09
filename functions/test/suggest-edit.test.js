@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// An agent proposes and never decides; what it proposes lands where a person will find it (SPEC §19, §22).
+// What an agent proposes lands where a person will find it, and it decides only with its owner's role (SPEC §19, §22).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");

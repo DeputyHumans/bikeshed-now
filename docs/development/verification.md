@@ -347,7 +347,7 @@ request's own origin (SPEC §23).
    again.
 5. `bikeshed login --origin http://127.0.0.1:5050` prints the address,
    opens the browser, and shows the "program on this computer" warning.
-   **Approve**. The terminal says it is signed in, and `bikeshed whoami` works.
+   **Approve**. The terminal says it is signed in, and `bikeshed list` works.
 6. Download a skill from the account screen. `unzip -l` lists
    `<name>/SKILL.md` and nothing else.
 

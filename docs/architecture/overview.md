@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — fourteen records of about thirty lines each.
+[`adr/`](adr/) — fifteen records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -99,7 +99,7 @@ functions/       Cloud Functions v2 (CommonJS) — every server-side decision
 scripts/         operator CLIs (ESM) — provision, publish, withdraw, tear down
 cli/             the end-user `bikeshed` CLI — PAT auth, HTTPS only
 app/             React 18 + Vite 5 + TypeScript strict
-content/         sample document bundles
+content/         the guides at /docs and /docs/developers, and sample bundles
 rules-tests/     the rules suite, against the emulator
 ```
 

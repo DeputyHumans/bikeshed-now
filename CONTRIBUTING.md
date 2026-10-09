@@ -30,7 +30,7 @@ The app connects to the emulators when `VITE_USE_EMULATORS=1` is set — copy
 
 A change is done when every row passes **with output shown**. `npm run verify`
 runs every row except 5, which needs the emulators — use
-`npm run test:rules:emulated`, which starts them.
+`npm run test:rules:emulated`, which starts them — and 6, which you run by hand.
 
 | # | Command | Pass condition |
 |---|---|---|
@@ -46,6 +46,7 @@ runs every row except 5, which needs the emulators — use
 | 10 | `npm run check:licenses` | exit 0 — every dependency permissive |
 | 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agents/agent-guide.md` |
 | 12 | `npm run test:tools` | 0 failing — the served instructions carry the deployment's own address, and no `<deployment>` survives |
+| 13 | `npm --prefix cli test` | 0 failing |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug
@@ -53,7 +54,7 @@ worth reporting on its own.
 
 The table above proves the code is self-consistent. It does not prove the
 product works — the properties that matter most here are integration ones. For
-those, walk `docs/development/verification.md` against the emulators. It is ten
+those, walk `docs/development/verification.md` against the emulators. It is fifteen
 observations, it needs no cloud account, and it is where four real defects were
 found that no unit test could have caught.
 
@@ -81,7 +82,7 @@ These are the ones that actually get enforced in review.
    subsystem, three declined.
 6. **Failure of a non-essential subsystem never fails the request.** Presence,
    email and stats are try/catch-and-continue. Access control never is.
-7. **Dependencies have a budget**: 7 runtime deps in `app/` and 10 in
+7. **Dependencies have a budget**: 8 runtime deps in `app/`, which is at 8, and 10 in
    `functions/`, plus the four lazily imported inside the email path only.
    `functions/` currently sits at nine, one under. Anything beyond the budget
    needs a written justification in the pull request, not a line in

@@ -175,7 +175,7 @@ in the title, the wordmark and the package names.
 
 ## Status
 
-`v0.1.0` is the last tag; `main` carries the unreleased work listed in
+Each release is tagged `vX.Y.Z` (the CLI `cli-vX.Y.Z`) and listed in
 [`CHANGELOG.md`](CHANGELOG.md). Working, tested and deployable. The rough edges
 are honest ones:
 
