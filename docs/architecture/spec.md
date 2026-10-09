@@ -2228,7 +2228,8 @@ behind the shape, and what would reverse it, is ADR 0013.
 | an agent | its person's | its person's | its person's | never |
 
 Roles are granted and inherited as in §13. The author of a pending suggestion
-may change or withdraw it, in the app or through an agent acting for them.
+may change or withdraw it, in the app or through an agent acting for them;
+changing it needs the right to suggest still, withdrawing it does not.
 
 ### What a suggestion is
 

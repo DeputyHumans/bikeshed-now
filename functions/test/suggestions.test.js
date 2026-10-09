@@ -364,6 +364,24 @@ test("its author may change a pending suggestion, and the generated opener follo
   assert.equal((await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: "a\nb" })).status, 400);
 });
 
+test("an author who may no longer suggest can take a suggestion back, not rewrite it", async () => {
+  // Revise needed only read access and authorship, so a suggester demoted to
+  // viewer could still change the text an approver is about to apply.
+  const w = world();
+  const annId = await suggested(w);
+  const doc = w.store.get("docs/d1");
+  w.store.set("docs/d1", {
+    ...doc,
+    suggesters: [],
+    viewers: [...doc.viewers, SUGGESTER.email],
+    suggesterMembers: doc.suggesterMembers.filter((e) => e !== SUGGESTER.email),
+  });
+  const r = await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: "a fortnight" });
+  assert.equal(r.status, 403);
+  assert.equal(w.ann(annId).suggestion.replacement, "two weekends");
+  assert.equal((await w.call(w.as(SUGGESTER), { op: "withdraw", annId })).status, 200);
+});
+
 test("a note the author wrote stays theirs until they send a new one", async () => {
   const w = world();
   const r = await create(w, w.as(SUGGESTER), { note: "Dual-write." });

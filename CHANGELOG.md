@@ -47,6 +47,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   version current, and a suggestion is written in one that reads the current
   version (SPEC §6a, §22).
 
+- **Only someone who may still suggest can change a suggestion.** Revising
+  needed only authorship, so a suggester demoted to viewer could still rewrite
+  the text an approver was about to apply, in the app or through an agent.
+  Revising now needs the right to suggest; withdrawing does not (SPEC §22).
+
 ## 0.10.0 — 2026-10-08
 
 ### Added

@@ -1707,6 +1707,7 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
     op,
     caller: author,
     actor,
+    maySuggest: canSuggest(data, caller, proof),
     replacement: typeof body.replacement === "string" ? body.replacement : undefined,
     note,
     reason: typeof body.reason === "string" ? body.reason : undefined,

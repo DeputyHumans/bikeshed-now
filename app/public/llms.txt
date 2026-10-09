@@ -322,7 +322,8 @@ before, oldest first.
 `revise_suggestion` (`bikeshed revise <id> <thread> --with …`) replaces its
 text, and `withdraw_suggestion` (`bikeshed withdraw <id> <thread>`) takes it
 back. Neither erases anything: what it said before stays in `revisions`, and a
-withdrawn suggestion keeps its thread.
+withdrawn suggestion keeps its thread. Changing one needs the right to suggest
+there still; if it has been taken away, you can only withdraw it.
 
 **A pending suggestion holds back every new version,** yours included:
 `update_document` is refused until somebody who can approve has decided each

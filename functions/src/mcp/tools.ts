@@ -229,7 +229,7 @@ async function changeOwnSuggestion(
   op: Extract<DecisionOp, "revise" | "withdraw">,
   change: { replacement?: string; note?: string },
 ) {
-  const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+  const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
   refuseIfExpired(data);
   const threadId = str(args, "threadId");
   if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
@@ -242,6 +242,7 @@ async function changeOwnSuggestion(
     op,
     caller: { uid: ctx.caller.uid, emailLower: ctx.caller.emailLower },
     actor: ctx.actor,
+    maySuggest: canSuggest(data, ctx.caller, proof),
     ...change,
   });
   if ("status" in changed) throw new Error(changed.error);

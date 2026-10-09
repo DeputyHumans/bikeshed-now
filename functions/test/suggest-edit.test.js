@@ -186,6 +186,7 @@ test("get_comments shows what a suggestion said before it was changed, by channe
     op: "revise",
     caller: { uid: SUGGESTER.uid, emailLower: SUGGESTER.emailLower },
     actor: w.ctx(SUGGESTER).actor,
+    maySuggest: true,
     replacement: "should do",
   });
   assert.deepEqual(changed, { state: "pending" });
@@ -237,6 +238,27 @@ test("get_comments reads an earlier version's threads when asked, and only a ver
     tool("get_comments").run(w.ctx({ uid: "u-x", emailLower: "x@example.com" }), { id: "d1", version: "v1" }),
     /no document with id "d1"/,
   );
+});
+
+test("an agent whose person may no longer suggest can take a suggestion back, not rewrite it", async () => {
+  const w = world();
+  const { threadId } = await withBucket(() =>
+    tool("suggest_edit").run(w.ctx(SUGGESTER), { id: "d1", exact: "is enough", replacement: "will do" }),
+  );
+  const doc = w.store.get("docs/d1");
+  w.store.set("docs/d1", {
+    ...doc,
+    suggesters: [],
+    viewers: [...doc.viewers, SUGGESTER.emailLower],
+    suggesterMembers: doc.suggesterMembers.filter((e) => e !== SUGGESTER.emailLower),
+  });
+  await assert.rejects(
+    tool("revise_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId, replacement: "x" }),
+    /no longer suggest/,
+  );
+  assert.equal(w.anns()[0].suggestion.replacement, "will do");
+  const withdrawn = await tool("withdraw_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId });
+  assert.equal(withdrawn.state, "withdrawn");
 });
 
 test("a suggester's agent changes its suggestion, then takes it back, and the record keeps both", async () => {

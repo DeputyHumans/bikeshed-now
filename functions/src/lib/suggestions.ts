@@ -311,6 +311,13 @@ export async function changeSuggestion(args: {
   op: DecisionOp;
   caller: Author;
   actor: Actor;
+  /**
+   * Whether the caller may suggest on this document NOW. Required of every
+   * caller, because a revise rewrites what an approver is about to apply and
+   * authorship alone does not say they still may; a withdraw only removes, so
+   * it does not ask.
+   */
+  maySuggest: boolean;
   replacement?: string;
   note?: string;
   reason?: string;
@@ -351,6 +358,9 @@ export async function changeSuggestion(args: {
       case "revise": {
         if (s.authorUid !== caller.uid) {
           return { status: 403, error: "only the person who suggested it can change it" };
+        }
+        if (!args.maySuggest) {
+          return { status: 403, error: "you may no longer suggest edits here, so you can withdraw this suggestion but not change it" };
         }
         const replacement = args.replacement ?? "";
         const problem = replacementProblem(replacement, String(s.anchor?.exact ?? ""));
