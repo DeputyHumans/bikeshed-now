@@ -278,3 +278,53 @@ describe("the golden quote cases, shared with the server", () => {
     });
   }
 });
+
+describe("the golden apply cases, shared with the server", () => {
+  /**
+   * An agent's accept makes the change in the source without a DOM
+   * (functions/src/lib/apply.ts). Where it does, the browser must place the
+   * quote in the same spot, and afterwards see the change as made, so nobody
+   * in the app is offered it again. Where it refuses a quote as stale, the
+   * browser must not find it either. The server is narrower than this on
+   * purpose: one side of context, or a span across formatting, is the
+   * browser's to apply.
+   */
+  const file = join(__dirname, "..", "..", "..", "functions", "test", "fixtures", "apply-vectors.json");
+  const { cases } = JSON.parse(readFileSync(file, "utf8")) as {
+    cases: {
+      name: string;
+      html: string;
+      anchor: { exact: string; prefix: string; suffix: string };
+      replacement: string;
+      expect: { html?: string; already?: boolean; refused?: string; browser?: string };
+    }[];
+  };
+  const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
+  const at = (c: (typeof cases)[number]): Anchor => ({ elementId: "", ...c.anchor, start: 0, end: 0 });
+
+  it("has cases to agree on", () => {
+    expect(cases.length).toBeGreaterThanOrEqual(12);
+  });
+
+  for (const c of cases) {
+    it(c.name, () => {
+      const before = resolveSuggestion(parse(c.html), at(c), c.replacement);
+      if (c.expect.html) {
+        expect(before.state).toBe("pending");
+        if (before.state === "pending") expect(before.range.toString().replace(/\s+/g, " ").trim()).toBe(c.anchor.exact);
+        const after = resolveSuggestion(parse(c.expect.html), at(c), c.replacement).state;
+        // A deletion is recognised by both sides of its context meeting; with
+        // one side empty, nothing marks the spot, as for a person's own accept.
+        if (c.anchor.prefix.trim() && c.anchor.suffix.trim()) expect(after).toBe("applied");
+        else expect(after).not.toBe("pending");
+      } else if (c.expect.already) {
+        expect(before.state).toBe("applied");
+      } else if (c.expect.refused === "stale") {
+        // Gone for both, unless the case says where the browser reads more text than a reader does.
+        expect(before.state).toBe(c.expect.browser ?? "stale");
+      } else {
+        expect(before.state).toBe("pending");
+      }
+    });
+  }
+});

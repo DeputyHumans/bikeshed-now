@@ -139,11 +139,12 @@ test("both version-minting endpoints ask about pending suggestions, in the right
   assert.ok(dedup >= 0 && gate > dedup, "the gate must come after the dedup, so a retry stays a no-op");
   assert.ok(upload > gate, "the gate must come before the upload, so a refusal leaves no bytes");
 
-  const commit = between(src("index.ts"), "export const commitVersion = onRequest(", "\nexport const ");
+  // The in-app commit and commit_draft both publish through commitDraft.
+  const commit = between(src("lib", "draft.ts"), "export async function commitDraft(", "\nexport ");
   const asks = commit.indexOf("openThreadsRefusal(docRef, baseVersion)");
   const writes = commit.indexOf("runTransaction(");
   assert.ok(asks >= 0 && writes > asks, "the in-app commit must ask before its transaction");
-  const helper = between(src("index.ts"), "async function openThreadsRefusal(", "\n}\n");
+  const helper = between(src("lib", "draft.ts"), "export async function openThreadsRefusal(", "\n}\n");
   assert.ok(helper.includes("pendingSuggestions(docRef, baseVersion)"), "and say whether a suggestion is what holds it");
 });
 
@@ -214,9 +215,10 @@ test("an update that another publish overtook is refused, not stacked on the old
 test("the in-app commit asks again inside the transaction that makes the version current", () => {
   // Its count runs before the upload; a thread opened during the upload would
   // otherwise be left on a version nobody reads any more.
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
-  const start = src.indexOf("export const commitVersion = onRequest(");
-  const commit = src.slice(start, src.indexOf("\nexport const ", start + 1));
+  const src = readFileSync(join(__dirname, "..", "src", "lib", "draft.ts"), "utf8");
+  const start = src.indexOf("export async function commitDraft(");
+  assert.ok(start >= 0, "commitDraft not found");
+  const commit = src.slice(start, src.indexOf("\nexport ", start + 1));
   const tx = commit.slice(commit.indexOf("runTransaction("));
   const asks = tx.indexOf("anyOpenThread(tx,");
   const moves = tx.indexOf("currentVersion: versionId");

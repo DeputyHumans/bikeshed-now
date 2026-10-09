@@ -62,9 +62,11 @@ export const INSTRUCTIONS =
   "new document is readable by its owner and by the members of any folder it is " +
   "filed in, until a person shares it; nothing here shares, deletes or sets an " +
   "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +
-  "Where you may suggest but not edit, propose a change with suggest_edit; a " +
-  "person accepts or rejects it, and until then revise_suggestion and " +
-  "withdraw_suggestion change or take back your own.";
+  "Where you may suggest but not edit, propose a change with suggest_edit; " +
+  "until it is decided, revise_suggestion and withdraw_suggestion change or " +
+  "take back your own. For an owner or approver, accept_suggestion makes " +
+  "one's change in the draft, reject_suggestion declines it, and " +
+  "commit_draft publishes the draft.";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

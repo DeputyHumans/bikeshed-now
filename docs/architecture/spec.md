@@ -688,7 +688,8 @@ The one path that writes content, and it is explicit and server-mediated.
   frame cannot carry one. An editor who opens an older version reads that
   version; the draft is built on the head (`readsDraft`).
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
-  `POST /commit`, allowed only when every comment on the current version is
+  `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
+  `lib/draft.ts`), allowed only when every comment on the current version is
   resolved. Annotations are version-scoped, so the new version starts
   comment-free and the old version keeps its comments.
 - **No version is minted while a suggestion on the current one is pending**,
@@ -1866,7 +1867,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — nineteen tools
+### MCP — twenty-one tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1878,9 +1879,11 @@ scripts and anything that cannot open a browser.
 | `fork_document` | copy a version of a document the caller can read into one they own (§21) |
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
 | `update_document` | commit a new version of an existing document |
+| `commit_draft` | publish the draft as the next version, through the in-app commit's own gates (§6a) |
 | `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
 | `revise_suggestion` | change the caller's own pending suggestion; what it said before is kept (§22) |
 | `withdraw_suggestion` | take back the caller's own pending suggestion; its thread stays, closed (§22) |
+| `accept_suggestion` | accept a pending suggestion, for the owner or an approver: its change is made in the draft (§22) |
 | `reject_suggestion` | decline a pending suggestion, for the owner or an approver, with a reason (§22) |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
@@ -1955,12 +1958,17 @@ or suffix to choose between repeats. It refuses a passage that is not there,
 that repeats with nothing to tell the copies apart, or that spans a block or a
 line break, each with what to do instead. The anchor it stores is the one the
 browser's strict resolver will find; a fixture of golden cases is asserted by
-both (§22). An agent whose person is the owner or an approver declines a
-suggestion with `reject_suggestion`: `changeSuggestion` exactly as the app's
-Reject, on the current version, with the reason in the generated note and the
-caller's actor in `decidedBy`. The role is checked in the tool, because a token
-never reaches the endpoint's check: `claim`, `accept` and `reject` on
-`/suggestion` refuse a token. Accepting has no tool. `functions/test/suggest-edit.test.js`
+both (§22). An agent whose person is the owner or an approver decides a
+suggestion on the current version. `reject_suggestion` is `changeSuggestion`
+exactly as the app's Reject, with the reason in the generated note and the
+caller's actor in `decidedBy`. `accept_suggestion` takes the app's four steps
+— claim, make the change in the draft, save it, record — with the change made
+in the source by `lib/apply.ts` rather than typed into a page (§22), and
+mints no version: `commit_draft` publishes the draft through `commitDraft`, the
+in-app commit's own code, gates and all. Both write to the draft only while
+nobody has the document open in the editor (§6b). The role is checked in the
+tool, because a token never reaches the endpoint's check: `claim`, `accept` and
+`reject` on `/suggestion` refuse a token. `functions/test/suggest-edit.test.js`
 pins the tools whose names close anything to exactly the ones this section
 lists, so a new one cannot arrive unexamined. What an
 agent proposed it may change (`revise_suggestion`) or take back
@@ -2013,8 +2021,8 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <sl
 `lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
 `resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text>
-| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `reject <slug> <thread>
-[--reason <text>]`, `open <slug>`,
+| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `accept <slug> <thread>`, `reject <slug> <thread>
+[--reason <text>]`, `commit <slug>`, `open <slug>`,
 `folders`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
 Every command takes `--json`. `--version` on its own prints the CLI's version,
@@ -2085,8 +2093,7 @@ believes it.
 
 Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
 endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
-deletion, folder renaming or sharing through the agent surface · accepting a
-suggested edit from an agent.
+deletion, folder renaming or sharing through the agent surface.
 
 ---
 
@@ -2268,7 +2275,7 @@ behind the shape, and what would reverse it, is ADR 0013.
 | approver | ✓ | ✓ | ✓ | ✓ |
 | owner | ✓ | ✓ | ✓ | ✓ |
 | open editor (§17) | ✓ | ✓ | ✓ | |
-| an agent | its person's | its person's | its person's | its person's: reject only (§19) |
+| an agent | its person's | its person's | its person's | its person's (§19) |
 
 Roles are granted and inherited as in §13. The author of a pending suggestion
 may change or withdraw it, in the app or through an agent acting for them;
@@ -2314,6 +2321,25 @@ records the decision. So it reaches every co-editor through the shared state
 (§16) like a keystroke, and lands in the draft; publishing it is still "Save as
 new version". A quote that no longer matches exactly is **stale**: shown as
 such, and only rejectable.
+
+**An agent's accept is the same edit, made in the source** (ADR 0015). With no
+page to type into, `lib/apply.ts` finds the quote in the working copy — the
+draft of the current version, else the version — by the browser's own rule,
+but only where BOTH sides of its context agree; replaces exactly the source
+bytes of that text, and only if they hold no markup, escaping the replacement
+as HTML or, for Markdown, as inline Markdown where that is what renders right;
+then reads the result back and keeps it only if its text is the old text with
+that one span replaced, as the browser checks after typing. A deletion takes
+the space it would leave doubled, by the browser's rule. A Markdown quote is
+looked for written out in the source, wrapped lines allowed, and the change is
+kept only if exactly one place renders as asked. Everything else is refused
+with what to do instead, never applied nearby, and a shared fixture
+(`functions/test/fixtures/apply-vectors.json`) is asserted by both sides: the
+server's answer, and where the browser stands on the same text. Because the
+live log wins over the draft when an editor opens (§6b), nothing is written
+while anybody has the editor open, and a log nobody is using is dropped with
+the write. A race remains: somebody opening the editor between that check and
+the write seeds from the older draft (ADR 0015).
 
 **A pending suggestion holds back every new version** (§6a). Only an approver
 clears one, so somebody who can publish but not decide is told who can. The
@@ -2405,9 +2431,9 @@ button. An approver may Reject it, with a reason; its author may Withdraw it.
 ### Not built
 
 A suggesting mode inside the editor · structural or formatting suggestions ·
-accepting on the server · merging a stale suggestion into changed text ·
-carrying a pending suggestion to the next version · bulk accept · a
-per-document "require review" switch · accepting from an agent.
+accepting on the server across markup, or on one side of the context ·
+merging a stale suggestion into changed text · carrying a pending suggestion
+to the next version · bulk accept · a per-document "require review" switch.
 
 ---
 

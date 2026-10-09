@@ -173,13 +173,17 @@ after the write, and every client comment claiming `generated` or
 `opensSuggestion`. The endpoint checks the role for each op, refuses every
 decision from a token, and refuses a replacement containing a line break,
 control character or bidirectional override. Over the endpoint a token
-decides nothing; an agent rejects through `reject_suggestion`, which checks the
+decides nothing; an agent accepts or rejects through its tools, which check the
 same approver role in the tool. A token may change or withdraw
 only its own person's pending suggestion, and neither erases anything: what a
 change replaced is kept in the `suggestion` field, which no client may write,
-and a withdrawn suggestion keeps its thread. Accepting applies nothing on the
-server: the approver's own session makes the edit, which an approver is
-allowed to make anyway (SPEC §22, ADR 0013).
+and a withdrawn suggestion keeps its thread. In the app, accepting applies
+nothing on the server: the approver's own session makes the edit, which an
+approver is allowed to make anyway (ADR 0013). An agent's accept is made on the
+server, for an approver's token only, into the draft rather than a version, and
+only where it is certain: the quote placed by both sides of its context, source
+bytes holding no markup, and the result read back as exactly that change, or
+refused (SPEC §22, ADR 0015).
 
 ### A thread steers the agent that reads it
 

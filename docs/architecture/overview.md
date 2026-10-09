@@ -124,8 +124,10 @@ a written argument in a pull request, not a dependency.
   it was chosen and why it was reversed.
 - **No suggesting mode in the editor, and no structural suggestions.** A
   suggestion is one text replacement, proposed from a selection and accepted as
-  an ordinary edit in the approver's own session; the server never applies one
-  and nothing is merged ([ADR 0013](adr/0013-suggestions-applied-as-an-edit.md)).
+  an ordinary edit in the approver's own session, and nothing is merged
+  ([ADR 0013](adr/0013-suggestions-applied-as-an-edit.md)). An agent's accept
+  is the one the server makes, in the source, only where it is certain, and
+  refused otherwise ([ADR 0015](adr/0015-agents-decide-as-approvers.md)).
 - **No plugin system.** Nothing has asked for an extension point twice.
 - **No theming engine.** One palette, swapped by editing twelve tokens.
 - **No i18n.** No second locale is in sight, and retrofitting is mechanical.
@@ -155,8 +157,8 @@ a written argument in a pull request, not a dependency.
   who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014
   records why that changed and what it cost.
 - **No destructive or sharing tools on the agent surface.** It can list, create,
-  fork, move, rename a document, comment, resolve, suggest, and, for an approver, reject a suggestion; it cannot delete
-  a folder, rename one, share anything, or accept a suggestion. Each is a decision a person makes, and each is stated to the
+  fork, move, rename a document, comment, resolve, suggest, and, for an approver, accept or reject a suggestion and
+  publish the draft; it cannot delete a folder, rename one, or share anything. Each is a decision a person makes, and each is stated to the
   agent in `docs/agents/agent-guide.md` rather than left to be discovered as a refusal.
   An agent's resolve leaves a note in the thread, because it hides a point from
   whoever raised it ([ADR 0015](adr/0015-agents-decide-as-approvers.md)).

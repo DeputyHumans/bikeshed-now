@@ -1168,3 +1168,32 @@ test("reject wants a document and a suggestion's thread", () => {
     );
   }
 });
+
+test("accept and commit name the document by its id, and accept the suggestion's thread", async () => {
+  await withServer(rpcOk({ threadId: "s1", version: "v2", state: "accepted", inDraft: true, versionId: "v3", deduped: false }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const accepted = await runAsync(["accept", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "s1"], env);
+    assert.equal(seen[0].body.params.name, "accept_suggestion");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", threadId: "s1" });
+    assert.match(accepted.stdout, /accepted s1; the change is in the draft/);
+
+    const published = await runAsync(["commit", "plan"], env);
+    assert.equal(seen[1].body.params.name, "commit_draft");
+    assert.deepEqual(seen[1].body.params.arguments, { id: "plan" });
+    assert.match(published.stdout, /published v3/);
+  });
+});
+
+test("accept wants a thread, and commit only a document", () => {
+  for (const [args, usage] of [
+    [["accept", "plan"], /usage: bikeshed accept <id> <thread>/],
+    [["commit"], /usage: bikeshed commit <id>/],
+    [["commit", "plan", "extra"], /usage: bikeshed commit <id>/],
+  ]) {
+    assert.throws(
+      () => run(args, { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+      (e) => e.status !== 0 && usage.test(e.stderr),
+      args.join(" "),
+    );
+  }
+});

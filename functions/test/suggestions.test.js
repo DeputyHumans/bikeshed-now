@@ -214,7 +214,7 @@ test("no decision comes from a token through this endpoint, not even an approver
   for (const op of ["claim", "accept", "reject"]) {
     const r = await w.call(w.bearer.approver, { op, annId });
     assert.equal(r.status, 403, op);
-    assert.match(r.body.error, /decided in the app/);
+    assert.match(r.body.error, /decided in the app\. An agent decides one with accept_suggestion or reject_suggestion/);
   }
   const a = w.ann(annId);
   assert.equal(a.suggestion.state, "pending");

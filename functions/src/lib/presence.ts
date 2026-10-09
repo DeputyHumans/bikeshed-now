@@ -127,3 +127,41 @@ export async function clearPresence(docId: string): Promise<void> {
     /* best-effort */
   }
 }
+
+/**
+ * Who has a document open in the editor right now, and whether its live
+ * editing log holds anything, for a write made outside the editor: an
+ * agent's accept or publish (ADR 0015). Null when the deployment has no
+ * Realtime Database, so nobody can be editing live.
+ *
+ * Resolved on every call rather than through the cached handle above: this
+ * guards a write, so it must see the database as it is, and a read that fails
+ * throws rather than reading as "nobody here".
+ *
+ * The log wins over the stored draft when an editor opens (SPEC §6b), which is
+ * why a draft written under a log nobody is using must clear the log too. It
+ * carries live collaboration and nothing durable, so it may be dropped.
+ */
+export async function liveEditing(docId: string): Promise<{ editors: number; log: boolean } | null> {
+  let db: admin.database.Database;
+  try {
+    db = admin.database();
+  } catch {
+    return null;
+  }
+  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
+  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
+  const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
+  return { editors, log };
+}
+
+/** Drop a document's live editing log, as the app does when a draft is published. */
+export async function clearEditLog(docId: string): Promise<void> {
+  let db: admin.database.Database;
+  try {
+    db = admin.database();
+  } catch {
+    return;
+  }
+  await db.ref(`status/${docId}/y`).remove();
+}

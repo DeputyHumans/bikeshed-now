@@ -341,7 +341,7 @@ request's own origin (SPEC §23).
 3. Point the MCP Inspector at `http://127.0.0.1:5050/mcp`, in direct mode. It
    registers, opens `/connect`, and the consent page shows the redirect host
    with the app's name marked as not checked. The address bar shows `/connect`
-   with no query. **Approve**. The Inspector lists nineteen tools.
+   with no query. **Approve**. The Inspector lists twenty-one tools.
 4. On the account screen the app appears under Access tokens as connected.
    **Revoke** it. The Inspector's next call answers `401` and offers to sign in
    again.
@@ -352,6 +352,36 @@ request's own origin (SPEC §23).
    `<name>/SKILL.md` and nothing else.
 
 ---
+
+### 15 · An agent decides a review, and publishes it as one version
+
+Use the document from step 13, with the CLI signed in as `appr@example.com`
+(`bikeshed login`, or `BIKESHED_TOKEN` from the account screen), and three new
+suggestions from `sug@example.com`: two to accept, one to reject.
+
+1. `bikeshed comments <id>` lists the three, `[pending]`.
+2. `bikeshed accept <id> <t1>`, then `<t2>`. `bikeshed get <id>` still prints
+   the old text, because accepting mints no version; in the app, as an editor,
+   the draft banner shows, and the draft has both changes.
+3. `bikeshed reject <id> <t3> --reason "Not this one"`. As `sug@example.com`,
+   the three threads read "Accepted.", "Accepted." and "Rejected: Not this
+   one", each marked as an agent's.
+4. Open the editor in a second window as `ed@example.com` and leave it open.
+   `bikeshed accept` on a fourth suggestion answers that somebody has the
+   document open in the editor, and writes nothing; so does `bikeshed commit`.
+   Close it.
+5. Open a comment thread as anybody. `bikeshed commit <id>` is refused until
+   `bikeshed resolve <id> <thread>`, which leaves a "Resolved." note in the
+   thread that its author is told of; `bikeshed reopen` leaves "Reopened.".
+6. `bikeshed commit <id>` publishes one version with both accepted changes.
+   Open the editor: it seeds from the new version, not from a stale log.
+7. `bikeshed rename <id> New title`: the workspace list shows it, and
+   `/d/<id>` still opens.
+
+What this proves: the change is made where the page shows the quote, a review
+lands as one version, and the live log cannot silently undo an accept. What it
+cannot prove: that a real deployment's runtime account may read and clear the
+Realtime Database (operations overview, "When something is wrong").
 
 ## What this walkthrough found
 

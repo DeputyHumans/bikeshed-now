@@ -582,6 +582,7 @@ written when there were two, and reported success.
 | Rules change had no effect | generated artifacts not rebuilt | `npm run check:policy` fails loudly; it is `pretest` and the first build step |
 | Peer cursors missing | no Realtime Database | create one, or accept the no-op |
 | No email arriving | no `RESEND_API_KEY` | set the secret, or accept the logged no-op |
+| An agent's accept or `commit_draft` says it "could not tell whether anybody is editing", every time | the runtime account cannot read the Realtime Database, which those two check before writing a draft | presence works for people because browsers read it; grant the runtime account RTDB access (`roles/firebasedatabase.admin` on the project) and retry |
 | A reader sees 404 on a document they were granted | membership not recomputed | `set-access.mjs --doc <id> --list` shows the effective members |
 | Every unlisted document reads "Not here", even with its link | `unlockDoc` not invokable | `curl -si https://<deployment>/unlock` must answer 405; the invoker repair is under §3b |
 | One unlisted link stopped working | the owner rotated it (private, then unlisted) | the new link is in the Share dialog; the old one is meant to be dead |

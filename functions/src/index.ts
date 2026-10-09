@@ -65,7 +65,6 @@ import {
   isDocApprover,
   isDocEditor,
   isExpired,
-  keepsTrust,
   opensEditingToAnyAccount,
   readBasis,
   tokenMatches,
@@ -86,17 +85,12 @@ import {
   type Role,
 } from "./lib/access";
 import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
-import { hashBundleFiles, type BundleFile } from "./lib/hash";
 import {
   CREATE_ONLY,
   compileBundle,
   publishNewDocument,
-  readPrefix,
-  readTrustGrants,
   reviseDocument,
-  withdrawTrust,
 } from "./lib/publish";
-import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./lib/review";
 import {
   SUGGESTION_COLOR,
   changeSuggestion,
@@ -144,6 +138,7 @@ import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { renameDocument } from "./lib/rename";
+import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
 import {
   bearerFrom,
   isTokenShaped,
@@ -1031,55 +1026,6 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
 // Inline editing: draft, draft read-back, commit
 // ---------------------------------------------------------------------------
 
-interface VersionMeta {
-  entry: string;
-  format: "html" | "markdown";
-  sourceEntry?: string;
-}
-
-async function loadVersionMeta(
-  docRef: admin.firestore.DocumentReference,
-  versionId: string,
-): Promise<VersionMeta | null> {
-  const snap = await docRef.collection("versions").doc(versionId).get();
-  if (!snap.exists) return null;
-  const v = snap.data() || {};
-  const entry = typeof v.entry === "string" ? safeRelPath(v.entry) : null;
-  if (!entry) return null;
-  return {
-    entry,
-    format: v.format === "markdown" ? "markdown" : "html",
-    sourceEntry:
-      typeof v.sourceEntry === "string"
-        ? (safeRelPath(v.sourceEntry) ?? undefined)
-        : undefined,
-  };
-}
-
-/**
- * Append this editor to the draft's session log, or extend their open entry.
- *
- * Derived from actual saves rather than from lock transitions, which is both
- * simpler and better evidence: the lock says who HELD the right to edit, the
- * saves say who actually wrote. When the lock changes hands twice in one draft,
- * `lastEditedByEmail` alone cannot answer "who wrote v3" — this can (SPEC §17).
- */
-function appendEditSession(
-  existing: unknown,
-  actor: Actor,
-): { email: string; actor: Actor; from: number; to: number }[] {
-  const list = Array.isArray(existing)
-    ? (existing as { email: string; actor: Actor; from: number; to: number }[])
-    : [];
-  const stamp = Date.now();
-  const last = list[list.length - 1];
-  if (last && last.email === actor.email && last.actor?.channel === actor.channel) {
-    last.to = stamp;
-    return list.slice(-50);
-  }
-  return [...list, { email: actor.email, actor, from: stamp, to: stamp }].slice(-50);
-}
-
 /**
  * POST /draft — persist the edited entry as the shared draft.
  *
@@ -1156,57 +1102,19 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `docs/${docId}/draft/`;
-  let bytes = 0;
-  let sourceEntry: string | undefined;
-
-  if (version.format === "markdown") {
-    const markdown = htmlToMarkdown(html);
-    const rendered = renderMarkdown(markdown, { title: data.title });
-    sourceEntry = version.sourceEntry ?? "index.md";
-    await bucket()
-      .file(`${prefix}${sourceEntry}`)
-      .save(Buffer.from(markdown, "utf8"), {
-        contentType: "text/markdown; charset=utf-8",
-        resumable: false,
-      });
-    const htmlBuf = Buffer.from(rendered.html, "utf8");
-    await bucket().file(`${prefix}${version.entry}`).save(htmlBuf, {
-      contentType: "text/html; charset=utf-8",
-      resumable: false,
-    });
-    bytes = Buffer.byteLength(markdown, "utf8");
-  } else {
-    const htmlBuf = Buffer.from(html, "utf8");
-    await bucket().file(`${prefix}${version.entry}`).save(htmlBuf, {
-      contentType: "text/html; charset=utf-8",
-      resumable: false,
-    });
-    bytes = htmlBuf.length;
-  }
-
-  const actor = actorFrom(caller, req);
-  const draft = {
+  // For Markdown the posted HTML is converted back to Markdown HERE, and its
+  // rendering stored beside it (SPEC §11).
+  const markdown = version.format === "markdown" ? htmlToMarkdown(html) : null;
+  const draft = await writeDraft({
+    docRef: ref,
     baseVersion,
-    entry: version.entry,
-    ...(sourceEntry ? { sourceEntry } : {}),
-    bytes,
-    updatedByEmail: caller.emailLower,
-    editSessions: appendEditSession(data.draft?.editSessions, actor),
-  };
-
-  await ref.set(
-    {
-      draft: { ...draft, updatedAt: now() },
-      updatedAt: now(),
-      // Edit provenance, folded into a write that was happening anyway. The
-      // draft is cleared on commit, so without this the "last edited by" signal
-      // would vanish the moment a version is published. A nested map under
-      // set/merge deep-merges, leaving the view counters alone.
-      stats: { lastEditedAt: now(), lastEditedByEmail: caller.emailLower },
-    },
-    { merge: true },
-  );
+    version,
+    content:
+      markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
+    existingSessions: data.draft?.editSessions,
+    emailLower: caller.emailLower,
+    actor: actorFrom(caller, req),
+  });
 
   res.status(200).json({ draft: { ...draft, editSessions: undefined } });
 });
@@ -1287,33 +1195,6 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
- * Why a new version cannot be published over `baseVersion` yet, or null. A
- * pending suggestion is an open thread too, so it is in the count; which kind
- * it is decides who can clear it — anyone resolves a comment, and only an
- * approver decides a suggestion — so the refusal says which.
- */
-async function openThreadsRefusal(
-  docRef: admin.firestore.DocumentReference,
-  baseVersion: string,
-): Promise<{ error: string; unresolvedCount: number; pendingSuggestions: number } | null> {
-  const unresolved = await docRef
-    .collection("versions")
-    .doc(baseVersion)
-    .collection("annotations")
-    .where("resolved", "==", false)
-    .count()
-    .get();
-  const unresolvedCount = unresolved.data().count;
-  if (unresolvedCount === 0) return null;
-  const pending = await pendingSuggestions(docRef, baseVersion);
-  return {
-    error: pending > 0 ? pendingSuggestionsMessage(pending) : "Resolve all comments before publishing a new version.",
-    unresolvedCount,
-    pendingSuggestions: pending,
-  };
-}
-
-/**
  * POST /commit — promote the draft into a new immutable version.
  *
  * Mirrors the publish CLI exactly: assemble, hash with the frozen framing,
@@ -1369,168 +1250,15 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     });
     return;
   }
-  const draft = data.draft;
-  if (!draft || typeof draft.entry !== "string") {
-    res.status(409).json({ error: "There is no draft to publish." });
-    return;
-  }
-
-  // No new version while comments on the current one are open. Annotations are
-  // version-scoped, so publishing would leave them behind on a version nobody
-  // is reading any more. Asked here, before any bytes are uploaded, and again
-  // inside the transaction that makes the new version current.
-  const open = await openThreadsRefusal(docRef, baseVersion);
-  if (open) {
-    res.status(409).json(open);
-    return;
-  }
-
-  const version = await loadVersionMeta(docRef, baseVersion);
-  if (!version) {
-    res.status(409).json({ error: "the base version is missing" });
-    return;
-  }
-
-  // Assemble: base assets, with anything the draft carries overriding it. That
-  // one rule covers both formats — for Markdown the draft carries index.md and
-  // index.html, for HTML just the entry — with no branch here.
-  const basePrefix = `docs/${docId}/${baseVersion}/`;
-  const draftPrefix = `docs/${docId}/draft/`;
-  const baseFiles = await readPrefix(basePrefix);
-  const draftFiles = await readPrefix(draftPrefix);
-  const byRel = new Map<string, Buffer>();
-  for (const f of baseFiles) byRel.set(f.rel, f.data);
-  for (const f of draftFiles) byRel.set(f.rel, f.data);
-  const files: BundleFile[] = [...byRel].map(([rel, data]) => ({ rel, data }));
-  const totalBytes = files.reduce((n, f) => n + f.data.length, 0);
-  if (totalBytes > MAX_BUNDLE_BYTES) {
-    res.status(409).json({ error: "bundle too large to publish" });
-    return;
-  }
-  if (files.length === 0) {
-    res.status(409).json({ error: "base version has no content to publish" });
-    return;
-  }
-
-  const { contentHash, fileCount, bytes } = hashBundleFiles(files);
-  const versionsRef = docRef.collection("versions");
-
-  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
-  if (!dup.empty) {
-    await docRef.set(
-      { draft: FieldValue.delete(), updatedAt: now() },
-      { merge: true },
-    );
-    await bucket().deleteFiles({ prefix: draftPrefix, force: true });
-    res.status(200).json({
-      versionId: dup.docs[0].id,
-      contentHash,
-      fileCount,
-      bytes,
-      deduped: true,
-    });
-    return;
-  }
-
-  // Version ids mint as max(N)+1 over EXISTING version documents, so a
-  // withdrawn id is re-used by the next commit. That is deliberate; the view
-  // tombstone in delete-version.mjs is what keeps the two from being conflated.
-  const allVersions = await versionsRef.get();
-  let maxN = 0;
-  for (const d of allVersions.docs) {
-    const m = /^v(\d+)$/.exec(d.id);
-    if (m) maxN = Math.max(maxN, Number(m[1]));
-  }
-  const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docId}/${versionId}`;
-
-  for (const f of files) {
-    await bucket().file(`${storagePrefix}/${f.rel}`).save(f.data, {
-      contentType: mime.lookup(f.rel) || "application/octet-stream",
-      resumable: false,
-    });
-  }
-
-  const actor = actorFrom(caller, req);
-  const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
-
-  try {
-    await db().runTransaction(async (tx) => {
-      const cur = await tx.get(docRef);
-      if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
-      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-      const vRef = versionsRef.doc(versionId);
-      if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
-      // Trust carries into the new version only when its owner wrote it here.
-      // The server stores whatever HTML a draft is sent, so "in-app editing
-      // cannot add a script" was never true of anybody else's edit (SPEC §6c).
-      const keeps = keepsTrust(cur.data() as DocAclData, {
-        emailLower: caller.emailLower,
-        channel: actor.channel,
-      });
-      const grants = keeps ? [] : await readTrustGrants(tx, docRef);
-      tx.set(vRef, {
-        versionId,
-        label: versionId,
-        entry: version.entry,
-        format: version.format,
-        ...(version.sourceEntry ? { sourceEntry: version.sourceEntry } : {}),
-        ...(version.format === "markdown"
-          ? { rendererVersion: renderMarkdown("", {}).rendererVersion }
-          : {}),
-        storagePrefix,
-        fileCount,
-        bytes,
-        contentHash,
-        files: files.map((f) => f.rel),
-        parentVersion: baseVersion,
-        publishedVia: isAutomated(actor) ? actor.channel : "editor",
-        publishedByEmail: caller.emailLower,
-        publishedBy: actor,
-        editSessions,
-        publishedAt: now(),
-      });
-      tx.set(
-        docRef,
-        {
-          currentVersion: versionId,
-          draft: FieldValue.delete(),
-          updatedAt: now(),
-          stats: {
-            commits: FieldValue.increment(1),
-            lastEditedAt: now(),
-            lastEditedByEmail: caller.emailLower,
-          },
-        },
-        { merge: true },
-      );
-      if (!keeps) withdrawTrust(tx, docRef, grants);
-    });
-  } catch (e) {
-    const reason = (e as Error).message;
-    if (reason === "OPEN") {
-      // Opened while the bytes were uploading: refused as it would have been before.
-      const open = await openThreadsRefusal(docRef, baseVersion);
-      if (open) {
-        res.status(409).json(open);
-        return;
-      }
-    }
-    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN") {
-      const fresh = await docRef.get();
-      res.status(409).json({
-        error: "Another editor just published. Reload before publishing.",
-        currentVersion: fresh.data()?.currentVersion,
-      });
-      return;
-    }
-    throw e;
-  }
-
-  await bucket().deleteFiles({ prefix: draftPrefix, force: true });
-  await syncPublicProjection(db(), docId);
-
-  res.status(200).json({ versionId, contentHash, fileCount, bytes, deduped: false });
+  const outcome = await commitDraft({
+    db: db(),
+    docRef,
+    baseVersion,
+    draft: data.draft,
+    emailLower: caller.emailLower,
+    actor: actorFrom(caller, req),
+  });
+  res.status(outcome.status).json(outcome.body);
 });
 
 // ---------------------------------------------------------------------------
@@ -1669,7 +1397,8 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
   const deciding = op === "claim" || op === "release" || op === "accept" || op === "reject";
   if (deciding && actor.channel !== "web") {
     res.status(403).json({
-      error: "Through this endpoint a suggestion is decided in the app. An agent rejects one with reject_suggestion.",
+      error:
+        "Through this endpoint a suggestion is decided in the app. An agent decides one with accept_suggestion or reject_suggestion.",
     });
     return;
   }

@@ -38,8 +38,22 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   0.14.0), decline one on the current version exactly as the app's Reject
   does, with the reason in the thread and the agent's channel in `decidedBy`.
   The tool checks the role itself; `POST /suggestion` still refuses a token's
-  claim, accept and reject, and now says how an agent decides instead. There
-  are nineteen tools (SPEC §2, §19, §22).
+  claim, accept and reject, and now says how an agent decides instead (SPEC §2,
+  §19, §22).
+
+- **An owner's or an approver's agent can accept a suggestion, and publish the
+  draft.** `accept_suggestion` and `bikeshed accept` make the change in the
+  draft, never a new version, so a review's decisions gather there until
+  `commit_draft` or `bikeshed commit` (in `bikeshed-now` 0.14.0) publishes them
+  as one, through the in-app commit's own code and gates. With no page to type
+  into, the change is made in the source only where it is certain: the quote
+  placed by both sides of its context, bytes holding no markup, and the result
+  read back as exactly that change; a Markdown quote must be written out in
+  the source, and its replacement is escaped only when it would otherwise
+  render. Anything else is refused and left to the app, and so is everything
+  while somebody has the document open in the editor, whose live log would
+  overwrite the draft. A fixture of cases is held by the server and the
+  browser alike. There are twenty-one tools (ADR 0015, SPEC §6a, §19, §22).
 
 ### Fixed
 

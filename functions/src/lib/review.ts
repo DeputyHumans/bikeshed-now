@@ -118,8 +118,8 @@ export function acceptedInDraftMessage(count: number): string {
   const what = count === 1 ? "1 accepted suggestion" : `${count} accepted suggestions`;
   return (
     `This document's unpublished draft holds ${what}, and publishing this would replace the draft ` +
-    `and lose ${count === 1 ? "it" : "them"}. Publish the draft first, with "Save as new version" in the app, ` +
-    "then update it."
+    `and lose ${count === 1 ? "it" : "them"}. Publish the draft first, with commit_draft or "Save as new version" ` +
+    "in the app, then read the document again and update it."
   );
 }
 

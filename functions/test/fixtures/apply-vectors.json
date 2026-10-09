@@ -1,0 +1,189 @@
+{
+  "$comment": "Golden cases for making an accepted suggestion's change without a DOM (functions/src/lib/apply.ts), asserted by functions/test/apply.test.js and, for where the browser stands on them, app/src/annotation/exact.test.ts (SPEC §22).",
+  "cases": [
+    {
+      "name": "replaces the quote in place",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in a single weekend.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "cut over in ",
+        "suffix": "."
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in two weekends.</p></body></html>"
+      }
+    },
+    {
+      "name": "chooses the repeat both sides of the context agree on",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>a single weekend, and yes, a single weekend is enough.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "and yes, ",
+        "suffix": " is enough"
+      },
+      "replacement": "one weekend",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>a single weekend, and yes, one weekend is enough.</p></body></html>"
+      }
+    },
+    {
+      "name": "a quote across a wrapped source line replaces the line break too",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in a single\n     weekend, and no more.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "cut over in ",
+        "suffix": ", and"
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in two weekends, and no more.</p></body></html>"
+      }
+    },
+    {
+      "name": "an entity inside the quote is replaced whole",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Compare Codex &amp; friends today.</p></body></html>",
+      "anchor": {
+        "exact": "Codex & friends",
+        "prefix": "Compare ",
+        "suffix": " today"
+      },
+      "replacement": "Codex and co",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Compare Codex and co today.</p></body></html>"
+      }
+    },
+    {
+      "name": "markup typed in a replacement is text, never markup",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Ship it soon.</p></body></html>",
+      "anchor": {
+        "exact": "soon",
+        "prefix": "Ship it ",
+        "suffix": "."
+      },
+      "replacement": "<b>now</b> & then",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Ship it &lt;b&gt;now&lt;/b&gt; &amp; then.</p></body></html>"
+      }
+    },
+    {
+      "name": "a deletion between two spaces takes the one after",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Compare vs. OpenAI Codex today.</p></body></html>",
+      "anchor": {
+        "exact": "OpenAI",
+        "prefix": "Compare vs. ",
+        "suffix": " Codex"
+      },
+      "replacement": "",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Compare vs. Codex today.</p></body></html>"
+      }
+    },
+    {
+      "name": "a deletion before punctuation takes the space before",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>It was made with OpenAI. Then shipped.</p></body></html>",
+      "anchor": {
+        "exact": "OpenAI",
+        "prefix": "made with ",
+        "suffix": ". Then"
+      },
+      "replacement": "",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>It was made with. Then shipped.</p></body></html>"
+      }
+    },
+    {
+      "name": "a deletion at the start of its block takes the space after",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Frankly the plan holds.</p></body></html>",
+      "anchor": {
+        "exact": "Frankly",
+        "prefix": "",
+        "suffix": " the plan"
+      },
+      "replacement": "",
+      "expect": {
+        "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>the plan holds.</p></body></html>"
+      }
+    },
+    {
+      "name": "a change already made is recognised and not made again",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in two weekends.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "cut over in ",
+        "suffix": "."
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "already": true
+      }
+    },
+    {
+      "name": "a quote no longer in the text is stale",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in a long weekend.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "cut over in ",
+        "suffix": "."
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "refused": "stale"
+      }
+    },
+    {
+      "name": "a repeat both sides agree on equally is not chosen between",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>so, a single weekend. And so, a single weekend.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "so, ",
+        "suffix": "."
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "refused": "stale"
+      }
+    },
+    {
+      "name": "text inside a script is not text a reader reads",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><script>var s = \"a single weekend\";</script><p>Nothing here.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "",
+        "suffix": ""
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "refused": "stale",
+        "browser": "pending"
+      },
+      "note": "The browser's resolver reads textContent, which holds a script's text; nothing a reader can select stands there, so no suggestion made in the app does, and the server, which never reads it as prose, refuses."
+    },
+    {
+      "name": "one side of the context is not enough to place it without the page",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>We can cut over in a single weekend, perhaps.</p></body></html>",
+      "anchor": {
+        "exact": "a single weekend",
+        "prefix": "cut over in ",
+        "suffix": ", surely"
+      },
+      "replacement": "two weekends",
+      "expect": {
+        "refused": "unplaced"
+      }
+    },
+    {
+      "name": "a quote across inline markup is left to the editor",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Ship it with <em>care</em> today.</p></body></html>",
+      "anchor": {
+        "exact": "with care today",
+        "prefix": "Ship it ",
+        "suffix": ""
+      },
+      "replacement": "now",
+      "expect": {
+        "refused": "markup"
+      }
+    }
+  ]
+}

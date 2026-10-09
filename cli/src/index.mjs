@@ -68,8 +68,11 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
                                        decided; what it said before is kept
   bikeshed withdraw <id> <thread>      take back your suggestion before it is
                                        decided; its thread stays
+  bikeshed accept <id> <thread>        accept a suggestion, as its owner or an
+                                       approver: the change goes into the draft
   bikeshed reject <id> <thread>        decline a suggestion, as its owner or an
                                        approver (--reason <why>)
+  bikeshed commit <id>                 publish the draft as the next version
   bikeshed open <id>                   open it in a browser
 
   Where a command takes <id> it also takes the link you were sent. An unlisted
@@ -661,6 +664,29 @@ async function revise(flags, [ref, threadId, ...rest]) {
 }
 
 /**
+ * Accept a suggestion, as the document's owner or an approver. The change is
+ * made in the draft, where the decisions of a review gather until `commit`
+ * publishes them as one version (SPEC §22).
+ */
+async function accept(flags, [ref, threadId, ...rest]) {
+  if (!ref || !threadId || rest.length) fail("usage: bikeshed accept <id> <thread>");
+  const { origin, token } = resolveAuth(flags);
+  // Deciding takes a real role on the document, never a link, so only the id is sent.
+  const result = await callTool(origin, token, "accept_suggestion", { id: docArgs(ref).id, threadId });
+  out(flags.json, result, () => console.log(`accepted ${threadId}; the change is in the draft — \`bikeshed commit\` publishes it`));
+}
+
+/** Publish the draft as the document's next version, as "Save as new version" does in the app. */
+async function commit(flags, [ref, ...rest]) {
+  if (!ref || rest.length) fail("usage: bikeshed commit <id>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "commit_draft", { id: docArgs(ref).id });
+  out(flags.json, result, () =>
+    console.log(result.deduped ? `nothing new: the draft is ${result.versionId} already` : `published ${result.versionId}`),
+  );
+}
+
+/**
  * Decline a suggestion, as the document's owner or an approver. The passage
  * stays as it is and the thread closes with a note giving the reason, which
  * its author is sent (SPEC §22).
@@ -910,7 +936,9 @@ const COMMANDS = {
   suggest,
   revise,
   withdraw,
+  accept,
   reject,
+  commit,
   open,
   folders,
   mkdir,

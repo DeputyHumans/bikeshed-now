@@ -301,18 +301,28 @@ const NUMBER_WORDS = [
   "eighteen", "nineteen", "twenty",
 ];
 
+const TENS = ["twenty", "thirty", "forty"];
+
 /**
- * "all twelve tools", "Thirteen MCP tools", "13 tools": every count of the
- * tools a text gives, as a number. Only a number directly before "tools" or
- * "MCP tools" counts, so "the three folder tools" is a remark about three of
- * them and is left alone.
+ * "all twelve tools", "Thirteen MCP tools", "13 tools", "twenty-one tools":
+ * every count of the tools a text gives, as a number. Only a number directly
+ * before "tools" or "MCP tools" counts, so "the three folder tools" is a
+ * remark about three of them and is left alone. A compound is read whole: a
+ * hyphen is a word boundary, so "twenty-one" would otherwise read as "one".
  */
 function toolCounts(text) {
-  const pattern = new RegExp(`\\b(\\d+|${NUMBER_WORDS.join("|")})\\s+(?:MCP\\s+)?tools\\b`, "gi");
-  return [...text.matchAll(pattern)].map((m) => {
-    const word = m[1].toLowerCase();
-    return { said: m[0], n: /^\d+$/.test(word) ? Number(word) : NUMBER_WORDS.indexOf(word) };
-  });
+  const compound = `(?:${TENS.join("|")})-(?:${NUMBER_WORDS.slice(1, 10).join("|")})`;
+  const word = `${compound}|\\d+|${[...TENS, ...NUMBER_WORDS].join("|")}`;
+  const pattern = new RegExp(`(?<![\\w-])(${word})\\s+(?:MCP\\s+)?tools\\b`, "gi");
+  return [...text.matchAll(pattern)].map((m) => ({ said: m[0], n: numberOf(m[1].toLowerCase()) }));
+}
+
+function numberOf(word) {
+  if (/^\d+$/.test(word)) return Number(word);
+  const [tens, unit] = word.split("-");
+  const t = TENS.indexOf(tens);
+  if (t >= 0) return (t + 2) * 10 + (unit ? NUMBER_WORDS.indexOf(unit) : 0);
+  return NUMBER_WORDS.indexOf(word);
 }
 
 test("a tool count is read as the number it says, and a remark about some tools is not one", () => {
@@ -320,6 +330,8 @@ test("a tool count is read as the number it says, and a remark about some tools 
     toolCounts("all twelve tools, Thirteen MCP tools, 14 tools, the three folder tools").map((c) => c.n),
     [12, 13, 14],
   );
+  // A compound is one number, not its last word.
+  assert.deepEqual(toolCounts("all twenty-one tools, Twenty-two MCP tools, twenty tools").map((c) => c.n), [21, 22, 20]);
 });
 
 test("every count of the tools these documents give is the number the server serves", async () => {

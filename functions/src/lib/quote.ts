@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Finding an agent's quoted passage in a version, without a DOM (SPEC §19, §22).
 
-import { asciiLower, decodeEntities } from "./htmltext";
+import { ENTITY_CHARS, asciiLower, decodeEntity } from "./htmltext";
 
 /**
  * An agent proposes an edit by quoting the passage as a reader sees it. The
@@ -46,13 +46,13 @@ export interface Located {
 
 const squash = (s: string) => s.replace(/\s+/g, " ");
 
-/** The body, or everything after the head, or everything. */
-function bodyRegion(html: string): string {
+/** Where the body's content starts: after `<body>`, or after the head, or at 0. */
+function bodyStart(html: string): number {
   const lower = asciiLower(html);
   const body = lower.search(/<body[\s>]/);
-  if (body >= 0) return html.slice(html.indexOf(">", body) + 1);
+  if (body >= 0) return html.indexOf(">", body) + 1;
   const head = lower.indexOf("</head>");
-  return head >= 0 ? html.slice(head + 7) : html;
+  return head >= 0 ? head + 7 : 0;
 }
 
 /** Where a tag that starts at `lt` ends, quote-aware, or -1. */
@@ -68,33 +68,72 @@ function tagEnd(html: string, lt: number): number {
   return -1;
 }
 
-/** The body's text as blocks: each a run of text no element boundary breaks. */
-export function textBlocks(html: string): string[] {
-  const src = bodyRegion(html);
-  const lower = asciiLower(src);
-  const blocks: string[] = [];
-  let current = "";
-  const breakBlock = () => {
-    blocks.push(squash(current));
-    current = "";
+/**
+ * The body's decoded text, one entry per UTF-16 unit, each with the source
+ * bytes it came from and the run of text it belongs to.
+ *
+ * A run ends at every block boundary and every skipped element, so two
+ * characters are in the same block exactly when their `run` is equal. An
+ * entity's characters all point at the whole entity, so a span of decoded
+ * text always maps back to whole source characters (SPEC §22).
+ */
+export interface ScannedText {
+  chars: string[];
+  /** Source offset of each character's first byte, in the whole document. */
+  from: number[];
+  /** Source offset just past each character's last byte. */
+  to: number[];
+  run: number[];
+}
+
+export function scanBody(html: string): ScannedText {
+  const out: ScannedText = { chars: [], from: [], to: [], run: [] };
+  let run = 0;
+  const push = (ch: string, from: number, to: number) => {
+    out.chars.push(ch);
+    out.from.push(from);
+    out.to.push(to);
+    out.run.push(run);
   };
-  let i = 0;
-  while (i < src.length) {
-    const lt = src.indexOf("<", i);
+  // Decoded exactly as `decodeEntities` decodes, keeping where each part came from.
+  const text = (from: number, to: number) => {
+    const raw = html.slice(from, to);
+    let pos = 0;
+    let amp = raw.indexOf("&");
+    let semi = -1;
+    while (amp !== -1) {
+      if (semi < amp) semi = raw.indexOf(";", amp + 1);
+      if (semi === -1) break;
+      const decoded = semi - amp - 1 <= ENTITY_CHARS ? decodeEntity(raw.slice(amp + 1, semi)) : null;
+      if (decoded === null) {
+        amp = raw.indexOf("&", amp + 1);
+        continue;
+      }
+      for (let k = pos; k < amp; k++) push(raw[k], from + k, from + k + 1);
+      for (let k = 0; k < decoded.length; k++) push(decoded[k], from + amp, from + semi + 1);
+      pos = semi + 1;
+      amp = raw.indexOf("&", pos);
+    }
+    for (let k = pos; k < raw.length; k++) push(raw[k], from + k, from + k + 1);
+  };
+  const lower = asciiLower(html);
+  let i = bodyStart(html);
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
     if (lt === -1) {
-      current += decodeEntities(src.slice(i));
+      text(i, html.length);
       break;
     }
-    current += decodeEntities(src.slice(i, lt));
+    text(i, lt);
     if (lower.startsWith("<!--", lt)) {
       const end = lower.indexOf("-->", lt + 4);
-      i = end === -1 ? src.length : end + 3;
+      i = end === -1 ? html.length : end + 3;
       continue;
     }
-    const gt = tagEnd(src, lt);
+    const gt = tagEnd(html, lt);
     if (gt === -1) {
       // An unterminated `<` is text, as the tokenizer reads it.
-      current += "<";
+      push("<", lt, lt + 1);
       i = lt + 1;
       continue;
     }
@@ -104,13 +143,32 @@ export function textBlocks(html: string): string[] {
     i = gt + 1;
     if (!closing && SKIPPED.has(name)) {
       const close = lower.indexOf(`</${name}`, i);
-      i = close === -1 ? src.length : tagEnd(src, close) + 1 || src.length;
-      breakBlock();
+      i = close === -1 ? html.length : tagEnd(html, close) + 1 || html.length;
+      run++;
       continue;
     }
-    if (BREAKS.has(name)) breakBlock();
+    if (BREAKS.has(name)) run++;
   }
-  breakBlock();
+  return out;
+}
+
+/** The body's text as blocks: each a run of text no element boundary breaks. */
+export function textBlocks(html: string): string[] {
+  const { chars, run } = scanBody(html);
+  const blocks: string[] = [];
+  let current = "";
+  let at = 0;
+  for (let k = 0; k < chars.length; k++) {
+    // Every boundary between two characters' runs closes one block per run
+    // passed, as each element boundary did when the text was read.
+    while (at < run[k]) {
+      blocks.push(squash(current));
+      current = "";
+      at++;
+    }
+    current += chars[k];
+  }
+  blocks.push(squash(current));
   return blocks.filter((b) => b.trim() !== "");
 }
 

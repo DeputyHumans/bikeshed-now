@@ -287,14 +287,15 @@ test("every path that mints a version decides trust inside its transaction", () 
     return src.slice(start, end < 0 ? undefined : end);
   };
   const publish = readFileSync(join(__dirname, "..", "src", "lib", "publish.ts"), "utf8");
-  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  // The in-app commit and commit_draft both publish the draft through commitDraft.
+  const draft = readFileSync(join(__dirname, "..", "src", "lib", "draft.ts"), "utf8");
 
   const upload = slice(publish, "export async function commitNewVersion(", "\nexport ");
   const inUpload = slice(upload, "runTransaction(", "\n  });\n");
   assert.match(inUpload, /readTrustGrants\(tx, /, "a token update must read the trust grants in its transaction");
   assert.match(inUpload, /withdrawTrust\(tx, /, "a token update must withdraw trust in its transaction");
 
-  const commit = slice(index, "export const commitVersion = onRequest(", "\nexport const ");
+  const commit = slice(draft, "export async function commitDraft(", "\nexport ");
   const inCommit = slice(commit, "runTransaction(", "\n    });\n");
   assert.match(inCommit, /keepsTrust\(/, "the in-app commit must ask who wrote the version");
   assert.match(inCommit, /readTrustGrants\(tx, /, "the in-app commit must read the trust grants in its transaction");
