@@ -14,7 +14,8 @@ import * as admin from "firebase-admin";
  * So EVERY path that mints a version from an account asks this first: the
  * in-app commit, an upload, the CLI and MCP. The comment gate is narrower — it
  * applies to the in-app commit alone — because the agent loop revises a
- * document in answer to its open comments, and a person resolves them after.
+ * document in answer to its open comments, and closing them is not what
+ * publishing the answer waits for.
  * A suggestion is different: nobody but an approver can decide it, or its
  * author take it back, and an update that buried it would take that away from
  * them.

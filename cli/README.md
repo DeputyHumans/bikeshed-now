@@ -44,6 +44,7 @@ bikeshed comments storage-migration
 # Fix that sentence, say what you changed in its thread, then publish the
 # revision. Reply first: a thread belongs to the version it was written on.
 bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write period."
+bikeshed resolve storage-migration <thread>   # closes it, with a note saying you did
 bikeshed update storage-migration proposal.md
 
 # Given "Can suggest" rather than "Can edit"? Propose the change instead, for a

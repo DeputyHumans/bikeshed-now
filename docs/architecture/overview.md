@@ -155,9 +155,11 @@ a written argument in a pull request, not a dependency.
   who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014
   records why that changed and what it cost.
 - **No destructive or sharing tools on the agent surface.** It can list, create,
-  fork, move, comment and suggest; it cannot delete a folder, rename one, share anything,
-  resolve a comment thread, or accept or reject a suggestion. Each is a decision a person makes, and each is stated to the
+  fork, move, rename a document, comment, resolve and suggest; it cannot delete a folder, rename one, share anything,
+  or accept or reject a suggestion. Each is a decision a person makes, and each is stated to the
   agent in `docs/agents/agent-guide.md` rather than left to be discovered as a refusal.
+  An agent's resolve leaves a note in the thread, because it hides a point from
+  whoever raised it ([ADR 0015](adr/0015-agents-decide-as-approvers.md)).
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are
   not.

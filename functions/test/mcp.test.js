@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly sixteen tools, and they are the sixteen in the spec", () => {
+test("there are exactly eighteen tools, and they are the eighteen in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -145,8 +145,10 @@ test("there are exactly sixteen tools, and they are the sixteen in the spec", ()
     "get_comments",
     "add_comment",
     "reply_to_comment",
+    "resolve_thread",
+    "reopen_thread",
   ]);
-  assert.equal(TOOLS.length, 16);
+  assert.equal(TOOLS.length, 18);
 });
 
 test("the surface has no tool that deletes or shares", () => {
@@ -601,7 +603,7 @@ test("open editing lets a stranger edit, never move: moving makes the mover a me
 });
 
 test("the key is an optional argument on every tool that reads one document", () => {
-  for (const name of ["get_document", "update_document", "suggest_edit", "get_comments", "add_comment", "reply_to_comment"]) {
+  for (const name of ["get_document", "update_document", "suggest_edit", "get_comments", "add_comment", "reply_to_comment", "resolve_thread", "reopen_thread"]) {
     const schema = toolByName(name).inputSchema;
     assert.equal(schema.properties.k?.type, "string", name);
     assert.ok(!schema.required.includes("k"), `${name} must not demand a key`);

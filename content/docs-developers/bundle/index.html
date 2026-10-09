@@ -829,10 +829,12 @@ bikeshed update q3-plan plan.md --watch   # republish on every save</code></pre>
 <pre><code>bikeshed comments storage-migration
 # revise proposal.md, then answer each thread
 bikeshed reply storage-migration a7Kd… "Rewritten for the dual-write fortnight."
+bikeshed resolve storage-migration a7Kd…
 bikeshed update storage-migration proposal.md</code></pre>
 
   <ul class="ticks">
     <li><strong>Reply before you publish.</strong> A thread belongs to the version it was written on, and <code>reply_to_comment</code> looks in the current version only. Once <code>update_document</code> has made a new version current, a reply to an older thread fails with <code>no such thread</code>.</li>
+    <li><strong>Close what you dealt with, also before you publish.</strong> <code>resolve_thread</code> closes a thread and leaves a note in it saying an agent did, and its author is told; <code>reopen_thread</code> opens it again. Leave a thread open when you disagreed.</li>
     <li><strong>Agents review too.</strong> <code>add_comment</code>, or <code>bikeshed comment &lt;id&gt; &lt;passage&gt; --body &lt;text&gt;</code>, opens a thread on a passage, quoted as a reader sees it, within one paragraph. Anyone who can read a document can comment on it, and the next agent to pick it up finds that thread with the rest.</li>
     <li>Identical content is a no-op, so an update is safe to retry or to run in a loop.</li>
     <li>With <em>Can suggest</em> rather than <em>Can edit</em>, <code>update_document</code> is refused. Propose each change with <code>suggest_edit</code> or <code>bikeshed suggest</code>, quoting the passage as a reader sees it, one paragraph at a time. An empty replacement proposes deleting it.</li>
@@ -843,7 +845,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Sixteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Eighteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -856,6 +858,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, each with its quote, its section and every comment, marked with the channel it came through</td></tr>
         <tr><td><code>add_comment</code></td><td>Start a thread on a passage of the current version, quoted as a reader sees it, within one paragraph</td></tr>
         <tr><td><code>reply_to_comment</code></td><td>Add a reply to a thread in the current version</td></tr>
+        <tr><td><code>resolve_thread</code></td><td>Close a thread in the current version, leaving a note that says so</td></tr>
+        <tr><td><code>reopen_thread</code></td><td>Open a resolved thread again, with a note</td></tr>
         <tr><td><code>suggest_edit</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
         <tr><td><code>revise_suggestion</code></td><td>Change the text of your own suggestion before it is decided; what it said before is kept</td></tr>
         <tr><td><code>withdraw_suggestion</code></td><td>Take back your own suggestion before it is decided; its thread stays, marked withdrawn</td></tr>
@@ -905,7 +909,7 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li>Share a document, or change who can see it.</li>
     <li>Set or clear an expiry.</li>
     <li>Rename or delete a folder.</li>
-    <li>Resolve a thread, or accept or reject a suggestion.</li>
+    <li>Accept or reject a suggestion.</li>
     <li>Delete a document. Nobody can: a single version can be withdrawn only by whoever runs the deployment.</li>
   </ul>
   <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
@@ -929,6 +933,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
         <tr><td><code>bikeshed comment &lt;id&gt; &lt;text&gt; --body &lt;comment&gt;</code></td><td>Start a thread on a passage</td></tr>
         <tr><td><code>bikeshed reply &lt;id&gt; &lt;thread&gt; &lt;text&gt;</code></td><td>Reply in a thread</td></tr>
+        <tr><td><code>bikeshed resolve &lt;id&gt; &lt;thread&gt;</code></td><td>Close a thread once its point is dealt with</td></tr>
+        <tr><td><code>bikeshed reopen &lt;id&gt; &lt;thread&gt;</code></td><td>Open a resolved thread again</td></tr>
         <tr><td><code>bikeshed suggest &lt;id&gt; &lt;text&gt; --with &lt;new&gt;</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
         <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
         <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>

@@ -75,12 +75,14 @@ async function withBucket(fn) {
   }
 }
 
-test("no tool decides anything a person decides", () => {
-  // An agent proposes; accepting, rejecting and resolving are a person's acts
-  // (SPEC §19). Whoever adds a tool meets this first.
-  for (const name of TOOL_NAMES) {
-    assert.doesNotMatch(name, /accept|reject|approve|resolve|decide/);
-  }
+test("the tools that close something are exactly the ones the spec names", () => {
+  // An agent decides with its owner's role (ADR 0015), and each of these
+  // checks that role itself; a closing tool nobody listed here would be one
+  // nobody checked. Whoever adds one meets this first.
+  assert.deepEqual(
+    TOOL_NAMES.filter((name) => /accept|reject|approve|resolve|reopen|decide/.test(name)),
+    ["resolve_thread", "reopen_thread"],
+  );
 });
 
 test("suggest_edit demands the document and the passage, and takes an empty replacement as a deletion", () => {

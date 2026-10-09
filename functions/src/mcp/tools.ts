@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The sixteen MCP tools (SPEC §19).
+// The eighteen MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -62,6 +62,7 @@ import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { locateQuote } from "../lib/quote";
 import { renameDocument } from "../lib/rename";
+import { setThreadResolved } from "../lib/threads";
 import {
   ANNOTATION_COLOR,
   SUGGESTION_COLOR,
@@ -248,6 +249,30 @@ async function changeOwnSuggestion(
   });
   if ("status" in changed) throw new Error(changed.error);
   return withReaderAddress({ threadId, version: versionId, state: changed.state }, ref.id);
+}
+
+/**
+ * Resolve or reopen a thread on the current version, as any reader may in the
+ * app. Threads on an earlier version are left as they were: what stands there
+ * is the record of that version's review (SPEC §6, §19).
+ */
+async function changeThread(ctx: ToolContext, args: Record<string, unknown>, resolved: boolean) {
+  const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+  refuseIfExpired(data);
+  const threadId = str(args, "threadId");
+  if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the thread, from get_comments");
+  const versionId = String(data.currentVersion ?? "");
+  const changed = await setThreadResolved({
+    db: ctx.db,
+    docRef: ref,
+    versionId,
+    annId: threadId,
+    resolved,
+    caller: { uid: ctx.caller.uid, emailLower: ctx.caller.emailLower },
+    actor: ctx.actor,
+  });
+  if ("status" in changed) throw new Error(changed.error);
+  return withReaderAddress({ threadId, version: versionId, resolved: changed.resolved }, ref.id);
 }
 
 /** Writes are refused on an expired document, the owner's included. */
@@ -1009,8 +1034,8 @@ export const TOOLS: ToolDefinition[] = [
       "Start a new comment thread on a passage of a document's current version. " +
       "Quote the passage exactly as a reader sees it — no Markdown or HTML — within one paragraph. " +
       "If it occurs more than once, add a few words before it (prefix) or after it (suffix). " +
-      "A thread belongs to the version it was opened on: once a new version is published, get_comments lists it only when asked for that version, " +
-      "and a person resolves it; there is no tool for that. " +
+      "A thread belongs to the version it was opened on: once a new version is published, get_comments lists it only when asked for that version. " +
+      "Once its point is dealt with, resolve_thread closes it. " +
       "To answer a thread that already exists, use reply_to_comment.",
     inputSchema: {
       type: "object",
@@ -1113,6 +1138,51 @@ export const TOOLS: ToolDefinition[] = [
       return { commentId: commentRef.id, threadId, documentId: ref.id };
     },
   },
+
+  {
+    name: "resolve_thread",
+    description:
+      "Close a comment thread on a document's current version once its point is dealt with: it is hidden " +
+      "until someone asks for resolved threads. Say what you did in the thread first, with reply_to_comment. " +
+      "A note saying you resolved it is added, and its author is told. A suggested edit is not resolved but decided.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "threadId"],
+      properties: {
+        id: { type: "string" },
+        threadId: { type: "string", description: "From get_comments." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      return changeThread(ctx, args, true);
+    },
+  },
+
+  {
+    name: "reopen_thread",
+    description:
+      "Open a resolved comment thread on a document's current version again, when its point turns out not to be dealt with. " +
+      "A note saying you reopened it is added.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "threadId"],
+      properties: {
+        id: { type: "string" },
+        threadId: { type: "string", description: "From get_comments with includeResolved." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      return changeThread(ctx, args, false);
+    },
+  },
 ];
 
 /** Tools an editor-only caller may still call, for the error message. */
@@ -1120,7 +1190,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is sixteen tools, not "some tools". */
+/** Exported for the wiring test: the surface is eighteen tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

@@ -57,6 +57,8 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed comment <id> <text> --body <comment>
                                        start a thread on a passage
   bikeshed reply <id> <thread> <text>  reply in a thread
+  bikeshed resolve <id> <thread>       close a thread once its point is dealt with
+  bikeshed reopen <id> <thread>        open a resolved thread again
   bikeshed suggest <id> <text> --with <new text>
                                        propose new text for a passage, for a
                                        person to accept or reject (--delete to
@@ -583,6 +585,27 @@ async function reply(flags, [ref, threadId, ...rest]) {
 }
 
 /**
+ * Close a thread on the current version, or open it again. Either leaves a
+ * note in the thread saying who did it and through what, which is how the
+ * person who raised the point hears (SPEC §19).
+ */
+// `resolve` alone is node:path's, imported above.
+async function resolveThread(flags, args) {
+  await setResolved(flags, args, "resolve");
+}
+
+async function reopenThread(flags, args) {
+  await setResolved(flags, args, "reopen");
+}
+
+async function setResolved(flags, [ref, threadId, ...rest], verb) {
+  if (!ref || !threadId || rest.length) fail(`usage: bikeshed ${verb} <id> <thread>`);
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, `${verb}_thread`, { ...docArgs(ref), threadId });
+  out(flags.json, result, () => console.log(`${verb === "resolve" ? "resolved" : "reopened"} ${threadId}`));
+}
+
+/**
  * Propose new text for one passage of a document's current version. The
  * passage is quoted as a reader sees it, which is how `comments` prints it, so
  * a quote can go straight from one command to the other.
@@ -862,6 +885,8 @@ const COMMANDS = {
   comments,
   comment,
   reply,
+  resolve: resolveThread,
+  reopen: reopenThread,
   suggest,
   revise,
   withdraw,

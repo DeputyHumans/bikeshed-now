@@ -596,7 +596,8 @@ Because it is same-origin, the parent app drives annotation directly on
   position fallback would highlight the wrong words.
 - **A resolved annotation is not drawn.** Resolving is how a reader says a
   passage is dealt with, so its mark comes off the prose; the thread stays in
-  the panel and can be reopened there. A resolved annotation is skipped before
+  the panel and can be reopened there. An agent resolves through a tool, which
+  leaves a note in the thread saying so (§19). A resolved annotation is skipped before
   its anchor is resolved, so it is never reported as orphaned either.
 - **The panel starts collapsed unless there is a thread to read.** Its default
   is decided once per document, by the version's first annotation snapshot:
@@ -694,8 +695,8 @@ The one path that writes content, and it is explicit and server-mediated.
   may decide it. The gate is asked after the content-hash dedup, so an
   identical update stays a no-op, and before anything is uploaded
   (`lib/review.ts`). The comment gate stays on the in-app commit alone, because
-  the agent loop revises a document in answer to its open comments and a
-  person resolves them afterwards (§19).
+  the agent loop revises a document in answer to its open comments, and
+  closing them is not what publishing the answer waits for (§19).
 
 ### 6b. Presence and live collaboration
 
@@ -1853,7 +1854,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — sixteen tools
+### MCP — eighteen tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1875,9 +1876,11 @@ scripts and anything that cannot open a browser.
 | `get_comments` | **unresolved feedback, each with its anchored quote**; `version` names an earlier version, whose threads any reader of the document may read |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
+| `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
+| `reopen_thread` | open such a thread again, with a note |
 
 `get_document`, `update_document`, `suggest_edit`, `get_comments`,
-`add_comment` and `reply_to_comment` take an optional `k`: an unlisted document's key, for a caller who is not a member and
+`add_comment`, `reply_to_comment`, `resolve_thread` and `reopen_thread` take an optional `k`: an unlisted document's key, for a caller who is not a member and
 whose account holds no link grant. Without it such a document answers exactly as
 an id that does not exist (§17). The CLI accepts the link itself wherever it
 takes an id, because the link is the only place a person holds the key.
@@ -1941,7 +1944,8 @@ line break, each with what to do instead. The anchor it stores is the one the
 browser's strict resolver will find; a fixture of golden cases is asserted by
 both (§22). Accepting and rejecting have no tool, and `claim`, `accept` and
 `reject` on `/suggestion` refuse a token; `functions/test/suggest-edit.test.js`
-asserts no tool name matches `accept|reject|approve|resolve|decide`. What an
+pins the tools whose names close anything to exactly the ones this section
+lists, so a new one cannot arrive unexamined. What an
 agent proposed it may change (`revise_suggestion`) or take back
 (`withdraw_suggestion`) until it is decided — its person's own suggestions, on
 the current version, where every pending one is. Neither erases anything
@@ -1956,9 +1960,21 @@ annotation and its first comment in one batch, stamped with the caller's
 actor. Anyone who can read a document may comment on it, as in the browser.
 The anchor is stored with `strict: true`, because its offsets mean nothing in
 the page (§6). Nothing caps how many threads an agent opens, as nothing caps a
-person. Only a person resolves one. Like every thread it stays on its version,
-and it holds back a new version saved in the app, but not `update_document`:
-the comment gate is the in-app commit's alone (`lib/review.ts`).
+person. Like every thread it stays on its version, and it holds back a new
+version saved in the app, but not `update_document`: the comment gate is the
+in-app commit's alone (`lib/review.ts`).
+
+**An agent closes what it dealt with** (ADR 0015). `resolve_thread` and
+`reopen_thread` do what any reader does with the panel's button, under the
+same two rules the browser's write is held to: whoever may read the document
+may, and never on a suggestion, which is decided rather than resolved. They act
+on the current version only; an earlier version's threads are the record of
+its review. A token cannot write Firestore, so they go through `lib/threads.ts`
+in a transaction, and unlike the app each change leaves a generated note in the
+thread — "Resolved." or "Reopened." — stamped with the caller's actor. Resolving
+hides a point from the person who raised it; the note, and the comment notice
+it sends them (§14), are how they hear an agent closed it, and the panel lets
+them reopen it. A retry that changes nothing writes nothing.
 
 One resolver authorizes every "put this inside that folder" in the system —
 `resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
@@ -1979,7 +1995,7 @@ Deliberately distinct from `scripts/*.mjs`:
 Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
 `lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
-`suggest <slug> <text> (--with <text>
+`resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text>
 | --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `open <slug>`,
 `folders`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
@@ -2051,8 +2067,8 @@ believes it.
 
 Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
 endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
-deletion, folder renaming or sharing through the agent surface · resolving a
-comment thread from an agent · accepting or rejecting a suggested edit from an agent.
+deletion, folder renaming or sharing through the agent surface · accepting or
+rejecting a suggested edit from an agent.
 
 ---
 

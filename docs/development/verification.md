@@ -341,7 +341,7 @@ request's own origin (SPEC §23).
 3. Point the MCP Inspector at `http://127.0.0.1:5050/mcp`, in direct mode. It
    registers, opens `/connect`, and the consent page shows the redirect host
    with the app's name marked as not checked. The address bar shows `/connect`
-   with no query. **Approve**. The Inspector lists sixteen tools.
+   with no query. **Approve**. The Inspector lists eighteen tools.
 4. On the account screen the app appears under Access tokens as connected.
    **Revoke** it. The Inspector's next call answers `401` and offers to sign in
    again.

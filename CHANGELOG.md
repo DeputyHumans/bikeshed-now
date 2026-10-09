@@ -23,7 +23,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   does, for whoever may edit it, and never its address. An HTML document's own
   `<title>` is content and stays as written. The workspace list and the tool
   now share one rename, and the tool refuses an expired document as every
-  write tool does. There are sixteen tools (SPEC §4, §19).
+  write tool does (SPEC §4, §19).
+
+- **An agent can resolve and reopen a thread.** `resolve_thread` and
+  `reopen_thread`, and `bikeshed resolve` and `bikeshed reopen` (in
+  `bikeshed-now` 0.14.0), do what the panel's button does for any reader, on
+  the current version, and never on a suggestion. Unlike the button, each
+  change leaves a "Resolved." or "Reopened." note in the thread, marked as made
+  through an agent, and its participants are told, because resolving hides a
+  point from whoever raised it (ADR 0015). There are eighteen tools (SPEC §6,
+  §19).
 
 ### Fixed
 

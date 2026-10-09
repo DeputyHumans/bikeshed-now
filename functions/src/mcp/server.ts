@@ -58,7 +58,7 @@ export const INSTRUCTIONS =
   "get_comments returns each comment together with the exact passage it is " +
   "about, so you can revise without fetching and diffing the whole document. " +
   "Raise a new point on a passage with add_comment; answer a thread with " +
-  "reply_to_comment. A " +
+  "reply_to_comment, and close it with resolve_thread once it is dealt with. A " +
   "new document is readable by its owner and by the members of any folder it is " +
   "filed in, until a person shares it; nothing here shares, deletes or sets an " +
   "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +

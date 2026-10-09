@@ -1118,3 +1118,27 @@ test("rename wants a title", () => {
     (e) => e.status !== 0 && /usage: bikeshed rename <id> <title>/.test(e.stderr),
   );
 });
+
+test("resolve and reopen name the thread, and carry a link's key", async () => {
+  await withServer(rpcOk({ threadId: "t1", version: "v2", resolved: true }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["resolve", "plan", "t1"], env);
+    assert.equal(seen[0].body.params.name, "resolve_thread");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", threadId: "t1" });
+    assert.match(stdout, /resolved t1/);
+
+    await runAsync(["reopen", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "t1", "--json"], env);
+    assert.equal(seen[1].body.params.name, "reopen_thread");
+    assert.deepEqual(seen[1].body.params.arguments, { id: "plan", k: "tok_0123456789abcdefghijk", threadId: "t1" });
+  });
+});
+
+test("resolve and reopen want exactly a document and a thread", () => {
+  for (const args of [["resolve", "plan"], ["reopen", "plan"], ["resolve", "plan", "t1", "extra"]]) {
+    assert.throws(
+      () => run(args, { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+      (e) => e.status !== 0 && new RegExp(`usage: bikeshed ${args[0]} <id> <thread>`).test(e.stderr),
+      args.join(" "),
+    );
+  }
+});
