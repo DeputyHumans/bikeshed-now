@@ -174,3 +174,38 @@ export async function acceptInSession(steps: {
   await steps.record();
   return applied;
 }
+
+/**
+ * Where the pass goes once the suggestion on screen is no longer pending —
+ * decided here, by another approver, or withdrawn: the next one after it in
+ * the order it was reviewed in, wrapping, so that an approver who skipped
+ * one is not sent back to it after every decision.
+ */
+export function followingSuggestion(before: string[], now: string[], currentId: string | null): string | null {
+  if (currentId && now.includes(currentId)) return currentId;
+  const from = currentId ? before.indexOf(currentId) : -1;
+  const ordered = [...before.slice(from + 1), ...before.slice(0, from + 1)];
+  return ordered.find((id) => now.includes(id)) ?? now[0] ?? null;
+}
+
+/** What to say when nothing is left in the pass, and only what is true. */
+export function passEndNotice(o: { acceptedHere: boolean; openComments: boolean; unreadable: boolean }): string {
+  if (o.unreadable) return "The suggestions couldn’t be loaded, so the review has stopped.";
+  if (!o.acceptedHere) return "No suggestions are left to review.";
+  return o.openComments
+    ? "That was the last suggestion. Resolve the open comments, then publish the result with Save as new version."
+    : "That was the last suggestion. Publish the result with Save as new version.";
+}
+
+/** Why "Save as new version" is greyed out, said to the person who can act on it. */
+export function publishBlockedReason(o: { pending: number; unresolved: boolean; canDecide: boolean }): string | undefined {
+  if (o.pending > 0) {
+    const waiting = o.pending === 1 ? "1 suggested edit is waiting." : `${o.pending} suggested edits are waiting.`;
+    return o.canDecide
+      ? `${waiting} Accept or reject ${o.pending === 1 ? "it" : "each one"} before you publish.`
+      : `${waiting} Only the owner or an approver can accept or reject ${o.pending === 1 ? "it" : "them"}.`;
+  }
+  return o.unresolved
+    ? "Resolve every comment first. Annotations belong to a version, so publishing would leave them behind."
+    : undefined;
+}

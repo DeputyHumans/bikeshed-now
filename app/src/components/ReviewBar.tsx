@@ -38,11 +38,14 @@ export function ReviewBar({
   onStart: () => void;
   onGo: (annId: string) => void;
   onAccept: (a: Annotation) => void;
-  onReject: (a: Annotation, reason: string) => void;
+  /** Resolves true once it is rejected; false leaves the reason to try again. */
+  onReject: (a: Annotation, reason: string) => Promise<boolean>;
   onDone: () => void;
 }) {
-  const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason] = useState("");
+  // The reason being written, and WHICH suggestion it is for. When another
+  // approver decides that one, or its author withdraws it, the pass moves on;
+  // a reason still open would reject the next one, for this one's reason.
+  const [draft, setDraft] = useState<{ annId: string; reason: string } | null>(null);
   const n = pending.length;
   if (n === 0) return null;
 
@@ -69,15 +72,19 @@ export function ReviewBar({
   const current = pending[index];
   const s = current.suggestion!;
   const isStale = stale.has(current.annId);
+  const rejecting = draft?.annId === current.annId;
+  const reason = rejecting ? draft.reason : "";
+  const setReason = (text: string) => setDraft({ annId: current.annId, reason: text });
+  const setRejecting = (on: boolean) => setDraft(on ? { annId: current.annId, reason: "" } : null);
   const go = (i: number) => {
     setRejecting(false);
-    setReason("");
     onGo(pending[(i + n) % n].annId);
   };
-  const reject = () => {
-    onReject(current, reason.trim());
-    setRejecting(false);
-    setReason("");
+  // Enter reaches this as well as the button, so it honours `busy` itself. The
+  // reason is kept until the rejection has gone through.
+  const reject = async () => {
+    if (busy) return;
+    if (await onReject(current, reason.trim())) setDraft(null);
   };
 
   return (
@@ -116,13 +123,13 @@ export function ReviewBar({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  reject();
+                  void reject();
                 } else if (e.key === "Escape") {
                   setRejecting(false);
                 }
               }}
             />
-            <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={reject}>
+            <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => void reject()}>
               Reject
             </button>
             <button type="button" className="btn btn-sm btn-quiet" onClick={() => setRejecting(false)}>

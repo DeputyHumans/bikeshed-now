@@ -82,6 +82,22 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   spaces on both sides of it, which the editor keeps visible as `&nbsp; ` and
   the next version kept for good (SPEC §22).
 
+- **Rejecting in the review pass rejects the suggestion on screen.** A reason
+  being typed stayed open when another approver decided that suggestion, or
+  its author withdrew it, and the pass moved on: Enter then rejected the next
+  one, with the reason written for the last. Enter also went through while a
+  decision was in flight, and a rejection that failed lost its reason. The
+  reason now belongs to one suggestion and is kept until the rejection goes
+  through (SPEC §22).
+
+- **The review pass moves on, and ends, as it should.** After a decision it
+  went back to the first suggestion rather than the one after it, so anyone
+  who skipped one met it again after every decision. Its last word was
+  "Publish the result with Save as new version" whatever had happened, even
+  after a rejection, or when the suggestions could not be loaded at all, or
+  while open comments still kept Save greyed out. And an approver hovering
+  over that greyed-out Save was told to find an approver (SPEC §22).
+
 ## 0.9.3 — 2026-10-08
 
 ### Fixed

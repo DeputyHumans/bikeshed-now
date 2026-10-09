@@ -45,7 +45,13 @@ import { SelectionFab } from "../components/SelectionFab";
 import { SuggestPopover, popoverPosition, type PopoverPosition } from "../components/SuggestPopover";
 import { acceptSuggestion, claimSuggestion, rejectSuggestion, suggestEdit } from "../suggestions";
 import { ReviewBar } from "../components/ReviewBar";
-import { acceptInSession, useSuggestionReview } from "../viewer/useSuggestionReview";
+import {
+  acceptInSession,
+  followingSuggestion,
+  passEndNotice,
+  publishBlockedReason,
+  useSuggestionReview,
+} from "../viewer/useSuggestionReview";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import { SlidePanel } from "../components/SlidePanel";
 import { SlideOverview } from "../components/SlideOverview";
@@ -121,6 +127,7 @@ export function DocViewer() {
     settled: gate !== "loading",
   });
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationsUnreadable, setAnnotationsUnreadable] = useState(false);
   const [teams, setTeams] = useState<TeamMeta[]>([]);
   // Only for the breadcrumb. An anonymous reader of a public document has no
   // folders and gets a trail of one, which is correct: "Everything" is still
@@ -416,12 +423,16 @@ export function DocViewer() {
       docId,
       doc.currentVersion,
       (anns) => {
+        setAnnotationsUnreadable(false);
         setAnnotations(anns);
         settleComments(anns);
       },
       // Unreadable is not "none": the panel stays undecided, which reads as
       // closed, and the reader can still open it.
-      () => setAnnotations([]),
+      () => {
+        setAnnotationsUnreadable(true);
+        setAnnotations([]);
+      },
     );
   }, [docId, doc.currentVersion, settleComments, doc.resolvedFor]);
 
@@ -611,31 +622,44 @@ export function DocViewer() {
     if (!wantsEdit) setReview(null);
   }, [wantsEdit]);
 
+  /** Whether this browser accepted anything in the pass now open: the only case with a result to publish. */
+  const acceptedInPass = useRef(false);
+
   /** Open the review pass in the editor, on one suggestion or the first. */
   const startReview = useCallback(
     (annId?: string) => {
+      acceptedInPass.current = false;
       setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
       setWantsEdit(true);
     },
     [pendingSuggestions],
   );
 
-  // Somebody decided the one on screen — this browser, or another approver's
-  // — so move on; and close the pass once nothing is left to decide.
-  const lastPending = useRef(pendingSuggestions.length);
+  // Somebody decided the one on screen — this browser, another approver, or
+  // its author by withdrawing it — so move on to the one after it; and close
+  // the pass once nothing is left to decide, saying only what is true.
+  const lastPending = useRef(pendingSuggestions.map((a) => a.annId));
   useEffect(() => {
     const before = lastPending.current;
-    lastPending.current = pendingSuggestions.length;
+    const now = pendingSuggestions.map((a) => a.annId);
+    lastPending.current = now;
     if (!review) return;
-    if (pendingSuggestions.length === 0) {
+    if (now.length === 0) {
       setReview(null);
-      if (before > 0) toast.show("That was the last suggestion. Publish the result with Save as new version.");
+      if (before.length > 0) {
+        toast.show(
+          passEndNotice({
+            acceptedHere: acceptedInPass.current,
+            openComments: annotations.some((a) => !a.resolved),
+            unreadable: annotationsUnreadable,
+          }),
+        );
+      }
       return;
     }
-    if (!pendingSuggestions.some((a) => a.annId === review.currentId)) {
-      setReview({ currentId: pendingSuggestions[0].annId });
-    }
-  }, [review, pendingSuggestions, toast]);
+    const next = followingSuggestion(before, now, review.currentId);
+    if (next !== review.currentId) setReview({ currentId: next });
+  }, [review, pendingSuggestions, annotations, annotationsUnreadable, toast]);
 
   const suggestionWhere = useCallback(
     (annId: string) => ({ docId, versionId: doc.currentVersion, annId, ...(linkKey ? { k: linkKey } : {}) }),
@@ -655,7 +679,9 @@ export function DocViewer() {
           saveFailed: () => editor.saveFailed(),
           record: () => acceptSuggestion(suggestionWhere(a.annId)),
         });
-        if (outcome === "stale") {
+        if (outcome === "applied" || outcome === "already-applied") {
+          acceptedInPass.current = true;
+        } else if (outcome === "stale") {
           toast.error("The text has changed since this was suggested, so it can’t be applied.");
         } else if (outcome === "failed") {
           toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
@@ -674,13 +700,15 @@ export function DocViewer() {
   );
 
   const rejectCurrent = useCallback(
-    async (a: Annotation, reason: string) => {
-      if (deciding) return;
+    async (a: Annotation, reason: string): Promise<boolean> => {
+      if (deciding) return false;
       setDeciding(true);
       try {
         await rejectSuggestion({ ...suggestionWhere(a.annId), ...(reason ? { reason } : {}) });
+        return true;
       } catch (e) {
         toast.error((e as Error).message);
+        return false;
       } finally {
         setDeciding(false);
       }
@@ -845,13 +873,11 @@ export function DocViewer() {
           onExit={() => void stopEditing()}
           committing={committing}
           commitDisabled={annotations.some((a) => !a.resolved)}
-          commitDisabledReason={
-            pendingSuggestions.length > 0
-              ? `${pendingSuggestions.length === 1 ? "1 suggested edit is" : `${pendingSuggestions.length} suggested edits are`} waiting. Only the owner or an approver can accept or reject ${pendingSuggestions.length === 1 ? "it" : "them"}.`
-              : annotations.some((a) => !a.resolved)
-                ? "Resolve every comment first. Annotations belong to a version, so publishing would leave them behind."
-                : undefined
-          }
+          commitDisabledReason={publishBlockedReason({
+            pending: pendingSuggestions.length,
+            unresolved: annotations.some((a) => !a.resolved),
+            canDecide: isApprover(doc.meta, emailLower),
+          })}
         />
       ) : null}
       {editingNow ? (
@@ -866,7 +892,7 @@ export function DocViewer() {
           onStart={() => startReview()}
           onGo={(annId) => setReview({ currentId: annId })}
           onAccept={(a) => void acceptCurrent(a)}
-          onReject={(a, reason) => void rejectCurrent(a, reason)}
+          onReject={rejectCurrent}
           onDone={() => setReview(null)}
         />
       ) : (

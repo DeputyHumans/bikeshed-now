@@ -5,7 +5,7 @@ import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
-import { useSuggestionReview } from "./useSuggestionReview";
+import { followingSuggestion, passEndNotice, publishBlockedReason, useSuggestionReview } from "./useSuggestionReview";
 
 const EDITING: FrameMode = { kind: "editing", baseVersion: "v1" };
 
@@ -149,5 +149,41 @@ describe("useSuggestionReview", () => {
     expect(scroll.mock.contexts[0]).toBe(rebuilt);
     expect([...seen]).toEqual(["b"]);
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+});
+
+describe("the review pass, after each decision", () => {
+  it("moves to the suggestion that followed the decided one, not back to the first", () => {
+    // An approver who skipped "a" to decide "b" is not sent back to "a" each time.
+    expect(followingSuggestion(["a", "b", "c"], ["a", "c"], "b")).toBe("c");
+    expect(followingSuggestion(["a", "b", "c"], ["a", "b"], "c")).toBe("a");
+    expect(followingSuggestion(["a", "b"], ["a", "b", "c"], "b")).toBe("b");
+    expect(followingSuggestion(["a"], [], "a")).toBeNull();
+  });
+
+  it("tells the approver to publish only when they accepted something, and only if they can", () => {
+    expect(passEndNotice({ acceptedHere: true, openComments: false, unreadable: false })).toBe(
+      "That was the last suggestion. Publish the result with Save as new version.",
+    );
+    expect(passEndNotice({ acceptedHere: true, openComments: true, unreadable: false })).toMatch(
+      /Resolve the open comments, then publish/,
+    );
+    // Rejected, withdrawn, or decided by somebody else: there is no result of theirs to publish.
+    expect(passEndNotice({ acceptedHere: false, openComments: false, unreadable: false })).toBe(
+      "No suggestions are left to review.",
+    );
+    // The list could not be read: that is not "none left".
+    expect(passEndNotice({ acceptedHere: true, openComments: false, unreadable: true })).toMatch(/couldn’t be loaded/);
+  });
+
+  it("does not tell an approver to go and find an approver", () => {
+    expect(publishBlockedReason({ pending: 2, unresolved: true, canDecide: true })).toBe(
+      "2 suggested edits are waiting. Accept or reject each one before you publish.",
+    );
+    expect(publishBlockedReason({ pending: 1, unresolved: true, canDecide: false })).toBe(
+      "1 suggested edit is waiting. Only the owner or an approver can accept or reject it.",
+    );
+    expect(publishBlockedReason({ pending: 0, unresolved: true, canDecide: true })).toMatch(/^Resolve every comment first/);
+    expect(publishBlockedReason({ pending: 0, unresolved: false, canDecide: true })).toBeUndefined();
   });
 });
