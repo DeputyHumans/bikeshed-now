@@ -1524,15 +1524,18 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
  * `{ op, docId, versionId, k?, … }`, where `op` is
  *
  *   create    `anchor, replacement, note?`  anyone who may suggest, any channel
- *   revise    `annId, replacement, note?`   its author, in the app
- *   withdraw  `annId`                       its author, in the app
+ *   revise    `annId, replacement, note?`   its author, any channel
+ *   withdraw  `annId`                       its author, any channel
  *   claim     `annId`                       an approver, in the app
  *   accept    `annId`                       an approver, in the app, after applying it
  *   reject    `annId, reason?`              an approver, in the app
  *
  * The only path that writes the `suggestion` field; the rules refuse every
  * client write that names it. Deciding is a person's act — an agent proposes
- * and never decides — so every op but `create` refuses a token.
+ * and never decides — so claim, accept and reject refuse a token. Revise and
+ * withdraw change only the caller's own pending proposal and destroy nothing
+ * (the earlier text is kept, and a withdrawn thread stays), so a token may do
+ * either.
  *
  * `accept` does not apply anything. The approver's browser has already made
  * the change in their editing session and saved the draft; this records the
@@ -1630,20 +1633,17 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  // Everything else is a decision about a suggestion that exists.
+  // Everything else changes a suggestion that exists.
   const annId = typeof body.annId === "string" ? body.annId : "";
   if (!annId || !safeSegment(annId)) {
     badRequest(res, "invalid or missing annId");
     return;
   }
-  if (actor.channel !== "web") {
-    res.status(403).json({
-      error:
-        "Accepting, rejecting, changing or withdrawing a suggestion is done by a person, in the app.",
-    });
+  const deciding = op === "claim" || op === "accept" || op === "reject";
+  if (deciding && actor.channel !== "web") {
+    res.status(403).json({ error: "Accepting or rejecting a suggestion is done by a person, in the app." });
     return;
   }
-  const deciding = op === "claim" || op === "accept" || op === "reject";
   if (deciding && !isDocApprover(data, caller.uid, caller.emailLower)) {
     res.status(403).json({ error: "Only the owner or an approver can accept or reject a suggestion." });
     return;

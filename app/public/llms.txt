@@ -117,7 +117,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all thirteen tools.
+first. If all you have is an HTTP client, you have all fifteen tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -140,6 +140,8 @@ somebody might commit.
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
 | `update_document` | Publish a new version of one that exists |
 | `suggest_edit` | Propose new text for one passage, for a person to accept or reject |
+| `revise_suggestion` | Change your own suggestion before it is decided; what it said before is kept |
+| `withdraw_suggestion` | Take back your own suggestion before it is decided; its thread stays |
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root |
@@ -162,6 +164,8 @@ bikeshed comments <id> [--version …] [--all] [--json]
 bikeshed comment <id> <text> --body … [--prefix …] [--suffix …]
 bikeshed reply <id> <thread> <text>
 bikeshed suggest <id> <text> (--with … | --delete) [--note …] [--prefix …] [--suffix …]
+bikeshed revise <id> <thread> (--with … | --delete) [--note …]
+bikeshed withdraw <id> <thread>
 bikeshed open <id>
 
 bikeshed folders
@@ -314,10 +318,17 @@ accepted, rejected or withdrawn. A withdrawn one keeps its thread, as a decided
 one does. Once its author has changed it, `revisions` lists what it said
 before, oldest first.
 
+**Until it is decided, a suggestion you made is yours to change.**
+`revise_suggestion` (`bikeshed revise <id> <thread> --with …`) replaces its
+text, and `withdraw_suggestion` (`bikeshed withdraw <id> <thread>`) takes it
+back. Neither erases anything: what it said before stays in `revisions`, and a
+withdrawn suggestion keeps its thread.
+
 **A pending suggestion holds back every new version,** yours included:
 `update_document` is refused until somebody who can approve has decided each
-one. Tell the person you are working with; there is nothing you can do about
-it yourself, and that is the point.
+one, or its author has withdrawn it. If it is one you made and no longer mean,
+withdraw it; otherwise tell the person you are working with, and that is the
+point.
 
 ## Forking someone else's document
 

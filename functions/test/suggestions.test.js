@@ -181,16 +181,41 @@ test("no decision comes from a token, not even an approver's", async () => {
   const w = world();
   const annId = await suggested(w);
   withDraft(w);
-  for (const op of ["claim", "accept", "reject", "revise", "withdraw"]) {
-    const r = await w.call(op === "revise" || op === "withdraw" ? w.bearer.suggester : w.bearer.approver, {
-      op,
-      annId,
-      replacement: "x",
-    });
+  for (const op of ["claim", "accept", "reject"]) {
+    const r = await w.call(w.bearer.approver, { op, annId });
     assert.equal(r.status, 403, op);
     assert.match(r.body.error, /by a person, in the app/);
   }
-  assert.equal(w.ann(annId).suggestion.state, "pending");
+  const a = w.ann(annId);
+  assert.equal(a.suggestion.state, "pending");
+  assert.equal(a.suggestion.claim, undefined, "not even held");
+});
+
+test("an agent changes or takes back its person's own suggestion, and nobody else's", async () => {
+  const w = world();
+  const theirs = await suggested(w); // made by SUGGESTER in the app
+  const others = (await create(w, w.as(APPROVER))).body.annId;
+
+  // Its person's own, though made in the browser: the token acts for them.
+  const revised = await w.call(w.bearer.suggester, { op: "revise", annId: theirs, replacement: "a fortnight" });
+  assert.deepEqual(revised.body, { state: "pending" });
+  const after = w.ann(theirs).suggestion;
+  assert.equal(after.replacement, "a fortnight");
+  assert.equal(after.revisions[0].replacement, "two weekends", "the earlier text is kept");
+  assert.equal(after.revisions[0].actor.channel, "mcp", "and says it was changed through a token");
+
+  // Somebody else's, even an approver's token cannot touch: it is not theirs.
+  for (const op of ["revise", "withdraw"]) {
+    const r = await w.call(w.bearer.suggester, { op, annId: others, replacement: "x" });
+    assert.equal(r.status, 403, op);
+  }
+
+  const withdrawn = await w.call(w.bearer.suggester, { op: "withdraw", annId: theirs });
+  assert.deepEqual(withdrawn.body, { state: "withdrawn" });
+  const closed = w.ann(theirs);
+  assert.equal(closed.resolved, true);
+  assert.equal(closed.suggestion.decidedBy.channel, "mcp");
+  assert.equal(w.ann(others).suggestion.state, "pending");
 });
 
 test("an editor edits, but does not decide", async () => {

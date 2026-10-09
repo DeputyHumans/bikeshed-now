@@ -172,7 +172,10 @@ rules refuse every client create, update or delete that names it, before or
 after the write, and every client comment claiming `generated` or
 `opensSuggestion`. The endpoint checks the role for each op, refuses every
 decision from a token, and refuses a replacement containing a line break,
-control character or bidirectional override. Accepting applies nothing on the
+control character or bidirectional override. A token may change or withdraw
+only its own person's pending suggestion, and neither erases anything: what a
+change replaced is kept in the `suggestion` field, which no client may write,
+and a withdrawn suggestion keeps its thread. Accepting applies nothing on the
 server: the approver's own session makes the edit, which an approver is
 allowed to make anyway (SPEC §22, ADR 0013).
 

@@ -1016,6 +1016,48 @@ test("comments prints a suggestion's change and whether it is decided", async ()
   });
 });
 
+test("revise and withdraw send the thread, the change, and the link's key", async () => {
+  await withServer(rpcOk({ threadId: "s1", version: "v1", state: "pending" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const link = "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk";
+    await runAsync(["revise", "plan", "s1", "--with", "a fortnight", "--note", "Longer.", "--json"], env);
+    await runAsync(["revise", link, "s1", "--delete", "--json"], env);
+    const { stdout } = await runAsync(["withdraw", "plan", "s1"], env);
+    assert.equal(seen[0].body.params.name, "revise_suggestion");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", threadId: "s1", replacement: "a fortnight", note: "Longer." });
+    assert.deepEqual(seen[1].body.params.arguments, {
+      id: "plan",
+      k: "tok_0123456789abcdefghijk",
+      threadId: "s1",
+      replacement: "",
+    });
+    assert.equal(seen[2].body.params.name, "withdraw_suggestion");
+    assert.deepEqual(seen[2].body.params.arguments, { id: "plan", threadId: "s1" });
+    assert.match(stdout, /withdrew s1/);
+  });
+});
+
+test("revise and withdraw refuse what they cannot mean", () => {
+  const env = { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" };
+  for (const args of [
+    ["revise", "plan", "s1"],
+    ["revise", "plan", "s1", "--with", "x", "--delete"],
+    ["revise", "plan", "--with", "x"],
+    ["revise", "plan", "s1", "stray", "--with", "x"],
+    ["withdraw", "plan"],
+  ]) {
+    assert.throws(
+      () => run(args, env),
+      (e) => e.status !== 0 && /usage: bikeshed (revise|withdraw)/.test(e.stderr),
+      args.join(" "),
+    );
+  }
+  assert.throws(
+    () => run(["revise", "plan", "s1", "--with", ""], env),
+    (e) => e.status !== 0 && /say --delete if you mean that/.test(e.stderr),
+  );
+});
+
 test("comments asks for an earlier version only when told to", async () => {
   await withServer(rpcOk({ id: "plan", version: "v2", threads: [] }), async (origin, seen) => {
     const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };

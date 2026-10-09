@@ -109,9 +109,10 @@ test("a version with no id has nothing pending, and is not queried", async () =>
 test("the refusal says who can clear it, in the singular and the plural", () => {
   assert.equal(
     pendingSuggestionsMessage(1),
-    "1 suggested edit is waiting for a decision. Only the owner or an approver can accept or reject it, and no new version can be published until then.",
+    "1 suggested edit is waiting for a decision. Only the owner or an approver can accept or reject it, and no new version can be published until then. If it is yours, you may withdraw it.",
   );
   assert.match(pendingSuggestionsMessage(3), /^3 suggested edits are waiting .* reject them,/);
+  assert.match(pendingSuggestionsMessage(3), /Any that are yours you may withdraw\.$/, "and that its author may take one back");
 });
 
 test("both version-minting endpoints ask about pending suggestions, in the right place", () => {

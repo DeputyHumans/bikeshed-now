@@ -63,7 +63,8 @@ export const INSTRUCTIONS =
   "filed in, until a person shares it; nothing here shares, deletes or sets an " +
   "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +
   "Where you may suggest but not edit, propose a change with suggest_edit; a " +
-  "person accepts or rejects it.";
+  "person accepts or rejects it, and until then revise_suggestion and " +
+  "withdraw_suggestion change or take back your own.";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

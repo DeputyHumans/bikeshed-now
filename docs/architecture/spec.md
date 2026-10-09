@@ -336,13 +336,15 @@ Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
 | `op` | Body | Who | Refused with |
 |---|---|---|---|
 | `create` | `anchor, replacement, note?` | `canSuggest`, any channel | `403` a reader who may not suggest; `409 { currentVersion }` not the current version; `409` twenty pending by this author; `400` a bad anchor, a replacement with a line break or control character, or one equal to its quote |
-| `revise` | `annId, replacement, note?` | its author, in the app | `403` anyone else; `409` decided or claimed |
-| `withdraw` | `annId` | its author, in the app | the same; idempotent once withdrawn, and the thread stays |
+| `revise` | `annId, replacement, note?` | its author, any channel | `403` anyone else; `409` decided or claimed, or changed twenty times |
+| `withdraw` | `annId` | its author, any channel | the same; idempotent once withdrawn, and the thread stays |
 | `claim` | `annId` | an approver, in the app | `409 { claimedBy }` another approver's live claim |
 | `accept` | `annId` | an approver, in the app | `409` no draft of this version; idempotent once accepted |
 | `reject` | `annId, reason?` | an approver, in the app | idempotent once rejected |
 
-Every op but `create` refuses a token with `403`: deciding is a person's act.
+`claim`, `accept` and `reject` refuse a token with `403`. `revise` and
+`withdraw` take one: each changes only the caller's own pending proposal, and
+neither destroys anything.
 `create` answers `{ annId, versionId }`; the others `{ state }`.
 
 ### Workspace endpoints
@@ -1851,7 +1853,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — thirteen tools
+### MCP — fifteen tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1864,6 +1866,8 @@ scripts and anything that cannot open a browser.
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
 | `update_document` | commit a new version of an existing document |
 | `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
+| `revise_suggestion` | change the caller's own pending suggestion; what it said before is kept (§22) |
+| `withdraw_suggestion` | take back the caller's own pending suggestion; its thread stays, closed (§22) |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
@@ -1927,9 +1931,13 @@ or suffix to choose between repeats. It refuses a passage that is not there,
 that repeats with nothing to tell the copies apart, or that spans a block or a
 line break, each with what to do instead. The anchor it stores is the one the
 browser's strict resolver will find; a fixture of golden cases is asserted by
-both (§22). Accepting and rejecting have no tool, and every decision op of
-`/suggestion` refuses a token; `functions/test/suggest-edit.test.js` asserts no
-tool name matches `accept|reject|approve|resolve|decide`. `get_comments` reports
+both (§22). Accepting and rejecting have no tool, and `claim`, `accept` and
+`reject` on `/suggestion` refuse a token; `functions/test/suggest-edit.test.js`
+asserts no tool name matches `accept|reject|approve|resolve|decide`. What an
+agent proposed it may change (`revise_suggestion`) or take back
+(`withdraw_suggestion`) until it is decided — its person's own suggestions, on
+the current version, where every pending one is. Neither erases anything
+(§22). `get_comments` reports
 a suggestion's `replacement`, `state` and `revisions` (each with its `via`
 channel, never its token); `get_document` reports `canSuggest`;
 and `update_document` from a caller who may only suggest names `suggest_edit`.
@@ -2220,7 +2228,7 @@ behind the shape, and what would reverse it, is ADR 0013.
 | an agent | its person's | its person's | its person's | never |
 
 Roles are granted and inherited as in §13. The author of a pending suggestion
-may change or withdraw it.
+may change or withdraw it, in the app or through an agent acting for them.
 
 ### What a suggestion is
 

@@ -61,6 +61,11 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
                                        propose new text for a passage, for a
                                        person to accept or reject (--delete to
                                        propose removing it)
+  bikeshed revise <id> <thread> --with <new text>
+                                       change your suggestion before it is
+                                       decided; what it said before is kept
+  bikeshed withdraw <id> <thread>      take back your suggestion before it is
+                                       decided; its thread stays
   bikeshed open <id>                   open it in a browser
 
   Where a command takes <id> it also takes the link you were sent. An unlisted
@@ -101,9 +106,9 @@ Options
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
   --all                  with list: every page; with comments: resolved too
-  --with <text>          with suggest: what the passage should say instead
-  --delete               with suggest: propose deleting the passage
-  --note <text>          with suggest: why, for whoever decides
+  --with <text>          with suggest or revise: what the passage should say instead
+  --delete               with suggest or revise: propose deleting the passage
+  --note <text>          with suggest or revise: why, for whoever decides
   --prefix <text>        with suggest: words just before a passage that repeats
   --suffix <text>        with suggest: words just after it
   --watch                with publish/update: republish on every save
@@ -585,16 +590,12 @@ async function suggest(flags, [ref, ...rest]) {
   const exact = rest.join(" ");
   const usage = "usage: bikeshed suggest <id> <text> (--with <new text> | --delete) [--note <why>]";
   if (!ref || !exact) fail(usage);
-  const replacing = typeof flags.with === "string";
-  if (replacing === Boolean(flags.delete)) fail(usage);
-  // An empty --with is what an unset shell variable sends; deleting a passage
-  // has to be asked for by name.
-  if (replacing && flags.with === "") fail("an empty --with would delete the passage; say --delete if you mean that");
+  const replacement = replacementFrom(flags, usage);
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "suggest_edit", {
     ...docArgs(ref),
     exact,
-    replacement: replacing ? flags.with : "",
+    replacement,
     ...(typeof flags.note === "string" ? { note: flags.note } : {}),
     ...(typeof flags.prefix === "string" ? { prefix: flags.prefix } : {}),
     ...(typeof flags.suffix === "string" ? { suffix: flags.suffix } : {}),
@@ -602,6 +603,42 @@ async function suggest(flags, [ref, ...rest]) {
   out(flags.json, result, () =>
     console.log(`suggested in ${result.threadId}; a person who can approve will accept or reject it`),
   );
+}
+
+/** The replacement `suggest` and `revise` were given: --with, or --delete by name. */
+function replacementFrom(flags, usage) {
+  const replacing = typeof flags.with === "string";
+  if (replacing === Boolean(flags.delete)) fail(usage);
+  // An empty --with is what an unset shell variable sends; deleting a passage
+  // has to be asked for by name.
+  if (replacing && flags.with === "") fail("an empty --with would delete the passage; say --delete if you mean that");
+  return replacing ? flags.with : "";
+}
+
+/**
+ * Change the text of a suggestion of yours that nobody has decided yet. What
+ * it said before is kept, for whoever decides (SPEC §22).
+ */
+async function revise(flags, [ref, threadId, ...rest]) {
+  const usage = "usage: bikeshed revise <id> <thread> (--with <new text> | --delete) [--note <why>]";
+  if (!ref || !threadId || rest.length) fail(usage);
+  const replacement = replacementFrom(flags, usage);
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "revise_suggestion", {
+    ...docArgs(ref),
+    threadId,
+    replacement,
+    ...(typeof flags.note === "string" ? { note: flags.note } : {}),
+  });
+  out(flags.json, result, () => console.log(`changed ${threadId}; what it said before is kept`));
+}
+
+/** Take back a suggestion of yours that nobody has decided yet; its thread stays. */
+async function withdraw(flags, [ref, threadId, ...rest]) {
+  if (!ref || !threadId || rest.length) fail("usage: bikeshed withdraw <id> <thread>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "withdraw_suggestion", { ...docArgs(ref), threadId });
+  out(flags.json, result, () => console.log(`withdrew ${threadId}`));
 }
 
 async function folders(flags) {
@@ -811,6 +848,8 @@ const COMMANDS = {
   comment,
   reply,
   suggest,
+  revise,
+  withdraw,
   open,
   folders,
   mkdir,

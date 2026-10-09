@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly thirteen tools, and they are the thirteen in the spec", () => {
+test("there are exactly fifteen tools, and they are the fifteen in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -136,6 +136,8 @@ test("there are exactly thirteen tools, and they are the thirteen in the spec", 
     "get_lineage",
     "update_document",
     "suggest_edit",
+    "revise_suggestion",
+    "withdraw_suggestion",
     "list_folders",
     "create_folder",
     "move_document",
@@ -143,7 +145,7 @@ test("there are exactly thirteen tools, and they are the thirteen in the spec", 
     "add_comment",
     "reply_to_comment",
   ]);
-  assert.equal(TOOLS.length, 13);
+  assert.equal(TOOLS.length, 15);
 });
 
 test("the surface has no tool that deletes or shares", () => {

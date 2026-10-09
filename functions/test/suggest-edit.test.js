@@ -77,7 +77,7 @@ async function withBucket(fn) {
 
 test("no tool decides anything a person decides", () => {
   // An agent proposes; accepting, rejecting and resolving are a person's acts
-  // (SPEC §19). Whoever adds a fourteenth tool meets this first.
+  // (SPEC §19). Whoever adds a tool meets this first.
   for (const name of TOOL_NAMES) {
     assert.doesNotMatch(name, /accept|reject|approve|resolve|decide/);
   }
@@ -237,4 +237,74 @@ test("get_comments reads an earlier version's threads when asked, and only a ver
     tool("get_comments").run(w.ctx({ uid: "u-x", emailLower: "x@example.com" }), { id: "d1", version: "v1" }),
     /no document with id "d1"/,
   );
+});
+
+test("a suggester's agent changes its suggestion, then takes it back, and the record keeps both", async () => {
+  const w = world();
+  const { threadId } = await withBucket(() =>
+    tool("suggest_edit").run(w.ctx(SUGGESTER), { id: "d1", exact: "is enough", replacement: "will do" }),
+  );
+
+  const revised = await tool("revise_suggestion").run(w.ctx(SUGGESTER), {
+    id: "d1",
+    threadId,
+    replacement: "",
+    note: "Cut it instead.",
+  });
+  assert.deepEqual(revised, { threadId, version: "v1", state: "pending" });
+
+  // Somebody else's agent, the owner's included, cannot change or take it back.
+  await assert.rejects(
+    tool("withdraw_suggestion").run(w.ctx(OWNER), { id: "d1", threadId }),
+    /only the person who suggested it can withdraw it/,
+  );
+  await assert.rejects(
+    tool("revise_suggestion").run(w.ctx(OWNER), { id: "d1", threadId, replacement: "x" }),
+    /only the person who suggested it can change it/,
+  );
+
+  const withdrawn = await tool("withdraw_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId });
+  assert.deepEqual(withdrawn, { threadId, version: "v1", state: "withdrawn" });
+  assert.deepEqual(
+    await tool("withdraw_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId }),
+    withdrawn,
+    "a retry is the same answer",
+  );
+  await assert.rejects(
+    tool("revise_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId, replacement: "x" }),
+    /already been withdrawn/,
+  );
+
+  const [a] = w.anns();
+  assert.equal(a.suggestion.state, "withdrawn");
+  assert.equal(a.resolved, true);
+  assert.equal(a.suggestion.decidedBy.channel, "mcp");
+  assert.equal(a.suggestion.revisions[0].replacement, "will do");
+
+  const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1", includeResolved: true });
+  assert.equal(threads[0].suggestion.state, "withdrawn");
+  assert.deepEqual(
+    threads[0].comments.map((c) => [c.body, c.via]),
+    [
+      ["Cut it instead.", "mcp"],
+      ["Withdrawn.", "mcp"],
+    ],
+    "the note it was changed with, and its withdrawal, both stamped as the agent's",
+  );
+});
+
+test("revising and withdrawing need a thread, a replacement to revise to, and a document still open", async () => {
+  const w = world();
+  assert.deepEqual(tool("revise_suggestion").inputSchema.required, ["id", "threadId"]);
+  assert.deepEqual(tool("withdraw_suggestion").inputSchema.required, ["id", "threadId"]);
+  await assert.rejects(
+    tool("revise_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId: "t" }),
+    /replacement is required/,
+  );
+  for (const threadId of ["", "a/b", ".."]) {
+    await assert.rejects(tool("withdraw_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId }), /threadId is required/);
+  }
+  await assert.rejects(tool("withdraw_suggestion").run(w.ctx(SUGGESTER), { id: "d1", threadId: "nope" }), /no such suggestion/);
+  w.store.set("docs/d1", { ...w.store.get("docs/d1"), expiresAt: Date.now() - 1000 });
+  await assert.rejects(tool("withdraw_suggestion").run(w.ctx(OWNER), { id: "d1", threadId: "nope" }), /expired/);
 });

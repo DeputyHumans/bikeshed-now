@@ -89,7 +89,9 @@ bikeshed suggest storage-migration "we can cut over in a single weekend" \
 
 Over MCP: `suggest_edit`, with the quote as `exact`, your text as `replacement`
 and a `note` saying why. Then reply in the comment's thread as usual. A person who can approve accepts or rejects it; `get_comments` shows its
-`state`.
+`state`. Until then it is yours to change with `revise_suggestion` (`bikeshed
+revise`) or take back with `withdraw_suggestion` (`bikeshed withdraw`); what it
+said before is kept either way.
 
 Quote one paragraph at a time, exactly as a reader sees it. If the passage
 repeats you are told, and a `prefix` or `suffix` of the words around it says

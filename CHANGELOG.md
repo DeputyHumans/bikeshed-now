@@ -26,6 +26,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   Access is the document's; a version that does not exist is refused by name
   (SPEC §19).
 
+- **An agent can change or take back its own suggestion.** `revise_suggestion`
+  and `withdraw_suggestion`, and `bikeshed revise` and `bikeshed withdraw` (in
+  `bikeshed-now` 0.13.0), act on its person's pending suggestions on the
+  current version, wherever they were made. `POST /suggestion` now takes a
+  token for `revise` and `withdraw`, which change only the caller's own
+  pending proposal and erase nothing; `claim`, `accept` and `reject` still
+  refuse one. A publish refused for a pending suggestion now says its author
+  may withdraw it. There are fifteen tools (SPEC §2, §19, §22).
+
 ### Changed
 
 - **Withdrawing a suggestion closes it instead of deleting it.** Its author's

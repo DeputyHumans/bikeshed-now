@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The thirteen MCP tools (SPEC §19).
+// The fifteen MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -61,7 +61,14 @@ import {
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { locateQuote } from "../lib/quote";
-import { ANNOTATION_COLOR, SUGGESTION_COLOR, createSuggestion, parseNote } from "../lib/suggestions";
+import {
+  ANNOTATION_COLOR,
+  SUGGESTION_COLOR,
+  changeSuggestion,
+  createSuggestion,
+  parseNote,
+  type DecisionOp,
+} from "../lib/suggestions";
 import { MAX_BUNDLE_BYTES } from "../config";
 import { safeSegment } from "../lib/http";
 
@@ -208,6 +215,37 @@ async function locateInCurrentVersion(
     );
   }
   return { versionId, anchor: located.anchor };
+}
+
+/**
+ * Revise or withdraw one of the caller's own pending suggestions on the
+ * current version, where every pending one is: it holds back the next version
+ * until it is closed. Whose it is, and whether it is still open, is decided
+ * by `changeSuggestion`, as for the app (SPEC §22).
+ */
+async function changeOwnSuggestion(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+  op: Extract<DecisionOp, "revise" | "withdraw">,
+  change: { replacement?: string; note?: string },
+) {
+  const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+  refuseIfExpired(data);
+  const threadId = str(args, "threadId");
+  if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
+  const versionId = String(data.currentVersion ?? "");
+  const changed = await changeSuggestion({
+    db: ctx.db,
+    docRef: ref,
+    versionId,
+    annId: threadId,
+    op,
+    caller: { uid: ctx.caller.uid, emailLower: ctx.caller.emailLower },
+    actor: ctx.actor,
+    ...change,
+  });
+  if ("status" in changed) throw new Error(changed.error);
+  return withReaderAddress({ threadId, version: versionId, state: changed.state }, ref.id);
 }
 
 /** Writes are refused on an expired document, the owner's included. */
@@ -646,7 +684,8 @@ export const TOOLS: ToolDefinition[] = [
       "Propose replacing a passage of a document's current version with new text, for a person to accept or reject. " +
       "Quote the passage exactly as a reader sees it — no Markdown or HTML — within one paragraph. " +
       "An empty replacement proposes deleting it. If the passage occurs more than once, add a few words " +
-      "before it (prefix) or after it (suffix). Accepting or rejecting is a person's decision; there is no tool for it.",
+      "before it (prefix) or after it (suffix). Accepting or rejecting is a person's decision; there is no tool for it. " +
+      "Until it is decided you may change it (revise_suggestion) or take it back (withdraw_suggestion).",
     inputSchema: {
       type: "object",
       // `replacement` is required in practice but not listed: an empty string
@@ -695,6 +734,58 @@ export const TOOLS: ToolDefinition[] = [
       });
       if ("status" in created) throw new Error(created.error);
       return withReaderAddress({ threadId: created.annId, version: versionId, quote: anchor.exact }, ref.id);
+    },
+  },
+
+  {
+    name: "revise_suggestion",
+    description:
+      "Change the text of a suggestion you made that nobody has decided yet. " +
+      "What it said before is kept, and shown to whoever decides. An empty replacement proposes deleting the passage.",
+    inputSchema: {
+      type: "object",
+      // As with suggest_edit, `replacement` is required in practice: "" is a deletion.
+      required: ["id", "threadId"],
+      properties: {
+        id: { type: "string" },
+        threadId: { type: "string", description: "The suggestion's thread, from suggest_edit or get_comments." },
+        replacement: { type: "string", description: "What it should say instead now. Empty proposes deleting it." },
+        note: { type: "string", description: "Why, for whoever decides. Optional; replaces the note you gave before." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      if (typeof args.replacement !== "string") {
+        throw new Error("replacement is required: the new text, or an empty string to propose deleting the passage");
+      }
+      const note = parseNote(args.note);
+      if (typeof note !== "string") throw new Error(note.error);
+      return changeOwnSuggestion(ctx, args, "revise", { replacement: args.replacement, note });
+    },
+  },
+
+  {
+    name: "withdraw_suggestion",
+    description:
+      "Take back a suggestion you made that nobody has decided yet. Its thread stays, marked withdrawn, " +
+      "and it stops holding back a new version.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "threadId"],
+      properties: {
+        id: { type: "string" },
+        threadId: { type: "string", description: "The suggestion's thread, from suggest_edit or get_comments." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      return changeOwnSuggestion(ctx, args, "withdraw", {});
     },
   },
 
@@ -1001,7 +1092,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is thirteen tools, not "some tools". */
+/** Exported for the wiring test: the surface is fifteen tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

@@ -15,8 +15,9 @@ import * as admin from "firebase-admin";
  * in-app commit, an upload, the CLI and MCP. The comment gate is narrower — it
  * applies to the in-app commit alone — because the agent loop revises a
  * document in answer to its open comments, and a person resolves them after.
- * A suggestion is different: nobody but an approver can clear it, and an
- * update that buried it would take that decision away from them.
+ * A suggestion is different: nobody but an approver can decide it, or its
+ * author take it back, and an update that buried it would take that away from
+ * them.
  */
 export async function pendingSuggestions(
   docRef: admin.firestore.DocumentReference,
@@ -38,7 +39,9 @@ export function pendingSuggestionsMessage(count: number): string {
   const what = count === 1 ? "1 suggested edit is" : `${count} suggested edits are`;
   return (
     `${what} waiting for a decision. Only the owner or an approver can accept ` +
-    `or reject ${count === 1 ? "it" : "them"}, and no new version can be published until then.`
+    `or reject ${count === 1 ? "it" : "them"}, and no new version can be published until then. ` +
+    // An agent blocked by its own proposal can clear that one itself.
+    (count === 1 ? "If it is yours, you may withdraw it." : "Any that are yours you may withdraw.")
   );
 }
 

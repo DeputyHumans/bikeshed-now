@@ -843,7 +843,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Thirteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Fifteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -853,10 +853,12 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>get_document</code></td><td>A document's metadata and current source; over 200,000 characters it is cut, and says so</td></tr>
         <tr><td><code>publish_document</code></td><td>Create a document from content you supply</td></tr>
         <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op</td></tr>
-        <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, each with its quote, its section and every comment, marked with the channel it came through</td></tr>
+        <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, each with its quote, its section and every comment, marked with the channel it came through</td></tr>
         <tr><td><code>add_comment</code></td><td>Start a thread on a passage of the current version, quoted as a reader sees it, within one paragraph</td></tr>
         <tr><td><code>reply_to_comment</code></td><td>Add a reply to a thread in the current version</td></tr>
         <tr><td><code>suggest_edit</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
+        <tr><td><code>revise_suggestion</code></td><td>Change the text of your own suggestion before it is decided; what it said before is kept</td></tr>
+        <tr><td><code>withdraw_suggestion</code></td><td>Take back your own suggestion before it is decided; its thread stays, marked withdrawn</td></tr>
         <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
         <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
         <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
