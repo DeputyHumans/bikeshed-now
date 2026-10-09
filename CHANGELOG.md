@@ -18,6 +18,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **The connect page says what an app can do since 0.11.0.** A person
+  approving an app was told it could not accept or reject suggested edits or
+  resolve threads, which 0.11.0 made untrue for an owner's or approver's
+  agent, and was not told it could rename documents or save a draft as a new
+  version. The page now lists both, and a test holds its two lists to the
+  tools the server serves, so the next tool fails until the page says it
+  (SPEC §19, §23).
+
 - **`bikeshed open` and `bikeshed mv` take the link you were sent** (in
   `bikeshed-now` 0.14.1). The usage has said every `<id>` takes the link since
   links carried an unlisted document's key, but these two used the argument as

@@ -216,8 +216,9 @@ function Ready({
           <h2 className="connect-subhead">As {account.email}, it will be able to</h2>
           <ul className="connect-list">
             <li>Read what you can read</li>
-            <li>Publish documents and revise them</li>
-            <li>Read comments, reply and suggest edits</li>
+            <li>Publish, revise and rename documents</li>
+            <li>Comment, reply, suggest edits and resolve threads</li>
+            <li>Accept or reject suggested edits where you can, and save them as a new version</li>
             <li>Create folders and file documents in them</li>
           </ul>
         </div>
@@ -226,7 +227,6 @@ function Ready({
           <ul className="connect-list connect-list-not">
             <li>Share anything, or change who can read it</li>
             <li>Delete anything, or rename a folder</li>
-            <li>Accept or reject suggested edits, or resolve threads</li>
             <li>Set or clear an expiry</li>
           </ul>
         </div>

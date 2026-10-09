@@ -264,6 +264,56 @@ test("the guide names every tool the server serves", () => {
   }
 });
 
+// The consent page (`app/src/pages/Connect.tsx`) is the list a person approves
+// an app against, and SPEC §23 makes it §19's list. When 0.11.0 let an agent
+// accept, reject and resolve, the page went on saying it could not, and no test
+// read it. So every tool must be claimed by a phrase on the "will be able to"
+// list, and no claimed phrase may appear on the "won't" list. A new tool fails
+// here until somebody decides how the page says it.
+const CONSENT_CLAIMS = {
+  list_documents: "read what you can read",
+  get_document: "read what you can read",
+  get_lineage: "read what you can read",
+  get_comments: "read what you can read",
+  list_folders: "read what you can read",
+  publish_document: "publish",
+  fork_document: "publish",
+  update_document: "revise",
+  rename_document: "rename documents",
+  commit_draft: "new version",
+  suggest_edit: "suggest edits",
+  revise_suggestion: "suggest edits",
+  withdraw_suggestion: "suggest edits",
+  accept_suggestion: "accept",
+  reject_suggestion: "reject",
+  add_comment: "comment",
+  reply_to_comment: "reply",
+  resolve_thread: "resolve threads",
+  reopen_thread: "resolve threads",
+  create_folder: "create folders",
+  move_document: "file documents",
+};
+
+function consentLists() {
+  const page = readFileSync(join(ROOT, "app", "src", "pages", "Connect.tsx"), "utf8");
+  const list = (cls) => {
+    const m = page.match(new RegExp(`<ul className="${cls}">([\\s\\S]*?)</ul>`));
+    assert.ok(m, `Connect.tsx has no <ul className="${cls}">`);
+    return [...m[1].matchAll(/<li>([^<]*)<\/li>/g)].map((li) => li[1].toLowerCase()).join("\n");
+  };
+  return { will: list("connect-list"), wont: list("connect-list connect-list-not") };
+}
+
+test("the consent page says what every tool lets an app do, and never the opposite", () => {
+  const { will, wont } = consentLists();
+  for (const tool of TOOL_NAMES) {
+    const claim = CONSENT_CLAIMS[tool];
+    assert.ok(claim, `the consent page has no phrase for ${tool}: add one here, and say it on the page`);
+    assert.ok(will.includes(claim), `the consent page never says an app can "${claim}" (${tool})`);
+    assert.ok(!wont.includes(claim), `the consent page says an app cannot "${claim}", yet ${tool} does`);
+  }
+});
+
 test("the guide names every command the CLI advertises", () => {
   for (const command of advertisedCommands()) {
     assert.ok(
