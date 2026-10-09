@@ -43,6 +43,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **An update no longer discards a change somebody accepted.** Accepting a
+  suggestion puts the change into the draft, and `update_document`, `bikeshed
+  update` and a re-upload replaced the draft with their own bytes and deleted
+  it, leaving the suggestion reading "Accepted." over a version without it.
+  They now refuse with `409 { acceptedInDraft }` while the draft holds an
+  accepted change, before uploading anything and again inside the transaction
+  that would delete the draft, and say to publish the draft first (SPEC §2,
+  §6a).
+
 - **Nobody can rewrite or delete the notes the server writes into a thread.**
   "Accepted.", "Rejected: …", "Withdrawn." and the opener of a suggestion are
   stamped with the person they speak for, and the comment rules let that person

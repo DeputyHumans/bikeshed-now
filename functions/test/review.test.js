@@ -9,7 +9,7 @@ const admin = require("firebase-admin");
 
 const { commitNewVersion } = require("../lib/lib/publish.js");
 const { fakeFirestore } = require("./fakes.js");
-const { pendingSuggestionsMessage, refuseIfPending } = require("../lib/lib/review.js");
+const { acceptedInDraftMessage, pendingSuggestionsMessage, refuseIfPending } = require("../lib/lib/review.js");
 
 /**
  * A document ref with just enough Firestore for commitNewVersion up to the
@@ -36,7 +36,8 @@ function fakeDocRef({ duplicateOf = null, pending = 0 } = {}) {
     get: async () => ({ docs: [{ id: "v1" }] }),
     doc: () => ({ collection: (name) => (assert.equal(name, "annotations"), annotations) }),
   };
-  return { id: "d1", collection: () => versions, asked };
+  // No draft: the accepted-in-draft guard has nothing to ask about.
+  return { id: "d1", collection: () => versions, get: async () => ({ data: () => ({}) }), asked };
 }
 
 /** Make the upload observable: reaching Storage at all is what is asserted. */
@@ -220,4 +221,59 @@ test("the in-app commit asks again inside the transaction that makes the version
   const asks = tx.indexOf("anyOpenThread(tx,");
   const moves = tx.indexOf("currentVersion: versionId");
   assert.ok(asks >= 0 && moves > asks, "the transaction must look for open threads before it moves currentVersion");
+});
+
+/** A document whose current version has a draft, and an accepted suggestion on it. */
+function acceptedWorld({ draft = { baseVersion: "v1", entry: "index.html" }, state = "accepted" } = {}) {
+  return fakeFirestore({
+    "docs/d1": { docId: "d1", currentVersion: "v1", ownerEmail: "ed@example.com", ...(draft ? { draft } : {}) },
+    "docs/d1/versions/v1": { versionId: "v1", entry: "index.html", contentHash: "old" },
+    "docs/d1/versions/v1/annotations/s1": { annId: "s1", resolved: state !== "pending", suggestion: { state } },
+  });
+}
+
+function updateIn(db) {
+  return commitNewVersion({
+    db,
+    docRef: db.collection("docs").doc("d1"),
+    compiled: COMPILED,
+    actor: ACTOR,
+    authorEmail: "ed@example.com",
+    baseVersion: "v1",
+    via: "mcp",
+  });
+}
+
+test("an update that would replace a draft holding an accepted change is refused before a byte is uploaded", async () => {
+  // Accepting puts the change in the draft; this path deletes the draft.
+  await withStorageSentinel(async () => {
+    const { db, store } = acceptedWorld();
+    const result = await updateIn(db);
+    assert.deepEqual(result, { error: acceptedInDraftMessage(1), status: 409, acceptedInDraft: 1 });
+    assert.ok(store.get("docs/d1").draft, "the draft is kept");
+    assert.match(acceptedInDraftMessage(2), /holds 2 accepted suggestions, .* lose them\. Publish the draft first/);
+  });
+});
+
+test("an accepted suggestion with no draft to lose, or a draft with nothing accepted, does not hold an update", async () => {
+  await withStorageSentinel(async () => {
+    await assert.rejects(updateIn(acceptedWorld({ draft: null }).db), /UPLOAD_REACHED/, "the draft was published or discarded");
+    await assert.rejects(updateIn(acceptedWorld({ state: "rejected" }).db), /UPLOAD_REACHED/, "a person's draft with nothing accepted in it");
+    await assert.rejects(
+      updateIn(acceptedWorld({ draft: { baseVersion: "v0", entry: "index.html" } }).db),
+      /UPLOAD_REACHED/,
+      "a draft of another version holds nothing accepted on this one",
+    );
+  });
+});
+
+test("a change accepted into the draft while an update uploads still holds it back", async () => {
+  const { result, store } = await updateWhile((store) => {
+    store.set("docs/d1", { ...store.get("docs/d1"), draft: { baseVersion: "v1", entry: "index.html" } });
+    store.set("docs/d1/versions/v1/annotations/s1", { annId: "s1", resolved: true, suggestion: { state: "accepted" } });
+  });
+  assert.equal(result.status, 409);
+  assert.equal(result.acceptedInDraft, 1);
+  assert.equal(store.get("docs/d1").currentVersion, "v1", "no version replaced the draft");
+  assert.ok(store.get("docs/d1").draft, "and the draft is still there");
 });

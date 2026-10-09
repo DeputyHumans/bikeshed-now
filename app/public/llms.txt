@@ -349,6 +349,12 @@ one, or its author has withdrawn it. If it is one you made and no longer mean,
 withdraw it; otherwise tell the person you are working with, and that is the
 point.
 
+**An accepted suggestion lives in the draft until the draft is published.** An
+update replaces the draft, so while it holds an accepted change
+`update_document` is refused with `acceptedInDraft`, and says so. Ask the
+person to publish the draft in the app, then read the document again and
+update it.
+
 ## If you can approve
 
 When the person you work for owns the document or can approve on it, you may

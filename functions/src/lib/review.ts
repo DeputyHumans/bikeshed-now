@@ -84,3 +84,74 @@ export async function anyOpenThread(
   const open = which === "suggestions" ? anns.where("suggestion.state", "==", "pending") : anns.where("resolved", "==", false);
   return !(await tx.get(open.limit(1))).empty;
 }
+
+/**
+ * Accepted suggestions whose change exists only in the draft.
+ *
+ * Accepting puts the change into the draft and records the decision on the
+ * current version; the change reaches a version when the draft is published.
+ * Every other way of minting a version — an update through a token, a
+ * re-upload — replaces the draft with its own bytes and deletes it. Doing that
+ * over such a draft would leave a suggestion reading "Accepted." on a version
+ * whose next one does not contain it, so those paths ask this first, and again
+ * inside the transaction that deletes the draft.
+ */
+export async function acceptedInDraft(
+  docRef: admin.firestore.DocumentReference,
+  versionId: string,
+): Promise<number> {
+  if (!versionId) return 0;
+  const draft = (await docRef.get()).data()?.draft as { baseVersion?: unknown } | undefined;
+  if (!draft || draft.baseVersion !== versionId) return 0;
+  const snap = await docRef
+    .collection("versions")
+    .doc(versionId)
+    .collection("annotations")
+    .where("suggestion.state", "==", "accepted")
+    .count()
+    .get();
+  return snap.data().count;
+}
+
+/** What a refused update says when the draft holds accepted changes. */
+export function acceptedInDraftMessage(count: number): string {
+  const what = count === 1 ? "1 accepted suggestion" : `${count} accepted suggestions`;
+  return (
+    `This document's unpublished draft holds ${what}, and publishing this would replace the draft ` +
+    `and lose ${count === 1 ? "it" : "them"}. Publish the draft first, with "Save as new version" in the app, ` +
+    "then update it."
+  );
+}
+
+/** The refusal an update returns while the draft holds accepted changes. */
+export interface AcceptedRefusal {
+  error: string;
+  status: 409;
+  acceptedInDraft: number;
+}
+
+export async function refuseIfAcceptedInDraft(
+  docRef: admin.firestore.DocumentReference,
+  versionId: string,
+): Promise<AcceptedRefusal | null> {
+  const count = await acceptedInDraft(docRef, versionId);
+  if (count === 0) return null;
+  return { error: acceptedInDraftMessage(count), status: 409, acceptedInDraft: count };
+}
+
+/** The same question inside a transaction, given the document as it read it. */
+export async function anyAcceptedInDraft(
+  tx: admin.firestore.Transaction,
+  docRef: admin.firestore.DocumentReference,
+  versionId: string,
+  doc: admin.firestore.DocumentData | undefined,
+): Promise<boolean> {
+  const draft = doc?.draft as { baseVersion?: unknown } | undefined;
+  if (!versionId || !draft || draft.baseVersion !== versionId) return false;
+  const accepted = docRef
+    .collection("versions")
+    .doc(versionId)
+    .collection("annotations")
+    .where("suggestion.state", "==", "accepted");
+  return !(await tx.get(accepted.limit(1))).empty;
+}

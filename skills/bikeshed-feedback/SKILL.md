@@ -113,7 +113,9 @@ which.
 
 A pending suggestion — anyone's — holds back every new version, so
 `update_document` refuses until it is decided. Say so to the person you are
-working with rather than retrying.
+working with rather than retrying. So does a draft holding an accepted
+suggestion (`acceptedInDraft`): the change is in the draft, and an update would
+replace it. Ask for the draft to be published, then read the document again.
 
 ## Two things to get right
 

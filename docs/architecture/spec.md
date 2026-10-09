@@ -366,7 +366,8 @@ own pending proposal, and neither destroys anything.
   re-upload in all but name, which open editing does not extend to. `id`,
   `folderId` and `title` with it are a `400`; a refused caller gets the usual
   `404`/`403` (§1.4b); an expired document a `409`; a pending suggestion on the
-  current version a `409 { error, pendingSuggestions }` (§6a). A new version
+  current version a `409 { error, pendingSuggestions }`, and a draft holding an
+  accepted suggestion a `409 { error, acceptedInDraft }` (§6a). A new version
   withdraws trust, as every update through a token does (§6c). Answers
   `{ docId, versionId, contentHash, fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
@@ -696,7 +697,16 @@ The one path that writes content, and it is explicit and server-mediated.
   version nobody reads — a rejection nobody chose to make — and only an approver
   may decide it. The gate is asked after the content-hash dedup, so an
   identical update stays a no-op, and before anything is uploaded
-  (`lib/review.ts`). The comment gate stays on the in-app commit alone, because
+  (`lib/review.ts`).
+- **No update replaces a draft that holds an accepted change.** Accepting puts
+  the change in the draft (§22), and `/publish?update=`, the CLI and
+  `update_document` mint a version from their own bytes and delete the draft.
+  So while the current version's draft exists and a suggestion on that version
+  is accepted, they refuse with `409 { error, acceptedInDraft }` and say to
+  publish the draft first, asked before anything is uploaded and again inside
+  the transaction that would delete it. The in-app commit publishes the draft
+  itself and is not held.
+- The comment gate stays on the in-app commit alone, because
   the agent loop revises a document in answer to its open comments, and
   closing them is not what publishing the answer waits for (§19).
 

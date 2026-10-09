@@ -35,7 +35,14 @@ import {
   type Membership,
 } from "./folders";
 import { syncPresenceAccess } from "./presence";
-import { anyOpenThread, refuseIfPending, type PendingRefusal } from "./review";
+import {
+  anyAcceptedInDraft,
+  anyOpenThread,
+  refuseIfAcceptedInDraft,
+  refuseIfPending,
+  type AcceptedRefusal,
+  type PendingRefusal,
+} from "./review";
 
 /** Another version became current while this one was uploading. */
 export interface StaleRefusal {
@@ -198,7 +205,7 @@ export async function reviseDocument(args: {
   actor: Actor;
   authorEmail: string;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | PendingRefusal | StaleRefusal | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -453,7 +460,7 @@ export async function commitNewVersion(args: {
   authorEmail: string;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult | PendingRefusal | StaleRefusal> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
@@ -473,6 +480,9 @@ export async function commitNewVersion(args: {
   // pending, and before anything is uploaded, so a refusal leaves no bytes.
   const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
   if (refused) return refused;
+  // This path deletes the draft; changes accepted into it would go with it.
+  const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");
+  if (held) return held;
 
   const allVersions = await versionsRef.get();
   let maxN = 0;
@@ -492,6 +502,7 @@ export async function commitNewVersion(args: {
       const cur = await tx.get(docRef);
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
+      if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
       await mintVersion(tx);
     });
   } catch (e) {
@@ -500,7 +511,11 @@ export async function commitNewVersion(args: {
       const pending = await refuseIfPending(docRef, base);
       if (pending) return pending;
     }
-    if (reason === "STALE" || reason === "PENDING") {
+    if (reason === "ACCEPTED") {
+      const held = await refuseIfAcceptedInDraft(docRef, base);
+      if (held) return held;
+    }
+    if (reason === "STALE" || reason === "PENDING" || reason === "ACCEPTED") {
       const fresh = await docRef.get();
       return {
         error: "Somebody published a newer version while this one was uploading. Read it, then update it again.",
