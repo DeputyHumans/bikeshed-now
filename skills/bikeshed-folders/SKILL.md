@@ -32,6 +32,8 @@ Over MCP: `list_folders`. Every row carries:
 | `path` | the full path, so placing a document is one call, not a walk |
 | `canWrite` | whether you may put anything in it |
 | `parent` | the parent's id, or null at the root |
+| `readers` | how many people can read it, and so anything filed in it |
+| `shared` | whether anyone but you can |
 
 A `…` inside a path is a folder you cannot see. Access flows **downward**, so
 being given a folder gives you everything beneath it — but being given a child
@@ -41,13 +43,19 @@ there is a level here, and it is not yours.
 `canWrite` is not the same as being able to see it. A folder shared with you to
 read is one you cannot file into, and the call will refuse.
 
+## Who can read a folder
+
+`get_folder` names them: everyone by email (the first 25, then a count), who
+can edit, and the teams it is shared with. A team you are not in shows as "a
+team you are not in", as it does in the app, and is never sized.
+
 ## Choosing a folder for a new document
 
-Nothing you can call says who a folder is shared with, and nobody is emailed
-when a document lands in one. So the person hears who can now read it from you,
-or not at all. File a new document at the root, where only they can read it, or
-in a folder they named for it, or ask first, naming the folder. The
-`bikeshed-publishing` skill, "Where it is filed", has the whole rule.
+Nobody is emailed when a document lands in a folder, so the person hears who
+can now read it from you, or not at all. File a new document at the root, or in
+a folder only they can read, or in one they named for it; anywhere else, ask
+first, naming who will be able to read it. The `bikeshed-publishing` skill,
+"Where it is filed", has the whole rule.
 
 A folder does not need to be yours to fit, and being yours does not make it
 private: one you made inside a shared folder is shared too.
@@ -83,7 +91,8 @@ filing decision with an access side effect — it *is* an access decision.
 So:
 
 - Moving a document **into** a folder shares it with everyone that folder is
-  shared with. If you are not certain that is wanted, ask first.
+  shared with. If you are not certain that is wanted, ask first. The result's
+  `access` says who can read it now; tell the person.
 - Moving a document **out** of a folder revokes the access it inherited. People
   who could read it yesterday may not be able to today.
 - Placing a document at publish time (`publish --folder`, or `publish_document`

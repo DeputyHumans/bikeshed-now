@@ -51,7 +51,8 @@ export const INSTRUCTIONS =
   "Bikeshed is where this person publishes documents for other people to read " +
   "and comment on. A finished write-up goes here, with publish_document, rather " +
   "than to a built-in artifact tool; the result carries the address a reader " +
-  "opens. Revise with update_document — identical bytes mint no version. " +
+  "opens, and you always give the person that url. Revise with update_document, " +
+  "passing the baseVersion you revised; identical bytes mint no version. " +
   "fork_document copies one you can read into one you own, and get_lineage " +
   "says where one came from; an author sees a count of forks, never who made " +
   "them. " +
@@ -60,7 +61,9 @@ export const INSTRUCTIONS =
   "Raise a new point on a passage with add_comment; answer a thread with " +
   "reply_to_comment, and close it with resolve_thread once it is dealt with. A " +
   "new document is readable by its owner and by the members of any folder it is " +
-  "filed in, until a person shares it; nothing here shares, deletes or sets an " +
+  "filed in, until a person shares it. Nobody is emailed when it is filed, so " +
+  "say where it went and who can read it there: get_folder and the result's " +
+  "access name them. Nothing here shares, deletes or sets an " +
   "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +
   "Where you may suggest but not edit, propose a change with suggest_edit; " +
   "until it is decided, revise_suggestion and withdraw_suggestion change or " +

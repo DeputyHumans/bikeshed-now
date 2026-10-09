@@ -840,27 +840,27 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li>With <em>Can suggest</em> rather than <em>Can edit</em>, <code>update_document</code> is refused. Propose each change with <code>suggest_edit</code> or <code>bikeshed suggest</code>, quoting the passage as a reader sees it, one paragraph at a time. An empty replacement proposes deleting it.</li>
     <li>A pending suggestion blocks every new version, from any channel, until somebody who can approve decides it, or its author withdraws it.</li>
     <li><strong>Choose the id, every time.</strong> Ids are one namespace for the whole deployment and never change. Start a time-bound document with the date, <code>2026-10-09-storage-migration-review</code>, qualify a living one by project, and pass it as <code>--id</code> or <code>publish_document</code>'s <code>id</code>.</li>
-    <li><strong>Say where it is filed.</strong> Filing a document in a folder shares it with that folder's people and emails nobody, and no call says who they are. File it at the root, in a folder the person named, or ask first. Then hand back the <code>url</code> with the folder and who can read it there.</li>
+    <li><strong>Say where it is filed.</strong> Filing a document in a folder shares it with that folder's people and emails nobody. <code>get_folder</code> says who they are: file at the root or somewhere only the person can read, in a folder they named, or ask first, naming who will be able to read it. Then hand back the <code>url</code> with the folder and who can read it there, from the result's <code>access</code>.</li>
     <li><strong>Open the link where it will be seen.</strong> <code>bikeshed open &lt;link&gt;</code> on the person's own machine, and never in CI, a container or over SSH.</li>
-    <li><strong>Then watch.</strong> Every few minutes, read the threads again (<code>bikeshed comments &lt;id&gt; --all --json</code>, or <code>get_comments</code> with <code>includeResolved</code>), compare them by thread, and answer the open ones whose latest comment a person wrote. Read the version again just before you publish, so a save made in the app is never overwritten. The <code>bikeshed-feedback</code> skill has the whole loop.</li>
+    <li><strong>Then watch.</strong> Every few minutes, read the threads again (<code>bikeshed comments &lt;id&gt; --all --json</code>, or <code>get_comments</code> with <code>includeResolved</code>), compare them by thread and comment id, and answer the ones marked <code>awaitingReply</code>. Pass <code>update_document</code> the <code>baseVersion</code> you revised, so a save made in the app is never overwritten. The <code>bikeshed-feedback</code> skill has the whole loop.</li>
   </ul>
 </div>
 
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Twenty-one tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Twenty-two tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
       <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead>
       <tbody>
-        <tr><td><code>list_documents</code></td><td>Documents you can read, newest first</td></tr>
-        <tr><td><code>get_document</code></td><td>A document's metadata and current source; over 200,000 characters it is cut, and says so</td></tr>
-        <tr><td><code>publish_document</code></td><td>Create a document from content you supply</td></tr>
-        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op</td></tr>
+        <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
+        <tr><td><code>get_document</code></td><td>A document's metadata, address and current source; over 200,000 characters it is cut, and says so</td></tr>
+        <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
+        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind</td></tr>
         <tr><td><code>commit_draft</code></td><td>Publish the draft as the next version, as Save as new version does</td></tr>
-        <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, each with its quote, its section and every comment, marked with the channel it came through</td></tr>
+        <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, oldest first and at most 50, each with its quote, its section, whether a person awaits a reply, and every comment with its id, time and the channel it came through</td></tr>
         <tr><td><code>add_comment</code></td><td>Start a thread on a passage of the current version, quoted as a reader sees it, within one paragraph</td></tr>
         <tr><td><code>reply_to_comment</code></td><td>Add a reply to a thread in the current version</td></tr>
         <tr><td><code>resolve_thread</code></td><td>Close a thread in the current version, leaving a note that says so</td></tr>
@@ -872,9 +872,10 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>reject_suggestion</code></td><td>Decline a suggestion, as the owner or an approver, with a reason for its author</td></tr>
         <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
         <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
-        <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
+        <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path and how many people can read it</td></tr>
+        <tr><td><code>get_folder</code></td><td>Who can read one folder, by email, and the teams it is shared with, named only to their members</td></tr>
         <tr><td><code>create_folder</code></td><td>Create a folder</td></tr>
-        <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top</td></tr>
+        <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top; says who can read it now</td></tr>
         <tr><td><code>rename_document</code></td><td>Give a document a new title; its address stays</td></tr>
       </tbody>
     </table>

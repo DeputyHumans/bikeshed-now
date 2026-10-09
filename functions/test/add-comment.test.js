@@ -143,7 +143,16 @@ test("get_comments returns the new thread with its quote and its words", async (
   const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1" });
   assert.equal(threads.length, 1);
   assert.equal(threads[0].quote, "Payments moves last.");
-  assert.deepEqual(threads[0].comments, [{ author: VIEWER.emailLower, via: "mcp", body: "Why last?" }]);
+  const [comment] = threads[0].comments;
+  assert.deepEqual(
+    { author: comment.author, via: comment.via, body: comment.body },
+    { author: VIEWER.emailLower, via: "mcp", body: "Why last?" },
+  );
+  // Each comment says which one it is and when it was written.
+  assert.equal(typeof comment.id, "string");
+  assert.match(comment.at, /^\d{4}-\d{2}-\d{2}T/);
+  // An agent wrote it, so nobody is waiting on an answer from an agent.
+  assert.equal(threads[0].awaitingReply, false);
 });
 
 test("a passage that repeats needs words around it, and the refusal says so", async () => {

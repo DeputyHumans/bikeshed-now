@@ -14,6 +14,53 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+Tool results gain fields and two tools gain arguments, which `CHANGELOG.md`
+counts as breaking, so this is a minor release. Nothing is removed, and every
+new argument is optional.
+
+### Added
+
+- **An agent can see who can read a folder, and so who can read what it files
+  there.** Filing a document shares it with the folder's people and emails
+  nobody, so the agent is the only one who can tell the person.
+  - `list_folders` counts each folder's `readers` and says whether it is
+    `shared`.
+  - The new `get_folder` names them: everyone by email (the first 25, then a
+    count), its editors, and its teams. A team is named only to its members, as
+    in the share panel, and is never sized.
+  - `publish_document`, `fork_document` and `move_document`, and `POST
+    /publish` behind `bikeshed publish --json`, return where the document is
+    filed (`filedIn`) and who can read it there (`access`), read after the
+    write. A public or unlisted document says so in words, not as a count.
+  - `list_documents` and `get_document` say where each document is filed, and
+    `get_document` returns its address.
+  - `publish_document` returns the `requestedId` and `idTaken`, so an agent is
+    told when its id was taken rather than having to compare.
+
+  There are twenty-two tools (SPEC §4, §13, §19).
+
+- **`update_document` takes the `baseVersion` it was revised from.** If
+  somebody has published since, the update is refused and names the current
+  version, instead of replacing their work. Its result counts the open threads
+  the new version leaves behind (`threadsLeftBehind`) (SPEC §19).
+
+### Changed
+
+- **`get_comments` returns the oldest threads first and says when it stopped.**
+  It used to return up to 50 threads in no set order, with nothing to say there
+  were more. It now orders by when each thread was opened and sets `truncated`.
+  Each comment carries its `id` and time (`at`). `awaitingReply` marks an open
+  thread on the current version whose latest comment a person wrote in the app.
+  `threads` fetches only the ids named. It needs a new Firestore index, which
+  the deploy creates (SPEC §19).
+
+- **The agent guide, the skills, the developer guide and the server's connect
+  instructions** use all of this. They name who can read a folder before
+  filing, report `access` after it, and pass `baseVersion` when publishing a
+  revision.
+
 ## 0.11.4 — 2026-10-09
 
 ### Changed

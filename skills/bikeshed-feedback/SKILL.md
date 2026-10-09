@@ -30,7 +30,10 @@ the others, and each one carries:
 |---|---|
 | `quote` | the exact text the comment is anchored to |
 | `section` | the id of the section it sits in |
-| `comments` | author, body, and whether it came from a person or a machine |
+| `comments` | each one's `id`, time (`at`), author, body, and whether it came from a person or a machine (`via`) |
+| `awaitingReply` | true when a person, in the app, spoke last in an open thread on the current version |
+
+Threads come oldest first, at most 50; `truncated` says when there were more.
 
 **The quote is the point.** You do not need to fetch the document to find out
 what "this paragraph is too strong" refers to. Search your source for the quote,
@@ -132,25 +135,26 @@ every thread again and compares:
 - **Read them all.** `bikeshed comments <id> --all --json`, or `get_comments`
   with `includeResolved`, so a thread that was closed shows up as a change.
 - **Compare by thread.** Keep the last result. A thread id you have not seen, a
-  thread with more comments than before, a changed `resolved`, or a suggestion
-  in a new `state` is news. Comments carry no ids or times yet, so compare a
-  thread's count of comments, then their authors and bodies.
+  comment `id` you have not seen, a changed `resolved`, or a suggestion in a new
+  `state` is news.
 - **Start from nothing.** Before your first check, the last result is empty, so
   a comment made in the seconds after you published is still news.
 - **Check every few minutes, not every few seconds.** Each check reads every
   thread.
-- **Fifty is a ceiling.** `get_comments` returns at most 50 threads and does not
-  say when it stopped. If you get 50, tell the person you may be missing some.
+- **Fifty is a ceiling.** `get_comments` returns the 50 oldest threads and sets
+  `truncated` when there are more. Say so, and pass `threads` with the ids you
+  care about to read those whatever their age.
 
 Stop when the person says so, after an hour with nothing new from anyone else,
 or when the document reads as absent.
 
 ### Each time something is new
 
-1. **Skip your own.** A comment that came through an agent channel (`via` is
-   not `web`) is yours or another agent's. Answer only open threads whose
-   latest comment a person wrote, so two agents never answer each other in
-   circles. A decided suggestion is closed, and its "Accepted." needs no reply.
+1. **Answer what awaits.** `awaitingReply` marks the open threads on the
+   current version whose latest comment a person wrote in the app. A comment
+   through an agent channel (`via` is not `web`) is yours or another agent's,
+   and never sets it, so two agents never answer each other in circles. A
+   decided suggestion is closed, and its "Accepted." needs no reply.
 2. **If the version moved, read it again.** When `get_document` reports a
    version you did not publish, a person changed the document. Work from that
    version, never from your copy.
@@ -168,12 +172,15 @@ or when the document reads as absent.
 5. **Reply in every thread first.** Lead with the answer, one point per reply,
    no filler.
 6. **Then publish once.** Never once per thread.
-   - Immediately before `bikeshed update` (`update_document`), read the
-     version again.
-   - If it moved since you read it, start again from step 2.
-   - A window of seconds still remains in which a save in the app can be
-     overwritten. Nothing closes it yet, so read, then publish, with nothing in
-     between.
+   - Over MCP, pass `update_document` the `baseVersion` you revised from. If a
+     person published since, the update is refused and names the version that
+     is current: read that, and start again from step 2. Nothing is
+     overwritten.
+   - `bikeshed update` cannot pass one yet. From a shell, read the version
+     again immediately before the update, with nothing in between; a window of
+     seconds remains.
+   - The result's `threadsLeftBehind` counts the open threads that stay on the
+     version you replaced. Mention them; they cannot be answered any more.
 7. **Tell the person:**
    - which threads you answered;
    - what you decided, and why;

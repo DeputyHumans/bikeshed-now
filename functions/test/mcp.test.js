@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly twenty-one tools, and they are the twenty-one in the spec", () => {
+test("there are exactly twenty-two tools, and they are the twenty-two in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -142,6 +142,7 @@ test("there are exactly twenty-one tools, and they are the twenty-one in the spe
     "accept_suggestion",
     "reject_suggestion",
     "list_folders",
+    "get_folder",
     "create_folder",
     "move_document",
     "rename_document",
@@ -151,7 +152,7 @@ test("there are exactly twenty-one tools, and they are the twenty-one in the spe
     "resolve_thread",
     "reopen_thread",
   ]);
-  assert.equal(TOOLS.length, 21);
+  assert.equal(TOOLS.length, 22);
 });
 
 test("the surface has no tool that deletes or shares", () => {
@@ -525,6 +526,7 @@ function unlistedDb({ grantToken = null, doc = {} } = {}) {
   };
   const annotations = {
     where: () => annotations,
+    orderBy: () => annotations,
     limit: () => annotations,
     get: async () => ({
       docs: [

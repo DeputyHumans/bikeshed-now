@@ -555,7 +555,10 @@ document's bytes are written only where no object exists yet, and a refused
 write moves the document to a suffixed id.
 The publisher learns that the id was taken and nothing more; the suffix is
 random, so it no longer says how many share the name. The returned `docId` is
-the answer; callers must not assume they got what they asked for. Ids minted
+the answer; callers must not assume they got what they asked for.
+`publish_document` also returns the `requestedId` (the one asked for, or the
+title's slug) and `idTaken`, which says outright what comparing the two would
+tell the caller anyway. Ids minted
 before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes
 `title` and `slug`, never the docId.
 
@@ -966,7 +969,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,audience,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
   lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
@@ -1236,6 +1239,20 @@ UNCHANGED.
 
 Folder delete is **owner-only** and reparents children to the folder's parent —
 never orphans. Document delete is unsupported, deliberately and explicitly.
+
+**Filing is sharing, and it is silent.** A document filed into a folder is
+readable by everyone in the folder's `members`, and nobody is emailed:
+invitations go out only when sharing itself changes. So an agent that files a
+document is the only party that can tell the person who just gained access,
+and the agent surface says who that is:
+- `list_folders` counts each folder's readers;
+- `get_folder` names them;
+- every write that files a document returns `filedIn` and `access`, read after
+  the write.
+
+This discloses nothing new. The rules let a folder's members read its whole
+record, `members` included, and a team is named only to its own members, as the
+share panel names it (`lib/audience.ts`).
 
 ---
 
@@ -1899,29 +1916,30 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — twenty-one tools
+### MCP — twenty-two tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
 | Tool | Purpose |
 |---|---|
-| `list_documents` | the caller's documents, with visibility and current version |
-| `get_document` | metadata + current **source** (Markdown where available) |
-| `publish_document` | create a document from content, optionally at a chosen `id` (§4) |
-| `fork_document` | copy a version of a document the caller can read into one they own (§21) |
+| `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
+| `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
+| `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13) |
+| `fork_document` | copy a version of a document the caller can read into one they own (§21), with `filedIn` and `access` |
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
-| `update_document` | commit a new version of an existing document |
+| `update_document` | commit a new version of an existing document; given the `baseVersion` it was revised from, refused when another version is current, and it counts the open threads the new version leaves behind (`threadsLeftBehind`) |
 | `commit_draft` | publish the draft as the next version, through the in-app commit's own gates (§6a) |
 | `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
 | `revise_suggestion` | change the caller's own pending suggestion; what it said before is kept (§22) |
 | `withdraw_suggestion` | take back the caller's own pending suggestion; its thread stays, closed (§22) |
 | `accept_suggestion` | accept a pending suggestion, for the owner or an approver: its change is made in the draft (§22) |
 | `reject_suggestion` | decline a pending suggestion, for the owner or an approver, with a reason (§22) |
-| `list_folders` | every folder the caller can see, each with its full path |
+| `list_folders` | every folder the caller can see, each with its full path and how many can read it (`readers`, `shared`) |
+| `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, and its teams, each named only to its members (§13) |
 | `create_folder` | create one, optionally inside another |
-| `move_document` | file a document into a folder, or back to the workspace root |
+| `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
-| `get_comments` | **unresolved feedback, each with its anchored quote**; `version` names an earlier version, whose threads any reader of the document may read |
+| `get_comments` | **unresolved feedback, each with its anchored quote**, oldest thread first, at most 50 with `truncated` when there were more; `awaitingReply` marks a thread a person spoke last in on the current version; `threads` fetches only the named ids; `version` names an earlier version, whose threads any reader of the document may read |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
 | `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
@@ -1939,13 +1957,21 @@ so an agent knows what to change without fetching and diffing the document. That
 closes the loop this product exists for.
 
 Efficiency rules, because agent context is the scarce resource: `get_comments`
-returns, per thread, its id, quote, section and whether it is resolved, a
-suggestion's replacement, state and earlier revisions, and each comment's author,
-channel and body, and nothing else; `list_documents` is metadata-only;
-`get_document` returns **source, never rendered HTML with its embedded
-stylesheet**; responses are capped. `list_documents` pages with a cursor and
-`list_folders` says `truncated`, but `get_comments` stops at 50 threads, in no
-set order, and nothing yet says it stopped. The source cap
+returns, per thread, its id, quote, section, whether it is resolved and whether
+a person awaits a reply, a suggestion's replacement, state and earlier
+revisions, and each comment's id, time, author, channel and body, and nothing
+else; `list_documents` is metadata-only; `get_document` returns **source, never
+rendered HTML with its embedded stylesheet**; responses are capped, and say so.
+`list_documents` pages with a cursor, `list_folders` says `truncated`, and
+`get_comments` returns the 50 oldest threads and says `truncated` when there
+were more; it orders by `createdAt`, the server's clock on every thread (§4),
+through a composite index on `(resolved, createdAt)` that the emulator does not
+demand and production does. A deploy ships the functions before that index
+finishes building, so until it is ready the query reads every thread in order
+and drops the resolved ones itself: the same answer, at more reads. `list_folders` counts each folder's readers and
+names none; `get_folder` names them for the one folder an agent is about to
+file into, because two hundred folders of email addresses would flood the
+context. The source cap
 is 200,000 characters, and `truncated` says when it applied. The CLI does not
 inherit it: its output lands in a file, not a context, so `bikeshed get` reads a
 cut source whole through `/content`, behind the same read checks.

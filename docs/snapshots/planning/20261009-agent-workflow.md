@@ -103,10 +103,13 @@ From `docs/architecture/overview.md` "What this is not", SPEC §19 and ADR 0015:
   A team the caller is not in shows as "a team you are not in", **with no
   size**, exactly as the share panel shows it (`app/src/components/SharePanel.tsx`).
 - **`publish_document`, `move_document`, `fork_document`** results add
-  `folder: { id, path }` and `access: { readers, people, teams }`, read after
-  the write. The announcement then rests on what the server did, not on what
-  the agent read a minute earlier.
-- **`list_documents` and `get_document`** add `folder: { id, path }`, or null.
+  `filedIn: { id, path }` and `access: { readers, people, morePeople, teams }`,
+  read after the write. The announcement then rests on what the server did, not
+  on what the agent read a minute earlier. `POST /publish` returns the same, so
+  `bikeshed publish --json` can say it.
+  - *Shipped in 0.12.0 as `filedIn`, not `folder`:* `move_document` already
+    returned `folder` as an id, and installed CLIs print it.
+- **`list_documents` and `get_document`** add `filedIn: { id, path }`, or null.
 - **Readers are not always a number.** A `public` document is readable by
   anyone signed in, and an `unlisted` one by anyone holding the link. For
   those, `access` says so in words (`"anyone signed in"`, `"anyone with the
@@ -759,11 +762,11 @@ that touches rules, and show the output.
 
 ## Open questions
 
-- **An unlisted document's `url`.** Should it carry `?k=` when the caller
-  supplied `k`, or is an editor? The app shows editors the link, so this would
-  disclose nothing new. But ADR 0012 treats the key as the document's only
-  gate, and a link pasted into a chat travels further than one read in the
-  app. Decide in Stage 2, against ADR 0012.
+- **An unlisted document's `url`.** *Decided in Stage 2: it carries no key.*
+  ADR 0012 treats the key as the document's only gate. A link an agent pastes
+  into a chat travels further than one read in the app, so the key travels only
+  where a person chooses to send it. `bikeshed open <link>` keeps a key the
+  person handed over.
 - **`fork.created`'s `at`.** The app shows the owner a count and never a time.
   Rounding to the day keeps the event useful without timing anyone; dropping
   `at` would make it the only event without one. Decide in Stage 3.

@@ -117,6 +117,12 @@ function fakeFirestore(initial = {}) {
       create: async (data) => apply({ op: "create", path, data }),
       delete: async () => apply({ op: "delete", path }),
       collection: (name) => collection(`${path}/${name}`),
+      /** The collection holding it, whose own `parent` is the document above, as Firestore's is. */
+      get parent() {
+        const parts = path.split("/");
+        const above = parts.slice(0, -2).join("/");
+        return { id: parts[parts.length - 2], path: parts.slice(0, -1).join("/"), parent: above ? ref(above) : null };
+      },
     };
   }
 
@@ -126,7 +132,12 @@ function fakeFirestore(initial = {}) {
     const matches = () => {
       const paths = [...store.keys()]
         .filter((p) => p.startsWith(`${path}/`) && p.split("/").length === depth)
-        .filter((p) => filters.every(([f, v]) => snap(p).get(f) === v));
+        .filter((p) =>
+          filters.every(([f, op, v]) => {
+            const got = snap(p).get(f);
+            return op === "array-contains" ? Array.isArray(got) && got.includes(v) : got === v;
+          }),
+        );
       if (order) {
         const [field, dir] = order;
         paths.sort((a, b) => {
@@ -139,8 +150,10 @@ function fakeFirestore(initial = {}) {
     };
     const q = {
       where: (field, op, value) => {
-        if (op !== "==") throw new Error(`fake: only == is supported, not ${op}`);
-        return query(path, [...filters, [field, value]], max, order);
+        if (op !== "==" && op !== "array-contains") {
+          throw new Error(`fake: only == and array-contains are supported, not ${op}`);
+        }
+        return query(path, [...filters, [field, op, value]], max, order);
       },
       limit: (n) => query(path, filters, n, order),
       orderBy: (field, dir = "asc") => query(path, filters, max, [field, dir]),

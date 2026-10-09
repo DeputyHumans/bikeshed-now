@@ -66,6 +66,10 @@ agent make (`accept_suggestion`, `reject_suggestion`, `resolve_thread`,
 `reopen_thread`, `commit_draft`) and `rename_document`. Still one `required`
 check per tool; streaming, sessions and the `zod` peer have not moved.
 
+**2026-10-09** — twenty-two, with `get_folder`, and an optional `baseVersion`
+on `update_document` and `threads` on `get_comments`. Optional arguments are
+still a `typeof` check in the tool; nothing above moved.
+
 ## What would change this
 
 Two things, either one sufficient. If the SDK drops the `zod` peer or ships a

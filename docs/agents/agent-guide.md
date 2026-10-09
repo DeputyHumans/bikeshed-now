@@ -119,7 +119,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all twenty-one tools.
+first. If all you have is an HTTP client, you have all twenty-two tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -135,23 +135,24 @@ somebody might commit.
 
 | Tool | What it does |
 |---|---|
-| `list_documents` | Your documents. Metadata only |
-| `get_document` | Metadata and the current **source**, cut at 200,000 characters with `truncated` set |
-| `publish_document` | Create a document from content you supply, optionally at an `id` you choose |
+| `list_documents` | Your documents. Metadata only, with where each is filed (`filedIn`) |
+| `get_document` | Metadata, the address and the current **source**, cut at 200,000 characters with `truncated` set |
+| `publish_document` | Create a document from content you supply, optionally at an `id` you choose (`idTaken` says if it was taken). Returns where it is filed and who can read it there (`filedIn`, `access`) |
 | `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
-| `update_document` | Publish a new version of one that exists |
+| `update_document` | Publish a new version of one that exists. Pass the `baseVersion` you revised: if somebody published since, it is refused instead of replacing their work |
 | `commit_draft` | Publish a document's draft as its next version, as "Save as new version" does |
 | `suggest_edit` | Propose new text for one passage, for a person to accept or reject |
 | `revise_suggestion` | Change your own suggestion before it is decided; what it said before is kept |
 | `withdraw_suggestion` | Take back your own suggestion before it is decided; its thread stays |
 | `accept_suggestion` | Accept somebody's suggestion, as the owner or an approver: its change goes into the draft |
 | `reject_suggestion` | Decline somebody's suggestion, as the owner or an approver, with a reason |
-| `list_folders` | Every folder you can see, each with its full path |
+| `list_folders` | Every folder you can see, each with its full path and how many people can read it |
+| `get_folder` | Who can read one folder, by email, and the teams it is shared with |
 | `create_folder` | Create one, optionally inside another |
-| `move_document` | File a document into a folder, or back out to the root |
+| `move_document` | File a document into a folder, or back out to the root; says who can read it now |
 | `rename_document` | Change a document's title; its address stays |
-| `get_comments` | Unresolved feedback, each with its anchored quote; `version` reads an earlier version's |
+| `get_comments` | Unresolved feedback, oldest first, each with its anchored quote and whether a person awaits a reply; `version` reads an earlier version's |
 | `add_comment` | Start a thread on one passage |
 | `reply_to_comment` | Reply in a thread |
 | `resolve_thread` | Close a thread once its point is dealt with; a note says you did |
@@ -287,14 +288,15 @@ retrospectives) with the date, `2026-10-09-storage-migration-review`, taken from
 the environment rather than from memory. Qualify a living one by project,
 `billing-storage-migration`, and never use a bare `notes`, `plan` or `report`.
 If the id is taken, the document is still published, at that id plus a few
-random characters, and the CLI says so on stderr; over MCP, compare the result's
-`docId` with the id you asked for. So the address to hand back is always the
+random characters, and the CLI says so on stderr; over MCP, the result's
+`idTaken` does. So the address to hand back is always the
 `url` in the result, never one you built from the id you asked for. An id never
 changes once published: to put new content at the same address, `update` that
 document.
 
 **Hand it back, and open it where it will be seen.** Give the `url` with the
-folder it is in and who can read it there. On the person's own machine, with them
+folder it is in and who can read it there, from the result's `filedIn` and
+`access` rather than from memory. On the person's own machine, with them
 present, open it too: `bikeshed open <link>`, or your harness's browser tool.
 In a cloud container, over SSH, in CI or on a schedule, never open it: nobody
 would see that browser. In a chat app, give it as a clickable link.
@@ -304,9 +306,9 @@ or until an hour passes with nothing new, and do, if your harness can run
 something in the background or on a schedule. If nothing will wake you up, say
 "When you've commented, tell me to check" instead. Each check reads the threads
 again (`bikeshed comments <id> --all --json`, or `get_comments` with
-`includeResolved`) and compares them with the last, by thread. Answer the open
-threads whose latest comment a person wrote, then publish once. Read the
-document's version immediately before publishing, so you never overwrite what a
+`includeResolved`) and compares them with the last, by thread and comment id.
+Answer the threads marked `awaitingReply`, then publish once, passing
+`update_document` the `baseVersion` you revised, so you never overwrite what a
 person saved in the app. The `bikeshed-feedback` skill has the whole loop.
 
 ## Raising something new
@@ -466,10 +468,12 @@ the sharing is wanted, ask before you move it. Placing a document
 when you publish it (`--folder`, or `publish_document`'s `folder`) has the same
 effect and costs one call instead of two.
 
-Nothing you can call says who a folder is shared with, and nobody is emailed
-when a document lands in one: the person hears it from you or not at all. So
-file a new document at the root, or in a folder the person named for it, or ask
-first, naming the folder. Then say where it went. A folder you made inside a
+Nobody is emailed when a document lands in a folder: the person hears who can
+now read it from you or not at all. `list_folders` counts each folder's readers
+and `get_folder` names them. So file a new document at the root, or in a folder
+only the person can read, or in one they named for it; anywhere else, ask first,
+naming who will be able to read it. Then say where it went, from the result's
+`access`. A folder you made inside a
 shared folder is shared too. And do not tidy: moving a document somebody else
 filed changes who can read it.
 

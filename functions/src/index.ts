@@ -138,6 +138,7 @@ import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { renameDocument } from "./lib/rename";
+import { documentAudience, filedIn } from "./lib/audience";
 import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
 import {
   bearerFrom,
@@ -1525,7 +1526,22 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     res.status(500).json({ error: "could not create the document" });
     return;
   }
-  res.status(200).json(result);
+  // Where it landed and who can read it there, as publish_document says it, so
+  // `bikeshed publish --json` can tell a person the same thing. The document
+  // exists by now: a failed read here costs the description, never the publish.
+  const told = await (async () => {
+    try {
+      const data = (await db().collection("docs").doc(result.docId).get()).data() ?? {};
+      const [paths, access] = await Promise.all([
+        filedIn(db(), caller, [target.id]),
+        documentAudience(db(), caller, data),
+      ]);
+      return { filedIn: (target.id && paths.get(target.id)) || null, access };
+    } catch {
+      return {};
+    }
+  })();
+  res.status(200).json({ ...result, ...told });
 });
 
 /**

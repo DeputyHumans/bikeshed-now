@@ -106,7 +106,13 @@ belongs to a private document they cannot read. This is accepted, not missed.
 Refusing instead would make the check free and silent. As it is, every check
 creates a document in the checker's own workspace, attributed to them, which
 cannot be deleted. The suffix is random, so it does not say how many documents
-share the name (SPEC §4).
+share the name (SPEC §4). `publish_document`'s `idTaken` says the same thing in
+so many words; it tells the caller nothing that comparing ids did not.
+
+**Who can read a folder is told to its members.** `get_folder` and the `access`
+returned by a filing write list a folder's readers by email. That is what the
+rules already let any member read off the folder record. A team is named only
+to its members, and a team the caller is not in is never sized (SPEC §13).
 
 ### A public document leaks its private fields
 

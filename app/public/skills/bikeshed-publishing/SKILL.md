@@ -69,10 +69,11 @@ Two exceptions, each with something you can check:
 
 1. **The address**: the `url` in the result, every time, as a link they can
    click. Open it too when they can see the browser it opens in (below).
-2. **Where it is filed, and who can read it there**: "Filed at the root. Only
-   you can read it." or "Filed in `Engineering/Reviews`. Everyone that folder is
-   shared with can read it." Ask them to share it further; there is no tool for
-   that.
+2. **Where it is filed, and who can read it there**, from the result's
+   `filedIn` and `access`, never from memory: "Filed at the root. Only you can
+   read it." or "Filed in `Engineering/Reviews`. Seven people can read it: ana@,
+   bo@, cy@ and the Platform team." When `access` says `alsoReadableBy`, say that
+   too. Ask them to share it further; there is no tool for that.
 3. **Nothing else.** No second copy elsewhere, no pasted document.
 
 Then say you will watch it for comments, and do, if your harness can wait: the
@@ -265,7 +266,7 @@ for good. Always pass one.
   `bikeshed rename`, and the id stays.
 
 A taken id still publishes, with the random characters added. The CLI says so on
-stderr; over MCP, compare the result's `docId` with the id you asked for. Either
+stderr; over MCP, the result's `idTaken` does, beside the `requestedId`. Either
 way, tell the person, and hand back the `url` in the result rather than an
 address you built yourself.
 
@@ -273,25 +274,32 @@ address you built yourself.
 
 Filing a document into a folder shares it with everyone that folder is shared
 with, and nobody is emailed. You are the only one who can tell the person who
-just gained access, and nothing you can call says who that is.
+just gained access.
 
 So, for every new document:
 
 1. **Look first.** `bikeshed folders` (`list_folders`) lists every folder you
-   can see. Find the one whose path matches the project, client, team or kind
-   of document.
-2. **File it where you may say who can read it:**
-   - at the root, where only the person can read it;
-   - in a folder the person named for this document;
-   - anywhere else, only after asking: "I'd file this in `Engineering/Reviews`,
-     which shares it with everyone that folder is shared with. Publish there?"
+   can see, with how many people can read each. Find the deepest one whose
+   path matches the project, client, team or kind of document.
+   `list_documents` shows what is already filed there (`filedIn`) and how it is
+   named.
+2. **Decide by who can read it:**
 
-   A folder you made yourself is no exception: one made inside a shared folder
-   is shared too, and the person may have shared it since.
-3. **Say where it went**, in the same reply as the link. If it is at the root,
-   say why.
+   | The folder | Do |
+   |---|---|
+   | Only the person can read it (`shared` is false), or it is the root | File it and publish |
+   | Others can read it | `get_folder`, then ask before publishing, naming them: "I'd file this in `Engineering/Reviews`. That makes it readable by 7 people: ana@, bo@, cy@ and the Platform team. Publish there?" |
+
+   Skip the question only when the person already named the folder, or the
+   people it is for. A folder you made yourself is no exception: one made inside
+   a shared folder is shared too, and the person may have shared it since.
+3. **Say where it went**, in the same reply as the link, from the result's
+   `access`. If it is at the root, say why.
 4. **Do not tidy.** Moving a document someone else filed changes who can read
    it.
+
+`get_folder` has no command yet; from a shell, `bikeshed folders` shows the
+counts, and the question is the same.
 
 `--folder` on `publish`, or `publish_document`'s `folder`, files it in one call.
 The `bikeshed-folders` skill has the rest.

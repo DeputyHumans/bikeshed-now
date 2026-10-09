@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The twenty-one MCP tools (SPEC §19).
+// The twenty-two MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -16,14 +16,19 @@
  *   - `list_documents` returns metadata only.
  *   - `get_document` returns SOURCE, never rendered HTML with its embedded
  *     stylesheet — the rendering is three kilobytes of CSS the agent cannot use.
- *   - `get_comments` returns quote, comment, author and thread id, nothing else.
- *   - Everything is capped and cursor-paginated.
+ *   - `get_comments` returns each thread's quote, section and comments, and
+ *     whether a person is waiting on an answer, nothing else.
+ *   - Everything is capped, and says when it was.
  *
  * The three folder tools are the workspace half of the same argument. An agent
  * that can publish but cannot see where things go either drops everything at
  * the root or asks a person to file it — and the person is not there, which is
  * why an agent is doing this. `list_folders` returns whole paths rather than a
  * tree to walk, so placing a document is one call and not a traversal.
+ *
+ * Filing is also sharing, and nobody is emailed when it happens, so the agent
+ * that filed a document is the only one who can tell the person who can now
+ * read it. `get_folder`, and the `access` a write returns, are how it knows.
  *
  * What they deliberately do NOT include is deleting or sharing a folder.
  * Deletion reparents everything beneath it, sharing decides who can read what;
@@ -39,6 +44,7 @@ import {
   canEdit,
   canEditFolder,
   canManageSharing,
+  canReadFolder,
   canRead,
   canSuggest,
   expiryMs,
@@ -50,6 +56,7 @@ import {
   type FolderAclData,
 } from "../lib/acl";
 import { grantsOf } from "../lib/access";
+import { documentAudience, filedIn, firstPeople, folderAudience } from "../lib/audience";
 import { extractBundle } from "../lib/bundle";
 import { linkProofFor } from "../lib/linkgrant";
 import {
@@ -58,6 +65,7 @@ import {
   isValidDocId,
   persistDocMembership,
   resolveFolderTarget,
+  slugify,
 } from "../lib/folders";
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
@@ -155,6 +163,28 @@ export function folderPath(
   nameOf: ReadonlyMap<string, string>,
 ): string {
   return [...ancestors.map((id) => nameOf.get(id) ?? "…"), name].join("/");
+}
+
+/**
+ * Where a document is filed and who can read it there, read from the record
+ * after a write, so what the agent tells a person is what the server did
+ * rather than what the agent read a minute earlier.
+ */
+async function whereAndWho(ctx: ToolContext, docId: string) {
+  const snap = await ctx.db.collection("docs").doc(docId).get();
+  const data = (snap.data() ?? {}) as DocAclData & Record<string, unknown>;
+  const folderId = typeof data.folderId === "string" ? data.folderId : null;
+  const [paths, access] = await Promise.all([
+    filedIn(ctx.db, ctx.caller, [folderId]),
+    documentAudience(ctx.db, ctx.caller, data),
+  ]);
+  return { filedIn: (folderId && paths.get(folderId)) || null, access };
+}
+
+/** Firestore refusing a query for want of a composite index (FAILED_PRECONDITION). */
+function isMissingIndex(e: unknown): boolean {
+  const err = e as { code?: unknown; message?: unknown };
+  return err?.code === 9 || /FAILED_PRECONDITION|requires an index/i.test(String(err?.message ?? ""));
 }
 
 /** How every tool that reads one document describes the unlisted key. */
@@ -439,6 +469,7 @@ export const TOOLS: ToolDefinition[] = [
       const formatOf = new Map(
         versions.map((v) => [v.ref.parent.parent!.id, v.data()?.format === "markdown" ? "markdown" : "html"]),
       );
+      const paths = await filedIn(ctx.db, ctx.caller, page.map((d) => d.data().folderId));
 
       const rows = page.map((d) => {
         const v = d.data();
@@ -457,6 +488,8 @@ export const TOOLS: ToolDefinition[] = [
           // has. Where they came from is get_lineage's, per caller (SPEC §21).
           forked: v.forked === true,
           forks: typeof v.stats?.forks === "number" ? v.stats.forks : 0,
+          // Where it lives, which is also who else can read it; null at the root.
+          filedIn: (typeof v.folderId === "string" && paths.get(v.folderId)) || null,
           updatedAt: (v.updatedAt as admin.firestore.Timestamp)?.toDate?.().toISOString(),
         };
       });
@@ -506,9 +539,13 @@ export const TOOLS: ToolDefinition[] = [
       const truncated = source.length > SOURCE_LIMIT;
 
       await recordApiRead(ctx, ref, versionId);
+      const folderId = typeof data.folderId === "string" ? data.folderId : null;
+      const paths = await filedIn(ctx.db, ctx.caller, [folderId]);
 
       return {
         id: ref.id,
+        // The address, ahead of the source for the same reason `truncated` is.
+        ...withReaderAddress({}, ref.id),
         title: data.title,
         version: versionId,
         format: v.format ?? "html",
@@ -518,6 +555,7 @@ export const TOOLS: ToolDefinition[] = [
         canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         forked: data.forked === true,
+        filedIn: (folderId && paths.get(folderId)) || null,
         // Ahead of the source, not after it: an agent reads this result as JSON
         // text in key order, and a flag after 200,000 characters of source is a
         // flag it may never reach.
@@ -530,7 +568,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "publish_document",
     description:
-      "Create a new document from content you supply. Markdown is rendered server-side; HTML is stored as authored.",
+      "Create a new document from content you supply. Markdown is rendered server-side; HTML is stored as authored. " +
+      "The result says where it is filed and who can read it there (`filedIn`, `access`): tell the person both, with the `url`.",
     inputSchema: {
       type: "object",
       required: ["title", "content"],
@@ -543,7 +582,7 @@ export const TOOLS: ToolDefinition[] = [
           type: "string",
           description:
             "The id to publish at, the part of the address after /d/. Optional; default is from the title. " +
-            "If it is taken, a random suffix is added, so use the docId this returns.",
+            "If it is taken, a random suffix is added and `idTaken` says so, so use the docId this returns.",
         },
       },
     },
@@ -578,7 +617,16 @@ export const TOOLS: ToolDefinition[] = [
         via: "mcp",
         ...(wantedId ? { docId: wantedId } : {}),
       });
-      return withReaderAddress(published, published.docId);
+      const requestedId = wantedId || slugify(title);
+      return withReaderAddress(
+        {
+          ...published,
+          requestedId,
+          idTaken: published.docId !== requestedId,
+          ...(await whereAndWho(ctx, published.docId)),
+        },
+        published.docId,
+      );
     },
   },
 
@@ -622,7 +670,12 @@ export const TOOLS: ToolDefinition[] = [
         throw new Error(out.unreadable ? `no document with id "${id}"` : out.error);
       }
       return withReaderAddress(
-        { docId: out.docId, versionId: out.versionId, title: out.title },
+        {
+          docId: out.docId,
+          versionId: out.versionId,
+          title: out.title,
+          ...(await whereAndWho(ctx, out.docId)),
+        },
         out.docId,
       );
     },
@@ -656,13 +709,19 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "update_document",
     description:
-      "Publish a new version of an existing document. Identical content is a no-op, so this is safe to retry.",
+      "Publish a new version of an existing document. Identical content is a no-op, so this is safe to retry. " +
+      "Pass the `baseVersion` you read and revised: if somebody has published since, the update is refused and names the current version, " +
+      "instead of replacing their work. `threadsLeftBehind` counts the open threads that stay on the version this replaces.",
     inputSchema: {
       type: "object",
       required: ["id", "content"],
       properties: {
         id: { type: "string" },
         content: { type: "string" },
+        baseVersion: {
+          type: "string",
+          description: "The version your content was revised from, e.g. v3, as get_document reported it. Recommended.",
+        },
         k: {
           type: "string",
           description: LINK_KEY_DESCRIPTION,
@@ -683,6 +742,15 @@ export const TOOLS: ToolDefinition[] = [
       if (!content.trim()) throw new Error("content is empty");
 
       const baseVersion = String(data.currentVersion ?? "");
+      // Optional, so an older client keeps working; absent, the update replaces
+      // whatever is current, as it always has.
+      const revisedFrom = str(args, "baseVersion");
+      if (revisedFrom && revisedFrom !== baseVersion) {
+        throw new Error(
+          `the document is at ${baseVersion} now, not ${revisedFrom}: somebody published since you read it. ` +
+            "Read it again with get_document, then update that",
+        );
+      }
       const vSnap = await ref.collection("versions").doc(baseVersion).get();
       const format = vSnap.data()?.format === "markdown" ? "markdown" : "html";
       const filename = format === "html" ? "index.html" : "index.md";
@@ -703,9 +771,18 @@ export const TOOLS: ToolDefinition[] = [
         via: "mcp",
       });
       if ("error" in committed) throw new Error(committed.error);
+      // A comment thread stays on the version it was opened on, and this path
+      // does not refuse to leave one behind (only the in-app commit does, by
+      // decision, SPEC §19), so the caller is told how many it left.
+      const threadsLeftBehind = committed.deduped
+        ? 0
+        : (
+            await ref.collection("versions").doc(baseVersion).collection("annotations")
+              .where("resolved", "==", false).count().get()
+          ).data().count;
       // The id comes from the document, not from the result: an update result is
       // about a version and does not name the document it belongs to.
-      return withReaderAddress(committed, ref.id);
+      return withReaderAddress({ ...committed, threadsLeftBehind }, ref.id);
     },
   },
 
@@ -942,7 +1019,9 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "list_folders",
     description:
-      "List every folder you can see, each with its full path. Use an id as the `folder` argument to publish_document or move_document.",
+      "List every folder you can see, each with its full path and how many people can read it. " +
+      "Filing a document in a folder shares it with all of them: get_folder says who they are. " +
+      "Use an id as the `folder` argument to publish_document or move_document.",
     inputSchema: { type: "object", properties: {} },
     async run(ctx) {
       const snap = await ctx.db
@@ -969,12 +1048,55 @@ export const TOOLS: ToolDefinition[] = [
             ctx.caller.uid,
             ctx.caller.emailLower,
           ),
+          // A count, not the people: two hundred folders of names would flood
+          // the context. get_folder names them for the one you are about to use.
+          readers: new Set(asArray(v.members)).size,
+          shared: new Set(asArray(v.members)).size > 1,
         };
       });
       // Sorted by path so the listing reads as a tree, and compared by code
       // unit rather than by locale so two callers get the same order.
       folders.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
       return { folders, truncated: snap.docs.length > FOLDER_LIMIT };
+    },
+  },
+
+  {
+    name: "get_folder",
+    description:
+      "Who can read one folder, and so who can read anything filed in it: everyone by email (the first 25, then a count), " +
+      "who can edit, and the teams it is shared with, named only for teams you are in. " +
+      "Nobody is emailed when a document is filed, so tell the person who will be able to read it before you file it here.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "The folder id, from list_folders." },
+      },
+    },
+    async run(ctx, args) {
+      const id = str(args, "id");
+      const snap = safeSegment(id) ? await ctx.db.collection("folders").doc(id).get() : null;
+      // A folder the caller may not read answers as one that does not exist.
+      if (!snap?.exists || !canReadFolder(snap.data() as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) {
+        throw new Error(`no folder with id "${id}"`);
+      }
+      const v = snap.data() ?? {};
+      const [paths, audience] = await Promise.all([
+        filedIn(ctx.db, ctx.caller, [id]),
+        folderAudience(ctx.db, ctx.caller, snap),
+      ]);
+      const editors = firstPeople(v.editorMembers);
+      return {
+        id,
+        name: String(v.name ?? id),
+        path: paths.get(id)?.path ?? String(v.name ?? id),
+        owner: String(v.ownerEmail ?? ""),
+        ...audience,
+        editors: editors.people,
+        moreEditors: editors.more,
+        canWrite: canEditFolder(v as FolderAclData, ctx.caller.uid, ctx.caller.emailLower),
+      };
     },
   },
 
@@ -1007,7 +1129,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "move_document",
     description:
-      "Move a document into a folder. OMIT `folder` to move it out to the workspace root.",
+      "Move a document into a folder. OMIT `folder` to move it out to the workspace root. " +
+      "Moving it changes who can read it, and the result says who can now (`access`).",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -1049,7 +1172,11 @@ export const TOOLS: ToolDefinition[] = [
         },
         { folderId: target.id },
       );
-      return { id: ref.id, folder: target.id };
+      // `folder` stays the id, as before: an installed CLI prints it.
+      return withReaderAddress(
+        { id: ref.id, folder: target.id, ...(await whereAndWho(ctx, ref.id)) },
+        ref.id,
+      );
     },
   },
 
@@ -1082,7 +1209,9 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_comments",
     description:
-      "Unresolved feedback on a document, each with the exact passage it is anchored to. " +
+      "Unresolved feedback on a document, oldest thread first, each with the exact passage it is anchored to. " +
+      `At most ${COMMENT_LIMIT} threads, and \`truncated\` says when there were more. ` +
+      "`awaitingReply` marks an open thread whose latest comment a person wrote in the app; `threads` fetches only the ids you name. " +
       "Threads belong to the version they were opened on; name an earlier version to read its threads.",
     inputSchema: {
       type: "object",
@@ -1091,6 +1220,11 @@ export const TOOLS: ToolDefinition[] = [
         id: { type: "string" },
         version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
         includeResolved: { type: "boolean", description: "Default false." },
+        threads: {
+          type: "array",
+          items: { type: "string" },
+          description: `Only these thread ids, whatever their state; at most ${COMMENT_LIMIT}.`,
+        },
         k: {
           type: "string",
           description: LINK_KEY_DESCRIPTION,
@@ -1106,13 +1240,52 @@ export const TOOLS: ToolDefinition[] = [
         throw new Error(`no version "${versionId}"`);
       }
       const annRef = ref.collection("versions").doc(versionId).collection("annotations");
-      const query = args.includeResolved === true ? annRef : annRef.where("resolved", "==", false);
-      const anns = await query.limit(COMMENT_LIMIT).get();
+      const named = asArray(args.threads).filter((t) => typeof t === "string" && safeSegment(t));
+      let annDocs: admin.firestore.DocumentSnapshot[];
+      let truncated = false;
+      if (named.length > 0) {
+        const snaps = await ctx.db.getAll(...named.slice(0, COMMENT_LIMIT).map((t) => annRef.doc(t)));
+        annDocs = snaps.filter((a) => a.exists);
+      } else {
+        // Oldest first, so a cut drops the newest threads, never a random set;
+        // and one more than the limit is read, so a cut is said rather than
+        // silent. createdAt is the server's clock on every thread (SPEC §4).
+        let found: admin.firestore.DocumentSnapshot[];
+        if (args.includeResolved === true) {
+          found = (await annRef.orderBy("createdAt", "asc").limit(COMMENT_LIMIT + 1).get()).docs;
+        } else {
+          try {
+            found = (
+              await annRef.where("resolved", "==", false).orderBy("createdAt", "asc").limit(COMMENT_LIMIT + 1).get()
+            ).docs;
+          } catch (e) {
+            // The (resolved, createdAt) index is created by the same deploy
+            // that ships this query, after the functions, and takes minutes to
+            // build. Until it is ready, read every thread in order and drop the
+            // resolved ones here: the same answer, at more reads.
+            if (!isMissingIndex(e)) throw e;
+            found = (await annRef.orderBy("createdAt", "asc").get()).docs
+              .filter((a) => a.data()?.resolved === false)
+              .slice(0, COMMENT_LIMIT + 1);
+          }
+        }
+        truncated = found.length > COMMENT_LIMIT;
+        annDocs = found.slice(0, COMMENT_LIMIT);
+      }
+      // Only a thread on the current version can be answered (reply_to_comment).
+      const answerable = versionId === String(data.currentVersion ?? "");
 
       const threads = [];
-      for (const a of anns.docs) {
-        const ann = a.data();
+      for (const a of annDocs) {
+        const ann = a.data() ?? {};
         const comments = await a.ref.collection("comments").orderBy("createdAt", "asc").get();
+        const shown = comments.docs
+          // The server's restatement of a suggestion says nothing the
+          // `suggestion` field does not; a note its author wrote, and every
+          // decision, are kept.
+          .filter((c) => !(c.data().opensSuggestion === true && c.data().generated === true));
+        // The last thing somebody said, not a note the server wrote for them.
+        const latest = [...shown].reverse().find((c) => c.data().generated !== true)?.data();
         threads.push({
           threadId: a.id,
           quote: String(ann.anchor?.exact ?? ""),
@@ -1132,22 +1305,27 @@ export const TOOLS: ToolDefinition[] = [
                 },
               }
             : {}),
-          comments: comments.docs
-            // The server's restatement of a suggestion says nothing the
-            // `suggestion` field does not; a note its author wrote, and every
-            // decision, are kept.
-            .filter((c) => !(c.data().opensSuggestion === true && c.data().generated === true))
-            .map((c) => {
-              const v = c.data();
-              return {
-                author: v.authorEmail,
-                via: (v.actor as Actor | undefined)?.channel ?? "web",
-                body: v.body,
-              };
-            }),
+          // A person, in the app, spoke last in an open thread you can answer.
+          // Never set by an agent's comment, so two agents watching one
+          // document cannot keep answering each other.
+          awaitingReply:
+            answerable &&
+            ann.resolved !== true &&
+            latest !== undefined &&
+            ((latest.actor as Actor | undefined)?.channel ?? "web") === "web",
+          comments: shown.map((c) => {
+            const v = c.data();
+            return {
+              id: c.id,
+              at: (v.createdAt as admin.firestore.Timestamp | undefined)?.toDate?.().toISOString() ?? null,
+              author: v.authorEmail,
+              via: (v.actor as Actor | undefined)?.channel ?? "web",
+              body: v.body,
+            };
+          }),
         });
       }
-      return { id: ref.id, version: versionId, threads };
+      return { id: ref.id, version: versionId, truncated, threads };
     },
   },
 
@@ -1313,7 +1491,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is twenty-one tools, not "some tools". */
+/** Exported for the wiring test: the surface is twenty-two tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;
