@@ -674,7 +674,7 @@ export const TOOLS: ToolDefinition[] = [
       if (!canEdit(data, ctx.caller, proof)) {
         throw new Error(
           canSuggest(data, ctx.caller, proof)
-            ? "you cannot edit that document, but you can suggest an edit to it with suggest_edit; a person accepts or rejects it"
+            ? "you cannot edit that document, but you can suggest an edit to it with suggest_edit; its owner or an approver accepts or rejects it"
             : "you cannot edit that document",
         );
       }

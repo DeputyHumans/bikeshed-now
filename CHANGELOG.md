@@ -14,6 +14,15 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A suggest-only agent is told who decides.** `update_document` refused a
+  caller who may only suggest with "a person accepts or rejects it", which
+  0.11.0 made untrue: the owner or an approver decides, in the app or through
+  an agent. It now says so (SPEC §19, §22).
+
 ## 0.11.0 — 2026-10-08
 
 ### Added

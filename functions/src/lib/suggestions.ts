@@ -13,9 +13,10 @@ import type { Actor } from "./actor";
  * writes that field: the rules refuse any client write that names it, so a
  * reader cannot forge one, clear one, or decide one (SPEC §22).
  *
- * It is a TEXT replacement inside one block. Accepting it is an edit an
- * approver makes in their own editing session; the server never applies one,
- * because it has no DOM to apply it with (ADR 0013).
+ * It is a TEXT replacement inside one block. Accepting it is an edit: in the
+ * app, one the approver makes in their own editing session (ADR 0013); through
+ * a token, one `lib/apply.ts` makes in the draft's source where it is certain,
+ * and refuses where it is not (ADR 0015).
  */
 
 type Db = admin.firestore.Firestore;

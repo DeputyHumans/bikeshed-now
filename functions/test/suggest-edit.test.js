@@ -147,11 +147,12 @@ test("a reader's agent may not suggest, and is told so", async () => {
   );
 });
 
-test("an update from someone who may only suggest points at suggest_edit", async () => {
+test("an update from someone who may only suggest points at suggest_edit, and at who decides", async () => {
   const w = world();
   await assert.rejects(
     tool("update_document").run(w.ctx(SUGGESTER), { id: "d1", content: "<p>new</p>" }),
-    /suggest an edit to it with suggest_edit/,
+    // Who decides is a role, not "a person": an approver's agent may (ADR 0015).
+    /suggest an edit to it with suggest_edit; its owner or an approver accepts or rejects it$/,
   );
   await assert.rejects(
     tool("update_document").run(w.ctx(VIEWER), { id: "d1", content: "<p>new</p>" }),
