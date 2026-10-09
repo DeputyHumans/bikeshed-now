@@ -99,6 +99,12 @@ uncompressed. Markdown is read as UTF-8.
 Without a title from you, a Markdown document is named by its first `#` heading
 and an HTML one by its `<title>`; failing both, by the file name.
 
+An update keeps the title. To change it, `bikeshed rename <id> <title>` or
+`rename_document`, which takes the same edit rights as an update. The address
+does not move, so links already sent keep working. An HTML document's own
+`<title>` is part of its content and stays as written, and link previews show
+that one: change it in the file too if it should match.
+
 ## Write Markdown unless you need HTML
 
 Markdown is rendered server-side into a self-contained document with sections, a

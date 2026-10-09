@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The agent surface speaks JSON-RPC and has exactly thirteen tools (SPEC §19).
+// The agent surface speaks JSON-RPC and has exactly the tools the spec lists (SPEC §19).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly fifteen tools, and they are the fifteen in the spec", () => {
+test("there are exactly sixteen tools, and they are the sixteen in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -141,11 +141,12 @@ test("there are exactly fifteen tools, and they are the fifteen in the spec", ()
     "list_folders",
     "create_folder",
     "move_document",
+    "rename_document",
     "get_comments",
     "add_comment",
     "reply_to_comment",
   ]);
-  assert.equal(TOOLS.length, 15);
+  assert.equal(TOOLS.length, 16);
 });
 
 test("the surface has no tool that deletes or shares", () => {

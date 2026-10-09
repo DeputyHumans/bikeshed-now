@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The fifteen MCP tools (SPEC §19).
+// The sixteen MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -61,6 +61,7 @@ import {
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { locateQuote } from "../lib/quote";
+import { renameDocument } from "../lib/rename";
 import {
   ANNOTATION_COLOR,
   SUGGESTION_COLOR,
@@ -905,6 +906,32 @@ export const TOOLS: ToolDefinition[] = [
   },
 
   {
+    name: "rename_document",
+    description:
+      "Change a document's title: the name the workspace lists it under. Its address, /d/<id>, never changes, " +
+      "so links already sent keep working. An HTML document's own <title> is part of its content and stays " +
+      "as written; link previews still show that one.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "title"],
+      properties: {
+        id: { type: "string", description: "The document id." },
+        title: { type: "string", description: "The new title, up to 200 characters." },
+      },
+    },
+    async run(ctx, args) {
+      // Whoever may edit may rename, as in the workspace list, which takes no
+      // link key either (POST /organize).
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
+      if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot rename that document");
+      refuseIfExpired(data);
+      const renamed = await renameDocument(ctx.db, ref, args.title);
+      if ("error" in renamed) throw new Error(renamed.error);
+      return withReaderAddress({ id: ref.id, title: renamed.title }, ref.id);
+    },
+  },
+
+  {
     name: "get_comments",
     description:
       "Unresolved feedback on a document, each with the exact passage it is anchored to. " +
@@ -1093,7 +1120,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is fifteen tools, not "some tools". */
+/** Exported for the wiring test: the surface is sixteen tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

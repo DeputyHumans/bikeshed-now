@@ -143,6 +143,7 @@ import { syncPresenceAccess } from "./lib/presence";
 import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
+import { renameDocument } from "./lib/rename";
 import {
   bearerFrom,
   isTokenShaped,
@@ -2032,13 +2033,11 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
     if (op === "rename") {
-      const name = typeof body?.name === "string" ? body.name.trim() : "";
-      if (!name || name.length > 200) {
-        badRequest(res, "title is required (up to 200 characters)");
+      const renamed = await renameDocument(db(), ref, body?.name);
+      if ("error" in renamed) {
+        badRequest(res, renamed.error);
         return;
       }
-      await ref.set({ title: name, slug: slugify(name), updatedAt: now() }, { merge: true });
-      await syncPublicProjection(db(), id);
       res.status(200).json({ ok: true });
       return;
     }

@@ -16,6 +16,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **An agent can rename a document.** `rename_document`, and `bikeshed rename`
+  (in `bikeshed-now` 0.14.0), change its title and slug as the workspace list
+  does, for whoever may edit it, and never its address. An HTML document's own
+  `<title>` is content and stays as written. The workspace list and the tool
+  now share one rename, and the tool refuses an expired document as every
+  write tool does. There are sixteen tools (SPEC §4, §19).
+
 ### Fixed
 
 - **Nobody can rewrite or delete the notes the server writes into a thread.**

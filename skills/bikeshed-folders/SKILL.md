@@ -90,7 +90,8 @@ You need edit rights on the document, not merely the ability to read it.
 - **Delete a document.** Documents are permanent by design. A single version can
   be withdrawn by whoever runs the deployment, through a guarded tool.
 - **Rename a folder.** What something is called is the workspace's language, not
-  a tidying job.
+  a tidying job. A document you can edit is different: `rename_document` changes
+  its title, and its address stays.
 
 If a listing is `truncated`, the workspace has more folders than one call
 returns. Say so rather than treating what you got as the whole tree.

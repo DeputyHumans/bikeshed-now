@@ -1098,3 +1098,23 @@ test("an empty --with is refused, since a deletion is asked for by name", () => 
     (e) => e.status !== 0 && /say --delete if you mean that/.test(e.stderr),
   );
 });
+
+test("rename sends the id and the rest of the line as the title, never a link's key", async () => {
+  await withServer(rpcOk({ id: "plan", title: "Cut-over plan" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["rename", "plan", "Cut-over", "plan"], env);
+    assert.equal(seen[0].body.params.name, "rename_document");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", title: "Cut-over plan" });
+    assert.match(stdout, /renamed plan to “Cut-over plan”/);
+
+    await runAsync(["rename", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "Cut-over plan", "--json"], env);
+    assert.deepEqual(seen[1].body.params.arguments, { id: "plan", title: "Cut-over plan" });
+  });
+});
+
+test("rename wants a title", () => {
+  assert.throws(
+    () => run(["rename", "plan"], { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+    (e) => e.status !== 0 && /usage: bikeshed rename <id> <title>/.test(e.stderr),
+  );
+});

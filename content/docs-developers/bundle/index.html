@@ -843,7 +843,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Fifteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Sixteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -864,6 +864,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
         <tr><td><code>create_folder</code></td><td>Create a folder</td></tr>
         <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top</td></tr>
+        <tr><td><code>rename_document</code></td><td>Give a document a new title; its address stays</td></tr>
       </tbody>
     </table>
   </div>
@@ -935,6 +936,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
         <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
+        <tr><td><code>bikeshed rename &lt;id&gt; &lt;title&gt;</code></td><td>Give a document a new title; its address stays</td></tr>
         <tr><td><code>bikeshed skills install &lt;dir&gt;</code></td><td>Write the skills into an agent's skills directory</td></tr>
       </tbody>
     </table>

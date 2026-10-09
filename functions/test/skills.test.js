@@ -226,8 +226,8 @@ test("an address after `bikeshed` is not a command, and a misnamed command still
   );
   assert.deepEqual([...commandsIn("`bikeshed http-proxy`")], ["http-proxy"]);
   // The control: the exception is for an address, not for anything unknown.
-  assert.deepEqual([...commandsIn("`bikeshed rename draft.md`")], ["rename"]);
-  assert.equal(advertisedCommands().has("rename"), false);
+  assert.deepEqual([...commandsIn("`bikeshed unpublish draft.md`")], ["unpublish"]);
+  assert.equal(advertisedCommands().has("unpublish"), false);
 });
 
 test("every bikeshed command any of these documents names is a real one", async () => {

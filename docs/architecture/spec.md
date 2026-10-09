@@ -1853,7 +1853,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — fifteen tools
+### MCP — sixteen tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1871,6 +1871,7 @@ scripts and anything that cannot open a browser.
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
+| `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
 | `get_comments` | **unresolved feedback, each with its anchored quote**; `version` names an earlier version, whose threads any reader of the document may read |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
@@ -1918,6 +1919,13 @@ projection move with it.
 caller is not a member of renders as `…`: membership cascades downward only, so
 a grant on a child leaves its parent invisible, and neither its id nor its
 omission would be a true answer.
+
+`rename_document` is the workspace list's rename through the same
+`renameDocument` (`lib/rename.ts`) that `POST /organize` calls: `canEdit` with
+no link key, at most 200 characters, `title` and `slug` and nothing else (§4),
+and the public projection follows. Unlike the list it refuses an expired
+document, as every write tool does. A document's own `<title>` is content and
+is not rewritten, so a link preview still shows it (§17).
 
 Three things are deliberately **absent** from the surface, and each is a stated
 refusal rather than a gap: deleting a folder (it reparents everything beneath
@@ -1972,8 +1980,9 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <sl
 `lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
 `suggest <slug> <text> (--with <text>
-| --delete)`, `open <slug>`, `folders`, `mkdir <name>`,
-`mv <slug> <folder|root>`, `skills [install <dir>]`, plus `publish --watch`.
+| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `open <slug>`,
+`folders`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
+`skills [install <dir>]`, plus `publish --watch`.
 Every command takes `--json`. `--version` on its own prints the CLI's version,
 read from its own `package.json`, which is also the version its
 `X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and

@@ -117,7 +117,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all fifteen tools.
+first. If all you have is an HTTP client, you have all sixteen tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -145,6 +145,7 @@ somebody might commit.
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root |
+| `rename_document` | Change a document's title; its address stays |
 | `get_comments` | Unresolved feedback, each with its anchored quote; `version` reads an earlier version's |
 | `add_comment` | Start a thread on one passage |
 | `reply_to_comment` | Reply in a thread |
@@ -171,6 +172,7 @@ bikeshed open <id>
 bikeshed folders
 bikeshed mkdir <name> [--parent <id>]
 bikeshed mv <id> <folder|root>
+bikeshed rename <id> <title>
 
 bikeshed skills [install <dir>]
 
@@ -552,7 +554,8 @@ generated table of contents.
 - **Delete anything.** Documents are permanent by design. A single version can
   be withdrawn by whoever runs the deployment, through a guarded tool. Deleting
   a folder reparents everything beneath it, so that is a person's call too.
-- **Rename a folder.** Names are the workspace's language. Ask.
+- **Rename a folder.** Names are the workspace's language. Ask. A document is
+  different: whoever can edit it can rename it, and its address never changes.
 - **Set or clear a document's expiry.** Same reason as sharing: it decides who
   can read something, and until when.
 - **Resolve a comment thread.** Whether an objection has been answered is the

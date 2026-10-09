@@ -75,6 +75,7 @@ Organising
   bikeshed folders                     the folder tree, with ids
   bikeshed mkdir <name> [--parent <id>]  create a folder
   bikeshed mv <id> <folder|root>       move a document
+  bikeshed rename <id> <title>         change a document's title; its address stays
 
 Skills
   bikeshed skills                      skills this deployment publishes
@@ -759,6 +760,20 @@ async function mv(flags, [id, dest]) {
 }
 
 /**
+ * Give a document a new title. Its address is its id, which never changes, so
+ * every link already sent keeps working (SPEC §4). The title is the rest of the
+ * line, so it needs no quotes.
+ */
+async function rename(flags, [ref, ...rest]) {
+  const title = rest.join(" ").trim();
+  if (!ref || !title) fail("usage: bikeshed rename <id> <title>");
+  const { origin, token } = resolveAuth(flags);
+  // Renaming takes no link key, as in the workspace list: only the id is sent.
+  const result = await callTool(origin, token, "rename_document", { id: docArgs(ref).id, title });
+  out(flags.json, result, () => console.log(`renamed ${result.id} to “${result.title}”`));
+}
+
+/**
  * Skills are instructions, not code, and they are fetched from the DEPLOYMENT
  * rather than bundled with this CLI on purpose: a deployment running an older
  * version should hand out the skills that describe what it can actually do.
@@ -854,6 +869,7 @@ const COMMANDS = {
   folders,
   mkdir,
   mv,
+  rename,
   skills: skillsCommand,
 };
 
