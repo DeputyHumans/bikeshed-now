@@ -125,7 +125,18 @@ service cloud.firestore {
         && request.resource.data.authorEmail == myEmail()
         && request.resource.data.actor.uid == request.auth.uid
         && request.resource.data.actor.email == myEmail()
-        && request.resource.data.actor.channel == 'web';
+        && request.resource.data.actor.channel == 'web'
+        && request.resource.data.actor.keys().hasOnly(['uid', 'email', 'channel']);
+    }
+
+    // Exactly the fields the app writes, stamped with the server's clock.
+    // Without the list a client could put any `actor.tokenId`, `client` or
+    // `agent` on its own feedback (the forensic primitive, SPEC §17), date it
+    // whenever it liked, or leave `resolved` out, and a thread without it
+    // escapes every `resolved == false` count, the commit gate's included.
+    function isExactly(keys) {
+      return request.resource.data.keys().hasOnly(keys)
+        && request.resource.data.keys().hasAll(keys);
     }
 
     match /docs/{docId} {
@@ -201,19 +212,19 @@ service cloud.firestore {
         // without anybody deciding it.
         match /annotations/{annId} {
           allow read: if canRead(docId, docData(docId));
+          // The key list keeps `suggestion` out as well.
           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-            && !('suggestion' in request.resource.data);
-          // Readers may only toggle `resolved`. Author, anchor, colour, actor
-          // and createdAt are immutable after creation.
+            && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
+            && request.resource.data.anchor is map
+            && request.resource.data.resolved == false
+            && request.resource.data.createdAt == request.time;
+          // Readers may only toggle `resolved`, and nothing else changes with
+          // it: not the author, anchor, colour, actor or createdAt, and no
+          // field added on the side.
           allow update: if canRead(docId, docData(docId))
             && !('suggestion' in resource.data)
-            && !('suggestion' in request.resource.data)
-            && request.resource.data.authorUid == resource.data.authorUid
-            && request.resource.data.authorEmail == resource.data.authorEmail
-            && request.resource.data.actor == resource.data.actor
-            && request.resource.data.anchor == resource.data.anchor
-            && request.resource.data.color == resource.data.color
-            && request.resource.data.createdAt == resource.data.createdAt;
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved'])
+            && request.resource.data.resolved is bool;
           allow delete: if isVerifiedUser()
             && resource.data.authorUid == request.auth.uid
             && !('suggestion' in resource.data);
@@ -226,18 +237,19 @@ service cloud.firestore {
           // rewrite an opener outside the revision history the server keeps.
           match /comments/{commentId} {
             allow read: if canRead(docId, docData(docId));
+            // The key list is what keeps `generated` and `opensSuggestion` out.
             allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-              && !('generated' in request.resource.data)
-              && !('opensSuggestion' in request.resource.data);
+              && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
+              && request.resource.data.body is string
+              && request.resource.data.createdAt == request.time;
+            // Its author may reword it, and that is all: when it was written,
+            // and by whom, stay as they were.
             allow update: if canRead(docId, docData(docId))
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)
               && !('opensSuggestion' in resource.data)
-              && request.resource.data.authorUid == resource.data.authorUid
-              && request.resource.data.authorEmail == resource.data.authorEmail
-              && request.resource.data.actor == resource.data.actor
-              && !request.resource.data.diff(resource.data).affectedKeys()
-                .hasAny(['generated', 'opensSuggestion']);
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
+              && request.resource.data.body is string;
             allow delete: if isVerifiedUser()
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)

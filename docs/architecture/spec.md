@@ -476,6 +476,15 @@ Only `POST /suggestion` writes the field. A **`Comment`** may carry
 `opensSuggestion` (the thread's first comment) and `generated` (text the server
 wrote rather than the author), and no client may write either.
 
+A browser writes feedback with **exactly** the fields the app sends, and the
+rules list them: an `Annotation` is `{ annId, anchor, authorUid, authorEmail,
+actor, color, resolved, createdAt }`, created with `resolved: false`, and a
+`Comment` is `{ commentId, body, authorUid, authorEmail, actor, createdAt }`.
+`createdAt` is the server's clock (`request.time`), never the client's. After
+that a reader may change an annotation's `resolved` and nothing else, and a
+comment's author its `body` and nothing else. Everything else on these records
+is written by the server, through the Admin SDK.
+
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
 while that is still `linkToken`, so rotating the link revokes every grant
@@ -1749,7 +1758,8 @@ type Actor = {
 actually presented — a Bearer token cannot claim to be `web`, and `/mcp` stamps
 `mcp` regardless of what the caller says. On the direct-Firestore write path,
 `firestore.rules authoredBySelf()` pins `actor.channel == 'web'` for the same
-reason. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`,
+reason, and allows the actor no other field: a browser cannot put a `tokenId`,
+`client` or `agent` on its own feedback. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`,
 are stored verbatim, and are **rendered as self-reported** in the UI. A badge
 that implies verification it does not have is worse than no badge.
 

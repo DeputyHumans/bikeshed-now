@@ -14,6 +14,21 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A browser can no longer forge what its own feedback says about itself.**
+  The rules checked that an annotation or comment named its real author, and
+  nothing else. A client could put an agent's token id, client or agent name
+  on its comment, date it whenever it liked, add fields of its own, or create
+  a thread with no `resolved` at all, which no count of open threads sees, the
+  check that holds back a new version included. Feedback is now exactly the
+  fields the app writes, dated by the server, and a later change touches only
+  `resolved` (a reader) or `body` (a comment's author). Nothing the app does
+  changes, and a test now fails if the app and the rules ever disagree
+  (SPEC §4, §17).
+
 ## 0.11.2 — 2026-10-09
 
 ### Fixed

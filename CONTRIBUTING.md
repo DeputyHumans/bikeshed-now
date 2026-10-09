@@ -112,6 +112,12 @@ Every positive rules assertion needs an explicit negative beside it. A rules
 suite where every test passes because the rule never fires is worse than no
 suite, because it looks like coverage.
 
+What a browser writes is listed field by field (`isExactly`) and dated by the
+server (`request.time`). A field added to an annotation or comment in
+`app/src/firestore.ts` must be added to that list in the same change.
+`app/src/firestore.test.ts` fails until it is, because the app's own tests mock
+Firestore and would otherwise pass while production refused every comment.
+
 ## Reporting a vulnerability
 
 See `SECURITY.md`. Please do not open a public issue for anything that lets

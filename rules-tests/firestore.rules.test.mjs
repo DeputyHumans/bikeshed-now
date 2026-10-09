@@ -19,6 +19,7 @@ import {
   getDoc,
   getDocs,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -420,7 +421,7 @@ describe("firestore rules", () => {
         anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
         color: "#b5257b",
         resolved: false,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
   });
@@ -436,7 +437,7 @@ describe("firestore rules", () => {
         anchor: {},
         color: "#b5257b",
         resolved: false,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
   });
@@ -455,7 +456,7 @@ describe("firestore rules", () => {
         anchor: {},
         color: "#b5257b",
         resolved: false,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
   });
@@ -467,6 +468,91 @@ describe("firestore rules", () => {
     await assertFails(updateDoc(ref, { authorEmail: EDITOR.email }));
     await assertFails(updateDoc(ref, { anchor: { elementId: "moved" } }));
     await assertFails(updateDoc(ref, { actor: actorFor(EDITOR) }));
+    // The pins above held the fields that existed; nothing stopped a resolve
+    // from adding one beside them, or setting `resolved` to something that is
+    // neither open nor closed.
+    await assertFails(updateDoc(ref, { resolved: false, note: "added on the side" }));
+    await assertFails(updateDoc(ref, { "actor.tokenId": "tok_agent" }));
+    await assertFails(updateDoc(ref, { resolved: "yes" }));
+    await assertFails(updateDoc(ref, { resolved: deleteField() }));
+  });
+
+  // --- Feedback is exactly what the app writes (SPEC §6, §17) ---------------
+  // A browser could otherwise sign its feedback with an agent's token id and
+  // so hide it from that agent, date it whenever it liked, or leave out
+  // `resolved` and slip past every count of open threads.
+
+  const annotationBy = (p, annId) => ({
+    annId,
+    authorUid: p.uid,
+    authorEmail: p.email,
+    actor: actorFor(p),
+    anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
+    color: "#b5257b",
+    resolved: false,
+    createdAt: serverTimestamp(),
+  });
+
+  const commentBy = (p, commentId) => ({
+    commentId,
+    body: "Is this the dual-write fortnight?",
+    authorUid: p.uid,
+    authorEmail: p.email,
+    actor: actorFor(p),
+    createdAt: serverTimestamp(),
+  });
+
+  it("an annotation carries exactly the app's fields, open, on the server's clock", async () => {
+    const db = verified(env, VIEWER).firestore();
+    const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/${id}`);
+    await assertSucceeds(setDoc(at("exact1"), annotationBy(VIEWER, "exact1")));
+    await assertFails(setDoc(at("extra"), { ...annotationBy(VIEWER, "extra"), note: "x" }));
+    const { resolved, ...unresolvable } = annotationBy(VIEWER, "noresolved");
+    assert.equal(resolved, false);
+    await assertFails(setDoc(at("noresolved"), unresolvable));
+    await assertFails(setDoc(at("closed"), { ...annotationBy(VIEWER, "closed"), resolved: true }));
+    await assertFails(setDoc(at("backdated"), { ...annotationBy(VIEWER, "backdated"), createdAt: new Date(0) }));
+    await assertFails(setDoc(at("noanchor"), { ...annotationBy(VIEWER, "noanchor"), anchor: "s1" }));
+  });
+
+  it("a comment carries exactly the app's fields, on the server's clock", async () => {
+    const db = verified(env, VIEWER).firestore();
+    const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/a1/comments/${id}`);
+    await assertSucceeds(setDoc(at("exact1"), commentBy(VIEWER, "exact1")));
+    await assertFails(setDoc(at("extra"), { ...commentBy(VIEWER, "extra"), note: "x" }));
+    await assertFails(setDoc(at("backdated"), { ...commentBy(VIEWER, "backdated"), createdAt: new Date(0) }));
+    await assertFails(setDoc(at("nobody"), { ...commentBy(VIEWER, "nobody"), body: 42 }));
+  });
+
+  it("a browser cannot sign its feedback with an agent's token, client or agent name", async () => {
+    const db = verified(env, VIEWER).firestore();
+    for (const extra of [{ tokenId: "tok_agent" }, { client: "claude-code" }, { agent: "reviewer" }]) {
+      const actor = { ...actorFor(VIEWER), ...extra };
+      const key = Object.keys(extra)[0];
+      await assertFails(
+        setDoc(doc(db, `docs/private-doc/versions/v1/annotations/as-${key}`), {
+          ...annotationBy(VIEWER, `as-${key}`),
+          actor,
+        }),
+      );
+      await assertFails(
+        setDoc(doc(db, `docs/private-doc/versions/v1/annotations/a1/comments/as-${key}`), {
+          ...commentBy(VIEWER, `as-${key}`),
+          actor,
+        }),
+      );
+    }
+  });
+
+  it("a comment's author rewords it, and nothing else", async () => {
+    const db = verified(env, VIEWER).firestore();
+    const at = doc(db, "docs/private-doc/versions/v1/annotations/a1/comments/mine");
+    await assertSucceeds(setDoc(at, commentBy(VIEWER, "mine")));
+    await assertSucceeds(updateDoc(at, { body: "Is this the two-week dual-write?" }));
+    await assertFails(updateDoc(at, { body: "Earlier.", createdAt: new Date(0) }));
+    await assertFails(updateDoc(at, { "actor.tokenId": "tok_agent" }));
+    await assertFails(updateDoc(at, { note: "added on the side" }));
+    await assertFails(updateDoc(at, { body: 42 }));
   });
 
   it("only the author deletes their annotation", async () => {
@@ -486,7 +572,7 @@ describe("firestore rules", () => {
     anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
     color: "#b5257b",
     resolved: false,
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   });
 
   it("no client creates a suggestion, though the same annotation without one is fine", async () => {
@@ -555,7 +641,7 @@ describe("firestore rules", () => {
         authorUid: EDITOR.uid,
         authorEmail: EDITOR.email,
         actor: actorFor(EDITOR),
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
   });
@@ -567,7 +653,7 @@ describe("firestore rules", () => {
       authorUid: EDITOR.uid,
       authorEmail: EDITOR.email,
       actor: actorFor(EDITOR),
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
     };
     const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/sug1/comments/${id}`);
     await assertFails(setDoc(at("g1"), { ...base, commentId: "g1", generated: true }));
@@ -596,7 +682,7 @@ describe("firestore rules", () => {
     const db = verified(env, EDITOR).firestore();
     const at = doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/r9");
     await assertSucceeds(
-      setDoc(at, { commentId: "r9", body: "Hmm.", authorUid: EDITOR.uid, authorEmail: EDITOR.email, actor: actorFor(EDITOR), createdAt: new Date() }),
+      setDoc(at, { commentId: "r9", body: "Hmm.", authorUid: EDITOR.uid, authorEmail: EDITOR.email, actor: actorFor(EDITOR), createdAt: serverTimestamp() }),
     );
     await assertSucceeds(updateDoc(at, { body: "Hmm, fine." }));
     await assertSucceeds(deleteDoc(at));
@@ -672,7 +758,7 @@ describe("firestore rules", () => {
           anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
           color: "#b5257b",
           resolved: false,
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
         }),
         who.uid,
       );
@@ -696,16 +782,17 @@ describe("firestore rules", () => {
         anchor: { elementId: "s1", exact: "x", prefix: "", suffix: "", start: 0, end: 1 },
         color: "#b5257b",
         resolved: false,
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
     await assertSucceeds(
       setDoc(doc(db, "docs/unlisted-doc/versions/v1/annotations/a1/comments/c1"), {
+        commentId: "c1",
         authorUid: GRANTED.uid,
         authorEmail: GRANTED.email,
         actor: actorFor(GRANTED),
         body: "Agreed.",
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       }),
     );
   });
@@ -924,7 +1011,7 @@ describe("firestore rules with a domain allowlist", () => {
         ownerEmail: OWNER.email,
         members: [OWNER.email, OUTSIDER.email],
         visibility: "private",
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       });
     });
   });

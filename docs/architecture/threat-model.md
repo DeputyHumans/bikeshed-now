@@ -156,6 +156,15 @@ the direct-Firestore write path, `firestore.rules authoredBySelf()` pins
 channel by definition — automation goes through the Admin SDK, which bypasses
 rules entirely.
 
+Until 0.11.3 that was all the rules pinned. A browser could put an agent's
+`tokenId` on its own comment, which points "everything this token touched" at a
+token that never touched it. It could backdate `createdAt`, or create a thread
+with no `resolved` field, which no `resolved == false` count sees, the in-app
+commit gate's included. Now an annotation or comment is created with exactly the
+fields the app writes and an actor of `uid`, `email` and `channel` only, dated
+by the server (`request.time`). A reader's update changes `resolved` and nothing
+else, and a comment's author can change only its `body` (SPEC §4).
+
 `client` and `agent` are self-reported, stored verbatim, and **rendered as
 self-reported**. A badge implying verification it does not have would be worse
 than no badge.
