@@ -309,7 +309,8 @@ Over MCP the same is `suggest_edit` with `exact`, `replacement` and `note`.
 
 `get_document` tells you whether you may (`canSuggest`), and `get_comments`
 shows each suggestion with its `replacement` and its `state`: pending,
-accepted or rejected.
+accepted, rejected or withdrawn. A withdrawn one keeps its thread, as a decided
+one does.
 
 **A pending suggestion holds back every new version,** yours included:
 `update_document` is refused until somebody who can approve has decided each

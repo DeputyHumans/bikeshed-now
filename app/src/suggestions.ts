@@ -28,7 +28,7 @@ export function suggestEdit(
   });
 }
 
-type Changed = Promise<{ state: SuggestionState | "withdrawn" }>;
+type Changed = Promise<{ state: SuggestionState }>;
 
 export function reviseSuggestion(where: Where & { annId: string; replacement: string; note?: string }): Changed {
   return post("/suggestion", { op: "revise", ...where }, { forbidden: AUTHOR });

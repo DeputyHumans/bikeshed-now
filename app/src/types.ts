@@ -399,7 +399,7 @@ export interface Annotation {
   suggestion?: Suggestion;
 }
 
-export type SuggestionState = "pending" | "accepted" | "rejected";
+export type SuggestionState = "pending" | "accepted" | "rejected" | "withdrawn";
 
 /** A proposed text replacement for the annotation's quote. Empty deletes it. */
 export interface Suggestion {
@@ -407,6 +407,7 @@ export interface Suggestion {
   state: SuggestionState;
   /** Held by the approver applying it, so nobody else does at the same time. */
   claim?: { uid: string; email: string; until: Timestamp };
+  /** Who closed it, and when: an approver's decision, or its author withdrawing it. */
   decidedBy?: Actor;
   decidedAt?: Timestamp;
 }

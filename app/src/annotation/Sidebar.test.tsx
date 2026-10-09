@@ -212,4 +212,23 @@ describe("a suggestion's thread", () => {
     expect(screen.getByText("Rejected: Keep it.")).toBeTruthy();
     expect(screen.getByText("Rejected by owner@example.com")).toBeTruthy();
   });
+
+  it("keeps a withdrawn one as a closed thread, saying so, with nothing left to do", () => {
+    comments.current = [
+      { commentId: "c1", body: "Withdrawn.", authorEmail: "sug@example.com", generated: true },
+    ];
+    const withdrawn = {
+      ...SUGGESTION,
+      resolved: true,
+      suggestion: { replacement: "two weekends", state: "withdrawn", decidedBy: { email: "sug@example.com" } },
+    } as Annotation;
+    mountWith(withdrawn, { uid: "u-sug", isApprover: true, onReview: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Show resolved" }));
+    expect(screen.getByText("Withdrawn by sug@example.com")).toBeTruthy();
+    expect(screen.queryByText("Waiting for the owner or an approver.")).toBeNull();
+    expect(screen.getByText("Withdrawn.")).toBeTruthy();
+    for (const name of ["Withdraw", "Edit", "Reject…", "Review"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
 });

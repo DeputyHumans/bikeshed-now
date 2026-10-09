@@ -337,7 +337,7 @@ Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
 |---|---|---|---|
 | `create` | `anchor, replacement, note?` | `canSuggest`, any channel | `403` a reader who may not suggest; `409 { currentVersion }` not the current version; `409` twenty pending by this author; `400` a bad anchor, a replacement with a line break or control character, or one equal to its quote |
 | `revise` | `annId, replacement, note?` | its author, in the app | `403` anyone else; `409` decided or claimed |
-| `withdraw` | `annId` | its author, in the app | the same; deletes the thread |
+| `withdraw` | `annId` | its author, in the app | the same; idempotent once withdrawn, and the thread stays |
 | `claim` | `annId` | an approver, in the app | `409 { claimedBy }` another approver's live claim |
 | `accept` | `annId` | an approver, in the app | `409` no draft of this version; idempotent once accepted |
 | `reject` | `annId, reason?` | an approver, in the app | idempotent once rejected |
@@ -451,9 +451,11 @@ public/{docId}                                 PublicDoc        (projection, pub
 ```
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
-`suggestion: { replacement, state: "pending" | "accepted" | "rejected",
-claim?, decidedBy?, decidedAt? }`. Its `resolved` is `false` while pending and
-`true` once decided, so it counts as an open thread everywhere one is counted.
+`suggestion: { replacement, state: "pending" | "accepted" | "rejected" |
+"withdrawn", claim?, decidedBy?, decidedAt? }`, where `decidedBy` and
+`decidedAt` say who closed it — an approver deciding, or its author withdrawing
+— and when. Its `resolved` is `false` while pending and `true` once closed, so
+it counts as an open thread everywhere one is counted.
 Only `POST /suggestion` writes the field. A **`Comment`** may carry
 `opensSuggestion` (the thread's first comment) and `generated` (text the server
 wrote rather than the author), and no client may write either.
@@ -1243,7 +1245,8 @@ opening comment is addressed to the owner and every approver − the author,
 because only they can decide it; the notice shows the quote and the proposed
 replacement, and the author's note if there was one. A decision is a short
 comment in the thread ("Accepted." / "Rejected: …"), which reaches the
-suggester the ordinary way.
+suggester the ordinary way; so is a withdrawal ("Withdrawn."), which reaches the
+owner and everybody who has written in the thread.
 
 New suggestions have a cooldown of their own, apart from comments: a waiting
 suggestion holds back the next version until somebody decides it, so a comment
@@ -2232,12 +2235,17 @@ thread, a highlight, orphan detection and the comment email for free.
 ```
 pending ──accept──▶ accepted
    │    └─reject──▶ rejected
-   └──withdraw────▶ (deleted)
+   └──withdraw────▶ withdrawn
 ```
 
 A **claim** is held by the approver applying it, for two minutes, and keeps
 every other decision and the author's withdrawal off it meanwhile, so two
 approvers cannot insert the same change twice. A lapsed claim is ignored.
+
+**Withdrawing closes, it does not delete.** A withdrawn suggestion keeps its
+quote, its replacement and its whole thread, and is resolved as a decided one
+is, so it stops holding back a new version. What somebody proposed and took
+back is part of the document's record.
 
 **Accepting is an edit.** The approver's browser finds the quote in the DRAFT —
 exactly, never by fuzzy match — replays the replacement with `execCommand` in
@@ -2311,7 +2319,7 @@ the strip that unwraps highlights into the bytes. Both attributes ride on
 It is drawn only where its quote resolves EXACTLY (`annotation/exact.ts`):
 whitespace normalised, context choosing between repeats, never fuzzy and
 never by position. One that does not is stale — listed, not drawn. A decided
-suggestion is resolved, and like a resolved comment is not drawn.
+or withdrawn suggestion is resolved, and like a resolved comment is not drawn.
 
 In the panel a suggestion reads as its change — struck, then inserted, and in
 words for a screen reader — with its state. It has no Resolve button. An

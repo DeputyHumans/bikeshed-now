@@ -61,11 +61,13 @@ function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggest
       ? `Accepted by ${suggestion.decidedBy?.email ?? "an approver"}`
       : suggestion.state === "rejected"
         ? `Rejected by ${suggestion.decidedBy?.email ?? "an approver"}`
-        : stale
-          ? "The text has changed since this was suggested, so it can’t be applied."
-          : holder
-            ? `${holder} is applying it…`
-            : "Waiting for the owner or an approver.";
+        : suggestion.state === "withdrawn"
+          ? `Withdrawn by ${suggestion.decidedBy?.email ?? "its author"}`
+          : stale
+            ? "The text has changed since this was suggested, so it can’t be applied."
+            : holder
+              ? `${holder} is applying it…`
+              : "Waiting for the owner or an approver.";
   return (
     <div className="suggestion" data-state={suggestion.state} data-stale={stale || undefined}>
       <p className="suggestion-change">

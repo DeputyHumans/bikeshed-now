@@ -283,13 +283,36 @@ test("a note the author wrote stays theirs until they send a new one", async () 
   assert.equal(w.comments(r.body.annId)[0].body, "Longer.");
 });
 
-test("its author withdraws a pending suggestion, and the whole thread goes with it", async () => {
+test("its author withdraws a pending suggestion, and the thread stays to say so", async () => {
   const w = world();
+  const ref = w.db.collection("docs").doc("d1");
   const annId = await suggested(w);
+  await w.call(w.as(OWNER), { op: "create", anchor: ANCHOR, replacement: "x" }); // somebody else's, untouched
   assert.equal((await w.call(w.as(OWNER), { op: "withdraw", annId })).status, 403, "only its author");
   assert.deepEqual((await w.call(w.as(SUGGESTER), { op: "withdraw", annId })).body, { state: "withdrawn" });
-  assert.equal(w.ann(annId), undefined);
-  assert.deepEqual(w.comments(annId), []);
+
+  const a = w.ann(annId);
+  assert.ok(a, "kept, not deleted: what was proposed and taken back is part of the record");
+  assert.equal(a.suggestion.state, "withdrawn");
+  assert.equal(a.suggestion.replacement, "two weekends", "what was proposed is still there");
+  assert.equal(a.resolved, true, "closed, or it would hold back every new version with nobody able to clear it");
+  assert.equal(a.suggestion.decidedBy.email, SUGGESTER.email);
+  assert.ok(a.suggestion.decidedAt, "when");
+  assert.equal(a.suggestion.claim, undefined);
+  const bodies = w.comments(annId).map((c) => c.body);
+  assert.equal(bodies[0], "Suggested replacing “a single weekend” with “two weekends”.", "the opener survives");
+  assert.ok(w.comments(annId).some((c) => c.body === "Withdrawn." && c.generated === true));
+  assert.equal(await pendingSuggestions(ref, "v1"), 1, "only the owner's own suggestion still holds the gate");
+
+  // A retry after a dropped response is a success; nothing else reopens it.
+  assert.deepEqual((await w.call(w.as(SUGGESTER), { op: "withdraw", annId })).body, { state: "withdrawn" });
+  assert.equal(w.comments(annId).filter((c) => c.body === "Withdrawn.").length, 1, "said once");
+  withDraft(w);
+  for (const [who, op] of [[SUGGESTER, "revise"], [APPROVER, "claim"], [APPROVER, "accept"], [APPROVER, "reject"]]) {
+    const r = await w.call(w.as(who), { op, annId, replacement: "y" });
+    assert.equal(r.status, 409, op);
+    assert.match(r.body.error, /already been withdrawn/);
+  }
 
   const decided = await suggested(w);
   await w.call(w.as(OWNER), { op: "reject", annId: decided });

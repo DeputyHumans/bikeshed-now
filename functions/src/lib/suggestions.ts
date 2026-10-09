@@ -40,7 +40,7 @@ export const ANNOTATION_COLOR = "#b5257b";
 /** A suggestion is drawn in the colour every other thread is. */
 export const SUGGESTION_COLOR = ANNOTATION_COLOR;
 
-export type SuggestionState = "pending" | "accepted" | "rejected";
+export type SuggestionState = "pending" | "accepted" | "rejected" | "withdrawn";
 
 export interface SuggestionAnchor {
   elementId: string;
@@ -237,14 +237,17 @@ export function isDecisionOp(v: unknown): v is DecisionOp {
  * has already authorized for `op`.
  *
  *   revise    author, pending, unclaimed      → new replacement and note
- *   withdraw  author, pending, unclaimed      → the thread is deleted
+ *   withdraw  author, pending, unclaimed      → withdrawn
  *   claim     approver, pending               → others are kept off for a while
  *   accept    approver, pending, not claimed by someone else → accepted
  *   reject    approver, pending, not claimed by someone else → rejected
  *
- * Accept and reject are idempotent for their own outcome, so a retry after a
- * dropped response reports success rather than a confusing conflict. Each
- * writes a short note into the thread, which is how the suggester hears.
+ * Withdraw, accept and reject each close the thread for good and are
+ * idempotent for their own outcome, so a retry after a dropped response
+ * reports success rather than a confusing conflict. Each writes a short note
+ * into the thread, which is how the others hear. A withdrawn suggestion is
+ * kept, thread and all, rather than deleted: what somebody proposed and took
+ * back is part of the document's record (SPEC §22).
  */
 export async function changeSuggestion(args: {
   db: Db;
@@ -258,50 +261,10 @@ export async function changeSuggestion(args: {
   note?: string;
   reason?: string;
   nowMs?: number;
-}): Promise<{ state: SuggestionState | "withdrawn" } | Refusal> {
+}): Promise<{ state: SuggestionState } | Refusal> {
   const { db, docRef, versionId, annId, op, caller, actor } = args;
   const nowMs = args.nowMs ?? Date.now();
   const annRef = annotations(docRef, versionId).doc(annId);
-
-  // Withdrawing deletes a whole thread, which a transaction cannot list; the
-  // state is checked in one, then the comments are removed with the record.
-  if (op === "withdraw") {
-    const checked = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(annRef);
-      const s = snap.data() as StoredSuggestion | undefined;
-      if (!snap.exists || !s?.suggestion) return { status: 404 as const, error: "no such suggestion" };
-      if (s.authorUid !== caller.uid) {
-        return { status: 403 as const, error: "only the person who suggested it can withdraw it" };
-      }
-      if (s.suggestion.state !== "pending") {
-        return {
-          status: 409 as const,
-          error: `it has already been ${s.suggestion.state}`,
-          state: s.suggestion.state,
-        };
-      }
-      const other = claimedByOther(s, caller.uid, nowMs);
-      if (other) {
-        return { status: 409 as const, error: `${other} is applying it right now`, claimedBy: other };
-      }
-      // Mark it decided-in-progress so nobody claims it between here and the delete.
-      tx.update(annRef, {
-        "suggestion.claim": {
-          uid: caller.uid,
-          email: caller.emailLower,
-          until: Timestamp.fromMillis(nowMs + SUGGESTION_LIMITS.claimMs),
-        },
-      });
-      return null;
-    });
-    if (checked) return checked;
-    const comments = await annRef.collection("comments").get();
-    const batch = db.batch();
-    for (const c of comments.docs) batch.delete(c.ref);
-    batch.delete(annRef);
-    await batch.commit();
-    return { state: "withdrawn" };
-  }
 
   return db.runTransaction(async (tx) => {
     // Every read before any write, as a transaction requires: the record, and
@@ -316,7 +279,11 @@ export async function changeSuggestion(args: {
     const state = s.suggestion.state ?? "pending";
 
     // Idempotent outcomes first, so a retried decision is not a conflict.
-    if ((op === "accept" && state === "accepted") || (op === "reject" && state === "rejected")) {
+    if (
+      (op === "accept" && state === "accepted") ||
+      (op === "reject" && state === "rejected") ||
+      (op === "withdraw" && state === "withdrawn")
+    ) {
       return { state };
     }
     if (state !== "pending") return { status: 409, error: `it has already been ${state}`, state };
@@ -345,6 +312,28 @@ export async function changeSuggestion(args: {
           }
         }
         return { state: "pending" };
+      }
+      case "withdraw": {
+        if (s.authorUid !== caller.uid) {
+          return { status: 403, error: "only the person who suggested it can withdraw it" };
+        }
+        // Closed as a decision is, so it stops holding back a new version
+        // (SPEC §6a); the thread stays, and says what happened.
+        tx.update(annRef, {
+          "suggestion.state": "withdrawn",
+          "suggestion.decidedBy": actor,
+          "suggestion.decidedAt": FieldValue.serverTimestamp(),
+          "suggestion.claim": FieldValue.delete(),
+          resolved: true,
+        });
+        const noteRef = annRef.collection("comments").doc();
+        tx.create(noteRef, {
+          commentId: noteRef.id,
+          body: "Withdrawn.",
+          ...commentFields(caller, actor),
+          generated: true,
+        });
+        return { state: "withdrawn" as SuggestionState };
       }
       case "claim": {
         tx.update(annRef, {
