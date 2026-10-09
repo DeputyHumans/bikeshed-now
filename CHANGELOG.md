@@ -56,6 +56,32 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   each. A suggestion may be changed twenty times; after that, withdraw it and
   suggest it again (SPEC §4, §22).
 
+### Fixed
+
+- **Accepting a suggestion makes the change once, and says what it did.**
+  Where the text beside the quote had changed since the suggestion was made,
+  Accept put the change in the draft and then reported "nothing was
+  accepted": the quote was found by either side of its context, and the
+  result was checked for by both. Accepting again then called it stale, or,
+  where the replacement keeps the quote ("X" becomes "Y, X"), inserted it a
+  second time. The quote and the replacement are now found by one rule. The
+  edit is checked by what the text must read afterwards, and an edit that
+  comes out otherwise is undone before anything is said. A change already in
+  the draft is recorded, not made again, and a stale suggestion no longer
+  takes a claim that keeps everyone else off it (SPEC §22).
+
+- **The last words of a paragraph can be suggested on and accepted.** A quote
+  that ended its paragraph was measured into the line break after it, so in
+  rendered Markdown it was refused as spanning two paragraphs. That happened
+  when the selection was dragged to the end of the line, and again on Accept,
+  which the review bar still offered. The bar, and the comments panel in the
+  editor, now call stale exactly what Accept would refuse, and judge again as
+  the draft changes (SPEC §22).
+
+- **A suggested deletion takes one space with it.** Deleting a word left the
+  spaces on both sides of it, which the editor keeps visible as `&nbsp; ` and
+  the next version kept for good (SPEC §22).
+
 ## 0.9.3 — 2026-10-08
 
 ### Fixed

@@ -2,7 +2,7 @@
 // The approver's review pass: one suggestion at a time, in the live draft (SPEC §22).
 
 import { useEffect, useRef, useState } from "react";
-import { exactRangeFromAnchor, type ApplyResult } from "../annotation/exact";
+import { exactRangeFromAnchor, resolveSuggestion, type ApplyResult, type Resolution } from "../annotation/exact";
 import { TOKENS } from "../brand/tokens";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
@@ -20,9 +20,17 @@ import type { FrameMode } from "./frameMode";
 
 const HIGHLIGHT = "bshd-review";
 
-/** Which pending suggestions no longer resolve exactly in the draft on screen. */
+/**
+ * Which pending suggestions Accept would refuse in the draft on screen. The
+ * same resolver Accept runs, so the bar never offers an Accept that can only
+ * fail, nor greys out one that would record a change already made.
+ */
 function staleIn(doc: Document, pending: Annotation[]): Set<string> {
-  return new Set(pending.filter((a) => !exactRangeFromAnchor(doc, a.anchor)).map((a) => a.annId));
+  return new Set(
+    pending
+      .filter((a) => resolveSuggestion(doc, a.anchor, a.suggestion?.replacement ?? "").state === "stale")
+      .map((a) => a.annId),
+  );
 }
 
 const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
@@ -87,16 +95,33 @@ export function useSuggestionReview(o: {
   reduceMotion?: boolean;
 }): { stale: Set<string> } {
   const { mode, doc, epoch, active, pending, currentId, ready, reduceMotion = false } = o;
-  const on = active && ready && mode.kind === "editing" && Boolean(doc?.body);
+  // Judged whenever the editor is bound, for the comments panel as well as the
+  // pass; marked only during the pass.
+  const judging = ready && mode.kind === "editing" && Boolean(doc?.body);
+  const on = active && judging;
   const [stale, setStale] = useState<Set<string>>(new Set());
+  // The draft changes under the pass: this approver's own typing, a
+  // co-editor's patch through the shared document, an Accept. Any of them may
+  // change a verdict. Observed, never written: this hook still puts nothing
+  // in the document.
+  const [edits, setEdits] = useState(0);
+  useEffect(() => {
+    if (!judging || !doc?.body) return;
+    // The frame's own constructor: a cross-realm observer observes nothing (see sync.ts).
+    const MO = doc.defaultView?.MutationObserver ?? globalThis.MutationObserver;
+    if (!MO) return;
+    const observer = new MO(() => setEdits((n) => n + 1));
+    observer.observe(doc.body, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
+  }, [judging, doc, epoch]);
 
   // Judged against the DRAFT, the text an Accept would actually change. State
   // changes only when the answer does: a caller handing a fresh array every
   // render must not make this re-render forever.
   useEffect(() => {
-    const next = on && doc ? staleIn(doc, pending) : new Set<string>();
+    const next = judging && doc ? staleIn(doc, pending) : new Set<string>();
     setStale((prev) => (sameSet(prev, next) ? prev : next));
-  }, [on, doc, epoch, pending]);
+  }, [judging, doc, epoch, pending, edits]);
 
   // Keyed on WHICH target, not on the array it arrived in, so that a presence
   // heartbeat or a peer's comment re-rendering the viewer does not scroll the
@@ -121,6 +146,7 @@ export type AcceptOutcome = ApplyResult | "unsaved";
 /**
  * Accept one suggestion, in the only order that survives every interruption:
  *
+ *   0. check   that there is something to apply, before keeping anyone off it;
  *   1. claim   other approvers are kept off it, so it is applied once;
  *   2. apply   the edit, in this session, reaching every peer;
  *   3. save    the draft, durably, before anything says it happened;
@@ -132,15 +158,17 @@ export type AcceptOutcome = ApplyResult | "unsaved";
  * one order with a lie in it: "accepted", over a draft that never got the text.
  */
 export async function acceptInSession(steps: {
+  check: () => Resolution["state"];
   claim: () => Promise<unknown>;
   apply: () => ApplyResult;
   flush: () => Promise<void>;
   saveFailed: () => boolean;
   record: () => Promise<unknown>;
 }): Promise<AcceptOutcome> {
+  if (steps.check() === "stale") return "stale";
   await steps.claim();
   const applied = steps.apply();
-  if (applied === "stale" || applied === "failed") return applied;
+  if (applied === "stale" || applied === "failed" || applied === "unverified") return applied;
   await steps.flush();
   if (steps.saveFailed()) return "unsaved";
   await steps.record();

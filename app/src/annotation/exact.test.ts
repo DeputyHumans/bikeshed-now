@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { rangeFromAnchor } from "./anchor";
-import { alreadyApplied, exactRangeFromAnchor, suggestibleRange, trimToText } from "./exact";
+import { exactRangeFromAnchor, resolveSuggestion, suggestibleRange, trimToText } from "./exact";
 import type { Anchor } from "../types";
 
 function makeDoc(body: string): Document {
@@ -82,6 +82,19 @@ describe("exactRangeFromAnchor", () => {
     const doc = makeDoc(`<section id="s1"><p>a <em>very</em> good idea</p></section>`);
     expect(exactRangeFromAnchor(doc, anchor({ exact: "very good" }))?.toString()).toBe("very good");
   });
+
+  it("ends a quote that ends its paragraph inside that paragraph", () => {
+    // Rendered Markdown puts a line break between blocks. Mapped to the start
+    // of THAT text node, the range crossed into the section, and the last
+    // words of every paragraph were refused as spanning two.
+    const doc = makeDoc(
+      `<section id="s1">\n<p><strong>Audience: developers and engineering leads</strong></p>\n<p>Next.</p>\n</section>`,
+    );
+    const r = exactRangeFromAnchor(doc, anchor({ exact: "developers and engineering leads", prefix: "Audience: ", suffix: "\nNext." }));
+    expect(r?.toString()).toBe("developers and engineering leads");
+    expect(r!.endContainer.parentElement?.tagName).toBe("STRONG");
+    expect(suggestibleRange(r!)).toBe(true);
+  });
 });
 
 describe("suggestibleRange", () => {
@@ -124,23 +137,73 @@ describe("suggestibleRange", () => {
   });
 });
 
-describe("alreadyApplied", () => {
+describe("resolveSuggestion: the quote and its replacement, found by one rule", () => {
   const a = anchor({ exact: "a single weekend", prefix: "We can cut over in ", suffix: ", without downtime." });
+  const state = (body: string, an: Anchor, replacement: string) =>
+    resolveSuggestion(makeDoc(`<section id="s1"><p>${body}</p></section>`), an, replacement).state;
 
-  it("recognises the replacement standing between the anchor's own context", () => {
-    const doc = makeDoc(`<section id="s1"><p>We can cut over in two weekends, without downtime.</p></section>`);
-    expect(alreadyApplied(doc, a, "two weekends")).toBe(true);
-    expect(alreadyApplied(doc, a, "three weekends")).toBe(false);
+  it("is pending where the quote stands between its context", () => {
+    expect(state("We can cut over in a single weekend, without downtime.", a, "two weekends")).toBe("pending");
   });
 
-  it("recognises a deletion by its two contexts meeting", () => {
-    const doc = makeDoc(`<section id="s1"><p>We can cut over in , without downtime.</p></section>`);
-    expect(alreadyApplied(doc, a, "")).toBe(true);
+  it("is applied where the replacement stands between its context", () => {
+    expect(state("We can cut over in two weekends, without downtime.", a, "two weekends")).toBe("applied");
+    expect(state("We can cut over in two weekends, without downtime.", a, "three weekends")).toBe("stale");
+  });
+
+  it("is applied when only one side of the context still matches the replacement", () => {
+    // What the user's draft held: the change made, the text after it since rewritten.
+    expect(state("We can cut over in two weekends, with an hour of downtime.", a, "two weekends")).toBe("applied");
+  });
+
+  it("is pending when only one side of the context still matches the quote", () => {
+    expect(state("We can cut over in a single weekend, with an hour of downtime.", a, "two weekends")).toBe("pending");
+  });
+
+  it("knows a replacement that contains its quote is applied, not pending again", () => {
+    // "X" → "Y, X": the quote is still there after accepting, so finding it
+    // proved nothing, and accepting again inserted Y twice.
+    const ins = anchor({ exact: "developers and engineering leads", prefix: "Audience: ", suffix: ". Next" });
+    const rep = "product managers, developers and engineering leads";
+    expect(state("Audience: developers and engineering leads. Next", ins, rep)).toBe("pending");
+    expect(state("Audience: product managers, developers and engineering leads. Next", ins, rep)).toBe("applied");
+    // One side of the context rewritten too: still the same accepted change.
+    expect(state("Readers: product managers, developers and engineering leads. Next", ins, rep)).toBe("applied");
+  });
+
+  it("knows a quote that contains its replacement is pending until it is shortened", () => {
+    // At the start of a block there is no prefix, and "good idea." inside the
+    // unapplied quote matches the replacement between its context.
+    const cut = anchor({ exact: "very good idea", suffix: "." });
+    expect(state("very good idea.", cut, "good idea")).toBe("pending");
+    expect(state("good idea.", cut, "good idea")).toBe("applied");
+  });
+
+  it("is stale when the quote and the replacement each match one side, in different places", () => {
+    const t = anchor({ exact: "alpha", prefix: "P1 ", suffix: " S1" });
+    expect(state("P1 alpha X. Y beta S1", t, "beta")).toBe("stale");
+  });
+
+  it("is stale when neither stands there", () => {
+    expect(state("Something else entirely.", a, "two weekends")).toBe("stale");
+  });
+
+  it("recognises a deletion by its two contexts meeting, and only by both", () => {
+    expect(state("We can cut over in , without downtime.", a, "")).toBe("applied");
+    const atStart = anchor({ exact: "a single weekend", suffix: ", without downtime." });
+    // With nothing before it, the suffix alone is there whether or not the quote was deleted.
+    expect(state(", without downtime.", atStart, "")).toBe("stale");
+    expect(state("a single weekend, without downtime.", atStart, "")).toBe("pending");
   });
 
   it("is never sure of a spot it has no context to recognise", () => {
-    const doc = makeDoc(`<section id="s1"><p>two weekends</p></section>`);
-    expect(alreadyApplied(doc, anchor({ exact: "x" }), "two weekends")).toBe(false);
+    expect(state("two weekends", anchor({ exact: "x" }), "two weekends")).toBe("stale");
+    expect(state("one x here", anchor({ exact: "x" }), "two weekends")).toBe("pending");
+  });
+
+  it("is stale where the quote now spans structure", () => {
+    const doc = makeDoc(`<section id="s1"><p>We can cut over in a single</p>\n<p>weekend, without downtime.</p></section>`);
+    expect(resolveSuggestion(doc, a, "two weekends").state).toBe("stale");
   });
 });
 
@@ -153,6 +216,17 @@ describe("trimToText", () => {
     r.setEnd(text, 36);
     expect(r.toString()).toBe(" a single weekend.");
     expect(trimToText(r).toString()).toBe("a single weekend.");
+  });
+
+  it("keeps a paragraph's last words in their paragraph when the drag took the line break", () => {
+    const doc = makeDoc(`<section id="s"><p id="p"><strong>Audience: developers and engineering leads</strong></p>\n<p>Next.</p></section>`);
+    const text = doc.querySelector("strong")!.firstChild!;
+    const r = doc.createRange();
+    r.setStart(text, 10);
+    r.setEnd(doc.getElementById("p")!.nextSibling!, 1);
+    const trimmed = trimToText(r);
+    expect(trimmed.toString()).toBe("developers and engineering leads");
+    expect(suggestibleRange(trimmed)).toBe(true);
   });
 
   it("leaves a clean range, and an all-space one, as they are", () => {

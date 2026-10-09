@@ -2234,7 +2234,8 @@ may change or withdraw it, in the app or through an agent acting for them.
 
 One **text** replacement inside one block: the quoted text, anchored as a
 comment is (§6), and what it should become. An empty replacement deletes the
-quote. A replacement is one line of text — no line break, control character or
+quote, and the one space beside it that would otherwise be left doubled. A
+replacement is one line of text — no line break, control character or
 bidirectional override — because anything else would insert structure when it
 is typed in. Formatting, images and structure cannot be suggested.
 
@@ -2309,11 +2310,17 @@ in the nodes it removes collapses to nothing.
 
 Accept waits for the editing session to have joined the shared document (an
 edit applied before the bind is lost to it), then runs claim → apply → save
-the draft → record. A failure at any step says which and records nothing, and
-accepting again after an interruption finds the change already made and only
-records it. In the editor, the same bar tells anyone who cannot decide that
-suggestions are waiting and who can clear them, which is also why "Save as new
-version" is greyed out.
+the draft → record, and claims nothing it can already see is stale. The quote
+and the replacement are found by one rule, the same context either side; where
+one contains the other ("X" becomes "Y, X"), the longer is what stands there.
+The edit is checked by what the text must read afterwards, and one that came
+out otherwise is undone. A failure at any step says which and records nothing,
+and accepting again after an interruption finds the change already made and
+only records it. The bar, and the comments panel in the editor, call stale
+exactly what Accept would refuse, judged again as the draft changes. In the
+editor, the same bar tells anyone who cannot decide that suggestions are
+waiting and who can clear them, which is also why "Save as new version" is
+greyed out.
 
 `useSuggestionReview` is declared AFTER `useInlineEditor`, the one viewer hook
 that is: it edits rather than decorates.

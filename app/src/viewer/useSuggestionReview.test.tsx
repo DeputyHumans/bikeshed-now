@@ -49,6 +49,13 @@ function Probe({ doc, mode, currentId, tick, ready = true }: { doc: Document; mo
   return <span data-tick={tick} />;
 }
 
+/** The same hook over a list the test chooses, held stable across renders. */
+function Judge({ doc, pending, active = true }: { doc: Document; pending: Annotation[]; active?: boolean }) {
+  const { stale } = useSuggestionReview({ mode: EDITING, doc, epoch: 1, active, pending, currentId: null, ready: true });
+  seen = stale;
+  return null;
+}
+
 afterEach(() => {
   renders = 0;
   vi.restoreAllMocks();
@@ -88,6 +95,38 @@ describe("useSuggestionReview", () => {
     }
     expect(scroll).toHaveBeenCalledTimes(1);
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it("calls stale exactly what Accept would refuse, and nothing it would accept", () => {
+    const doc = new DOMParser().parseFromString(
+      `<!DOCTYPE html><html><body><section id="s1"><p>Audience: product managers, developers and engineering leads. Now with a rewritten end.</p>` +
+        `<p>We can cut over in a single</p>\n<p>weekend, without downtime.</p></section></body></html>`,
+      "text/html",
+    );
+    const made = { ...suggestion("made", "developers and engineering leads", "Audience: ", ". Then the old end."), suggestion: { replacement: "product managers, developers and engineering leads", state: "pending" as const } };
+    // Its quote is found, but now runs across two paragraphs.
+    const split = suggestion("split", "a single weekend", "cut over in ", ", without downtime.");
+    render(<Judge doc={doc} pending={[made, split]} />);
+    // Already made in this draft: Accept records it, so it must not be greyed out.
+    expect(seen.has("made")).toBe(false);
+    expect(seen.has("split")).toBe(true);
+  });
+
+  it("judges in the editor before any review pass, for the comments panel", () => {
+    // Otherwise the panel shows the verdict from the last reading view, and
+    // one that arrived while editing was never judged at all.
+    render(<Judge doc={makeDoc()} active={false} pending={[suggestion("b", "words that are gone")]} />);
+    expect([...seen]).toEqual(["b"]);
+  });
+
+  it("judges again when the draft is edited", async () => {
+    const doc = makeDoc();
+    render(<Judge doc={doc} pending={[suggestion("a", "a single weekend", "cut over in ")]} />);
+    expect(seen.size).toBe(0);
+    await act(async () => {
+      doc.querySelector("p")!.textContent = "We can cut over in one long weekend.";
+    });
+    expect([...seen]).toEqual(["a"]);
   });
 
   it("marks nothing until the session is bound, then marks the nodes binding left", () => {

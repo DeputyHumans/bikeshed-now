@@ -2,7 +2,7 @@
 // The "comment on this" and "suggest an edit" affordance that follows a selection (SPEC §6, §22).
 
 import { useEffect, useState } from "react";
-import { suggestibleRange } from "../annotation/exact";
+import { suggestibleRange, trimToText } from "../annotation/exact";
 import { Icon } from "./Icon";
 
 export interface FabPosition {
@@ -73,7 +73,8 @@ export function SelectionFab({
         setPosition(null);
         return;
       }
-      const verdict = suggestibleRange(range);
+      // Judged as it will be anchored: trimmed of the whitespace a drag takes with it.
+      const verdict = suggestibleRange(trimToText(range));
       setRefusal(verdict === true ? null : verdict.reason);
       const view = doc.defaultView;
       setPosition(

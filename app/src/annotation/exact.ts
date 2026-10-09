@@ -54,8 +54,15 @@ function occurrences(hay: string, needle: string): number[] {
   return out;
 }
 
+/** Where a text stands in the normalised text, and how many sides of its context agree. */
+interface Match {
+  start: number;
+  end: number;
+  sides: 1 | 2;
+}
+
 /**
- * The one place a quote stands, chosen by its context, or null.
+ * The one place a text stands, chosen by its context, or null.
  *
  *   1. the unique occurrence whose prefix AND suffix still match;
  *   2. else the unique occurrence where either does;
@@ -64,10 +71,7 @@ function occurrences(hay: string, needle: string): number[] {
  * Empty context matches anything, so a quote at the very start or end of its
  * section is not penalised for having nothing beside it.
  */
-function locate(
-  text: string,
-  q: { exact: string; prefix: string; suffix: string },
-): { start: number; end: number } | null {
+function locate(text: string, q: { exact: string; prefix: string; suffix: string }): Match | null {
   const exact = squash(q.exact).trim();
   if (!exact) return null;
   const prefix = squash(q.prefix).trimEnd();
@@ -83,8 +87,55 @@ function locate(
   });
   const both = scored.filter((c) => c.pre && c.suf);
   const either = scored.filter((c) => c.pre || c.suf);
-  const pick = both.length === 1 ? both[0] : both.length === 0 && either.length === 1 ? either[0] : null;
-  return pick ? { start: pick.at, end: pick.at + exact.length } : null;
+  if (both.length === 1) return { start: both[0].at, end: both[0].at + exact.length, sides: 2 };
+  if (both.length === 0 && either.length === 1) return { start: either[0].at, end: either[0].at + exact.length, sides: 1 };
+  return null;
+}
+
+/**
+ * Where a deletion was made: the one point where the prefix ends and the
+ * suffix begins. Only with both sides, because one side alone stands there
+ * whether or not the quote between them is gone.
+ */
+function locateJoin(text: string, q: { prefix: string; suffix: string }): Match | null {
+  const prefix = squash(q.prefix).trim();
+  const suffix = squash(q.suffix).trim();
+  if (!prefix || !suffix) return null;
+  const joins = occurrences(text, prefix)
+    .map((at) => at + prefix.length)
+    .filter((p) => text.slice(p).trimStart().startsWith(suffix));
+  return joins.length === 1 ? { start: joins[0], end: joins[0], sides: 2 } : null;
+}
+
+/**
+ * A Range over raw characters `start` to `end` of `root`'s text, held tight:
+ * it starts in the text node holding the first character and ends in the one
+ * holding the last.
+ *
+ * Not `dom-anchor-text-position`'s `toRange`, which resolves an end that falls
+ * on a node boundary to offset 0 of the NEXT text node. A quote ending its
+ * paragraph then ends in the whitespace between blocks, its range spans two,
+ * and the last words of every paragraph of rendered Markdown were refused.
+ */
+function rangeAt(root: Node, start: number, end: number): Range | null {
+  const doc = root.ownerDocument ?? (root as Document);
+  const nodes = doc.createNodeIterator(root, 4 /* NodeFilter.SHOW_TEXT */);
+  const range = doc.createRange();
+  let at = 0;
+  let started = false;
+  for (let n = nodes.nextNode() as Text | null; n; n = nodes.nextNode() as Text | null) {
+    const len = n.data.length;
+    if (!started && start < at + len) {
+      range.setStart(n, start - at);
+      started = true;
+    }
+    if (started && end <= at + len) {
+      range.setEnd(n, end - at);
+      return range;
+    }
+    at += len;
+  }
+  return null;
 }
 
 /** A live Range over exactly the anchored text, or null when it is not unambiguously there. */
@@ -93,37 +144,57 @@ export function exactRangeFromAnchor(doc: Document, anchor: Anchor): Range | nul
   if (!root) return null;
   const { text, rawAt } = normalise(root.textContent ?? "");
   const found = locate(text, anchor);
-  if (!found) return null;
-  try {
-    return textPosition.toRange(root, { start: rawAt[found.start], end: rawAt[found.end - 1] + 1 });
-  } catch {
-    return null;
-  }
+  return found ? rangeAt(root, rawAt[found.start], rawAt[found.end - 1] + 1) : null;
 }
 
+export type Resolution = { state: "pending"; range: Range } | { state: "applied" } | { state: "stale" };
+
 /**
- * Has this replacement already been made where the anchor stood? True when the
- * replacement, between the anchor's own context, occurs exactly once. This is
- * what lets an Accept that was interrupted after the edit but before it was
- * recorded be finished without making the edit twice.
+ * Where a suggestion stands in the document as it is NOW: still to be made
+ * (with the range it replaces), already made, or stale.
+ *
+ * The quote and its replacement are looked for by ONE rule, between the same
+ * context. Two rules are how this went wrong: the quote was found by either
+ * side of its context, the result was then checked for by both, and an edit
+ * beside the quote left a change made in the document and "nothing was
+ * accepted" on the screen.
+ *
+ *   - Where one contains the other, the larger is what stands there. A
+ *     replacement that keeps its quote ("X" → "Y, X") is not pending again
+ *     because X is still visible; a quote that contains its replacement is
+ *     not applied because the shorter text is visible inside it.
+ *   - Otherwise whichever agrees with more of the context wins, and a tie
+ *     is stale: nothing is changed on a guess.
+ *
+ * Without any context at all a replacement cannot be recognised, so only the
+ * quote counts, as it always did.
  */
-export function alreadyApplied(doc: Document, anchor: Anchor, replacement: string): boolean {
+export function resolveSuggestion(doc: Document, anchor: Anchor, replacement: string): Resolution {
   const root = rootOf(doc, anchor);
-  if (!root) return false;
-  const tail = squash(anchor.prefix).trimEnd().slice(-24);
-  const head = squash(anchor.suffix).trimStart().slice(0, 24);
-  if (!tail && !head) return false; // nothing to recognise the spot by
-  const text = normalise(root.textContent ?? "").text;
-  const glue = (a: string, b: string) => (a && b ? `${a} ${b}` : a || b);
-  // Either side may or may not have kept a space at the join, and a deletion
-  // leaves the two contexts touching; try the plausible spellings.
-  const body = squash(replacement).trim();
-  const candidates = new Set(
-    body
-      ? [glue(glue(tail, body), head), `${tail}${body}${head}`, glue(tail, `${body}${head}`), glue(`${tail}${body}`, head)]
-      : [glue(tail, head), `${tail}${head}`],
-  );
-  return [...candidates].some((c) => occurrences(text, c).length === 1);
+  if (!root) return { state: "stale" };
+  const { text, rawAt } = normalise(root.textContent ?? "");
+  const quote = locate(text, anchor);
+  const hasContext = Boolean(anchor.prefix.trim() || anchor.suffix.trim());
+  const made = !hasContext
+    ? null
+    : squash(replacement).trim() === ""
+      ? locateJoin(text, anchor)
+      : locate(text, { exact: replacement, prefix: anchor.prefix, suffix: anchor.suffix });
+
+  const pending = (): Resolution => {
+    const range = rangeAt(root, rawAt[quote!.start], rawAt[quote!.end - 1] + 1);
+    return range && suggestibleRange(range) === true ? { state: "pending", range } : { state: "stale" };
+  };
+  if (quote && made) {
+    const within = (a: Match, b: Match) => a.start >= b.start && a.end <= b.end;
+    if (within(quote, made)) return { state: "applied" };
+    if (within(made, quote)) return pending();
+    if (made.sides !== quote.sides) return made.sides > quote.sides ? { state: "applied" } : pending();
+    return { state: "stale" };
+  }
+  if (made) return { state: "applied" };
+  if (quote) return pending();
+  return { state: "stale" };
 }
 
 /** The elements whose contents are one run of text for the purpose of a suggestion. */
@@ -191,13 +262,46 @@ export function trimToText(range: Range): Range {
   if (!root) return range;
   try {
     const at = textPosition.fromRange(root, range);
-    return textPosition.toRange(root, { start: at.start + lead, end: at.end - trail }) ?? range;
+    return rangeAt(root, at.start + lead, at.end - trail) ?? range;
   } catch {
     return range;
   }
 }
 
-export type ApplyResult = "applied" | "already-applied" | "stale" | "failed";
+/** What may follow a deleted word directly, so the space before it goes instead. */
+const CLOSING = /^[.,;:!?)\]}…'"’”]/;
+
+/**
+ * A deletion widened by the one space it would otherwise leave doubled.
+ *
+ * Deleting "OpenAI" from "vs. OpenAI Codex" by its characters leaves two
+ * spaces, which the browser keeps visible as `&nbsp; ` and the next version
+ * keeps for good. Between two spaces the one after goes; before punctuation or
+ * at the end of the block, the one before; at the start of the block, the one
+ * after. Measured within the block, so it never reaches into the next one.
+ */
+function widenDeletion(range: Range): Range {
+  const block = blockOf(range.startContainer);
+  if (!block) return range;
+  const text = block.textContent ?? "";
+  let at: { start: number; end: number };
+  try {
+    at = textPosition.fromRange(block, range);
+  } catch {
+    return range;
+  }
+  const before = text[at.start - 1];
+  const after = text[at.end];
+  const space = (c: string | undefined) => c !== undefined && /\s/.test(c);
+  let { start, end } = at;
+  if (space(before) && space(after)) end += 1;
+  else if (space(before) && (after === undefined || CLOSING.test(after))) start -= 1;
+  else if (before === undefined && space(after)) end += 1;
+  else return range;
+  return rangeAt(block, start, end) ?? range;
+}
+
+export type ApplyResult = "applied" | "already-applied" | "stale" | "failed" | "unverified";
 
 /**
  * Make a suggested edit in the live editing session, as a person would.
@@ -208,17 +312,37 @@ export type ApplyResult = "applied" | "already-applied" | "stale" | "failed";
  * a selection, so the CRDT carries it to every peer and autosave stores it,
  * with nothing special about it anywhere downstream (SPEC §22).
  *
- *   applied          made now, and seen in place afterwards
+ *   applied          made now, and the text reads exactly as asked
  *   already-applied  the replacement already stands where the quote stood —
  *                    an earlier attempt that was not recorded; do not repeat it
  *   stale            the quote is not unambiguously there, or now spans
  *                    structure: nothing is touched
- *   failed           the editor refused, or the result is not what was asked
+ *   failed           the editor refused, or did something else and that was
+ *                    undone: the document is as it was
+ *   unverified       the editor did something else and it could not be
+ *                    undone: the passage has changed and needs looking at
+ *
+ * Checked by what the text must now be, not by finding the spot again: the
+ * spot was found once, and finding it again by a stricter rule is how a made
+ * change was once reported as not made.
  */
 export function applySuggestion(doc: Document, anchor: Anchor, replacement: string): ApplyResult {
-  const range = exactRangeFromAnchor(doc, anchor);
-  if (!range) return alreadyApplied(doc, anchor, replacement) ? "already-applied" : "stale";
-  if (suggestibleRange(range) !== true) return "stale";
+  const found = resolveSuggestion(doc, anchor, replacement);
+  if (found.state === "applied") return "already-applied";
+  if (found.state === "stale") return "stale";
+  const range = replacement === "" ? widenDeletion(found.range) : found.range;
+
+  const textNow = () => rootOf(doc, anchor)?.textContent ?? "";
+  const same = (a: string, b: string) => squash(a).trim() === squash(b).trim();
+  const root = rootOf(doc, anchor)!;
+  const before = root.textContent ?? "";
+  let expected: string;
+  try {
+    const at = textPosition.fromRange(root, range);
+    expected = before.slice(0, at.start) + replacement + before.slice(at.end);
+  } catch {
+    return "stale";
+  }
 
   // The editing host must have focus for execCommand to act on the frame
   // (the toolbar does the same before every command).
@@ -235,10 +359,10 @@ export function applySuggestion(doc: Document, anchor: Anchor, replacement: stri
     replacement === ""
       ? doc.execCommand("delete", false)
       : doc.execCommand("insertText", false, replacement);
-  if (!ok) return "failed";
-  // Verified by its context where it has one; a quote with no context around
-  // it (a whole section's text) has nothing to recognise the spot by, and the
-  // editor's own answer is all there is.
-  const hasContext = Boolean(anchor.prefix.trim() || anchor.suffix.trim());
-  return !hasContext || alreadyApplied(doc, anchor, replacement) ? "applied" : "failed";
+  if (!ok) return same(textNow(), before) ? "failed" : "unverified";
+  if (same(textNow(), expected)) return "applied";
+  // Something other than what was asked. Take it back through the editor, so
+  // the shared document and autosave see the undo as they saw the edit.
+  doc.execCommand("undo", false);
+  return same(textNow(), before) ? "failed" : "unverified";
 }

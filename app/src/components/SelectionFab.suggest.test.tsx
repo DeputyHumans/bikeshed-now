@@ -64,6 +64,29 @@ describe("Suggest edit", () => {
     expect(onSuggest).not.toHaveBeenCalled();
   });
 
+  it("offers a paragraph's last words when the drag also took the line break", () => {
+    // The form anchors the selection trimmed of edge whitespace, so that is
+    // what is judged: refusing the untrimmed one turned away every drag to
+    // the end of a line, and every triple-click.
+    const { onSuggest, onRefused } = mount();
+    const p = document.getElementById("p")!;
+    p.after(document.createTextNode("\n"));
+    const range = document.createRange();
+    range.setStart(p.firstChild!, 19);
+    range.setEnd(p.nextSibling!, 1);
+    const sel = document.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    act(() => {
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    const button = screen.getByRole("button", { name: /Suggest edit/ });
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.pointerDown(button);
+    expect(onSuggest).toHaveBeenCalledTimes(1);
+    expect(onRefused).not.toHaveBeenCalled();
+  });
+
   it("answers the keyboard, and a pointer press only once", () => {
     const { onSuggest, onComment } = mount();
     select("#p", 19, 35);

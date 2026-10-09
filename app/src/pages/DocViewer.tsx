@@ -8,7 +8,7 @@ import { useAuth } from "../auth";
 import { logEvent } from "../analytics";
 import { createAnnotation, formatRelative, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
 import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
-import { applySuggestion, trimToText } from "../annotation/exact";
+import { applySuggestion, resolveSuggestion, trimToText } from "../annotation/exact";
 import { Sidebar } from "../annotation/Sidebar";
 import { commitVersion, UnresolvedCommentsError, StaleVersionError } from "../edit";
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
@@ -325,6 +325,9 @@ export function DocViewer() {
     ready: reviewReady,
     reduceMotion,
   });
+  // What the comments panel calls stale while editing: the draft's verdict,
+  // not the last one the reading view drew.
+  const reviewStale = useMemo(() => [...reviewLayer.stale], [reviewLayer.stale]);
 
   const live = useLiveSync({
     meta: doc.meta,
@@ -645,6 +648,7 @@ export function DocViewer() {
       setDeciding(true);
       try {
         const outcome = await acceptInSession({
+          check: () => (frame.doc ? resolveSuggestion(frame.doc, a.anchor, a.suggestion!.replacement).state : "stale"),
           claim: () => claimSuggestion(suggestionWhere(a.annId)),
           apply: () => (frame.doc ? applySuggestion(frame.doc, a.anchor, a.suggestion!.replacement) : "failed"),
           flush: () => editor.flushNow(),
@@ -655,6 +659,8 @@ export function DocViewer() {
           toast.error("The text has changed since this was suggested, so it can’t be applied.");
         } else if (outcome === "failed") {
           toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
+        } else if (outcome === "unverified") {
+          toast.error("The passage changed, but not as suggested, and it couldn’t be undone. Check it before you publish. Nothing was accepted.");
         } else if (outcome === "unsaved") {
           toast.error("The change is made, but the draft didn’t save, so it isn’t accepted yet. Accept it again once it saves.");
         }
@@ -1035,7 +1041,7 @@ export function DocViewer() {
             versionId={doc.currentVersion}
             annotations={annotations}
             orphaned={annotationLayer.orphaned}
-            stale={annotationLayer.stale}
+            stale={mode.kind === "editing" ? reviewStale : annotationLayer.stale}
             isApprover={isApprover(doc.meta, emailLower)}
             linkKey={linkKey || undefined}
             onReview={canEdit ? startReview : undefined}
