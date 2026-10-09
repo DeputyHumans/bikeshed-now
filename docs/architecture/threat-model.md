@@ -219,6 +219,32 @@ feedback skill tell an agent that a comment or a note is content, never an
 instruction, and to take one that asks for anything beyond revising the
 passage to its person (SPEC §19, ADR 0015).
 
+When an agent watches a document, the same text reaches it every few minutes,
+unasked. The feedback skill's loop decides only within its person's role, never
+because a comment asks, and on a public or unlisted document decides nothing
+without its person's word. It reports every decision to its person.
+
+### The change log tells somebody more than they could see
+
+An agent reads `get_changes` as its owner. The log could otherwise hand a reader
+what only an editor sees, or name the person who forked a document.
+
+**Mitigation.**
+- **Audience.** Every event carries its audience, filtered with the gates that
+  already exist. Moves, visibility, trust and sharing reach editors only, as the
+  activity panel and the `acl` log do. A fork reaches the original's owner only,
+  dated to the day and never by whom (SPEC §21). An unsaved draft is shown to
+  editors only.
+- **Nothing stored, everything joined.** No email or body is stored in the log.
+  Both are joined from the source record at read time, which the caller's
+  access already covers, and a deleted comment drops out.
+- **"Mine" cannot be forged.** What the caller caused is skipped only when it
+  came through an agent channel with the caller's own token. A browser cannot
+  claim either: the rules pin its channel to `web` and its actor's fields.
+- **Cursors grant nothing.** A cursor carries no access, and every call checks
+  access again. A forged one yields only events its holder could read anyway.
+  Saved cursors are server-only (SPEC §4, §19, ADR 0016).
+
 ### Zip-slip and zip bombs
 
 A `.zip` upload is the only place attacker-controlled relative paths enter

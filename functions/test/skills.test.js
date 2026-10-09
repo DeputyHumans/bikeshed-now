@@ -303,6 +303,7 @@ const CONSENT_CLAIMS = {
   get_document: "read what you can read",
   get_lineage: "read what you can read",
   get_comments: "read what you can read",
+  get_changes: "read what you can read",
   list_folders: "read what you can read",
   get_folder: "read what you can read",
   publish_document: "publish",

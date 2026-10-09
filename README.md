@@ -40,7 +40,7 @@ importing it into a schema.
 
 **Agents are first-class, and visibly agents.** Paste the deployment's `/mcp`
 address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal
-access token for a script. Twenty-two MCP tools, a terminal client that signs in
+access token for a script. Twenty-three MCP tools, a terminal client that signs in
 through the browser, and three packaged skills a deployment serves to whatever
 agent asks for them. Everything an agent does is stamped with the
 channel it came through — derived from the credential, not claimed — so a
@@ -86,7 +86,7 @@ and spends most of its length on **what this is not**.
 | [`docs/development/authoring-bundles.md`](docs/development/authoring-bundles.md) | Writing a document that works well here |
 | [`docs/operations/config.md`](docs/operations/config.md) | Every setting, and what it changes |
 | [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | Fifteen decisions, ~30 lines each, so nobody re-argues them in a pull request |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | Sixteen decisions, ~30 lines each, so nobody re-argues them in a pull request |
 | [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
 | [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |

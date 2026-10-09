@@ -54,7 +54,7 @@ worth reporting on its own.
 
 The table above proves the code is self-consistent. It does not prove the
 product works — the properties that matter most here are integration ones. For
-those, walk `docs/development/verification.md` against the emulators. It is fifteen
+those, walk `docs/development/verification.md` against the emulators. It is sixteen
 observations, it needs no cloud account, and it is where four real defects were
 found that no unit test could have caught.
 

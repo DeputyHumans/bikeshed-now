@@ -127,7 +127,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly twenty-two tools, and they are the twenty-two in the spec", () => {
+test("there are exactly twenty-three tools, and they are the twenty-three in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "list_documents",
     "get_document",
@@ -147,12 +147,13 @@ test("there are exactly twenty-two tools, and they are the twenty-two in the spe
     "move_document",
     "rename_document",
     "get_comments",
+    "get_changes",
     "add_comment",
     "reply_to_comment",
     "resolve_thread",
     "reopen_thread",
   ]);
-  assert.equal(TOOLS.length, 22);
+  assert.equal(TOOLS.length, 23);
 });
 
 test("the surface has no tool that deletes or shares", () => {
@@ -339,9 +340,14 @@ test("get_document says a source is cut before the source starts", async () => {
       id: "big-deck",
       get: async () => ({ exists: true, data: () => data }),
       set: async () => {},
-      collection: (name) => ({
-        doc: () => (name === "versions" ? { get: async () => version } : { set: async () => {} }),
-      }),
+      collection: (name) => {
+        // An empty change log: get_document hands back where watching starts.
+        const none = { orderBy: () => none, limit: () => none, get: async () => ({ docs: [] }) };
+        return {
+          ...none,
+          doc: () => (name === "versions" ? { get: async () => version } : { set: async () => {} }),
+        };
+      },
     };
     const db = { collection: () => ({ doc: () => ref }) };
 
@@ -608,7 +614,7 @@ test("open editing lets a stranger edit, never move: moving makes the mover a me
 });
 
 test("the key is an optional argument on every tool that reads one document", () => {
-  for (const name of ["get_document", "update_document", "suggest_edit", "get_comments", "add_comment", "reply_to_comment", "resolve_thread", "reopen_thread"]) {
+  for (const name of ["get_document", "update_document", "suggest_edit", "get_comments", "get_changes", "add_comment", "reply_to_comment", "resolve_thread", "reopen_thread"]) {
     const schema = toolByName(name).inputSchema;
     assert.equal(schema.properties.k?.type, "string", name);
     assert.ok(!schema.required.includes("k"), `${name} must not demand a key`);

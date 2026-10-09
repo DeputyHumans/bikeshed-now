@@ -129,29 +129,42 @@ Then do it, if your harness can run a command in the background or on a
 schedule. In a chat app nothing wakes you up, so say instead: "When you've
 commented, tell me to check." Never say you are watching when you are not.
 
-There is no "what changed since I last looked" call yet, so each check reads
-every thread again and compares:
+Over MCP, `get_changes` answers "what happened since I last looked" in one
+call:
 
-- **Read them all.** `bikeshed comments <id> --all --json`, or `get_comments`
-  with `includeResolved`, so a thread that was closed shows up as a change.
-- **Compare by thread.** Keep the last result. A thread id you have not seen, a
-  comment `id` you have not seen, a changed `resolved`, or a suggestion in a new
-  `state` is news.
-- **Start from nothing.** Before your first check, the last result is empty, so
-  a comment made in the seconds after you published is still news.
-- **Check every few minutes, not every few seconds.** Each check reads every
-  thread.
-- **Fifty is a ceiling.** `get_comments` returns the 50 oldest threads and sets
-  `truncated` when there are more. Say so, and pass `threads` with the ids you
-  care about to read those whatever their age.
+- **Hold one cursor.**
+  - Start from the `cursor` your publish returned, or `get_document`'s for a
+    document you did not publish.
+  - Pass it as `since` on every check, and replace it with the `cursor` each
+    `get_changes` returns. Never take one from any other result: a write's
+    cursor would skip what came before it.
+  - If you lost it, `since: "last"` picks up where this credential left off,
+    even in a new conversation.
+- **Read every page.** `more: true` means call again now with the new cursor.
+- **Wait as long as `retryAfter` says,** a minute or so, between checks.
+- **What you get:**
+  - `events`: comments with their passage, threads opened and closed,
+    suggestions decided, versions published or withdrawn, and changes to the
+    document's title, folder, visibility, expiry, trust and sharing. Yours are
+    left out.
+  - `needsReply`: the threads a person is waiting on.
+  - `state`: the document as it is now. If its `readers` count changed since
+    the last check, its folder's sharing changed: tell the person.
+
+From a shell there is no command for this yet, so each check reads every thread
+again and compares. `bikeshed comments <id> --all --json` returns ids and times
+on every comment; something new to you is news. Start from an empty list at
+publish, so a comment made in the first seconds is still news.
 
 Stop when the person says so, after an hour with nothing new from anyone else,
 or when the document reads as absent.
 
 ### Each time something is new
 
-1. **Answer what awaits.** `awaitingReply` marks the open threads on the
-   current version whose latest comment a person wrote in the app. A comment
+1. **Answer what awaits.** `needsReply` from `get_changes`, or `awaitingReply`
+   on a thread from `get_comments`, marks the open threads on the current
+   version whose latest comment a person wrote in the app. Pass those ids as
+   `threads` to `get_comments` to read them whole. A comment
    through an agent channel (`via` is not `web`) is yours or another agent's,
    and never sets it, so two agents never answer each other in circles. A
    decided suggestion is closed, and its "Accepted." needs no reply.

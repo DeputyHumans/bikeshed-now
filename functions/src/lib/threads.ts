@@ -43,7 +43,8 @@ export async function setThreadResolved(args: {
     // Already so: nothing written and no second note, so a retry is harmless.
     if ((ann.resolved === true) === resolved) return { resolved, changed: false };
 
-    tx.update(annRef, { resolved });
+    // `resolvedBy` is who the change log says resolved or reopened it.
+    tx.update(annRef, { resolved, resolvedBy: actor });
     const noteRef = annRef.collection("comments").doc();
     tx.create(noteRef, {
       commentId: noteRef.id,

@@ -72,8 +72,11 @@ describe("feedback the app writes", () => {
     expect(Object.keys(record.actor as object).sort()).toEqual(["channel", "email", "uid"]);
   });
 
-  it("a resolve changes `resolved` and nothing else", async () => {
-    await setResolved("doc", "v1", "a1", true);
-    expect(vi.mocked(updateDoc).mock.calls[0][1]).toEqual({ resolved: true });
+  it("a resolve changes `resolved`, and says who did it, and nothing else", async () => {
+    await setResolved("doc", "v1", "a1", true, "u1", "Ana@Example.com");
+    expect(vi.mocked(updateDoc).mock.calls[0][1]).toEqual({
+      resolved: true,
+      resolvedBy: { uid: "u1", email: "ana@example.com", channel: "web" },
+    });
   });
 });

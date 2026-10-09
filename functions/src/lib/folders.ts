@@ -23,6 +23,7 @@
  * themselves — which is what keeps the `list` rule statically provable (SPEC §5).
  */
 
+import { addEvent, type EventInput } from "./events";
 import { randomBytes } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -427,11 +428,18 @@ export async function persistDocMembership(
     folderId: string | null;
   },
   extra: Record<string, unknown> = {},
+  /**
+   * The change-log events this write makes, given the membership it computed:
+   * written in the same batch, so the record and its event cannot disagree.
+   */
+  events: (membership: Membership) => EventInput[] = () => [],
 ): Promise<Membership> {
   const parent = await loadFolderMembership(db, fields.folderId);
   const teams = await loadTeamIndex(db, ...grantLists(fields.grants));
   const membership = computeMembership(fields.ownerEmail, fields.grants, parent, teams);
-  await docRef.set(
+  const batch = db.batch();
+  batch.set(
+    docRef,
     {
       ...fields.grants,
       ...membership,
@@ -440,6 +448,8 @@ export async function persistDocMembership(
     },
     { merge: true },
   );
+  for (const e of events(membership)) addEvent(batch, docRef, e);
+  await batch.commit();
   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
   await syncPublicProjection(db, docRef.id);
   return membership;

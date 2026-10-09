@@ -70,6 +70,13 @@ check per tool; streaming, sessions and the `zod` peer have not moved.
 on `update_document` and `threads` on `get_comments`. Optional arguments are
 still a `typeof` check in the tool; nothing above moved.
 
+**2026-10-09** — twenty-three, with `get_changes`. Its `since` cursor is an
+argument, not a session: every request still carries its own credential and
+stands alone. The server keeps the last cursor each credential was given per
+document, so a client that forgets can ask for `"last"`. That is a bookmark in
+Firestore, not protocol state, so the reversal condition on sessions has not
+moved (ADR 0016).
+
 ## What would change this
 
 Two things, either one sufficient. If the SDK drops the `zod` peer or ships a

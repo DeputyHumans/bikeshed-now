@@ -109,8 +109,14 @@ more locked down than an older one, and every symptom is remote from its cause:
 Step 6 grants the first five to the runtime service account — Storage scoped to
 the content bucket only, never project-wide — and step 8 makes the 29 HTTP
 functions publicly invokable. "Publicly invokable" is not "public": each
-function authenticates its own caller. The Firestore trigger is deliberately
-left private.
+function authenticates its own caller. The four Firestore triggers
+(`onCommentCreated` and the three `record…Event` triggers that write the change
+log) are deliberately left private. Eventarc invokes them, and a fresh project
+grants that path nothing of its own. If comment emails already arrive, the
+triggers' wiring works: all four use the same one. The three log triggers retry
+on failure. A permission they lack therefore shows as the same function failing
+again and again in the logs, and as a `get_changes` that never reports a new
+comment.
 
 **If step 8 fails with `FAILED_PRECONDITION`**, the project's organization has
 Domain Restricted Sharing on (`constraints/iam.allowedPolicyMemberDomains`),

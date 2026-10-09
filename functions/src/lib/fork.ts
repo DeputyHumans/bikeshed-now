@@ -19,6 +19,7 @@
  * the id alone can come to name different bytes.
  */
 
+import { addEvent } from "./events";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -245,6 +246,9 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   // A nested map under merge, as every stats writer does, so this cannot
   // clobber the view counters; and no `updatedAt`, which means "published".
   batch.set(srcRef, { stats: { forks: FieldValue.increment(1) } }, { merge: true });
+  // On the ORIGINAL's log, for its owner only, with no actor: who forked a
+  // document is never told to its author (SPEC §21).
+  addEvent(batch, srcRef, { type: "fork.created", audience: "owner" });
   await batch.commit();
 
   await syncPresenceAccess(docId, membership.members, membership.editorMembers);

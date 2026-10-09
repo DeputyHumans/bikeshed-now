@@ -15,7 +15,7 @@
  */
 
 import { onRequest, type Request } from "firebase-functions/v2/https";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 /**
  * FieldValue and Timestamp come from the MODULAR entry point, never through
@@ -139,6 +139,17 @@ import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { renameDocument } from "./lib/rename";
 import { documentAudience, filedIn } from "./lib/audience";
+import {
+  addEvent,
+  annotationEvents,
+  commentEvents,
+  encodeCursor,
+  eventActor,
+  headCursor,
+  recordTriggered,
+  saveCursor,
+  versionEvents,
+} from "./lib/events";
 import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
 import {
   bearerFrom,
@@ -827,13 +838,26 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   // through the parent folder. That was a real defect in the original CLI, and
   // it is structurally impossible here because there is one function that
   // computes membership and everything calls it.
-  const membership = await persistDocMembership(db(), ref, {
-    ownerEmail: String(data.ownerEmail),
-    grants: next,
-    folderId: (data.folderId as string | null) ?? null,
-  });
-
   const actor = actorFrom(caller, req);
+  const membership = await persistDocMembership(
+    db(),
+    ref,
+    {
+      ownerEmail: String(data.ownerEmail),
+      grants: next,
+      folderId: (data.folderId as string | null) ?? null,
+    },
+    {},
+    (m) => {
+      const was = new Set(beforeMembers);
+      const now = new Set(m.members);
+      const added = m.members.filter((e) => !was.has(e));
+      const removed = beforeMembers.filter((e) => !now.has(e));
+      return added.length || removed.length
+        ? [{ type: "access.changed", audience: "editors", actor: eventActor(actor), data: { added, removed } }]
+        : [];
+    },
+  );
   await logAclChange(ref, actor, beforeMembers, membership.members, next);
 
   // Invitations go to people who NEWLY gained access, computed from the
@@ -921,7 +945,26 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   } else {
     update.linkToken = FieldValue.delete();
   }
-  await ref.set(update, { merge: true });
+  // Visibility and expiry decide who may read the document and until when, so
+  // each is an event, written with the change. The link's key never is.
+  const batch = db().batch();
+  batch.set(ref, update, { merge: true });
+  const who = eventActor(actorFrom(caller, req));
+  const wasVisibility = visibilityOf(data);
+  const wasPublicEdit = (data as { publicEdit?: unknown }).publicEdit === true;
+  if (wasVisibility !== visibility || wasPublicEdit !== update.publicEdit) {
+    addEvent(batch, ref, {
+      type: "doc.visibility",
+      audience: "editors",
+      actor: who,
+      data: { from: wasVisibility, to: visibility, publicEdit: update.publicEdit },
+    });
+  }
+  const wasExpiry = expiryMs(data);
+  if (wasExpiry !== expiry.value) {
+    addEvent(batch, ref, { type: "doc.expiry", audience: "readers", actor: who, data: { from: wasExpiry, to: expiry.value } });
+  }
+  await batch.commit();
   await syncPublicProjection(db(), docId);
   // Open editing widens who may write the SHARED document too, and the RTDB
   // gate is a mirror rather than a query, so it has to be told. Only a PUBLIC
@@ -980,7 +1023,12 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  await ref.set({ trusted, updatedAt: now() }, { merge: true });
+  const batch = db().batch();
+  batch.set(ref, { trusted, updatedAt: now() }, { merge: true });
+  if ((data as { trusted?: unknown }).trusted !== trusted) {
+    addEvent(batch, ref, { type: "doc.trust", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { trusted } });
+  }
+  await batch.commit();
   await syncPublicProjection(db(), docId);
   res.status(200).json({ trusted });
 });
@@ -1531,12 +1579,17 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
   // exists by now: a failed read here costs the description, never the publish.
   const told = await (async () => {
     try {
-      const data = (await db().collection("docs").doc(result.docId).get()).data() ?? {};
-      const [paths, access] = await Promise.all([
+      const docRef = db().collection("docs").doc(result.docId);
+      const data = (await docRef.get()).data() ?? {};
+      const [paths, access, head] = await Promise.all([
         filedIn(db(), caller, [target.id]),
         documentAudience(db(), caller, data),
+        headCursor(docRef),
       ]);
-      return { filedIn: (target.id && paths.get(target.id)) || null, access };
+      // Where `bikeshed changes` starts watching: nothing after this is missed.
+      const cursor = encodeCursor(head);
+      if (caller.tokenId) await saveCursor(db(), caller.uid, caller.tokenId, result.docId, cursor);
+      return { filedIn: (target.id && paths.get(target.id)) || null, access, cursor };
     } catch {
       return {};
     }
@@ -1782,7 +1835,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
     if (op === "rename") {
-      const renamed = await renameDocument(db(), ref, body?.name);
+      const renamed = await renameDocument(db(), ref, body?.name, actorFrom(caller, req));
       if ("error" in renamed) {
         badRequest(res, renamed.error);
         return;
@@ -1805,6 +1858,8 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       res.status(target.status).json({ error: target.error });
       return;
     }
+    const was = (data as { folderId?: unknown }).folderId;
+    const fromFolder = typeof was === "string" ? was : null;
     await persistDocMembership(
       db(),
       ref,
@@ -1814,6 +1869,10 @@ export const organize = onRequest(PLAIN, async (req, res) => {
         folderId: target.id,
       },
       { folderId: target.id },
+      () =>
+        fromFolder === target.id
+          ? []
+          : [{ type: "doc.moved", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { from: fromFolder, to: target.id } }],
     );
     res.status(200).json({ ok: true });
     return;
@@ -2871,6 +2930,60 @@ export const onCommentCreated = onDocumentCreated(
           : {}),
       });
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// The change log (SPEC §4, §19, ADR 0016)
+// ---------------------------------------------------------------------------
+
+/**
+ * Three triggers record the changes that many paths make: a version (every
+ * publisher, the in-app commit, the operator's withdrawal), a thread (the
+ * browser directly, and the server), and a comment. A trigger on the
+ * collection catches every writer, including ones added later.
+ *
+ * `retry: true`, which `onCommentCreated` does not have: a thrown error there
+ * loses an email, which it would rather do than send one twice, but a lost
+ * event here is the one failure the log cannot report. Retrying is safe
+ * because recording is idempotent: each event is created under the
+ * CloudEvent's id, so a redelivery finds it and writes nothing.
+ */
+export const recordVersionEvent = onDocumentWritten(
+  { document: "docs/{docId}/versions/{versionId}", region: REGION, retry: true },
+  async (event) => {
+    const { docId, versionId } = event.params;
+    await recordTriggered(
+      db(),
+      docId,
+      event.id,
+      versionEvents(versionId, event.data?.before?.data(), event.data?.after?.data()),
+    );
+  },
+);
+
+export const recordThreadEvent = onDocumentWritten(
+  { document: "docs/{docId}/versions/{versionId}/annotations/{annId}", region: REGION, retry: true },
+  async (event) => {
+    const { docId, versionId, annId } = event.params;
+    await recordTriggered(
+      db(),
+      docId,
+      event.id,
+      annotationEvents(versionId, annId, event.data?.before?.data(), event.data?.after?.data()),
+    );
+  },
+);
+
+export const recordCommentEvent = onDocumentCreated(
+  {
+    document: "docs/{docId}/versions/{versionId}/annotations/{annId}/comments/{commentId}",
+    region: REGION,
+    retry: true,
+  },
+  async (event) => {
+    const { docId, versionId, annId, commentId } = event.params;
+    await recordTriggered(db(), docId, event.id, commentEvents(versionId, annId, commentId, event.data?.data()));
   },
 );
 

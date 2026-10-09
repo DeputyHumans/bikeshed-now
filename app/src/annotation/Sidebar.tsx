@@ -416,7 +416,7 @@ function Thread({
                 className="btn btn-sm btn-quiet"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void setResolved(docId, versionId, annotation.annId, !annotation.resolved);
+                  if (uid) void setResolved(docId, versionId, annotation.annId, !annotation.resolved, uid, emailLower);
                 }}
               >
                 <Icon name="check" size={14} />

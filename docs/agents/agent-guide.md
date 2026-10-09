@@ -119,7 +119,9 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all twenty-two tools.
+first. The one thing kept between calls is a bookmark: the last `get_changes`
+cursor each credential was given for each document, so a client that forgets
+can ask for `"last"`. If all you have is an HTTP client, you have all twenty-three tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -153,6 +155,7 @@ somebody might commit.
 | `move_document` | File a document into a folder, or back out to the root; says who can read it now |
 | `rename_document` | Change a document's title; its address stays |
 | `get_comments` | Unresolved feedback, oldest first, each with its anchored quote and whether a person awaits a reply; `version` reads an earlier version's |
+| `get_changes` | What happened since a cursor: comments, threads, suggestions, versions, and changes to the document itself. `since` is required |
 | `add_comment` | Start a thread on one passage |
 | `reply_to_comment` | Reply in a thread |
 | `resolve_thread` | Close a thread once its point is dealt with; a note says you did |
@@ -304,12 +307,18 @@ would see that browser. In a chat app, give it as a clickable link.
 **Then watch it.** Say you will check for comments until they tell you to stop,
 or until an hour passes with nothing new, and do, if your harness can run
 something in the background or on a schedule. If nothing will wake you up, say
-"When you've commented, tell me to check" instead. Each check reads the threads
-again (`bikeshed comments <id> --all --json`, or `get_comments` with
-`includeResolved`) and compares them with the last, by thread and comment id.
-Answer the threads marked `awaitingReply`, then publish once, passing
-`update_document` the `baseVersion` you revised, so you never overwrite what a
-person saved in the app. The `bikeshed-feedback` skill has the whole loop.
+"When you've commented, tell me to check" instead.
+- **Hold the cursor** the publish returned, or `get_document`'s for a document
+  you did not publish. Each check is `get_changes` with that cursor, and you
+  replace it with the one `get_changes` returns, never with another result's.
+  If you lose it, `since: "last"`.
+- **Answer the threads in `needsReply`,** then publish once, passing
+  `update_document` the `baseVersion` you revised, so you never overwrite what
+  a person saved in the app.
+- **From a shell,** `bikeshed comments <id> --all --json`, compared by thread
+  and comment id, does the same until the CLI has a command for it.
+
+The `bikeshed-feedback` skill has the whole loop.
 
 ## Raising something new
 

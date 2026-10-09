@@ -76,8 +76,9 @@ Two exceptions, each with something you can check:
    too. Ask them to share it further; there is no tool for that.
 3. **Nothing else.** No second copy elsewhere, no pasted document.
 
-Then say you will watch it for comments, and do, if your harness can wait: the
-`bikeshed-feedback` skill, "After you hand back the address".
+Then say you will watch it for comments, and do, if your harness can wait. Keep
+the `cursor` the publish returned: it is where watching starts. The
+`bikeshed-feedback` skill, "After you hand back the address", has the loop.
 
 ### Instead of
 

@@ -341,7 +341,7 @@ request's own origin (SPEC §23).
 3. Point the MCP Inspector at `http://127.0.0.1:5050/mcp`, in direct mode. It
    registers, opens `/connect`, and the consent page shows the redirect host
    with the app's name marked as not checked. The address bar shows `/connect`
-   with no query. **Approve**. The Inspector lists twenty-two tools.
+   with no query. **Approve**. The Inspector lists twenty-three tools.
 4. On the account screen the app appears under Access tokens as connected.
    **Revoke** it. The Inspector's next call answers `401` and offers to sign in
    again.
@@ -382,6 +382,25 @@ What this proves: the change is made where the page shows the quote, a review
 lands as one version, and the live log cannot silently undo an accept. What it
 cannot prove: that a real deployment's runtime account may read and clear the
 Realtime Database (operations overview, "When something is wrong").
+
+### 16 · An agent watching a document hears what people say, and only once
+
+1. Over MCP (or `curl` to `/mcp`), `publish_document` a short Markdown
+   document. Keep the `cursor` it returns.
+2. In the browser, comment on a passage, then resolve the thread.
+3. `get_changes` with that cursor: `thread.opened`, `comment.added` with your
+   words and the passage, and `thread.resolved` with your address. Keep the new
+   cursor.
+4. `get_changes` again with the new cursor: no events, and the same cursor
+   back.
+5. Share the document with a second account from the share panel, and call
+   `get_changes` with that account's token: `access.changed` is not there.
+   That event reaches editors only.
+
+What this proves: the three triggers fire in the emulator and the feed reads
+them in order, once each. What it cannot prove: that Eventarc may invoke the
+triggers on a real deployment, or that a failed one is retried. Both show only
+there (operations overview).
 
 ## What this walkthrough found
 

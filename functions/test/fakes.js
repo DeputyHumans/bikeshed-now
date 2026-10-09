@@ -40,8 +40,19 @@ function fakeFirestore(initial = {}) {
     else if (isIncrement(value)) node[last] = (typeof node[last] === "number" ? node[last] : 0) + value.operand;
     else node[last] = resolve(value);
   }
+  /**
+   * The server's clock, strictly increasing: Firestore gives one document's
+   * sequential commits increasing times, and a millisecond clock would tie a
+   * burst of writes and order them by id instead.
+   */
+  let lastStamp = 0;
+  function stamp() {
+    const now = Date.now() * 1e6;
+    lastStamp = Math.max(now, lastStamp + 1000);
+    return new admin.firestore.Timestamp(Math.floor(lastStamp / 1e9), lastStamp % 1e9);
+  }
   function resolve(value) {
-    if (isSentinel(value, STAMP)) return admin.firestore.Timestamp.now();
+    if (isSentinel(value, STAMP)) return stamp();
     if (isIncrement(value)) return value.operand;
     if (value instanceof FieldValue) throw new Error("fake: unsupported sentinel");
     if (Array.isArray(value)) return value.map(inArray);
@@ -126,11 +137,23 @@ function fakeFirestore(initial = {}) {
     };
   }
 
-  function query(path, filters = [], max = Infinity, order = null) {
+  function query(path, filters = [], max = Infinity, orders = [], after = null) {
     const depth = path.split("/").length + 1;
-    const key = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : v);
+    /** Timestamps by their full precision, so two in one millisecond still order. */
+    const key = (v) =>
+      v instanceof admin.firestore.Timestamp ? v.seconds * 1e9 + v.nanoseconds : v && typeof v.toMillis === "function" ? v.toMillis() : v;
+    /** A field, or the document's own id for `FieldPath.documentId()`, as Firestore orders by it. */
+    const value = (p, field) => (field instanceof admin.firestore.FieldPath ? p.split("/").pop() : key(snap(p).get(field)));
+    const compare = (a, b) => {
+      for (const [field, dir] of orders) {
+        const x = value(a, field);
+        const y = value(b, field);
+        if (x !== y) return (x < y ? -1 : 1) * (dir === "desc" ? -1 : 1);
+      }
+      return 0;
+    };
     const matches = () => {
-      const paths = [...store.keys()]
+      let paths = [...store.keys()]
         .filter((p) => p.startsWith(`${path}/`) && p.split("/").length === depth)
         .filter((p) =>
           filters.every(([f, op, v]) => {
@@ -138,12 +161,17 @@ function fakeFirestore(initial = {}) {
             return op === "array-contains" ? Array.isArray(got) && got.includes(v) : got === v;
           }),
         );
-      if (order) {
-        const [field, dir] = order;
-        paths.sort((a, b) => {
-          const x = key(snap(a).get(field));
-          const y = key(snap(b).get(field));
-          return (x < y ? -1 : x > y ? 1 : 0) * (dir === "desc" ? -1 : 1);
+      if (orders.length) paths.sort(compare);
+      if (after) {
+        // Strictly after the given values, in the query's own order.
+        paths = paths.filter((p) => {
+          for (let i = 0; i < orders.length && i < after.length; i++) {
+            const [field, dir] = orders[i];
+            const x = value(p, field);
+            const y = after[i] instanceof admin.firestore.Timestamp ? key(after[i]) : after[i];
+            if (x !== y) return (x > y) === (dir !== "desc");
+          }
+          return false;
         });
       }
       return paths.slice(0, max).map(snap);
@@ -153,10 +181,11 @@ function fakeFirestore(initial = {}) {
         if (op !== "==" && op !== "array-contains") {
           throw new Error(`fake: only == and array-contains are supported, not ${op}`);
         }
-        return query(path, [...filters, [field, op, value]], max, order);
+        return query(path, [...filters, [field, op, value]], max, orders, after);
       },
-      limit: (n) => query(path, filters, n, order),
-      orderBy: (field, dir = "asc") => query(path, filters, max, [field, dir]),
+      limit: (n) => query(path, filters, n, orders, after),
+      orderBy: (field, dir = "asc") => query(path, filters, max, [...orders, [field, dir]], after),
+      startAfter: (...values) => query(path, filters, max, orders, values),
       count: () => ({ get: async () => ({ data: () => ({ count: matches().length }) }) }),
       get: async () => {
         const docs = matches();

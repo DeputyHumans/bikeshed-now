@@ -80,10 +80,11 @@ export const ENDPOINTS = [
 ];
 
 /**
- * Functions with no Hosting rewrite. `onCommentCreated` is a Firestore
- * `onDocumentCreated` trigger — the only non-HTTP function in the codebase.
+ * Functions with no Hosting rewrite: Firestore triggers. `onCommentCreated`
+ * sends comment notices; the three `record…Event` triggers write the change
+ * log (SPEC §19, ADR 0016).
  */
-export const TRIGGERS = ["onCommentCreated"];
+export const TRIGGERS = ["onCommentCreated", "recordVersionEvent", "recordThreadEvent", "recordCommentEvent"];
 
 /** Every deployed function name, in `firebase functions:delete` order. */
 export function functionNames() {

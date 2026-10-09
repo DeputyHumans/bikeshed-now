@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Fifteen decisions that a newcomer would otherwise re-argue in a pull request, each
+Sixteen decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
@@ -26,6 +26,7 @@ actually available at the time.
 | [0013](0013-suggestions-applied-as-an-edit.md) | Suggestions are text, applied as an edit in the approver's browser | Amended by 0015 |
 | [0014](0014-oauth-for-the-agent-surface.md) | Apps connect by signing in: OAuth 2.1 beside personal tokens | Accepted |
 | [0015](0015-agents-decide-as-approvers.md) | An agent decides with its owner's role | Accepted |
+| [0016](0016-a-change-log-an-agent-pulls.md) | A change log an agent pulls, one per document | Accepted |
 
 ## Format
 

@@ -464,17 +464,43 @@ describe("firestore rules", () => {
   it("a reader may toggle resolved and nothing else", async () => {
     const db = verified(env, EDITOR).firestore();
     const ref = doc(db, "docs/private-doc/versions/v1/annotations/a1");
-    await assertSucceeds(updateDoc(ref, { resolved: true }));
+    const by = actorFor(EDITOR);
+    await assertSucceeds(updateDoc(ref, { resolved: true, resolvedBy: by }));
     await assertFails(updateDoc(ref, { authorEmail: EDITOR.email }));
     await assertFails(updateDoc(ref, { anchor: { elementId: "moved" } }));
     await assertFails(updateDoc(ref, { actor: actorFor(EDITOR) }));
     // The pins above held the fields that existed; nothing stopped a resolve
     // from adding one beside them, or setting `resolved` to something that is
     // neither open nor closed.
-    await assertFails(updateDoc(ref, { resolved: false, note: "added on the side" }));
+    await assertFails(updateDoc(ref, { resolved: false, resolvedBy: by, note: "added on the side" }));
     await assertFails(updateDoc(ref, { "actor.tokenId": "tok_agent" }));
-    await assertFails(updateDoc(ref, { resolved: "yes" }));
-    await assertFails(updateDoc(ref, { resolved: deleteField() }));
+    await assertFails(updateDoc(ref, { resolved: "yes", resolvedBy: by }));
+    await assertFails(updateDoc(ref, { resolved: deleteField(), resolvedBy: by }));
+  });
+
+  it("a resolve says who did it, and it can only be the caller, on the web", async () => {
+    // The change log reports `resolvedBy` as who resolved or reopened a
+    // thread, so a browser must not be able to put anybody else there, or say
+    // nothing and leave the last resolver's name standing.
+    const at = (p) => doc(verified(env, p).firestore(), "docs/private-doc/versions/v1/annotations/a1");
+    await assertSucceeds(updateDoc(at(EDITOR), { resolved: true, resolvedBy: actorFor(EDITOR) }));
+    // The owner reopens it: saying nothing would leave the editor's name on it.
+    await assertFails(updateDoc(at(OWNER), { resolved: false }));
+    await assertFails(updateDoc(at(OWNER), { resolved: false, resolvedBy: actorFor(EDITOR) }));
+    await assertFails(updateDoc(at(OWNER), { resolved: false, resolvedBy: { ...actorFor(OWNER), channel: "mcp" } }));
+    await assertFails(updateDoc(at(OWNER), { resolved: false, resolvedBy: { ...actorFor(OWNER), tokenId: "tok_agent" } }));
+    await assertSucceeds(updateDoc(at(OWNER), { resolved: false, resolvedBy: actorFor(OWNER) }));
+  });
+
+  it("nobody but the server reads or writes a document's change log or a saved cursor", async () => {
+    // Both are written through the Admin SDK only (ADR 0016); the catch-all
+    // denies them, and this pins that it still does.
+    const owner = verified(env, OWNER).firestore();
+    await assertFails(getDoc(doc(owner, "docs/private-doc/events/e1")));
+    await assertFails(getDocs(collection(owner, "docs/private-doc/events")));
+    await assertFails(setDoc(doc(owner, "docs/private-doc/events/e2"), { type: "comment.added" }));
+    await assertFails(getDoc(doc(owner, `users/${OWNER.uid}/cursors/t1~private-doc`)));
+    await assertFails(setDoc(doc(owner, `users/${OWNER.uid}/cursors/t1~private-doc`), { cursor: "x" }));
   });
 
   // --- Feedback is exactly what the app writes (SPEC §6, §17) ---------------

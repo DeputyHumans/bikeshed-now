@@ -14,6 +14,56 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+A new tool, new fields on results and a new rule on resolving, so a minor
+release.
+
+### Added
+
+- **`get_changes`: what happened on a document since a cursor, in one call.**
+  - **What it reports:** comments, with their passage; threads opened, resolved
+    and reopened; suggestions opened, revised and decided; versions published
+    and withdrawn; and changes to the document's title, folder, visibility,
+    expiry, trust and sharing. Events come in the order they were recorded.
+  - **`since` is required.** It is a cursor from an earlier result, `"last"`
+    for the one this credential was last given for the document, or `"all"`. A
+    cursor from another document, or a malformed one, is refused, never read as
+    "now".
+  - **Where cursors come from:**
+    - `publish_document`, `fork_document` and `POST /publish` hand back the one
+      to start from;
+    - `get_document` starts one without overwriting a saved one;
+    - an update hands back none, because a write's cursor would skip what came
+      before it.
+  - **What is filtered:** what the caller caused is left out, and the events
+    are cut to what the caller may see. Moves, visibility, trust and sharing
+    reach editors only. A fork reaches the original's owner, dated to the day
+    and never by whom.
+  - **Also returned:** `needsReply` names the threads a person is waiting on,
+    and `state` is the document now.
+  - **What is behind it:** each document has an append-only change log.
+    - **Three new Firestore triggers** record versions, threads and comments,
+      each retried on failure, and each event is written once even when a
+      trigger is redelivered.
+    - **The endpoints** that rename, move, share, trust or change visibility or
+      expiry write their event in the same batch as the change.
+    - **Nothing in the log is shared or sent.** It is read only by whoever asks
+      (ADR 0016, SPEC §4, §19).
+
+  There are twenty-three tools.
+
+### Changed
+
+- **Resolving a thread in the app now records who did it.** The resolve writes
+  `resolvedBy` beside `resolved`, and the rules accept it only as the person
+  resolving, on the web. An agent's resolve records its own. A tab opened before
+  this release has to be reloaded to resolve (SPEC §4).
+
+- **The agent guide, the skills and the developer guide** watch a document with
+  `get_changes`. The CLI keeps comparing `bikeshed comments` until it has a
+  command of its own.
+
 ## 0.12.0 — 2026-10-09
 
 Tool results gain fields and two tools gain arguments, which `CHANGELOG.md`

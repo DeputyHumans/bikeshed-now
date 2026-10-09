@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The twenty-two MCP tools (SPEC §19).
+// The twenty-three MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -57,6 +57,17 @@ import {
 } from "../lib/acl";
 import { grantsOf } from "../lib/access";
 import { documentAudience, filedIn, firstPeople, folderAudience } from "../lib/audience";
+import {
+  decodeCursor,
+  encodeCursor,
+  eventActor,
+  eventsAfter,
+  headCursor,
+  readSavedCursor,
+  saveCursor,
+  type Cursor,
+  type EventActor,
+} from "../lib/events";
 import { extractBundle } from "../lib/bundle";
 import { linkProofFor } from "../lib/linkgrant";
 import {
@@ -90,6 +101,19 @@ type Db = admin.firestore.Firestore;
 
 const LIST_LIMIT = 50;
 const COMMENT_LIMIT = 50;
+/** Events per get_changes page. */
+const CHANGE_PAGE = 100;
+/** How often get_changes suggests asking, in seconds. */
+const RETRY_AFTER_SECONDS = 60;
+
+/** One read per path for the length of a call. */
+function memo<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
+  const seen = new Map<string, Promise<T>>();
+  return (key) => {
+    if (!seen.has(key)) seen.set(key, fn(key));
+    return seen.get(key)!;
+  };
+}
 /**
  * The folder tree comes back whole or not at all.
  *
@@ -179,6 +203,52 @@ async function whereAndWho(ctx: ToolContext, docId: string) {
     documentAudience(ctx.db, ctx.caller, data),
   ]);
   return { filedIn: (folderId && paths.get(folderId)) || null, access };
+}
+
+/**
+ * A person, in the app, spoke last in this open thread. Notes the server wrote
+ * ("Accepted.", "Resolved.") are not anybody speaking; an agent's comment is
+ * never somebody waiting, so two agents watching one document cannot keep
+ * answering each other.
+ */
+function awaitsReply(
+  ann: Record<string, unknown>,
+  comments: ReadonlyArray<{ data: () => Record<string, unknown> | undefined }>,
+): boolean {
+  if (ann.resolved === true) return false;
+  const latest = [...comments]
+    .map((c) => c.data() ?? {})
+    .filter((c) => !(c.opensSuggestion === true && c.generated === true))
+    .reverse()
+    .find((c) => c.generated !== true);
+  return latest !== undefined && ((latest.actor as Actor | undefined)?.channel ?? "web") === "web";
+}
+
+/**
+ * The cursor a reader starts watching from: the newest event already in the
+ * log, so everything recorded after this moment is news to them.
+ *
+ * Saved as the credential's "last" only by a call that has seen everything
+ * before it: a new document (`always`), or one this credential has no cursor
+ * for yet (`ifNone`). A write to an existing document never moves a cursor,
+ * because the log may hold events after the caller's last poll that it has
+ * not seen, and a cursor at the head would skip them (SPEC §19).
+ */
+async function startingCursor(
+  ctx: ToolContext,
+  docRef: admin.firestore.DocumentReference,
+  save: "always" | "ifNone",
+): Promise<string> {
+  const cursor = encodeCursor(await headCursor(docRef));
+  if (ctx.caller.tokenId) {
+    await saveCursor(ctx.db, ctx.caller.uid, ctx.caller.tokenId, docRef.id, cursor, { onlyIfNone: save === "ifNone" });
+  }
+  return cursor;
+}
+
+/** An event this credential caused: an agent channel AND this token, so a browser cannot forge one. */
+function causedBy(actor: EventActor | undefined, caller: Principal): boolean {
+  return !!actor && actor.channel !== "web" && !!caller.tokenId && actor.tokenId === caller.tokenId;
 }
 
 /** Firestore refusing a query for want of a composite index (FAILED_PRECONDITION). */
@@ -556,6 +626,9 @@ export const TOOLS: ToolDefinition[] = [
         canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         forked: data.forked === true,
         filedIn: (folderId && paths.get(folderId)) || null,
+        // Where get_changes starts, for watching a document you did not
+        // publish. Saved as "last" only if this credential has none for it.
+        cursor: await startingCursor(ctx, ref, "ifNone"),
         // Ahead of the source, not after it: an agent reads this result as JSON
         // text in key order, and a flag after 200,000 characters of source is a
         // flag it may never reach.
@@ -624,6 +697,8 @@ export const TOOLS: ToolDefinition[] = [
           requestedId,
           idTaken: published.docId !== requestedId,
           ...(await whereAndWho(ctx, published.docId)),
+          // Where get_changes starts: nothing that happens from now on is missed.
+          cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(published.docId), "always"),
         },
         published.docId,
       );
@@ -675,6 +750,7 @@ export const TOOLS: ToolDefinition[] = [
           versionId: out.versionId,
           title: out.title,
           ...(await whereAndWho(ctx, out.docId)),
+          cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(out.docId), "always"),
         },
         out.docId,
       );
@@ -1162,6 +1238,7 @@ export const TOOLS: ToolDefinition[] = [
       // between folders changes who can read it. The presence mirror and the
       // public projection are recomputed in the same call, which is the whole
       // reason that helper exists.
+      const fromFolder = typeof data.folderId === "string" ? data.folderId : null;
       await persistDocMembership(
         ctx.db,
         ref,
@@ -1171,6 +1248,10 @@ export const TOOLS: ToolDefinition[] = [
           folderId: target.id,
         },
         { folderId: target.id },
+        () =>
+          fromFolder === target.id
+            ? []
+            : [{ type: "doc.moved", audience: "editors", actor: eventActor(ctx.actor), data: { from: fromFolder, to: target.id } }],
       );
       // `folder` stays the id, as before: an installed CLI prints it.
       return withReaderAddress(
@@ -1200,7 +1281,7 @@ export const TOOLS: ToolDefinition[] = [
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
       if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot rename that document");
       refuseIfExpired(data);
-      const renamed = await renameDocument(ctx.db, ref, args.title);
+      const renamed = await renameDocument(ctx.db, ref, args.title, ctx.actor);
       if ("error" in renamed) throw new Error(renamed.error);
       return withReaderAddress({ id: ref.id, title: renamed.title }, ref.id);
     },
@@ -1284,8 +1365,6 @@ export const TOOLS: ToolDefinition[] = [
           // `suggestion` field does not; a note its author wrote, and every
           // decision, are kept.
           .filter((c) => !(c.data().opensSuggestion === true && c.data().generated === true));
-        // The last thing somebody said, not a note the server wrote for them.
-        const latest = [...shown].reverse().find((c) => c.data().generated !== true)?.data();
         threads.push({
           threadId: a.id,
           quote: String(ann.anchor?.exact ?? ""),
@@ -1308,11 +1387,7 @@ export const TOOLS: ToolDefinition[] = [
           // A person, in the app, spoke last in an open thread you can answer.
           // Never set by an agent's comment, so two agents watching one
           // document cannot keep answering each other.
-          awaitingReply:
-            answerable &&
-            ann.resolved !== true &&
-            latest !== undefined &&
-            ((latest.actor as Actor | undefined)?.channel ?? "web") === "web",
+          awaitingReply: answerable && awaitsReply(ann, shown),
           comments: shown.map((c) => {
             const v = c.data();
             return {
@@ -1326,6 +1401,198 @@ export const TOOLS: ToolDefinition[] = [
         });
       }
       return { id: ref.id, version: versionId, truncated, threads };
+    },
+  },
+
+  {
+    name: "get_changes",
+    description:
+      "What happened on a document since a cursor, in the order it was recorded: comments, threads opened, resolved and reopened, " +
+      "suggestions opened, revised and decided, versions published and withdrawn, and changes to its title, folder, visibility, expiry, trust and sharing. " +
+      "`since` is REQUIRED: a cursor from an earlier result, \"last\" for the one this credential was last given for this document, or \"all\". " +
+      "Replace the cursor you hold with the one this returns, and with no other result's. `more: true` means call again now. " +
+      "Events you caused are left out unless includeMine. `needsReply` names the threads a person is waiting on; `state` is the document as it is now.",
+    inputSchema: {
+      type: "object",
+      required: ["id", "since"],
+      properties: {
+        id: { type: "string", description: "The document id." },
+        since: {
+          type: "string",
+          description: 'A cursor from an earlier result (publish_document, fork_document, get_document or get_changes), "last", or "all".',
+        },
+        includeMine: { type: "boolean", description: "Include events this credential caused. Default false." },
+        k: {
+          type: "string",
+          description: LINK_KEY_DESCRIPTION,
+        },
+      },
+    },
+    async run(ctx, args) {
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const since = str(args, "since");
+      const start: Cursor = { docId: ref.id, at: null, id: null };
+      let from: Cursor;
+      let resumedFrom: "start" | undefined;
+      if (since === "all") {
+        from = start;
+      } else if (since === "last") {
+        const saved = ctx.caller.tokenId ? await readSavedCursor(ctx.db, ctx.caller.uid, ctx.caller.tokenId, ref.id) : null;
+        const decoded = saved ? decodeCursor(saved, ref.id) : null;
+        // Nothing saved: answer from the start, and say so. Too much, never too little.
+        if (!decoded || "error" in decoded) resumedFrom = "start";
+        from = decoded && !("error" in decoded) ? decoded : start;
+      } else {
+        const decoded = decodeCursor(since, ref.id);
+        if ("error" in decoded) {
+          throw new Error(`since: ${decoded.error}. Pass a cursor from an earlier result, "last" or "all"`);
+        }
+        from = decoded;
+      }
+
+      const raw = await eventsAfter(ref, from, CHANGE_PAGE);
+      const more = raw.length > CHANGE_PAGE;
+      const page = raw.slice(0, CHANGE_PAGE);
+      // The position after the last event READ, whoever may see it, so a page
+      // of events this caller may not see still moves them past it.
+      const last = page[page.length - 1];
+      const cursor = encodeCursor(last ? { docId: ref.id, at: last.data().at, id: last.id } : from);
+
+      const editor = isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower);
+      const owner = canManageSharing(data, ctx.caller.emailLower);
+      const includeMine = args.includeMine === true;
+      const visible = page.filter((e) => {
+        const v = e.data();
+        if (v.audience === "editors" && !editor) return false;
+        if (v.audience === "owner" && !owner) return false;
+        return includeMine || !causedBy(v.actor as EventActor | undefined, ctx.caller);
+      });
+
+      const current = String(data.currentVersion ?? "");
+      const read = memo((path: string) => ctx.db.doc(path).get());
+      const threadPath = (version: string, threadId: string) => `docs/${ref.id}/versions/${version}/annotations/${threadId}`;
+      const emailOf = memo(async (uid: string) => String((await read(`users/${uid}`)).data()?.email ?? "") || null);
+      const folderIds = visible.flatMap((e) => {
+        const d = e.data().data as { from?: unknown; to?: unknown } | undefined;
+        return e.data().type === "doc.moved" ? [d?.from, d?.to].filter((x): x is string => typeof x === "string") : [];
+      });
+      const paths = await filedIn(ctx.db, ctx.caller, folderIds);
+
+      const events = [];
+      for (const e of visible) {
+        const v = e.data();
+        const actor = v.actor as EventActor | undefined;
+        const at = (v.at as admin.firestore.Timestamp | undefined)?.toDate?.().toISOString() ?? null;
+        const out: Record<string, unknown> = {
+          type: v.type,
+          // A fork's time would say more than its count, and its owner is told
+          // only that one was made (SPEC §21): the day, no more.
+          at: v.type === "fork.created" && at ? at.slice(0, 10) : at,
+          ...(actor?.channel ? { channel: actor.channel } : {}),
+          ...(v.version ? { version: v.version } : {}),
+          ...(v.threadId ? { threadId: v.threadId } : {}),
+        };
+        const thread = v.threadId && v.version ? (await read(threadPath(v.version, v.threadId))).data() : undefined;
+        if (thread) out.quote = String((thread.anchor as { exact?: unknown } | undefined)?.exact ?? "");
+        switch (v.type) {
+          case "comment.added": {
+            const c = (await read(`${threadPath(v.version, v.threadId)}/comments/${v.commentId}`)).data();
+            if (!c) continue; // deleted by its author: gone from the feed too
+            Object.assign(out, { commentId: v.commentId, by: c.authorEmail, body: c.body });
+            break;
+          }
+          case "thread.opened":
+          case "suggestion.opened":
+            out.by = thread?.authorEmail ?? null;
+            if (thread?.suggestion) out.replacement = String((thread.suggestion as { replacement?: unknown }).replacement ?? "");
+            break;
+          case "thread.resolved":
+          case "thread.reopened":
+            out.by = (thread?.resolvedBy as { email?: unknown } | undefined)?.email ?? null;
+            break;
+          case "suggestion.accepted":
+          case "suggestion.rejected":
+          case "suggestion.withdrawn":
+            out.by = (thread?.suggestion as { decidedBy?: { email?: unknown } } | undefined)?.decidedBy?.email ?? null;
+            break;
+          case "suggestion.revised": {
+            const s = thread?.suggestion as { replacement?: unknown; revisions?: Array<{ actor?: { email?: unknown } }> } | undefined;
+            out.by = s?.revisions?.[s.revisions.length - 1]?.actor?.email ?? null;
+            out.replacement = String(s?.replacement ?? "");
+            break;
+          }
+          case "version.published":
+            out.by = (await read(`docs/${ref.id}/versions/${v.version}`)).data()?.publishedByEmail ?? null;
+            break;
+          case "doc.moved": {
+            const d = (v.data ?? {}) as { from?: string | null; to?: string | null };
+            out.from = d.from ? paths.get(d.from) ?? { id: d.from, path: "…" } : null;
+            out.to = d.to ? paths.get(d.to) ?? { id: d.to, path: "…" } : null;
+            out.by = actor?.uid ? await emailOf(actor.uid) : null;
+            break;
+          }
+          case "fork.created":
+            break;
+          default:
+            Object.assign(out, v.data ?? {});
+            out.by = actor?.uid ? await emailOf(actor.uid) : null;
+        }
+        events.push(out);
+      }
+
+      // Threads in this page a person is waiting on, which this caller can
+      // still answer: the current version only, as reply_to_comment has it.
+      const needsReply: string[] = [];
+      for (const threadId of new Set(events.filter((e) => e.version === current && e.threadId).map((e) => String(e.threadId)))) {
+        const thread = (await read(threadPath(current, threadId))).data();
+        if (!thread) continue;
+        const comments = await ctx.db.doc(threadPath(current, threadId)).collection("comments").orderBy("createdAt", "asc").get();
+        if (awaitsReply(thread, comments.docs)) needsReply.push(threadId);
+      }
+
+      const annotations = ref.collection("versions").doc(current).collection("annotations");
+      const [open, pending, where] = await Promise.all([
+        annotations.where("resolved", "==", false).count().get(),
+        annotations.where("suggestion.state", "==", "pending").count().get(),
+        filedIn(ctx.db, ctx.caller, [typeof data.folderId === "string" ? data.folderId : null]),
+      ]);
+      const draft = data.draft as { updatedByEmail?: unknown; updatedAt?: admin.firestore.Timestamp } | undefined;
+      const state = {
+        version: current,
+        title: data.title,
+        filedIn: (typeof data.folderId === "string" && where.get(data.folderId)) || null,
+        readers: new Set(asArray(data.members)).size,
+        visibility: visibilityOf(data),
+        expiresAt: expiryMs(data),
+        trusted: data.trusted === true,
+        openThreads: open.data().count,
+        pendingSuggestions: pending.data().count,
+        // As the app shows it: an unsaved draft is an editor's business.
+        ...(editor
+          ? {
+              draft: draft
+                ? { exists: true, lastEditedBy: draft.updatedByEmail ?? null, lastEditedAt: draft.updatedAt?.toDate?.().toISOString() ?? null }
+                : { exists: false },
+            }
+          : {}),
+        canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canDecide: isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower),
+      };
+
+      if (ctx.caller.tokenId) await saveCursor(ctx.db, ctx.caller.uid, ctx.caller.tokenId, ref.id, cursor);
+      return {
+        id: ref.id,
+        ...withReaderAddress({}, ref.id),
+        cursor,
+        more,
+        // There is no rate limiter, by decision; this is how often to ask.
+        retryAfter: RETRY_AFTER_SECONDS,
+        ...(resumedFrom ? { resumedFrom } : {}),
+        state,
+        events,
+        needsReply,
+      };
     },
   },
 
@@ -1491,7 +1758,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is twenty-two tools, not "some tools". */
+/** Exported for the wiring test: the surface is twenty-three tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

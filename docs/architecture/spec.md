@@ -153,6 +153,9 @@ which also holds this table to them.
 | `/thumb/**` | `contentProxy` |
 | `/d/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
+| — (Firestore trigger) | `recordVersionEvent` |
+| — (Firestore trigger) | `recordThreadEvent` |
+| — (Firestore trigger) | `recordCommentEvent` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
 catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
@@ -455,12 +458,14 @@ docs/{docId}/trust/{uid}                       PersonalTrust
 docs/{docId}/viewers/{uid}                     ViewerStat
 docs/{docId}/views/{sessionId}                 ViewSession
 docs/{docId}/acl/{entryId}                     AclChange        (append-only)
+docs/{docId}/events/{eventId}                  ChangeEvent      (append-only, server-only, ADR 0016)
 docs/{docId}/linkGrants/{uid}                  LinkGrant        (server-written)
 forks/{forkDocId}                              ForkRecord       (server-only, §21)
 folders/{folderId}                             FolderMeta
 teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
+users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only)
 ```
 
@@ -481,9 +486,33 @@ rules list them: an `Annotation` is `{ annId, anchor, authorUid, authorEmail,
 actor, color, resolved, createdAt }`, created with `resolved: false`, and a
 `Comment` is `{ commentId, body, authorUid, authorEmail, actor, createdAt }`.
 `createdAt` is the server's clock (`request.time`), never the client's. After
-that a reader may change an annotation's `resolved` and nothing else, and a
-comment's author its `body` and nothing else. Everything else on these records
-is written by the server, through the Admin SDK.
+that a reader may change an annotation's `resolved`, together with
+`resolvedBy: { uid, email, channel: "web" }`, which must be the reader. The
+change log reports it as who resolved or reopened the thread, and an agent's
+resolve writes the same field with its own actor. A comment's author may change
+its `body` and nothing else. Everything else on these records is written by the
+server, through the Admin SDK.
+
+**`events/{eventId}`** is the change log an agent reads through `get_changes`
+(§19, ADR 0016). Its fields:
+- `at`: when the event was written, by the server's clock;
+- `type`: what changed, for example `comment.added`, `thread.resolved`,
+  `suggestion.accepted`, `version.withdrawn`, `doc.renamed` or `access.changed`;
+- `audience`: `readers`, `editors` or `owner`;
+- optionally `version`, `threadId` and `commentId`;
+- `actor`: `{ uid, channel, tokenId? }`, with no email;
+- `data`: small values, never a body.
+
+How events are written:
+- **Triggers** (`recordVersionEvent`, `recordThreadEvent`, `recordCommentEvent`)
+  create them under the CloudEvent's id, so a redelivery writes nothing.
+- **Endpoints** that change the document record create them in the same batch
+  as the change.
+- **Never:** no client reads or writes the log, and nothing deletes from it.
+
+A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId,
+tokenId, updatedAt }`: the last cursor `get_changes` gave that credential for
+that document. It is server-only.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
@@ -969,7 +998,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,audience,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
   lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
@@ -1299,7 +1328,9 @@ recorded as such in `docs/architecture/threat-model.md`.
 Exactly three messages: **invitation** (a new grant, never a re-grant),
 **verification**, **new comment**. Deliberately not built: digests, weekly
 summaries, a notification centre, unread badges, mention parsing, reminders,
-marketing.
+marketing. The change log an agent reads (§19, ADR 0016) is none of these. Nobody
+is told anything by it. It is written as a side effect of changes that happen
+anyway, and read only by whoever asks.
 
 The comment email is bounded **by construction rather than by infrastructure**:
 one `onDocumentCreated` trigger; recipients = owner + prior thread participants −
@@ -1826,7 +1857,10 @@ Sessions are counted; people are not. A deliberate privacy floor.
 ### The activity panel
 
 One reverse-chronological feed per document, assembled entirely from collections
-that already exist, with **no new writes**. Gated to `isDocEditor`.
+that already exist, with **no new writes**. Gated to `isDocEditor`. The change log
+`get_changes` reads (§19, ADR 0016) is separate and does not feed this panel. The
+panel is opened now and then by an editor; the log is polled every minute or two
+by an agent, and must report what leaves no record of its own.
 
 ---
 
@@ -1916,7 +1950,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — twenty-two tools
+### MCP — twenty-three tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1924,7 +1958,7 @@ scripts and anything that cannot open a browser.
 |---|---|
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
-| `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13) |
+| `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |
 | `fork_document` | copy a version of a document the caller can read into one they own (§21), with `filedIn` and `access` |
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
 | `update_document` | commit a new version of an existing document; given the `baseVersion` it was revised from, refused when another version is current, and it counts the open threads the new version leaves behind (`threadsLeftBehind`) |
@@ -1940,16 +1974,73 @@ scripts and anything that cannot open a browser.
 | `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
 | `get_comments` | **unresolved feedback, each with its anchored quote**, oldest thread first, at most 50 with `truncated` when there were more; `awaitingReply` marks a thread a person spoke last in on the current version; `threads` fetches only the named ids; `version` names an earlier version, whose threads any reader of the document may read |
+| `get_changes` | what happened since a cursor, in recorded order: comments, threads, suggestions, versions, and changes to the document's title, folder, visibility, expiry, trust and sharing; `since` is required; with `needsReply` and the document's `state` (ADR 0016) |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
 | `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
 | `reopen_thread` | open such a thread again, with a note |
 
-`get_document`, `update_document`, `suggest_edit`, `get_comments`,
+`get_document`, `update_document`, `suggest_edit`, `get_comments`, `get_changes`,
 `add_comment`, `reply_to_comment`, `resolve_thread` and `reopen_thread` take an optional `k`: an unlisted document's key, for a caller who is not a member and
 whose account holds no link grant. Without it such a document answers exactly as
 an id that does not exist (§17). The CLI accepts the link itself wherever it
 takes an id, because the link is the only place a person holds the key.
+
+### Watching a document: `get_changes`
+
+An agent that publishes a document watches it for what people say. `get_changes`
+reads the document's change log (§4, ADR 0016) after a cursor.
+
+**`since` is required.** A poll that starts from an unknown point returns
+nothing, and nothing reads as nothing happened. So the server never picks the
+starting point. It is one of:
+- a cursor from an earlier result: the events after it;
+- `"last"`: the cursor this credential was last given for this document, or the
+  log's start when it has none, said as `resumedFrom: "start"`;
+- `"all"`: the log from its start.
+
+A cursor is bound to its document. One from another document, a malformed one,
+or one of an unknown version is refused, never read as "start over" or "now".
+It grants nothing, so it is not signed.
+
+**Where a cursor comes from, and only a poll moves one:**
+
+| Result | Carries a cursor | Saves it as `"last"` |
+|---|---|---|
+| `get_changes` | the position after the last event read | always |
+| `publish_document`, `fork_document`, `POST /publish` | the head of the new document's log | yes |
+| `get_document` | the head of the log, to start watching from | only if none is saved |
+| `update_document` and every other write | none | no |
+
+A write's cursor would sit at the head of the log, past events recorded since
+the caller's last poll that it has not seen. So an update hands none back.
+
+**Each response** carries `cursor` (the same value back on a quiet poll), `more`
+(call again now; pages are 100 events, cut on `(at, eventId)`) and `retryAfter`
+in seconds, because there is no rate limiter. It also carries:
+- `events`, in recorded order, each with its `type`, `at` and `channel`, and
+  `by`, the email joined at read time. A comment carries its `body` and `quote`
+  read from the source, and a deleted one drops out. A `fork.created` is dated
+  to the day, never by whom (§21).
+- `needsReply`: the threads in this page a person is waiting on. That means the
+  current version, open, with the latest comment that is not a server note
+  written in the browser. Never an agent's comment, so two agents cannot keep
+  answering each other.
+- `state`: the document now. Its version, title, `filedIn`, readers,
+  visibility, expiry, trust, open threads and pending suggestions, whether a
+  draft exists (to editors only, as the app shows it), and what the caller may
+  do.
+
+**Filtering:**
+- **What the caller caused** is left out unless `includeMine`. That means an
+  agent channel and this token: the rules pin a browser write's channel to
+  `web`, so a browser comment signed with an agent's token is still reported.
+- **Audience** follows the gates that exist. Readers see reader events.
+  `isDocEditor` adds editor events: moves, visibility, trust and sharing, as the
+  activity panel and the `acl` log are gated. The owner adds `fork.created`.
+
+`bikeshed comments --all --json`, diffed between polls, is the fallback from a
+shell until the CLI has a command for this.
 
 `get_comments` is what earns the whole surface. Because every annotation stores
 `exact`/`prefix`/`suffix`, a comment comes back **with the passage it is about**,

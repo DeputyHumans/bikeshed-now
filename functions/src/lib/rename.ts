@@ -3,6 +3,8 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import type { Actor } from "./actor";
+import { addEvent, eventActor } from "./events";
 import { slugify } from "./folders";
 import { syncPublicProjection } from "./publicdoc";
 
@@ -22,15 +24,19 @@ export async function renameDocument(
   db: admin.firestore.Firestore,
   ref: admin.firestore.DocumentReference,
   raw: unknown,
+  actor: Actor,
 ): Promise<{ title: string } | { error: string }> {
   const title = typeof raw === "string" ? raw.trim() : "";
   if (!title || title.length > TITLE_LIMIT) {
     return { error: `title is required (up to ${TITLE_LIMIT} characters)` };
   }
-  await ref.set(
-    { title, slug: slugify(title), updatedAt: FieldValue.serverTimestamp() },
-    { merge: true },
-  );
+  await db.runTransaction(async (tx) => {
+    const was = String((await tx.get(ref)).data()?.title ?? "");
+    tx.set(ref, { title, slug: slugify(title), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (was !== title) {
+      addEvent(tx, ref, { type: "doc.renamed", audience: "readers", actor: eventActor(actor), data: { from: was, to: title } });
+    }
+  });
   // A public document's title is also in its world-readable projection.
   await syncPublicProjection(db, ref.id);
   return { title };

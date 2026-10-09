@@ -251,9 +251,13 @@ docs/{docId}/events/{eventId}
 | `suggestion.revised` | `suggestion.revisions` grows (state stays `pending`) | trigger | readers |
 | `comment.added` | a comment created that is not `generated`; the server's "Accepted.", "Rejected: …" and "Withdrawn." notes fold into the decision event | trigger | readers |
 | `doc.renamed`, `doc.expiry` | `organize`, `rename_document`, `setVisibility` | the endpoint, in the same batch as the change | readers |
-| `doc.moved`, `doc.visibility`, `doc.link_rotated`, `doc.trust` | `organize`, `move_document`, `setVisibility`, `trustDoc` | the endpoint, in the same batch as the change | editors |
+| `doc.moved`, `doc.visibility`, `doc.trust` | `organize`, `move_document`, `setVisibility`, `trustDoc` | the endpoint, in the same batch as the change | editors |
 | `access.changed` (added, removed) | `setAccess`, beside `logAclChange` (`index.ts:742,836`) | the endpoint, in the same batch as the change | editors |
 | `fork.created` (no identity, SPEC §21; `at` to the day) | `forkDoc`, `fork_document` | their batch (`lib/fork.ts:202`) | owner |
+
+*Shipped in 0.13.0 without `doc.link_rotated`:* no operation rotates a link on
+its own. An unlisted link stops working only through a visibility change, which
+`doc.visibility` reports.
 
 **Three new triggers, each with `retry: true`:** on annotations, on comments,
 and on versions.

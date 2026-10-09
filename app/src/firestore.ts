@@ -228,11 +228,14 @@ export async function setResolved(
   versionId: string,
   annId: string,
   resolved: boolean,
+  uid: string,
+  emailLower: string,
 ): Promise<void> {
-  // The rules allow exactly this field to change, so this is the whole update.
+  // The rules allow exactly these two fields to change, and `resolvedBy` must
+  // be the caller: it is who the change log says resolved or reopened it.
   await updateDoc(
     doc(db, "docs", docId, "versions", versionId, "annotations", annId),
-    { resolved },
+    { resolved, resolvedBy: webActor(uid, emailLower.toLowerCase()) },
   );
 }
 
