@@ -678,11 +678,15 @@ export function DocViewer() {
           apply: () => (frame.doc ? applySuggestion(frame.doc, a.anchor, a.suggestion!.replacement) : "failed"),
           flush: () => editor.flushNow(),
           saveFailed: () => editor.saveFailed(),
-          record: () => acceptSuggestion(suggestionWhere(a.annId)),
+          record: () => {
+            // Set before the request, not after it: the snapshot that drops it
+            // from pending can arrive before the response, and end the pass
+            // first. By now the change is in the saved draft either way.
+            acceptedInPass.current = true;
+            return acceptSuggestion(suggestionWhere(a.annId));
+          },
         });
-        if (outcome === "applied" || outcome === "already-applied") {
-          acceptedInPass.current = true;
-        } else if (outcome === "stale") {
+        if (outcome === "stale") {
           toast.error("The text has changed since this was suggested, so it can’t be applied.");
         } else if (outcome === "failed") {
           toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
