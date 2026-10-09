@@ -173,6 +173,27 @@ describe("firestore rules", () => {
         generated: true,
       });
 
+      // What the server writes into a suggestion's thread: a decision, and an
+      // opener in its author's own words.
+      await setDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/c2"), {
+        commentId: "c2",
+        body: "Accepted.",
+        authorUid: OWNER.uid,
+        authorEmail: OWNER.email,
+        actor: actorFor(OWNER),
+        createdAt: new Date(),
+        generated: true,
+      });
+      await setDoc(doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/c3"), {
+        commentId: "c3",
+        body: "This reads better.",
+        authorUid: VIEWER.uid,
+        authorEmail: VIEWER.email,
+        actor: actorFor(VIEWER),
+        createdAt: new Date(),
+        opensSuggestion: true,
+      });
+
       // A document whose members entry is stored with the wrong case.
       await setDoc(doc(db, "docs/mixedcase-doc"), {
         docId: "mixedcase-doc",
@@ -554,6 +575,31 @@ describe("firestore rules", () => {
     // Nor by editing one of its own afterwards.
     await assertFails(updateDoc(at("r1"), { generated: true }));
     await assertSucceeds(updateDoc(at("r1"), { body: "Why this word, here?" }));
+  });
+
+  it("nobody rewrites or deletes what the server wrote in a thread, its stamped author included", async () => {
+    // Each is stamped with the person it speaks for, so the comment rules let
+    // that person edit and delete it: an approver could erase "Accepted.", and
+    // an author rewrite their opener outside the revision history.
+    const at = (db, id) => doc(db, `docs/private-doc/versions/v1/annotations/sug1/comments/${id}`);
+    const owner = verified(env, OWNER).firestore();
+    const author = verified(env, VIEWER).firestore();
+    await assertFails(updateDoc(at(owner, "c2"), { body: "Never mind." }));
+    await assertFails(deleteDoc(at(owner, "c2")));
+    for (const id of ["c1", "c3"]) {
+      await assertFails(updateDoc(at(author, id), { body: "Something else entirely." }));
+      await assertFails(deleteDoc(at(author, id)));
+    }
+  });
+
+  it("a person still edits and deletes their own reply in a suggestion's thread", async () => {
+    const db = verified(env, EDITOR).firestore();
+    const at = doc(db, "docs/private-doc/versions/v1/annotations/sug1/comments/r9");
+    await assertSucceeds(
+      setDoc(at, { commentId: "r9", body: "Hmm.", authorUid: EDITOR.uid, authorEmail: EDITOR.email, actor: actorFor(EDITOR), createdAt: new Date() }),
+    );
+    await assertSucceeds(updateDoc(at, { body: "Hmm, fine." }));
+    await assertSucceeds(deleteDoc(at));
   });
 
   it("a non-member cannot read or write feedback", async () => {

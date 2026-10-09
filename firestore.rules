@@ -220,7 +220,10 @@ service cloud.firestore {
 
           // `generated` and `opensSuggestion` mark what the server wrote for a
           // suggestion; a client claiming either would be passing its words off
-          // as the server's.
+          // as the server's. Nor may it change or remove one afterwards: each
+          // is stamped with the person it speaks for, so "its author may edit
+          // it" would let an approver erase "Accepted.", and a suggester
+          // rewrite an opener outside the revision history the server keeps.
           match /comments/{commentId} {
             allow read: if canRead(docId, docData(docId));
             allow create: if canRead(docId, docData(docId)) && authoredBySelf()
@@ -228,13 +231,17 @@ service cloud.firestore {
               && !('opensSuggestion' in request.resource.data);
             allow update: if canRead(docId, docData(docId))
               && resource.data.authorUid == request.auth.uid
+              && !('generated' in resource.data)
+              && !('opensSuggestion' in resource.data)
               && request.resource.data.authorUid == resource.data.authorUid
               && request.resource.data.authorEmail == resource.data.authorEmail
               && request.resource.data.actor == resource.data.actor
               && !request.resource.data.diff(resource.data).affectedKeys()
                 .hasAny(['generated', 'opensSuggestion']);
             allow delete: if isVerifiedUser()
-              && resource.data.authorUid == request.auth.uid;
+              && resource.data.authorUid == request.auth.uid
+              && !('generated' in resource.data)
+              && !('opensSuggestion' in resource.data);
           }
         }
       }

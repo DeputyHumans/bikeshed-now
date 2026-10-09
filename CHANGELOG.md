@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Nobody can rewrite or delete the notes the server writes into a thread.**
+  "Accepted.", "Rejected: …", "Withdrawn." and the opener of a suggestion are
+  stamped with the person they speak for, and the comment rules let that person
+  edit or delete them. An approver could erase their decision, and an author
+  rewrite an opener outside the revision history. The rules now refuse both,
+  and a person's own replies are unaffected (SPEC §22).
+
 ## 0.10.0 — 2026-10-08
 
 ### Added

@@ -2270,6 +2270,10 @@ such, and only rejectable.
 **A pending suggestion holds back every new version** (§6a). Only an approver
 clears one, so somebody who can publish but not decide is told who can.
 
+The notes the server writes into a thread — the opener, "Accepted.",
+"Rejected: …", "Withdrawn." — are stamped with the person they speak for, and
+nobody may edit or delete them, that person included.
+
 Each author may have twenty pending suggestions on one version.
 
 ### Writing one
