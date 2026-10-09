@@ -14,7 +14,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.12.0 — 2026-10-09
 
 Tool results gain fields and two tools gain arguments, which `CHANGELOG.md`
 counts as breaking, so this is a minor release. Nothing is removed, and every
