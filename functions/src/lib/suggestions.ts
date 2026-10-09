@@ -170,7 +170,7 @@ function annotations(docRef: DocRef, versionId: string) {
 export type Refusal = { status: 400 | 403 | 404 | 409; error: string; [k: string]: unknown };
 
 /**
- * Write a new suggestion and its opening comment in one batch.
+ * Write a new suggestion and its opening comment in one transaction.
  *
  * The caller has decided the author may suggest on this version. The opening
  * comment is what tells the owner and the approvers: the comment trigger sees
@@ -208,24 +208,37 @@ export async function createSuggestion(args: {
 
   const annRef = anns.doc();
   const commentRef = annRef.collection("comments").doc();
-  const batch = db.batch();
-  batch.create(annRef, {
-    annId: annRef.id,
-    anchor,
-    ...commentFields(author, actor),
-    color: args.color,
-    resolved: false,
-    suggestion: { replacement, state: "pending" as SuggestionState },
+  // In a transaction that reads the document, so this and a publish are
+  // ordered: either the publish's own check sees this suggestion and refuses,
+  // or this sees the newer version and refuses. Checked only before writing,
+  // a publish landing in between left it pending on a version nobody reads.
+  return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
+    const doc = await tx.get(docRef);
+    const current = String(doc.data()?.currentVersion ?? "");
+    if (current !== versionId) {
+      return {
+        status: 409,
+        error: "This document has a newer version. Reload, then suggest the edit on it.",
+        currentVersion: current,
+      };
+    }
+    tx.create(annRef, {
+      annId: annRef.id,
+      anchor,
+      ...commentFields(author, actor),
+      color: args.color,
+      resolved: false,
+      suggestion: { replacement, state: "pending" as SuggestionState },
+    });
+    tx.create(commentRef, {
+      commentId: commentRef.id,
+      body: note || describeChange(anchor.exact, replacement),
+      ...commentFields(author, actor),
+      opensSuggestion: true,
+      ...(note ? {} : { generated: true }),
+    });
+    return { annId: annRef.id };
   });
-  batch.create(commentRef, {
-    commentId: commentRef.id,
-    body: note || describeChange(anchor.exact, replacement),
-    ...commentFields(author, actor),
-    opensSuggestion: true,
-    ...(note ? {} : { generated: true }),
-  });
-  await batch.commit();
-  return { annId: annRef.id };
 }
 
 interface StoredSuggestion {

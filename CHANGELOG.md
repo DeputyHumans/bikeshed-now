@@ -39,6 +39,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   when nothing could be applied, rather than keeping everyone off it for two
   minutes, and a quote of nothing but whitespace is refused (SPEC §22).
 
+- **A suggestion is never left behind on an old version.** Publishing checked
+  for open threads before uploading the new version's bytes, and made it
+  current after. A suggestion made in between stayed pending on a version
+  nobody reads, and `update_document` did not check that its base was still
+  current. Both publish paths now ask again in the transaction that makes the
+  version current, and a suggestion is written in one that reads the current
+  version (SPEC §6a, §22).
+
 ## 0.10.0 — 2026-10-08
 
 ### Added

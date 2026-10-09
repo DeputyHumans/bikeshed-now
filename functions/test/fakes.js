@@ -7,8 +7,9 @@ const { FieldValue } = require("firebase-admin/firestore");
 
 /**
  * Enough of Firestore to run an endpoint end to end: document refs, dotted
- * updates, field sentinels, chained equality `where` with `limit` and
- * `count`, batches, and transactions that read before they write.
+ * updates, field sentinels (delete, server timestamp, increment), chained
+ * equality `where` with `limit` and `count`, batches, and transactions that
+ * read before they write.
  *
  * It is deliberately strict where Firestore is: a `create` over an existing
  * document fails, an `update` of a missing one fails, and a transaction that
@@ -21,6 +22,8 @@ function fakeFirestore(initial = {}) {
   let autoId = 0;
 
   const isSentinel = (v, kind) => v instanceof FieldValue && v.isEqual(kind);
+  /** `FieldValue.increment(n)`, which adds to whatever number is there, or to 0. */
+  const isIncrement = (v) => v instanceof FieldValue && typeof v.operand === "number";
   const DELETE = FieldValue.delete();
   const STAMP = FieldValue.serverTimestamp();
 
@@ -34,10 +37,12 @@ function fakeFirestore(initial = {}) {
     }
     const last = parts[parts.length - 1];
     if (isSentinel(value, DELETE)) delete node[last];
+    else if (isIncrement(value)) node[last] = (typeof node[last] === "number" ? node[last] : 0) + value.operand;
     else node[last] = resolve(value);
   }
   function resolve(value) {
     if (isSentinel(value, STAMP)) return admin.firestore.Timestamp.now();
+    if (isIncrement(value)) return value.operand;
     if (value instanceof FieldValue) throw new Error("fake: unsupported sentinel");
     if (Array.isArray(value)) return value.map(inArray);
     if (value && typeof value === "object" && value.constructor === Object) {

@@ -8,6 +8,7 @@ const { join } = require("node:path");
 const admin = require("firebase-admin");
 
 const { commitNewVersion } = require("../lib/lib/publish.js");
+const { fakeFirestore } = require("./fakes.js");
 const { pendingSuggestionsMessage, refuseIfPending } = require("../lib/lib/review.js");
 
 /**
@@ -138,7 +139,85 @@ test("both version-minting endpoints ask about pending suggestions, in the right
   assert.ok(upload > gate, "the gate must come before the upload, so a refusal leaves no bytes");
 
   const commit = between(src("index.ts"), "export const commitVersion = onRequest(", "\nexport const ");
-  const asks = commit.indexOf("pendingSuggestions(docRef, baseVersion)");
+  const asks = commit.indexOf("openThreadsRefusal(docRef, baseVersion)");
   const writes = commit.indexOf("runTransaction(");
   assert.ok(asks >= 0 && writes > asks, "the in-app commit must ask before its transaction");
+  const helper = between(src("index.ts"), "async function openThreadsRefusal(", "\n}\n");
+  assert.ok(helper.includes("pendingSuggestions(docRef, baseVersion)"), "and say whether a suggestion is what holds it");
+});
+
+/**
+ * A real-enough Firestore and a Storage whose every save runs `during`: what
+ * somebody else does while this version's bytes are uploading.
+ */
+async function updateWhile(during) {
+  const { db, store } = fakeFirestore({
+    "docs/d1": { docId: "d1", currentVersion: "v1", ownerEmail: "ed@example.com" },
+    "docs/d1/versions/v1": { versionId: "v1", entry: "index.html", contentHash: "old" },
+  });
+  const original = Object.getOwnPropertyDescriptor(admin, "storage");
+  const previousBucket = process.env.BIKESHED_BUCKET;
+  process.env.BIKESHED_BUCKET = "test-bucket";
+  let ran = false;
+  Object.defineProperty(admin, "storage", {
+    configurable: true,
+    value: () => ({
+      bucket: () => ({
+        file: () => ({
+          save: async () => {
+            if (!ran) during(store);
+            ran = true;
+          },
+        }),
+      }),
+    }),
+  });
+  try {
+    const result = await commitNewVersion({
+      db,
+      docRef: db.collection("docs").doc("d1"),
+      compiled: COMPILED,
+      actor: ACTOR,
+      authorEmail: "ed@example.com",
+      baseVersion: "v1",
+      via: "mcp",
+    });
+    return { result, store };
+  } finally {
+    if (original) Object.defineProperty(admin, "storage", original);
+    if (previousBucket === undefined) delete process.env.BIKESHED_BUCKET;
+    else process.env.BIKESHED_BUCKET = previousBucket;
+  }
+}
+
+test("a suggestion made while an update uploads still holds it back", async () => {
+  // The gate counted before the upload; the version became current after it.
+  const { result, store } = await updateWhile((store) =>
+    store.set("docs/d1/versions/v1/annotations/late", { annId: "late", resolved: false, suggestion: { state: "pending" } }),
+  );
+  assert.equal(result.status, 409);
+  assert.equal(result.pendingSuggestions, 1);
+  assert.equal(store.get("docs/d1").currentVersion, "v1", "no version left the suggestion behind");
+});
+
+test("an update that another publish overtook is refused, not stacked on the old base", async () => {
+  const { result, store } = await updateWhile((store) => {
+    store.set("docs/d1/versions/v2", { versionId: "v2", entry: "index.html", contentHash: "theirs" });
+    store.set("docs/d1", { ...store.get("docs/d1"), currentVersion: "v2" });
+  });
+  assert.equal(result.status, 409);
+  assert.match(result.error, /newer version/);
+  assert.equal(store.get("docs/d1").currentVersion, "v2", "theirs stays current");
+});
+
+test("the in-app commit asks again inside the transaction that makes the version current", () => {
+  // Its count runs before the upload; a thread opened during the upload would
+  // otherwise be left on a version nobody reads any more.
+  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = src.indexOf("export const commitVersion = onRequest(");
+  const commit = src.slice(start, src.indexOf("\nexport const ", start + 1));
+  const tx = commit.slice(commit.indexOf("runTransaction("));
+  const asks = tx.indexOf("anyOpenThread(tx,");
+  const moves = tx.indexOf("currentVersion: versionId");
+  assert.ok(asks >= 0 && moves > asks, "the transaction must look for open threads before it moves currentVersion");
 });

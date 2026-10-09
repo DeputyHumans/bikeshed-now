@@ -35,7 +35,14 @@ import {
   type Membership,
 } from "./folders";
 import { syncPresenceAccess } from "./presence";
-import { refuseIfPending, type PendingRefusal } from "./review";
+import { anyOpenThread, refuseIfPending, type PendingRefusal } from "./review";
+
+/** Another version became current while this one was uploading. */
+export interface StaleRefusal {
+  error: string;
+  status: 409;
+  currentVersion: string;
+}
 import { syncPublicProjection } from "./publicdoc";
 import { resolveMarking, type Marking } from "./marking";
 
@@ -191,7 +198,7 @@ export async function reviseDocument(args: {
   actor: Actor;
   authorEmail: string;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | PendingRefusal | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | StaleRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -446,7 +453,7 @@ export async function commitNewVersion(args: {
   authorEmail: string;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult | PendingRefusal> {
+}): Promise<UpdateResult | PendingRefusal | StaleRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
@@ -477,7 +484,38 @@ export async function commitNewVersion(args: {
   const storagePrefix = `docs/${docRef.id}/${versionId}`;
   await uploadBundle(storagePrefix, compiled.files);
 
-  await db.runTransaction(async (tx) => {
+  const base = args.baseVersion ?? "";
+  try {
+    await db.runTransaction(async (tx) => {
+      // Both asked again here, where the version becomes current: the checks
+      // above ran before the upload, and either may have changed during it.
+      const cur = await tx.get(docRef);
+      if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
+      if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
+      await mintVersion(tx);
+    });
+  } catch (e) {
+    const reason = (e as Error).message;
+    if (reason === "PENDING") {
+      const pending = await refuseIfPending(docRef, base);
+      if (pending) return pending;
+    }
+    if (reason === "STALE" || reason === "PENDING") {
+      const fresh = await docRef.get();
+      return {
+        error: "Somebody published a newer version while this one was uploading. Read it, then update it again.",
+        status: 409,
+        currentVersion: String(fresh.data()?.currentVersion ?? ""),
+      };
+    }
+    throw e;
+  }
+
+  await syncPublicProjection(db, docRef.id);
+
+  return { versionId, contentHash, fileCount, bytes, deduped: false };
+
+  async function mintVersion(tx: admin.firestore.Transaction): Promise<void> {
     const vRef = versionsRef.doc(versionId);
     if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
     const grants = await readTrustGrants(tx, docRef);
@@ -516,9 +554,5 @@ export async function commitNewVersion(args: {
       { merge: true },
     );
     withdrawTrust(tx, docRef, grants);
-  });
-
-  await syncPublicProjection(db, docRef.id);
-
-  return { versionId, contentHash, fileCount, bytes, deduped: false };
+  }
 }

@@ -60,3 +60,26 @@ export async function refuseIfPending(
   if (count === 0) return null;
   return { error: pendingSuggestionsMessage(count), status: 409, pendingSuggestions: count };
 }
+
+/**
+ * Is anything still open on `versionId`, read INSIDE the transaction that is
+ * about to make another version current? The counts above run before the
+ * upload, and a thread opened during it would otherwise be left on a version
+ * nobody reads any more. Read in the transaction, it either is seen here or
+ * is written after the version moved, where its own check refuses it.
+ *
+ * `suggestions` asks only about pending suggestions, which hold back every
+ * way of publishing; `threads` asks about any unresolved thread, which the
+ * in-app commit also waits for.
+ */
+export async function anyOpenThread(
+  tx: admin.firestore.Transaction,
+  docRef: admin.firestore.DocumentReference,
+  versionId: string,
+  which: "suggestions" | "threads",
+): Promise<boolean> {
+  if (!versionId) return false;
+  const anns = docRef.collection("versions").doc(versionId).collection("annotations");
+  const open = which === "suggestions" ? anns.where("suggestion.state", "==", "pending") : anns.where("resolved", "==", false);
+  return !(await tx.get(open.limit(1))).empty;
+}

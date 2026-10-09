@@ -2272,7 +2272,11 @@ new version". A quote that no longer matches exactly is **stale**: shown as
 such, and only rejectable.
 
 **A pending suggestion holds back every new version** (§6a). Only an approver
-clears one, so somebody who can publish but not decide is told who can.
+clears one, so somebody who can publish but not decide is told who can. The
+hold is asked again inside the transaction that makes a version current, and a
+suggestion is written in one that reads the current version, so one made while
+a version is uploading either holds it back or is refused for the newer one;
+it is never left behind on a version nobody reads.
 
 The notes the server writes into a thread — the opener, "Accepted.",
 "Rejected: …", "Withdrawn." — are stamped with the person they speak for, and

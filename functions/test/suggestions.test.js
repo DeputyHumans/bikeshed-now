@@ -177,6 +177,27 @@ test("one author may have twenty pending on a version, and no more", async () =>
 
 // --- Deciding --------------------------------------------------------------
 
+test("a suggestion is never written on a version that is no longer current", async () => {
+  // The endpoint checks the version before it writes; a publish landing in
+  // between would leave the suggestion on a version nobody reads.
+  const { createSuggestion } = require("../lib/lib/suggestions.js");
+  const w = world();
+  w.store.set("docs/d1", { ...w.store.get("docs/d1"), currentVersion: "v2" });
+  const r = await createSuggestion({
+    db: w.db,
+    docRef: w.db.collection("docs").doc("d1"),
+    versionId: "v1",
+    anchor: ANCHOR,
+    replacement: "two weekends",
+    note: "",
+    author: { uid: SUGGESTER.uid, emailLower: SUGGESTER.email },
+    actor: { uid: SUGGESTER.uid, email: SUGGESTER.email, channel: "web" },
+    color: SUGGESTION_COLOR,
+  });
+  assert.equal(r.status, 409);
+  assert.equal(await pendingSuggestions(w.db.collection("docs").doc("d1"), "v1"), 0);
+});
+
 test("a quote of nothing but whitespace is refused", async () => {
   const w = world();
   const r = await create(w, w.as(SUGGESTER), { anchor: { ...ANCHOR, exact: " \n\t " } });

@@ -96,7 +96,7 @@ import {
   reviseDocument,
   withdrawTrust,
 } from "./lib/publish";
-import { pendingSuggestions, pendingSuggestionsMessage } from "./lib/review";
+import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./lib/review";
 import {
   SUGGESTION_COLOR,
   changeSuggestion,
@@ -1286,6 +1286,33 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
+ * Why a new version cannot be published over `baseVersion` yet, or null. A
+ * pending suggestion is an open thread too, so it is in the count; which kind
+ * it is decides who can clear it — anyone resolves a comment, and only an
+ * approver decides a suggestion — so the refusal says which.
+ */
+async function openThreadsRefusal(
+  docRef: admin.firestore.DocumentReference,
+  baseVersion: string,
+): Promise<{ error: string; unresolvedCount: number; pendingSuggestions: number } | null> {
+  const unresolved = await docRef
+    .collection("versions")
+    .doc(baseVersion)
+    .collection("annotations")
+    .where("resolved", "==", false)
+    .count()
+    .get();
+  const unresolvedCount = unresolved.data().count;
+  if (unresolvedCount === 0) return null;
+  const pending = await pendingSuggestions(docRef, baseVersion);
+  return {
+    error: pending > 0 ? pendingSuggestionsMessage(pending) : "Resolve all comments before publishing a new version.",
+    unresolvedCount,
+    pendingSuggestions: pending,
+  };
+}
+
+/**
  * POST /commit — promote the draft into a new immutable version.
  *
  * Mirrors the publish CLI exactly: assemble, hash with the frozen framing,
@@ -1349,28 +1376,11 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
 
   // No new version while comments on the current one are open. Annotations are
   // version-scoped, so publishing would leave them behind on a version nobody
-  // is reading any more.
-  const unresolved = await docRef
-    .collection("versions")
-    .doc(baseVersion)
-    .collection("annotations")
-    .where("resolved", "==", false)
-    .count()
-    .get();
-  const unresolvedCount = unresolved.data().count;
-  if (unresolvedCount > 0) {
-    // A pending suggestion is an open thread too, so it is in that count. Which
-    // kind it is decides who can clear it: anyone resolves a comment, and only
-    // an approver decides a suggestion — so the refusal says which.
-    const pending = await pendingSuggestions(docRef, baseVersion);
-    res.status(409).json({
-      error:
-        pending > 0
-          ? pendingSuggestionsMessage(pending)
-          : "Resolve all comments before publishing a new version.",
-      unresolvedCount,
-      pendingSuggestions: pending,
-    });
+  // is reading any more. Asked here, before any bytes are uploaded, and again
+  // inside the transaction that makes the new version current.
+  const open = await openThreadsRefusal(docRef, baseVersion);
+  if (open) {
+    res.status(409).json(open);
     return;
   }
 
@@ -1447,6 +1457,7 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     await db().runTransaction(async (tx) => {
       const cur = await tx.get(docRef);
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       const vRef = versionsRef.doc(versionId);
       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
       // Trust carries into the new version only when its owner wrote it here.
@@ -1496,7 +1507,15 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     });
   } catch (e) {
     const reason = (e as Error).message;
-    if (reason === "STALE" || reason === "CONFLICT") {
+    if (reason === "OPEN") {
+      // Opened while the bytes were uploading: refused as it would have been before.
+      const open = await openThreadsRefusal(docRef, baseVersion);
+      if (open) {
+        res.status(409).json(open);
+        return;
+      }
+    }
+    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN") {
       const fresh = await docRef.get();
       res.status(409).json({
         error: "Another editor just published. Reload before publishing.",
@@ -1837,7 +1856,9 @@ async function updateFromUpload(
     return;
   }
   if ("status" in result) {
-    res.status(result.status).json({ error: result.error, pendingSuggestions: result.pendingSuggestions });
+    // Pending suggestions, or another version made current during the upload.
+    const { status, ...refusal } = result;
+    res.status(status).json(refusal);
     return;
   }
   if ("error" in result) {
