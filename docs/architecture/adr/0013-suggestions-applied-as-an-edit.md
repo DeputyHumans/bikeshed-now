@@ -1,6 +1,7 @@
 # 0013 — Suggestions are text, applied as an edit in the approver's browser
 
-**Status** Accepted · **Spec** §6a, §13, §19, §22
+**Status** Accepted, amended by [0015](0015-agents-decide-as-approvers.md) (decision 6 and
+"Applying on the server") · **Spec** §6a, §13, §19, §22
 
 ## Context
 
