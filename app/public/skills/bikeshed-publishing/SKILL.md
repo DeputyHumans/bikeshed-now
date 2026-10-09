@@ -1,6 +1,6 @@
 ---
 name: bikeshed-publishing
-description: Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment, including which formats it takes (Markdown, HTML, a .zip bundle) and what renders, runs or loads in one (scripts, external images and fonts, Mermaid, math, front matter).
+description: Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment, including which folder it goes in and who can read it there, its id, handing back and opening its link, which formats it takes (Markdown, HTML, a .zip bundle) and what renders, runs or loads in one (scripts, external images and fonts, Mermaid, math, front matter).
 ---
 
 # Publishing to Bikeshed
@@ -67,10 +67,16 @@ Two exceptions, each with something you can check:
 
 ### What you hand back
 
-1. **The address** — the `url` in the result.
-2. **One line on who can read it**: them, plus everyone a folder is shared with if
-   you filed it into one. Ask them to share it further; there is no tool for that.
+1. **The address**: the `url` in the result, every time, as a link they can
+   click. Open it too when they can see the browser it opens in (below).
+2. **Where it is filed, and who can read it there**: "Filed at the root. Only
+   you can read it." or "Filed in `Engineering/Reviews`. Everyone that folder is
+   shared with can read it." Ask them to share it further; there is no tool for
+   that.
 3. **Nothing else.** No second copy elsewhere, no pasted document.
+
+Then say you will watch it for comments, and do, if your harness can wait: the
+`bikeshed-feedback` skill, "After you hand back the address".
 
 ### Instead of
 
@@ -195,8 +201,19 @@ bikeshed update storage-migration proposal.md
 ```
 
 Over MCP the same two are `publish_document` and `update_document`, and they
-return the same `url`. That is the address to hand back. Do not run
-`bikeshed open` to find it — that opens a browser on somebody's machine.
+return the same `url`. That is the address to hand back. `bikeshed open` is not
+how to find it: it opens a browser, on whatever machine runs the command.
+
+### Opening it
+
+| Where you run | Do |
+|---|---|
+| On the person's own machine, with them there: Claude Code, Claude Desktop, Cursor, VS Code | Give the link, then open it: `bikeshed open <link>`, or your harness's own browser tool |
+| In a cloud container, over SSH, in CI, on a schedule | Give the link. Never open it: a browser would start where nobody sees it |
+| In a chat app: ChatGPT, Claude on the web or a phone | Give it as a clickable Markdown link |
+
+`bikeshed open` takes the link itself, so an unlisted document's key goes with
+it.
 
 **Publishing identical content is a no-op.** The bytes are hashed; matching
 bytes mint no new version. So `update` is safe to run in a loop, in CI, or after
@@ -225,15 +242,59 @@ bikeshed update platform-review index.html   # the entry; the rest is kept
 An update cannot switch a document between Markdown and HTML. Publish a new
 document for that.
 
+## Choose the id, every time
+
 The address comes from the title unless you choose it: `--id platform-review`,
 or `publish_document`'s `id`, publishes at `/d/platform-review` (lowercase
-letters, digits and hyphens, up to 60 characters). A taken id still publishes,
-with a few random characters added, which is one more reason to hand back the
-`url` in the result rather than an address you built yourself.
+letters, digits and hyphens, up to 60 characters). Ids are one namespace for the
+whole deployment and never change. So a generic title collides with documents
+you cannot see, and the document lands at that id plus a few random characters,
+for good. Always pass one.
 
-Give `publish` a `--folder` (or `create_folder`'s id) when you know where it
-belongs — see the `bikeshed-folders` skill, and read its warning about what
-moving a document does to who can read it.
+- **Time-bound documents start with the date**: meeting notes, status and
+  weekly updates, incident reviews, retrospectives, period reports.
+  `2026-10-09-storage-migration-review`: the ISO form sorts by date. If the
+  documents beside it use another date form, copy theirs.
+- **Living documents get no date**: specs, proposals, handbooks. Qualify them by
+  project instead: `billing-storage-migration`, not `migration`.
+- **Never a bare generic word**: `proposal`, `notes`, `plan`, `draft`,
+  `report`.
+- **Take the date from the environment**, never from memory: `date +%F`, or the
+  date your harness states. If you are unsure of it, leave it out.
+- **A revision is an update, not a new dated copy.** A better title is
+  `bikeshed rename`, and the id stays.
+
+A taken id still publishes, with the random characters added. The CLI says so on
+stderr; over MCP, compare the result's `docId` with the id you asked for. Either
+way, tell the person, and hand back the `url` in the result rather than an
+address you built yourself.
+
+## Where it is filed
+
+Filing a document into a folder shares it with everyone that folder is shared
+with, and nobody is emailed. You are the only one who can tell the person who
+just gained access, and nothing you can call says who that is.
+
+So, for every new document:
+
+1. **Look first.** `bikeshed folders` (`list_folders`) lists every folder you
+   can see. Find the one whose path matches the project, client, team or kind
+   of document.
+2. **File it where you may say who can read it:**
+   - at the root, where only the person can read it;
+   - in a folder the person named for this document;
+   - anywhere else, only after asking: "I'd file this in `Engineering/Reviews`,
+     which shares it with everyone that folder is shared with. Publish there?"
+
+   A folder you made yourself is no exception: one made inside a shared folder
+   is shared too, and the person may have shared it since.
+3. **Say where it went**, in the same reply as the link. If it is at the root,
+   say why.
+4. **Do not tidy.** Moving a document someone else filed changes who can read
+   it.
+
+`--folder` on `publish`, or `publish_document`'s `folder`, files it in one call.
+The `bikeshed-folders` skill has the rest.
 
 ## A document may expire
 
@@ -302,5 +363,6 @@ that builds them with JavaScript stays empty until somebody trusts it.
 
 ## What happens next
 
-Ask the person to share it — there is no tool for sharing, deliberately.
-Then read what comes back: the `bikeshed-feedback` skill.
+Ask the person to share it if more people should read it. There is no tool for
+sharing, deliberately. Then watch for what comes back, and answer it: the
+`bikeshed-feedback` skill.

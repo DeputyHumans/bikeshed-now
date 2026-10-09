@@ -77,8 +77,16 @@ bikeshed publish platform.md --id 01-platform
 # published 01-platform v1 — https://bikeshed.now/d/01-platform
 ```
 
-If the id is taken, the document is still published, at the id plus a few
-random characters, and the CLI says so on stderr.
+Ids are shared by the whole deployment and never change, so choose one every
+time: put the date first on something time-bound
+(`2026-10-09-storage-migration-review`), and the project on something that
+lives on (`billing-storage-migration`, not `migration`). If the id is taken, the
+document is still published, at the id plus a few random characters, and the
+CLI says so on stderr.
+
+`bikeshed open <link>` opens a document in your browser, an unlisted one's key
+included. It opens the browser on the machine that runs it, so an agent in CI
+or a container should hand you the link instead.
 
 A rename changes the title and leaves the address alone, so links already sent
 keep working:

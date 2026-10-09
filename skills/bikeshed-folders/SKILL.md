@@ -1,6 +1,6 @@
 ---
 name: bikeshed-folders
-description: Use when organising a Bikeshed workspace — listing the folder tree, creating folders, and filing documents into them. Read this before moving a document, because a folder decides who can read what is inside it.
+description: Use when deciding where a new Bikeshed document goes, and when organising a workspace — listing the folder tree, creating folders, and filing documents into them. Read this before publishing into a folder or moving a document, because a folder decides who can read what is inside it.
 ---
 
 # Folders on Bikeshed
@@ -40,6 +40,17 @@ there is a level here, and it is not yours.
 
 `canWrite` is not the same as being able to see it. A folder shared with you to
 read is one you cannot file into, and the call will refuse.
+
+## Choosing a folder for a new document
+
+Nothing you can call says who a folder is shared with, and nobody is emailed
+when a document lands in one. So the person hears who can now read it from you,
+or not at all. File a new document at the root, where only they can read it, or
+in a folder they named for it, or ask first, naming the folder. The
+`bikeshed-publishing` skill, "Where it is filed", has the whole rule.
+
+A folder does not need to be yours to fit, and being yours does not make it
+private: one you made inside a shared folder is shared too.
 
 ## Make a folder
 

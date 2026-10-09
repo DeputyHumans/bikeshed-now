@@ -44,8 +44,10 @@ can do on its own produces a credential. Below.
 
 **4. Publish something, and hand back the address.** The worked loop is further
 down. What you give back is the `url` in the result — `https://<deployment>/d/<id>`
-— and one line saying who can read it, because a new document is private until
-somebody shares it.
+— every time, with where you filed it and who can read it there, because a new
+document is private until somebody shares it, and filing it in a folder shares it
+with that folder's people. Open the link too, when the person can see the
+browser it would open in. Then watch it for comments.
 
 ## What this is for
 
@@ -276,13 +278,36 @@ instead of doing it.
 same value and no new version is minted, so it is safe to run `update` in a
 loop, in CI, or after a change you are not sure you made.
 
-**You can choose the address.** `--id platform-review`, or `publish_document`'s
-`id`, publishes at `/d/platform-review`. Use lowercase letters, digits and
-hyphens, up to 60 characters. If the id is taken, the document is still
-published, at that id plus a few random characters, and the CLI says so on
-stderr. So the address to hand back is always the `url` in the result, never
-one you built from the id you asked for. An id never changes once published: to
-put new content at the same address, `update` that document.
+**Choose the address, every time.** `--id platform-review`, or
+`publish_document`'s `id`, publishes at `/d/platform-review`. Use lowercase
+letters, digits and hyphens, up to 60 characters. Ids are one namespace for the
+whole deployment and never change, so a generic title collides with documents you
+cannot see. Start a time-bound document (notes, status updates, incident reviews,
+retrospectives) with the date, `2026-10-09-storage-migration-review`, taken from
+the environment rather than from memory. Qualify a living one by project,
+`billing-storage-migration`, and never use a bare `notes`, `plan` or `report`.
+If the id is taken, the document is still published, at that id plus a few
+random characters, and the CLI says so on stderr; over MCP, compare the result's
+`docId` with the id you asked for. So the address to hand back is always the
+`url` in the result, never one you built from the id you asked for. An id never
+changes once published: to put new content at the same address, `update` that
+document.
+
+**Hand it back, and open it where it will be seen.** Give the `url` with the
+folder it is in and who can read it there. On the person's own machine, with them
+present, open it too: `bikeshed open <link>`, or your harness's browser tool.
+In a cloud container, over SSH, in CI or on a schedule, never open it: nobody
+would see that browser. In a chat app, give it as a clickable link.
+
+**Then watch it.** Say you will check for comments until they tell you to stop,
+or until an hour passes with nothing new, and do, if your harness can run
+something in the background or on a schedule. If nothing will wake you up, say
+"When you've commented, tell me to check" instead. Each check reads the threads
+again (`bikeshed comments <id> --all --json`, or `get_comments` with
+`includeResolved`) and compares them with the last, by thread. Answer the open
+threads whose latest comment a person wrote, then publish once. Read the
+document's version immediately before publishing, so you never overwrite what a
+person saved in the app. The `bikeshed-feedback` skill has the whole loop.
 
 ## Raising something new
 
@@ -440,6 +465,13 @@ shared with; moving it **out** takes that access away. So if you are not certain
 the sharing is wanted, ask before you move it. Placing a document
 when you publish it (`--folder`, or `publish_document`'s `folder`) has the same
 effect and costs one call instead of two.
+
+Nothing you can call says who a folder is shared with, and nobody is emailed
+when a document lands in one: the person hears it from you or not at all. So
+file a new document at the root, or in a folder the person named for it, or ask
+first, naming the folder. Then say where it went. A folder you made inside a
+shared folder is shared too. And do not tidy: moving a document somebody else
+filed changes who can read it.
 
 A `…` in a path is a folder you cannot see: access flows downward, so a grant on
 a child says nothing about its parent. A folder listed without `canWrite` is one

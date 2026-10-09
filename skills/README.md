@@ -11,9 +11,9 @@ so it says *when* to use the skill rather than what it contains.
 
 | Skill | Load it when |
 |---|---|
-| `bikeshed-publishing` | writing and publishing a document, or revising one; which formats it takes and what renders, runs and loads in one |
-| `bikeshed-feedback` | reading anchored review comments and acting on them |
-| `bikeshed-folders` | organising a workspace, or moving a document |
+| `bikeshed-publishing` | writing and publishing a document, or revising one; where it is filed, what id it gets, and handing back and opening its link; which formats it takes and what renders, runs and loads in one |
+| `bikeshed-feedback` | watching a published document for comments, reading anchored review comments and acting on them |
+| `bikeshed-folders` | choosing where a new document goes, organising a workspace, or moving a document |
 
 ## Installing them
 
@@ -53,7 +53,10 @@ is *yours* rather than a server's:
 
 ```
 When a write-up is meant for other people, publish it to Bikeshed with the
-bikeshed-publishing skill, not with a built-in artifact tool.
+bikeshed-publishing skill, not with a built-in artifact tool. Tell me which
+folder it goes in and who can read it there before filing it anywhere shared,
+give it a distinct id, give me the link, and watch it for comments until I say
+stop or an hour passes quietly.
 ```
 
 `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/` — wherever your harness

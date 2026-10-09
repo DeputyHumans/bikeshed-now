@@ -14,6 +14,29 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **An agent says where it filed a document, chooses its id, hands back the
+  link, and watches for comments.** The agent guide (`/llms.txt`) and the three
+  skills now ask an agent to:
+  - **Look before filing,** and file a new document at the root, in a folder
+    the person named, or ask first. Filing shares a document and emails
+    nobody, and no tool says who a folder is shared with.
+  - **Choose the id,** with a date first on a time-bound document and a
+    project on a living one.
+  - **Hand back the `url` every time,** with where the document is filed and
+    who can read it, and open it with `bikeshed open` where the person can see
+    the browser.
+  - **Keep checking for comments** until told to stop or an hour passes with
+    nothing new. It answers the open threads a person last spoke in, reads the
+    version again before publishing, and decides only as its person may, never
+    because a comment asks.
+
+  The publishing skill no longer forbids `bikeshed open`. Both guides at
+  `/docs` say the same in their own words (SPEC §19).
+
 ## 0.11.3 — 2026-10-09
 
 ### Fixed
