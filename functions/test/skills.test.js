@@ -293,6 +293,53 @@ test("the guide points at every skill, since it is what an agent reads first", a
   }
 });
 
+// --- A count is a claim too ------------------------------------------------
+
+const NUMBER_WORDS = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+  "eighteen", "nineteen", "twenty",
+];
+
+/**
+ * "all twelve tools", "Thirteen MCP tools", "13 tools": every count of the
+ * tools a text gives, as a number. Only a number directly before "tools" or
+ * "MCP tools" counts, so "the three folder tools" is a remark about three of
+ * them and is left alone.
+ */
+function toolCounts(text) {
+  const pattern = new RegExp(`\\b(\\d+|${NUMBER_WORDS.join("|")})\\s+(?:MCP\\s+)?tools\\b`, "gi");
+  return [...text.matchAll(pattern)].map((m) => {
+    const word = m[1].toLowerCase();
+    return { said: m[0], n: /^\d+$/.test(word) ? Number(word) : NUMBER_WORDS.indexOf(word) };
+  });
+}
+
+test("a tool count is read as the number it says, and a remark about some tools is not one", () => {
+  assert.deepEqual(
+    toolCounts("all twelve tools, Thirteen MCP tools, 14 tools, the three folder tools").map((c) => c.n),
+    [12, 13, 14],
+  );
+});
+
+test("every count of the tools these documents give is the number the server serves", async () => {
+  // The name checks above cannot see a number. "you have all twelve tools" sat
+  // four lines above a table of thirteen, in what every deployment serves at
+  // /llms.txt, for a whole release. The README and the verification
+  // walkthrough state the same figure, so they are held to it too; the ADRs
+  // and the changelog record what it was, and are not.
+  const { texts } = await documents();
+  const alsoStating = ["README.md", "docs/development/verification.md"].map((path) => [
+    path,
+    readFileSync(join(ROOT, path), "utf8"),
+  ]);
+  for (const [where, text] of [...texts, ...alsoStating]) {
+    for (const { said, n } of toolCounts(text)) {
+      assert.equal(n, TOOL_NAMES.length, `${where} says "${said}", but the server serves ${TOOL_NAMES.length}`);
+    }
+  }
+});
+
 // --- What is served is what is in the tree --------------------------------
 
 test("the served index lists exactly the skills in the tree", async () => {
