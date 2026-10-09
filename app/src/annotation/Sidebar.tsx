@@ -156,6 +156,21 @@ function Thread({
   const mine = Boolean(uid && annotation.authorUid === uid);
   const where = { docId, versionId, annId: annotation.annId, ...(linkKey ? { k: linkKey } : {}) };
 
+  // Somebody else's live claim: the server refuses every change but theirs
+  // until it lapses, so nothing is offered meanwhile. Rendered again the
+  // moment it lapses, or the notice and the greyed-out buttons would stay.
+  const claim = pending && suggestion?.claim && suggestion.claim.uid !== uid ? suggestion.claim : null;
+  const until = claim?.until?.toMillis?.() ?? 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const left = until - Date.now();
+    if (left <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), left + 50);
+    return () => clearTimeout(t);
+  }, [until]);
+  const heldBy = claim && until > now ? claim.email : null;
+  const heldTitle = heldBy ? `${heldBy} is applying it right now.` : undefined;
+
   /** One suggestion action at a time, with its failure said rather than swallowed. */
   const act = async (run: () => Promise<unknown>) => {
     if (busy) return;
@@ -307,7 +322,8 @@ function Thread({
                 <button
                   type="button"
                   className="btn btn-sm btn-quiet"
-                  disabled={busy}
+                  disabled={busy || Boolean(heldBy)}
+                  title={heldTitle}
                   onClick={(e) => {
                     e.stopPropagation();
                     setRejecting(true);
@@ -321,7 +337,8 @@ function Thread({
                   <button
                     type="button"
                     className="btn btn-sm btn-quiet"
-                    disabled={busy}
+                    disabled={busy || Boolean(heldBy)}
+                    title={heldTitle}
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditing(true);
@@ -332,7 +349,8 @@ function Thread({
                   <button
                     type="button"
                     className="btn btn-sm btn-quiet"
-                    disabled={busy}
+                    disabled={busy || Boolean(heldBy)}
+                    title={heldTitle}
                     onClick={(e) => {
                       e.stopPropagation();
                       void act(() => withdrawSuggestion(where));

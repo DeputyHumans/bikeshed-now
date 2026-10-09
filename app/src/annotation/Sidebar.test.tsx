@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A reply posts once, and a suggestion offers only what its reader may do (SPEC §6, §22).
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Annotation } from "../types";
@@ -161,6 +161,46 @@ describe("a suggestion's thread", () => {
       fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
     });
     expect(withdrawSuggestion).toHaveBeenCalledWith({ docId: "d1", versionId: "v1", annId: "s1" });
+  });
+
+  it("offers nothing that would be refused while somebody else is applying it, and lets go when that lapses", () => {
+    // The server refuses each of these under another person's live claim; the
+    // buttons stayed enabled, and the notice stayed after the claim had lapsed.
+    vi.useFakeTimers();
+    try {
+      const held = (ms: number) =>
+        ({
+          ...SUGGESTION,
+          suggestion: {
+            ...SUGGESTION.suggestion,
+            claim: { uid: "u-appr", email: "appr@example.com", until: { toMillis: () => Date.now() + ms } },
+          },
+        }) as unknown as Annotation;
+      const until = Date.now() + 1000;
+      const claimed = {
+        ...SUGGESTION,
+        suggestion: { ...SUGGESTION.suggestion, claim: { uid: "u-appr", email: "appr@example.com", until: { toMillis: () => until } } },
+      } as unknown as Annotation;
+      mountWith(claimed, { uid: "u-sug" });
+      expect(screen.getByText(/appr@example\.com is applying it/)).toBeTruthy();
+      expect((screen.getByRole("button", { name: "Withdraw" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Edit" }) as HTMLButtonElement).disabled).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(1100);
+      });
+      expect(screen.queryByText(/is applying it/)).toBeNull();
+      expect((screen.getByRole("button", { name: "Withdraw" }) as HTMLButtonElement).disabled).toBe(false);
+      cleanup();
+
+      mountWith(held(60_000), { uid: "u-owner", isApprover: true });
+      expect((screen.getByRole("button", { name: "Reject…" }) as HTMLButtonElement).disabled).toBe(true);
+      cleanup();
+      // Its own claim leaves its holder free to decide.
+      mountWith(held(60_000), { uid: "u-appr", isApprover: true });
+      expect((screen.getByRole("button", { name: "Reject…" }) as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("lets its author change what they suggested, in place", async () => {

@@ -25,6 +25,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   rewrite an opener outside the revision history. The rules now refuse both,
   and a person's own replies are unaffected (SPEC §22).
 
+- **The comments panel offers nothing a live claim would refuse.** While
+  another approver was applying a suggestion, its author's Edit and Withdraw,
+  and other approvers' Reject, stayed enabled and failed when pressed. The
+  "is applying it…" notice also stayed after the claim had lapsed. They are now
+  disabled for exactly as long as the claim holds (SPEC §22).
+
 ## 0.10.0 — 2026-10-08
 
 ### Added
