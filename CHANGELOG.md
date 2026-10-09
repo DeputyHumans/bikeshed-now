@@ -16,6 +16,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **`get_comments` reads an earlier version's threads.** A thread stays on the
+  version it was opened on, so once a new version was published an agent lost
+  sight of it, decided suggestions included, though any reader could open
+  `/d/<id>/<version>` in the app. It now takes `version`, and
+  `bikeshed comments --version v3` passes it (in `bikeshed-now` 0.13.0).
+  Access is the document's; a version that does not exist is refused by name
+  (SPEC §19).
+
 ### Changed
 
 - **Withdrawing a suggestion closes it instead of deleting it.** Its author's

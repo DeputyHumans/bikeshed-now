@@ -200,3 +200,41 @@ test("get_comments shows what a suggestion said before it was changed, by channe
   assert.match(earlier.at, /^\d{4}-\d{2}-\d{2}T/, "an ISO time an agent can read");
   assert.doesNotMatch(JSON.stringify(threads), /t1|tokenId/, "which token did it is not an agent's business");
 });
+
+test("get_comments reads an earlier version's threads when asked, and only a version that exists", async () => {
+  const w = world();
+  const at = admin.firestore.Timestamp.fromMillis(Date.parse("2026-10-01T09:00:00Z"));
+  w.store.set("docs/d1", { ...w.store.get("docs/d1"), currentVersion: "v2" });
+  w.store.set("docs/d1/versions/v2", { versionId: "v2", entry: "index.html", format: "html" });
+  w.store.set("docs/d1/versions/v1/annotations/old", {
+    annId: "old",
+    anchor: { exact: "a single weekend" },
+    resolved: true,
+    suggestion: { replacement: "two weekends", state: "accepted" },
+  });
+  w.store.set("docs/d1/versions/v1/annotations/old/comments/c1", {
+    commentId: "c1", body: "Accepted.", authorEmail: OWNER.emailLower, generated: true, createdAt: at,
+  });
+  w.store.set("docs/d1/versions/v2/annotations/new", { annId: "new", anchor: { exact: "is enough" }, resolved: false });
+
+  const current = await tool("get_comments").run(w.ctx(OWNER), { id: "d1" });
+  assert.equal(current.version, "v2");
+  assert.deepEqual(current.threads.map((t) => t.threadId), ["new"], "the current version by default");
+
+  const earlier = await tool("get_comments").run(w.ctx(OWNER), { id: "d1", version: "v1", includeResolved: true });
+  assert.equal(earlier.version, "v1");
+  assert.deepEqual(earlier.threads.map((t) => t.threadId), ["old"]);
+  assert.deepEqual(earlier.threads[0].suggestion, { replacement: "two weekends", state: "accepted" });
+  assert.equal(earlier.threads[0].comments[0].body, "Accepted.");
+
+  for (const version of ["v9", "v1/annotations/old", ".."]) {
+    await assert.rejects(tool("get_comments").run(w.ctx(OWNER), { id: "d1", version }), {
+      message: `no version "${version}"`,
+    });
+  }
+  // Access is the document's, whichever version is asked for.
+  await assert.rejects(
+    tool("get_comments").run(w.ctx({ uid: "u-x", emailLower: "x@example.com" }), { id: "d1", version: "v1" }),
+    /no document with id "d1"/,
+  );
+});

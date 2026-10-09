@@ -1016,6 +1016,17 @@ test("comments prints a suggestion's change and whether it is decided", async ()
   });
 });
 
+test("comments asks for an earlier version only when told to", async () => {
+  await withServer(rpcOk({ id: "plan", version: "v2", threads: [] }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    await runAsync(["comments", "plan", "--json"], env);
+    await runAsync(["comments", "plan", "--version", "v2", "--all", "--json"], env);
+    assert.equal(seen[0].body.params.name, "get_comments");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", includeResolved: false });
+    assert.deepEqual(seen[1].body.params.arguments, { id: "plan", version: "v2", includeResolved: true });
+  });
+});
+
 test("comments prints what a suggestion said before each change, oldest first", async () => {
   const answer = {
     id: "plan",

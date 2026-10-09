@@ -53,6 +53,7 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed lineage <id>                what it was forked from; for its owner, its forks
   bikeshed get <id>                    print a document's source
   bikeshed comments <id>               unresolved feedback, with its anchored text
+                                       (--version <v> for an earlier version's)
   bikeshed comment <id> <text> --body <comment>
                                        start a thread on a passage
   bikeshed reply <id> <thread> <text>  reply in a thread
@@ -93,8 +94,9 @@ Options
   --title <text>         title for publish or fork (fork default: the original's)
   --id <id>              with publish: the address, /d/<id> (default: from the title)
   --folder <id>          destination folder for publish or fork
-  --version <v>          with fork: the version to copy (default: current);
-                         on its own, which version of bikeshed this is
+  --version <v>          with fork: the version to copy; with comments: the
+                         version to read (default: current); on its own,
+                         which version of bikeshed this is
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
@@ -506,6 +508,9 @@ async function comments(flags, [ref]) {
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "get_comments", {
     ...docArgs(ref),
+    // Threads belong to the version they were opened on; a version in a link
+    // is not taken as a request for one, only the flag is.
+    ...(typeof flags.version === "string" ? { version: flags.version } : {}),
     includeResolved: Boolean(flags.all),
   });
   out(flags.json, result, () => {

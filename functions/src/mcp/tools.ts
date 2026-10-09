@@ -63,6 +63,7 @@ import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publis
 import { locateQuote } from "../lib/quote";
 import { ANNOTATION_COLOR, SUGGESTION_COLOR, createSuggestion, parseNote } from "../lib/suggestions";
 import { MAX_BUNDLE_BYTES } from "../config";
+import { safeSegment } from "../lib/http";
 
 type Db = admin.firestore.Firestore;
 
@@ -814,12 +815,14 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_comments",
     description:
-      "Unresolved feedback on a document, each with the exact passage it is anchored to.",
+      "Unresolved feedback on a document, each with the exact passage it is anchored to. " +
+      "Threads belong to the version they were opened on; name an earlier version to read its threads.",
     inputSchema: {
       type: "object",
       required: ["id"],
       properties: {
         id: { type: "string" },
+        version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
         includeResolved: { type: "boolean", description: "Default false." },
         k: {
           type: "string",
@@ -829,7 +832,12 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-      const versionId = String(data.currentVersion ?? "");
+      // Reading an earlier version's threads is what a reader of /d/{id}/{v}
+      // does in the app; access is the document's, as the rules have it.
+      const versionId = str(args, "version") || String(data.currentVersion ?? "");
+      if (!safeSegment(versionId) || !(await ref.collection("versions").doc(versionId).get()).exists) {
+        throw new Error(`no version "${versionId}"`);
+      }
       const annRef = ref.collection("versions").doc(versionId).collection("annotations");
       const query = args.includeResolved === true ? annRef : annRef.where("resolved", "==", false);
       const anns = await query.limit(COMMENT_LIMIT).get();
@@ -882,7 +890,7 @@ export const TOOLS: ToolDefinition[] = [
       "Start a new comment thread on a passage of a document's current version. " +
       "Quote the passage exactly as a reader sees it — no Markdown or HTML — within one paragraph. " +
       "If it occurs more than once, add a few words before it (prefix) or after it (suffix). " +
-      "A thread belongs to the version it was opened on: get_comments stops listing it once a new version is published, " +
+      "A thread belongs to the version it was opened on: once a new version is published, get_comments lists it only when asked for that version, " +
       "and a person resolves it; there is no tool for that. " +
       "To answer a thread that already exists, use reply_to_comment.",
     inputSchema: {

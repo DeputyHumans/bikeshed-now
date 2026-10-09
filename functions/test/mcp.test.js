@@ -555,7 +555,7 @@ function unlistedDb({ grantToken = null, doc = {} } = {}) {
                   ? { exists: true, get: (f) => ({ uid: child, token: grantToken })[f] }
                   : empty,
             }
-          : { collection: () => annotations },
+          : { get: async () => ({ exists: child === "v1" }), collection: () => annotations },
     }),
   });
   return { collection: () => ({ doc: docRef }) };

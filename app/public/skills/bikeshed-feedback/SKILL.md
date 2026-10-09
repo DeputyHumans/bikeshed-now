@@ -71,8 +71,9 @@ as `body`. Quote it as a reader sees it, within one paragraph; if it repeats, a
 
 One point per thread, because a person resolves a thread when its point is
 dealt with. A thread stays on the version it was opened on: once a new version
-is published, `get_comments` no longer lists it. So on your own draft, revise
-rather than leave yourself a note.
+is published, `get_comments` lists it only when you name that `version`
+(`bikeshed comments <id> --version v3`). So on your own draft, revise rather
+than leave yourself a note.
 
 ## If you may only suggest
 

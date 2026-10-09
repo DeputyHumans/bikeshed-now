@@ -143,7 +143,7 @@ somebody might commit.
 | `list_folders` | Every folder you can see, each with its full path |
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root |
-| `get_comments` | Unresolved feedback, each with its anchored quote |
+| `get_comments` | Unresolved feedback, each with its anchored quote; `version` reads an earlier version's |
 | `add_comment` | Start a thread on one passage |
 | `reply_to_comment` | Reply in a thread |
 
@@ -158,7 +158,7 @@ bikeshed update <id> <file> [--watch]
 bikeshed fork <id> [--version …] [--folder …] [--title …]
 bikeshed lineage <id> [--json]
 bikeshed get <id>
-bikeshed comments <id> [--json]
+bikeshed comments <id> [--version …] [--all] [--json]
 bikeshed comment <id> <text> --body … [--prefix …] [--suffix …]
 bikeshed reply <id> <thread> <text>
 bikeshed suggest <id> <text> (--with … | --delete) [--note …] [--prefix …] [--suffix …]
@@ -278,7 +278,8 @@ a document can comment on it, so `canEdit` does not matter here.
 - **One point per thread.** A reader resolves a thread when its point is dealt
   with; two points in one thread leave one of them hanging.
 - **A thread stays on the version it was opened on.** Once a new version is
-  published, `get_comments` no longer lists it and nobody can reply to it. So
+  published, `get_comments` lists it only when you name that `version`
+  (`bikeshed comments <id> --version v3`), and nobody can reply to it. So
   do not open threads on your own draft that you mean to answer by revising
   it: revise it. A person saving a new version in the app has to resolve
   every open thread first, yours included.

@@ -1867,7 +1867,7 @@ scripts and anything that cannot open a browser.
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
-| `get_comments` | **unresolved feedback, each with its anchored quote** |
+| `get_comments` | **unresolved feedback, each with its anchored quote**; `version` names an earlier version, whose threads any reader of the document may read |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
 
