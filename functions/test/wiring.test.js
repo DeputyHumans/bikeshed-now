@@ -71,6 +71,18 @@ test("SPEC §8 accounts for every source file in functions/src", () => {
   }
 });
 
+test("a function that retries can be deployed by the workflow", () => {
+  // firebase deploy refuses a function with a failure policy when it cannot
+  // ask, unless given --force. 0.13.0's first deploy failed exactly so: CI
+  // was green, and the deploy stopped at its first step.
+  const built = require("../lib/index.js");
+  const retrying = Object.keys(built).filter((n) => built[n]?.__endpoint?.eventTrigger?.retry === true);
+  assert.ok(retrying.length > 0, "no function retries, so this test checks nothing");
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "deploy.yml"), "utf8");
+  const step = workflow.slice(workflow.indexOf("- name: Deploy functions"), workflow.indexOf("- name: Deploy rules"));
+  assert.match(step, /firebase deploy --only "\$only"[^\n]*--force/, `the by-name functions deploy needs --force for ${retrying.join(", ")}`);
+});
+
 test("the SPA catch-all is last, after every wildcard", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   const sources = firebase.hosting.rewrites.map((r) => r.source);

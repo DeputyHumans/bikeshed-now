@@ -370,7 +370,7 @@ One run, in order:
 |---|---|
 | Write `app/.env.local`, `functions/.env` and `config/deploy.json` from secrets, then build | The same files a hand deploy reads; `--project` stands in for `.firebaserc` |
 | `tools/deploy-preflight.mjs` | Refuses a bundle built for another project or the emulators, a missing origin, an unstamped `app/dist`, and functions told a different origin. All of this happens before any credential exists |
-| Functions, **by name** | First, as above. By name, so a function the release removed cannot abort a non-interactive deploy |
+| Functions, **by name**, with `--force` | First, as above. By name, so a function the release removed cannot abort a non-interactive deploy. `--force` because the change-log triggers retry on failure, and the CLI refuses a function with a failure policy without it; by name, it deletes nothing |
 | Firestore rules and indexes, Storage rules, RTDB rules if an instance exists | Before hosting, so no visitor loads an app newer than its rules |
 | Hosting | |
 | `--only functions --force` | Deletes the functions the release removed, once hosting has dropped their rewrites |

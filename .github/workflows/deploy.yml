@@ -115,10 +115,13 @@ jobs:
       # Functions first: the new app may call an endpoint the old functions do
       # not have, never the reverse. By NAME, so a function this release removed
       # cannot abort a non-interactive deploy; it is pruned after hosting below.
+      # --force because the change-log triggers retry on failure, and the CLI
+      # refuses a function with a failure policy non-interactively without it.
+      # By name, it has nothing to delete here.
       - name: Deploy functions
         run: |
           only=$(node --input-type=module -e 'import { functionNames } from "./scripts/lib/endpoints.mjs"; process.stdout.write(functionNames().map((n) => "functions:" + n).join(","))')
-          firebase deploy --only "$only" --project "$PROJECT" --non-interactive
+          firebase deploy --only "$only" --force --project "$PROJECT" --non-interactive
 
       # Before hosting, so no visitor ever loads an app newer than the rules it
       # is written against. RTDB rules only where an instance exists, as

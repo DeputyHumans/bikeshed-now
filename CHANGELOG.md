@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **0.13.0 can be deployed.** Its change-log triggers retry on failure, and the
+  Firebase CLI refuses to deploy such a function without `--force` when it
+  cannot ask. The deploy workflow's functions step now passes it. Deploying by
+  name, it has nothing to delete. A test holds the workflow to it whenever a
+  function retries.
+
 ## 0.13.0 — 2026-10-09
 
 A new tool, new fields on results and a new rule on resolving, so a minor
