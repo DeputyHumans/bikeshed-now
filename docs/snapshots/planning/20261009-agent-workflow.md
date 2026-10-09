@@ -25,6 +25,9 @@ document, and answer what people say on it.
   `update_document` takes no base version, so an agent publishing from a stale
   copy silently reverts what a person saved in the app. And an update strands
   every open thread on the old version.
+- **Every poll carries a cursor, from the first one.** `since` is required,
+  and publishing hands the agent its starting cursor, so nothing a person does
+  between publish and the first poll can fall outside the feed.
 - **"Open it in the browser" contradicts a rule** in
   `skills/bikeshed-publishing/SKILL.md:190`. The rule's reason survives; its
   prohibition goes.
@@ -209,7 +212,7 @@ whether an unsaved draft exists and who last edited it.
 ### 4.4 `get_changes`
 
 ```
-get_changes({ id, since?, k?, includeMine? })
+get_changes({ id, since, k?, includeMine? })      since is REQUIRED
 ```
 
 ```json
@@ -238,14 +241,6 @@ get_changes({ id, since?, k?, includeMine? })
 }
 ```
 
-- **`since` omitted means "since this connection last checked".** The server
-  keeps one cursor per credential per document, server-only, and advances it
-  when events are returned. That is what makes the call work from a chat app
-  that remembers nothing between conversations. The first call ever returns
-  `state` and a cursor, no events.
-- **`since: "<cursor>"`** is exact and moves nothing on the server. Use it when
-  two processes share one token, or they will consume each other's events.
-- **`since: "all"`** returns the log from the start, 100 at a time.
 - **Events this credential caused are omitted** unless `includeMine`. Keyed by
   `tokenId`, not email, so the owner commenting in the browser on a document
   their agent published is reported, as it must be.
@@ -259,36 +254,97 @@ get_changes({ id, since?, k?, includeMine? })
   reader events; `isDocEditor` adds editor events (the gate on the activity
   panel and the `acl` log); the owner adds `fork.created`.
 
-### 4.5 Cursor correctness
+### 4.5 No poll without a cursor
 
-`at` is the commit time of the event's own write, not of the change it
-describes, and the cursor is the `(at, eventId)` of the last event returned.
-Firestore reads see every commit up to the read, so an event recorded after a
-poll always sorts after that poll's cursor, however late its trigger ran.
-Using the change's own time instead would let a slow trigger drop an event
-behind the cursor. A test pins this ordering.
+A poll that starts from an unknown point is the one failure the feed cannot
+report: it returns nothing, and "nothing" reads as "nothing happened". So the
+server never chooses the starting point. Every poll names one.
+
+**`since` is required.** A call without it fails through `missingArguments`
+(`functions/src/mcp/server.ts`), with a message naming the three forms:
+
+| `since` | Means | Moves the saved cursor |
+|---|---|---|
+| a cursor from any earlier result | exactly the events after it | yes, to the one returned |
+| `"last"` | the last cursor this credential was given for this document, by any tool | yes |
+| `"all"` | the log from its start, 100 a page | yes |
+
+**A cursor exists from the first moment, not the first poll.** Every result
+that leaves the caller holding the document carries one: `publish_document`,
+`update_document`, `fork_document` and `get_document`, as well as
+`get_changes`. The agent's first poll therefore starts where its publish
+ended. Without this, a comment made between publishing and the first poll
+falls before a cursor taken at that poll, and is lost silently; that sequence
+is exactly a person reacting to a link the moment they get it.
+
+**How a write or a read gets its cursor.** The event a publish causes is
+recorded by a trigger, after the result has gone back, so the result cannot
+point past it. It points at the latest event already in the log, found with one
+query (`orderBy("at", "desc").limit(1)`) after the write commits. Anything
+recorded later sorts after it, the publish's own `version.published`
+included, which the first poll then drops as the caller's own. An empty log
+gives the log's start.
+
+**`"last"` exists for clients that forget.** A chat app keeps nothing between
+conversations, so the server keeps one cursor per credential per document
+(`users/{uid}/cursors/{tokenId}~{docId}`, server-only), overwritten each time
+a result gives that credential a cursor for that document. Two processes
+sharing one token share that cursor and will consume each other's events; they
+pass explicit cursors instead. `"last"` with nothing saved answers as `"all"`
+and says `resumedFrom: "start"`: it may say too much, never too little.
+
+**Rules for the value.**
+
+- **Every response carries `cursor`,** including a page with no events (the
+  same value back) and every page of a `more: true` run. The caller always
+  replaces what it holds with what it got.
+- **`more: true` means call again now** with the returned cursor. Pages are
+  cut on `(at, eventId)`, a total order, so 101 events arrive as 100 then 1,
+  with nothing repeated or skipped.
+- **Bound to its document.** The opaque value encodes
+  `{ v, docId, at, eventId }`. A cursor from another document, a malformed one
+  or an unknown `v` is refused, never read as "start over" or "now".
+- **Not a credential.** It grants nothing: every call re-checks the ACL, and a
+  forged cursor yields only events the caller could read anyway. So it is not
+  signed.
+- **Never expires.** The log is never pruned, so a cursor from last year still
+  resumes exactly.
+
+**Ordering.** `at` is the commit time of the event's own write, not of the
+change it describes, and a cursor is the `(at, eventId)` of the last event
+returned. Firestore reads see every commit up to the read, so an event
+recorded after a poll always sorts after that poll's cursor, however late its
+trigger ran. Using the change's own time instead would let a slow trigger drop
+an event behind the cursor.
 
 ### 4.6 Cost
 
 | | Reads per quiet poll | 60 polls (one hour, one a minute) |
 |---|---|---|
 | Re-reading `get_comments`, 50 open threads | 51 | about 3,060 |
-| `get_changes` | document, cursor, events query, two counts: about 5 | about 300 |
+| `get_changes` | document, saved cursor, events query, two counts: about 5 | about 300 |
 
-Writes: one event per change, plus one cursor write per poll that returned
-something. One trigger invocation per annotation, comment and version write.
+Writes: one event per change, and one saved-cursor write whenever a result
+hands a credential a cursor that differs from the saved one. A quiet poll
+returns the same cursor and writes nothing. Publishing, updating, forking and
+`get_document` each add one read, for the latest-event query. One trigger
+invocation per annotation, comment and version write.
 
 ### 4.7 CLI
 
 ```
-bikeshed changes <id> [--since <cursor>|all] [--wait] [--interval 60] [--timeout 1800] [--json]
+bikeshed changes <id> --since <cursor|last|all> [--wait] [--interval 60] [--timeout 1800] [--json]
 ```
 
-One line per event. `--wait` polls until an event from someone else arrives,
-prints it and exits 0, or exits with a distinct documented code on timeout.
-Interval floor 30 s. A harness that re-invokes the agent when a background
-command exits (Claude Code does) gets watching for one command, with no state
-file: the server holds the cursor.
+`--since` is required here too, and the error names the three forms. One line
+per event, then the next cursor (`next: --since …`); `--json` returns it as
+`cursor`. `publish --json`, `update --json`, `fork --json` and `get --json`
+include `cursor`. `--wait` polls from the given cursor until an event from
+someone else arrives, prints it with the next cursor and exits 0, or exits with
+a distinct documented code on timeout, also printing the cursor so the next
+wait resumes rather than restarts. Interval floor 30 s. A harness that
+re-invokes the agent when a background command exits (Claude Code does) gets
+watching for one command.
 
 ### 4.8 Guidance: the watch loop
 
@@ -299,11 +355,16 @@ Feedback skill, new "After you hand back the address"; publishing skill's
   next hour." Start watching if the harness can wait in the background or on
   a schedule. Stop on request, after three quiet waits, or when the document
   reads as absent.
+- **Hold the cursor.** Keep the one your publish (or `get_document`) returned;
+  pass it to every poll; replace it with the one each result returns. Never
+  poll without one. Lost it: `since: "last"`. Watching a document you did not
+  publish: `get_document` first and start from its cursor.
 - **Never claim to watch when you cannot.** In a chat app nothing re-invokes
-  you. Say: "When you've commented, tell me to check." Then `get_changes`
-  without `since` answers exactly "since last time".
+  you. Say: "When you've commented, tell me to check." Then
+  `get_changes` with `since: "last"` answers exactly "since last time", even in
+  a new conversation.
 - **Each cycle:**
-  1. `get_changes`. Nothing for you: wait again.
+  1. `get_changes` with your cursor. Nothing for you: wait again.
   2. `version.published` by someone else, or `draft.exists`: a person is
      editing. `get_document` and work from that, never from your copy.
   3. `version.withdrawn`: say so; do not republish what was withdrawn.
@@ -349,8 +410,8 @@ Four PRs, each releasable alone; guidance lands with the capability it names.
 |---|---|---|
 | 1. Guidance true today | §1 with what exists (announce the folder; for a folder you did not create, say you cannot see who reads it and ask), §2, §3, §4.8 using `get_comments`, §6 | Patch 0.9.1: `llms.txt` and `skills/index.json` deploy |
 | 2. Filing and safety | `get_folder`; `readers`, `shared`, `folder`, `access` fields; `requestedId`/`idTaken`; `baseVersion`; `threadsLeftBehind`; D3; `INSTRUCTIONS`; SPEC §19; guidance deltas | 0.10.0: tool schemas are breaking per `CHANGELOG.md` |
-| 3. Change feed | ADR 0015; `events`; two triggers plus `onCommentCreated`; event writes in five endpoints and the fork path; `get_changes`; per-credential cursors; indexes; rules; SPEC §4 and §19; guidance deltas | 0.11.0 |
-| 4. CLI | `changes [--wait]`, `folder <id>`, `open` takes links | `bikeshed-now` 0.11.0, on its own |
+| 3. Change feed | ADR 0015; `events`; two triggers plus `onCommentCreated`; event writes in five endpoints and the fork path; `get_changes` with a required `since`; `cursor` on publish, update, fork and `get_document` results; saved per-credential cursors; indexes; rules; SPEC §4 and §19; guidance deltas | 0.11.0 |
+| 4. CLI | `changes --since … [--wait]`, `cursor` in `publish`/`update`/`fork`/`get --json`, `folder <id>`, `open` takes links | `bikeshed-now` 0.11.0, on its own |
 
 PR 3 touches deployment: two new Firestore triggers. Eventarc permissions and
 trigger auth are invisible locally (CLAUDE.md), so it is verified against a
@@ -370,8 +431,21 @@ Reintroduce the bug, watch the test fail, restore.
   `comment.added`, `thread.resolved`, `version.withdrawn`, in order, without
   the agent's own reply. Control: key "mine" on email and watch the owner's
   comment vanish.
-- **Cursor.** An event recorded after a poll but describing an earlier change
-  appears on the next poll. Control: order by the change's time.
+- **Cursor from birth.** Publish; a person comments before the agent's first
+  poll; the first poll, from the publish result's cursor, returns the comment.
+  Control: take the starting cursor at the first poll and watch the comment
+  vanish.
+- **Cursor ordering.** An event recorded after a poll but describing an
+  earlier change appears on the next poll. Control: order by the change's
+  time.
+- **Cursor required and bound.** A call without `since` fails naming it; a
+  cursor from another document, a malformed one and an unknown `v` are each
+  refused. Control: fall back to "now" on a bad cursor and watch the refusal
+  test fail.
+- **Every response has a cursor,** including an empty page; 101 events arrive
+  as 100 then 1 with nothing repeated or skipped.
+- **`"last"`.** Two tokens keep separate saved cursors; with nothing saved it
+  answers from the start and says so; a quiet poll writes nothing.
 - **Idempotence.** Deliver one CloudEvent twice; one event.
 - **Audience.** A reader never sees `access.changed`, `doc.visibility` or
   `fork.created`. Control: drop the filter.
@@ -397,11 +471,3 @@ Then `npm run verify` and `npm run test:rules:emulated`, output shown.
 | Auto-dated ids on the server | Changes every caller's addresses; suits half of documents | Never |
 | Email to readers when an agent files into a folder | Turns filing into sharing by another name, and sharing is a person's act | A person asks for it, in the app, as a sharing feature |
 | `resource_link` blocks in results | Client rendering unverified; a plain `url` works everywhere | A target client renders them |
-
-## Open question
-
-**Should `get_changes` without `since` really default to the server-held
-cursor?** It is what makes "since last check" work from a stateless chat app,
-which is the point. The cost: two consumers on one token take each other's
-events. The plan documents that and offers explicit cursors; the alternative is
-an explicit `since: "last"` and a bare call that returns state only.
