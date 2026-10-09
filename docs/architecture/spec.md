@@ -112,7 +112,8 @@ document answers exactly as a private one.
 
 Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hosting
 rewrites require it). Export names are FIXED and are asserted to match
-`firebase.json` and `scripts/lib/endpoints.mjs` by `functions/test/wiring.test.js`.
+`firebase.json` and `scripts/lib/endpoints.mjs` by `functions/test/wiring.test.js`,
+which also holds this table to them.
 
 | Rewrite | Function |
 |---|---|
@@ -134,8 +135,16 @@ rewrites require it). Export names are FIXED and are asserted to match
 | `/unlock` | `unlockDoc` |
 | `/draft` | `saveDraft` |
 | `/commit` | `commitVersion` |
+| `/suggestion` | `manageSuggestion` |
 | `/thumb` | `saveThumbs` |
 | `/mcp` | `mcp` |
+| `/.well-known/oauth-protected-resource` | `oauth` |
+| `/.well-known/oauth-protected-resource/mcp` | `oauth` |
+| `/.well-known/oauth-authorization-server` | `oauth` |
+| `/.well-known/openid-configuration` | `oauth` |
+| `/oauth/register` | `oauth` |
+| `/oauth/token` | `oauth` |
+| `/oauth/consent` | `oauthConsent` |
 | `/sitemap.xml` | `sitemap` |
 | `/verify/**` | `verifyEmail` |
 | `/download/**` | `downloadBundle` |
@@ -948,10 +957,14 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens,head,html,shell}.ts
-  lib/markdown/{render,serialize,slug,theme.ts}
-  email/{send,cooldown,templates/*}
+  lib/{auth,acl,access,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
+  lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/markdown/{render,serialize,slug,theme}.ts
+  email/{send,notify}.ts
+  email/templates/*.tsx
   mcp/{server,tools}.ts
+  oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token}.ts
 ```
 
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session
@@ -1146,9 +1159,18 @@ Markdown converter collapses whitespace in every other text node.
 | `npm --prefix functions run build && npm --prefix functions test` | 0 failing |
 | `npm --prefix app test` | green; coverage ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
 | `npm run test:rules:emulated` | 0 failing |
-| 5 script `--dry-run` commands | exit 0, **none requires credentials** |
+| `npm --prefix cli test` | 0 failing |
+| `node scripts/<each>.mjs --dry-run …` | exit 0; credential-free for all but `delete-version`, whose preview must read to be useful |
 | `npm run check:secrets` | `check-secrets: clean` |
 | `npm run check:headers` | exit 0 |
+| `npm run check:content` | every sample still demonstrates what it is there for |
+| `npm run check:licenses` | exit 0, every dependency permissive |
+| `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, `llms.txt` the agent guide, and the served skills their sources |
+| `npm run test:tools` | 0 failing |
+
+`npm run verify` runs every row except two: `test:rules:emulated`, which needs
+the emulators and starts them, and the script dry-runs, which are run by hand
+(`CONTRIBUTING.md` has the same table).
 
 **The app MUST connect to the emulators** behind `VITE_USE_EMULATORS=1`
 (`connectAuthEmulator`, `connectFirestoreEmulator`, `connectDatabaseEmulator`).
@@ -1907,9 +1929,13 @@ so an agent knows what to change without fetching and diffing the document. That
 closes the loop this product exists for.
 
 Efficiency rules, because agent context is the scarce resource: `get_comments`
-returns quote, comment, author and thread id and nothing else; `list_documents`
-is metadata-only; `get_document` returns **source, never rendered HTML with its
-embedded stylesheet**; responses are capped and cursor-paginated. The source cap
+returns, per thread, its id, quote, section and whether it is resolved, a
+suggestion's replacement, state and earlier revisions, and each comment's author,
+channel and body, and nothing else; `list_documents` is metadata-only;
+`get_document` returns **source, never rendered HTML with its embedded
+stylesheet**; responses are capped. `list_documents` pages with a cursor and
+`list_folders` says `truncated`, but `get_comments` stops at 50 threads, in no
+set order, and nothing yet says it stopped. The source cap
 is 200,000 characters, and `truncated` says when it applied. The CLI does not
 inherit it: its output lands in a file, not a context, so `bikeshed get` reads a
 cut source whole through `/content`, behind the same read checks.
@@ -2003,8 +2029,10 @@ them reopen it. A retry that changes nothing writes nothing.
 
 One resolver authorizes every "put this inside that folder" in the system —
 `resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
-`createFolder`, both halves of `organize`, and the three MCP tools. It
-authorizes with `canEditFolder`, which is the question all six are asking.
+`createFolder`, both halves of `organize`, three MCP tools (`publish_document`,
+`create_folder`, `move_document`), and `lib/fork.ts`, which `forkDoc` and
+`fork_document` share. It authorizes with `canEditFolder`, which is the
+question all seven are asking.
 
 ### CLI — `bikeshed`
 

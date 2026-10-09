@@ -25,6 +25,52 @@ test("firebase.json rewrites match the endpoint table exactly", async () => {
   assert.deepEqual(actual, expected);
 });
 
+test("SPEC §2's table lists every rewrite and trigger, in order", async () => {
+  // The table said it was asserted to match, and nothing read it: it went
+  // without /suggestion and the OAuth rewrites for two releases.
+  const { rewrites, TRIGGERS } = await import("../../scripts/lib/endpoints.mjs");
+  const spec = readFileSync(join(ROOT, "docs", "architecture", "spec.md"), "utf8");
+  const section = spec.slice(spec.indexOf("\n## 2. "), spec.indexOf("\n## 3. "));
+  const rows = [...section.matchAll(/^\| (`[^`]+`|— \(Firestore trigger\)) \| `([A-Za-z]+)` \|$/gm)].map(
+    (m) => `${m[1].replace(/`/g, "")} -> ${m[2]}`,
+  );
+  const expected = [
+    ...rewrites().map((r) => `${r.source} -> ${r.function}`),
+    ...TRIGGERS.map((fn) => `— (Firestore trigger) -> ${fn}`),
+  ];
+  assert.deepEqual(rows, expected);
+});
+
+test("SPEC §8 accounts for every source file in functions/src", () => {
+  // A list of files is true on the day it is written. This one lost email's
+  // real names, all of oauth/ and ten lib/ files without anything noticing.
+  const { readdirSync } = require("node:fs");
+  const spec = readFileSync(join(ROOT, "docs", "architecture", "spec.md"), "utf8");
+  const section = spec.slice(spec.indexOf("\n## 8. "), spec.indexOf("\n## 9. "));
+  const block = section.match(/```\nfunctions\/src\/\n([\s\S]*?)```/);
+  assert.ok(block, "SPEC §8 has no functions/src/ tree");
+  const listed = [];
+  for (const line of block[1].split("\n")) {
+    const path = line.trim().split(/\s+/)[0];
+    if (!path) continue;
+    const brace = path.match(/^(.*)\{([^}]+)\}(.*)$/);
+    if (brace) for (const part of brace[2].split(",")) listed.push(`${brace[1]}${part}${brace[3]}`);
+    else listed.push(path);
+  }
+  const globs = listed.filter((p) => p.includes("*")).map((p) => new RegExp(`^${p.replace(".", "\\.").replace("*", "[^/]+")}$`));
+  const named = new Set(listed.filter((p) => !p.includes("*")));
+  const walk = (dir) =>
+    readdirSync(join(ROOT, "functions", "src", dir), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+    );
+  for (const file of walk("")) {
+    assert.ok(named.has(file) || globs.some((g) => g.test(file)), `SPEC §8 never lists functions/src/${file}`);
+  }
+  for (const file of named) {
+    assert.ok(existsSync(join(ROOT, "functions", "src", file)), `SPEC §8 lists functions/src/${file}, which does not exist`);
+  }
+});
+
 test("the SPA catch-all is last, after every wildcard", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   const sources = firebase.hosting.rewrites.map((r) => r.source);
