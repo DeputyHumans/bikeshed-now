@@ -264,6 +264,34 @@ test("the guide names every tool the server serves", () => {
   }
 });
 
+// Only the agent guide used to be held to naming everything, so the developer
+// guide's command reference, which says it is "every bikeshed command, in one
+// place", went without `revise` and `withdraw` for a release, and nothing
+// failed. SPEC §19's tool table is held the same way.
+const DEVELOPER_GUIDE = readFileSync(join(ROOT, "content", "docs-developers", "bundle", "index.html"), "utf8");
+
+test("the developer guide names every tool and every command", () => {
+  const tools = toolsIn(DEVELOPER_GUIDE);
+  for (const tool of TOOL_NAMES) {
+    assert.ok(tools.has(tool), `content/docs-developers never shows \`${tool}\``);
+  }
+  const commands = commandsIn(DEVELOPER_GUIDE);
+  for (const command of advertisedCommands()) {
+    assert.ok(commands.has(command), `content/docs-developers never shows \`bikeshed ${command}\``);
+  }
+});
+
+test("SPEC §19 names every tool the server serves", () => {
+  const spec = readFileSync(join(ROOT, "docs", "architecture", "spec.md"), "utf8");
+  const start = spec.indexOf("\n## 19.");
+  const end = spec.indexOf("\n## 20.", start);
+  assert.ok(start >= 0 && end > start, "SPEC §19 was not found");
+  const tools = toolsIn(spec.slice(start, end));
+  for (const tool of TOOL_NAMES) {
+    assert.ok(tools.has(tool), `SPEC §19 never shows \`${tool}\``);
+  }
+});
+
 // The consent page (`app/src/pages/Connect.tsx`) is the list a person approves
 // an app against, and SPEC §23 makes it §19's list. When 0.11.0 let an agent
 // accept, reject and resolve, the page went on saying it could not, and no test

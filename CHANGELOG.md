@@ -26,6 +26,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   tools the server serves, so the next tool fails until the page says it
   (SPEC §19, §23).
 
+- **The developer guide's command reference lists every command again.** It
+  says it is "every `bikeshed` command, in one place", and had no `bikeshed
+  revise` or `bikeshed withdraw` since 0.10.0. Only the agent guide was held to
+  naming everything; now the developer guide is too, SPEC §19 must show every
+  tool, and `--help` must list exactly the commands the CLI runs (SPEC §19).
+
 - **`bikeshed open` and `bikeshed mv` take the link you were sent** (in
   `bikeshed-now` 0.14.1). The usage has said every `<id>` takes the link since
   links carried an unlisted document's key, but these two used the argument as

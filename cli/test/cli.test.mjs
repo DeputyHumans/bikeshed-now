@@ -231,6 +231,20 @@ test("help is printed with no arguments and with --help, and exits 0", () => {
   }
 });
 
+test("--help advertises exactly the commands the CLI runs", () => {
+  // skills.test.js takes --help as the list of commands and holds every guide
+  // to it, so a command added to the table but not to the usage would be
+  // missing from every document with nothing failing. The reverse is a usage
+  // line for a command that answers "unknown command".
+  const source = readFileSync(join(SRC, "index.mjs"), "utf8");
+  const table = source.match(/^const COMMANDS = \{\n([\s\S]*?)^\};/m);
+  assert.ok(table, "the COMMANDS table was not found");
+  const runs = [...table[1].matchAll(/^ {2}([a-z][a-z-]*)\b/gm)].map((m) => m[1]).sort();
+  const advertised = [...new Set([...run(["--help"]).matchAll(/^ {2}bikeshed ([a-z][a-z-]*)/gm)].map((m) => m[1]))].sort();
+  assert.ok(runs.length > 10, "the COMMANDS table did not parse");
+  assert.deepEqual(advertised, runs);
+});
+
 test("--version and -v say which version is installed, and so does the client header", async () => {
   // Read from the package, never written down twice: a release that bumps
   // package.json and forgets a constant would announce the old number.
