@@ -258,6 +258,25 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     }
   });
 
+  it("says the change is in the draft when only recording it fails", async () => {
+    // "Failed to fetch" is all the approver was told, over a draft that has
+    // the change: accepting again finds it made and records it.
+    const order: string[] = [];
+    const outcome = await acceptInSession({
+      check: () => "pending",
+      claim: async () => void order.push("claim"),
+      apply: () => (order.push("apply"), "applied"),
+      flush: async () => void order.push("save"),
+      saveFailed: () => false,
+      record: async () => {
+        order.push("record");
+        throw new Error("Failed to fetch");
+      },
+    });
+    expect(outcome).toBe("unrecorded");
+    expect(order).toEqual(["claim", "apply", "save", "record"]);
+  });
+
   it("takes no claim on a suggestion that is already stale", async () => {
     // A claim keeps every other approver, and the author, off it for two
     // minutes. Taking one only to find nothing to apply held them off for nothing.

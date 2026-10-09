@@ -141,7 +141,12 @@ export function useSuggestionReview(o: {
   return { stale };
 }
 
-export type AcceptOutcome = ApplyResult | "unsaved";
+/**
+ * `unsaved`     made, but the draft did not save: not accepted yet.
+ * `unrecorded`  made and saved, but the decision did not reach the server;
+ *               accepting again finds it made and only records it.
+ */
+export type AcceptOutcome = ApplyResult | "unsaved" | "unrecorded";
 
 /**
  * Accept one suggestion, in the only order that survives every interruption:
@@ -171,7 +176,13 @@ export async function acceptInSession(steps: {
   if (applied === "stale" || applied === "failed" || applied === "unverified") return applied;
   await steps.flush();
   if (steps.saveFailed()) return "unsaved";
-  await steps.record();
+  try {
+    await steps.record();
+  } catch {
+    // The change is in the saved draft whatever the server said. Reporting
+    // only the error would read as "nothing happened".
+    return "unrecorded";
+  }
   return applied;
 }
 

@@ -688,6 +688,8 @@ export function DocViewer() {
           toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
         } else if (outcome === "unverified") {
           toast.error("The passage changed, but not as suggested, and it couldn’t be undone. Check it before you publish. Nothing was accepted.");
+        } else if (outcome === "unrecorded") {
+          toast.error("The change is in the draft, but accepting it wasn’t recorded. Accept it again to record it.");
         } else if (outcome === "unsaved") {
           toast.error("The change is made, but the draft didn’t save, so it isn’t accepted yet. Accept it again once it saves.");
         }

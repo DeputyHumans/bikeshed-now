@@ -68,7 +68,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   edit is checked by what the text must read afterwards, and an edit that
   comes out otherwise is undone before anything is said. A change already in
   the draft is recorded, not made again, and a stale suggestion no longer
-  takes a claim that keeps everyone else off it (SPEC §22).
+  takes a claim that keeps everyone else off it. When only recording the
+  decision fails, it says the change is in the draft and to accept again,
+  where it said only "Failed to fetch" (SPEC §22).
 
 - **The last words of a paragraph can be suggested on and accepted.** A quote
   that ended its paragraph was measured into the line break after it, so in
