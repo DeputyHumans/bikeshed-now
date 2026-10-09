@@ -1556,8 +1556,10 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
  * recorded as accepted are then the same text.
  *
  * The only path that writes the `suggestion` field; the rules refuse every
- * client write that names it. Deciding is a person's act — an agent proposes
- * and never decides — so claim, release, accept and reject refuse a token.
+ * client write that names it. Here, claim, release, accept and reject come
+ * from the app alone: an accept on this endpoint records what the approver's
+ * browser has already applied, which a token cannot have done. An agent
+ * decides through its own tools, which check the same role (ADR 0015).
  * Revise and withdraw change only the caller's own pending proposal and
  * destroy nothing (the earlier text is kept, and a withdrawn thread stays), so
  * a token may do either.
@@ -1666,7 +1668,9 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
   }
   const deciding = op === "claim" || op === "release" || op === "accept" || op === "reject";
   if (deciding && actor.channel !== "web") {
-    res.status(403).json({ error: "Accepting or rejecting a suggestion is done by a person, in the app." });
+    res.status(403).json({
+      error: "Through this endpoint a suggestion is decided in the app. An agent rejects one with reject_suggestion.",
+    });
     return;
   }
   if (deciding && !isDocApprover(data, caller.uid, caller.emailLower)) {

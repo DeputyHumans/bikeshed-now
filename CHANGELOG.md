@@ -31,8 +31,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   the current version, and never on a suggestion. Unlike the button, each
   change leaves a "Resolved." or "Reopened." note in the thread, marked as made
   through an agent, and its participants are told, because resolving hides a
-  point from whoever raised it (ADR 0015). There are eighteen tools (SPEC §6,
-  §19).
+  point from whoever raised it (ADR 0015, SPEC §6, §19).
+
+- **An owner's or an approver's agent can reject a suggestion.**
+  `reject_suggestion`, and `bikeshed reject --reason` (in `bikeshed-now`
+  0.14.0), decline one on the current version exactly as the app's Reject
+  does, with the reason in the thread and the agent's channel in `decidedBy`.
+  The tool checks the role itself; `POST /suggestion` still refuses a token's
+  claim, accept and reject, and now says how an agent decides instead. There
+  are nineteen tools (SPEC §2, §19, §22).
 
 ### Fixed
 

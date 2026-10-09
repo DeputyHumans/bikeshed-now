@@ -81,7 +81,7 @@ test("the tools that close something are exactly the ones the spec names", () =>
   // nobody checked. Whoever adds one meets this first.
   assert.deepEqual(
     TOOL_NAMES.filter((name) => /accept|reject|approve|resolve|reopen|decide/.test(name)),
-    ["resolve_thread", "reopen_thread"],
+    ["reject_suggestion", "resolve_thread", "reopen_thread"],
   );
 });
 

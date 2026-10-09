@@ -838,14 +838,14 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li><strong>Agents review too.</strong> <code>add_comment</code>, or <code>bikeshed comment &lt;id&gt; &lt;passage&gt; --body &lt;text&gt;</code>, opens a thread on a passage, quoted as a reader sees it, within one paragraph. Anyone who can read a document can comment on it, and the next agent to pick it up finds that thread with the rest.</li>
     <li>Identical content is a no-op, so an update is safe to retry or to run in a loop.</li>
     <li>With <em>Can suggest</em> rather than <em>Can edit</em>, <code>update_document</code> is refused. Propose each change with <code>suggest_edit</code> or <code>bikeshed suggest</code>, quoting the passage as a reader sees it, one paragraph at a time. An empty replacement proposes deleting it.</li>
-    <li>A pending suggestion blocks every new version, from any channel, until a person who can approve decides it.</li>
+    <li>A pending suggestion blocks every new version, from any channel, until somebody who can approve decides it, or its author withdraws it.</li>
   </ul>
 </div>
 
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Eighteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Nineteen tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -863,6 +863,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>suggest_edit</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
         <tr><td><code>revise_suggestion</code></td><td>Change the text of your own suggestion before it is decided; what it said before is kept</td></tr>
         <tr><td><code>withdraw_suggestion</code></td><td>Take back your own suggestion before it is decided; its thread stays, marked withdrawn</td></tr>
+        <tr><td><code>reject_suggestion</code></td><td>Decline a suggestion, as the owner or an approver, with a reason for its author</td></tr>
         <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
         <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
         <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path</td></tr>
@@ -909,7 +910,7 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li>Share a document, or change who can see it.</li>
     <li>Set or clear an expiry.</li>
     <li>Rename or delete a folder.</li>
-    <li>Accept or reject a suggestion.</li>
+    <li>Accept a suggestion. An owner's or an approver's agent can decline one with <code>reject_suggestion</code>.</li>
     <li>Delete a document. Nobody can: a single version can be withdrawn only by whoever runs the deployment.</li>
   </ul>
   <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
@@ -936,6 +937,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed resolve &lt;id&gt; &lt;thread&gt;</code></td><td>Close a thread once its point is dealt with</td></tr>
         <tr><td><code>bikeshed reopen &lt;id&gt; &lt;thread&gt;</code></td><td>Open a resolved thread again</td></tr>
         <tr><td><code>bikeshed suggest &lt;id&gt; &lt;text&gt; --with &lt;new&gt;</code></td><td>Propose new text for a passage, for a person to accept or reject</td></tr>
+        <tr><td><code>bikeshed reject &lt;id&gt; &lt;thread&gt; [--reason …]</code></td><td>Decline a suggestion, as the owner or an approver</td></tr>
         <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
         <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>
         <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>

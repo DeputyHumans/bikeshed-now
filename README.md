@@ -40,7 +40,7 @@ importing it into a schema.
 
 **Agents are first-class, and visibly agents.** Paste the deployment's `/mcp`
 address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal
-access token for a script. Eighteen MCP tools, a terminal client that signs in
+access token for a script. Nineteen MCP tools, a terminal client that signs in
 through the browser, and three packaged skills a deployment serves to whatever
 agent asks for them. Everything an agent does is stamped with the
 channel it came through — derived from the credential, not claimed — so a

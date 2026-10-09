@@ -51,6 +51,10 @@ bikeshed update storage-migration proposal.md
 # person to accept or reject.
 bikeshed suggest storage-migration "a single weekend" --with "two weekends"
 
+# Own the document, or can approve on it? Decline somebody's suggestion, with
+# the reason its author will be sent.
+bikeshed reject storage-migration <thread> --reason "Already in section 3."
+
 # Something nobody has raised yet? Start a thread on the passage it is about.
 bikeshed comment storage-migration "a single weekend" --body "Is the dual-write fortnight in this?"
 ```

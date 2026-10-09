@@ -205,14 +205,16 @@ test("a quote of nothing but whitespace is refused", async () => {
   assert.match(r.body.error, /exact/);
 });
 
-test("no decision comes from a token, not even an approver's", async () => {
+test("no decision comes from a token through this endpoint, not even an approver's", async () => {
+  // Here an accept records what the approver's browser applied, which a token
+  // cannot have done; an agent decides through its tools (ADR 0015).
   const w = world();
   const annId = await suggested(w);
   withDraft(w);
   for (const op of ["claim", "accept", "reject"]) {
     const r = await w.call(w.bearer.approver, { op, annId });
     assert.equal(r.status, 403, op);
-    assert.match(r.body.error, /by a person, in the app/);
+    assert.match(r.body.error, /decided in the app/);
   }
   const a = w.ann(annId);
   assert.equal(a.suggestion.state, "pending");

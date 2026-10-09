@@ -342,9 +342,11 @@ Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
 | `accept` | `annId` | an approver, in the app | `409` no draft of this version; idempotent once accepted |
 | `reject` | `annId, reason?` | an approver, in the app | idempotent once rejected |
 
-`claim`, `accept` and `reject` refuse a token with `403`. `revise` and
-`withdraw` take one: each changes only the caller's own pending proposal, and
-neither destroys anything.
+`claim`, `accept` and `reject` refuse a token with `403`: here an accept
+records what the approver's browser has already applied, which a token cannot
+have done. An agent decides through its tools instead, which check the same
+role (§19). `revise` and `withdraw` take one: each changes only the caller's
+own pending proposal, and neither destroys anything.
 `create` answers `{ annId, versionId }`; the others `{ state }`.
 
 ### Workspace endpoints
@@ -1854,7 +1856,7 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — eighteen tools
+### MCP — nineteen tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -1869,6 +1871,7 @@ scripts and anything that cannot open a browser.
 | `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
 | `revise_suggestion` | change the caller's own pending suggestion; what it said before is kept (§22) |
 | `withdraw_suggestion` | take back the caller's own pending suggestion; its thread stays, closed (§22) |
+| `reject_suggestion` | decline a pending suggestion, for the owner or an approver, with a reason (§22) |
 | `list_folders` | every folder the caller can see, each with its full path |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root |
@@ -1935,15 +1938,19 @@ refusal rather than a gap: deleting a folder (it reparents everything beneath
 it), renaming one, and sharing anything. `functions/test/mcp.test.js` asserts no
 tool name matches `delete|remove|share|grant|access`.
 
-**An agent proposes and never decides.** `suggest_edit` takes the passage as a
+**An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a
 reader sees it — no markup — and finds it in the current version's RENDERED
 entry without a DOM (`lib/quote.ts`): exactly, inside one block, with a prefix
 or suffix to choose between repeats. It refuses a passage that is not there,
 that repeats with nothing to tell the copies apart, or that spans a block or a
 line break, each with what to do instead. The anchor it stores is the one the
 browser's strict resolver will find; a fixture of golden cases is asserted by
-both (§22). Accepting and rejecting have no tool, and `claim`, `accept` and
-`reject` on `/suggestion` refuse a token; `functions/test/suggest-edit.test.js`
+both (§22). An agent whose person is the owner or an approver declines a
+suggestion with `reject_suggestion`: `changeSuggestion` exactly as the app's
+Reject, on the current version, with the reason in the generated note and the
+caller's actor in `decidedBy`. The role is checked in the tool, because a token
+never reaches the endpoint's check: `claim`, `accept` and `reject` on
+`/suggestion` refuse a token. Accepting has no tool. `functions/test/suggest-edit.test.js`
 pins the tools whose names close anything to exactly the ones this section
 lists, so a new one cannot arrive unexamined. What an
 agent proposed it may change (`revise_suggestion`) or take back
@@ -1996,7 +2003,8 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <sl
 `lineage <slug>`, `list`,
 `get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
 `resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text>
-| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `open <slug>`,
+| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `reject <slug> <thread>
+[--reason <text>]`, `open <slug>`,
 `folders`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
 Every command takes `--json`. `--version` on its own prints the CLI's version,
@@ -2067,8 +2075,8 @@ believes it.
 
 Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
 endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
-deletion, folder renaming or sharing through the agent surface · accepting or
-rejecting a suggested edit from an agent.
+deletion, folder renaming or sharing through the agent surface · accepting a
+suggested edit from an agent.
 
 ---
 
@@ -2250,7 +2258,7 @@ behind the shape, and what would reverse it, is ADR 0013.
 | approver | ✓ | ✓ | ✓ | ✓ |
 | owner | ✓ | ✓ | ✓ | ✓ |
 | open editor (§17) | ✓ | ✓ | ✓ | |
-| an agent | its person's | its person's | its person's | never |
+| an agent | its person's | its person's | its person's | its person's: reject only (§19) |
 
 Roles are granted and inherited as in §13. The author of a pending suggestion
 may change or withdraw it, in the app or through an agent acting for them;
@@ -2389,7 +2397,7 @@ button. An approver may Reject it, with a reason; its author may Withdraw it.
 A suggesting mode inside the editor · structural or formatting suggestions ·
 accepting on the server · merging a stale suggestion into changed text ·
 carrying a pending suggestion to the next version · bulk accept · a
-per-document "require review" switch · deciding from an agent.
+per-document "require review" switch · accepting from an agent.
 
 ---
 

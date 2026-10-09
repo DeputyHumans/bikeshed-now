@@ -68,6 +68,8 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
                                        decided; what it said before is kept
   bikeshed withdraw <id> <thread>      take back your suggestion before it is
                                        decided; its thread stays
+  bikeshed reject <id> <thread>        decline a suggestion, as its owner or an
+                                       approver (--reason <why>)
   bikeshed open <id>                   open it in a browser
 
   Where a command takes <id> it also takes the link you were sent. An unlisted
@@ -112,6 +114,7 @@ Options
   --with <text>          with suggest or revise: what the passage should say instead
   --delete               with suggest or revise: propose deleting the passage
   --note <text>          with suggest or revise: why, for whoever decides
+  --reason <text>        with reject: why, for the suggestion's author
   --prefix <text>        with suggest: words just before a passage that repeats
   --suffix <text>        with suggest: words just after it
   --watch                with publish/update: republish on every save
@@ -657,6 +660,23 @@ async function revise(flags, [ref, threadId, ...rest]) {
   out(flags.json, result, () => console.log(`changed ${threadId}; what it said before is kept`));
 }
 
+/**
+ * Decline a suggestion, as the document's owner or an approver. The passage
+ * stays as it is and the thread closes with a note giving the reason, which
+ * its author is sent (SPEC §22).
+ */
+async function reject(flags, [ref, threadId, ...rest]) {
+  if (!ref || !threadId || rest.length) fail("usage: bikeshed reject <id> <thread> [--reason <why>]");
+  const { origin, token } = resolveAuth(flags);
+  // Deciding takes a real role on the document, never a link, so only the id is sent.
+  const result = await callTool(origin, token, "reject_suggestion", {
+    id: docArgs(ref).id,
+    threadId,
+    ...(typeof flags.reason === "string" ? { reason: flags.reason } : {}),
+  });
+  out(flags.json, result, () => console.log(`rejected ${threadId}`));
+}
+
 /** Take back a suggestion of yours that nobody has decided yet; its thread stays. */
 async function withdraw(flags, [ref, threadId, ...rest]) {
   if (!ref || !threadId || rest.length) fail("usage: bikeshed withdraw <id> <thread>");
@@ -890,6 +910,7 @@ const COMMANDS = {
   suggest,
   revise,
   withdraw,
+  reject,
   open,
   folders,
   mkdir,
@@ -925,6 +946,7 @@ async function main() {
       paste: { type: "boolean", default: false },
       "no-browser": { type: "boolean", default: false },
       note: { type: "string" },
+      reason: { type: "string" },
       body: { type: "string" },
       prefix: { type: "string" },
       suffix: { type: "string" },

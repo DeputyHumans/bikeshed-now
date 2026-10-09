@@ -1142,3 +1142,29 @@ test("resolve and reopen want exactly a document and a thread", () => {
     );
   }
 });
+
+test("reject names the suggestion, sends a reason only when given, and never a link's key", async () => {
+  await withServer(rpcOk({ threadId: "s1", version: "v2", state: "rejected" }), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["reject", "plan", "s1"], env);
+    assert.equal(seen[0].body.params.name, "reject_suggestion");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", threadId: "s1" });
+    assert.match(stdout, /rejected s1/);
+
+    await runAsync(
+      ["reject", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "s1", "--reason", "Already in section 3.", "--json"],
+      env,
+    );
+    assert.deepEqual(seen[1].body.params.arguments, { id: "plan", threadId: "s1", reason: "Already in section 3." });
+  });
+});
+
+test("reject wants a document and a suggestion's thread", () => {
+  for (const args of [["reject", "plan"], ["reject", "plan", "s1", "extra"]]) {
+    assert.throws(
+      () => run(args, { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+      (e) => e.status !== 0 && /usage: bikeshed reject <id> <thread>/.test(e.stderr),
+      args.join(" "),
+    );
+  }
+});
