@@ -778,7 +778,8 @@ footer p { margin: 0 0 6px; }
 <pre><code>npm i -g bikeshed-now
 bikeshed login                       # opens the browser; --paste for a token over SSH
 bikeshed publish plan.md --id q3-plan
-bikeshed update q3-plan plan.md --watch   # republish on every save</code></pre>
+bikeshed update q3-plan plan.md --watch   # republish on every save
+bikeshed changes q3-plan --since last --wait   # until somebody comments</code></pre>
 
   <ul class="ticks">
     <li><code>bikeshed login</code> signs in to the CLI's default deployment unless you pass <code>--origin</code> or set <code>BIKESHED_ORIGIN</code>.</li>
@@ -842,7 +843,7 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li><strong>Choose the id, every time.</strong> Ids are one namespace for the whole deployment and never change. Start a time-bound document with the date, <code>2026-10-09-storage-migration-review</code>, qualify a living one by project, and pass it as <code>--id</code> or <code>publish_document</code>'s <code>id</code>.</li>
     <li><strong>Say where it is filed.</strong> Filing a document in a folder shares it with that folder's people and emails nobody. <code>get_folder</code> says who they are: file at the root or somewhere only the person can read, in a folder they named, or ask first, naming who will be able to read it. Then hand back the <code>url</code> with the folder and who can read it there, from the result's <code>access</code>.</li>
     <li><strong>Open the link where it will be seen.</strong> <code>bikeshed open &lt;link&gt;</code> on the person's own machine, and never in CI, a container or over SSH.</li>
-    <li><strong>Then watch.</strong> Keep the <code>cursor</code> the publish returned and call <code>get_changes</code> with it every minute or two, replacing it with the one each call returns; answer the threads in <code>needsReply</code>. From a shell, read the threads again (<code>bikeshed comments &lt;id&gt; --all --json</code>) and compare them by thread and comment id. Pass <code>update_document</code> the <code>baseVersion</code> you revised, so a save made in the app is never overwritten. The <code>bikeshed-feedback</code> skill has the whole loop.</li>
+    <li><strong>Then watch.</strong> Keep the <code>cursor</code> the publish returned and call <code>get_changes</code> with it every minute or two, replacing it with the one each call returns; answer the threads in <code>needsReply</code>. From a shell, <code>bikeshed changes &lt;id&gt; --since &lt;cursor&gt; --wait</code> does the same in one command. Pass <code>update_document</code> the <code>baseVersion</code> you revised, so a save made in the app is never overwritten. The <code>bikeshed-feedback</code> skill has the whole loop.</li>
   </ul>
 </div>
 
@@ -936,9 +937,10 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed logout</code></td><td>Sign out on this computer, revoking a token from browser sign-in</td></tr>
         <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
         <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
-        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt;</code></td><td>Publish a new version</td></tr>
+        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; with <code>--base</code>, refused if somebody published since the version you revised</td></tr>
         <tr><td><code>bikeshed get &lt;id&gt;</code></td><td>Print a document's source</td></tr>
         <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
+        <tr><td><code>bikeshed changes &lt;id&gt; --since &lt;cursor&gt; [--wait]</code></td><td>What happened since a cursor, ending with the cursor for next time; <code>--wait</code> keeps checking until something does, and exits 3 on <code>--timeout</code></td></tr>
         <tr><td><code>bikeshed comment &lt;id&gt; &lt;text&gt; --body &lt;comment&gt;</code></td><td>Start a thread on a passage</td></tr>
         <tr><td><code>bikeshed reply &lt;id&gt; &lt;thread&gt; &lt;text&gt;</code></td><td>Reply in a thread</td></tr>
         <tr><td><code>bikeshed resolve &lt;id&gt; &lt;thread&gt;</code></td><td>Close a thread once its point is dealt with</td></tr>
@@ -952,7 +954,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
         <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>
         <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
-        <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids</td></tr>
+        <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids and how many can read each</td></tr>
+        <tr><td><code>bikeshed folder &lt;id&gt;</code></td><td>Who can read a folder, and so anything filed in it</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
         <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
         <tr><td><code>bikeshed rename &lt;id&gt; &lt;title&gt;</code></td><td>Give a document a new title; its address stays</td></tr>

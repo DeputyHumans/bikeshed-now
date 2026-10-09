@@ -95,7 +95,7 @@ export async function callTool(origin, token, name, args = {}) {
  * with `update`, as a new version of that document, with `k` for an unlisted
  * one.
  */
-export async function uploadFile(origin, token, path, { title, folder, id, update, k } = {}) {
+export async function uploadFile(origin, token, path, { title, folder, id, update, k, base } = {}) {
   const bytes = readFileSync(path);
   const params = new URLSearchParams({ filename: basename(path) });
   if (title) params.set("title", title);
@@ -103,6 +103,7 @@ export async function uploadFile(origin, token, path, { title, folder, id, updat
   if (id) params.set("id", id);
   if (update) params.set("update", update);
   if (k) params.set("k", k);
+  if (base) params.set("baseVersion", base);
 
   const res = await fetch(`${origin}/publish?${params}`, {
     method: "POST",

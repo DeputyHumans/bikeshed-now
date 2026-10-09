@@ -151,10 +151,18 @@ call:
   - `state`: the document as it is now. If its `readers` count changed since
     the last check, its folder's sharing changed: tell the person.
 
-From a shell there is no command for this yet, so each check reads every thread
-again and compares. `bikeshed comments <id> --all --json` returns ids and times
-on every comment; something new to you is news. Start from an empty list at
-publish, so a comment made in the first seconds is still news.
+From a shell it is one command. `bikeshed publish --json` prints the `cursor`,
+and so do `fork --json` and `get --json` for a document you did not publish:
+
+```bash
+bikeshed changes storage-migration --since <cursor> --wait
+```
+
+`--wait` keeps checking until something happens, then prints it and exits 0. A
+harness that wakes you when a background command ends, as Claude Code does,
+watches with that one command. On timeout (`--timeout`, an hour by default) it
+exits 3 and still prints the cursor. Every run ends with `next: --since …`:
+pass that next time, and nothing else.
 
 Stop when the person says so, after an hour with nothing new from anyone else,
 or when the document reads as absent.
@@ -189,9 +197,8 @@ or when the document reads as absent.
      person published since, the update is refused and names the version that
      is current: read that, and start again from step 2. Nothing is
      overwritten.
-   - `bikeshed update` cannot pass one yet. From a shell, read the version
-     again immediately before the update, with nothing in between; a window of
-     seconds remains.
+   - From a shell, `bikeshed update <id> <file> --base <version>` does the
+     same, for a `.zip` too.
    - The result's `threadsLeftBehind` counts the open threads that stay on the
      version you replaced. Mention them; they cannot be answered any more.
 7. **Tell the person:**

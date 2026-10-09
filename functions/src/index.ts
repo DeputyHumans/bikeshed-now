@@ -1677,6 +1677,17 @@ async function updateFromUpload(
     res.status(409).json({ error: EXPIRED_WRITE });
     return;
   }
+  // The version the caller revised from, when it says, as update_document
+  // takes it: refused if another is current, rather than replacing that one.
+  const revisedFrom = strParam(req, "baseVersion");
+  const current = String(data.currentVersion ?? "");
+  if (revisedFrom && revisedFrom !== current) {
+    res.status(409).json({
+      error: `the document is at ${current} now, not ${revisedFrom}: somebody published since you read it. Read it again, then update that`,
+      currentVersion: current,
+    });
+    return;
+  }
 
   const actor = actorFrom(caller, req);
   const result = await reviseDocument({

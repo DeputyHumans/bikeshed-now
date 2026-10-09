@@ -168,11 +168,12 @@ bikeshed login [--paste] [--no-browser]
 bikeshed logout
 bikeshed list [--json]
 bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
-bikeshed update <id> <file> [--watch]
+bikeshed update <id> <file> [--base …] [--watch]
 bikeshed fork <id> [--version …] [--folder …] [--title …]
 bikeshed lineage <id> [--json]
 bikeshed get <id>
 bikeshed comments <id> [--version …] [--all] [--json]
+bikeshed changes <id> --since <cursor|last|all> [--wait] [--interval …] [--timeout …]
 bikeshed comment <id> <text> --body … [--prefix …] [--suffix …]
 bikeshed reply <id> <thread> <text>
 bikeshed resolve <id> <thread>
@@ -186,6 +187,7 @@ bikeshed commit <id>
 bikeshed open <id>
 
 bikeshed folders
+bikeshed folder <id>
 bikeshed mkdir <name> [--parent <id>]
 bikeshed mv <id> <folder|root>
 bikeshed rename <id> <title>
@@ -315,8 +317,9 @@ something in the background or on a schedule. If nothing will wake you up, say
 - **Answer the threads in `needsReply`,** then publish once, passing
   `update_document` the `baseVersion` you revised, so you never overwrite what
   a person saved in the app.
-- **From a shell,** `bikeshed comments <id> --all --json`, compared by thread
-  and comment id, does the same until the CLI has a command for it.
+- **From a shell,** `bikeshed changes <id> --since <cursor> --wait` keeps
+  checking until something happens, and prints the cursor for next time.
+  `bikeshed update <id> <file> --base <version>` refuses a stale base.
 
 The `bikeshed-feedback` skill has the whole loop.
 

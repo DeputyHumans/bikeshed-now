@@ -38,14 +38,16 @@ be using the same one: revoke it at `/account` once nothing needs it.
 bikeshed publish proposal.md --title "Storage migration"
 # published storage-migration v1 — https://bikeshed.now/d/storage-migration
 
-# Somebody highlights a sentence and says what is wrong with it.
+# Somebody highlights a sentence and says what is wrong with it. Wait for it:
+# the cursor comes from `publish --json`, and every `changes` prints the next one.
+bikeshed changes storage-migration --since <cursor> --wait
 bikeshed comments storage-migration
 
 # Fix that sentence, say what you changed in its thread, then publish the
 # revision. Reply first: a thread belongs to the version it was written on.
 bikeshed reply storage-migration <thread> "Rewritten to describe the dual-write period."
 bikeshed resolve storage-migration <thread>   # closes it, with a note saying you did
-bikeshed update storage-migration proposal.md
+bikeshed update storage-migration proposal.md --base v1   # refused if somebody published since
 
 # Given "Can suggest" rather than "Can edit"? Propose the change instead, for a
 # person to accept or reject.
@@ -76,6 +78,11 @@ The address comes from the title. To choose it, pass `--id`:
 bikeshed publish platform.md --id 01-platform
 # published 01-platform v1 — https://bikeshed.now/d/01-platform
 ```
+
+`publish` says where it filed the document and who can read it there.
+`bikeshed folders` counts who can read each folder, and `bikeshed folder <id>`
+names them: filing a document in a folder shares it with all of them, and
+nobody is emailed.
 
 Ids are shared by the whole deployment and never change, so choose one every
 time: put the date first on something time-bound

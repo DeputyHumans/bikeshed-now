@@ -774,7 +774,7 @@ test("an address the deployment supplied wins over one the client can build", as
  * Bytes are kept as a Buffer, not decoded: decoding is exactly how the bug this
  * covers corrupted an archive, and `withServer` decodes.
  */
-async function updateWithZip(ref) {
+async function updateWithZip(ref, extra = []) {
   const dir = mkdtempSync(join(tmpdir(), "bshd-update-zip-"));
   const file = join(dir, "deck.zip");
   // A local-file header, then bytes that are not valid UTF-8. Read as text,
@@ -794,7 +794,7 @@ async function updateWithZip(ref) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   try {
-    const { stdout } = await runAsync(["update", ref, file, "--json"], {
+    const { stdout } = await runAsync(["update", ref, file, "--json", ...extra], {
       BIKESHED_ORIGIN: origin,
       BIKESHED_TOKEN: "bsk_a.b",
     });
@@ -1221,5 +1221,130 @@ test("accept wants a thread, and commit only a document", () => {
       (e) => e.status !== 0 && usage.test(e.stderr),
       args.join(" "),
     );
+  }
+});
+
+// --- Watching a document: changes, folder, update --base (SPEC §19) --------
+
+/** A JSON-RPC server answering each call with the next result in turn. */
+const rpcSeq = (results) => {
+  let i = 0;
+  return (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    const result = results[Math.min(i++, results.length - 1)];
+    res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { structuredContent: result } }));
+  };
+};
+
+const CHANGE = {
+  type: "comment.added",
+  at: "2026-10-09T12:00:00.000Z",
+  by: "ana@example.com",
+  channel: "web",
+  threadId: "t1",
+  quote: "a single weekend",
+  body: "Is the fortnight in this?",
+};
+
+test("changes wants --since, and says what it may be", () => {
+  assert.throws(
+    () => run(["changes", "plan"], { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),
+    (e) => e.status === 1 && /--since is required: .*"last".*"all"/s.test(e.stderr),
+  );
+});
+
+test("changes prints what happened and the cursor to pass next, reading every page first", async () => {
+  const pages = [
+    { cursor: "c1", more: true, events: [CHANGE], needsReply: [], state: {} },
+    { cursor: "c2", more: false, events: [{ ...CHANGE, body: "And egress?" }], needsReply: ["t1"], state: {} },
+  ];
+  await withServer(rpcSeq(pages), async (origin, seen) => {
+    const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
+    const { stdout } = await runAsync(["changes", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "--since", "c0"], env);
+    assert.equal(seen[0].body.params.name, "get_changes");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "plan", k: "tok_0123456789abcdefghijk", since: "c0" });
+    assert.equal(seen[1].body.params.arguments.since, "c1", "the next page starts where the last ended");
+    assert.match(stdout, /comment\.added {2}ana@example\.com {2}\(t1\) “a single weekend”: Is the fortnight in this\?/);
+    assert.match(stdout, /And egress\?/);
+    assert.match(stdout, /waiting on a reply: t1/);
+    assert.match(stdout, /next: --since c2\n$/);
+  });
+  await withServer(rpcSeq(pages), async (origin) => {
+    const { stdout } = await runAsync(["changes", "plan", "--since", "c0", "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    const result = JSON.parse(stdout);
+    assert.equal(result.cursor, "c2");
+    assert.equal(result.events.length, 2);
+  });
+});
+
+test("changes --wait returns as soon as something has happened", async () => {
+  await withServer(rpcSeq([{ cursor: "c1", more: false, events: [CHANGE], needsReply: ["t1"], retryAfter: 60, state: {} }]), async (origin, seen) => {
+    const { stdout } = await runAsync(["changes", "plan", "--since", "last", "--wait"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.equal(seen.length, 1);
+    assert.match(stdout, /comment\.added/);
+  });
+});
+
+test("changes --wait gives up with exit 3, and prints the cursor to resume from", async () => {
+  await withServer(rpcSeq([{ cursor: "c9", more: false, events: [], needsReply: [], retryAfter: 60, state: {} }]), async (origin) => {
+    await assert.rejects(
+      runAsync(["changes", "plan", "--since", "c8", "--wait", "--timeout", "0"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }),
+      (e) => e.code === 3 && /nothing new before the timeout/.test(e.stdout) && /next: --since c9/.test(e.stdout),
+    );
+  });
+});
+
+test("folder says who can read a folder, by name, and teams only by theirs", async () => {
+  const result = {
+    id: "f1", name: "Reviews", path: "Engineering/Reviews", owner: "owner@example.com", readers: 7,
+    people: ["ana@example.com", "bo@example.com"], morePeople: 5, teams: ["Platform", "a team you are not in"],
+    editors: ["owner@example.com"], moreEditors: 0, canWrite: true,
+  };
+  await withServer(rpcOk(result), async (origin, seen) => {
+    const { stdout } = await runAsync(["folder", "f1"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.equal(seen[0].body.params.name, "get_folder");
+    assert.deepEqual(seen[0].body.params.arguments, { id: "f1" });
+    assert.match(stdout, /^Engineering\/Reviews {2}f1\n7 can read it:\n {2}ana@example\.com\n {2}bo@example\.com\n {2}and 5 more\nteams: Platform, a team you are not in/);
+  });
+});
+
+test("update --base sends the version it revised, by either path", async () => {
+  await withServer(rpcOk({ versionId: "v4", deduped: false, fileCount: 1, bytes: 3, threadsLeftBehind: 0 }), async (origin, seen) => {
+    const dir = mkdtempSync(join(tmpdir(), "bshd-base-"));
+    try {
+      writeFileSync(join(dir, "plan.md"), "# Plan");
+      await runAsync(["update", "plan", join(dir, "plan.md"), "--base", "v3", "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+      assert.equal(seen[0].body.params.arguments.baseVersion, "v3");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  const { seen } = await updateWithZip("deck", ["--base", "v2"]);
+  assert.equal(seen[0].url.searchParams.get("baseVersion"), "v2");
+});
+
+test("publish says where it filed the document and who can read it there", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "bshd-where-"));
+  try {
+    writeFileSync(join(dir, "plan.md"), "# Plan");
+    await withServer(
+      (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({
+          docId: "plan", versionId: "v1", fileCount: 1, bytes: 6,
+          filedIn: { id: "f1", path: "Engineering/Reviews" },
+          access: { readers: 7, people: [], morePeople: 0, teams: [], alsoReadableBy: "anyone with the link" },
+          cursor: "c0",
+        }));
+      },
+      async (origin) => {
+        const { stdout } = await runAsync(["publish", join(dir, "plan.md")], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+        assert.match(stdout, /filed in Engineering\/Reviews: 7 people can read it, and anyone with the link/);
+        const json = await runAsync(["publish", join(dir, "plan.md"), "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+        assert.equal(JSON.parse(json.stdout).cursor, "c0", "--json carries the cursor to watch from");
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

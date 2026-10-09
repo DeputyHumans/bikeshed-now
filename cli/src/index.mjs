@@ -54,6 +54,9 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed get <id>                    print a document's source
   bikeshed comments <id>               unresolved feedback, with its anchored text
                                        (--version <v> for an earlier version's)
+  bikeshed changes <id> --since <cursor|last|all>
+                                       what happened since a cursor; --wait to
+                                       keep checking until something does
   bikeshed comment <id> <text> --body <comment>
                                        start a thread on a passage
   bikeshed reply <id> <thread> <text>  reply in a thread
@@ -79,7 +82,8 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   document you are not a member of needs the link: its key is in it.
 
 Organising
-  bikeshed folders                     the folder tree, with ids
+  bikeshed folders                     the folder tree, with ids and readers
+  bikeshed folder <id>                 who can read a folder, and so what is in it
   bikeshed mkdir <name> [--parent <id>]  create a folder
   bikeshed mv <id> <folder|root>       move a document
   bikeshed rename <id> <title>         change a document's title; its address stays
@@ -113,6 +117,16 @@ Options
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
+  --since <cursor>       with changes: a cursor publish, fork, get --json or
+                         changes printed; "last" where this sign-in left off;
+                         or "all"
+  --wait                 with changes: keep checking until something happens
+  --interval <s>         with changes --wait: seconds between checks (default
+                         60, at least 30)
+  --timeout <s>          with changes --wait: give up after this long (default
+                         3600), exit 3, and print the cursor to resume from
+  --base <v>             with update: the version you revised; refused if
+                         somebody has published since
   --all                  with list: every page; with comments: resolved too
   --with <text>          with suggest or revise: what the passage should say instead
   --delete               with suggest or revise: propose deleting the passage
@@ -449,9 +463,11 @@ async function publish(flags, [path]) {
     }
     // The address is in the human line already; `--json` carried only the id, so
     // anything reading it had to know how to build a URL out of a docId.
-    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${result.docId}` }, () =>
-      console.log(`published ${result.docId} ${result.versionId} — ${origin}/d/${result.docId}`),
-    );
+    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${result.docId}` }, () => {
+      console.log(`published ${result.docId} ${result.versionId} — ${origin}/d/${result.docId}`);
+      const where = describeAccess(result);
+      if (where) console.log(where);
+    });
     return result;
   };
 
@@ -476,9 +492,16 @@ async function update(flags, [ref, path]) {
     const bytes = readFileSync(file);
     // An archive goes up as bytes, to the one endpoint that takes them. Read as
     // text, every byte above 0x7f in it would become U+FFFD on the way.
+    // --base: the version this was revised from, so an update over somebody's
+    // newer save is refused instead of replacing it (SPEC §19).
+    const base = typeof flags.base === "string" && flags.base ? flags.base : undefined;
     const result = isArchive(file, bytes)
-      ? await uploadFile(origin, token, file, { update: id, k: doc.k })
-      : await callTool(origin, token, "update_document", { ...doc, content: bytes.toString("utf8") });
+      ? await uploadFile(origin, token, file, { update: id, k: doc.k, base })
+      : await callTool(origin, token, "update_document", {
+          ...doc,
+          content: bytes.toString("utf8"),
+          ...(base ? { baseVersion: base } : {}),
+        });
     out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () =>
       console.log(
         result.deduped
@@ -726,11 +749,103 @@ async function folders(flags) {
       const depth = folder.path.split("/").length - 1;
       const label = `${"  ".repeat(depth)}${folder.name}`;
       const note = folder.canWrite ? "" : "  (read-only)";
-      console.log(`${label.padEnd(40)} ${folder.id}${note}`);
+      // Filing a document here shares it with everyone counted, and emails nobody.
+      const readers = typeof folder.readers === "number" ? `  ${folder.readers} can read` : "";
+      console.log(`${label.padEnd(40)} ${folder.id}${readers}${note}`);
     }
     if (result.truncated) {
       console.log("\nThere are more folders than this listing shows.");
     }
+  });
+}
+
+/**
+ * Where a published document is filed and who can read it there, from what the
+ * server read after the write, for a person to be told. Empty for a deployment
+ * too old to say.
+ */
+function describeAccess(result) {
+  const access = result.access;
+  if (!access) return "";
+  const where = result.filedIn ? `filed in ${result.filedIn.path}` : "at the root";
+  const who = access.readers === 1 ? "only you can read it" : `${access.readers} people can read it`;
+  const also = access.alsoReadableBy ? `, and ${access.alsoReadableBy}` : "";
+  return `${where}: ${who}${also}`;
+}
+
+/** Who can read one folder: and so who can read anything filed in it. */
+async function folder(flags, [id]) {
+  if (!id) fail("usage: bikeshed folder <id>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "get_folder", { id });
+  out(flags.json, result, () => {
+    console.log(`${result.path}  ${result.id}${result.canWrite ? "" : "  (read-only)"}`);
+    console.log(`${result.readers} can read it${result.readers === 1 ? " (only you)" : ""}:`);
+    for (const person of result.people) console.log(`  ${person}`);
+    if (result.morePeople > 0) console.log(`  and ${result.morePeople} more`);
+    if (result.teams.length) console.log(`teams: ${result.teams.join(", ")}`);
+    console.log(`can edit: ${[...result.editors, ...(result.moreEditors ? [`and ${result.moreEditors} more`] : [])].join(", ")}`);
+  });
+}
+
+/** Exit status when `changes --wait` gives up: distinct from 1, an error. */
+const WAIT_TIMED_OUT = 3;
+/** The shortest wait between checks: each one reads the log and the document. */
+const MIN_INTERVAL_S = 30;
+
+/**
+ * What happened on a document since a cursor (SPEC §19, ADR 0016).
+ *
+ * `--since` is required: a check that starts from nowhere in particular
+ * reports nothing, and nothing reads as nothing happened. Every page is read
+ * before anything is printed, and the cursor printed last is the one to pass
+ * next time: replace whatever you held with it.
+ *
+ * `--wait` keeps checking until something happens, then prints it and exits 0.
+ * A harness that wakes an agent when a background command ends (Claude Code
+ * does) gets watching from one command. On timeout it exits 3 and still prints
+ * the cursor, so the next wait resumes rather than restarts.
+ */
+async function changes(flags, [ref]) {
+  const usage = "usage: bikeshed changes <id> --since <cursor|last|all> [--wait] [--interval <s>] [--timeout <s>]";
+  if (!ref) fail(usage);
+  if (typeof flags.since !== "string" || !flags.since) {
+    fail(`${usage}\n--since is required: a cursor that publish, fork, get --json or changes printed; "last", where this sign-in left off; or "all"`);
+  }
+  const interval = Math.max(MIN_INTERVAL_S, flags.interval === undefined ? 60 : Number(flags.interval) || 0);
+  const timeout = flags.timeout === undefined ? 3600 : Number(flags.timeout);
+  if (!Number.isFinite(timeout) || timeout < 0) fail(usage);
+  const { origin, token } = resolveAuth(flags);
+  const doc = docArgs(ref);
+  const started = Date.now();
+  let since = flags.since;
+  const events = [];
+  for (;;) {
+    const result = await callTool(origin, token, "get_changes", { ...doc, since });
+    since = result.cursor;
+    events.push(...result.events);
+    if (result.more) continue;
+    const waitFor = Math.max(interval, Number(result.retryAfter) || 0);
+    if (!flags.wait || events.length > 0) return printChanges(flags, { ...result, events });
+    if ((Date.now() - started) / 1000 + waitFor > timeout) {
+      process.exitCode = WAIT_TIMED_OUT;
+      return printChanges(flags, { ...result, events, timedOut: true });
+    }
+    await new Promise((r) => setTimeout(r, waitFor * 1000));
+  }
+}
+
+function printChanges(flags, result) {
+  out(flags.json, result, () => {
+    if (result.timedOut) console.log("nothing new before the timeout");
+    for (const e of result.events) {
+      const quote = e.quote ? ` “${e.quote}”` : "";
+      const words = e.body ? `: ${e.body}` : e.replacement !== undefined ? ` → “${e.replacement}”` : "";
+      const via = e.channel && e.channel !== "web" ? ` [via ${e.channel}]` : "";
+      console.log(`${e.at}  ${e.type}  ${e.by ?? ""}${via}${e.threadId ? `  (${e.threadId})` : ""}${quote}${words}`);
+    }
+    if (result.needsReply?.length) console.log(`waiting on a reply: ${result.needsReply.join(", ")}`);
+    console.log(`next: --since ${result.cursor}`);
   });
 }
 
@@ -935,6 +1050,7 @@ const COMMANDS = {
   lineage,
   get,
   comments,
+  changes,
   comment,
   reply,
   resolve: resolveThread,
@@ -947,6 +1063,7 @@ const COMMANDS = {
   commit,
   open,
   folders,
+  folder,
   mkdir,
   mv,
   rename,
@@ -984,6 +1101,11 @@ async function main() {
       body: { type: "string" },
       prefix: { type: "string" },
       suffix: { type: "string" },
+      since: { type: "string" },
+      wait: { type: "boolean", default: false },
+      interval: { type: "string" },
+      timeout: { type: "string" },
+      base: { type: "string" },
     },
   });
 

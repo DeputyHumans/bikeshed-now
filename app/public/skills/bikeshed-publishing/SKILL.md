@@ -299,8 +299,9 @@ So, for every new document:
 4. **Do not tidy.** Moving a document someone else filed changes who can read
    it.
 
-`get_folder` has no command yet; from a shell, `bikeshed folders` shows the
-counts, and the question is the same.
+From a shell, `bikeshed folders` shows how many can read each folder, and
+`bikeshed folder <id>` names them. `bikeshed publish` prints where the document
+went and who can read it there.
 
 `--folder` on `publish`, or `publish_document`'s `folder`, files it in one call.
 The `bikeshed-folders` skill has the rest.

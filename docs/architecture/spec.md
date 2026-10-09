@@ -2059,8 +2059,10 @@ in seconds, because there is no rate limiter. It also carries:
   `isDocEditor` adds editor events: moves, visibility, trust and sharing, as the
   activity panel and the `acl` log are gated. The owner adds `fork.created`.
 
-`bikeshed comments --all --json`, diffed between polls, is the fallback from a
-shell until the CLI has a command for this.
+From a shell, `bikeshed changes <id> --since <cursor|last|all>` reads every page
+and prints the cursor to pass next. `--wait` keeps checking until something
+happens, at most every 30 seconds or `retryAfter`, and exits 3 with the cursor
+when `--timeout` runs out.
 
 `get_comments` is what earns the whole surface. Because every annotation stores
 `exact`/`prefix`/`suffix`, a comment comes back **with the passage it is about**,
@@ -2192,13 +2194,14 @@ Deliberately distinct from `scripts/*.mjs`:
 | Talks to | Firestore and Storage directly | the deployment over HTTPS |
 | Purpose | provision, withdraw, tear down | publish and revise documents |
 
-Commands: `login`, `logout`, `publish <file>`, `update <slug> <file>`, `fork <slug>`,
+Commands: `login`, `logout`, `publish <file>`, `update <slug> <file> [--base <v>]`, `fork <slug>`,
 `lineage <slug>`, `list`,
-`get <slug>`, `comments <slug>`, `comment <slug> <text> --body <text>`, `reply`,
+`get <slug>`, `comments <slug>`, `changes <slug> --since <cursor|last|all> [--wait]`,
+`comment <slug> <text> --body <text>`, `reply`,
 `resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text>
 | --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `accept <slug> <thread>`, `reject <slug> <thread>
 [--reason <text>]`, `commit <slug>`, `open <slug>`,
-`folders`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
+`folders`, `folder <id>`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
 Every command takes `--json`. `--version` on its own prints the CLI's version,
 read from its own `package.json`, which is also the version its
@@ -2210,6 +2213,21 @@ deletion.
 `update` sends one `.md` or `.html` through `update_document`, and a `.zip` —
 by name, or by the same magic-byte sniff the deployment uses — as raw bytes to
 `POST /publish?update=`. Read as text, an archive is corrupted on the way.
+`--base <v>` sends the version the file was revised from, as `baseVersion` by
+either path. Either refuses if another version is current, with a 409 that
+names it.
+
+`publish` prints where it filed the document and who can read it there, from
+the `filedIn` and `access` that `POST /publish` returns. With `--json`, it also
+prints the `cursor` to watch from, as `fork --json` and `get --json` do.
+`folders` counts each folder's readers, and `folder <id>` names them, from
+`get_folder`.
+
+`changes` reads every page of `get_changes` before printing, and ends with
+`next: --since <cursor>`. `--since` is required. `--wait` checks again every
+`--interval` seconds (at least 30, and at least the server's `retryAfter`) until
+something happens, then exits 0. When `--timeout` runs out it exits 3, and still
+prints the cursor to resume from.
 
 `publish --id <id>` asks for the docId. When the deployment answers with a
 different one, because the id was taken or because a deployment too old to know

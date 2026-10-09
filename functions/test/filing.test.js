@@ -381,6 +381,27 @@ test("an update from the current version publishes, and counts the threads it le
   assert.equal(again.versionId, "v4");
 });
 
+test("a zip update revised from an older version is refused too, and names the current one", async () => {
+  // `bikeshed update <id> deck.zip --base v1` goes through POST /publish, not
+  // update_document, and must refuse the same way.
+  const { createDoc } = require("../lib/index.js");
+  const { withFakeAdmin, invoke } = require("./fakes.js");
+  const w = editable();
+  const sessions = { s: { uid: OWNER.uid, email: OWNER.emailLower, email_verified: true } };
+  const res = await withFakeAdmin({ db: w.db, sessions }, () =>
+    invoke(createDoc, {
+      headers: { cookie: "__session=s", "content-type": "application/octet-stream" },
+      query: { filename: "index.html", update: "d1", baseVersion: "v1" },
+      rawBody: Buffer.from("<p>Mine.</p>"),
+      body: Buffer.from("<p>Mine.</p>"),
+    }),
+  );
+  assert.equal(res.status, 409);
+  assert.match(res.body.error, /the document is at v2 now, not v1/);
+  assert.equal(res.body.currentVersion, "v2");
+  assert.equal(w.store.get("docs/d1").currentVersion, "v2");
+});
+
 // --- get_comments: in order, and saying when it stopped ---------------------
 
 function discussed(threads, { current = "v1" } = {}) {

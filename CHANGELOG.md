@@ -14,6 +14,30 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Watch a document from a terminal, and see who can read a folder**
+  (`bikeshed-now` 0.15.0).
+  - `bikeshed changes <id> --since <cursor|last|all>` prints what happened
+    since a cursor, every page of it, and ends with the cursor to pass next.
+  - `--wait` keeps checking until something happens, at most every 30 seconds
+    or the server's `retryAfter`. It exits 3 with the cursor when `--timeout`
+    runs out, so a harness that wakes an agent when a background command ends
+    gets watching from one command.
+  - `publish --json`, `fork --json` and `get --json` carry the cursor to start
+    from.
+  - `bikeshed folder <id>` names who can read a folder, and `bikeshed folders`
+    counts them.
+  - `publish` says where it filed the document and who can read it there.
+  - `bikeshed update --base <v>` refuses to replace a version somebody published
+    since, for a `.zip` too (SPEC §19).
+
+- **`POST /publish?update=` takes `baseVersion`,** as `update_document` does.
+  If another version is current, it answers 409 and names that version (SPEC
+  §19).
+
 ## 0.14.0 — 2026-10-09
 
 A new read on two endpoints, so a minor release.
