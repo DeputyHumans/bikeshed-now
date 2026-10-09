@@ -190,10 +190,12 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   // `forkDoc` serves no bytes, but its lineage answer is per caller — who may
   // see which ancestor, and the owner's inventory — so it is held to the same
   // rule: a cached lineage would show one reader's view of a document to the next.
+  // `setAccess` and `setFolderAccess` answer GET with the grants a record
+  // inherits, which is one owner's view of who can read it (SPEC §13).
   // `mcp`, `oauth` and `oauthConsent` answer refusals — a 401, a 405 — before
   // any handler code runs its own header, and a refusal cached for ten minutes
   // is a sign-in that cannot be retried (SPEC §23).
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "mcp", "oauth", "oauthConsent"]) {
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "setAccess", "setFolderAccess", "mcp", "oauth", "oauthConsent"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);

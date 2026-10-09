@@ -318,6 +318,14 @@ mirror (§16) and the public projection (§17).
 
 `200 { viewers, suggesters, editors, approvers, members }`.
 
+`GET /access?docId=` answers the owner's share panel: which grants the
+document inherits, and from which folder (§13). Owner-only, refused as a read
+is. `200 { inherited: [{ folderId, path, principal, role }] }`: every grant on
+the document's folder and on each folder above it, nearest folder first and
+highest role first within each. `path` names only the levels the caller can
+open and writes `…` for the rest, as `filedIn` does. `Cache-Control: private,
+no-store` on every answer, the refusals included.
+
 ### `POST /draft`, `GET /draft/**`, `POST /commit`
 Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
 caller's link grant), Admin-SDK only, versions immutable — a commit always
@@ -384,7 +392,9 @@ own pending proposal, and neither destroys anything.
   `{ docId, versionId, contentHash, fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
-  owner-only; cascade-recomputes the whole subtree.
+  owner-only; cascade-recomputes the whole subtree. `GET
+  /folder-access?folderId=` answers as `GET /access` does, from the folder's
+  parent up: a folder's own grants are already its direct ones.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
   deletion is deliberately unsupported (`400`). Renaming a document takes
   `canEdit`; **moving it takes `isDocEditor`**, because filing a document into a
@@ -1282,6 +1292,16 @@ and the agent surface says who that is:
 This discloses nothing new. The rules let a folder's members read its whole
 record, `members` included, and a team is named only to its own members, as the
 share panel names it (`lib/audience.ts`).
+
+**The share panel says where access comes from.** A record holds only the
+flattened sets, so the panel asks `GET /access` or `GET /folder-access` (§2) and
+lists each inherited grant after the record's own, tagged with the folder it is
+made on. Those rows have no role select and no remove button: inherited access
+is changed on the folder, never under it. A person granted directly and through
+a folder gets both rows, because removing the direct grant leaves the other. The
+owner may be unable to open a folder above: its people are already in the
+record's own sets, so they are listed, but the folder is "a folder you cannot
+open", never its name.
 
 ---
 

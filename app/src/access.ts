@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client for the owner-only sharing endpoint (SPEC §2, §18).
 
-import { post } from "./api";
-import type { Role } from "./types";
+import { get, post } from "./api";
+import type { InheritedGrant, Role } from "./types";
 
 /**
  * Writes to docs/* are server-side only — firestore.rules denies client writes —
@@ -31,4 +31,10 @@ export function setAccess(docId: string, change: AccessChange): Promise<AccessSt
     { docId, ...change },
     { forbidden: "Only the document owner can change sharing." },
   );
+}
+
+/** What the document inherits from its folders, for its owner's share panel. */
+export async function inheritedAccess(docId: string): Promise<InheritedGrant[]> {
+  const { inherited } = await get<{ inherited: InheritedGrant[] }>("/access", { docId });
+  return inherited;
 }

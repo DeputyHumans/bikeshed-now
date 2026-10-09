@@ -2,7 +2,7 @@
 // The one place a client calls an endpoint (SPEC §2).
 
 /**
- * Eight modules post JSON to an endpoint and need the same four things: the
+ * Eight modules call an endpoint and need the same four things: the
  * same-origin credential, a parsed error message, a typed 409, and a sentence a
  * person can act on. Nine copies of that is how the wording drifts until one
  * screen says "Forbidden" and another says "You do not have access".
@@ -61,7 +61,23 @@ export async function post<T>(
     body: JSON.stringify(body),
     credentials: "same-origin",
   });
+  return reply<T>(res, opts);
+}
 
+/** GET an endpoint, with the query given, and return its JSON reply. */
+export async function get<T>(
+  path: string,
+  query: Record<string, string>,
+  opts: ApiOptions = {},
+): Promise<T> {
+  const res = await fetch(`${path}?${new URLSearchParams(query)}`, {
+    credentials: "same-origin",
+  });
+  return reply<T>(res, opts);
+}
+
+/** The JSON of a success, or the error a person can act on. */
+async function reply<T>(res: Response, opts: ApiOptions): Promise<T> {
   if (res.ok) return (await res.json()) as T;
 
   if (res.status === 401) {

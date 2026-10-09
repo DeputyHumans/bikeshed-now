@@ -8,9 +8,10 @@ const { join } = require("node:path");
 const admin = require("firebase-admin");
 const { Timestamp } = require("firebase-admin/firestore");
 
-const { fakeFirestore } = require("./fakes.js");
+const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
+const { setAccess, setFolderAccess } = require("../lib/index.js");
 const { TOOLS } = require("../lib/mcp/tools.js");
-const { UNNAMED_TEAM } = require("../lib/lib/audience.js");
+const { UNNAMED_TEAM, inheritedGrants } = require("../lib/lib/audience.js");
 
 const tool = (name) => TOOLS.find((t) => t.name === name);
 
@@ -164,6 +165,94 @@ test("list_folders counts the readers of each folder, and says whether it is sha
   const by = Object.fromEntries(folders.map((f) => [f.path, f]));
   assert.deepEqual([by["Drafts"].readers, by["Drafts"].shared], [1, false]);
   assert.deepEqual([by["Engineering/Reviews"].readers, by["Engineering/Reviews"].shared], [6, true]);
+});
+
+// --- Which folder each inherited grant comes from --------------------------
+
+test("inherited grants come nearest folder first, highest role first, each with its folder's path", async () => {
+  const w = world();
+  assert.deepEqual(await inheritedGrants(w.db, OWNER, "reviews"), [
+    { folderId: "reviews", path: "Engineering/Reviews", principal: "team:secret", role: "editor" },
+    { folderId: "reviews", path: "Engineering/Reviews", principal: CY.emailLower, role: "viewer" },
+    { folderId: "eng", path: "Engineering", principal: ANA.emailLower, role: "viewer" },
+    { folderId: "eng", path: "Engineering", principal: "team:platform", role: "viewer" },
+  ]);
+});
+
+test("a folder the caller cannot read gives its grants under …, never its name", async () => {
+  const w = world();
+  // cy reads Reviews through its own grant and is not in Engineering's members.
+  const rows = await inheritedGrants(w.db, CY, "reviews");
+  assert.deepEqual([...new Set(rows.map((r) => r.path))], ["…/Reviews", "…"]);
+  assert.doesNotMatch(JSON.stringify(rows), /Engineering/);
+});
+
+/** Ask an endpoint with GET as one of the world's people, signed in on the web. */
+function asking(w) {
+  const sessions = Object.fromEntries(
+    [OWNER, ANA, CY, STRANGER].map((p) => [`s-${p.uid}`, { uid: p.uid, email: p.emailLower, email_verified: true }]),
+  );
+  return (handler, who, query) =>
+    withFakeAdmin({ db: w.db, sessions }, () =>
+      invoke(handler, { method: "GET", headers: { cookie: `__session=s-${who.uid}` }, query }),
+    );
+}
+
+test("GET /access tells the owner what a document inherits, and no cache may keep the answer", async () => {
+  const w = world({
+    "docs/d1": {
+      docId: "d1",
+      title: "Memo",
+      ownerUid: OWNER.uid,
+      ownerEmail: OWNER.emailLower,
+      folderId: "reviews",
+      viewers: [],
+      members: [OWNER.emailLower, ANA.emailLower, CY.emailLower],
+      editorMembers: [OWNER.emailLower],
+    },
+  });
+  const ask = asking(w);
+  const ok = await ask(setAccess, OWNER, { docId: "d1" });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(
+    ok.body.inherited.map((r) => [r.path, r.principal, r.role]),
+    [
+      ["Engineering/Reviews", "team:secret", "editor"],
+      ["Engineering/Reviews", CY.emailLower, "viewer"],
+      ["Engineering", ANA.emailLower, "viewer"],
+      ["Engineering", "team:platform", "viewer"],
+    ],
+  );
+  assert.equal(ok.headers["cache-control"], "private, no-store");
+  // Owner-only, as changing it is: a reader is refused, a stranger is not told
+  // it exists, and neither refusal may be held by a CDN for the next caller.
+  const reader = await ask(setAccess, CY, { docId: "d1" });
+  assert.equal(reader.status, 403);
+  assert.equal(reader.headers["cache-control"], "private, no-store");
+  const stranger = await ask(setAccess, STRANGER, { docId: "d1" });
+  assert.equal(stranger.status, 404);
+  assert.equal(stranger.headers["cache-control"], "private, no-store");
+});
+
+test("GET /folder-access gives what a folder inherits from the folders above it, not its own grants", async () => {
+  const w = world();
+  const ask = asking(w);
+  const ok = await ask(setFolderAccess, OWNER, { folderId: "reviews" });
+  assert.equal(ok.status, 200);
+  assert.deepEqual([...new Set(ok.body.inherited.map((r) => r.folderId))], ["eng"]);
+  assert.equal(ok.headers["cache-control"], "private, no-store");
+  assert.deepEqual((await ask(setFolderAccess, OWNER, { folderId: "eng" })).body, { inherited: [] });
+  assert.equal((await ask(setFolderAccess, CY, { folderId: "reviews" })).status, 403);
+  assert.equal((await ask(setFolderAccess, STRANGER, { folderId: "reviews" })).status, 404);
+});
+
+test("a folder with no grants adds no rows, and an unfiled record has none", async () => {
+  const w = world({
+    "folders/eng": { name: "Engineering", ownerUid: OWNER.uid, ownerEmail: OWNER.emailLower, ancestors: [], members: [OWNER.emailLower] },
+  });
+  const rows = await inheritedGrants(w.db, OWNER, "reviews");
+  assert.deepEqual([...new Set(rows.map((r) => r.folderId))], ["reviews"]);
+  assert.deepEqual(await inheritedGrants(w.db, OWNER, null), []);
 });
 
 // --- What a write says about where it landed -------------------------------

@@ -10,7 +10,7 @@ import { ToastProvider } from "./Toast";
 import { endOfDayMs } from "../expiry";
 import { shareUrl, type VisibilityState } from "../visibility";
 import type { AccessChange, AccessState } from "../access";
-import type { Visibility } from "../types";
+import type { InheritedGrant, TeamMeta, Visibility } from "../types";
 
 /**
  * The dialog's job is what it SENDS; the transport is stubbed. `vi.hoisted`
@@ -41,8 +41,13 @@ const { setAccess, setFolderAccess, setVisibility } = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("../access", () => ({ setAccess }));
-vi.mock("../folders", () => ({ setFolderAccess }));
+const { inheritedAccess, inheritedFolderAccess } = vi.hoisted(() => ({
+  inheritedAccess: vi.fn(async (_id: string): Promise<InheritedGrant[]> => []),
+  inheritedFolderAccess: vi.fn(async (_id: string): Promise<InheritedGrant[]> => []),
+}));
+
+vi.mock("../access", () => ({ setAccess, inheritedAccess }));
+vi.mock("../folders", () => ({ setFolderAccess, inheritedFolderAccess }));
 vi.mock("../visibility", async () => {
   // `shareUrl` and `visibilityStateOf` stay real; only the network call is stubbed.
   const actual = await vi.importActual<typeof import("../visibility")>("../visibility");
@@ -278,5 +283,86 @@ describe("the people, as before", () => {
     expect(screen.queryByRole("radio")).toBeNull();
     // The count stays the whole truth even for somebody who cannot change it.
     expect(screen.getByText(/1 person, and anyone with the link/)).toBeTruthy();
+  });
+});
+
+describe("access that comes through a folder", () => {
+  // Timestamps are never read by the dialog.
+  const PLATFORM = {
+    teamId: "platform",
+    name: "Platform",
+    slug: "platform",
+    ownerEmail: "owner@example.com",
+    admins: [],
+    members: ["owner@example.com", "bo@example.com"],
+  } as unknown as TeamMeta;
+  const THROUGH: InheritedGrant[] = [
+    { folderId: "reviews", path: "Engineering/Reviews", principal: "cy@example.com", role: "viewer" },
+    { folderId: "eng", path: "Engineering", principal: "team:platform", role: "editor" },
+  ];
+
+  test("each inherited grant is listed after the direct ones, tagged with its folder, and cannot be changed here", async () => {
+    inheritedAccess.mockResolvedValueOnce(THROUGH);
+    renderShare({ visibility: PRIVATE, teams: [PLATFORM], target: { ...DOC, viewers: ["ana@example.com"] } });
+
+    const cy = (await screen.findByText("via Engineering/Reviews")).closest("li") as HTMLElement;
+    expect(cy.textContent).toContain("cy@example.com");
+    expect(cy.textContent).toContain("Can read");
+    const team = screen.getByText("via Engineering").closest("li") as HTMLElement;
+    expect(team.textContent).toContain("Platform");
+    expect(team.textContent).toContain("Can edit");
+    expect(inheritedAccess).toHaveBeenCalledWith("d1");
+
+    // Changed on the folder, so nothing here offers to change it.
+    expect(screen.queryByRole("combobox", { name: "Access for cy@example.com" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove cy@example.com" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove Platform" })).toBeNull();
+
+    // The direct grant is still the editable row, and it comes first.
+    const ana = screen.getByRole("combobox", { name: "Access for ana@example.com" });
+    expect(ana.compareDocumentPosition(cy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test("somebody granted directly and through a folder is listed twice, so removing one is not mistaken for both", async () => {
+    inheritedAccess.mockResolvedValueOnce([
+      { folderId: "eng", path: "Engineering", principal: "cy@example.com", role: "editor" },
+    ]);
+    renderShare({ visibility: PRIVATE, target: { ...DOC, viewers: ["cy@example.com"] } });
+    const inherited = (await screen.findByText("via Engineering")).closest("li") as HTMLElement;
+    expect(inherited.textContent).toContain("cy@example.com");
+    expect(screen.getByRole("combobox", { name: "Access for cy@example.com" })).toBeTruthy();
+    expect(screen.getAllByText("cy@example.com")).toHaveLength(2);
+  });
+
+  test("a grant on a folder the owner cannot open says so rather than naming it", async () => {
+    inheritedAccess.mockResolvedValueOnce([
+      { folderId: "top", path: "…", principal: "dee@example.com", role: "viewer" },
+    ]);
+    renderShare({ visibility: PRIVATE });
+    const row = (await screen.findByText("via a folder you cannot open")).closest("li") as HTMLElement;
+    expect(row.textContent).toContain("dee@example.com");
+  });
+
+  test("a failed read leaves the direct grants working, and says what is missing", async () => {
+    inheritedAccess.mockRejectedValueOnce(new Error("offline"));
+    renderShare({ visibility: PRIVATE, target: { ...DOC, viewers: ["ana@example.com"] } });
+    expect(await screen.findByText(/could not load who has access through its folders/i)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Access for ana@example.com" })).toBeTruthy();
+  });
+
+  test("a folder asks what the folders above it give, and a document does not", async () => {
+    inheritedFolderAccess.mockResolvedValueOnce([
+      { folderId: "eng", path: "Engineering", principal: "ana@example.com", role: "viewer" },
+    ]);
+    renderShare({ target: { ...DOC, kind: "folder", id: "f1" } });
+    expect(await screen.findByText("via Engineering")).toBeTruthy();
+    expect(inheritedFolderAccess).toHaveBeenCalledWith("f1");
+    expect(inheritedAccess).not.toHaveBeenCalled();
+  });
+
+  test("somebody who is not the owner sees no list, so nothing is asked", () => {
+    renderShare({ isOwner: false, visibility: PRIVATE });
+    expect(inheritedAccess).not.toHaveBeenCalled();
+    expect(inheritedFolderAccess).not.toHaveBeenCalled();
   });
 });

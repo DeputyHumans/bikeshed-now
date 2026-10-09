@@ -59,6 +59,7 @@ import {
   canRead,
   canEditFolder,
   canManageFolder,
+  canReadFolder,
   canSuggest,
   expiredForReader,
   expiryMs,
@@ -138,7 +139,7 @@ import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { renameDocument } from "./lib/rename";
-import { documentAudience, filedIn } from "./lib/audience";
+import { documentAudience, filedIn, inheritedGrants } from "./lib/audience";
 import {
   addEvent,
   annotationEvents,
@@ -786,12 +787,21 @@ function roleOf(email: string, membership: Membership): Role {
  * `add` accepts a plain email or a `team:{id}` grant. Both are stored as grants
  * and expanded server-side into the flat `members` array, so the Firestore list
  * rule and the workspace query are untouched by teams existing at all (SPEC §18).
+ *
+ * GET /access?docId= — the grants the document inherits from its folders, for
+ * the owner's share panel. The record holds only the flattened result, and
+ * the folders above it may be ones the owner cannot read (SPEC §13).
  */
 export const setAccess = onRequest(MAILING, async (req, res) => {
-  if (rejectMethod(req, res, ["POST"])) return;
+  noStore(res); // before any branch can return — see noStore()
+  if (rejectMethod(req, res, ["GET", "POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
+    return;
+  }
+  if (req.method === "GET") {
+    await sendDocInheritance(req, res, caller);
     return;
   }
 
@@ -877,6 +887,31 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
 
   res.status(200).json({ ...next, members: membership.members });
 });
+
+/** GET /access: owner-only, as changing it is, and refused as a read is. */
+async function sendDocInheritance(
+  req: Request,
+  res: import("express").Response,
+  caller: Principal,
+): Promise<void> {
+  const docId = strParam(req, "docId");
+  if (!docId || !safeSegment(docId)) {
+    badRequest(res, "invalid or missing docId");
+    return;
+  }
+  const snap = await db().collection("docs").doc(docId).get();
+  if (!snap.exists) {
+    res.status(404).end();
+    return;
+  }
+  const data = snap.data() as DocAclData & { folderId?: unknown };
+  if (!canManageSharing(data, caller.emailLower)) {
+    res.status(refusal(data, caller)).end();
+    return;
+  }
+  const folderId = typeof data.folderId === "string" ? data.folderId : null;
+  res.status(200).json({ inherited: await inheritedGrants(db(), caller, folderId) });
+}
 
 /**
  * POST /visibility — owner-only. `{ docId, visibility, publicEdit? }`.
@@ -1713,12 +1748,20 @@ export const createFolder = onRequest(PLAIN, async (req, res) => {
  * The cascade is the expensive part and it is deliberate: inheritance is
  * denormalized at write time so the read path stays one array-contains query
  * with a statically provable rule (SPEC §5, §13).
+ *
+ * GET /folder-access?folderId= — the grants the folder inherits from the
+ * folders above it, for the owner's share panel, as GET /access does.
  */
 export const setFolderAccess = onRequest(MAILING, async (req, res) => {
-  if (rejectMethod(req, res, ["POST"])) return;
+  noStore(res); // before any branch can return — see noStore()
+  if (rejectMethod(req, res, ["GET", "POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
+    return;
+  }
+  if (req.method === "GET") {
+    await sendFolderInheritance(req, res, caller);
     return;
   }
 
@@ -1778,6 +1821,29 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
 
   res.status(200).json(next);
 });
+
+/** GET /folder-access: a folder inherits from its parent up, never from itself. */
+async function sendFolderInheritance(
+  req: Request,
+  res: import("express").Response,
+  caller: Principal,
+): Promise<void> {
+  const folderId = strParam(req, "folderId");
+  if (!folderId || !safeSegment(folderId)) {
+    badRequest(res, "invalid or missing folderId");
+    return;
+  }
+  const snap = await db().collection("folders").doc(folderId).get();
+  const data = snap.exists ? (snap.data() as FolderAclData & { parentId?: unknown }) : null;
+  if (!data || !canManageFolder(data, caller.emailLower)) {
+    // A folder the caller cannot read is not there for them.
+    const reads = data !== null && canReadFolder(data, caller.uid, caller.emailLower);
+    res.status(reads ? 403 : 404).end();
+    return;
+  }
+  const parentId = typeof data.parentId === "string" ? data.parentId : null;
+  res.status(200).json({ inherited: await inheritedGrants(db(), caller, parentId) });
+}
 
 /**
  * POST /organize — move, rename or delete a document or folder.

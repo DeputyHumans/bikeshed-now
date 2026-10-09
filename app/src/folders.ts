@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client for the folder and organize endpoints (SPEC §2, §13).
 
-import { post } from "./api";
+import { get, post } from "./api";
 import type { AccessChange, AccessState } from "./access";
+import type { InheritedGrant } from "./types";
 
 /**
  * folders/* is server-side only, so the workspace calls these endpoints rather
@@ -26,6 +27,12 @@ export function setFolderAccess(
     { folderId, ...change },
     { forbidden: "Only the folder owner can change sharing." },
   );
+}
+
+/** What the folder inherits from the folders above it, for its owner's share panel. */
+export async function inheritedFolderAccess(folderId: string): Promise<InheritedGrant[]> {
+  const { inherited } = await get<{ inherited: InheritedGrant[] }>("/folder-access", { folderId });
+  return inherited;
 }
 
 export type OrganizeKind = "doc" | "folder";

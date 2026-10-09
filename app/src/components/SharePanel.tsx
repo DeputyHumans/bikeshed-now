@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Sharing: people and teams, and who else can see it (SPEC §2, §17, §18).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
 import { Spinner } from "./Spinner";
 import { useToast } from "./Toast";
 import { VisibilitySection } from "./VisibilitySection";
-import { setAccess } from "../access";
-import { setFolderAccess } from "../folders";
+import { inheritedAccess, setAccess } from "../access";
+import { inheritedFolderAccess, setFolderAccess } from "../folders";
 import { logEvent } from "../analytics";
 import type { VisibilityState } from "../visibility";
 import { GRANT_LIST, ROLES, ROLE_HINT, ROLE_LABEL, grantsOf, type RoleGrants } from "../roles";
-import type { Role, TeamMeta } from "../types";
+import type { InheritedGrant, Role, TeamMeta } from "../types";
 
 /**
  * Teams and people live in ONE list, and a team shows its expansion inline.
@@ -54,6 +54,51 @@ function RoleOptions() {
   );
 }
 
+/** What a grant's row calls it, for a direct grant and an inherited one alike. */
+function describePrincipal(principal: string, teams: TeamMeta[]) {
+  const isTeam = principal.startsWith("team:");
+  const team = isTeam ? teams.find((t) => t.teamId === principal.slice(5)) : undefined;
+  // What this row IS, said once. It is also what the accessible names use: a
+  // screen reader was being read "Remove team colon" and twenty characters of
+  // base-62, which is the same defect as showing the id, only worse.
+  const label = isTeam ? (team?.name ?? `team ${principal.slice(5)}`) : principal;
+  const size = !isTeam
+    ? null
+    : team
+      ? `${team.members.length} ${team.members.length === 1 ? "person" : "people"}`
+      : // A team is readable only by its own members, so an unresolved
+        // grant means one of two things and the interface cannot tell
+        // them apart. Saying which it might be beats asserting the
+        // wrong one.
+        "deleted, or a team you are not in";
+  return { isTeam, team, label, size };
+}
+
+/**
+ * A grant made on a folder above, so it is changed there and not here: no
+ * select and no remove. A person granted directly as well gets both rows,
+ * because removing the direct grant leaves this one, and the dialog must not
+ * let that look like removing them.
+ */
+function InheritedRow({ grant, teams }: { grant: InheritedGrant; teams: TeamMeta[] }) {
+  const { isTeam, label, size } = describePrincipal(grant.principal, teams);
+  // The server writes `…` for a level the owner cannot open, so a path whose
+  // last level is one is a folder this person may not know the name of.
+  const hidden = grant.path === "…" || grant.path.endsWith("/…");
+  const via = hidden ? "via a folder you cannot open" : `via ${grant.path}`;
+  return (
+    <li className="share-row">
+      <Icon name={isTeam ? "team" : "eye"} />
+      <span className="share-principal">
+        <span className="share-name">{label}</span>
+        {size ? <span className="share-sub">{size}</span> : null}
+        <span className="share-sub">{via}</span>
+      </span>
+      <span className="share-role share-sub">{ROLE_LABEL[grant.role]}</span>
+    </li>
+  );
+}
+
 function PrincipalRow({
   principal,
   role,
@@ -69,29 +114,14 @@ function PrincipalRow({
   onRemove: () => void;
   disabled?: boolean;
 }) {
-  const isTeam = principal.startsWith("team:");
-  const team = isTeam ? teams.find((t) => t.teamId === principal.slice(5)) : undefined;
-  // What this row IS, said once. It is also what the accessible names use: a
-  // screen reader was being read "Remove team colon" and twenty characters of
-  // base-62, which is the same defect as showing the id, only worse.
-  const label = isTeam ? (team?.name ?? `team ${principal.slice(5)}`) : principal;
+  const { isTeam, team, label, size } = describePrincipal(principal, teams);
 
   return (
     <li className="share-row">
       <Icon name={isTeam ? "team" : "eye"} />
       <span className="share-principal">
         <span className="share-name">{label}</span>
-        {isTeam ? (
-          <span className="share-sub">
-            {team
-              ? `${team.members.length} ${team.members.length === 1 ? "person" : "people"}`
-              : // A team is readable only by its own members, so an unresolved
-                // grant means one of two things and the interface cannot tell
-                // them apart. Saying which it might be beats asserting the
-                // wrong one.
-                "deleted, or a team you are not in"}
-          </span>
-        ) : null}
+        {size ? <span className="share-sub">{size}</span> : null}
       </span>
       <span className="share-role">
         <label className="visually-hidden" htmlFor={`role-${principal}`}>
@@ -171,6 +201,22 @@ export function SharePanel({
   const [input, setInput] = useState("");
   const [role, setRole] = useState<Role>("viewer");
   const [busy, setBusy] = useState(false);
+  // What the folders above give, which only the server can say: the owner may
+  // not be able to open them, and the record holds only the flattened result.
+  const [inherited, setInherited] = useState<InheritedGrant[]>([]);
+  const [inheritedFailed, setInheritedFailed] = useState(false);
+  useEffect(() => {
+    if (!isOwner) return;
+    let live = true;
+    const read = target.kind === "doc" ? inheritedAccess : inheritedFolderAccess;
+    void read(target.id).then(
+      (rows) => live && setInherited(rows),
+      () => live && setInheritedFailed(true),
+    );
+    return () => {
+      live = false;
+    };
+  }, [isOwner, target.kind, target.id]);
   // Followed here only for the footer: the section owns the editing of it.
   const [level, setLevel] = useState(visibility?.visibility ?? "private");
   const showsVisibility = visibility !== undefined && target.kind === "doc";
@@ -356,7 +402,17 @@ export function SharePanel({
                 onRemove={() => void apply({ remove: [principal] })}
               />
             ))}
+            {inherited.map((grant) => (
+              <InheritedRow
+                key={`${grant.folderId}:${grant.principal}`}
+                grant={grant}
+                teams={teams}
+              />
+            ))}
           </ul>
+          {inheritedFailed ? (
+            <p className="caption">Could not load who has access through its folders.</p>
+          ) : null}
 
           {showsVisibility ? (
             <VisibilitySection

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Where a document is filed and who can read it there, as an agent is told it (SPEC §13, §19).
+// Where a document is filed and who can read it there, for an agent and the share panel (SPEC §13, §19).
 
 import type * as admin from "firebase-admin";
 import type { Principal } from "./auth";
 import { canReadFolder, visibilityOf, type DocAclData, type FolderAclData } from "./acl";
-import { grantLists, grantsOf, normalizeEmail } from "./access";
+import { GRANT_LIST, ROLES, grantLists, grantsOf, normalizeEmail, type Role } from "./access";
 import { referencedTeamIds } from "./teams";
 
 type Db = admin.firestore.Firestore;
@@ -162,6 +162,45 @@ export async function folderAudience(db: Db, caller: Principal, folder: Snap): P
     [folder, ...above].flatMap((s) => grantLists(grantsOf(s.data()))),
   );
   return { ...people(strings(folder.data()?.members)), teams };
+}
+
+/** One grant a record inherits, and the folder it is made on. */
+export interface InheritedGrant {
+  folderId: string;
+  /** That folder's path, `…` for each level the caller may not read. */
+  path: string;
+  /** An email, or a `team:{id}` the share panel names by its own rule. */
+  principal: string;
+  role: Role;
+}
+
+/**
+ * The grants a record inherits from `folderId` and every folder above it,
+ * nearest folder first and highest role first within each: what the share
+ * panel lists under the record's own grants.
+ *
+ * Everyone named here is already in the record's effective sets, which the
+ * owner asking can read; what this adds is which folder each grant is on, and
+ * a folder the caller may not read is not named.
+ */
+export async function inheritedGrants(
+  db: Db,
+  caller: Principal,
+  folderId: string | null,
+): Promise<InheritedGrant[]> {
+  if (!folderId) return [];
+  const chain = await folderChain(db, folderId);
+  if (chain.length === 0) return [];
+  const paths = await filedIn(db, caller, chain.map((s) => s.id));
+  return chain.flatMap((s) => {
+    const grants = grantsOf(s.data());
+    const path = paths.get(s.id)?.path ?? "…";
+    return [...ROLES]
+      .reverse()
+      .flatMap((role) =>
+        grants[GRANT_LIST[role]].map((principal) => ({ folderId: s.id, path, principal, role })),
+      );
+  });
 }
 
 /** The first PEOPLE_SHOWN of a list, and how many more there are. */

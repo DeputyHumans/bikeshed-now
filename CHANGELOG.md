@@ -14,6 +14,29 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **The share dialog lists who has access through a folder.** A grant on a
+  folder has always reached everything inside it, subfolders included, but the
+  dialog listed only the record's own grants. The count in its footer included
+  people the list did not show.
+  - **What it shows:** each grant made on the folder, or a folder above it, is
+    listed after the record's own. The row is tagged with the folder it comes
+    from and has no role select or remove button, because it is changed on that
+    folder. A folder's dialog shows what the folders above it give.
+  - **A folder the owner cannot open** is "a folder you cannot open", never its
+    name. Its people are listed, because the record already names them.
+  - **`GET /access?docId=` and `GET /folder-access?folderId=`** answer it,
+    owner-only, with `Cache-Control: private, no-store`.
+
+### Tests
+
+- A grant on a folder is now tested reaching a document two folders down.
+  Before this, only one step of the inheritance arithmetic was tested, and
+  nothing ran the walk over the subtree.
+
 ## 0.13.1 — 2026-10-09
 
 ### Fixed

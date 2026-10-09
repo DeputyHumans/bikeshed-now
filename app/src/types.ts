@@ -244,6 +244,19 @@ export interface FolderMeta {
 }
 
 /**
+ * One grant a record inherits, from GET /access or /folder-access (SPEC §13).
+ * Read-only in the share panel: it is changed on the folder it is made on.
+ */
+export interface InheritedGrant {
+  folderId: string;
+  /** The folder's path, `…` for each level the owner cannot open. */
+  path: string;
+  /** An email, or `team:{id}`. */
+  principal: string;
+  role: Role;
+}
+
+/**
  * Firestore: teams/{teamId} — an access grant, never a principal (SPEC §18).
  *
  * A document always has a person as owner. A team is something you can grant to.
