@@ -10,7 +10,7 @@ import { createAnnotation, formatRelative, listAnnotations, listMyFolders, listM
 import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
 import { applySuggestion, resolveSuggestion, trimToText } from "../annotation/exact";
 import { Sidebar } from "../annotation/Sidebar";
-import { commitVersion, UnresolvedCommentsError, StaleVersionError } from "../edit";
+import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError } from "../edit";
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
 import { printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
@@ -551,22 +551,15 @@ export function DocViewer() {
   }, [pendingComment, signedIn, user, doc.resolvedFor, startComment]);
 
   const commit = useCallback(async () => {
-    if (editor.saveFailed()) {
-      // Publishing now would promote the PREVIOUS draft bytes while reporting
-      // success, which is the worst available outcome.
-      toast.error("The last save did not go through. Fix that before publishing.");
-      return;
-    }
     setCommitting(true);
-    // Asked again AFTER this save: a save failing here would otherwise publish
-    // the draft as it was before it, and report that as published.
-    if (!(await editor.flushNow())) {
-      setCommitting(false);
-      toast.error("The draft didn’t save, so nothing was published. Try again once it saves.");
-      return;
-    }
     try {
-      const result = await commitVersion(docId, doc.currentVersion);
+      // Saved first, every time, and published only if that save went
+      // through: never the previous draft's bytes reported as published.
+      const result = await publishSaved(editor.flushNow, () => commitVersion(docId, doc.currentVersion));
+      if (!result) {
+        toast.error("The draft didn’t save, so nothing was published. Try again.");
+        return;
+      }
       logEvent({ name: "version_commit", params: { format: doc.format } });
       // The shared document described the DRAFT, which the commit has just
       // consumed. Leaving it behind means the next person to open the editor

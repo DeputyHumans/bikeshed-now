@@ -11,6 +11,7 @@ vi.mock("./api", async () => {
 
 import { ConflictError } from "./api";
 import {
+  publishSaved,
   PendingSuggestionsError,
   StaleVersionError,
   UnresolvedCommentsError,
@@ -46,5 +47,23 @@ describe("commitVersion", () => {
   test("a newer version is still the stale refusal", async () => {
     post.mockRejectedValueOnce(new ConflictError("refused", { currentVersion: "v2" }));
     await expect(commitVersion("d1", "v1")).rejects.toBeInstanceOf(StaleVersionError);
+  });
+});
+
+describe("publishSaved: the draft is saved, then published, never the one before", () => {
+  const result = { versionId: "v2", contentHash: "h", fileCount: 1, bytes: 1, deduped: false };
+
+  test("publishes nothing when the save before it fails", async () => {
+    const commit = vi.fn(async () => result);
+    expect(await publishSaved(async () => false, commit)).toBeNull();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  test("publishes once the save goes through, whatever an earlier save did", async () => {
+    // Refusing on the LAST save's failure without trying again left no way
+    // out but typing something to make the editor save.
+    const commit = vi.fn(async () => result);
+    expect(await publishSaved(async () => true, commit)).toBe(result);
+    expect(commit).toHaveBeenCalledTimes(1);
   });
 });

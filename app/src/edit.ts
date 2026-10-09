@@ -109,3 +109,18 @@ export async function commitVersion(
     return rethrow(e);
   }
 }
+
+/**
+ * Save the draft, then publish it; or, when the save fails, publish nothing
+ * and return null. A commit publishes the DRAFT's bytes, so publishing past a
+ * failed save would promote the previous draft and report it as published.
+ * The save is tried every time, rather than refused because the last one
+ * failed: that refusal left no way out but typing something to make the
+ * editor save again.
+ */
+export async function publishSaved(
+  flush: () => Promise<boolean>,
+  commit: () => Promise<CommitResult>,
+): Promise<CommitResult | null> {
+  return (await flush()) ? commit() : null;
+}

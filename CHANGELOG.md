@@ -101,8 +101,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **Save as new version publishes nothing when the draft did not save.** It
   checked for a failed save before saving one last time, and not after. A
   save that failed at that moment published the draft as it was before, and
-  reported "Published". It now stops and says the draft did not save (SPEC
-  §6a).
+  reported "Published". Once a save had failed, pressing it again only said
+  to fix that, and the only fix was to type something. It now saves first
+  every time, and publishes only if that save went through (SPEC §6a).
 
 - **Somebody typing no longer resets the page under a reader.** Every autosave
   reloaded every reader's frame, about once a second while a co-editor typed,
