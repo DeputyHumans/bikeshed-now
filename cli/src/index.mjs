@@ -821,10 +821,13 @@ async function mv(flags, [id, dest]) {
    */
   if (!id || !dest) fail("usage: bikeshed mv <id> <folder|root>");
   const { origin, token } = resolveAuth(flags);
-  const args = dest === "root" ? { id } : { id, folder: dest };
+  // Moving is an editor's act, and a link's key only lets somebody read, so
+  // only the id goes along.
+  const doc = docArgs(id).id;
+  const args = dest === "root" ? { id: doc } : { id: doc, folder: dest };
   const result = await callTool(origin, token, "move_document", args);
   out(flags.json, result, () =>
-    console.log(result.folder ? `moved ${id} into ${result.folder}` : `moved ${id} to the root`),
+    console.log(result.folder ? `moved ${doc} into ${result.folder}` : `moved ${doc} to the root`),
   );
 }
 
@@ -886,10 +889,13 @@ async function skillsCommand(flags, [sub, dir]) {
   });
 }
 
-async function open(flags, [id]) {
-  if (!id) fail("usage: bikeshed open <id>");
+async function open(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed open <id>");
   const { origin } = resolveAuth(flags);
-  const url = `${origin}/d/${id}`;
+  // An unlisted document opens only with its key, and the link is the one place
+  // the key lives, so a link keeps it.
+  const { id, k } = docArgs(ref);
+  const url = `${origin}/d/${encodeURIComponent(id)}${k ? `?k=${encodeURIComponent(k)}` : ""}`;
   // Best effort, and the address is printed either way. This used to spawn
   // `start`, which is a cmd.exe builtin rather than a program, so on Windows
   // the spawn failed and, with nothing listening for the error, crashed.

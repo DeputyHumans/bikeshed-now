@@ -367,6 +367,18 @@ test("`root` is sent as an ABSENT folder, not as a folder named root", async () 
   });
 });
 
+test("mv takes the link it was sent, and moves by id alone", async () => {
+  await withServer(rpcOk({ id: "notes", folder: "fold123" }), async (origin, seen) => {
+    const { stdout } = await runAsync(["mv", "https://bikeshed.example/d/notes?k=tok_0123456789abcdefghijk", "fold123"], {
+      BIKESHED_ORIGIN: origin,
+      BIKESHED_TOKEN: "bsk_a.b",
+    });
+    // The whole link sent as an id would 404; the key grants reading, not moving.
+    assert.deepEqual(seen[0].body.params.arguments, { id: "notes", folder: "fold123" });
+    assert.match(stdout, /moved notes into fold123/);
+  });
+});
+
 test("a destination folder is sent as the folder argument", async () => {
   await withServer(rpcOk({ id: "some-doc", folder: "fold123" }), async (origin, seen) => {
     await runAsync(["mv", "some-doc", "fold123", "--json"], {

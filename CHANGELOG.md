@@ -14,6 +14,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **`bikeshed open` and `bikeshed mv` take the link you were sent** (in
+  `bikeshed-now` 0.14.1). The usage has said every `<id>` takes the link since
+  links carried an unlisted document's key, but these two used the argument as
+  it was: `open` opened `…/d/https://…`, and `mv` asked to move a document
+  named after the whole link. `open` now keeps the key, so an unlisted
+  document opens rather than refusing; `mv` moves by the id, since the key
+  lets somebody read, not move (SPEC §17, §19).
+
 ## 0.11.1 — 2026-10-08
 
 ### Fixed

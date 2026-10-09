@@ -1040,6 +1040,32 @@ test("`bikeshed open` prints the link and exits 0 when no opener exists", { skip
   }
 });
 
+test("`bikeshed open` keeps an unlisted link's key", { skip: process.platform === "win32" }, async () => {
+  // The link is the only place the key exists; opening the bare id of an
+  // unlisted document shows the person a page that refuses them.
+  const empty = mkdtempSync(join(tmpdir(), "bikeshed-path-"));
+  try {
+    const link = "https://bikeshed.example/d/plan/v2?k=tok_0123456789abcdefghijk";
+    const child = spawn(process.execPath, [join(SRC, "index.mjs"), "open", link], {
+      env: { PATH: empty, BIKESHED_ORIGIN: "http://127.0.0.1:9", XDG_CONFIG_HOME: empty },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += d;
+    });
+    child.stderr.on("data", (d) => {
+      stderr += d;
+    });
+    const code = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(code, 0, stderr);
+    assert.equal(stdout, "http://127.0.0.1:9/d/plan?k=tok_0123456789abcdefghijk\n");
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
 test("a browser is opened only where the person can see it", () => {
   assert.equal(login.canOpenBrowser({}, "darwin"), true);
   assert.equal(login.canOpenBrowser({}, "win32"), true);
