@@ -83,8 +83,9 @@ export function useInlineEditor(options: {
   const onStaleRef = useRef(onStale);
   onStaleRef.current = onStale;
 
-  const flush = useCallback(async () => {
-    if (!doc || mode.kind !== "editing") return;
+  /** Save the draft; true when it is saved. */
+  const flush = useCallback(async (): Promise<boolean> => {
+    if (!doc || mode.kind !== "editing") return false;
     setSaveState("saving");
     // Cleared before the save rather than after it: an edit typed while this
     // save is in flight is not in these bytes, and must still count as unsaved.
@@ -97,6 +98,7 @@ export function useInlineEditor(options: {
       lastSaveFailed.current = false;
       setSaveState("saved");
       setSaveError(null);
+      return true;
     } catch (e) {
       unsaved.current = true;
       lastSaveFailed.current = true;
@@ -107,6 +109,7 @@ export function useInlineEditor(options: {
       } else {
         setSaveError((e as Error).message);
       }
+      return false;
     }
   }, [doc, mode, docId, authoredAssets]);
 
@@ -158,7 +161,11 @@ export function useInlineEditor(options: {
   return {
     saveState,
     saveError,
-    /** Save now, changed or not: before a commit, which publishes the draft's bytes. */
+    /**
+     * Save now, changed or not: before a commit, which publishes the draft's
+     * bytes. Resolves false when the save failed, which a commit must heed:
+     * it would otherwise publish the PREVIOUS draft and call it done.
+     */
     flushNow: flush,
     /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
     flushUnsaved: useCallback(async () => {

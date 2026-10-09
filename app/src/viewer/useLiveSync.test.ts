@@ -22,6 +22,7 @@ function mount(initial: { meta: DocMeta; shownVersion: string }) {
         shownVersion,
         emailLower: "reader@example.com",
         isEditing: false,
+        showsDraft: false,
         onPeerSavedDraft: () => {},
       }),
     { initialProps: initial },
@@ -74,5 +75,54 @@ describe("useLiveSync: a newer version", () => {
     rerender({ meta: meta("v4"), shownVersion: "v3" });
 
     expect(result.current.newVersion).toBeNull();
+  });
+});
+
+describe("useLiveSync: a peer saves the draft", () => {
+  const saved = (at: number): DocMeta =>
+    ({ docId: "doc-a", currentVersion: "v3", draft: { updatedAt: { toMillis: () => at }, updatedByEmail: "peer@example.com" } }) as unknown as DocMeta;
+
+  function reader(showsDraft: boolean, hold = false) {
+    const reloads: number[] = [];
+    const view = renderHook(
+      ({ meta, hold }) =>
+        useLiveSync({
+          meta,
+          shownVersion: "v3",
+          emailLower: "reader@example.com",
+          isEditing: false,
+          showsDraft,
+          hold,
+          onPeerSavedDraft: () => reloads.push(1),
+        }),
+      { initialProps: { meta: saved(1), hold } },
+    );
+    return { view, reloads };
+  }
+
+  it("leaves a reader of the published version alone", () => {
+    // Their frame shows a version, which a draft save does not change. It was
+    // reloaded on every autosave, about once a second while somebody typed,
+    // and each reload threw away an open suggestion form or selection.
+    const { view, reloads } = reader(false);
+    view.rerender({ meta: saved(2), hold: false });
+    view.rerender({ meta: saved(3), hold: false });
+    expect(reloads).toEqual([]);
+  });
+
+  it("brings a reader of the draft up to date, but not with the save it just loaded", () => {
+    const { view, reloads } = reader(true);
+    expect(reloads).toEqual([]);
+    view.rerender({ meta: saved(2), hold: false });
+    expect(reloads).toEqual([1]);
+  });
+
+  it("waits while the reader is writing a suggestion or a comment, then catches up once", () => {
+    const { view, reloads } = reader(true, true);
+    view.rerender({ meta: saved(2), hold: true });
+    view.rerender({ meta: saved(3), hold: true });
+    expect(reloads).toEqual([]);
+    view.rerender({ meta: saved(3), hold: false });
+    expect(reloads).toEqual([1]);
   });
 });

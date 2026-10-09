@@ -341,6 +341,8 @@ export function DocViewer() {
     shownVersion: doc.currentVersion,
     emailLower,
     isEditing: mode.kind === "editing",
+    showsDraft: mode.kind === "reading" && mode.draft,
+    hold: suggesting !== null || commenting,
     onPeerSavedDraft: frame.reload,
   });
 
@@ -556,7 +558,13 @@ export function DocViewer() {
       return;
     }
     setCommitting(true);
-    await editor.flushNow();
+    // Asked again AFTER this save: a save failing here would otherwise publish
+    // the draft as it was before it, and report that as published.
+    if (!(await editor.flushNow())) {
+      setCommitting(false);
+      toast.error("The draft didn’t save, so nothing was published. Try again once it saves.");
+      return;
+    }
     try {
       const result = await commitVersion(docId, doc.currentVersion);
       logEvent({ name: "version_commit", params: { format: doc.format } });

@@ -15,7 +15,9 @@ import type { DocMeta } from "../types";
  * person finishes a sentence.
  *
  * Nothing here diffs or patches. It refreshes the src of a frame the viewer
- * already knows how to reload without losing the reader's place.
+ * already knows how to reload without losing the reader's place — and only a
+ * frame that shows the draft, and not while the reader is writing a
+ * suggestion: a reload throws the open form and the selection away.
  */
 export function useLiveSync(options: {
   meta: DocMeta | null;
@@ -24,11 +26,16 @@ export function useLiveSync(options: {
   emailLower: string;
   /** True when this reader is the one typing. */
   isEditing: boolean;
+  /** The frame shows the draft. A published version does not change when the draft is saved. */
+  showsDraft: boolean;
+  /** The reader is writing something a reload would throw away; catch up once they finish. */
+  hold?: boolean;
   onPeerSavedDraft: () => void;
 }) {
-  const { meta, shownVersion, emailLower, isEditing, onPeerSavedDraft } = options;
+  const { meta, shownVersion, emailLower, isEditing, showsDraft, hold = false, onPeerSavedDraft } = options;
 
   const lastDraftAt = useRef<number>(0);
+  const owedReload = useRef(false);
   const lastVersion = useRef<string | null>(null);
   const [conflict, setConflict] = useState<{ byEmail: string } | null>(null);
   const [newVersion, setNewVersion] = useState<string | null>(null);
@@ -41,14 +48,17 @@ export function useLiveSync(options: {
     const byPeer = draft != null && draft.updatedByEmail !== emailLower;
 
     if (draftAt > lastDraftAt.current) {
+      // The first save seen is the one the frame was just loaded with.
+      const first = lastDraftAt.current === 0;
       lastDraftAt.current = draftAt;
       if (byPeer) {
         if (isEditing) {
           // Last-writer-wins, never auto-clobbered: the choice is offered, and
           // silence keeps YOUR work rather than theirs.
           setConflict({ byEmail: draft.updatedByEmail });
-        } else {
-          onPeerSavedDraft();
+        } else if (showsDraft && !first) {
+          if (hold) owedReload.current = true;
+          else onPeerSavedDraft();
         }
       }
     }
@@ -58,7 +68,14 @@ export function useLiveSync(options: {
       setNewVersion(meta.currentVersion);
     }
     lastVersion.current = meta.currentVersion;
-  }, [meta, emailLower, isEditing, onPeerSavedDraft]);
+  }, [meta, emailLower, isEditing, showsDraft, hold, onPeerSavedDraft]);
+
+  // The reload a reader was spared while writing, made once they are done.
+  useEffect(() => {
+    if (hold || !owedReload.current) return;
+    owedReload.current = false;
+    if (showsDraft && !isEditing) onPeerSavedDraft();
+  }, [hold, showsDraft, isEditing, onPeerSavedDraft]);
 
   return {
     conflict,

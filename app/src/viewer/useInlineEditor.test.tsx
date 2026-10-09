@@ -84,7 +84,7 @@ describe("saving on the way out of the editor", () => {
     let release: () => void = () => {};
     saveDraft.mockImplementationOnce(() => new Promise((r) => (release = () => r({}))));
     act(type);
-    let first: Promise<void> = Promise.resolve();
+    let first: Promise<unknown> = Promise.resolve();
     act(() => {
       first = view.result.current.flushNow();
     });
@@ -93,6 +93,22 @@ describe("saving on the way out of the editor", () => {
     await act(() => first);
     await act(() => view.result.current.flushUnsaved());
     expect(saveDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("says whether the save a commit waits on went through", async () => {
+    // The commit asked saveFailed() BEFORE this save and never after it, so a
+    // save failing here published the previous draft and toasted "Published".
+    const { view } = setup();
+    saveDraft.mockRejectedValueOnce(new Error("offline"));
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await view.result.current.flushNow();
+    });
+    expect(saved).toBe(false);
+    await act(async () => {
+      saved = await view.result.current.flushNow();
+    });
+    expect(saved).toBe(true);
   });
 
   it("a commit saves first whether or not anything changed, because it publishes the draft", async () => {

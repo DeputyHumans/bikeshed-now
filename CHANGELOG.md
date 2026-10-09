@@ -98,6 +98,19 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   while open comments still kept Save greyed out. And an approver hovering
   over that greyed-out Save was told to find an approver (SPEC §22).
 
+- **Save as new version publishes nothing when the draft did not save.** It
+  checked for a failed save before saving one last time, and not after. A
+  save that failed at that moment published the draft as it was before, and
+  reported "Published". It now stops and says the draft did not save (SPEC
+  §6a).
+
+- **Somebody typing no longer resets the page under a reader.** Every autosave
+  reloaded every reader's frame, about once a second while a co-editor typed,
+  even a frame showing the published version, which a draft save does not
+  change. Each reload dropped the reader's selection and any suggestion form
+  they had open. Now only a frame showing the draft is brought up to date,
+  and only once its reader has finished writing (SPEC §16, §22).
+
 ## 0.9.3 — 2026-10-08
 
 ### Fixed

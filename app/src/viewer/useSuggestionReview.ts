@@ -161,7 +161,7 @@ export async function acceptInSession(steps: {
   check: () => Resolution["state"];
   claim: () => Promise<unknown>;
   apply: () => ApplyResult;
-  flush: () => Promise<void>;
+  flush: () => Promise<unknown>;
   saveFailed: () => boolean;
   record: () => Promise<unknown>;
 }): Promise<AcceptOutcome> {
