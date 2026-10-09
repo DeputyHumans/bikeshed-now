@@ -79,18 +79,21 @@ itself from the `401` that `/mcp` answers.
 
 `bikeshed login --origin https://<deployment>` prints an address, opens the
 browser if it can, and waits up to five minutes for the person to approve.
-Without `--origin` (or `BIKESHED_ORIGIN`) it signs in to the CLI's default
-deployment, which is not necessarily this one. It needs no terminal of its own, so
-you can run it for them; give the command a long timeout, because it is waiting
-for a human. Over SSH, where no browser can open, `bikeshed login --paste` takes
-a token instead. `bikeshed logout` signs out again. It revokes a token from
+Without `--origin` it signs in to `BIKESHED_ORIGIN`, or else the deployment it
+last signed in to, or else the CLI's default, and its first line says which.
+None of those is necessarily this one, so keep `--origin`. It needs no terminal
+of its own, so you can run it for them; give the command a long timeout, because
+it is waiting for a human. Over SSH, where no browser can open, `bikeshed login
+--paste` takes a token instead. `bikeshed logout` signs out again. It revokes a token from
 browser sign-in and deletes it; a pasted token is deleted but not revoked.
 
 ### A token, for CI and scripts
 
 Where no browser will ever open, ask the person to create a personal access
 token at `/account` -> **Access tokens**. It is shown once. Send it as
-`Authorization: Bearer bsk_...`.
+`Authorization: Bearer bsk_...`. When the job is done, a token can end itself:
+`POST /tokens` with `{"op":"revoke"}` and the token as its bearer revokes that
+token and nothing else. A token cannot create or list tokens.
 
 Either way, a credential carries **exactly its owner's identity and
 permissions**. It cannot see more than they can, and everything it does is
@@ -114,7 +117,7 @@ discovery document is at `/.well-known/mcp.json`.
 **You do not need a registered MCP client.** There is no session state: every
 request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
-first. If all you have is an HTTP client, you have all twelve tools.
+first. If all you have is an HTTP client, you have all thirteen tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -166,6 +169,8 @@ bikeshed mkdir <name> [--parent <id>]
 bikeshed mv <id> <folder|root>
 
 bikeshed skills [install <dir>]
+
+bikeshed --version
 ```
 
 ```bash
@@ -178,6 +183,7 @@ export BIKESHED_TOKEN=bsk_...
 Every command takes `--json`. `login` signs in through the browser and waits
 for a person to approve, so run it with a long timeout. The two variables work
 instead of `login` where no browser will ever open, such as CI.
+`bikeshed --version` prints which version is installed.
 
 `bikeshed get <id> > index.html` writes the whole source, however long it is.
 `get_document` cuts a source at 200,000 characters and sets `truncated`. Never

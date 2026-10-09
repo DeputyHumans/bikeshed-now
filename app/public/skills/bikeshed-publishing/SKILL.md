@@ -25,7 +25,9 @@ these is a minute, and neither involves copying a secret:
   `npx -y bikeshed-now login --origin https://<deployment>`. It prints an
   address, opens the browser, and waits for the person to approve. Give the
   command a long timeout; it is waiting for a human. Keep `--origin`: without
-  it, the command signs in to the CLI's default deployment, not this one.
+  it, the command signs in to `BIKESHED_ORIGIN`, or else the deployment it last
+  signed in to, or else the CLI's default, and none of those is necessarily
+  this one.
 
 For CI, or anywhere a browser cannot open, a personal access token still works.
 The person mints one at `/account` → **Access tokens**:

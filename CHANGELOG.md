@@ -14,6 +14,21 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **`/llms.txt` counts thirteen tools, and says where `bikeshed login` signs
+  in.** Since 0.8.0 it told an agent with only an HTTP client that it had "all
+  twelve tools", four lines above a table of thirteen. It and the publishing
+  skill said that `login` without `--origin` signs in to the CLI's default
+  deployment; since `bikeshed-now` 0.12.0 it tries `BIKESHED_ORIGIN` and then
+  the deployment of the last sign-in first. The guide now also names
+  `bikeshed --version`, and says that a token can revoke itself with
+  `POST /tokens`. The README and the verification walkthrough said twelve
+  too. A test now holds every count of the tools these documents give to the
+  number the server serves (SPEC §19).
+
 ## 0.9.2 — 2026-10-08
 
 ### Changed
