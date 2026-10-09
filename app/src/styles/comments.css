@@ -134,6 +134,15 @@
 .suggestion[data-stale] .suggestion-status { color: var(--color-warn); }
 .suggestion[data-state="accepted"] .suggestion-status { color: var(--color-success); }
 .suggestion-actions .input { flex: 1 1 8rem; min-width: 0; }
+.suggestion-history {
+  margin-top: var(--s-1);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.suggestion-history summary { cursor: pointer; }
+.suggestion-history ol { margin: var(--s-1) 0 0; padding-left: var(--s-4); }
+.suggestion-history li { overflow-wrap: anywhere; }
+.suggestion-history-note { margin: 0; font-style: italic; }
 
 .thread-composing {
   display: flex;

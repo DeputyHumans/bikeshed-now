@@ -27,6 +27,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   as before. The panel says "Withdrawn by …", and `get_comments` reports
   `state: "withdrawn"` (SPEC §22).
 
+- **A suggestion keeps what it said before each change.** Editing a pending
+  suggestion overwrote its text, and a new note overwrote the author's old
+  one, so whoever decided saw only the latest form. Each change now keeps what
+  it replaced in `suggestion.revisions`, with when and through which channel,
+  where only the server writes. The panel shows "Changed N times" opening onto
+  the earlier texts, `get_comments` returns them with their `via`, and
+  `bikeshed comments` (in `bikeshed-now` 0.13.0) prints a `was …` line for
+  each. A suggestion may be changed twenty times; after that, withdraw it and
+  suggest it again (SPEC §4, §22).
+
 ## 0.9.3 — 2026-10-08
 
 ### Fixed

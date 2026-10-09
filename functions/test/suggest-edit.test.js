@@ -171,3 +171,32 @@ test("get_comments shows a suggestion's change and state, and not the server's r
   assert.deepEqual(threads[0].suggestion, { replacement: "will do", state: "pending" });
   assert.deepEqual(threads[0].comments, [], "the generated opener is not repeated to the agent");
 });
+
+test("get_comments shows what a suggestion said before it was changed, by channel and never by token", async () => {
+  const w = world();
+  const { changeSuggestion } = require("../lib/lib/suggestions.js");
+  const { threadId } = await withBucket(() =>
+    tool("suggest_edit").run(w.ctx(SUGGESTER), { id: "d1", exact: "is enough", replacement: "will do" }),
+  );
+  const changed = await changeSuggestion({
+    db: w.db,
+    docRef: w.db.collection("docs").doc("d1"),
+    versionId: "v1",
+    annId: threadId,
+    op: "revise",
+    caller: { uid: SUGGESTER.uid, emailLower: SUGGESTER.emailLower },
+    actor: w.ctx(SUGGESTER).actor,
+    replacement: "should do",
+  });
+  assert.deepEqual(changed, { state: "pending" });
+
+  const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1" });
+  const { suggestion } = threads[0];
+  assert.equal(suggestion.replacement, "should do");
+  assert.equal(suggestion.revisions.length, 1);
+  const [earlier] = suggestion.revisions;
+  assert.equal(earlier.replacement, "will do");
+  assert.equal(earlier.via, "mcp");
+  assert.match(earlier.at, /^\d{4}-\d{2}-\d{2}T/, "an ISO time an agent can read");
+  assert.doesNotMatch(JSON.stringify(threads), /t1|tokenId/, "which token did it is not an agent's business");
+});

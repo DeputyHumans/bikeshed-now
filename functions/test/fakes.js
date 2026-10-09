@@ -39,10 +39,21 @@ function fakeFirestore(initial = {}) {
   function resolve(value) {
     if (isSentinel(value, STAMP)) return admin.firestore.Timestamp.now();
     if (value instanceof FieldValue) throw new Error("fake: unsupported sentinel");
-    if (Array.isArray(value)) return value.map(resolve);
+    if (Array.isArray(value)) return value.map(inArray);
     if (value && typeof value === "object" && value.constructor === Object) {
       const out = {};
       for (const [k, v] of Object.entries(value)) if (!isSentinel(v, DELETE)) out[k] = resolve(v);
+      return out;
+    }
+    return value;
+  }
+  /** Firestore refuses every sentinel inside an array, however deep. */
+  function inArray(value) {
+    if (value instanceof FieldValue) throw new Error("fake: a FieldValue cannot be used inside an array");
+    if (Array.isArray(value)) return value.map(inArray);
+    if (value && typeof value === "object" && value.constructor === Object) {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) out[k] = inArray(v);
       return out;
     }
     return value;

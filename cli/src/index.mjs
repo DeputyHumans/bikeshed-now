@@ -518,11 +518,14 @@ async function comments(flags, [ref]) {
       // which passage to change without opening the document.
       console.log(`\n── ${thread.threadId}${thread.section ? `  (${thread.section})` : ""}`);
       if (thread.quote) console.log(`   “${thread.quote}”`);
-      // A suggested edit says what the passage would become, and whether a
-      // person has decided it yet (SPEC §22).
+      // A suggested edit says what the passage would become, whether it is
+      // still open, and what its author proposed before changing it (SPEC §22).
       if (thread.suggestion) {
-        const change = thread.suggestion.replacement === "" ? "(delete it)" : `“${thread.suggestion.replacement}”`;
-        console.log(`   → ${change}  [${thread.suggestion.state}]`);
+        const said = (text) => (text === "" ? "(delete it)" : `“${text}”`);
+        console.log(`   → ${said(thread.suggestion.replacement)}  [${thread.suggestion.state}]`);
+        for (const earlier of thread.suggestion.revisions ?? []) {
+          console.log(`     was ${said(earlier.replacement)}${earlier.note ? `  (${earlier.note})` : ""}`);
+        }
       }
       for (const comment of thread.comments) {
         const via = comment.via && comment.via !== "web" ? ` [via ${comment.via}]` : "";

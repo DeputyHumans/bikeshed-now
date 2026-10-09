@@ -452,9 +452,11 @@ public/{docId}                                 PublicDoc        (projection, pub
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
 `suggestion: { replacement, state: "pending" | "accepted" | "rejected" |
-"withdrawn", claim?, decidedBy?, decidedAt? }`, where `decidedBy` and
-`decidedAt` say who closed it — an approver deciding, or its author withdrawing
-— and when. Its `resolved` is `false` while pending and `true` once closed, so
+"withdrawn", claim?, decidedBy?, decidedAt?, revisions? }`, where `decidedBy`
+and `decidedAt` say who closed it — an approver deciding, or its author
+withdrawing — and when, and `revisions` holds, oldest first, what each change
+its author made replaced: `{ replacement, note?, at, actor }`, the note only
+when a new one replaced the author's own. Its `resolved` is `false` while pending and `true` once closed, so
 it counts as an open thread everywhere one is counted.
 Only `POST /suggestion` writes the field. A **`Comment`** may carry
 `opensSuggestion` (the thread's first comment) and `generated` (text the server
@@ -1928,7 +1930,8 @@ browser's strict resolver will find; a fixture of golden cases is asserted by
 both (§22). Accepting and rejecting have no tool, and every decision op of
 `/suggestion` refuses a token; `functions/test/suggest-edit.test.js` asserts no
 tool name matches `accept|reject|approve|resolve|decide`. `get_comments` reports
-a suggestion's `replacement` and `state`; `get_document` reports `canSuggest`;
+a suggestion's `replacement`, `state` and `revisions` (each with its `via`
+channel, never its token); `get_document` reports `canSuggest`;
 and `update_document` from a caller who may only suggest names `suggest_edit`.
 
 **An agent raises points as well as answering them.** `add_comment` finds its
@@ -2277,7 +2280,9 @@ The form floats over the frame, in the parent's DOM: the quote, a field
 prefilled with it (caret at the end), and an optional note. Enter submits;
 Escape cancels; a pasted line break becomes a space; empty suggests deleting
 the text. The thread opens on success. Its author may Edit it, in the panel,
-until it is decided.
+until it is decided — twenty times at most, after which it must be withdrawn
+and suggested afresh. An edit never overwrites: what it replaced is kept in
+`revisions` (§4), so a change of mind is on the record.
 
 ### The review pass
 
@@ -2322,8 +2327,9 @@ never by position. One that does not is stale — listed, not drawn. A decided
 or withdrawn suggestion is resolved, and like a resolved comment is not drawn.
 
 In the panel a suggestion reads as its change — struck, then inserted, and in
-words for a screen reader — with its state. It has no Resolve button. An
-approver may Reject it, with a reason; its author may Withdraw it.
+words for a screen reader — with its state, and, once its author has changed
+it, "Changed N times" opening onto what it said before. It has no Resolve
+button. An approver may Reject it, with a reason; its author may Withdraw it.
 
 ### Not built
 

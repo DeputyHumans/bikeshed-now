@@ -213,6 +213,31 @@ describe("a suggestion's thread", () => {
     expect(screen.getByText("Rejected by owner@example.com")).toBeTruthy();
   });
 
+  it("lists what its author proposed before changing it, oldest first, with a replaced note", () => {
+    const at = { toDate: () => new Date() };
+    mountWith({
+      ...SUGGESTION,
+      suggestion: {
+        replacement: "a month",
+        state: "pending",
+        revisions: [
+          { replacement: "two weekends", at, actor: { channel: "web" } },
+          { replacement: "", note: "Dual-write.", at, actor: { channel: "mcp" } },
+        ],
+      },
+    } as unknown as Annotation);
+    expect(screen.getByText("Changed 2 times")).toBeTruthy();
+    const items = [...document.querySelectorAll(".suggestion-history li")].map((li) => li.textContent);
+    expect(items).toEqual(["two weekends · replaced just now", "(delete) · replaced just nowDual-write."]);
+    // The current text stays the change; the history is only what it replaced.
+    expect(document.querySelector(".suggestion-change ins")!.textContent).toBe("a month");
+  });
+
+  it("shows no history for a suggestion never changed", () => {
+    mountWith(SUGGESTION);
+    expect(document.querySelector(".suggestion-history")).toBeNull();
+  });
+
   it("keeps a withdrawn one as a closed thread, saying so, with nothing left to do", () => {
     comments.current = [
       { commentId: "c1", body: "Withdrawn.", authorEmail: "sug@example.com", generated: true },

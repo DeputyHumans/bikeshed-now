@@ -30,6 +30,12 @@ export const SUGGESTION_LIMITS = {
   context: 256,
   /** Pending suggestions one author may have open on one version (R7). */
   pendingPerAuthor: 20,
+  /**
+   * Times one suggestion may be changed. Each keeps what it replaced, so this
+   * bounds the record: twenty at the text limits is about 200 KB, well inside
+   * a Firestore document.
+   */
+  revisions: 20,
   /** How long an approver's claim keeps others off while they apply it. */
   claimMs: 2 * 60 * 1000,
 } as const;
@@ -41,6 +47,20 @@ export const ANNOTATION_COLOR = "#b5257b";
 export const SUGGESTION_COLOR = ANNOTATION_COLOR;
 
 export type SuggestionState = "pending" | "accepted" | "rejected" | "withdrawn";
+
+/**
+ * One change its author made to a pending suggestion: the replacement it
+ * superseded, the note it superseded if it replaced one the author wrote, and
+ * when and through which channel. Oldest first, so the replacement at index i
+ * stood from the previous entry's `at` (or the annotation's `createdAt`) until
+ * its own.
+ */
+export interface SuggestionRevision {
+  replacement: string;
+  note?: string;
+  at: Timestamp;
+  actor: Actor;
+}
 
 export interface SuggestionAnchor {
   elementId: string;
@@ -213,6 +233,7 @@ interface StoredSuggestion {
     replacement?: string;
     state?: SuggestionState;
     claim?: { uid?: string; email?: string; until?: Timestamp };
+    revisions?: SuggestionRevision[];
   };
 }
 
@@ -236,7 +257,7 @@ export function isDecisionOp(v: unknown): v is DecisionOp {
  * Change a suggestion's state, inside a transaction, for a caller the endpoint
  * has already authorized for `op`.
  *
- *   revise    author, pending, unclaimed      → new replacement and note
+ *   revise    author, pending, unclaimed      → new replacement and note; the old kept
  *   withdraw  author, pending, unclaimed      → withdrawn
  *   claim     approver, pending               → others are kept off for a while
  *   accept    approver, pending, not claimed by someone else → accepted
@@ -299,13 +320,34 @@ export async function changeSuggestion(args: {
         const replacement = args.replacement ?? "";
         const problem = replacementProblem(replacement, String(s.anchor?.exact ?? ""));
         if (problem) return { status: 400, error: problem };
-        tx.update(annRef, { "suggestion.replacement": replacement });
+        const revisions = s.suggestion.revisions ?? [];
+        if (revisions.length >= SUGGESTION_LIMITS.revisions) {
+          return {
+            status: 409,
+            error: `This suggestion has been changed ${SUGGESTION_LIMITS.revisions} times. Withdraw it and suggest it again.`,
+          };
+        }
+        const first = opener?.docs[0];
+        const note = args.note ?? "";
+        // What this change replaces is kept, never overwritten: the text, and
+        // the author's own note when a new one replaces it. A generated opener
+        // only restated the old text, which the entry already holds.
+        const replacedNote = note && first && first.data().generated !== true ? String(first.data().body ?? "") : "";
+        const revision: SuggestionRevision = {
+          replacement: String(s.suggestion.replacement ?? ""),
+          ...(replacedNote ? { note: replacedNote } : {}),
+          // A server timestamp may not sit inside an array.
+          at: Timestamp.fromMillis(nowMs),
+          actor,
+        };
+        tx.update(annRef, {
+          "suggestion.replacement": replacement,
+          "suggestion.revisions": [...revisions, revision],
+        });
         // The opening comment says the change in words when there was no note,
         // so it has to say the new one; a note the author wrote is theirs, and
         // is replaced only when they send a new one.
-        const first = opener?.docs[0];
         if (first) {
-          const note = args.note ?? "";
           if (note) tx.update(first.ref, { body: note, generated: FieldValue.delete() });
           else if (first.data().generated === true) {
             tx.update(first.ref, { body: describeChange(String(s.anchor?.exact ?? ""), replacement) });

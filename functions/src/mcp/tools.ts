@@ -107,6 +107,19 @@ function asArray(v: unknown): string[] {
 }
 
 /**
+ * One earlier form of a suggestion, as an agent reads it: the channel it was
+ * changed through, never the token that did it.
+ */
+function revisionOut(r: { replacement?: unknown; note?: unknown; at?: { toDate?: () => Date }; actor?: Actor }) {
+  return {
+    replacement: String(r.replacement ?? ""),
+    ...(typeof r.note === "string" && r.note ? { note: r.note } : {}),
+    at: r.at?.toDate?.().toISOString() ?? null,
+    via: r.actor?.channel ?? "web",
+  };
+}
+
+/**
  * A folder's full path, given the names the caller is allowed to know.
  *
  * An ancestor can be INVISIBLE. Membership cascades downward, so a grant on a
@@ -830,13 +843,17 @@ export const TOOLS: ToolDefinition[] = [
           quote: String(ann.anchor?.exact ?? ""),
           section: String(ann.anchor?.elementId ?? ""),
           resolved: ann.resolved === true,
-          // A suggested edit: what the quote would become ("" deletes it), and
-          // whether a person has accepted or rejected it yet (SPEC §22).
+          // A suggested edit: what the quote would become ("" deletes it),
+          // whether it is still open, and what its author proposed before
+          // changing it, oldest first (SPEC §22).
           ...(ann.suggestion
             ? {
                 suggestion: {
                   replacement: String(ann.suggestion.replacement ?? ""),
                   state: String(ann.suggestion.state ?? "pending"),
+                  ...(Array.isArray(ann.suggestion.revisions) && ann.suggestion.revisions.length
+                    ? { revisions: ann.suggestion.revisions.map(revisionOut) }
+                    : {}),
                 },
               }
             : {}),

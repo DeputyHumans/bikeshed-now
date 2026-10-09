@@ -1016,6 +1016,29 @@ test("comments prints a suggestion's change and whether it is decided", async ()
   });
 });
 
+test("comments prints what a suggestion said before each change, oldest first", async () => {
+  const answer = {
+    id: "plan",
+    version: "v3",
+    threads: [
+      { threadId: "t1", quote: "a single weekend", section: "", resolved: true,
+        suggestion: {
+          replacement: "a month",
+          state: "withdrawn",
+          revisions: [
+            { replacement: "two weekends", at: "2026-10-08T10:00:00.000Z", via: "web" },
+            { replacement: "", note: "Dual-write.", at: "2026-10-08T11:00:00.000Z", via: "mcp" },
+          ],
+        },
+        comments: [] },
+    ],
+  };
+  await withServer(rpcOk(answer), async (origin) => {
+    const { stdout } = await runAsync(["comments", "plan", "--all"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.match(stdout, /→ “a month”  \[withdrawn\]\n     was “two weekends”\n     was \(delete it\)  \(Dual-write\.\)\n/);
+  });
+});
+
 test("an empty --with is refused, since a deletion is asked for by name", () => {
   assert.throws(
     () => run(["suggest", "plan", "text", "--with", ""], { BIKESHED_TOKEN: "bsk_a.b", BIKESHED_ORIGIN: "http://127.0.0.1:9" }),

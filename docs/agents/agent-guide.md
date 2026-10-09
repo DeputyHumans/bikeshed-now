@@ -310,7 +310,8 @@ Over MCP the same is `suggest_edit` with `exact`, `replacement` and `note`.
 `get_document` tells you whether you may (`canSuggest`), and `get_comments`
 shows each suggestion with its `replacement` and its `state`: pending,
 accepted, rejected or withdrawn. A withdrawn one keeps its thread, as a decided
-one does.
+one does. Once its author has changed it, `revisions` lists what it said
+before, oldest first.
 
 **A pending suggestion holds back every new version,** yours included:
 `update_document` is refused until somebody who can approve has decided each

@@ -319,6 +319,51 @@ test("its author withdraws a pending suggestion, and the thread stays to say so"
   assert.equal((await w.call(w.as(SUGGESTER), { op: "withdraw", annId: decided })).status, 409, "a decision stands");
 });
 
+test("suggested, changed twice, withdrawn: every earlier form is kept, oldest first", async () => {
+  const w = world();
+  const r = await create(w, w.as(SUGGESTER), { note: "Dual-write." });
+  const annId = r.body.annId;
+  const revise = (extra) => w.call(w.as(SUGGESTER), { op: "revise", annId, ...extra });
+
+  assert.equal((await revise({ replacement: "a fortnight" })).status, 200);
+  assert.equal((await revise({ replacement: "a month", note: "Longer." })).status, 200);
+  const changed = w.ann(annId).suggestion;
+  assert.equal(changed.replacement, "a month");
+  assert.deepEqual(
+    changed.revisions.map(({ replacement, note }) => ({ replacement, note })),
+    [
+      { replacement: "two weekends", note: undefined },
+      { replacement: "a fortnight", note: "Dual-write." },
+    ],
+    "each entry holds what its change replaced; the note only when a new one replaced the author's",
+  );
+  for (const entry of changed.revisions) {
+    assert.equal(typeof entry.at.toMillis(), "number", "a real timestamp, not a server sentinel in an array");
+    assert.equal(entry.actor.channel, "web");
+  }
+  assert.equal(w.comments(annId)[0].body, "Longer.", "the opener still says the current note");
+
+  assert.equal((await w.call(w.as(SUGGESTER), { op: "withdraw", annId })).status, 200);
+  const closed = w.ann(annId).suggestion;
+  assert.equal(closed.state, "withdrawn");
+  assert.equal(closed.revisions.length, 2, "withdrawing keeps the history too");
+});
+
+test("a suggestion may be changed twenty times, and then must be suggested afresh", async () => {
+  const w = world();
+  const annId = await suggested(w);
+  for (let i = 0; i < SUGGESTION_LIMITS.revisions; i++) {
+    const r = await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: `option ${i}` });
+    assert.equal(r.status, 200, `revision ${i}`);
+  }
+  const over = await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement: "one more" });
+  assert.equal(over.status, 409);
+  assert.match(over.body.error, /Withdraw it and suggest it again/);
+  const a = w.ann(annId);
+  assert.equal(a.suggestion.replacement, `option ${SUGGESTION_LIMITS.revisions - 1}`, "the refused change changed nothing");
+  assert.equal(a.suggestion.revisions.length, SUGGESTION_LIMITS.revisions);
+});
+
 test("an unknown op, or no such suggestion, is said plainly", async () => {
   const w = world();
   assert.equal((await w.call(w.as(OWNER), { op: "approve" })).status, 400);

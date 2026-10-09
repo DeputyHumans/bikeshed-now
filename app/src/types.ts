@@ -410,6 +410,16 @@ export interface Suggestion {
   /** Who closed it, and when: an approver's decision, or its author withdrawing it. */
   decidedBy?: Actor;
   decidedAt?: Timestamp;
+  /** Each change its author made, oldest first, holding what it replaced. */
+  revisions?: SuggestionRevision[];
+}
+
+/** The replacement (and the author's note, if one was replaced) a change superseded. */
+export interface SuggestionRevision {
+  replacement: string;
+  note?: string;
+  at: Timestamp;
+  actor: Actor;
 }
 
 /** Firestore: .../annotations/{annId}/comments/{commentId} */

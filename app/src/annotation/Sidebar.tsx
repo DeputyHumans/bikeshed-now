@@ -87,6 +87,24 @@ function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggest
         )}
       </p>
       <p className="suggestion-status">{status}</p>
+      {suggestion.revisions?.length ? (
+        // What its author proposed before, so a change of mind is on the
+        // record rather than overwritten (SPEC §22).
+        <details className="suggestion-history" onClick={(e) => e.stopPropagation()}>
+          <summary>
+            Changed {suggestion.revisions.length === 1 ? "once" : `${suggestion.revisions.length} times`}
+          </summary>
+          <ol>
+            {suggestion.revisions.map((r, i) => (
+              <li key={i}>
+                {r.replacement === "" ? <em>(delete)</em> : <del>{r.replacement}</del>}
+                <span className="suggestion-history-when"> · replaced {formatRelative(r.at)}</span>
+                {r.note ? <p className="suggestion-history-note">{r.note}</p> : null}
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
     </div>
   );
 }
