@@ -4,7 +4,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { computeMembership, isValidDocId, slugify, uniqueDocId } = require("../lib/lib/folders.js");
+const { computeMembership, isValidDocId, recomputeSubtree, slugify, uniqueDocId } = require("../lib/lib/folders.js");
+const { fakeFirestore } = require("./fakes.js");
 const { computeTeamMembers, referencedTeamIds } = require("../lib/lib/teams.js");
 const { emptyGrants } = require("../lib/lib/access.js");
 
@@ -113,6 +114,34 @@ test("inheritance is additive: a direct grant never drops an inherited one", () 
   const m = computeMembership(OWNER, g(["direct@example.com"], []), parent);
   assert.ok(m.members.includes("inherited@example.com"));
   assert.ok(m.members.includes("direct@example.com"));
+});
+
+test("a grant on a folder reaches a document two folders down, at its role", async () => {
+  /**
+   * Every case above is one parent step of the arithmetic. This is the walk:
+   * a team granted on the top folder must arrive on a document filed in a
+   * subfolder of a subfolder, on every rung its role reaches and none above.
+   */
+  // Each record starts as it stood before the grant: the owner on every rung.
+  const before = Object.fromEntries(LADDER.map((k) => [k, [OWNER]]));
+  const owned = (extra) => ({ ownerUid: "u-owner", ownerEmail: OWNER, ...emptyGrants(), ...before, ...extra });
+  const { db, store } = fakeFirestore({
+    "folders/top": owned({ parentId: null, ancestors: [], editors: ["team:crew"] }),
+    "folders/mid": owned({ parentId: "top", ancestors: ["top"] }),
+    "folders/leaf": owned({ parentId: "mid", ancestors: ["top", "mid"], viewers: ["leaf@example.com"] }),
+    "docs/d1": owned({ folderId: "leaf" }),
+    "teams/crew": { name: "Crew", ownerEmail: OWNER, members: [OWNER, "crew@example.com"] },
+  });
+
+  await recomputeSubtree(db, "top");
+
+  const doc = store.get("docs/d1");
+  assert.ok(doc.editorMembers.includes("crew@example.com"), "the team's editor grant reaches the document");
+  assert.ok(doc.members.includes("crew@example.com"));
+  assert.ok(!doc.approverMembers.includes("crew@example.com"), "and no higher than it was granted");
+  assert.ok(doc.members.includes("leaf@example.com"), "the leaf's own grant still holds");
+  assertLadder(doc, "d1");
+  assert.ok(store.get("folders/mid").editorMembers.includes("crew@example.com"), "the folder between holds it too");
 });
 
 test("emails are lowercased and de-duplicated, and output is sorted", () => {
