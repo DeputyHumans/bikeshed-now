@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The consent page's tests no longer fail on a slow CI runner.** They moved
+  the pointer the moment the page's heading appeared. The page attaches its
+  listeners a turn later, and on a loaded runner that turn came after the move,
+  so Approve never armed and three tests failed while the page was right. The
+  tests now keep moving until the page arms. They still fail if it arms on time
+  alone, without its second, or across a blur.
+
 ## 0.15.0 — 2026-10-09
 
 ### Added

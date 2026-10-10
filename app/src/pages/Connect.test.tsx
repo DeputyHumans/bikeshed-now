@@ -163,14 +163,36 @@ const routeTree = () => (
 const heading = (name: RegExp) => screen.findByRole("heading", { level: 1, name });
 const approveButton = () => screen.getByRole("button", { name: "Approve" }) as HTMLButtonElement;
 
-/** What a person does without meaning to approve anything: look, and move. */
+/**
+ * What a person does without meaning to approve anything: look, and move.
+ *
+ * The page listens on `window` from an effect, which runs a turn after the
+ * render that shows the heading. On a loaded CI runner that turn came late, a
+ * move made before it went unseen, and Approve never armed. So this keeps
+ * looking and moving until the page has armed, as a person would.
+ */
 async function lookAndMove() {
-  act(() => {
-    window.dispatchEvent(new Event("pointermove"));
-  });
   await act(async () => {
     vi.advanceTimersByTime(ARM_DELAY_MS);
   });
+  await moveUntilArmed();
+}
+
+/**
+ * Move the pointer until Approve arms. Never advances the clock itself, which
+ * would also fire waitFor's own timeout; the clock follows real time here, so
+ * an arming timer the late effect started still runs out within the wait.
+ */
+async function moveUntilArmed() {
+  await waitFor(
+    () => {
+      act(() => {
+        window.dispatchEvent(new Event("pointermove"));
+      });
+      expect(approveButton().disabled).toBe(false);
+    },
+    { timeout: 5 * ARM_DELAY_MS },
+  );
 }
 
 describe("asking", () => {
@@ -237,10 +259,9 @@ describe("approving", () => {
     });
     expect(approveButton().disabled).toBe(true);
 
-    act(() => {
-      window.dispatchEvent(new Event("pointermove"));
-    });
-    expect(approveButton().disabled).toBe(false);
+    // A touch arms it, once the page's listeners are there to see it, which
+    // on a slow runner is a turn after the heading (see lookAndMove).
+    await moveUntilArmed();
 
     // Losing focus starts the second again.
     act(() => {
