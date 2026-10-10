@@ -47,9 +47,9 @@
     "check:licenses": "node tools/check-licenses.mjs"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "^3.0.4",
-    "firebase": "^10.14.1",
-    "firebase-admin": "^12.7.0",
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
     "mime": "^4.0.4"
   }
 }
