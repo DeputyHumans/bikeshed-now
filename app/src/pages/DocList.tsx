@@ -35,6 +35,8 @@ import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
 import { visibilityStateOf, type VisibilityState } from "../visibility";
 import { UploadDialog } from "../components/UploadDialog";
+import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
+import { offersVersionUpload } from "../roles";
 import { CardSkeletons } from "../components/Spinner";
 import { coverUrl } from "../thumbs";
 import { useCoverBackfill } from "../hooks/useCoverBackfill";
@@ -225,6 +227,8 @@ export function DocList() {
     title: string;
     folderId: string | null;
   } | null>(null);
+  /** The document a new version is being uploaded to, by id: read live from the list. */
+  const [revising, setRevising] = useState<string | null>(null);
   /** `{ done, total, fraction }` while a dropped batch is in flight. */
   const [dropping, setDropping] = useState<{
     done: number;
@@ -370,6 +374,8 @@ export function DocList() {
       visibility: visibilityStateOf(doc),
     });
 
+  const revisingDoc = revising ? (docs.find((d) => d.docId === revising) ?? null) : null;
+
   const docMenu = (doc: DocMeta): MenuEntry[] => {
     const isOwner = doc.ownerEmail === emailLower;
     return [
@@ -403,6 +409,12 @@ export function DocList() {
             folderId: doc.folderId ?? null,
           }),
       },
+      // Only to the real editor set, as the server asks (SPEC §2); hidden
+      // rather than disabled, as the viewer's menu does, since a reader was
+      // never going to publish here.
+      ...(offersVersionUpload(doc, emailLower)
+        ? [{ id: "upload-version", label: "Upload a new version…", onSelect: () => setRevising(doc.docId) }]
+        : []),
       {
         // One click, into the folder being looked at, and straight into the
         // fork: renaming and moving it are the two items above (SPEC §21).
@@ -665,6 +677,25 @@ export function DocList() {
           onUploaded={(result) => {
             setUploading(false);
             navigate(`/d/${result.docId}`);
+          }}
+        />
+      ) : null}
+
+      {revisingDoc ? (
+        <UploadVersionDialog
+          docId={revisingDoc.docId}
+          title={revisingDoc.title}
+          headVersion={revisingDoc.currentVersion}
+          // Missing means trusted (SPEC §6c).
+          trusted={revisingDoc.trusted !== false}
+          draftBy={revisingDoc.draft?.updatedByEmail ?? null}
+          onClose={() => setRevising(null)}
+          onPublished={(result) => {
+            setRevising(null);
+            toast.show(versionUploadMessage(result), {
+              label: "Open",
+              onSelect: () => navigate(`/d/${result.docId}`),
+            });
           }}
         />
       ) : null}

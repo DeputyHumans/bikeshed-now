@@ -402,6 +402,39 @@ them in order, once each. What it cannot prove: that Eventarc may invoke the
 triggers on a real deployment, or that a failed one is retried. Both show only
 there (operations overview).
 
+### 17 · A file uploaded as the next version replaces the draft, and nobody's typing
+
+Use any document you own at `v1`.
+
+1. Open the editor, type a word you will recognise, and close the window
+   without publishing. The document now has a draft and a live log.
+2. In another window, **More → Upload a new version…**, choose a different
+   `.html`, and **Publish**. The toast says `Published v2.`; the frame shows the
+   new file. The version doc in the emulator UI says `publishedVia: "upload"`,
+   and scripts the owner had trusted are blocked again.
+3. Open the editor. It shows `v2`, not the word from step 1: the update dropped
+   the draft's files and its log. Before 0.16.0 it brought the old draft back,
+   and the first keystroke saved it over the new version.
+4. Drag a file from the desktop onto the open document. A dashed target covers
+   the page and the dialog opens with the file in it; nothing is published
+   until **Publish**. The frame is never replaced by the file.
+5. Open the dialog, then `bikeshed update <id> other.html` from a terminal.
+   The dialog says `v3 was published while this was open` and will not
+   publish.
+6. Open the editor in a second window as another editor and leave it open.
+   The dialog names them and will not publish; `bikeshed update` answers that
+   somebody has the document open in the editor. Close it, and both work.
+7. Upload the same file again: `No changes — the file is identical to v…`.
+   The workspace card's **Actions → Upload a new version…** does the same as
+   the viewer's menu.
+
+What this proves: every update path refuses under an open editor and drops
+what the replaced draft left behind, and the dialog never publishes over a
+version its user has not seen. What it cannot prove: that a real
+deployment's runtime account may read and clear the Realtime Database. If it
+cannot read it, every update is refused as "could not tell whether anybody is
+editing" (operations overview, "When something is wrong").
+
 ## What this walkthrough found
 
 Four defects, none of which the 344 unit and rules tests could have caught,

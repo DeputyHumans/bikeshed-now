@@ -181,6 +181,15 @@
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
 }
+/* What an upload of a new version does besides publish it (SPEC §6a). */
+.upload-notes {
+  display: grid;
+  gap: var(--s-1);
+  margin: var(--s-3) 0 0;
+  padding-inline-start: var(--s-4);
+  font-size: var(--fs-small);
+  color: var(--color-ink-muted);
+}
 /* --- Dropping a file onto the workspace (SPEC §2) --------------------------
  * The zone is the whole column rather than the grid, because most of the free
  * space on a workspace with two documents in it is BELOW them. min-height keeps

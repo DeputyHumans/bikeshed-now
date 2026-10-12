@@ -380,8 +380,10 @@ own pending proposal, and neither destroys anything.
   breaks the rules in §4. A taken `id` is not refused; see §4.
 
   **`?update=<docId>[&k=]`** publishes a new version of that document instead,
-  through the same `reviseDocument` as `update_document` (§19). It is the one
-  way to revise with a `.zip`, because the tools take text. It takes
+  through the same `reviseDocument` as `update_document` (§19). It is how the
+  app's "Upload a new version…" publishes a file from disk — from the viewer's
+  menu, a dropped file, or the workspace card — and the one way to revise with a
+  `.zip`, because the tools take text. It takes
   `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
   re-upload in all but name, which open editing does not extend to. `id`,
   `folderId` and `title` with it are a `400`; a refused caller gets the usual

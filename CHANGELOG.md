@@ -16,6 +16,21 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **Upload a file as a document's next version, from the browser.** Somebody
+  who works on the file on their own computer could publish its next version
+  only through the CLI or an agent. **Upload a new version…**, in the
+  document's menu or on its card in the workspace, now publishes a file in the
+  document's place, and so does dropping the file onto the open document.
+  Before anything is published, the dialog says what will happen: the comments
+  stay on the version they were written about, an unpublished draft is
+  discarded, and the page's scripts are blocked again until somebody trusts
+  it. It sends the version it opened on, so a version published meanwhile is
+  never silently covered. It is offered to the document's editors, not to the
+  open editors of a public document, which the server already refused (SPEC
+  §2, §6a).
+
 ### Fixed
 
 - **An update no longer brings the replaced draft back, or publishes over

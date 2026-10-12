@@ -175,6 +175,26 @@
 }
 @keyframes frame-loading-in { from { opacity: 0; } }
 
+/* A file dragged onto the document (SPEC §2). It takes pointer events, unlike
+   the loading cover: the drag has to land HERE, in the page, not in the frame,
+   whose browser default is to open the file in place of the document. */
+.frame-drop {
+  position: absolute;
+  inset: var(--s-2);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  text-align: center;
+}
+
 /* --- Banners ------------------------------------------------------------- */
 
 .viewer-banners {

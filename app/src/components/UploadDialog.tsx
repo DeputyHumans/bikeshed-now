@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Browser upload, with real progress and a marking default (SPEC §2, §11, §20).
 
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { Modal } from "./Modal";
-import { Icon } from "./Icon";
+import { FileDropzone } from "./FileDropzone";
 import { useToast } from "./Toast";
-import { UPLOAD_HINT, isUploadable, uploadDoc, type UploadResult } from "../upload";
+import { uploadDoc, type UploadResult } from "../upload";
 import { logEvent } from "../analytics";
 import { MARKING_OFF } from "../export/labels";
 import type { Marking } from "../types";
@@ -28,20 +28,6 @@ export function UploadDialog({
   const [id, setId] = useState("");
   const [marking, setMarking] = useState<Marking>(accountDefaultMarking ?? MARKING_OFF);
   const [progress, setProgress] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const accept = useCallback(
-    (next: File | null) => {
-      if (!next) return;
-      if (!isUploadable(next)) {
-        toast.error(`${UPLOAD_HINT}. That file is not one of those.`);
-        return;
-      }
-      setFile(next);
-    },
-    [toast],
-  );
 
   const upload = async () => {
     if (!file) return;
@@ -87,43 +73,7 @@ export function UploadDialog({
         </>
       }
     >
-      <div
-        className="upload-dropzone"
-        data-dragging={dragging}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          accept(e.dataTransfer.files[0] ?? null);
-        }}
-      >
-        <Icon name="upload" size={28} />
-        {file ? (
-          <>
-            <strong>{file.name}</strong>
-            <span className="caption">{Math.round(file.size / 1024)} KB</span>
-          </>
-        ) : (
-          <>
-            <strong>Drop a file here</strong>
-            <span className="caption">{UPLOAD_HINT}</span>
-          </>
-        )}
-        <button type="button" className="btn btn-sm" onClick={() => inputRef.current?.click()}>
-          Choose a file
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          className="visually-hidden"
-          accept=".html,.htm,.md,.markdown,.zip"
-          onChange={(e) => accept(e.target.files?.[0] ?? null)}
-        />
-      </div>
+      <FileDropzone file={file} onFile={setFile} />
 
       {progress != null ? (
         <div className="upload-progress" style={{ marginTop: "var(--s-3)" }}>

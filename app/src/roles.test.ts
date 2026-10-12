@@ -2,7 +2,7 @@
 // What the interface reads off a record before offering anything (SPEC §13).
 
 import { describe, expect, test } from "vitest";
-import { grantsOf, isDocEditor, offersSuggest, ROLES } from "./roles";
+import { grantsOf, isDocEditor, offersSuggest, offersVersionUpload, ROLES } from "./roles";
 
 describe("grantsOf", () => {
   test("reads every role's list, and an absent or malformed one as empty", () => {
@@ -73,5 +73,33 @@ describe("offersSuggest", () => {
     expect(offersSuggest({ ...ON_HEAD, expired: true })).toBe(false);
     expect(offersSuggest({ ...ON_HEAD, signedIn: false })).toBe(false);
     expect(offersSuggest({ ...ON_HEAD, maySuggest: false })).toBe(false);
+  });
+});
+
+describe("offersVersionUpload", () => {
+  const record = {
+    ownerEmail: "owner@example.com",
+    editors: ["e@example.com"],
+    suggesters: ["s@example.com"],
+    viewers: ["v@example.com"],
+    editorMembers: ["owner@example.com", "e@example.com", "folder@example.com"],
+  };
+
+  test("the real editor set is offered it, a grant through a folder included", () => {
+    for (const email of ["owner@example.com", "e@example.com", "folder@example.com"]) {
+      expect(offersVersionUpload(record, email)).toBe(true);
+    }
+  });
+
+  test("a suggester, a viewer and an open editor are not, as the server would refuse them", () => {
+    const open = { ...record, publicEdit: true };
+    for (const email of ["s@example.com", "v@example.com", "stranger@example.com", ""]) {
+      expect(offersVersionUpload(open, email)).toBe(false);
+    }
+  });
+
+  test("nobody is offered it once the document has expired", () => {
+    expect(offersVersionUpload({ ...record, expiresAt: 1_000 }, "owner@example.com", 2_000)).toBe(false);
+    expect(offersVersionUpload({ ...record, expiresAt: 3_000 }, "owner@example.com", 2_000)).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The four roles and what a record says each person may do (SPEC §13).
 
+import { isExpired } from "./expiry";
 import type { Role } from "./types";
 import type { FrameMode } from "./viewer/frameMode";
 
@@ -75,6 +76,20 @@ export function isDocEditor(record: RoleRecord | null | undefined, emailLower: s
     has(record.approvers, emailLower) ||
     has(record.editorMembers, emailLower)
   );
+}
+
+/**
+ * Whether to offer "Upload a new version…" (SPEC §2). The server takes the
+ * real editor set for an upload, not open editing — sending a whole file is a
+ * re-upload in all but name — so a public document's open editors are not
+ * offered it. An expired document takes no new version from anybody.
+ */
+export function offersVersionUpload(
+  record: (RoleRecord & { expiresAt?: Parameters<typeof isExpired>[0] }) | null | undefined,
+  emailLower: string,
+  nowMs: number = Date.now(),
+): boolean {
+  return isDocEditor(record, emailLower) && !isExpired(record?.expiresAt, nowMs);
 }
 
 /**

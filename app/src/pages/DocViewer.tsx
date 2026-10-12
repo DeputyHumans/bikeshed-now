@@ -36,6 +36,7 @@ import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
 import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
+import { useVersionDrop } from "../viewer/useVersionDrop";
 import { contentBase, readsDraft, type FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
@@ -61,12 +62,14 @@ import { MarkingDialog } from "../components/MarkingDialog";
 import { StatsPanel } from "../components/StatsPanel";
 import { ForksPanel } from "../components/ForksPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
+import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
+import { Icon } from "../components/Icon";
 import { Loading } from "../components/Spinner";
 import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
 import type { Anchor, Annotation, FolderMeta, TeamMeta } from "../types";
-import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest } from "../roles";
+import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest, offersVersionUpload } from "../roles";
 
 /**
  * This file is COMPOSITION. Every decision lives in a hook in `viewer/`, and
@@ -100,6 +103,10 @@ import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest 
  * `useInlineEditor` and into `viewer/invariant.test.tsx`'s harness. The same
  * holds for `useThumbCapture`, which reads the document to build previews and
  * renders them in a frame of its own.
+ *
+ * Nor is `useVersionDrop`. It listens to the document for a file dragged into
+ * it and writes nothing there: the target it raises is the page's, over the
+ * frame, never in it.
  */
 
 type Dialog =
@@ -109,7 +116,8 @@ type Dialog =
   | "marking"
   | "stats"
   | "forks"
-  | "image";
+  | "image"
+  | "upload-version";
 
 export function DocViewer() {
   const { docId = "", versionId } = useParams();
@@ -135,6 +143,8 @@ export function DocViewer() {
   const [folders, setFolders] = useState<FolderMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  // A file dropped onto the document, waiting in the upload dialog.
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [wantsEdit, setWantsEdit] = useState(false);
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
@@ -162,6 +172,8 @@ export function DocViewer() {
   // Open editing widens WHO, never to anyone: a signed-in account is still
   // required, on every document, whatever its owner chose.
   const canEdit = isDocEditor || (signedIn && doc.publicEdit);
+  // The real editor set, as the server asks of an upload (SPEC §2).
+  const offersUpload = offersVersionUpload(doc.meta, emailLower);
 
   // The member record, or the projection a public or link reader gets: either
   // says whether this is a fork, and neither says of what (SPEC §21).
@@ -613,6 +625,20 @@ export function DocViewer() {
     onPrint: printCurrent,
   });
 
+  // A file dropped onto the document opens the upload dialog with it, for
+  // whoever may upload, while reading. Never while editing, where a drop
+  // belongs to the editor, nor while presenting (SPEC §2).
+  const openUpload = useCallback((file: File | null) => {
+    setDroppedFile(file);
+    setDialog("upload-version");
+  }, []);
+  const versionDrop = useVersionDrop({
+    enabled: offersUpload && mode.kind === "reading" && !presenting && dialog === null,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    onFile: openUpload,
+  });
+
   const stopEditing = useCallback(async () => {
     await editor.flushUnsaved();
     setWantsEdit(false);
@@ -791,6 +817,10 @@ export function DocViewer() {
     });
     if (doc.meta) {
       entries.push({ id: "stats", label: "Activity", onSelect: () => setDialog("stats") });
+      if (offersUpload) {
+        // Not reachable while editing: the editor's toolbar replaces this menu.
+        entries.push({ id: "upload-version", label: "Upload a new version…", onSelect: () => openUpload(null) });
+      }
       if (isOwner) {
         entries.push(
           // One entry for who has access AND who can see it: they were two,
@@ -818,7 +848,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion]);
+  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload]);
 
   if (doc.loading) return <Loading label="Opening the document" />;
   if (doc.notFound) {
@@ -1000,6 +1030,7 @@ export function DocViewer() {
             className="doc-frame-stage"
             ref={stageRef}
             style={frameFit ? { overflow: "hidden" } : undefined}
+            {...versionDrop.handlers}
           >
             {frame.frameProps ? (
               <iframe
@@ -1017,6 +1048,16 @@ export function DocViewer() {
             {frame.loading ? (
               <div className="frame-loading">
                 <Loading label="Opening the document" />
+              </div>
+            ) : null}
+            {/* Over the frame, like the loading cover, and for the same
+                reason: a drag over the frame is the frame's, so this is what
+                takes the drop once a file has been dragged in. */}
+            {versionDrop.over ? (
+              <div className="frame-drop">
+                <Icon name="upload" size={28} />
+                <strong>Drop to publish it as a new version</strong>
+                <span className="caption">You can check it before it is published.</span>
               </div>
             ) : null}
             <SelectionFab
@@ -1151,6 +1192,24 @@ export function DocViewer() {
           failed={lineage.failed}
           onRefresh={lineage.refresh}
           onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {dialog === "upload-version" && doc.meta ? (
+        <UploadVersionDialog
+          docId={docId}
+          title={doc.title}
+          headVersion={headVersion}
+          trusted={trust.trusted}
+          draftBy={doc.meta.draft?.updatedByEmail ?? null}
+          editing={presence.peers.filter((p) => p.mode === "edit").map((p) => p.name || p.email)}
+          initialFile={droppedFile}
+          onClose={() => setDialog(null)}
+          onPublished={(result) => {
+            setDialog(null);
+            toast.show(versionUploadMessage(result));
+            navigate(`/d/${docId}`);
+          }}
         />
       ) : null}
 

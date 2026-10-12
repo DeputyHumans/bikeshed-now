@@ -282,3 +282,31 @@ describe("filling in missing covers", () => {
     expect(email).toBe("me@example.com");
   });
 });
+
+describe("uploading a new version from the workspace", () => {
+  it("is offered to an editor, and opens on the version current now", async () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta({ editors: ["me@example.com"], editorMembers: ["me@example.com"] })]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "Upload a new version…" })));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("next version of Q3 plan, after v4");
+    // The list is live: somebody publishing while the dialog is open shows.
+    act(() =>
+      listeners.docs!([docMeta({ editors: ["me@example.com"], editorMembers: ["me@example.com"], currentVersion: "v5" })]),
+    );
+    expect(screen.getByRole("status").textContent).toContain("v5 was published while this was open");
+  });
+
+  it("is not offered to somebody who may only read it", () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Upload a new version…" })).toBeNull();
+  });
+});
