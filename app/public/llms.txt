@@ -142,7 +142,7 @@ somebody might commit.
 | `publish_document` | Create a document from content you supply, optionally at an `id` you choose (`idTaken` says if it was taken). Returns where it is filed and who can read it there (`filedIn`, `access`) |
 | `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
-| `update_document` | Publish a new version of one that exists. Pass the `baseVersion` you revised: if somebody published since, it is refused instead of replacing their work |
+| `update_document` | Publish a new version of one that exists. Pass the `baseVersion` you revised: if somebody published since, it is refused instead of replacing their work. Refused while somebody has it open in the editor |
 | `commit_draft` | Publish a document's draft as its next version, as "Save as new version" does |
 | `suggest_edit` | Propose new text for one passage, for a person to accept or reject |
 | `revise_suggestion` | Change your own suggestion before it is decided; what it said before is kept |
@@ -397,6 +397,12 @@ update replaces the draft, so while it holds an accepted change
 `update_document` is refused with `acceptedInDraft`, and says so. Publish the
 draft with `commit_draft` if you may, or ask the person to, then read the
 document again and update it.
+
+**Nobody may be editing.** An update replaces the draft, so while somebody has
+the document open in the editor, `update_document` is refused rather than throw
+away what they are typing, and so is `bikeshed update`. Try again once they have
+left it, or tell the person you are working with. Identical content is still a
+no-op, whoever is editing.
 
 ## If you can approve
 

@@ -119,7 +119,9 @@ A pending suggestion — anyone's — holds back every new version, so
 working with rather than retrying. So does a draft holding an accepted
 suggestion (`acceptedInDraft`): the change is in the draft, and an update would
 replace it. Publish the draft with `bikeshed commit` if you may, or ask for it
-to be, then read the document again.
+to be, then read the document again. And while somebody has the document open
+in the editor, an update is refused rather than throw away their typing: try
+again once they have left it.
 
 ## After you hand back the address
 
@@ -211,6 +213,7 @@ or when the document reads as absent.
 
 - A pending suggestion, anyone's, refuses `update_document`.
 - An accepted change in the draft refuses it too (`acceptedInDraft`).
+- So does somebody having the document open in the editor.
 - `bikeshed commit` (`commit_draft`) is refused until every thread on the
   version is resolved and every suggestion decided.
 

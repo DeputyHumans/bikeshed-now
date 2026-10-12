@@ -108,7 +108,7 @@ async function withStorage(fn) {
   });
   Object.defineProperty(admin, "storage", {
     configurable: true,
-    value: () => ({ bucket: () => ({ file: object, getFiles: async () => [[]] }) }),
+    value: () => ({ bucket: () => ({ file: object, getFiles: async () => [[]], deleteFiles: async () => {} }) }),
   });
   try {
     return await fn();

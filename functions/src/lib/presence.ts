@@ -165,3 +165,39 @@ export async function clearEditLog(docId: string): Promise<void> {
   }
   await db.ref(`status/${docId}/y`).remove();
 }
+
+/** A write refused because somebody is in the editor, or might be. */
+export type EditingRefusal = { status: 409; error: string; editors?: number };
+
+/**
+ * Why nothing may be written to a draft now, or what is left to drop when it
+ * may: whether a log nobody is using holds anything.
+ *
+ * Every write made outside the editor asks this first: an agent's accept,
+ * `commit_draft`, and every update (SPEC §6a). A read that fails refuses,
+ * because "nobody is here" is the answer that loses somebody's typing.
+ */
+export async function editorsRefusal(
+  docId: string,
+  doing: string,
+): Promise<{ refusal: EditingRefusal } | { log: boolean }> {
+  let live: Awaited<ReturnType<typeof liveEditing>>;
+  try {
+    live = await liveEditing(docId);
+  } catch {
+    return {
+      refusal: { status: 409, error: `Could not tell whether anybody is editing this document, so it was not ${doing}. Try again.` },
+    };
+  }
+  if (live && live.editors > 0) {
+    const who = live.editors === 1 ? "Somebody has" : `${live.editors} people have`;
+    return {
+      refusal: {
+        status: 409,
+        error: `${who} this document open in the editor, where this would be lost, so it was not ${doing}. Try again once they have left it, or ask them to do it there.`,
+        editors: live.editors,
+      },
+    };
+  }
+  return { log: Boolean(live?.log) };
+}

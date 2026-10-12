@@ -859,7 +859,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>get_document</code></td><td>A document's metadata, address and current source; over 200,000 characters it is cut, and says so</td></tr>
         <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
-        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind</td></tr>
+        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>commit_draft</code></td><td>Publish the draft as the next version, as Save as new version does</td></tr>
         <tr><td><code>get_changes</code></td><td>What happened since a cursor, in the order it was recorded: comments, threads, suggestions, versions, and changes to the document itself; <code>since</code> is required, and <code>needsReply</code> names the threads a person is waiting on</td></tr>
         <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, oldest first and at most 50, each with its quote, its section, whether a person awaits a reply, and every comment with its id, time and the channel it came through</td></tr>
@@ -937,7 +937,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed logout</code></td><td>Sign out on this computer, revoking a token from browser sign-in</td></tr>
         <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
         <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
-        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; with <code>--base</code>, refused if somebody published since the version you revised</td></tr>
+        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; with <code>--base</code>, refused if somebody published since the version you revised. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>bikeshed get &lt;id&gt;</code></td><td>Print a document's source</td></tr>
         <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
         <tr><td><code>bikeshed changes &lt;id&gt; --since &lt;cursor&gt; [--wait]</code></td><td>What happened since a cursor, ending with the cursor for next time; <code>--wait</code> keeps checking until something does, and exits 3 on <code>--timeout</code></td></tr>

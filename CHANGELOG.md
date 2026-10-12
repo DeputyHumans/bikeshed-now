@@ -14,6 +14,23 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **An update no longer brings the replaced draft back, or publishes over
+  somebody's typing.** A new version from `update_document`, `bikeshed update`
+  or `POST /publish?update=` deleted the document's draft record but left the
+  draft's files and its live editing log behind. The log wins over the bytes an
+  editor loads, so the next person to open the editor got the old draft back
+  over the new version, and autosaved it. An update made while somebody was in
+  the editor replaced the draft under them, and what they typed was lost when
+  their next save was refused as stale. Every update is now refused while
+  anybody has the document open in the editor, as `commit_draft` and an agent's
+  accept already were. Once the new version is current, the draft's files and
+  its log are dropped. Identical content is still a no-op, whoever is editing
+  (SPEC §2, §6a, §16, §19).
+
 ## 0.15.1 — 2026-10-10
 
 ### Fixed

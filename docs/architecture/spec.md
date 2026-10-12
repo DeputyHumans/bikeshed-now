@@ -385,11 +385,15 @@ own pending proposal, and neither destroys anything.
   `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
   re-upload in all but name, which open editing does not extend to. `id`,
   `folderId` and `title` with it are a `400`; a refused caller gets the usual
-  `404`/`403` (§1.4b); an expired document a `409`; a pending suggestion on the
-  current version a `409 { error, pendingSuggestions }`, and a draft holding an
-  accepted suggestion a `409 { error, acceptedInDraft }` (§6a). A new version
-  withdraws trust, as every update through a token does (§6c). Answers
-  `{ docId, versionId, contentHash, fileCount, bytes, deduped }`.
+  `404`/`403` (§1.4b); an expired document a `409`. Given `baseVersion`, the
+  version the file was revised from, another version being current is a
+  `409 { error, currentVersion }`. A pending suggestion on the current version
+  is a `409 { error, pendingSuggestions }`, a draft holding an accepted
+  suggestion a `409 { error, acceptedInDraft }`, and anybody having the document
+  open in the editor a `409 { error, editors }` (§6a). A new version withdraws
+  trust, as every update through a token does (§6c), and drops the draft it
+  replaced (§16). Answers `{ docId, versionId, contentHash, fileCount, bytes,
+  deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree. `GET
@@ -767,6 +771,16 @@ The one path that writes content, and it is explicit and server-mediated.
   publish the draft first, asked before anything is uploaded and again inside
   the transaction that would delete it. The in-app commit publishes the draft
   itself and is not held.
+- **No update is made under somebody's editor.** `/publish?update=`, the CLI
+  and `update_document` are refused with `409 { error, editors }` while anybody
+  has the document open in the editor, whose typing the new version would
+  throw away. A read of presence that fails refuses too, rather than guess
+  nobody is there. The question is asked after the dedup, so an identical
+  update stays a no-op, and before anything is uploaded (`lib/presence.ts`).
+  Once the version is current, the draft's files and its live log are dropped
+  (§16); a refused or deduplicated update leaves both alone. A race remains,
+  as for an agent's accept (§22): somebody who opens the editor between the
+  question and the new version loses what they type in that window.
 - The comment gate stays on the in-app commit alone, because
   the agent loop revises a document in answer to its open comments, and
   closing them is not what publishing the answer waits for (§19).
@@ -1537,6 +1551,15 @@ The stale-base `409` **stays**, and now means only what it always meant:
 somebody PUBLISHED a new version while you were editing. It never described
 concurrent drafts, and no longer has to.
 
+**The log belongs to the draft.** When an editor opens a document, a log that
+holds anything wins over the bytes it loaded, because it may hold edits they do
+not. So a write made outside the editor is refused while anybody is in it, and
+drops a log nobody is using: an agent's accept and `commit_draft` (§22), and
+every update, through `/publish?update=`, the CLI or `update_document` (§6a).
+An update deletes the draft's files with it; left in place, `/draft` would
+serve them. Without both, the next person to open the editor would bring the
+replaced draft back over the new version and autosave it.
+
 Writes to the shared log are gated by `editAccess/{docId}`, a second mirror, of
 `editorMembers` — approvers included, since that set contains them (§13). A
 suggester is not in it, and never joins the shared log. A **public** open-editing document also carries the key `*`:
@@ -1981,7 +2004,7 @@ scripts and anything that cannot open a browser.
 | `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |
 | `fork_document` | copy a version of a document the caller can read into one they own (§21), with `filedIn` and `access` |
 | `get_lineage` | what a document was forked from and, for its owner, its forks (§21) |
-| `update_document` | commit a new version of an existing document; given the `baseVersion` it was revised from, refused when another version is current, and it counts the open threads the new version leaves behind (`threadsLeftBehind`) |
+| `update_document` | commit a new version of an existing document; given the `baseVersion` it was revised from, refused when another version is current; refused while anybody has the document open in the editor; and it counts the open threads the new version leaves behind (`threadsLeftBehind`) |
 | `commit_draft` | publish the draft as the next version, through the in-app commit's own gates (§6a) |
 | `suggest_edit` | propose replacing a passage with new text, for a person to accept or reject (§22) |
 | `revise_suggestion` | change the caller's own pending suggestion; what it said before is kept (§22) |

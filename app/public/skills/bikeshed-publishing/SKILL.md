@@ -220,7 +220,9 @@ it.
 **Publishing identical content is a no-op.** The bytes are hashed; matching
 bytes mint no new version. So `update` is safe to run in a loop, in CI, or after
 a change you are not sure you made — it will tell you `no change` rather than
-filling the history with duplicates.
+filling the history with duplicates. A change is refused while somebody has the
+document open in the editor, where it would throw away their typing; try again
+once they have left it.
 
 **An update keeps the document's format, and what it replaces depends on what
 you send.**

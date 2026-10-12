@@ -83,9 +83,9 @@ import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publis
 import { locateQuote } from "../lib/quote";
 import { renameDocument } from "../lib/rename";
 import { setThreadResolved } from "../lib/threads";
-import { acceptSuggestion, editorsRefusal } from "../lib/accept";
+import { acceptSuggestion } from "../lib/accept";
 import { commitDraft } from "../lib/draft";
-import { clearEditLog } from "../lib/presence";
+import { clearEditLog, editorsRefusal } from "../lib/presence";
 import {
   ANNOTATION_COLOR,
   SUGGESTION_COLOR,
@@ -787,7 +787,8 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "Publish a new version of an existing document. Identical content is a no-op, so this is safe to retry. " +
       "Pass the `baseVersion` you read and revised: if somebody has published since, the update is refused and names the current version, " +
-      "instead of replacing their work. `threadsLeftBehind` counts the open threads that stay on the version this replaces.",
+      "instead of replacing their work. `threadsLeftBehind` counts the open threads that stay on the version this replaces. " +
+      "Refused while somebody has the document open in the editor.",
     inputSchema: {
       type: "object",
       required: ["id", "content"],

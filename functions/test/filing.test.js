@@ -89,6 +89,9 @@ async function withStorage(objects, fn) {
       bucket: () => ({
         file: object,
         getFiles: async ({ prefix }) => [[...objects.keys()].filter((k) => k.startsWith(prefix)).map(object)],
+        deleteFiles: async ({ prefix }) => {
+          for (const k of [...objects.keys()]) if (k.startsWith(prefix)) objects.delete(k);
+        },
       }),
     }),
   });

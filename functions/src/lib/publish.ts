@@ -34,7 +34,7 @@ import {
   uniqueDocId,
   type Membership,
 } from "./folders";
-import { syncPresenceAccess } from "./presence";
+import { clearEditLog, editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
 import {
   anyAcceptedInDraft,
   anyOpenThread,
@@ -205,7 +205,7 @@ export async function reviseDocument(args: {
   actor: Actor;
   authorEmail: string;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -443,14 +443,18 @@ export interface UpdateResult {
 /**
  * Mint a new version of an existing document from supplied content.
  *
- * Used by the agent surface, where the caller sends a whole new document rather
- * than editing a draft. The dedup rule is the same one the CLI and the in-app
- * commit use, which is what makes "publish the same thing twice" safe for an
- * agent that cannot remember whether it already did.
+ * Used by every update that sends a whole new document rather than editing a
+ * draft: `update_document`, the CLI and a file uploaded in the app. The dedup
+ * rule is the same one the in-app commit uses, which is what makes "publish
+ * the same thing twice" safe for an agent that cannot remember whether it
+ * already did.
  *
  * A new version through here is an upload, so it is never trusted: the owner's
  * trust and every reader's own are withdrawn with the same write that makes it
  * current (SPEC §6c). A deduplicated update changes nothing and keeps them.
+ *
+ * It replaces the draft, so it is refused while anybody is in the editor, and
+ * once it is current it drops what the draft left behind (SPEC §6a, §6b).
  */
 export async function commitNewVersion(args: {
   db: Db;
@@ -460,7 +464,7 @@ export async function commitNewVersion(args: {
   authorEmail: string;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
@@ -478,6 +482,10 @@ export async function commitNewVersion(args: {
 
   // After the dedup above, so an identical update stays a no-op whatever is
   // pending, and before anything is uploaded, so a refusal leaves no bytes.
+  // Whoever is in the editor would lose their typing to this version, and the
+  // next save of theirs would be refused as stale.
+  const editing = await editorsRefusal(docRef.id, "published");
+  if ("refusal" in editing) return editing.refusal;
   const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
   if (refused) return refused;
   // This path deletes the draft; changes accepted into it would go with it.
@@ -526,6 +534,9 @@ export async function commitNewVersion(args: {
     throw e;
   }
 
+  // Only once the version is current, so a refused or stale update leaves the
+  // draft and its log to the people editing them.
+  await dropReplacedDraft(docRef.id, editing.log);
   await syncPublicProjection(db, docRef.id);
 
   return { versionId, contentHash, fileCount, bytes, deduped: false };
@@ -569,5 +580,29 @@ export async function commitNewVersion(args: {
       { merge: true },
     );
     withdrawTrust(tx, docRef, grants);
+  }
+}
+
+/**
+ * What a draft leaves behind once a version has replaced it (SPEC §6b).
+ *
+ * The transaction deleted the `draft` field; its files and its live log are
+ * outside Firestore. Both would bring it back: the next editor to open the
+ * document joins the log, which wins over the bytes it loaded, and autosaves
+ * the old draft over the new version; the files are what `/draft` serves.
+ *
+ * Best effort, because the version is already current: failing the request now
+ * would report as unpublished a version everybody can already see.
+ */
+async function dropReplacedDraft(docId: string, log: boolean): Promise<void> {
+  try {
+    if (log) await clearEditLog(docId);
+  } catch (e) {
+    console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
+  }
+  try {
+    await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+  } catch (e) {
+    console.error(`could not delete the draft files of ${docId}:`, (e as Error)?.message ?? e);
   }
 }

@@ -6,7 +6,7 @@ import type { Actor } from "./actor";
 import { applyToHtml, applyToMarkdown, type ApplyRefusal } from "./apply";
 import { readWorkingCopy, writeDraft } from "./draft";
 import { renderMarkdown } from "./markdown/render";
-import { clearEditLog, liveEditing } from "./presence";
+import { clearEditLog, editorsRefusal } from "./presence";
 import { changeSuggestion, type Author, type Refusal } from "./suggestions";
 
 /**
@@ -33,32 +33,6 @@ const REFUSALS: Record<ApplyRefusal, string> = {
   "not-verbatim": `In this Markdown document its passage is not written out plainly in the source. ${IN_THE_APP}`,
   unverified: `The change could not be made exactly as suggested. ${IN_THE_APP}`,
 };
-
-/** Why nothing may be written to a draft now, or null when it may. */
-export async function editorsRefusal(
-  docId: string,
-  doing: string,
-): Promise<{ refusal: Refusal } | { log: boolean }> {
-  let live: Awaited<ReturnType<typeof liveEditing>>;
-  try {
-    live = await liveEditing(docId);
-  } catch {
-    return {
-      refusal: { status: 409, error: `Could not tell whether anybody is editing this document, so it was not ${doing}. Try again.` },
-    };
-  }
-  if (live && live.editors > 0) {
-    const who = live.editors === 1 ? "Somebody has" : `${live.editors} people have`;
-    return {
-      refusal: {
-        status: 409,
-        error: `${who} this document open in the editor, where this would be lost, so it was not ${doing}. Try again once they have left it, or ask them to do it there.`,
-        editors: live.editors,
-      },
-    };
-  }
-  return { log: Boolean(live?.log) };
-}
 
 export async function acceptSuggestion(args: {
   db: admin.firestore.Firestore;
