@@ -1234,10 +1234,15 @@ Markdown converter collapses whitespace in every other text node.
 | `npm run check:licenses` | exit 0, every dependency permissive |
 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, `llms.txt` the agent guide, and the served skills their sources |
 | `npm run test:tools` | 0 failing |
+| `npm run test:e2e -- --self-test`, then `npm run test:e2e -- run --suite smoke` (opt-in) | 0 failing, then exit 0 |
 
-`npm run verify` runs every row except two: `test:rules:emulated`, which needs
-the emulators and starts them, and the script dry-runs, which are run by hand
-(`CONTRIBUTING.md` has the same table).
+`npm run verify` runs every row except three: `test:rules:emulated`, which needs
+the emulators and starts them, the script dry-runs, which are run by hand, and
+the end-to-end suite, which is opt-in (`CONTRIBUTING.md` has the same table).
+The suite builds its own copy of the product from the tree on spare ports,
+needs Java, Mailpit and Chrome, and takes minutes and gigabytes, so neither
+`verify` nor CI runs it. It is run for a change the verification walkthrough
+covers (`docs/development/verification.md`, "Automated"; `e2e/README.md`).
 
 **The app MUST connect to the emulators** behind `VITE_USE_EMULATORS=1`
 (`connectAuthEmulator`, `connectFirestoreEmulator`, `connectDatabaseEmulator`).

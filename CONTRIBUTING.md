@@ -30,7 +30,8 @@ The app connects to the emulators when `VITE_USE_EMULATORS=1` is set — copy
 
 A change is done when every row passes **with output shown**. `npm run verify`
 runs every row except 5, which needs the emulators — use
-`npm run test:rules:emulated`, which starts them — and 6, which you run by hand.
+`npm run test:rules:emulated`, which starts them — 6, which you run by hand,
+and 14, the opt-in end-to-end suite, which neither `verify` nor CI runs.
 
 | # | Command | Pass condition |
 |---|---|---|
@@ -47,6 +48,7 @@ runs every row except 5, which needs the emulators — use
 | 11 | `npm run check:agents` | `AGENTS.md` matches `CLAUDE.md`, and `llms.txt` matches `docs/agents/agent-guide.md` |
 | 12 | `npm run test:tools` | 0 failing — the served instructions carry the deployment's own address, and no `<deployment>` survives |
 | 13 | `npm --prefix cli test` | 0 failing |
+| 14 | `npm run test:e2e -- --self-test`, then `npm run test:e2e -- run --suite smoke` | opt-in, for a change the walkthrough below covers: 0 failing, then exit 0 |
 
 **Every command in every document in this repository is copy-pasteable and is
 expected to work.** A document is wrong if a command in it fails; that is a bug
@@ -54,9 +56,20 @@ worth reporting on its own.
 
 The table above proves the code is self-consistent. It does not prove the
 product works — the properties that matter most here are integration ones. For
-those, walk `docs/development/verification.md` against the emulators. It is sixteen
+those, walk `docs/development/verification.md` against the emulators. It is seventeen
 observations, it needs no cloud account, and it is where four real defects were
 found that no unit test could have caught.
+
+Most of that walkthrough also runs by itself, as row 14. `npm run test:e2e`
+builds a copy of the product from the tree, starts it on its own ports with
+its own emulators and mail catcher, and drives it with real browsers, MCP and
+the CLI. It is opt-in because a run takes minutes and gigabytes, and needs
+Java, Mailpit and system Chrome. Run it when a change touches what the
+walkthrough covers: the editor and live editing, sharing, publishing and
+versions, MCP, the CLI, OAuth or email. Then run the specs for that area
+against a kept stack. The verification doc's **Automated** section maps each
+walkthrough step to its specs, and [`e2e/README.md`](e2e/README.md) is the
+guide, including what the suite does not yet prove.
 
 ## House rules
 

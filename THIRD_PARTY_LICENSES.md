@@ -79,6 +79,7 @@ Every one is MIT or Apache-2.0.
 | root (dev) | `@firebase/rules-unit-testing` | Apache-2.0 |
 | root (dev) | `firebase-admin` | Apache-2.0 |
 | root (dev) | `mime` | MIT |
+| root (dev) | `playwright-core` — the opt-in end-to-end suite's browser driver, pinned exactly; it has no dependencies and downloads no browser | Apache-2.0 |
 
 ---
 

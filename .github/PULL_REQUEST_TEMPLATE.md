@@ -10,11 +10,14 @@ which belongs in the commit body, not in a form.
 ## Verification
 
 Paste the output, do not describe it. `npm run verify` covers everything except
-the rules suite.
+the rules suite and the opt-in end-to-end suite.
 
 - [ ] `npm run verify`
 - [ ] `npm run test:rules:emulated` — if rules, indexes or the ACL changed
 - [ ] Manually exercised in the emulators — if this changes the viewer or editor
+- [ ] `npm run test:e2e -- run --suite smoke`, and the area's specs — if this
+      changes what `docs/development/verification.md` walks through (opt-in,
+      `e2e/README.md`)
 
 ```
 <!-- output -->

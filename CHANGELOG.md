@@ -14,6 +14,40 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+Tests and documentation only, so a patch release. The product is unchanged.
+
+### Tests
+
+- **An end-to-end suite, opt-in: `npm run test:e2e`.** The unit suites run
+  each module in plain Node or jsdom, with at most two fake peers and
+  transactions that never conflict. So the properties that matter most here
+  were proved only by walking `docs/development/verification.md` by hand: a
+  highlight surviving a reload, decoration kept out of saved bytes, several
+  people typing in one document, two commits racing. `e2e/` builds a copy of
+  the product from the tree and starts it on its own ports, with its own
+  emulators and a local mail catcher. Real Chrome sessions, MCP clients and
+  the CLI then drive it.
+  - **What it covers:** a smoke tier; 26 functional specs over areas A1–A24
+    of the test plan; and concurrency scenarios C1–C23 at 2, 5, 10 and 20
+    simultaneous users. The shared oracles each have a negative control (the
+    saved bytes free of decoration, their hash, convergence, the
+    concurrency invariants): a patch that plants the bug the oracle exists
+    for, seen to turn its case red, then green without it. There are 145
+    such sets in all. Many checks inside single cases have none yet.
+  - **Why it is opt-in:** a run takes minutes and gigabytes, and needs Java,
+    Mailpit and system Chrome. The concurrency tier is a measurement that
+    wants the machine to itself. Neither `npm run verify` nor CI runs it.
+  - **What it does not prove yet:** the functional specs have known gaps,
+    left open on purpose so the concurrency scenarios came first, and the
+    production tier is refused in this build. Both are listed in
+    `e2e/README.md`, "Known weaknesses".
+  - **It found product defects.** They are tracked separately and fixed in
+    their own releases. Until then their cases report TODO, never a pass.
+  - `playwright-core` is the one new dependency: a root devDependency, pinned
+    exactly, Apache-2.0, with no dependencies of its own.
+
 ## 0.16.0 — 2026-10-12
 
 A feature, and an update refused where it was not before — while somebody is

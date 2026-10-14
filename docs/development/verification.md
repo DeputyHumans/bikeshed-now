@@ -7,7 +7,9 @@ vouches for it, generated DOM not being baked into the next version.
 
 This is the walkthrough that proves those, against the emulators, with no cloud
 account. It found four real defects the unit suites could not, each recorded in
-the commit that fixed it.
+the commit that fixed it. Most of it now runs as the opt-in end-to-end suite;
+[Automated](#automated-npm-run-teste2e) maps each step to its specs and says
+what is still walked by hand.
 
 ---
 
@@ -124,7 +126,7 @@ a slug space that often contains the confidential part.
 
 Then check `public/{docId}` for the PUBLIC row: it carries `docId, title, slug,
 currentVersion, entry, format, visibility, publicEdit, trusted, expiresAt,
-publishedAt` and **no** `members`, `viewers`, `ownerEmail` or `stats`. There is
+forked, publishedAt` and **no** `members`, `viewers`, `ownerEmail` or `stats`. There is
 no row at all for the private and unlisted documents, and an anonymous `GET` of
 `public/<unlisted>` and of `public/<absent>` both come back `PERMISSION_DENIED`,
 as does listing `public`. Make the public document private again and its row is
@@ -434,6 +436,74 @@ version its user has not seen. What it cannot prove: that a real
 deployment's runtime account may read and clear the Realtime Database. If it
 cannot read it, every update is refused as "could not tell whether anybody is
 editing" (operations overview, "When something is wrong").
+
+## Automated: `npm run test:e2e`
+
+The suite in `e2e/` runs most of this walkthrough by itself. It builds a copy
+of the product from the tree and starts it on its own ports, with its own
+emulators, a local Mailpit for mail and its own `functions/.env.local`. It
+builds the app from `app/.env.example` with the copy's own origin, so none of
+"Running it" applies to it and nothing in it can reach a deployment. It is
+**opt-in**, and neither `npm run verify` nor CI runs it. One run takes minutes
+and gigabytes, and it needs Java, Mailpit and system Chrome on the machine. Its
+concurrency tier is a measurement that wants the machine to itself.
+[`e2e/README.md`](../../e2e/README.md) is the full guide.
+
+```bash
+npm run test:e2e -- --self-test          # the harness's own tests, no stack
+npm run test:e2e -- run --suite smoke    # a stack from HEAD, canaries, a functional smoke, stack down
+npm run test:e2e -- stack up --tree worktree                       # keep a stack; prints its runId
+npm run test:e2e -- run --attach <runId> --suite functional        # every functional spec against it
+```
+
+Specs are under `e2e/specs/`; the `A` cases are `functional/`, the `C` cases
+`concurrency/`.
+
+| # | Specs | Cases | What runs by itself | Still by hand |
+|---|---|---|---|---|
+| 1 | a12-versions, a20-mcp, a20-cli | A12.1, A20.2 `update_document`, A20.7e, A20.7s | identical bytes mint nothing on `/publish?update=`, `update_document`, an editor's commit and `publish --watch` | the operator script's `NO-OP` line |
+| 2 | a10-markdown | A10.2 | `format`, `entry`, `sourceEntry`, `rendererVersion`; both files stored and zipped | the operator script's actor, `uid: null, channel: "cli"` |
+| 3 | a02-matrix-http | A2.X, A2.AN | a stranger's and an anonymous 404 are byte-equal to an absent id's: status, body and headers | — |
+| 4 | a03-visibility, a02-matrix-http, a18-stats | A3.1–A3.7, A3.9, A2.LK, A2.LKw, A18.5 | every proxy, `/unlock` and `/d` row; private and absent byte-identical; the `public/{id}` keys; link grants and rotation; `POST /view` without the token | production's own headers (below) |
+| 5 | a05-reading-trust, a15-forks | A5.1, A15.2 | the three trust rows; a fork resets `trusted` | — (A5.1 uploads the samples rather than forking them) |
+| 6 | a05-reading-trust | A5.7 | `elementId: "s5-sections"`, the highlight redrawn, both ancestors open, the other eight closed | — |
+| 7 | a09-editing | A9.7, A9.11 | the commit refused with its reason; every v1 and v2 count; no duplicate id; `#dot-nav` empty in the bytes and filled when read; v2 clean and its hash right | — |
+| 8 | a10-markdown | A10.1, A10.5 | the disabled controls and their tooltip; the format-aware download menu | — |
+| 9 | a10-markdown | A10.3, A10.4 | the diff is the edit plus normalisation, comments and SPDX kept; a no-op commit is `deduped: true` | — |
+| 10 | a20-mcp, a06-comments, a18-stats, a19-account | A20.1, A20.2, A6.1, A6.9, A18.3, A19.5 | 23 tools; each thread's quote; the agent's thread highlighted in the viewer; `via` mcp beside web; Markdown source from `get_document`; `apiReads` with `ms: 0`, the human stats untouched | — |
+| 11 | a15-forks | A15.1, A15.1b, A15.2, A15.3, A15.3b | signed-out Fork → sign-in → one fork; the record and the server-only `forks/{id}`; two hops, `changed`, the walk stopping at a hidden parent | the Fork chip, the "Forked from" panel, the dot and the card's count (lineage is checked through its API) |
+| 12 | a16-decks, a14-workspace, a02-matrix-http | A16.4, A16.5, A14.6 | cover then slides, once each; the `thumb` record, `updatedAt` untouched; the rail as `<img src="/thumb/…">`; a viewer posts nothing; a non-member's 404; the workspace's own covers | each slide's final state, and the reload served from the browser's cache (only the `immutable` header is checked) |
+| 13 | a07-suggestions, a08-review, a24-responsive-a11y | A7.1, A7.2, A7.4, A8.1–A8.3, A8.9, A24.2c, A24.2d | Suggest refused across paragraphs; `409` with `pendingSuggestions`; the highlight API with no mutation; `claim` → `POST /draft` → `accept`; the reject note; the co-editor sees the change once; clean committed bytes; the keyboard walk | the struck text and inline replacement redrawn after an Edit |
+| 14 | a20-mcp, a22-oauth, a20-cli, a19-account | A20.4, A22.1, A22.2, A22.6, A22.7, A20.7p, A19.6 | the `401` challenge with `no-store`; the issuer equal to `authorization_servers[0]`; registration, consent, 23 tools; Revoke → `invalid_token`; CLI login; a skill zip holding `<name>/SKILL.md` alone | the MCP Inspector itself (a scripted OAuth client stands in), and the CLI's own browser (stubbed) |
+| 15 | a20-cli, a20-mcp, c06-leave-commit, c12-agent-vs-editors | A20.7h, A20.7i, A20.7k, A20.2 `commit_draft`, C11, C12d | accept, reject and commit from the CLI, with only the commit minting; the resolve and reopen notes; an agent's accept and commit refused while an editor is open | the CLI's own wording of that refusal |
+| 16 | a21-changes, a20-mcp, a20-cli | A21.1–A21.3, A20.2 `get_changes`, A20.7j | the three events once each, in order; a quiet cursor comes back unchanged; `access.changed` reaches editors only | Eventarc on a real deployment |
+| 17 | c12-agent-vs-editors, a12-versions, a20-cli | C12a–C12c, A12.5, A12.6, A20.7e | an update refused `409` naming the editors and leaving draft and log alone; an update dropping both, the next editor seeing the new version; `publishedVia: "upload"`; a stale base; identical bytes | **the whole dialog**: Upload a new version…, its toast, dropping onto an open document, "vN was published while this was open", the editors it names, "No changes", the card's entry |
+
+**What stays by hand, and why.**
+
+- **The upload dialog (17).** It arrived in 0.16.0, after the specs were
+  written. The specs send its request raw, so the server's answers are
+  covered, but no spec opens the dialog.
+- **Third-party and system UI (14).** The MCP Inspector, and the browser
+  `bikeshed login` opens, are other people's programs. The specs drive the
+  same protocol with a scripted client and a stubbed opener.
+- **The operator scripts' own output (1, 2).** The specs publish over HTTP,
+  MCP and the CLI. The operator script runs once, in the smoke tier, so its
+  console line and its account-less actor are read only here.
+- **What only a deployment shows.** Eventarc invoking the triggers and
+  retrying them (16), the runtime account's access to the Realtime Database
+  (15, 17), and real Hosting's caching are production properties. The
+  emulator cannot show them (CLAUDE.md), and the suite's production tier is
+  refused in this build.
+- **Pixels and a few UI words (11, 12, 13).** Where a step is judged by eye,
+  the specs check the record or the API behind it instead.
+
+A case tagged `defect:` reports TODO, not a pass. It is a known product
+defect, or a SPEC question under triage, and some rows above contain one. A
+green `run` therefore does not say every row holds. **Known weaknesses** in
+`e2e/README.md` says how to read those cases. It also lists the cases that
+need a specially built stack, and the gaps in the functional specs that
+were deliberately left open.
 
 ## What this walkthrough found
 

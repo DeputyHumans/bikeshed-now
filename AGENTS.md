@@ -32,6 +32,12 @@ npm run test:rules:emulated  # rules — needs emulators, and starts them
 Run both. Show the output. **Never describe a check as passing that you did not
 run**, and never report a fix as verified when you only reasoned about it.
 
+`npm run test:e2e` is the opt-in end-to-end suite (`e2e/README.md`), outside
+`verify` and CI. If a change touches the editor, live editing, sharing,
+publishing, MCP, the CLI, OAuth or email, also run `-- --self-test`, then
+`-- run --suite smoke`, then that area's specs on a kept stack. It starts its
+own stack on spare ports, never on yours. A `defect:` case's TODO is not a pass.
+
 ## The emulator cannot tell you everything
 
 Four classes of defect are **invisible locally** and have all shipped:
