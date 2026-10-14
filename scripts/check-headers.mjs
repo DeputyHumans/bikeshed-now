@@ -44,6 +44,7 @@ const SOURCE_ROOTS = [
   "cli/src",
   "config",
   "rules-tests",
+  "e2e",
 ];
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs", ".js", ".css", ".sh", ".py"]);
@@ -51,8 +52,12 @@ const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs", ".js", ".css", ".sh", 
 /** Files that must carry the full notice, not just the identifier. */
 const FULL_NOTICE = ["functions/src/lib/hash.ts", "scripts/lib/hash.mjs"];
 
-/** Sample documents: identifier only, in a comment of whatever syntax fits. */
-const IDENTIFIER_ONLY = ["content/"];
+/**
+ * Sample documents: identifier only, in a comment of whatever syntax fits. The
+ * e2e fixtures are documents too — they are published into a stack and their
+ * bytes are compared, so a second header line would be content under test.
+ */
+const IDENTIFIER_ONLY = ["content/", "e2e/fixtures/"];
 
 const FULL_NOTICE_MARKERS = [
   "Licensed under the Apache License, Version 2.0",

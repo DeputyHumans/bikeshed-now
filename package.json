@@ -41,6 +41,7 @@
     "test:app": "npm --prefix app test",
     "test:cli": "npm --prefix cli test",
     "test:rules": "node --test rules-tests/*.test.mjs",
+    "test:e2e": "node e2e/run.mjs",
     "test:rules:emulated": "firebase emulators:exec --only firestore,database --project demo-bikeshed \"npm run test:rules\"",
     "verify": "npm run check:policy && npm run check:agents && npm run build && npm run test && npm run check:secrets && npm run check:headers && npm run check:content && npm run check:licenses",
     "check:content": "node scripts/check-content.mjs",
@@ -50,6 +51,7 @@
     "@firebase/rules-unit-testing": "^3.0.4",
     "firebase": "^10.14.1",
     "firebase-admin": "^12.7.0",
-    "mime": "^4.0.4"
+    "mime": "^4.0.4",
+    "playwright-core": "1.63.0"
   }
 }
