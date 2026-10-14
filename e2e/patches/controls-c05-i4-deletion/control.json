@@ -1,0 +1,15 @@
+{
+  "oracle": "I4 (C5, deletion wins): a paragraph deleted while another editor types into it, and every token typed into it, are gone on every peer; the deletion took exactly that element",
+  "what": "applyRemote never applies a delta that only deletes children (app/src/crdt/sync.ts), so the paragraph a peer deleted stays in the other copies with the tokens typed into it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C5 delete a paragraph while N−1 type into it: deletion wins, so the paragraph and every token typed into it are gone on every peer (I4), and the session converges (I1) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^I4: p2: "
+  }
+}

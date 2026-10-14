@@ -1,0 +1,13 @@
+{
+  "oracle": "C4b: every peer's v1 body once (I3), the joiner sharing the live log, and a probe keystroke crossing each way between a member and the joiner within 2 s (I13)",
+  "what": "persistDocMembership (functions/src/lib/folders.ts) mirrors a directly granted editor to editAccess but leaves it out of presenceAccess, so that editor may write the live log but not read it: S27's shape on a member, who then seeds a second body into the owner's copy and never receives the owner's keys",
+  "target": {
+    "spec": "e2e/specs/concurrency/c04-first-join.spec.mjs",
+    "case": "C4b positive control: an account granted editor joins N−1 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C4b: I3 p1: the sentinel appears [2-9] time\\(s\\), not once(?![\\s\\S]*editing alone)[\\s\\S]*not merged \\(I13, p1 → pj\\): pj: the probe never arrived"
+  }
+}

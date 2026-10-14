@@ -1,0 +1,11 @@
+{
+  "oracle": "the peer overlay never exists in an edit frame (A11.3): every edit-frame sample lacks #bshd-peers, #bshd-peer-style and data-bshd=peers|peer-style",
+  "what": "usePeerPresence creates the overlay whatever the mode, so an editor's edit frame carries the peer layer",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.3 no edit frame ever holds the peer overlay #bshd-peers, though the reading frame beside it draws the editor's caret"
+  },
+  "expect": {
+    "message": "absent from every edit frame sample"
+  }
+}

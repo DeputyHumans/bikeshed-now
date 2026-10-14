@@ -1,0 +1,77 @@
+--- /dev/null
++++ b/functions/src/lib/e2eGate.ts
+@@ -0,0 +1,27 @@
++// SPDX-License-Identifier: Apache-2.0
++// e2e only, applied to a stack copy by e2e/patches/amplify-mint-join: a server pause point that asks the stack's gate service whether to go on (SPEC §12).
++
++import { randomUUID } from "crypto";
++
++/**
++ * Never part of the product: the e2e harness applies this file, and the
++ * calls to it, to a stack's COPY of the tree (e2e/lib/gates.mjs). The stack
++ * that applies it sets E2E_GATE_URL in functions/.env.local.
++ *
++ * FAILS CLOSED. Without E2E_GATE_URL, or when the gate service does not
++ * answer 200, the call throws and the request fails: a patched stack that
++ * cannot pause here must never go on as if it had paused.
++ *
++ * WHO CALLS. Each call is its own request, so each names a caller of its
++ * own (run 1): a spec waiting for distinct callers counts requests.
++ */
++export async function e2eGate(name: string, key: string): Promise<void> {
++  const base = process.env.E2E_GATE_URL;
++  if (!base) {
++    throw new Error(`e2e gate ${name}: E2E_GATE_URL is not set on this patched stack, so the pause point cannot be honoured; refusing to go on`);
++  }
++  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=server&caller=${encodeURIComponent(randomUUID())}&run=1`;
++  const res = await fetch(url, { method: "POST" });
++  const text = await res.text();
++  if (res.status !== 200) throw new Error(`e2e gate ${name}: the gate service answered ${res.status} ${text.slice(0, 200)}`);
++}
+--- /dev/null
++++ b/app/src/e2eGate.ts
+@@ -0,0 +1,44 @@
++// SPDX-License-Identifier: Apache-2.0
++// e2e only, applied to a stack copy by e2e/patches/amplify-mint-join: a client gate that asks the stack's gate service whether to go on (SPEC §12).
++
++/**
++ * Never part of the product: the e2e harness applies this file, and the
++ * calls to it, to a stack's COPY of the tree (e2e/lib/gates.mjs). The stack
++ * that applies it builds the app with VITE_E2E_GATE_URL, a port of its own
++ * block that the browser tripwire allows.
++ *
++ * FAILS CLOSED. Without VITE_E2E_GATE_URL in the build, or when the gate
++ * service does not answer 200, the call throws: the join never completes,
++ * rather than going on as if the gate had been asked.
++ *
++ * WHO CALLS. Every call names its caller: one id for this page (made once,
++ * when the module loads) and a run number counting this page's calls. A
++ * hook's effect runs again (a frame reload, a changed dependency) while its
++ * earlier call is still held, so one joiner can be held twice; the gate
++ * service tells joiners apart by the id and counts each by its latest run.
++ */
++function newCaller(): string {
++  try {
++    const id = globalThis.crypto?.randomUUID?.();
++    if (id) return id;
++  } catch {
++    // Not a secure context: a random string serves as well.
++  }
++  return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
++}
++
++const CALLER = newCaller();
++let runs = 0;
++
++export async function e2eGate(name: string, key: string): Promise<void> {
++  const env = import.meta.env as Record<string, string | undefined> | undefined;
++  const base = env?.VITE_E2E_GATE_URL;
++  if (!base) {
++    throw new Error(`e2e gate ${name}: VITE_E2E_GATE_URL was not built into this patched app, so the gate cannot be honoured; refusing to go on`);
++  }
++  runs += 1;
++  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=client&caller=${encodeURIComponent(CALLER)}&run=${runs}`;
++  const res = await fetch(url, { method: "POST" });
++  const text = await res.text();
++  if (res.status !== 200) throw new Error(`e2e gate ${name}: the gate service answered ${res.status} ${text.slice(0, 200)}`);
++}

@@ -1,0 +1,11 @@
+{
+  "oracle": "a suggestion is drawn only where its quote resolves exactly; one that does not is listed as stale (A7.8)",
+  "what": "the annotation layer resolves pending suggestions with the fuzzy comment resolver (position fallback), so a draft-only quote is drawn on the published version instead of being stale",
+  "target": {
+    "spec": "e2e/specs/functional/a07-suggestions.spec.mjs",
+    "case": "A7.8 a suggestion quoting text only the draft holds is drawn for the editor reading the draft and listed as stale, undrawn, for a reader of the published version"
+  },
+  "expect": {
+    "message": "the reader's panel calls it stale"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 refusal parity (c7/c8): a caller who may not read gets the 404 an absent id gets",
+  "what": "refusal() always answers 403, so a stranger learns that a private document exists",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c7.X a signed-in stranger may not create a suggestion through POST /suggestion: 404"
+  },
+  "expect": {
+    "message": "c7 X: expected 404, got 403"
+  }
+}

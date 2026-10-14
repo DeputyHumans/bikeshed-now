@@ -1,0 +1,15 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -450,7 +450,11 @@ export async function persistDocMembership(
+   );
+   for (const e of events(membership)) addEvent(batch, docRef, e);
+   await batch.commit();
+-  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
++  // e2e negative control (controls-c04-open-edit-read): a directly granted
++  // editor is mirrored to editAccess (may write the live log) but left out of
++  // presenceAccess (may not read it), the shape S27 gives an open editor.
++  const grantedEditors = new Set(fields.grants.editors ?? []);
++  await syncPresenceAccess(docRef.id, membership.members.filter((m) => !grantedEditors.has(m)), membership.editorMembers);
+   await syncPublicProjection(db, docRef.id);
+   return membership;
+ }

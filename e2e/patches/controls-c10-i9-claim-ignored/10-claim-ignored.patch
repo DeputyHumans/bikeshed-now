@@ -1,0 +1,11 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -267,6 +267,8 @@
+ 
+ /** The live claim on a suggestion, unless it is the caller's own or has lapsed. */
+ function claimedByOther(s: StoredSuggestion, uid: string, nowMs: number): string | null {
++  // e2e control (controls-c10-i9-claim-ignored): nobody's claim keeps another approver off.
++  if (nowMs >= 0) return null;
+   const claim = s.suggestion?.claim;
+   if (!claim || claim.uid === uid) return null;
+   const until = claim.until?.toMillis?.() ?? 0;

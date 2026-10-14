@@ -1,0 +1,13 @@
+{
+  "oracle": "/connect and /signup are 200 with X-Frame-Options: DENY and frame-ancestors 'none' (A1.9)",
+  "what": "firebase.json's header rule for /connect names a path nothing requests, so /connect is served without its frame headers while /signup keeps them",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.9 /connect and /signup send X-Frame-Options: DENY and Content-Security-Policy frame-ancestors 'none'",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "these are not: /connect 200 X-Frame-Options=null frame-ancestors=null; /connect\\?\\S+ 200 X-Frame-Options=null frame-ancestors=null(?:\\n|$)"
+  }
+}

@@ -1,0 +1,9 @@
+--- a/app/src/viewer/outboundLinks.ts
++++ b/app/src/viewer/outboundLinks.ts
+@@ -65,5 +65,5 @@
+ 
+ /** Open an address in a new tab that cannot reach back into the viewer. */
+ export function openBeside(url: string): void {
+-  window.open(url, "_blank", "noopener,noreferrer");
++  window.open(url, "_blank");
+ }

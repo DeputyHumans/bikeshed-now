@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -218,7 +218,7 @@
+   caller: { uid: string; emailLower: string } | null,
+   proof?: LinkProof,
+ ): 403 | 404 {
+-  return canRead(doc, caller, proof) ? 403 : 404;
++  return canRead(doc, caller, proof) ? 403 : 403; // e2e control: every refusal confirms the id
+ }
+ 
+ /** The message a write path gives, which has to say how to undo it. */

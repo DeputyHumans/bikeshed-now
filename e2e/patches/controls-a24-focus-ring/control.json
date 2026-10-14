@@ -1,0 +1,13 @@
+{
+  "oracle": "every keyboard stop wears the one ring: :focus-visible, solid, 2 px, --color-focus (A24.2a; SPEC §10)",
+  "what": "base.css draws the :focus-visible outline in --color-accent instead of --color-focus, so the ring is solid and 2 px but no longer the focus colour",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2a sign-in by keyboard: Tab reaches the skip link (shown when focused), the address, the password and Sign in, Enter signs in, and every stop wears the one --color-focus ring",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^every keyboard stop wears the ring"
+  }
+}

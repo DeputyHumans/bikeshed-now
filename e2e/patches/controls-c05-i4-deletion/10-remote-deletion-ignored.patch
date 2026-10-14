@@ -1,0 +1,15 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -115,7 +115,11 @@
+             else (node as Element).removeAttribute(key);
+           }
+         }
+-        if (event.changes.delta.length > 0) rebuildChildren(target, node as Element);
++        // e2e negative control (controls-c05-i4-deletion): a delta that only
++        // deletes children is never applied to this copy, so an element a
++        // peer removed stays here with whatever was typed into it.
++        const delta = event.changes.delta;
++        if (delta.length > 0 && !delta.every((d) => d.insert === undefined)) rebuildChildren(target, node as Element);
+       }
+     } finally {
+       applyingRemote = false;

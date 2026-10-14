@@ -1,0 +1,11 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1337,7 +1337,7 @@
+         } else {
+           try {
+             found = (
+-              await annRef.where("resolved", "==", false).orderBy("createdAt", "asc").limit(COMMENT_LIMIT + 1).get()
++              await annRef.where("resolved", "==", false).orderBy("createdAt", "asc").limit(COMMENT_LIMIT).get()
+             ).docs;
+           } catch (e) {
+             // The (resolved, createdAt) index is created by the same deploy

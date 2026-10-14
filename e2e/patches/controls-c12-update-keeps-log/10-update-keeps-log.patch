@@ -1,0 +1,12 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -596,7 +596,8 @@
+  */
+ async function dropReplacedDraft(docId: string, log: boolean): Promise<void> {
+   try {
+-    if (log) await clearEditLog(docId);
++    // e2e control (controls-c12-update-keeps-log): the live log a replaced draft left is kept.
++    void [log, clearEditLog];
+   } catch (e) {
+     console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
+   }

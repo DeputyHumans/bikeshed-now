@@ -1,0 +1,11 @@
+{
+  "oracle": "I1/I2 live convergence",
+  "what": "applyRemote skips remote text, so neither peer ever sees the other's token",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)"
+  },
+  "expect": {
+    "message": "holds both tokens in place|I1 convergence"
+  }
+}

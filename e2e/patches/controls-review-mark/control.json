@@ -1,0 +1,11 @@
+{
+  "oracle": "the review pass marks its target with the CSS Custom Highlight API and makes zero mutations of the frame's document (A8.2)",
+  "what": "markTarget also adds a bshd- class to the target's element, a DOM mark the serializer and the shared document's observer would both see",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.2 the pass marks the quote with the CSS highlight API and zero mutations of the frame's document; Accept sends claim, then POST /draft, then accept, each after the last answered; the change lands once"
+  },
+  "expect": {
+    "message": "marking the target made 0 DOM mutations"
+  }
+}

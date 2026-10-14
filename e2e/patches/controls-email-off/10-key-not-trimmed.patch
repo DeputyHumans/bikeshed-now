@@ -1,0 +1,13 @@
+--- a/functions/src/email/send.ts
++++ b/functions/src/email/send.ts
+@@ -43,7 +43,9 @@
+  */
+ function apiKey(): string {
+   try {
+-    return (RESEND_API_KEY.value() || "").trim();
++    // e2e negative control (controls-email-off): the load-bearing trim removed,
++    // so a whitespace key reads as configured and the product tries to send.
++    return RESEND_API_KEY.value() || "";
+   } catch {
+     // .value() throws when the secret is not bound to the running function,
+     // which is the same situation as "not configured".

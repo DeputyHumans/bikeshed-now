@@ -1,0 +1,13 @@
+{
+  "oracle": "a refused update mints nothing and every editor's next save answers 200 (C12a 'nothing minted' and 'saves', SPEC §6a: \"No update is made under somebody's editor … refused with 409 { error, editors } while anybody has the document open in the editor\"; \"a refused or deduplicated update leaves both alone\"): judged at once on what the two answers left, so a refusal that still names the editors cannot hide a mint",
+  "what": "functions/src/lib/publish.ts commitNewVersion asks the editors question as before but answers its refusal only after uploadBundle and the minting transaction (or after the transaction's STALE for the loser), so both updates answer editorsRefusal's exact 409 while one of them has minted v2",
+  "target": {
+    "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
+    "case": "C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C12a nothing minted: a refused update mints and uploads nothing — current v2"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "oracle": "one frame load for a personally trusted reader (A5.3 frame-load count)",
+  "what": "the reading frame no longer waits for the reader's own trust answer (DocViewer passes hold: false), and the answer arrives 600 ms after its snapshot, as it does on any slower network: a reader holding a personal grant gets a sandboxed load first, then a second, unsandboxed one",
+  "target": {
+    "spec": "e2e/specs/functional/a05-reading-trust.spec.mjs",
+    "case": "A5.3 a reader's own trust grant gives exactly one frame load, unsandboxed, when they open the document again"
+  },
+  "expect": {
+    "message": "exactly one load, without a sandbox"
+  }
+}

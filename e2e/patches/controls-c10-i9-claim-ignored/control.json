@@ -1,0 +1,13 @@
+{
+  "oracle": "I9: one insertion and one decision note per suggestion, and every loser refused 409 claimedBy (c10-accepts)",
+  "what": "claimedByOther (functions/src/lib/suggestions.ts) ignores every live claim, so a second approver's claim is taken while the first is applying the change, and both insert it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c10-accepts.spec.mjs",
+    "case": "C10c in-app held accept: while one approver's claim is live, the others press Accept with the live link slowed; the claim keeps them off: one insertion and one note, every other refused 409 claimedBy (I9, I8) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": ["--rtdb-proxy"],
+  "expect": {
+    "message": "^I9: \\S+: 2 insertion\\(s\\), not one"
+  }
+}

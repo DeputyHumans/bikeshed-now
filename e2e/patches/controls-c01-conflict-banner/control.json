@@ -1,0 +1,13 @@
+{
+  "oracle": "no page is shown \"<peer> saved a change while you were editing\" (the S9 conflict banner, User.watchFor over every render; c01-typing)",
+  "what": "useLiveSync (app/src/viewer/useLiveSync.ts) offers the conflict banner to a reader of the draft as well as reloading its frame, so a page that edits nothing is shown it when an editor autosaves",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C1-serial positive control: the same typing one editor after another passes every C1 oracle but S3's and C21's (every save 200, never an error), and editing one editor at a time shows nobody the conflict banner [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^S9 oracle: nobody is shown \"<peer> saved a change while you were editing\" while one editor at a time edits"
+  }
+}

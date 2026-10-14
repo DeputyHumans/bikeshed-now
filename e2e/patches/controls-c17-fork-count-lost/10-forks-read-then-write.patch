@@ -1,0 +1,12 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -245,7 +245,8 @@
+   });
+   // A nested map under merge, as every stats writer does, so this cannot
+   // clobber the view counters; and no `updatedAt`, which means "published".
+-  batch.set(srcRef, { stats: { forks: FieldValue.increment(1) } }, { merge: true });
++  // e2e negative control (controls-c17-fork-count-lost): stats.forks written as the source's plain read plus one, a read-then-write outside any transaction.
++  batch.set(srcRef, { stats: { forks: Number((src as unknown as { stats?: { forks?: unknown } }).stats?.forks ?? 0) + 1 } }, { merge: true });
+   // On the ORIGINAL's log, for its owner only, with no actor: who forked a
+   // document is never told to its author (SPEC §21).
+   addEvent(batch, srcRef, { type: "fork.created", audience: "owner" });

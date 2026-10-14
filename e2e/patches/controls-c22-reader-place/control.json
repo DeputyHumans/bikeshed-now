@@ -1,0 +1,13 @@
+{
+  "oracle": "C22: a reader of the draft keeps its place when a peer save reloads its frame (suspect S28)",
+  "what": "useDocFrame.reload no longer captures the frame's scroll before the reload, so every peer save puts the reader back at the top of the document",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C22-serial positive control: the same held frame loads, reply box and typists, one save at a time: each typist saves once the reader's previous reload shows the last token, and the reader types a piece of its reply between saves; its place and its reply are kept [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C22-serial: the reader's place is kept"
+  }
+}

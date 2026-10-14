@@ -1,0 +1,13 @@
+{
+  "oracle": "no invitation without new access (A13.1 re-save, A13.3 role change): the shim's sends for one recipient after a grant that changes nothing",
+  "what": "setAccess invites everyone the request names, not only the people who newly gained access, so re-saving the same list emails the invitee again",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.1 adding a person in Share sends exactly one invitation, with the subject \"<owner> shared “<title>” with you\"; re-saving the same list sends none",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^re-saving the same list sent another invitation: the shim received [2-9]"
+  }
+}

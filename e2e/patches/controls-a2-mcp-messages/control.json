@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 MCP role refusals (exact messages)",
+  "what": "rename_document's refusal says \"this document\" instead of \"that document\"",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-http.spec.mjs",
+    "case": "A2.mcp-roles a viewer, suggester, editor, stranger, grant holder and open editors are refused by MCP with the exact messages"
+  },
+  "expect": {
+    "message": "viewer rename_document: want isError with \"you cannot rename that document\""
+  }
+}

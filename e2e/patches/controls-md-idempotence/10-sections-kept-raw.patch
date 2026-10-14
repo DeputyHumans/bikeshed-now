@@ -1,0 +1,21 @@
+--- a/functions/src/lib/markdown/serialize.ts
++++ b/functions/src/lib/markdown/serialize.ts
+@@ -46,7 +46,8 @@ const turndownGfm = require("turndown-plugin-gfm") as {
+  */
+ const GENERATED_ELEMENTS = new Set([
+   "html", "head", "body", "title", "meta", "link", "style",
+-  "main", "section",
++  // e2e control: <section> no longer counted as generated, so it is kept as the author's raw HTML.
++  "main",
+   "p", "h1", "h2", "h3", "h4", "h5", "h6",
+   "ul", "ol", "li", "blockquote", "pre", "code",
+   "em", "strong", "s", "del", "a", "img", "hr", "br",
+@@ -182,7 +183,7 @@ function createService(): TurndownService {
+   // round trip accumulates one nesting level per save. `<article>` is
+   // deliberately NOT in this list: we never generate it, so it is the author's.
+   service.addRule("unwrapGeneratedStructure", {
+-    filter: ["section", "main"],
++    filter: ["main"],
+     replacement: (content) => `\n\n${content.trim()}\n\n`,
+   });
+ 

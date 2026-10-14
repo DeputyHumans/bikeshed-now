@@ -1,0 +1,13 @@
+{
+  "oracle": "hostile CSS cannot hide the stamp (A17.2): each locked property computes as with no author CSS, under print media, on the snapshot print() received",
+  "what": "the stamp no longer sets opacity inline with !important, so the document's own `opacity: 0 !important` on the stamps wins",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.2 a document whose CSS sets every hiding vector SPEC §20 lists with !important on the stamps cannot hide them: under print media each locked property computes as with no author CSS, and the label and footer paint readable glyphs",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "locked properties the hostile CSS changed"
+  }
+}

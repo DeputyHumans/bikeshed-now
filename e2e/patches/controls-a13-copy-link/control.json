@@ -1,0 +1,13 @@
+{
+  "oracle": "Copy puts the shown link on the clipboard (A13.8): the system clipboard read back after pressing Copy",
+  "what": "the Copy button writes the link without its ?k= while the field still shows the keyed link",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the clipboard"
+  }
+}

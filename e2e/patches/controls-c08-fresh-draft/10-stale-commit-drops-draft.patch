@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1328,6 +1328,9 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
+     return;
+   }
+   if (data.currentVersion !== baseVersion) {
++    // controls-c08-fresh-draft: a commit refused as stale discards whatever draft the document holds now.
++    await docRef.set({ draft: FieldValue.delete() }, { merge: true });
++    await bucket().deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+     res.status(409).json({
+       error: "This document has a newer version. Reload before publishing.",
+       currentVersion: data.currentVersion,

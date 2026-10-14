@@ -1,0 +1,11 @@
+--- a/scripts/delete-version.mjs
++++ b/scripts/delete-version.mjs
+@@ -190,6 +190,8 @@
+   }
+ 
+   if (meta.draft && !values["drop-draft"]) {
++    // e2e control: the refusal discards the draft before it refuses.
++    await docRef.update({ draft: FieldValue.delete() });
+     fail(
+       `refusing: a draft exists (base=${meta.draft.baseVersion}, by ${meta.draft.updatedByEmail}). ` +
+         "Repointing currentVersion would silently revive or strand it. " +

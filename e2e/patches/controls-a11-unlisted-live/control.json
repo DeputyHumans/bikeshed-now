@@ -1,0 +1,11 @@
+{
+  "oracle": "an unlisted open-editing link holder is not shown as Shared unless merged live (A11.8, suspect S24)",
+  "what": "the viewer shares the live log with every signed-in editor, so an unlisted link holder (who can neither read nor write the log) is shown Shared while editing alone",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.8 an unlisted open-editing link holder in the editor is not shown as Shared, or receives a member's probe keystroke within 2 s"
+  },
+  "expect": {
+    "message": "S24: not merged live"
+  }
+}

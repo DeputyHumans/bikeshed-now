@@ -1,0 +1,16 @@
+{
+  "oracle": "C9b: a refused update uploads nothing and leaves the draft and its live log alone (SPEC §6a: \"a refused or deduplicated update leaves both alone\"; c08-mint-races)",
+  "what": "commitNewVersion (functions/src/lib/publish.ts), refused for the editors, first uploads the update's bytes to the next version prefix and drops the draft's files and its live log (dropReplacedDraft), then answers the refusal",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2) editors' commits are in flight (held past the base check), the other agents' updates on v1 are refused for the editors, upload nothing and leave the draft and its live log alone; then the commits mint one version (I6) with the draft's bytes (I7), one \"Published\" toast and the rest conflict [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-mint-join"
+  ],
+  "expect": {
+    "message": "C9b: a refused update uploads nothing and leaves the draft and its live log alone \\(SPEC §6a\\) — objects under docs/[^ ]+/v2/ before any commit had chosen an id: [^;]+; the draft's entry changed \\([0-9a-f]+ → absent\\); status/[^ ]+/y changed"
+  }
+}

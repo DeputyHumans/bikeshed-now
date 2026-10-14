@@ -1,0 +1,12 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -294,7 +294,8 @@
+   try {
+     await db.runTransaction(async (tx) => {
+       const cur = await tx.get(docRef);
+-      if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
++      // e2e negative control (controls-i6-stale-removed): the transaction no
++      // longer checks that the base is still current.
+       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
+       const vRef = versionsRef.doc(versionId);
+       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");

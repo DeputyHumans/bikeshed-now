@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -172,7 +172,7 @@
+   saveFailed: () => boolean;
+   record: () => Promise<unknown>;
+ }): Promise<AcceptOutcome> {
+-  if (steps.check() === "stale") return "stale";
++  // e2e control: no check before the claim, so a stale suggestion is claimed.
+   await steps.claim();
+   const applied = steps.apply();
+   if (applied === "stale" || applied === "failed" || applied === "unverified") {

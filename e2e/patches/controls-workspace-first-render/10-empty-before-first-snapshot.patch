@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -579,7 +579,7 @@
+           </button>
+         </div>
+ 
+-        {loading || foldersLoading ? (
++        {false && (loading || foldersLoading) ? (
+           <CardSkeletons />
+         ) : visibleDocs.length === 0 && visibleFolders.length === 0 ? (
+           <div className="empty-state">

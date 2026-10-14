@@ -1,0 +1,13 @@
+{
+  "oracle": "an expired document's card is a placeholder for everyone but its owner (A14.6)",
+  "what": "the workspace card shows a stored cover whatever the expiry, so an editor's card for an expired document draws its owner's cover",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the expired card stays a placeholder for the editor"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "lineage per caller (A15.3): ownerEmail only where the caller is a member of that ancestor",
+  "what": "lineageFor names every readable ancestor's owner (functions/src/lib/fork.ts), so a public reader of the origin is told who owns it",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.3 lineage over two hops: nearest first, ownerEmail only to a member, changed on the nearest parent only, the walk stops at the first parent the caller cannot open, forks for the owner only (hidden ones counted), a stranger's 404",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "lineage of C as its owner \\(a member of B, a public reader of A\\)"
+  }
+}

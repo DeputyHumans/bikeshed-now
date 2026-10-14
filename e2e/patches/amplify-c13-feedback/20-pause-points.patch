@@ -1,0 +1,66 @@
+diff --git a/functions/src/lib/suggestions.ts b/functions/src/lib/suggestions.ts
+index b1a9e3b..475773f 100644
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -4,6 +4,7 @@
+ import * as admin from "firebase-admin";
+ import { FieldValue, Timestamp } from "firebase-admin/firestore";
+ import type { Actor } from "./actor";
++import { e2eGate } from "./e2eGate";
+ 
+ /**
+  * A suggestion is an ANNOTATION with one more field, so it inherits anchoring,
+@@ -207,6 +208,9 @@ export async function createSuggestion(args: {
+     };
+   }
+ 
++  // e2e amplify (amplify-c13-feedback): a pause point after the pending count and before the transaction that writes the suggestion.
++  await e2eGate("suggest-after-count", docRef.id);
++
+   const annRef = anns.doc();
+   const commentRef = annRef.collection("comments").doc();
+   // In a transaction that reads the document, so this and a publish are
+diff --git a/functions/src/mcp/tools.ts b/functions/src/mcp/tools.ts
+index 86cb44c..a34c65b 100644
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -83,6 +83,7 @@ import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publis
+ import { locateQuote } from "../lib/quote";
+ import { renameDocument } from "../lib/rename";
+ import { setThreadResolved } from "../lib/threads";
++import { e2eGate } from "../lib/e2eGate";
+ import { acceptSuggestion } from "../lib/accept";
+ import { commitDraft } from "../lib/draft";
+ import { clearEditLog, editorsRefusal } from "../lib/presence";
+@@ -1646,6 +1647,9 @@ export const TOOLS: ToolDefinition[] = [
+         actor: ctx.actor,
+         createdAt: FieldValue.serverTimestamp(),
+       };
++      // e2e amplify (amplify-c13-feedback): a pause point after the current version is read and the passage found, before the batch that writes the thread.
++      await e2eGate("comment-before-write", ref.id);
++
+       // One batch: a thread with no comment in it is a highlight that says nothing.
+       const batch = ctx.db.batch();
+       batch.create(annRef, {
+diff --git a/functions/src/lib/draft.ts b/functions/src/lib/draft.ts
+index fac79fc..5a5aa24 100644
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -13,6 +13,7 @@ import { renderMarkdown } from "./markdown/render";
+ import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
+ import { syncPublicProjection } from "./publicdoc";
+ import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
++import { e2eGate } from "./e2eGate";
+ 
+ /**
+  * The browser's editor and the agent surface both change a document through
+@@ -289,6 +290,9 @@ export async function commitDraft(args: {
+     });
+   }
+ 
++  // e2e amplify (amplify-c13-feedback): a pause point after the open-thread check and the upload, before the transaction that asks again and makes the version current.
++  await e2eGate("commit-before-tx", docId);
++
+   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
+ 
+   try {

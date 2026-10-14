@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -693,7 +693,7 @@
+   }
+   const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
+   if (!canRead(docData, caller, proof)) {
+-    res.status(404).end();
++    res.status(404).end("not readable"); // e2e control: a refusal unlike an absent id's
+     return;
+   }
+ 

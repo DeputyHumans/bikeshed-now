@@ -1,0 +1,13 @@
+{
+  "oracle": "expiry chip escalation: A4.4, the chip's words and data-soon/data-expired state through the last week",
+  "what": "expiringSoon counts eight days as the last week (app/src/expiry.ts), so a chip seven days and an hour out already insists",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.4 the expiry chip escalates in words and state through the last week and past the date; the owner's tap opens Share, a reader's says what it means",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the expiry chip \\(just over a week: not yet the last week\\) not shown within \\d+ ms of load \\d+ of /d/\\S+ \\(want \\{\"label\":\"Expires in 7 days\",\"text\":\"Expires in 7 days\",\"soon\":false,\"expired\":false\\}, last read \\{\"label\":\"Expires in 7 days\",\"text\":\"Expires in 7 days\",\"soon\":true"
+  }
+}

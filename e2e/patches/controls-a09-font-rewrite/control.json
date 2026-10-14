@@ -1,0 +1,11 @@
+{
+  "oracle": "A9.3 no <font> after a formatting control, in the frame and in the stored draft",
+  "what": "the editor stops rewriting execCommand's <font> output into spans on input, so Text colour and Font leave <font> elements in the document and the draft",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.3 the formatting controls change the text they are used on, and neither the frame nor the draft contains a <font>"
+  },
+  "expect": {
+    "message": "no <font> element"
+  }
+}

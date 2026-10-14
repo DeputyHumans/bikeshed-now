@@ -1,0 +1,13 @@
+--- a/cli/src/config.mjs
++++ b/cli/src/config.mjs
+@@ -50,9 +50,8 @@
+   const config = readConfig();
+   const origin = (
+     flags.origin ||
+-    process.env.BIKESHED_ORIGIN ||
+     config.origin ||
+-    "https://bikeshed.now"
++    "https://e2e-control.invalid"
+   ).replace(/\/+$/, "");
+   const token = flags.token || process.env.BIKESHED_TOKEN || config.token || "";
+   return { origin, token };

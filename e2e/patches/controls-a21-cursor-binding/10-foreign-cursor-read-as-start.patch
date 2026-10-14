@@ -1,0 +1,11 @@
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -291,7 +291,7 @@
+   if (!parsed || typeof parsed !== "object" || parsed.v !== CURSOR_VERSION) {
+     return { error: "that is not a cursor this server gave out" };
+   }
+-  if (parsed.d !== docId) return { error: `that cursor belongs to another document, not "${docId}"` };
++  if (parsed.d !== docId) return { docId, at: null, id: null };
+   if (parsed.s === undefined) return { docId, at: null, id: null };
+   if (
+     typeof parsed.s !== "number" ||

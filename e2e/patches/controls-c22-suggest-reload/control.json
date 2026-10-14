@@ -1,0 +1,13 @@
+{
+  "oracle": "C22 suggesting: a reader writing a suggestion keeps its form, every key and its selection while peers save, because the viewer holds peer reloads while the form is open (DocViewer.tsx hold, useLiveSync.ts)",
+  "what": "the viewer never tells useLiveSync to hold, so a peer save reloads the reader frame under its open suggestion form, which the reload closes",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C22 suggesting: while an editor reading the draft writes a suggestion on its selection, N−1 editors type and autosave in staggered rounds; its frame never reloads while the form is open, the form keeps every key, its quote and the focus, the frame keeps the selection, and once the form closes the frame catches up with every token [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C22 suggesting: while the form was open no peer save reloaded the reader"
+  }
+}

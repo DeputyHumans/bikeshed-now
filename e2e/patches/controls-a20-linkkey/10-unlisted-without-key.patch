@@ -1,0 +1,11 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -272,7 +272,7 @@
+   if (!snap.exists) throw new Error(`no document with id "${slug}"`);
+   const data = snap.data() as DocAclData & Record<string, unknown>;
+   const proof = await linkProofFor(ref, data, ctx.caller, k);
+-  if (!canRead(data, ctx.caller, proof)) throw new Error(`no document with id "${slug}"`);
++  if (!canRead(data, ctx.caller, proof) && visibilityOf(data) !== "unlisted") throw new Error(`no document with id "${slug}"`);
+   // An expired document reads as absent to everyone but its owner — the same
+   // answer a document they may not read gives, so expiry cannot be used to
+   // confirm that a slug exists (SPEC §17).

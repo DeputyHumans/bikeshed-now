@@ -1,0 +1,41 @@
+{
+  "what": "Six server pause points in the membership writers, each asking the stack's gate service whether to go on: a document's membership after its grants, parent folder and teams are read and before it is written (persistDocMembership: POST /access and every team re-fan), the same document's RTDB mirrors after its record is written, a folder's cascade after it writes the folder and before it reads the documents, and again after it reads them and before it writes them (recomputeSubtree), a team's members after it is read and before they are written (POST /team-members), and the RTDB mirrors POST /visibility rewrites from the members it read at its start. For deterministic interleavings of concurrent sharing changes: C16a (S18), C16b (S18, and the invitation a folder grant's cascade in flight leads to), C16c (S19), C16d (S20, and the mirror order of two POST /access). Its own helper (functions/src/lib/e2eAccessGate.ts), so it applies alone or beside the other amplify sets",
+  "gates": [
+    {
+      "name": "doc-membership-before-write",
+      "side": "server",
+      "where": "functions/src/lib/folders.ts persistDocMembership: after the parent folder's membership and the team index are read and the document's membership computed from the grants its caller read, before the batch that writes grants and membership",
+      "key": "docId"
+    },
+    {
+      "name": "doc-mirror-before-write",
+      "side": "server",
+      "where": "functions/src/lib/folders.ts persistDocMembership: after the batch is committed, before syncPresenceAccess rewrites presenceAccess/{d} and editAccess/{d} from the membership this call computed",
+      "key": "docId"
+    },
+    {
+      "name": "subtree-before-docs-read",
+      "side": "server",
+      "where": "functions/src/lib/folders.ts recomputeSubtree: after the folder's own membership is written, before the query that reads the documents filed in it",
+      "key": "folderId"
+    },
+    {
+      "name": "subtree-docs-before-write",
+      "side": "server",
+      "where": "functions/src/lib/folders.ts recomputeSubtree: after a folder's documents are queried and their membership computed from the grants read then, before the batch that writes them",
+      "key": "folderId"
+    },
+    {
+      "name": "team-members-after-read",
+      "side": "server",
+      "where": "functions/src/index.ts manageTeamMembers: after the team is read, the caller authorized and the new member list computed, before it is written and the team re-fanned",
+      "key": "teamId"
+    },
+    {
+      "name": "visibility-before-mirror",
+      "side": "server",
+      "where": "functions/src/index.ts setVisibility: after the record and the public projection are written, before syncPresenceAccess rewrites the mirrors from the members read at the start of the request",
+      "key": "docId"
+    }
+  ]
+}

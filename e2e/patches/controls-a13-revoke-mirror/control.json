@@ -1,0 +1,13 @@
+{
+  "oracle": "revocation reaches the RTDB (A13.2): a removed member's own-token read of status/{doc} is refused by the rules",
+  "what": "syncPresenceAccess merges member keys into the mirror instead of replacing the node, so a removed member keeps presenceAccess and the rules still let them read the live state",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.2 removing a member gives them the absent id's 404 within 2 s, takes away their presence mirror, and the RTDB rules then refuse their reads and writes",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the removed viewer's RTDB read is refused"
+  }
+}

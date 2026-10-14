@@ -1,0 +1,13 @@
+{
+  "oracle": "CLI publish --watch publishes once per burst of saves",
+  "what": "the watcher runs an update on every file event instead of debouncing them",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "one result per burst"
+  }
+}

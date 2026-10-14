@@ -1,0 +1,13 @@
+{
+  "oracle": "shared-before-sign-up listed on the workspace's first render (A1.8)",
+  "what": "the workspace renders before its first snapshot, so a new member sees the empty state before the shared document",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.8 a document shared before sign-up is listed on the workspace's first render: the empty state never appears",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the workspace showed its empty state before listing the shared document"
+  }
+}

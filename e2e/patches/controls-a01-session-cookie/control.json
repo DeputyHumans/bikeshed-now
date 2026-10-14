@@ -1,0 +1,13 @@
+{
+  "oracle": "password sign-up ends in a __session cookie with the attributes SPEC §2 names (A1.2)",
+  "what": "POST /session mints __session without SameSite=Strict (functions/src/index.ts, the ok branch's cookie.serialize), so Chrome falls back to Lax",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.2 password sign-up at /signup: unverified, one code mail, /verify/complete verified, then /session ok with the §2 cookie and users/{uid} = {uid, email}",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^__session is HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=432000 \\(SPEC §2\\): got (?![^\\n]*samesite)\\{[^\\n]*\"httponly\":true[^\\n]*\\}(?:\\n|$)"
+  }
+}

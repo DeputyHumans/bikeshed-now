@@ -1,0 +1,12 @@
+--- a/functions/src/email/templates/CommentNotice.tsx
++++ b/functions/src/email/templates/CommentNotice.tsx
+@@ -61,7 +61,8 @@
+       ) : null}
+       {p.quote ? <Text style={textStyles.quote}>{p.quote}</Text> : null}
+       {p.suggestion ? <Text style={textStyles.paragraph}>{changeLine(p.suggestion)}</Text> : null}
+-      {p.body ? <Text style={textStyles.paragraph}>{p.body}</Text> : null}
++      {/* e2e negative control (controls-a23-plaintext): the body rendered as markup */}
++      {p.body ? <Text style={textStyles.paragraph} dangerouslySetInnerHTML={{ __html: p.body }} /> : null}
+       <Button href={p.url} style={textStyles.button}>
+         {p.suggestion ? "Review it in context" : "Reply in context"}
+       </Button>

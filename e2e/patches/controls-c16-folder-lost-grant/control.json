@@ -1,0 +1,13 @@
+{
+  "oracle": "C16b folder grants: a folder's grant lists and sets, and its document's sets, equal computeMembership over every folder grant the owner asked for (I16 against what was asked, on the folder and on the document filed in it), and every grantee reads the document",
+  "what": "setFolderAccess applies each delta to empty grant lists instead of the stored ones, so every POST /folder-access replaces the folder's grants and only the latest grantee keeps access",
+  "target": {
+    "spec": "e2e/specs/concurrency/c16-access.spec.mjs",
+    "case": "C16b folder grants serial positive control: the same N POST /folder-access one after another leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, the mirrors equal to the record (I14), and each invited once (I11) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "I16: folders/[A-Za-z0-9_-]+ against what was asked: members: lacks fgrantee1-"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 a refusal stores nothing (docs/<id>, its versions, link grants and Storage unchanged by any non-200 cell)",
+  "what": "POST /commit publishes a refused caller's commit of the owner's draft, then answers 403",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-http.spec.mjs",
+    "case": "A2.V a viewer: reads and forks 200, /unlock 404, every edit and owner-only operation 403"
+  },
+  "expect": {
+    "message": "V×c11 POST /commit: refused 403, yet stored: docs/<id> fields [^;]*currentVersion"
+  }
+}

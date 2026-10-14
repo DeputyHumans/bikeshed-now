@@ -1,0 +1,11 @@
+{
+  "oracle": "a peer's comment never scrolls the reader (A6.6)",
+  "what": "the scroll-to-selection effect forgets it already scrolled, so every redraw for a peer's comment pulls the reader back to the selected passage",
+  "target": {
+    "spec": "e2e/specs/functional/a06-comments.spec.mjs",
+    "case": "A6.6 selecting a thread scrolls its passage into view only when it is offscreen, and a peer's comment never scrolls the reader"
+  },
+  "expect": {
+    "message": "a peer's comment scrolled the reader back to the selected passage"
+  }
+}

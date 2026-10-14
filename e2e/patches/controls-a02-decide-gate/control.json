@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 c8: POST /suggestion claim, accept and reject refused to anyone but the owner or an approver",
+  "what": "the decision gate is widened to everyone who may suggest, so an editor can claim, accept and reject",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c8.E an editor may not claim, accept and reject a suggestion in the app: 403"
+  },
+  "expect": {
+    "message": "^c8 E claim: expected 403, got 200"
+  }
+}

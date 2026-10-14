@@ -1,0 +1,16 @@
+{
+  "oracle": "no analytics under emulators (A19.2, SPEC §15): with a measurement id built in, no consent banner and no analytics request, even with a stored grant",
+  "what": "analyticsConfigured() drops its !USE_EMULATORS guard (app/src/analytics.ts), so a stack built with a measurement id shows the banner and, once granted, initializes analytics",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.2 with a measurement id built in but running under emulators, there is still no banner and no analytics request, even with a stored grant (SPEC §15: never under emulators)",
+    "suite": "functional"
+  },
+  "stack": [
+    "--app-env",
+    "VITE_FIREBASE_MEASUREMENT_ID=dummy"
+  ],
+  "expect": {
+    "message": "under emulators: a consent banner is shown"
+  }
+}

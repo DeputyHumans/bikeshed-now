@@ -1,0 +1,11 @@
+--- a/app/src/annotation/highlighter.ts
++++ b/app/src/annotation/highlighter.ts
+@@ -306,7 +306,7 @@
+ 
+   stripDecoration(root);
+ 
+-  if (opts.authoredAssets) {
++  if (opts.authoredAssets && false) {
+     // A BUDGET rather than a set: a document that legitimately contains two
+     // identical <style> tags keeps both, while a third — ours, or an
+     // extension's — is dropped.

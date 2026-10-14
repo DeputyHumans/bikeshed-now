@@ -1,0 +1,13 @@
+{
+  "oracle": "checks before the spend (A22.4): a wrong PKCE verifier is refused without spending the code, which still exchanges afterwards",
+  "what": "exchangeCode in functions/src/oauth/token.ts marks the code used in the same transaction that refuses a wrong verifier, so the right verifier then finds it spent",
+  "target": {
+    "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
+    "case": "A22.4 redirects and PKCE: every token-endpoint check runs before the code is spent, so a wrong client, redirect_uri, resource or verifier is refused and the code still works; javascript:, data:, fragment and userinfo redirects are refused at registration and in a hand-built id; a loopback redirect matches any port, localhost is not 127.0.0.1, an https one matches exactly; only S256, and a failure once the redirect is known carries back with iss, which the consent page follows only when pressed",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the code still works after the refused attempts \\(SPEC §23: a wrong verifier costs nothing\\): 400 .*already used"
+  }
+}

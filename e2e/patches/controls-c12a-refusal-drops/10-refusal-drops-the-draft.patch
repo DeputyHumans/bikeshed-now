@@ -1,0 +1,16 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -485,7 +485,12 @@
+   // Whoever is in the editor would lose their typing to this version, and the
+   // next save of theirs would be refused as stale.
+   const editing = await editorsRefusal(docRef.id, "published");
+-  if ("refusal" in editing) return editing.refusal;
++  if ("refusal" in editing) {
++    // e2e control (controls-c12a-refusal-drops): a refused update drops the
++    // draft's files and its live log anyway, then answers the refusal.
++    await dropReplacedDraft(docRef.id, true);
++    return editing.refusal;
++  }
+   const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
+   if (refused) return refused;
+   // This path deletes the draft; changes accepted into it would go with it.

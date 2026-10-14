@@ -1,0 +1,11 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -257,7 +257,7 @@
+   const ctx: ToolContext = {
+     db: admin.firestore(),
+     caller: principal,
+-    actor: actorFrom(principal, req, "mcp"),
++    actor: actorFrom({ ...principal, channel: verified.channel }, req),
+   };
+ 
+   const messages: JsonRpcRequest[] = Array.isArray(payload)

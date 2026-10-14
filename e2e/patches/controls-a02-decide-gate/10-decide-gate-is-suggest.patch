@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1486,7 +1486,7 @@
+     });
+     return;
+   }
+-  if (deciding && !isDocApprover(data, caller.uid, caller.emailLower)) {
++  if (deciding && !(canSuggest(data, caller, proof) || isDocApprover(data, caller.uid, caller.emailLower))) {
+     res.status(403).json({ error: "Only the owner or an approver can accept or reject a suggestion." });
+     return;
+   }

@@ -1,0 +1,13 @@
+{
+  "oracle": "C15 flip rounds: each resolve or reopen round is judged on T0's stored state and on its own flip events in the change log, not on the tools' answers, which echo the state asked for (c13-feedback)",
+  "what": "setThreadResolved (functions/src/lib/threads.ts) answers {resolved, changed: true} without writing the thread's new state or its \"Resolved.\"/\"Reopened.\" note, so every resolve_thread and reopen_thread reports success over a thread that never changed",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C15: after round 1 \\(all resolve\\) T0 is resolved in Firestore \\(stored resolved=false, 0 note\\(s\\) written in the round\\)"
+  }
+}

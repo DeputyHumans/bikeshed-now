@@ -1,0 +1,13 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -894,7 +894,9 @@
+       if (outcome.status !== 200) throw new Error(String(outcome.body.error));
+       // As the app does once it has published: the log was the draft's, and
+       // the next editor seeds from the new version.
+-      if (editors.log) await clearEditLog(ref.id);
++      // e2e negative control (controls-c06-log-kept): commit_draft keeps the
++      // live log it should drop.
++      if (editors.log) void clearEditLog;
+       return withReaderAddress(outcome.body, ref.id);
+     },
+   },

@@ -1,0 +1,13 @@
+{
+  "oracle": "automated reads never enter the human reading numbers (A18.3): a token's POST /view records ms 0 and moves only stats.apiReads",
+  "what": "recordView treats every caller as a person (functions/src/index.ts), so a cli or mcp token's beat is counted into stats.views, stats.totalMs and viewers/{uid} with the time it claims",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.3 automated reads count only into stats.apiReads with ms 0: MCP get_document and a cli token's POST /view leave views, totalMs and viewers alone, while a person's beat on the same document counts",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "an automated beat is recorded with ms 0, whatever it claims"
+  }
+}

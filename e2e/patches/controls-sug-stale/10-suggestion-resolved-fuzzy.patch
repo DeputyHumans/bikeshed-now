@@ -1,0 +1,12 @@
+--- a/app/src/annotation/highlighter.ts
++++ b/app/src/annotation/highlighter.ts
+@@ -419,7 +419,8 @@
+     const suggestion = ann.suggestion?.state === "pending" ? ann.suggestion : null;
+     // An agent's comment is resolved strictly too: its anchor was found by its
+     // quote without a DOM, so a position fallback would point at the wrong words.
+-    const strict = suggestion !== null || ann.anchor.strict === true;
++    // e2e control: suggestions resolved by the fuzzy comment resolver, like a comment.
++    const strict = ann.anchor.strict === true;
+     const range = strict ? resolveExact(ann.anchor) : resolve(ann.anchor);
+     if (range) {
+       highlightRange(doc, range, ann.annId, {

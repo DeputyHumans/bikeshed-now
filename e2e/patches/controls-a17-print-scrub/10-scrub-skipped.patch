@@ -1,0 +1,12 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -132,7 +132,8 @@
+   const parsed = new DOMParser().parseFromString(raw, "text/html");
+ 
+   parsed.querySelectorAll("script").forEach((s) => s.remove());
+-  scrubActiveContent(parsed);
++  // e2e control: the on* and javascript: scrub skipped.
++  // scrubActiveContent(parsed);
+ 
+   const head = parsed.head ?? parsed.documentElement;
+   if (opts.baseHref) {

@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -139,7 +139,7 @@
+       // execCommand still emits <font size> in every engine. Normalizing on
+       // input rather than on save keeps what the author sees and what gets
+       // stored the same thing.
+-      rewriteLegacyFontTags(doc);
++      void rewriteLegacyFontTags;
+       unsaved.current = true;
+       setSaveState("dirty");
+       if (timer.current) clearTimeout(timer.current);

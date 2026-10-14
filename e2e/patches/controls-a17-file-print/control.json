@@ -1,0 +1,13 @@
+{
+  "oracle": "File → Print opens the frame to its content's full height (A17.6): the frame's height at beforeprint, after the app's handler",
+  "what": "usePrinting's beforeprint handler returns before opening the frame, so the browser's own print gets the frame at its on-screen height",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "at beforeprint the frame is opened to its content's full height"
+  }
+}

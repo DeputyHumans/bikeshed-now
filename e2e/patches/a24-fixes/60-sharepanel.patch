@@ -1,0 +1,10 @@
+--- a/app/src/components/SharePanel.tsx
++++ b/app/src/components/SharePanel.tsx
+@@ -285,6 +285,7 @@
+     }
+     setInput("");
+     await apply({ add: [{ principal, role }] });
++    setTimeout(() => document.getElementById("share-input")?.focus(), 0);
+   };
+ 
+   return (

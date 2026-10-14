@@ -1,0 +1,12 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -273,7 +273,8 @@
+  * the race on demand, so `wiring.test.js` pins that every new-document write
+  * uses this.
+  */
+-export const CREATE_ONLY = { preconditionOpts: { ifGenerationMatch: 0 } };
++// e2e negative control (controls-c17-create-only-dropped): no precondition, so a new document's writes and copies replace whatever is already stored there.
++export const CREATE_ONLY = { preconditionOpts: {} as { ifGenerationMatch?: number } };
+ 
+ /** Storage's refusal of a CREATE_ONLY write: the object is already there. */
+ export function isPreconditionFailure(e: unknown): boolean {

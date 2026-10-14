@@ -1,0 +1,13 @@
+{
+  "oracle": "the signed-out fork completes once (A15.1): the intent is gone from the URL before POST /fork and from the history entry, and going back and reloading forks nothing more",
+  "what": "useFork no longer deletes ?fork=1 before the request (app/src/viewer/useFork.ts), so the page the intent arrived on keeps it and going back to it forks again",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.1 a signed-out reader's Fork on a public document goes through sign-in and completes exactly once: ?fork=1 is gone from the URL before POST /fork, and going back and reloading forks nothing more",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the signed-out fork, once: \\{\"intentAtSend\":\"1\",.*\"createsAfterReload\":[2-9]"
+  }
+}

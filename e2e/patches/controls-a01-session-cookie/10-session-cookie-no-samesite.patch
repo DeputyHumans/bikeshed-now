@@ -1,0 +1,10 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -332,7 +332,6 @@
+     cookie.serialize(SESSION_COOKIE_NAME, sessionCookie, {
+       httpOnly: true,
+       secure: true,
+-      sameSite: "strict",
+       path: "/",
+       maxAge: Math.floor(SESSION_EXPIRES_MS / 1000),
+     }),

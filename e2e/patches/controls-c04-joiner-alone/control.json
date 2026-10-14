@@ -1,0 +1,13 @@
+{
+  "oracle": "C4b, the joiner sharing the live log: a joiner still not \"Shared\" 30 s after pressing Edit is 'not merged: <joiner> is editing alone', a failure of the case's own oracle",
+  "what": "DocViewer's shareLive (app/src/pages/DocViewer.tsx) is false for everyone but the owner on a public open-editing document, so the joiner edits alone: the shape of an S27 'fix' that drops open editors out of the live log. At N=2 the owner is the only member, so the members still share; at N>=3 the other members would edit alone too, so the control runs at N=2 only",
+  "target": {
+    "spec": "e2e/specs/concurrency/c04-first-join.spec.mjs",
+    "case": "C4b positive control: an account granted editor joins N−1 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C4b: (?![\\s\\S]*I3 )not merged: pj is editing alone: its share state is \"off\"[\\s\\S]*not merged \\(I13, p1 → pj\\): pj: the probe never arrived[\\s\\S]*not merged \\(I13, pj → the members\\): p1: the probe never arrived"
+  }
+}

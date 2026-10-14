@@ -1,0 +1,13 @@
+{
+  "oracle": "C18 mode: every presence chip shows its person mode by its dot shape, the square rotated dot for editing and the round dot for reading (SPEC §16)",
+  "what": "viewer.css swaps the two dot shapes, data-mode and the Editing icon left as they are, so an editor chip shows the round dot and a reader chip the square one",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C18 presence at scale: N people in one document, about half of them editing, the rest reading, the last on a 400 px phone; every reader shows N−1 presence chips, one per other person, each in that person's mode (editing: the square dot and the Editing icon; reading: the round dot), and the editors settle (I1) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C18 mode: every chip shows its person.s mode by its dot.s shape"
+  }
+}

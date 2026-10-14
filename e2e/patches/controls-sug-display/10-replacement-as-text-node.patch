@@ -1,0 +1,11 @@
+--- a/app/src/annotation/highlighter.ts
++++ b/app/src/annotation/highlighter.ts
+@@ -209,6 +209,8 @@
+   // read from an attribute (see INS_ATTR). Nothing for a deletion.
+   if (options.suggestion?.replacement && lastHtmlMark) {
+     lastHtmlMark.setAttribute(INS_ATTR, options.suggestion.replacement);
++    // e2e control: the replacement also drawn as a TEXT NODE after the last wrapper.
++    lastHtmlMark.after(doc.createTextNode(options.suggestion.replacement));
+   }
+ }
+ 

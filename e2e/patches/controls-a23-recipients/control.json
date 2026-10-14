@@ -1,0 +1,13 @@
+{
+  "oracle": "comment notice recipients need an account record (A23.2): a thread participant with no users/{uid} is never mailed, witnessed by a participant decided after them in the same trigger run",
+  "what": "onCommentCreated mails a recipient with no users/{uid} record instead of skipping them (functions/src/index.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's says via MCP",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a participant with no users/\\{uid\\} record was sent a comment notice"
+  }
+}

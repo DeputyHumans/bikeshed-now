@@ -1,0 +1,11 @@
+{
+  "oracle": "a comment reaches the other reader",
+  "what": "the comments listener keeps only the reader's own threads, so the owner never sees the viewer's",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: owner and viewer sign in through the UI, the viewer comments on a passage, the owner sees the thread"
+  },
+  "expect": {
+    "message": "waitFor: Timeout \\d+ms exceeded"
+  }
+}

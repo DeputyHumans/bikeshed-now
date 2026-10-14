@@ -1,0 +1,13 @@
+{
+  "oracle": "I14 (C16d): presenceAccess/{d} and editAccess/{d} hold exactly the record's members and editorMembers after a revoke, and each revoked editor's own-token y write is refused by the RTDB rules",
+  "what": "syncPresenceAccess merges member keys into both mirrors instead of replacing the nodes, so every removed editor keeps presenceAccess and editAccess and may still write the live log",
+  "target": {
+    "spec": "e2e/specs/concurrency/c16-access.spec.mjs",
+    "case": "C16d serial positive control: the removal of every editor, then the visibility change; the mirrors equal the record and every revoked editor's live write is refused (I14) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "I14: presenceAccess has extra editor1-"
+  }
+}

@@ -1,0 +1,10 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -429,6 +429,7 @@
+     result = await page(Number(flags.limit) || 20, flags.cursor);
+   }
+ 
++  result.documents = result.documents.slice(1);
+   out(flags.json, result, () => {
+     if (result.documents.length === 0) {
+       console.log("Nothing yet. `bikeshed publish <file>` to start.");

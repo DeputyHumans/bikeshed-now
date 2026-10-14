@@ -1,0 +1,13 @@
+{
+  "oracle": "the editors refusal (C6, C11, SPEC §16 and §6a): a write made outside the editor (the agent's commit_draft) is refused with editorsRefusal's exact text while somebody's presence says edit",
+  "what": "functions/src/lib/presence.ts liveEditing reads status/{d}/peers but counts nobody as editing, so commit_draft publishes under an open editor",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C11 canary: at N=2 the agent's commit_draft is refused while the other editor is in the document, and once both have left the editor it publishes and the live log is empty",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C11 refusal: commit_draft is refused while p2 is in the editor"
+  }
+}

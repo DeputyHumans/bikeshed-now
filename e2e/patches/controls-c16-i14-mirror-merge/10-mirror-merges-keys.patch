@@ -1,0 +1,15 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -104,9 +104,10 @@
+     // ONE multi-path update, so the two mirrors can never disagree about a
+     // person: a window where `editAccess` still names somebody `presenceAccess`
+     // has dropped is a window where a revoked reader can still write.
++    // e2e negative control (controls-c16-i14-mirror-merge): the mirrors are merged key by key instead of replaced, so a removed member keeps both.
+     await db.ref().update({
+-      [`presenceAccess/${docId}`]: keyed(members),
+-      [`editAccess/${docId}`]: edit,
++      ...Object.fromEntries(Object.keys(keyed(members)).map((k) => [`presenceAccess/${docId}/${k}`, true])),
++      ...Object.fromEntries(Object.keys(edit).map((k) => [`editAccess/${docId}/${k}`, true])),
+     });
+   } catch {
+     /* presence is best-effort and must never fail the request it rode in on */

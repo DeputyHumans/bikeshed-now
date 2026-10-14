@@ -1,0 +1,13 @@
+{
+  "oracle": "a counter under a race (C17b): N forks made at one instant raise the source's stats.forks by exactly N, as many as its fork.created events, which holds only if forkDocument's requests interleave on the server and the oracle sees a lost increment",
+  "what": "forkDocument in functions/src/lib/fork.ts writes the source's stats.forks as the plain read it made at the start of the request plus one, a read-then-write outside any transaction in place of FieldValue.increment, so forks made at once overwrite each other's count",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17b N forks (SYNC-T): N readers of an unlisted link fork it at one instant, each under a title of its own; stats.forks and the source's fork.created events rise by exactly N, N fork records name the source, and every fork holds its bytes (SPEC §21) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C17b race: stats\\.forks and the fork\\.created events each rose by the 2 fork\\(s\\) made"
+  }
+}

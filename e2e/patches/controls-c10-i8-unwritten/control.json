@@ -1,0 +1,13 @@
+{
+  "oracle": "I8: every replacement an accept recorded is in the draft exactly once (c10-accepts)",
+  "what": "acceptSuggestion (functions/src/lib/accept.ts) takes the claim and records the decision, but never writes the change to the draft: every agent is told accepted, the draft still reads v1",
+  "target": {
+    "spec": "e2e/specs/concurrency/c10-accepts.spec.mjs",
+    "case": "C10a-serial: N agents accept N different suggestions one after another; every replacement is in the draft once (I8), one insertion and one note each (I9) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I8: \\S+: its replacement is in the draft 0 time\\(s\\), not once"
+  }
+}

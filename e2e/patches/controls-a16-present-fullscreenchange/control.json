@@ -1,0 +1,13 @@
+{
+  "oracle": "presentation follows fullscreenchange (A16.3)",
+  "what": "usePresenting no longer listens for fullscreenchange, so leaving fullscreen without the Exit button leaves the chrome hidden",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.3 Present hides the chrome and shows a counter that follows the deck; leaving fullscreen without Exit ends it (fullscreenchange); Exit ends it; a refused fullscreen still presents",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^presentation follows fullscreenchange"
+  }
+}

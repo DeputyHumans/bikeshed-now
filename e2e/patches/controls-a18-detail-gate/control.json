@@ -1,0 +1,13 @@
+{
+  "oracle": "the per-person reading detail is for the owner and editors (A18.4): the rules refuse viewers, views and acl to every other reader",
+  "what": "the viewers/{uid} rule lets anyone who may read the document read it (firestore.rules and its template), so a viewer or suggester learns who read it and for how long",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.4 the Activity panel's per-person detail is for the owner and editors only: rules refuse viewers, views and acl to a viewer, a suggester, an open editor and anonymous; the panel lists readers for the owner and an editor, only the aggregate for a viewer, and nothing for an open editor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the per-person detail: owner, editor and approver read it; viewer, suggester and anonymous are refused"
+  }
+}

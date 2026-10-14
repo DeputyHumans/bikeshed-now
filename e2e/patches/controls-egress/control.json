@@ -1,0 +1,12 @@
+{
+  "oracle": "egress guard (connect layer)",
+  "what": "the stack's egress guard lets a connection to a NAME through its connect layer (its DNS layer still refuses it, so even this control sends nothing): a function's outbound fetch is no longer refused at connect",
+  "target": {
+    "suite": "smoke",
+    "spec": "e2e/specs/smoke/egress.spec.mjs",
+    "case": "canary: a function's outbound fetch (OAuth client metadata) is refused at connect by the egress guard and logged"
+  },
+  "expect": {
+    "message": "no connect refusal for egress-canary-"
+  }
+}

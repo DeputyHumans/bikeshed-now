@@ -1,0 +1,16 @@
+{
+  "oracle": "C9b S4b: an editor's Save whose commit reaches the server after an update made a newer version current is told so (POST /commit 409, a conflict toast), never \"No changes to publish\" (SPEC §2 \"409 if stale\", §16; c08-mint-races)",
+  "what": "POST /commit's stale-base branch (functions/src/index.ts commitVersion) answers 200 {versionId: <current>, deduped: true} instead of 409, so the app shows \"No changes to publish\" for a commit on an old base: S4b's symptom, planted on the path the serial control takes",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C9b S4b serial positive control: the same update and Save one after another — N−1 agents pass the editors question while nobody edits and are held; the editor opens the editor and presses Save, and its POST /commit waits in its own browser; the first agent mints alone, and only then does the editor's commit on v1 reach the server: 409 and a conflict toast, one update succeeds and the rest are stale, one version (I6) with the agent's bytes (I7) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c08-mint-races"
+  ],
+  "expect": {
+    "message": "^C9b S4b serial toast: no Save publishes and every Save is told of the newer version \\(POST /commit 409, a conflict toast\\) — p1: nochange \"No changes to publish[^\"]*\" \\(POST /commit 200 \\{\"versionId\":\"v2\",\"deduped\":true\\}\\)"
+  }
+}

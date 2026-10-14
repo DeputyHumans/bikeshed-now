@@ -1,0 +1,10 @@
+--- a/app/src/annotation/clickGuard.ts
++++ b/app/src/annotation/clickGuard.ts
+@@ -45,7 +45,6 @@
+     const sel = doc.getSelection();
+     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+     if (sameSelection(before, sel)) return;
+-    e.stopPropagation();
+   };
+ 
+   target.addEventListener("pointerdown", onPointerDown, true);

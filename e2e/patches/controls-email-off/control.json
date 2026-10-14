@@ -1,0 +1,13 @@
+{
+  "oracle": "email off (the product's whitespace key)",
+  "what": "send.ts no longer trims RESEND_API_KEY, so the single-space key of an email-off stack reads as configured and the product tries to send: an invitation reaches the shim",
+  "target": {
+    "suite": "smoke",
+    "spec": "e2e/specs/smoke/options.spec.mjs",
+    "case": "canary: email off — a share reaches the product's own skip path, and the shim receives nothing for the recipient"
+  },
+  "stack": ["--email-off"],
+  "expect": {
+    "message": "on an email-off stack the shim received [1-9]"
+  }
+}

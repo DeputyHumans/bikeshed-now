@@ -1,0 +1,23 @@
+{
+  "what": "Two server pause points in the editor's mint path (commitDraft) and one client gate in the live join, each asking the stack's gate service whether to go on: for deterministic interleavings of concurrent commits (C8, C9b; S4, S4b; I6) and simultaneous first joins (C4; S1)",
+  "gates": [
+    {
+      "name": "mint-before-id",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts commitDraft: after the dedup query and before the version id is chosen (max(N)+1)",
+      "key": "docId"
+    },
+    {
+      "name": "mint-after-upload",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts commitDraft: between the upload of v(N+1)/ and the transaction that makes it current",
+      "key": "docId"
+    },
+    {
+      "name": "join-before-bind",
+      "side": "client",
+      "where": "app/src/viewer/useSharedDocument.ts: after log.ready() has delivered the existing live log, before bindSync binds (and maybe seeds) the host",
+      "key": "docId"
+    }
+  ]
+}

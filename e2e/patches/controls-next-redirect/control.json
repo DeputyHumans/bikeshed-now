@@ -1,0 +1,13 @@
+{
+  "oracle": "next= lands only on this origin (A1.7)",
+  "what": "safeNext trusts any value that starts with a slash; react-router still folds //host into a path, but /\\host reaches history.replaceState, which Chrome reads as http://host/ and refuses, killing the sign-in page",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.7 next= is honoured only as a path on this origin: https://evil.example/, //evil.example and the other hostile forms land on /, a same-origin path lands there",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^next=\\S*evil\\.example\\S* landed on /"
+  }
+}

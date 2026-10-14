@@ -1,0 +1,7 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -69,3 +69,3 @@
+       {
+-        "source": "/connect",
++        "source": "/connect-unframed",
+         "headers": [

@@ -1,0 +1,13 @@
+{
+  "oracle": "I9, one writer: only the claim holder applies an accepted change, so the draft is last written by the decider (c10-accepts checkOneWriter)",
+  "what": "acceptSuggestion (functions/src/lib/accept.ts) goes on when its claim is refused 409 (only a missing suggestion stops it), so an agent the claim, or the decision, refused writes the draft too; its bytes are the decider's (same working copy) and its accept is idempotent, so insertions and notes stay one and the answers look settled",
+  "target": {
+    "spec": "e2e/specs/concurrency/c10-accepts.spec.mjs",
+    "case": "C10c agents accept one suggestion at once (SYNC-T): the draft written by the decider alone, one insertion and one note, the others refused naming the claimer or told it is accepted (I9, I8); a free race is mostly decided before the losers' claims are read, so the claim itself is proven for agents only by C10c claim-gated [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I9: \\S+: the draft was last written by \\S+, not by the decider \\S+: an approver the claim should have kept off applied the change too"
+  }
+}

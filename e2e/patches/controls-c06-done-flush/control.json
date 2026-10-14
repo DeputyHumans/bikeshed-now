@@ -1,0 +1,13 @@
+{
+  "oracle": "C6 Done: every editor's Done saves its unsaved typing (SPEC §6a \"Leaving edit mode saves only an edit the autosave has not yet taken\"): its first POST /draft after Done holds every token it typed, and every save is answered 200",
+  "what": "app/src/viewer/useInlineEditor.ts flushUnsaved saves nothing, so Done inside the autosave debounce leaves the editor without sending the typing the autosave had not yet taken (the effect cleanup then clears the timer)",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 everyone stops and presses Done inside the autosave debounce at once: every Done saves its own typing, nobody stays in the editor, the agent's commit_draft publishes the draft with no decoration (DECOR, BODYATTR apart from S3), the live log is empty after it, and status/{d}/peers empties within 5 s of everyone leaving (I12) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C6 Done: every editor's Done saves its unsaved typing"
+  }
+}

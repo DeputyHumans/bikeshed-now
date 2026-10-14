@@ -1,0 +1,20 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -248,7 +248,6 @@
+             // and by whom, stay as they were.
+             allow update: if canRead(docId, docData(docId))
+               && resource.data.authorUid == request.auth.uid
+-              && !('generated' in resource.data)
+               && !('opensSuggestion' in resource.data)
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
+               && request.resource.data.body is string;
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -251,7 +251,6 @@
+             // and by whom, stay as they were.
+             allow update: if canRead(docId, docData(docId))
+               && resource.data.authorUid == request.auth.uid
+-              && !('generated' in resource.data)
+               && !('opensSuggestion' in resource.data)
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
+               && request.resource.data.body is string;

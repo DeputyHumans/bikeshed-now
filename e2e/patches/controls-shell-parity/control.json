@@ -1,0 +1,11 @@
+{
+  "oracle": "/d/** shell parity (A3.3): a private slug and an absent one are the same response, Date aside",
+  "what": "docShell adds X-Robots-Tag to the generic shell when the refused document exists, which tells a stranger the slug is taken",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.3 /d/**: a private and an absent slug answer identical headers (Date aside) and identical bytes, to the owner too; unlisted with its k is public max-age=300, noindex and titled by the document; POST is 405"
+  },
+  "expect": {
+    "message": "/d/ private and absent headers differ"
+  }
+}

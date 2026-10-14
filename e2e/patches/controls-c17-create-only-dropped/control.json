@@ -1,0 +1,15 @@
+{
+  "oracle": "a new document's bytes go into Storage create-only (C17a): under N publishes at one id at one instant every request is answered 200, one document has the id and N−1 a suffixed one, and on a --storage-shim stack every object of each new document's v1 reached Storage as a create-only write that Storage judged and stored",
+  "what": "CREATE_ONLY in functions/src/lib/publish.ts carries no precondition, so placeNewDocument (and fork.ts, POST /thumb) writes and copies unconditionally: a create racing another at one id replaces its v1 and then fails on the record",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17a same id (SYNC-T): N accounts publish at one requested id at one instant; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--storage-shim"
+  ],
+  "expect": {
+    "message": "C17a race: every request answered 200 — publish [0-9]+: 500[\\s\\S]*C17a race: every object of each new document's v1 reached Storage create-only \\(ifGenerationMatch=0\\)"
+  }
+}

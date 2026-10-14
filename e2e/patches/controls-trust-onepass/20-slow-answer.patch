@@ -1,0 +1,14 @@
+--- a/app/src/trust.ts
++++ b/app/src/trust.ts
+@@ -51,7 +51,10 @@
+ ): Unsubscribe {
+   return onSnapshot(
+     doc(db, "docs", docId, "trust", uid),
+-    (snap) => onData(snap.exists()),
++    (snap) => {
++      const exists = snap.exists();
++      setTimeout(() => onData(exists), 600);
++    },
+     () => onData(false),
+   );
+ }

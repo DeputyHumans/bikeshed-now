@@ -1,0 +1,21 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -104,9 +104,15 @@ export async function writeDraft(args: {
+     bytes = Buffer.byteLength(content.markdown, "utf8");
+   } else {
+     const htmlBuf = Buffer.from(content.html, "utf8");
+-    await bucket()
+-      .file(`${prefix}${version.entry}`)
+-      .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false });
++    // e2e negative control (controls-c01-draft-stale): a later save never
++    // replaces the draft's entry, so the first one stays while every save
++    // still answers 200.
++    const [kept] = await bucket().file(`${prefix}${version.entry}`).exists();
++    if (!kept) {
++      await bucket()
++        .file(`${prefix}${version.entry}`)
++        .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false });
++    }
+     bytes = htmlBuf.length;
+   }
+ 

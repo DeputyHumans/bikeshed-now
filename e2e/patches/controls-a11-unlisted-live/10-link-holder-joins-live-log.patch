@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -293,7 +293,7 @@
+   // A member, or anyone on a PUBLIC open-editing document, shares the live log.
+   // An unlisted document's link holder cannot — the realtime rules cannot see
+   // a key — so they edit alone and publish through /draft (SPEC §16).
+-  const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
++  const shareLive = signedIn;
+   const shared = useSharedDocument({
+     mode,
+     doc: frame.doc,

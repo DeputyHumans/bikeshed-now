@@ -1,0 +1,31 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -149,9 +149,28 @@
+   } catch {
+     return null;
+   }
++  // e2e probe (amplify-c12-update): what the editors question read, and how long each read took (C12a, X-c12-agent-vs-editors-2).
++  const e2eT0 = Date.now();
++  const e2eConnected = (await db.ref(".info/connected").once("value")).val() === true;
++  const e2eT1 = Date.now();
+   const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
++  const e2eT2 = Date.now();
+   const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
+   const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
++  const e2eT3 = Date.now();
++  console.log(
++    `[e2e-c12-probe] ${JSON.stringify({
++      docId,
++      at: new Date(e2eT0).toISOString(),
++      connected: e2eConnected,
++      editors,
++      modes: Object.values(peers ?? {}).map((p) => (typeof p?.mode === "string" ? p.mode : null)),
++      log,
++      connectedMs: e2eT1 - e2eT0,
++      peersMs: e2eT2 - e2eT1,
++      logMs: e2eT3 - e2eT2,
++    })}`,
++  );
+   return { editors, log };
+ }
+ 

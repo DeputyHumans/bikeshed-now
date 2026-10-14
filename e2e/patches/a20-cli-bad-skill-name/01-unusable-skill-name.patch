@@ -1,0 +1,11 @@
+--- a/app/public/skills/index.json
++++ b/app/public/skills/index.json
+@@ -1,7 +1,7 @@
+ {
+   "skills": [
+     {
+-      "name": "bikeshed-feedback",
++      "name": "../a20-escape",
+       "description": "Use when a Bikeshed document has just been published, to watch it for comments and answer them, and when reading review comments on one and revising it, or raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way.",
+       "path": "skills/bikeshed-feedback/SKILL.md",
+       "archive": "skills/bikeshed-feedback.zip"

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -601,7 +601,7 @@
+     console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
+   }
+   try {
+-    await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
++    // e2e control (controls-c12-update-keeps-draft-files): the replaced draft's files are kept.
+   } catch (e) {
+     console.error(`could not delete the draft files of ${docId}:`, (e as Error)?.message ?? e);
+   }

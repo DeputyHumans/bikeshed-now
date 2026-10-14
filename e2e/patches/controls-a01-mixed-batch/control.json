@@ -1,0 +1,13 @@
+{
+  "oracle": "a malformed recipient refuses its whole batch: 400 \"not a valid recipient\", nobody granted, nobody invited (A1.5)",
+  "what": "setAccess drops the malformed entries, applies and invites the valid ones, and only then answers 400 naming the malformed ones (functions/src/index.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.5 malformed recipients on /access, /folder-access and /team-members are 400 \"not a valid recipient\"; a mixed batch grants and invites nobody",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the refused batch granted mixed-[a-z0-9-]+@example\\.com: it is in .*\\bmembers\\b"
+  }
+}

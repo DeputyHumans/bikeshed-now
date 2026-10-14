@@ -1,0 +1,11 @@
+{
+  "oracle": "outbound links open with no opener (A5.5)",
+  "what": "openBeside calls window.open without noopener,noreferrer, so the new page can reach back into the viewer through window.opener",
+  "target": {
+    "spec": "e2e/specs/functional/a05-reading-trust.spec.mjs",
+    "case": "A5.5 links: an external link opens beside the document with no opener, a fragment scrolls the frame, a sibling file navigates the frame"
+  },
+  "expect": {
+    "message": "window\\.opener is null in the new page"
+  }
+}

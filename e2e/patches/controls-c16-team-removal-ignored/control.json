@@ -1,0 +1,13 @@
+{
+  "oracle": "C16c lost removal: a member the owner removes from a team is out of teams/{t}, out of every document the team is granted on (I16: the absent id's 404), and refused by the RTDB rules on that document's live log (I14's revoked-write leg)",
+  "what": "manageTeamMembers accepts a removal and ignores it, so the removed member stays in the team and keeps every grant the team holds",
+  "target": {
+    "spec": "e2e/specs/concurrency/c16-access.spec.mjs",
+    "case": "C16c lost removal serial positive control: the owner's removal of a member from a team granted editor on a document, then the N−1 admins' additions one after another; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), every added person reads the document, and each is invited once (I11) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "holds exactly the members asked — has extra leaver-"
+  }
+}

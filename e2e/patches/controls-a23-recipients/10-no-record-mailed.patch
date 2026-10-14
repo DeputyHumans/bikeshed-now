@@ -1,0 +1,14 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2992,8 +2992,9 @@
+       // No account yet means no cooldown record and no preference to honour.
+       // Staying silent is the right default: they were never told about the
+       // document either.
+-      if (!uid) continue;
+-      if (!(await claimCommentCooldown(db(), uid, docId, suggestion ? "suggestion" : "comment"))) continue;
++      // e2e negative control (controls-a23-recipients): a recipient with no
++      // users/{uid} record is mailed anyway, with no cooldown or preference.
++      if (uid && !(await claimCommentCooldown(db(), uid, docId, suggestion ? "suggestion" : "comment"))) continue;
+       await sendCommentNotice(email, {
+         authorEmail,
+         docTitle: title,

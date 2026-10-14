@@ -1,0 +1,13 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -169,7 +169,9 @@
+     flushNow: flush,
+     /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
+     flushUnsaved: useCallback(async () => {
+-      if (unsaved.current) await flush();
++      // e2e negative control (controls-c06-done-flush): Done saves nothing,
++      // so typing the autosave has not yet taken is dropped on the way out.
++      void unsaved;
+     }, [flush]),
+     /** True when the last save failed: a commit must not proceed. */
+     saveFailed: () => lastSaveFailed.current,

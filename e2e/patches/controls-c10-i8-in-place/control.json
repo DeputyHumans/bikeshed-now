@@ -1,0 +1,13 @@
+{
+  "oracle": "I8 in place: every replacement an accept recorded is in the draft once, in its own paragraph in place of its quote (invariants.mjs checkI8 in place, as c10-accepts calls it)",
+  "what": "acceptSuggestion (functions/src/lib/accept.ts) keeps the quote and puts the replacement after it: the replacement is in the draft exactly once, so counting alone passes, but no paragraph reads its text with the quote replaced",
+  "target": {
+    "spec": "e2e/specs/concurrency/c10-accepts.spec.mjs",
+    "case": "C10a-serial: N agents accept N different suggestions one after another; every replacement is in the draft once (I8), one insertion and one note each (I9) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I8: \\S+: its replacement is in the draft once, but not in place: #e2e-\\d+ reads \"Paragraph \\d+\\. "
+  }
+}

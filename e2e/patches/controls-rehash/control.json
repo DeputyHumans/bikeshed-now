@@ -1,0 +1,11 @@
+{
+  "oracle": "REHASH",
+  "what": "a commit stores the entry file with bytes appended after its contentHash was computed",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)"
+  },
+  "expect": {
+    "message": "REHASH v2"
+  }
+}

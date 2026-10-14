@@ -1,0 +1,11 @@
+{
+  "oracle": "A9.9 no POST /commit after a failed pre-commit save",
+  "what": "publishSaved ignores the result of the pre-commit save and commits anyway, publishing the previous draft",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.9 a failed pre-commit save shows \"The draft didn’t save, so nothing was published. Try again.\" and sends no POST /commit"
+  },
+  "expect": {
+    "message": "no POST /commit was sent"
+  }
+}

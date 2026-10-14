@@ -1,0 +1,10 @@
+--- a/app/src/viewer/usePresenting.ts
++++ b/app/src/viewer/usePresenting.ts
+@@ -47,7 +47,6 @@
+     const onChange = () => {
+       if (!document.fullscreenElement) setPresenting(false);
+     };
+-    document.addEventListener("fullscreenchange", onChange);
+     return () => document.removeEventListener("fullscreenchange", onChange);
+   }, [presenting]);
+ 

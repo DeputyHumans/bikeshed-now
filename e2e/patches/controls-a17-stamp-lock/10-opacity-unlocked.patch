@@ -1,0 +1,11 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -40,7 +40,7 @@
+ const LOCK: Record<string, string> = {
+   display: "block",
+   visibility: "visible",
+-  opacity: "1",
++  // e2e control: opacity no longer locked.
+   transform: "none",
+   filter: "none",
+   "clip-path": "none",

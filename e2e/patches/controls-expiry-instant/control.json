@@ -1,0 +1,13 @@
+{
+  "oracle": "expiry instant: A4.1, every request sent once the date has passed sees the document expired (isExpired is read at each request, with no grace)",
+  "what": "isExpired takes effect ten seconds after the date (acl.ts), so a request in the first ten seconds past it still reads and writes the document",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.1 an expired document is the absent id's 404 to everyone but its owner, frozen for all (the owner's cover excepted), gone from the shell and sitemap, and clearing the date restores every cell",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "expired: \\d+ of \\d+ cells wrong:[\\s\\S]*E GET /content = the absent id's 404: got \\{\"status\":200"
+  }
+}

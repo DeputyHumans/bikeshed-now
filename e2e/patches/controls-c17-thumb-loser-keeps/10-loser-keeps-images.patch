@@ -1,0 +1,13 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -645,9 +645,7 @@
+   });
+ 
+   if (!outcome.stored) {
+-    await bucket()
+-      .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
+-      .catch(() => undefined);
++    // e2e negative control (controls-c17-thumb-loser-keeps): a losing upload no longer deletes the images it wrote.
+     if (outcome.moved) {
+       res.status(409).json({ error: "not the current version" });
+     } else {

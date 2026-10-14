@@ -1,0 +1,12 @@
+--- a/functions/src/lib/acl.ts
++++ b/functions/src/lib/acl.ts
+@@ -186,7 +186,8 @@ export function readBasis(
+   if (visibility === "public") return "public";
+   if (visibility !== "unlisted") return null;
+   if (tokenMatches(doc.linkToken, proof.k)) return "link";
+-  if (caller && tokenMatches(doc.linkToken, proof.grantToken)) return "grant";
++  // e2e control: any grant counts, whichever token it was made with.
++  if (caller && typeof proof.grantToken === "string" && proof.grantToken.length > 0) return "grant";
+   return null;
+ }
+ 

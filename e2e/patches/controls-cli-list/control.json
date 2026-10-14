@@ -1,0 +1,11 @@
+{
+  "oracle": "CLI list --json",
+  "what": "the CLI drops the first document from its listing",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: the CLI's list --json, run against the stack with a minted token, lists the owner's document"
+  },
+  "expect": {
+    "message": "a new owner's listing is exactly the one document"
+  }
+}

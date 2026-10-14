@@ -1,0 +1,11 @@
+{
+  "oracle": "A9.13 an asset tag absent at load never reaches the draft",
+  "what": "serializeCleanHtml stops applying the load-time asset inventory, so a <style> put into the edit frame after load (as an extension would) is saved into the draft",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.13 a <style> put into the edit frame's <head> after it loaded never reaches the draft, while the author's own <style> does"
+  },
+  "expect": {
+    "message": "the injected <style> is not in the draft"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "the live log is dropped by an agent's write (C6, C11, SPEC §16: a write made outside the editor drops a log nobody is using): status/{d}/y is empty once the agent's commit_draft or accept has answered",
+  "what": "functions/src/mcp/tools.ts commit_draft publishes and keeps the live log (clearEditLog is never called)",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C11 canary: at N=2 the agent's commit_draft is refused while the other editor is in the document, and once both have left the editor it publishes and the live log is empty",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C11 log: status/\\S+/y is empty after the agent's commit_draft \\(it still holds [1-9]"
+  }
+}

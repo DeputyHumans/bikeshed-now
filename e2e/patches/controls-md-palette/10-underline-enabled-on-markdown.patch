@@ -1,0 +1,11 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -54,7 +54,7 @@ const INLINE_CONTROLS: Control[] = [
+     title: "Underline",
+     command: { kind: "exec", command: "underline" },
+     // Markdown has no underline. HTML-authored documents keep it.
+-    formats: ["html"],
++    // e2e control: the format restriction dropped, so Markdown offers Underline enabled.
+   },
+   {
+     id: "strike",

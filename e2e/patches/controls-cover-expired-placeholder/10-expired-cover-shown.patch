@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -627,7 +627,7 @@
+                       doc={doc}
+                       menu={docMenu(doc)}
+                       onShare={isOwner ? () => shareDoc(doc) : undefined}
+-                      showCover={isOwner || !isExpired(doc.expiresAt)}
++                      showCover={isOwner || !isExpired(doc.expiresAt) || true}
+                     />
+                   );
+                 })}

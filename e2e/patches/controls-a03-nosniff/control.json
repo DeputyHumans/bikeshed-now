@@ -1,0 +1,13 @@
+{
+  "oracle": "nosniff on every /draft answer, refusals included (A3.1 header matrix)",
+  "what": "firebase.json's /draft/** header rule no longer adds X-Content-Type-Options, so the 404 and 401 getDraft answers without streaming carry no nosniff while the owner's streamed read keeps the function's own",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.1 cache headers: member and grant reads are private no-store, link and public reads public max-age=300 (+noindex when unlisted), expiry caps max-age, thumbs immutable, /draft /download /unlock GET /access always no-store, nosniff on byte paths",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "header matrix: 2 mismatching cell\\(s\\)\\n  /draft \\(stranger\\) \\| x-content-type-options: want nosniff, got \\(absent\\)\\n  /draft \\(anonymous\\) \\| x-content-type-options: want nosniff, got \\(absent\\)(?:\\n|$)"
+  }
+}

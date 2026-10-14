@@ -1,0 +1,13 @@
+{
+  "oracle": "I16 against what was asked (C16a): a document's grant lists and its four effective sets equal computeMembership over every grant the owner's requests asked for, and every grantee reads it (200)",
+  "what": "setAccess applies each delta to empty grant lists instead of the stored ones, so every POST /access replaces the grants and only the latest grantee keeps access",
+  "target": {
+    "spec": "e2e/specs/concurrency/c16-access.spec.mjs",
+    "case": "C16a serial positive control: the same N POST /access one after another leave every grant in the record and every grantee reading the document (I16), the mirrors equal to the record (I14), and each grantee invited once (I11) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "I16: docs/[a-z0-9-]+ against what was asked: members: lacks grantee1-"
+  }
+}

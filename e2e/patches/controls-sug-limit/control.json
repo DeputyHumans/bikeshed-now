@@ -1,0 +1,11 @@
+{
+  "oracle": "twenty pending suggestions per author per version (A7.6)",
+  "what": "the pending count is compared with > instead of >=, so a twenty-first pending suggestion is accepted",
+  "target": {
+    "spec": "e2e/specs/functional/a07-suggestions.spec.mjs",
+    "case": "A7.6 twenty pending suggestions per author per version: the twenty-first is 409 You already have 20… in the API and in the form, which stays open; another author is not held back; withdrawing one frees a slot"
+  },
+  "expect": {
+    "message": "the twenty-first pending suggestion is refused"
+  }
+}

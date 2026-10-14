@@ -1,0 +1,23 @@
+{
+  "what": "Three server pause points for feedback racing a publish and the twenty-pending limit (c13-feedback): in createSuggestion between the pending count and the transaction that writes the suggestion (C13, S7: every caller counted before any wrote), in add_comment between reading the current version and writing the thread (C14, S12: a publish made while the thread is in flight), and in commitDraft between its open-thread check and upload and the transaction that asks again (C14: feedback landing while a version uploads). Stands alone: it adds its own functions/src/lib/e2eGate.ts, so it is not applied together with another amplify set.",
+  "gates": [
+    {
+      "name": "suggest-after-count",
+      "side": "server",
+      "where": "functions/src/lib/suggestions.ts createSuggestion: after the author's pending count is checked against the limit of twenty, before the transaction that reads the document and creates the suggestion",
+      "key": "docId"
+    },
+    {
+      "name": "comment-before-write",
+      "side": "server",
+      "where": "functions/src/mcp/tools.ts add_comment: after loadDoc read currentVersion and locateInCurrentVersion found the passage in it, before the batch that creates the thread and its first comment",
+      "key": "docId"
+    },
+    {
+      "name": "commit-before-tx",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts commitDraft: after openThreadsRefusal and the upload of v(N+1)/, before the transaction that asks anyOpenThread again and makes the version current",
+      "key": "docId"
+    }
+  ]
+}

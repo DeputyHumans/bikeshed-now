@@ -1,0 +1,30 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -24,6 +24,7 @@ import * as mime from "mime-types";
+ import { MAX_BUNDLE_BYTES, bucketName } from "../config";
+ import { emptyGrants } from "./access";
+ import type { Actor } from "./actor";
++import { e2eRaceGate } from "./e2eRaceGate";
+ import { hashBundleFiles, type BundleFile } from "./hash";
+ import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
+ import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
+@@ -492,6 +493,9 @@ export async function commitNewVersion(args: {
+   const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");
+   if (held) return held;
+ 
++  // e2e amplify (amplify-c08-mint-races): a pause point after every refusal, before the version id is chosen.
++  await e2eRaceGate("update-before-id", docRef.id);
++
+   const allVersions = await versionsRef.get();
+   let maxN = 0;
+   for (const d of allVersions.docs) {
+@@ -502,6 +506,9 @@ export async function commitNewVersion(args: {
+   const storagePrefix = `docs/${docRef.id}/${versionId}`;
+   await uploadBundle(storagePrefix, compiled.files);
+ 
++  // e2e amplify (amplify-c08-mint-races): a pause point between the upload of v(N+1)/ and the transaction.
++  await e2eRaceGate("update-after-upload", docRef.id);
++
+   const base = args.baseVersion ?? "";
+   try {
+     await db.runTransaction(async (tx) => {

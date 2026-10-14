@@ -1,0 +1,12 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -180,7 +180,8 @@
+     await steps.release().catch(() => {});
+     return applied;
+   }
+-  await steps.flush();
++  // e2e control: the save is started but not waited for, so the decision can be recorded before the draft holds it.
++  void steps.flush();
+   if (steps.saveFailed()) return "unsaved";
+   try {
+     await steps.record();

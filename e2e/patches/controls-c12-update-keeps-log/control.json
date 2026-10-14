@@ -1,0 +1,13 @@
+{
+  "oracle": "an update drops the live log a replaced draft left (C12c, SPEC §6a, §16: \"drops a log nobody is using … every update\"): once every editor has left the editor, status/{d}/y is empty within 2 s of the agent's update_document, and the next editor sees the agent's version",
+  "what": "functions/src/lib/publish.ts dropReplacedDraft no longer clears status/{d}/y after a non-deduplicated update",
+  "target": {
+    "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
+    "case": "C12c deleted draft objects, leftover log: N editors type, save and all press Done, leaving a draft and a live log nobody is using; the agent's update publishes v2, the live log is empty within 2 s, the draft's record and objects are gone, GET /draft serves v2 and the next editor sees the agent's version and none of the tokens [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C12c log: status/\\S+/y is empty within 2 s of the agent's update \\(it still holds [1-9]"
+  }
+}

@@ -1,0 +1,10 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -110,7 +110,6 @@
+   if (!canRead(data, caller, proof)) return null;
+   // Forking reads every byte, so it is a read path: without this, copying an
+   // expired document would get its content back out from behind the date.
+-  if (expiredForReader(data, caller)) return null;
+   return { ref, data };
+ }
+ 

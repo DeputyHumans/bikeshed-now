@@ -1,0 +1,12 @@
+{
+  "oracle": "an unpinned reader never sees the newer-version banner (A12.3, User.watchFor: every render, from each document's first script)",
+  "what": "useLiveSync offers the newer-version banner to every reader, including one whose frame already follows the new version",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.3 a reader pinned to an older version gets the newer-version banner and Open or Stay here; an unpinned reader follows each new version, with no banner for the first, not for one render",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "an unpinned reader follows to v2 with no banner, ever"
+  }
+}

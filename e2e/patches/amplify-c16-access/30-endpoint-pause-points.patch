@@ -1,0 +1,28 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -135,6 +135,7 @@
+ } from "./lib/folders";
+ import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
+ import { syncPresenceAccess } from "./lib/presence";
++import { e2eAccessGate } from "./lib/e2eAccessGate";
+ import { forkDocument, lineageFor } from "./lib/fork";
+ import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
+ import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
+@@ -1005,6 +1006,8 @@
+   // gate is a mirror rather than a query, so it has to be told. Only a PUBLIC
+   // document opens it to any account: the realtime rules cannot see a link's
+   // key, so an unlisted document's link holders edit through /draft instead.
++  // e2e amplify (amplify-c16-access): a pause point after the record and its projection are written, before the RTDB mirrors are rewritten from the members read at the start.
++  await e2eAccessGate("visibility-before-mirror", docId);
+   await syncPresenceAccess(
+     docId,
+     asArray(data.members),
+@@ -2715,6 +2718,8 @@
+     }
+   }
+ 
++  // e2e amplify (amplify-c16-access): a pause point after the team is read and its new members computed, before they are written.
++  await e2eAccessGate("team-members-after-read", teamId);
+   await ref.set({ members, admins, updatedAt: now() }, { merge: true });
+ 
+   // Removing someone from a team must revoke their access everywhere the team

@@ -1,0 +1,11 @@
+{
+  "oracle": "DECOR",
+  "what": "the editor leaves a bshd- class on the first paragraph, and nothing strips it, so it is published into the next version",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)"
+  },
+  "expect": {
+    "message": "DECOR: decoration in v2"
+  }
+}

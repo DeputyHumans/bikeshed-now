@@ -1,0 +1,10 @@
+--- a/app/src/styles/layout.css
++++ b/app/src/styles/layout.css
+@@ -10,6 +10,7 @@
+ }
+ 
+ .app-header {
++  min-width: 480px;
+   position: sticky;
+   top: 0;
+   z-index: 40;

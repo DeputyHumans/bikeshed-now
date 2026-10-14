@@ -1,0 +1,28 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1117,6 +1117,9 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
+  * HERE and both files are written: the source, which is canonical, and a freshly
+  * rendered HTML so the draft read-back below needs no special case (SPEC §11).
+  */
++// e2e negative control (controls-c01-save-errors): the saves this worker takes, counted.
++let e2eDraftSaves = 0;
++
+ export const saveDraft = onRequest(PLAIN, async (req, res) => {
+   if (rejectMethod(req, res, ["POST"])) return;
+   const caller = await resolveCaller(req);
+@@ -1186,6 +1189,15 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
+     return;
+   }
+ 
++  // e2e negative control (controls-c01-save-errors): every second save this
++  // worker takes is refused 503 and nothing is stored, as a contended
++  // docs/{id} write fails under load (S30). The editor shows "error".
++  e2eDraftSaves += 1;
++  if (e2eDraftSaves % 2 === 0) {
++    res.status(503).json({ error: "e2e: this save was refused on purpose (controls-c01-save-errors)" });
++    return;
++  }
++
+   // For Markdown the posted HTML is converted back to Markdown HERE, and its
+   // rendering stored beside it (SPEC §11).
+   const markdown = version.format === "markdown" ? htmlToMarkdown(html) : null;

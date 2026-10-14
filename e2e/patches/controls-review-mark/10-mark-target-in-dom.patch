@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -55,6 +55,8 @@
+   const win = doc.defaultView as HighlightWindow | null;
+   const target = range.startContainer.parentElement;
+   target?.scrollIntoView?.({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
++  // e2e control: the target is marked in the DOM as well, which the observer sees.
++  target?.classList.add("bshd-review-target");
+   if (win?.Highlight && win.CSS?.highlights && "adoptedStyleSheets" in doc) {
+     const sheet = new win.CSSStyleSheet();
+     sheet.replaceSync(

@@ -1,0 +1,10 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -322,7 +322,6 @@
+     if (sinceRotation <= REPLAY_GRACE_MS && typeof g.nonce === "string") {
+       return { ok: true, pair: pairFor(tokenId, derivePair(secret, g.nonce), millis(g.accessExpiresAt)) };
+     }
+-    await revokeToken(db, g.uid, tokenId);
+     return invalidGrant("refresh token was already used; the connection has been disconnected");
+   }
+ 

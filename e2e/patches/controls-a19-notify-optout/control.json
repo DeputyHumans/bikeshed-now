@@ -1,0 +1,13 @@
+{
+  "oracle": "comment email honours the account opt-out (A19.1): an owner who turned #notify off gets no notice of a reply whose notice, in the same trigger run, reaches the thread's other participant",
+  "what": "claimCommentCooldown no longer reads users/{uid}.emailNotifications (functions/src/email/notify.ts), so an owner who turned comment email off is still sent the notice",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.1 the Email toggle gates comment email both ways: with #notify off the owner gets no notice of a reply whose notice reaches the thread's other participant; turned back on, the owner's next notice arrives",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "with #notify off, the quiet owner is told nothing of a new comment"
+  }
+}

@@ -1,0 +1,20 @@
+--- a/app/src/firestore.ts
++++ b/app/src/firestore.ts
+@@ -19,7 +19,7 @@
+   type Unsubscribe,
+ } from "firebase/firestore";
+ 
+-import { db } from "./firebase";
++import { auth, db } from "./firebase";
+ import { TOKENS } from "./brand/tokens";
+ import type {
+   AclChange,
+@@ -182,7 +182,7 @@
+   );
+   return onSnapshot(
+     q,
+-    (snap) => onData(snap.docs.map((d) => ({ ...(d.data() as Annotation), annId: d.id }))),
++    (snap) => onData(snap.docs.filter((d) => d.data().authorUid === auth.currentUser?.uid).map((d) => ({ ...(d.data() as Annotation), annId: d.id }))),
+     (err) => onError?.(err),
+   );
+ }

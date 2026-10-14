@@ -1,0 +1,11 @@
+--- a/app/src/thumbs.ts
++++ b/app/src/thumbs.ts
+@@ -117,7 +117,7 @@
+ export function captureNeeds(input: CaptureInput): CaptureNeeds | null {
+   if (!input.reading || input.draft) return null;
+   if (!input.headVersion || input.shownVersion !== input.headVersion) return null;
+-  if (!input.isDocEditor || (input.expired && !input.isOwner)) return null;
++  if (input.expired && !input.isOwner) return null;
+   if (input.sandboxed === input.globallyTrusted) return null;
+ 
+   const current =

@@ -1,0 +1,13 @@
+{
+  "oracle": "C9 outcomes: exactly one update_document on a base succeeds and every other is refused as stale (c08-mint-races)",
+  "what": "update_document (functions/src/mcp/tools.ts) never compares the baseVersion its caller revised from, so a later update on v1 replaces the version somebody else published since",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C9 serial positive control: the same N updates on v1 one after another; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the first's (I7) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C9 outcomes: exactly one update succeeds and every other is refused as stale — 2 succeeded"
+  }
+}

@@ -1,0 +1,15 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -271,7 +271,11 @@
+     epoch: frame.epoch,
+     annotations,
+     selectedId,
+-    onSelect: setSelectedId,
++    onSelect: (id: string) => {
++      setSelectedId(id);
++      setCommentsOpen(true);
++      setPane("comments");
++    },
+   });
+ 
+   const presence = usePeerPresence({

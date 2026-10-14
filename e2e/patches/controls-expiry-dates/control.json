@@ -1,0 +1,13 @@
+{
+  "oracle": "expiry date refusal: A4.2, a past or far date is refused with its reason and the record is untouched",
+  "what": "parseExpiry's upper bound is a hundred thousand years instead of a hundred (access.ts), so a date 101 years out, or one in microseconds, is accepted and applied",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.2 a past date and one beyond a hundred years are each refused with a 400, and neither touches the record",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^each refused with its reason, and the record exactly as before\\n[\\s\\S]*what: '101 years out'"
+  }
+}

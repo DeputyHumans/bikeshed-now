@@ -1,0 +1,17 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1749,6 +1749,14 @@
+     },
+     async run(ctx, args) {
+       return changeThread(ctx, args, false);
++    },
++  },
++  {
++    name: "e2e_control_extra",
++    description: "negative control",
++    inputSchema: { type: "object", properties: {} },
++    async run() {
++      return {};
+     },
+   },
+ ];

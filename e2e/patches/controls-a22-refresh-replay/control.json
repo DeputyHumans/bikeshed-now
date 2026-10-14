@@ -1,0 +1,13 @@
+{
+  "oracle": "refresh reuse detection (A22.3): replaying a spent refresh token after the 60 s window revokes the grant, so its newest bsa_ answers 401",
+  "what": "refreshGrant in functions/src/oauth/grants.ts still answers a late replay of the previous refresh token with invalid_grant, but no longer revokes the grant",
+  "target": {
+    "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
+    "case": "A22.3 refresh rotates both secrets and the spent bsa_ stops working; a replay of the spent bsr_ or of the code within 60 s gets the identical pair; a wrong secret for a known grant changes nothing; a replay after 60 s revokes the grant, so its bsa_ answers 401 and its newest bsr_ is refused",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "late replay revokes: /mcp refuses the newest bsa_"
+  }
+}

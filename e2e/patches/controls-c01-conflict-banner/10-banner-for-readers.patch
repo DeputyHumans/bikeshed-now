@@ -1,0 +1,12 @@
+--- a/app/src/viewer/useLiveSync.ts
++++ b/app/src/viewer/useLiveSync.ts
+@@ -57,6 +57,9 @@ export function useLiveSync(options: {
+           // silence keeps YOUR work rather than theirs.
+           setConflict({ byEmail: draft.updatedByEmail });
+         } else if (showsDraft && !first) {
++          // e2e negative control (controls-c01-conflict-banner): a reader is
++          // offered the conflict banner too, beside the reload it gets.
++          setConflict({ byEmail: draft.updatedByEmail });
+           if (hold) owedReload.current = true;
+           else onPeerSavedDraft();
+         }

@@ -1,0 +1,11 @@
+{
+  "oracle": "mail exactly once",
+  "what": "every invitation is sent twice",
+  "target": {
+    "spec": "e2e/specs/functional/smoke.spec.mjs",
+    "case": "smoke: sharing with a new address sends exactly one invitation, with the product's subject and link"
+  },
+  "expect": {
+    "message": "wanted 1 message\\(s\\) to \\S+; saw 2"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "forks/* is server-only under the Firestore rules (A15.2): no client gets or lists it, while the same token reads the fork's own record",
+  "what": "the forks/{forkId} rule lets any signed-in client read (firestore.rules and its template), so a fork's members can learn the parent's id",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.2 a fork of a trusted public document is private, trusted:false, forked:true and marked by the forker's default, with nothing naming its parent; v1 is publishedVia fork with the source's bytes (REHASH); forks/{id} is server-only; stats.forks counts each fork once and nothing else moves",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "forks/\\* is server-only under the rules"
+  }
+}

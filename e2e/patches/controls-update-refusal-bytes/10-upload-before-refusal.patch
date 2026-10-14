@@ -1,0 +1,19 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -486,6 +486,16 @@
+   // next save of theirs would be refused as stale.
+   const editing = await editorsRefusal(docRef.id, "published");
+   if ("refusal" in editing) return editing.refusal;
++  // e2e control: the bytes go up before the refusals are asked.
++  {
++    const all = await versionsRef.get();
++    let top = 0;
++    for (const d of all.docs) {
++      const m = /^v(\d+)$/.exec(d.id);
++      if (m) top = Math.max(top, Number(m[1]));
++    }
++    await uploadBundle(`docs/${docRef.id}/v${top + 1}`, compiled.files);
++  }
+   const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
+   if (refused) return refused;
+   // This path deletes the draft; changes accepted into it would go with it.

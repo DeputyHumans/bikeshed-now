@@ -1,0 +1,13 @@
+{
+  "oracle": "get_changes audience (A21.3): a viewer receives reader events only, never access.changed or another editors' event",
+  "what": "the get_changes page filter no longer drops editors' events for a reader who is not an editor (functions/src/mcp/tools.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a viewer receives reader events only"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "one answer per record under concurrent captures (C17c): exactly one upload per kind is told {stored: true}, and GET /thumb serves the bytes of every upload told so",
+  "what": "saveThumbs in functions/src/index.ts decides the record from the read made before the upload and writes it outside any transaction, so every capture that read it empty is told {stored: true} and keeps its images, and the last write wins the record",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17c thumbnails (SYNC-T): the owner and N−1 editors store v1's cover at one instant, then its slides; one cover key and one slides key are recorded and served, every loser's images are deleted, and updatedAt is untouched (SPEC §2, §4) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C17c race: exactly one cover upload became the record \\(\\{stored: true\\}\\)[\\s\\S]*C17c race: GET /thumb serves the cover that every upload told \\{stored: true\\} sent — not cover [0-9]+'s"
+  }
+}

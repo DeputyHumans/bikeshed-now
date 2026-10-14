@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2183,7 +2183,8 @@
+   }
+ 
+   const actor = caller ? actorFrom(caller, req) : null;
+-  const automated = actor ? isAutomated(actor) : false;
++  // e2e control: an automated caller is counted as a person, into views and totalMs.
++  const automated = actor ? isAutomated(actor) && false : false;
+   const via: "app" | "unlisted" | "public" =
+     basis === "member" ? "app" : basis === "public" ? "public" : "unlisted";
+ 

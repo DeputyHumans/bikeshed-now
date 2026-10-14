@@ -1,0 +1,23 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -308,8 +308,9 @@
+     return { ok: false, status: 500, error: "server_error", description: "try again" };
+   }
+   if (g.kind !== "oauth") return invalidGrant("refresh token not recognised");
+-  const isCurrent = sameHash(g.refreshHash, secret);
+-  const isPrevious = !isCurrent && sameHash(g.prevRefreshHash, secret);
++  // e2e negative control (controls-c20-refresh-fork): a spend of the previous refresh token rotates again instead of answering the pair the first spend produced.
++  const isCurrent = sameHash(g.refreshHash, secret) || sameHash(g.prevRefreshHash, secret);
++  const isPrevious = false;
+   if (!isCurrent && !isPrevious) return invalidGrant("refresh token not recognised");
+   if (g.revokedAt != null) return invalidGrant("this connection was disconnected");
+   if (opts.clientId && opts.clientId !== g.client?.id) return invalidGrant("refresh token was issued to another client");
+@@ -345,7 +346,7 @@
+       const cur = fresh.data() as GrantRecord | undefined;
+       if (!cur || cur.revokedAt != null) return invalidGrant("this connection was disconnected");
+       // Lost a race to a concurrent spend of the same token: answer as a retry.
+-      if (!sameHash(cur.refreshHash, secret)) {
++      if (!sameHash(cur.refreshHash, secret) && !sameHash(cur.prevRefreshHash, secret)) {
+         if (sameHash(cur.prevRefreshHash, secret) && typeof cur.nonce === "string") {
+           return { ok: true, pair: pairFor(tokenId, derivePair(secret, cur.nonce), millis(cur.accessExpiresAt)) } as RefreshResult;
+         }

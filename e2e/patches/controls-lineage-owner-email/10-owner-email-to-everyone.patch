@@ -1,0 +1,11 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -325,7 +325,7 @@
+       title: str(parent.data.title, "Untitled"),
+       versionId: str(rec.get("parentVersion"), ""),
+     };
+-    if (isMember(parent.data, caller.uid, caller.emailLower) && typeof parent.data.ownerEmail === "string") {
++    if (typeof parent.data.ownerEmail === "string") {
+       entry.ownerEmail = parent.data.ownerEmail;
+     }
+     if (hop === 0) {

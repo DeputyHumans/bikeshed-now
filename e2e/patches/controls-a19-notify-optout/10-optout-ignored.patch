@@ -1,0 +1,12 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -52,7 +52,8 @@
+     const snap = await tx.get(ref);
+     if (!snap.exists) return false;
+     const data = snap.data() || {};
+-    if (data.emailNotifications === false) return false;
++    // e2e negative control (controls-a19-notify-optout): the account's opt-out
++    // is no longer read, so somebody who turned comment email off still gets it.
+ 
+     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+     const last = Number(cooldowns[own] ?? 0);

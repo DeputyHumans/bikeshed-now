@@ -1,0 +1,15 @@
+diff --git a/functions/src/lib/events.ts b/functions/src/lib/events.ts
+index 7c6a099..247d35c 100644
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -325,7 +325,9 @@ export async function eventsAfter(
+   limit: number,
+ ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+   let q = docRef.collection("events").orderBy("at", "asc").orderBy(FieldPath.documentId(), "asc");
+-  if (cursor.at && cursor.id) q = q.startAfter(cursor.at, cursor.id);
++  // e2e negative control (controls-c15-i15-repeat): the page starts AT the cursor, so the
++  // event a reader was last given is given again.
++  if (cursor.at && cursor.id) q = q.startAt(cursor.at, cursor.id);
+   return (await q.limit(limit + 1).get()).docs;
+ }
+ 

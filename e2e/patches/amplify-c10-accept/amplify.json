@@ -1,0 +1,17 @@
+{
+  "what": "Two server pause points in the agent's accept (acceptSuggestion): after the working copy is read and the change made in memory (before the claim and the draft write), and after the claim is taken (before the draft write and the decision). For deterministic interleavings of concurrent agent accepts: C10a, different suggestions (S5, a lost update of the draft); C10c, one suggestion (I9: the others arrive while the claim is held, one insertion and one note)",
+  "gates": [
+    {
+      "name": "accept-after-read",
+      "side": "server",
+      "where": "functions/src/lib/accept.ts acceptSuggestion: after readWorkingCopy and applyToHtml/applyToMarkdown have made the change in memory, before changeSuggestion(claim) and writeDraft",
+      "key": "docId"
+    },
+    {
+      "name": "accept-after-claim",
+      "side": "server",
+      "where": "functions/src/lib/accept.ts acceptSuggestion: after changeSuggestion(claim) has taken the claim, before writeDraft and changeSuggestion(accept)",
+      "key": "docId"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "C21's save health on a live session: every POST /draft is answered 200 and no editor's save state is ever \"error\" (assertSaves over User.capture's /draft rows and User.recordSaveStates, asserted before the settle; c01-typing)",
+  "what": "the POST /draft endpoint (functions/src/index.ts saveDraft) refuses every second save a worker takes with 503 and stores nothing, as a contended docs/{id} write fails under load (S30); the editor shows \"error\" until its next input",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C21 autosave rate: N editors type a token each in step and pause past the debounce, 6 times, so their autosaves land on one document together; no save state is ever \"error\" and every POST /draft is answered 200 (p95 under 3 s asserted on production only) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C21: every POST /draft is answered 200"
+  }
+}

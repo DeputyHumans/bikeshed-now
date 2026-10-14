@@ -1,0 +1,71 @@
+--- /dev/null
++++ b/app/src/e2eLogGate.ts
+@@ -0,0 +1,68 @@
++// SPDX-License-Identifier: Apache-2.0
++// e2e only, applied to a stack copy by e2e/patches/amplify-c01-append-refused: one live-log append refused on the harness's word, marked at a client gate (SPEC §12).
++
++/**
++ * Never part of the product: the e2e harness applies this file, and the one
++ * call to it in app/src/crdt/rtdb.ts, to a stack's COPY of the tree. The
++ * stack that applies it builds the app with VITE_E2E_GATE_URL, a port of its
++ * own block that the browser tripwire allows.
++ *
++ * WHICH APPEND. Nothing is refused unless the harness asks, in this page:
++ * it sets `window.__e2eRefuseAppends` to a count, and that many of the
++ * page's next appends are refused, one each. An unasked page never calls
++ * the gate service, so every other case on the stack runs as on an
++ * unpatched one. Each refusal is recorded in `window.__e2eRefusedAppends`
++ * ({at, key, bytes}) for the harness to read back.
++ *
++ * HOW. A refused append first calls the client gate "append-refused" (held
++ * while the harness holds it, so the case knows the refusal happened), then
++ * throws as a Realtime Database write the server refused does, having
++ * written nothing: the promise `push()` would have returned rejects.
++ *
++ * FAILS CLOSED. Without VITE_E2E_GATE_URL in the build, or when the gate
++ * service does not answer 200, the gate throws before the refusal is
++ * recorded, and the harness, which waits for the held caller, ends its case
++ * INCONCLUSIVE rather than judging an append that may not have been refused.
++ */
++type RefuseState = { __e2eRefuseAppends?: unknown; __e2eRefusedAppends?: { at: number; key: string; bytes: number }[] };
++
++/** Whether the harness asked this page to refuse its next append; counts the request down. */
++export function e2eRefuseThisAppend(): boolean {
++  const w = globalThis as unknown as RefuseState;
++  const left = Number(w.__e2eRefuseAppends ?? 0);
++  if (!(left > 0)) return false;
++  w.__e2eRefuseAppends = left - 1;
++  return true;
++}
++
++/** Record a refusal the harness asked for. */
++export function e2eNoteRefusal(key: string, bytes: number): void {
++  const w = globalThis as unknown as RefuseState;
++  (w.__e2eRefusedAppends ??= []).push({ at: Date.now(), key, bytes });
++}
++
++function newCaller(): string {
++  try {
++    const id = globalThis.crypto?.randomUUID?.();
++    if (id) return id;
++  } catch {
++    // Not a secure context: a random string serves as well.
++  }
++  return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
++}
++
++const CALLER = newCaller();
++let runs = 0;
++
++export async function e2eLogGate(name: string, key: string): Promise<void> {
++  const env = import.meta.env as Record<string, string | undefined> | undefined;
++  const base = env?.VITE_E2E_GATE_URL;
++  if (!base) {
++    throw new Error(`e2e gate ${name}: VITE_E2E_GATE_URL was not built into this patched app, so the gate cannot be honoured; refusing to go on`);
++  }
++  runs += 1;
++  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=client&caller=${encodeURIComponent(CALLER)}&run=${runs}`;
++  const res = await fetch(url, { method: "POST" });
++  const text = await res.text();
++  if (res.status !== 200) throw new Error(`e2e gate ${name}: the gate service answered ${res.status} ${text.slice(0, 200)}`);
++}

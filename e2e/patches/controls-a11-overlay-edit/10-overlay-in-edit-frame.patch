@@ -1,0 +1,11 @@
+--- a/app/src/viewer/usePeerPresence.ts
++++ b/app/src/viewer/usePeerPresence.ts
+@@ -75,7 +75,7 @@
+    * every peer cursor, which is the whole point of observe mode.
+    */
+   useEffect(() => {
+-    if (!enabled || !doc || mode === "edit") return;
++    if (!enabled || !doc) return;
+     overlay.current = createPeerOverlay(doc);
+     return () => {
+       overlay.current?.destroy();

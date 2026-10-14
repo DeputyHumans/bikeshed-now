@@ -1,0 +1,13 @@
+{
+  "oracle": "C8 fresh draft: a draft saved on the new version after a mint race survives every losing editor's save (c08-mint-races)",
+  "what": "POST /commit's stale branch (functions/src/index.ts commitVersion) deletes docs/{d}.draft and docs/{d}/draft/ before it answers 409, so a losing editor's commit throws away the draft somebody saved on the new version",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C8 serial positive control: the same saves one after another — every other editor types, saves its draft on v1 and presses Save, the first then publishes, a fresh draft is saved on its version, and only then does each losing commit on v1 reach the server, in turn — mint one version (I6) with the first's bytes (I7), one \"Published\" toast and N−1 conflict toasts, and the fresh draft survives [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "fresh draft: a draft saved on v2 after it was published survives — docs/[^ ]+\\.draft is gone"
+  }
+}

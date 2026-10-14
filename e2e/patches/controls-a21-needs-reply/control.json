@@ -1,0 +1,13 @@
+{
+  "oracle": "needsReply (A21.6): a thread whose latest comment is an agent's never needs a reply",
+  "what": "awaitsReply counts any latest comment, an agent's included, as a person waiting (functions/src/mcp/tools.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.6 needsReply names only open threads on the current version whose latest comment a person wrote in the browser: never an agent's thread or reply, a resolved thread, or an older version's",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "needsReply names the people's threads, never the agent-opened T2"
+  }
+}

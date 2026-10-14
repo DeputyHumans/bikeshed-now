@@ -1,0 +1,28 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -51,6 +51,7 @@
+   signInHint,
+ } from "./config";
+ import { verifyIdToken, verifySessionCookie } from "./lib/auth";
++import { e2eIdentityGate } from "./lib/e2eIdentityGate";
+ import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
+ import {
+   canEdit,
+@@ -2398,6 +2399,8 @@
+       return;
+     }
+ 
++    // e2e amplify (amplify-c17-identity): a pause point after the verification in progress is read and the resend gap passed, before a new code is stored and mailed.
++    await e2eIdentityGate("verify-start-after-read", uid);
+     const code = sixDigitCode();
+     await ref.set(
+       {
+@@ -2439,6 +2442,8 @@
+     return;
+   }
+ 
++  // e2e amplify (amplify-c17-identity): a pause point after the verification and its attempt count are read and the expiry and attempt checks passed, before the code is compared and a wrong guess counted.
++  await e2eIdentityGate("verify-complete-after-read", uid);
+   const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");
+   if (expected !== verification.hash) {
+     await ref.set(

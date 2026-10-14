@@ -1,0 +1,11 @@
+--- a/app/src/components/VisibilitySection.tsx
++++ b/app/src/components/VisibilitySection.tsx
+@@ -131,7 +131,7 @@
+               type="button"
+               className="btn btn-sm"
+               onClick={() => {
+-                void navigator.clipboard?.writeText(link);
++                void navigator.clipboard?.writeText(link.split("?")[0]);
+                 toast.show("Link copied");
+               }}
+             >

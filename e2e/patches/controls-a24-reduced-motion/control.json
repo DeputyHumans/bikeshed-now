@@ -1,0 +1,13 @@
+{
+  "oracle": "with prefers-reduced-motion a selected thread's passage is brought into view in one animation frame (A24.3a)",
+  "what": "useAnnotationLayer scrolls the passage into view with behavior smooth whatever the reader's preference, so with reduced motion the frame animates through intermediate positions",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.3a with reduced motion, selecting a thread brings its passage into view in one frame; with no preference the same scroll animates",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^with reduced motion the passage is brought into view in one frame"
+  }
+}

@@ -1,0 +1,13 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -86,6 +86,10 @@
+   /** Save the draft; true when it is saved. */
+   const flush = useCallback(async (): Promise<boolean> => {
+     if (!doc || mode.kind !== "editing") return false;
++    if (timer.current) {
++      clearTimeout(timer.current);
++      timer.current = null;
++    }
+     setSaveState("saving");
+     // Cleared before the save rather than after it: an edit typed while this
+     // save is in flight is not in these bytes, and must still count as unsaved.

@@ -1,0 +1,11 @@
+{
+  "oracle": "a drag's click never reaches the document's scripts (A5.6)",
+  "what": "the selection guard no longer stops the click that ends a text-selecting drag, so a deck that advances on click moves off the slide being annotated",
+  "target": {
+    "spec": "e2e/specs/functional/a05-reading-trust.spec.mjs",
+    "case": "A5.6 a drag that selects text on a click-to-advance deck does not advance it"
+  },
+  "expect": {
+    "message": "the drag's click reached the window but the deck did not advance"
+  }
+}

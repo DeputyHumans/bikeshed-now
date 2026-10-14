@@ -1,0 +1,11 @@
+{
+  "oracle": "the Markdown palette: every control Markdown cannot express is disabled with its tooltip on a Markdown document, and only those (A10.1)",
+  "what": "Underline loses its format restriction, so a Markdown document's editor offers it enabled and its formatting is not what the source can keep",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.1 a Markdown document's editor disables Underline, Font, Text colour and both Align controls with the tooltip \"Markdown cannot express this, so it would be lost the next time you save.\", and nothing else; an HTML document's editor enables them"
+  },
+  "expect": {
+    "message": "last error: disabled \\[\"Align centre\",\"Align left\",\"Font\",\"Text colour\"\\], expected \\[\"Align centre\",\"Align left\",\"Font\",\"Text colour\",\"Underline\"\\]"
+  }
+}

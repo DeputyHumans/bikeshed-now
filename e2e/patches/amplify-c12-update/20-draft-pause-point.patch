@@ -1,0 +1,20 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -152,6 +152,7 @@
+   versionEvents,
+ } from "./lib/events";
+ import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
++import { e2eC12Gate } from "./lib/e2eC12Gate";
+ import {
+   bearerFrom,
+   isTokenShaped,
+@@ -1179,6 +1180,9 @@
+     });
+     return;
+   }
++
++  // e2e amplify (amplify-c12-update): a pause point after the base check, before the draft is written.
++  await e2eC12Gate("draft-after-check", docId);
+ 
+   const version = await loadVersionMeta(ref, baseVersion);
+   if (!version) {

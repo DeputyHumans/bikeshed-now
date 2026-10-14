@@ -1,0 +1,13 @@
+{
+  "oracle": "expiry read refusal: A4.1's cell matrix, an expired document is the absent id's 404 to everyone but its owner",
+  "what": "forkDocument no longer checks expiry (fork.ts openReadable), so an editor forks an expired document out from behind its date",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.1 an expired document is the absent id's 404 to everyone but its owner, frozen for all (the owner's cover excepted), gone from the shell and sitemap, and clearing the date restores every cell",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "expired: \\d+ of \\d+ cells wrong:[\\s\\S]*E POST /fork: got \\{\"status\":200"
+  }
+}

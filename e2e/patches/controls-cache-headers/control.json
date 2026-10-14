@@ -1,0 +1,11 @@
+{
+  "oracle": "cache-header matrix (A3.1): a refusal on a byte path is private, no-store",
+  "what": "contentProxy no longer sets private, no-store before its early returns, so every 404 it answers carries whatever the host adds (Hosting: max-age=600)",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.1 cache headers: member and grant reads are private no-store, link and public reads public max-age=300 (+noindex when unlisted), expiry caps max-age, thumbs immutable, /draft /download /unlock GET /access always no-store, nosniff on byte paths"
+  },
+  "expect": {
+    "message": "refusal /content \\(stranger, private\\) \\| cache-control: want private, no-store"
+  }
+}

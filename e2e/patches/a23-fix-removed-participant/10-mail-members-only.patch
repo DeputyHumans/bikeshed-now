@@ -1,0 +1,17 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2969,9 +2969,13 @@
+     const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
+     const deciders = suggestion ? membershipOf(doc).approverMembers : [];
+     for (const e of deciders) recipients.add(normalizeEmail(e));
++    // A participant who is no longer a member is told nothing more.
++    const members = new Set(
++      (Array.isArray(doc.members) ? doc.members : []).map((m: unknown) => normalizeEmail(String(m))),
++    );
+     for (const c of siblingSnap.docs) {
+       const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+-      if (e) recipients.add(e);
++      if (e && members.has(e)) recipients.add(e);
+     }
+     recipients.delete(authorEmail);
+     if (recipients.size === 0) return;

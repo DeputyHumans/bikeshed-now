@@ -1,0 +1,17 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -192,14 +192,10 @@
+         "source": "/draft/**",
+         "headers": [
+           {
+             "key": "Cache-Control",
+             "value": "private, no-store"
+-          },
+-          {
+-            "key": "X-Content-Type-Options",
+-            "value": "nosniff"
+           }
+         ]
+       },
+       {
+         "source": "/download/**",

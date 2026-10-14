@@ -1,0 +1,10 @@
+--- a/app/src/viewer/useFork.ts
++++ b/app/src/viewer/useFork.ts
+@@ -77,7 +77,6 @@
+     setParams(
+       (current) => {
+         const next = new URLSearchParams(current);
+-        next.delete(FORK_INTENT);
+         return next;
+       },
+       { replace: true },

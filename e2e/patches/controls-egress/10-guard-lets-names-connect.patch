@@ -1,0 +1,13 @@
+--- a/.e2e/egress-guard.mjs
++++ b/.e2e/egress-guard.mjs
+@@ -142,7 +142,9 @@
+   const connect = net.Socket.prototype.connect;
+   net.Socket.prototype.connect = function guardedConnect(...args) {
+     const dest = destination(args);
+-    if (dest && !isLoopbackHost(dest.host)) {
++    // e2e negative control (controls-egress): a NAME passes the connect layer;
++    // the dns layer behind it still refuses, so nothing is ever sent.
++    if (dest && !isLoopbackHost(dest.host) && net.isIP(bare(dest.host)) !== 0) {
+       const err = refusal("connect", dest.host, dest.port);
+       process.nextTick(() => this.destroy(err));
+       return this;

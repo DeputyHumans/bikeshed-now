@@ -1,0 +1,13 @@
+{
+  "oracle": "I5: GET /draft's body equals every peer's, the draft and each peer's frame body read alike by Chrome's parser (c01-typing)",
+  "what": "writeDraft (functions/src/lib/draft.ts) keeps the draft's first entry file and still answers 200 to every later save, so the draft lacks what the next editor typed while every peer shows it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C1-serial positive control: the same typing one editor after another passes every C1 oracle but S3's and C21's (every save 200, never an error), and editing one editor at a time shows nobody the conflict banner [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I5: p[12]'s body [0-9a-f]{12} is not the draft's"
+  }
+}

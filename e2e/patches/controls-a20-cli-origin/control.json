@@ -1,0 +1,13 @@
+{
+  "oracle": "no CLI process reaches beyond the stack (egress refusals parented by the spec process)",
+  "what": "the CLI ignores BIKESHED_ORIGIN and resolves an origin of its own",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7u no CLI process this spec started reached for anything outside the stack (zero egress refusals with this spec as parent), and the commands it runs here reach the stack itself",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "egress: CLI processes this spec started tried to leave the stack"
+  }
+}

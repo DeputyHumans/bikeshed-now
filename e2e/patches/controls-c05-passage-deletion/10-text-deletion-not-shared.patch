@@ -1,0 +1,12 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -208,7 +208,8 @@
+             end += 1;
+           }
+           const removed = was.length - start - end;
+-          if (removed > 0) y.delete(start, removed);
++          // e2e control (controls-c05-passage-deletion): a deletion inside a text never reaches the shared document.
++          if (removed > 0 && now.length >= was.length) y.delete(start, removed);
+           const added = now.slice(start, now.length - end);
+           if (added) y.insert(start, added);
+           continue;

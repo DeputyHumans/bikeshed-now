@@ -1,0 +1,11 @@
+{
+  "oracle": "a suggestion's replacement is an attribute, never text: the frame's textContent is unchanged (A7.1)",
+  "what": "the highlighter also draws the replacement as a text node after the last wrapper, which shifts the textContent every anchor is measured against",
+  "target": {
+    "spec": "e2e/specs/functional/a07-suggestions.spec.mjs",
+    "case": "A7.1 Suggest edit is offered to the suggester and the owner, not the viewer; the form is prefilled with the caret at the end and Enter submits; the frame strikes the quote, data-bshd-ins only on the last wrapper, textContent unchanged"
+  },
+  "expect": {
+    "message": "the frame's textContent is unchanged by the suggestion"
+  }
+}

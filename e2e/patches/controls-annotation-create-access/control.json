@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 annotation rules (c6): a Firestore REST create with the actor's own ID token",
+  "what": "the annotation create rule drops canRead, so any verified account can annotate a private document it cannot read",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c6.X a signed-in stranger may not create an annotation on v1 through the Firestore rules with their own credential: DENY"
+  },
+  "expect": {
+    "message": "c6 X: expected DENY, the stranger's annotation was committed"
+  }
+}

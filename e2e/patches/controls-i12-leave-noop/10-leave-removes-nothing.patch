@@ -1,0 +1,14 @@
+--- a/app/src/presence.ts
++++ b/app/src/presence.ts
+@@ -178,8 +178,9 @@
+       write();
+     },
+     leave() {
+-      unsubConn();
+-      void remove(meRef).catch(() => {});
++      // e2e negative control (controls-i12-leave-noop): leaving removes
++      // nothing, so the peer node stays while the connection lives.
++      void unsubConn;
+     },
+   };
+ }

@@ -1,0 +1,27 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -102,7 +102,23 @@
+           const node = domOf.get(target) as Text | undefined;
+           // Replacing only `data` leaves the caret alone when it is elsewhere
+           // in the document, which is the common case while somebody types.
+-          if (node && node.data !== target.toString()) node.data = target.toString();
++          // e2e negative control (controls-i2-double-insert): every remote
++          // insert lands in the DOM twice.
++          if (node && node.data !== target.toString()) {
++            const now = target.toString();
++            let at = 0;
++            let out = "";
++            for (const op of (event as Y.YTextEvent).delta) {
++              if (typeof op.retain === "number") {
++                out += now.slice(at, at + op.retain);
++                at += op.retain;
++              } else if (typeof op.insert === "string") {
++                out += op.insert + op.insert;
++                at += op.insert.length;
++              }
++            }
++            node.data = out + now.slice(at);
++          }
+           continue;
+         }
+         const node = target === fragment ? host : (domOf.get(target as YNode) as Element | undefined);

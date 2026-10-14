@@ -1,0 +1,13 @@
+{
+  "oracle": "five verification guesses, then 429 (A1.3)",
+  "what": "an off-by-one in the attempt check lets a sixth guess be evaluated",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.3 five wrong codes are each 400; the sixth attempt, with the right code, is 429, the verification is deleted and the account stays unverified",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the sixth attempt"
+  }
+}

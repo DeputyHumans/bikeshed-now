@@ -1,0 +1,11 @@
+{
+  "oracle": "the wire round trip (A11.12): a joiner's body, rebuilt from the live log, is byte-identical to the seeder's for H, B, M, D and Q",
+  "what": "the CRDT-to-DOM materialiser creates every element in the HTML namespace, so SVG comes back with lowercased attribute names",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.12 joining a live session with no edits rebuilds the body byte-identical (outerHTML) for H, B, M, D and Q"
+  },
+  "expect": {
+    "message": "every sample's body is byte-identical on the seeder and the joiner"
+  }
+}

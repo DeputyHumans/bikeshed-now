@@ -1,0 +1,24 @@
+diff --git a/app/src/crdt/rtdb.ts b/app/src/crdt/rtdb.ts
+--- a/app/src/crdt/rtdb.ts
++++ b/app/src/crdt/rtdb.ts
+@@ -3,6 +3,7 @@
+ 
+ import { onChildAdded, onValue, push, ref, remove, update } from "firebase/database";
+ import { rtdb } from "../firebase";
++import { e2eLogGate, e2eNoteRefusal, e2eRefuseThisAppend } from "../e2eLogGate";
+ import type { UpdateLog } from "./log";
+ 
+ /**
+@@ -50,6 +51,12 @@ export function rtdbLog(docId: string): UpdateLog | null {
+       });
+     },
+     async append(payload) {
++      // e2e amplify (amplify-c01-append-refused): refuse this append when the harness asked, as the Database refused one in X-c01-typing-1.
++      if (e2eRefuseThisAppend()) {
++        await e2eLogGate("append-refused", docId);
++        e2eNoteRefusal(docId, payload.length);
++        throw new Error(`set at /status/${docId}/y failed: internal_error (e2e: refused on purpose by amplify-c01-append-refused)`);
++      }
+       const entry = await push(logRef, payload);
+       return entry.key;
+     },

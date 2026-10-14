@@ -1,0 +1,13 @@
+{
+  "oracle": "CLI update of a .zip goes up as bytes to /publish?update= (publishedVia cli, entries byte for byte)",
+  "what": "the CLI never recognises an archive, so a .zip is read as text and sent through update_document",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7f update of a .zip, by name or by its magic bytes, goes up as bytes to /publish?update= (publishedVia cli): every entry, a binary image included, is stored byte for byte, and --base is honoured there too",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the \\.zip went up as bytes to /publish\\?update="
+  }
+}

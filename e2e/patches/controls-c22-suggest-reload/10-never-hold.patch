@@ -1,0 +1,13 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -354,7 +354,9 @@
+     emailLower,
+     isEditing: mode.kind === "editing",
+     showsDraft: mode.kind === "reading" && mode.draft,
+-    hold: suggesting !== null || commenting,
++    // e2e negative control (controls-c22-suggest-reload): never hold, so a peer's
++    // save reloads the frame under an open suggestion form and throws it away.
++    hold: false,
+     onPeerSavedDraft: frame.reload,
+   });
+ 

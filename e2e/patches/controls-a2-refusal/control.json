@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 status matrix (403 only to a caller who may read, SPEC §1.4b)",
+  "what": "refusal() answers 403 to every caller refused an action, so a stranger's write confirms the id",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-http.spec.mjs",
+    "case": "A2.X a signed-in stranger: every operation 404, byte-equal to an absent id's"
+  },
+  "expect": {
+    "message": "c9 POST /draft: want 404, got 403"
+  }
+}

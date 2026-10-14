@@ -1,0 +1,11 @@
+{
+  "oracle": "A2 live-log rules (c17/c18): an RTDB REST write or read with the actor's own ID token, in the namespace the app uses",
+  "what": "the live log's write gate reads presenceAccess instead of editAccess, so a read-only member can push entries into an editor's document",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c17.V a viewer may not write an entry to the live log status/{doc}/y with their own ID token: DENY"
+  },
+  "expect": {
+    "message": "c17 V: expected DENY, the entry was written"
+  }
+}

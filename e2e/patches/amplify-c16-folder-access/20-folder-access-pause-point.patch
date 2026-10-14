@@ -1,0 +1,19 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -140,6 +140,7 @@
+ import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
+ import { renameDocument } from "./lib/rename";
+ import { documentAudience, filedIn, inheritedGrants } from "./lib/audience";
++import { e2eFolderAccessGate } from "./lib/e2eFolderAccessGate";
+ import {
+   addEvent,
+   annotationEvents,
+@@ -1813,6 +1814,8 @@
+   const beforeMembers = asArray(data.members);
+   const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
+ 
++  // e2e amplify (amplify-c16-folder-access): a pause point after the folder's grants are read and the delta applied to them, before they are written.
++  await e2eFolderAccessGate("folder-access-before-write", folderId);
+   await ref.set({ ...next, updatedAt: now() }, { merge: true });
+   await recomputeSubtree(db(), folderId);
+ 

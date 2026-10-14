@@ -1,0 +1,11 @@
+{
+  "oracle": "the comments panel default is decided once (A6.5)",
+  "what": "every annotation snapshot re-decides the panel, so a later comment reopens a panel the reader closed",
+  "target": {
+    "spec": "e2e/specs/functional/a06-comments.spec.mjs",
+    "case": "A6.5 the panel default is decided once: a later comment does not reopen a panel the reader closed, a reopened thread does not open one that started collapsed, and starting a comment opens it"
+  },
+  "expect": {
+    "message": "a later comment reopened the panel the reader closed"
+  }
+}

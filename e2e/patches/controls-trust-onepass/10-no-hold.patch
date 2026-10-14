@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -218,7 +218,7 @@
+     trustToken: trust.trustToken,
+     linkToken: linkKey || undefined,
+     // Editing is always sandboxed, so no answer could change how it loads.
+-    hold: mode.kind === "reading" && !trust.settled,
++    hold: false,
+   });
+ 
+   // Re-derived against the live document, so the trust prompt can ask "does it

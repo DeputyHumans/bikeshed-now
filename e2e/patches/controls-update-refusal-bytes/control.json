@@ -1,0 +1,12 @@
+{
+  "oracle": "a refused /publish?update= uploads nothing (A12.5, Storage under the next version prefix)",
+  "what": "commitNewVersion uploads the bundle to the next version prefix before asking the pending and accepted-in-draft refusals",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId/title 400, a pending suggestion 409 pendingSuggestions, an accepted change in the draft 409 acceptedInDraft; no refusal uploads anything, and the in-app commit is not held",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "nothing minted and nothing uploaded under v3/"
+  }
+}

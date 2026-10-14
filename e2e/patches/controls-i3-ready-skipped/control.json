@@ -1,0 +1,13 @@
+{
+  "oracle": "I3: the v1 sentinel appears once, and the top-level child count is unchanged",
+  "what": "useSharedDocument binds the host without awaiting log.ready() (app/src/viewer/useSharedDocument.ts), so an editor who joins a live log seeds a second copy of the document",
+  "target": {
+    "spec": "e2e/specs/concurrency/canary.spec.mjs",
+    "case": "canary I3: an editor who joins after another has seeded adopts the live document: the sentinel once, the top-level count unchanged",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I3: p[12]: the sentinel appears ([2-9]|\\d{2,}) time\\(s\\), not once"
+  }
+}

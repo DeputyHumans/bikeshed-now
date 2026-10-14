@@ -1,0 +1,11 @@
+--- a/app/src/viewer/usePrinting.ts
++++ b/app/src/viewer/usePrinting.ts
+@@ -66,6 +66,8 @@
+     const open = () => {
+       // Idempotent: once open there is no overflow and the position reads 0,
+       // so a second beforeprint must not overwrite what the first remembered.
++      // e2e control: the frame is never opened for the print.
++      return;
+       if (frame.style.height) return;
+       scrollTop = scroller().scrollTop;
+       frame.style.height = `${doc.documentElement.scrollHeight}px`;

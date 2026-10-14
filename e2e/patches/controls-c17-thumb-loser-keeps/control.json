@@ -1,0 +1,13 @@
+{
+  "oracle": "one cover key and one slides key under concurrent captures (C17c): Storage under a version's thumbnails holds exactly the keys the record names, so every losing upload deleted what it wrote",
+  "what": "saveThumbs in functions/src/index.ts no longer deletes a losing upload's images, so each concurrent capture that lost the transaction leaves its key's objects behind",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17c thumbnails (SYNC-T): the owner and N−1 editors store v1's cover at one instant, then its slides; one cover key and one slides key are recorded and served, every loser's images are deleted, and updatedAt is untouched (SPEC §2, §4) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Storage holds the record's cover and slides and nothing else: every loser deleted what it wrote"
+  }
+}

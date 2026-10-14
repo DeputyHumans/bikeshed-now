@@ -1,0 +1,13 @@
+{
+  "oracle": "C7 not silent (S10's Tier-1 property): no peer shows Shared while the live log refuses its writes",
+  "what": "the live log's entry limit is 50,000 characters instead of 200,000 (database.rules.json and its template), so every editor's seed of the 79 KB document (118,020 characters) is refused, as S10 refuses a ~300 KB one, while each editor shows Shared",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C7 not-silent size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule): no peer shows Shared while the live log refuses its writes [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C7 not silent: p\\d+ shows \"Shared\" while the live log refused \\d+ of its write"
+  }
+}

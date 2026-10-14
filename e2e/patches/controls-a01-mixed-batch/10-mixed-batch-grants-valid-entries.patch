@@ -1,0 +1,25 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -817,10 +817,7 @@
+     return;
+   }
+   const bad = invalidPrincipals(parsed.delta);
+-  if (bad.length > 0) {
+-    badRequest(res, `not a valid recipient: ${bad.join(", ")}`);
+-    return;
+-  }
++  parsed.delta.add = parsed.delta.add.filter((a) => !bad.includes(a.principal));
+ 
+   const ref = db().collection("docs").doc(docId);
+   const snap = await ref.get();
+@@ -885,6 +882,10 @@
+     });
+   }
+ 
++  if (bad.length > 0) {
++    badRequest(res, `not a valid recipient: ${bad.join(", ")}`);
++    return;
++  }
+   res.status(200).json({ ...next, members: membership.members });
+ });
+ 

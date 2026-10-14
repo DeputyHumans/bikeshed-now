@@ -1,0 +1,13 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -105,8 +105,8 @@
+     // person: a window where `editAccess` still names somebody `presenceAccess`
+     // has dropped is a window where a revoked reader can still write.
+     await db.ref().update({
+-      [`presenceAccess/${docId}`]: keyed(members),
+-      [`editAccess/${docId}`]: edit,
++      ...Object.fromEntries(Object.keys(keyed(members)).map((k) => [`presenceAccess/${docId}/${k}`, true])),
++      ...Object.fromEntries(Object.keys(edit).map((k) => [`editAccess/${docId}/${k}`, true])),
+     });
+   } catch {
+     /* presence is best-effort and must never fail the request it rode in on */

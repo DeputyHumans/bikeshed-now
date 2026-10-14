@@ -1,0 +1,15 @@
+{
+  "oracle": "I4 for a passage (C5 passage): a passage deleted inside a paragraph, and every token typed into it, are gone on every peer; the paragraph left is v1's with the passage cut out, its neighbours untouched",
+  "what": "a deletion inside a text node never reaches the shared document (app/src/crdt/sync.ts onMutations skips y.delete when the text got shorter), so the passage the deleter removed stays in every other copy with the tokens typed into it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C5 passage serial control: the same typing inside the passage, then its deletion once every token has reached the deleter: the passage and its tokens are gone on every peer (I4) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^I4: p2: "
+  }
+}

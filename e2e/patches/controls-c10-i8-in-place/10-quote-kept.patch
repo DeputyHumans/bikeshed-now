@@ -1,0 +1,12 @@
+--- a/functions/src/lib/accept.ts
++++ b/functions/src/lib/accept.ts
+@@ -69,7 +69,8 @@
+   const title = typeof data.title === "string" ? data.title : undefined;
+   const made =
+     working.format === "html"
+-      ? applyToHtml(working.html, anchor, replacement)
++      ? // e2e control (controls-c10-i8-in-place): the quote is kept and the replacement put after it, so the replacement is in the draft once but not in place of its quote.
++        applyToHtml(working.html, anchor, `${anchor.exact} ${replacement}`)
+       : applyToMarkdown(working.markdown, anchor, replacement, (md) => renderMarkdown(md, { title }).html);
+   if (made.state === "refused") return { status: 409, error: REFUSALS[made.reason], refused: made.reason };
+ 

@@ -1,0 +1,13 @@
+{
+  "oracle": "C14 against the update mint path: a version minted through reviseDocument (update_document, POST /publish?update=) never leaves a pending suggestion behind on the version it replaced (c13-feedback)",
+  "what": "commitNewVersion's transaction (functions/src/lib/publish.ts) no longer asks anyOpenThread(..., \"suggestions\") again, so a suggestion made on the base while the update's bytes uploaded no longer refuses it: v2 is minted with the suggestions left pending on v1",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 update held: the owner's upload of a new version (POST /publish?update=) held between its upload and its transaction while N agents' suggestions land on v1, then released; its transaction refuses it for the pending suggestions, v1 stays current and nothing is left behind [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": ["--patches", "amplify-c08-mint-races"],
+  "expect": {
+    "message": "^C14 left behind: 2 unresolved thread\\(s\\) on a version that is no longer current \\(v2 is\\)"
+  }
+}

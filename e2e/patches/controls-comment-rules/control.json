@@ -1,0 +1,11 @@
+{
+  "oracle": "client writes outside the rules are refused (A6.4)",
+  "what": "the comment update rule no longer excludes generated notes, so the author of a server-written note may reword it",
+  "target": {
+    "spec": "e2e/specs/functional/a06-comments.spec.mjs",
+    "case": "A6.4 client writes outside the rules are refused with PERMISSION_DENIED: extra field, mcp channel, resolved at creation, someone else's comment, a generated note"
+  },
+  "expect": {
+    "message": "refused: the author editing a generated note"
+  }
+}

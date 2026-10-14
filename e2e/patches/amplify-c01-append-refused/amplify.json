@@ -1,0 +1,11 @@
+{
+  "what": "One live-log append refused on the harness's word, as the Database emulator refused one in X-c01-typing-1 (set … failed: internal_error): app/src/crdt/rtdb.ts append refuses, writing nothing, the next append of a page whose window.__e2eRefuseAppends asks for it, after a client gate that marks the refusal. A page that is not asked never calls the gate service. For c01-typing's refused-append case (the client half of X-c01-typing-1, S10's mechanism at app/src/crdt/log.ts:110): is an update the Database refused ever sent again, so that every copy converges? Its own helper (app/src/e2eLogGate.ts), so it applies alone or beside any other set",
+  "gates": [
+    {
+      "name": "append-refused",
+      "side": "client",
+      "where": "app/src/crdt/rtdb.ts rtdbLog append: when the harness asked this page to refuse its next append, before the refusal is thrown (nothing is pushed)",
+      "key": "docId"
+    }
+  ]
+}

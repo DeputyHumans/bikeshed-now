@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useAnnotationLayer.ts
++++ b/app/src/viewer/useAnnotationLayer.ts
+@@ -129,7 +129,7 @@
+       scrolledTo.current = null;
+       return;
+     }
+-    if (!enabled || !doc || scrolledTo.current === selectedId) return;
++    if (!enabled || !doc) return;
+     const wrapper = Array.from(doc.querySelectorAll(HL_SELECTOR)).find(
+       (el) => el.getAttribute(ANN_ATTR) === selectedId,
+     );

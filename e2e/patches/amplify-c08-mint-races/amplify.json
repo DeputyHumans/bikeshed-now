@@ -1,0 +1,29 @@
+{
+  "what": "Four server pause points in the two mint paths, each asking the stack's gate service whether to go on: commitDraft before and after it reads the base and draft files (a commit that read its draft before or after another commit deleted it, S4b), and commitNewVersion (update_document, /publish?update=, the CLI) before it chooses the version id and between its upload and its transaction (S4, C9, C9b). Its own helper (functions/src/lib/e2eRaceGate.ts), so it applies alone or beside amplify-mint-join, whose commitDraft gates the C8 S4 case also needs",
+  "gates": [
+    {
+      "name": "commit-before-read",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts commitDraft: after the endpoint's base check and the open-threads refusal, before the base and draft files are read",
+      "key": "docId"
+    },
+    {
+      "name": "commit-after-read",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts commitDraft: after the base and draft files are read, before they are hashed and the content-hash dedup is asked",
+      "key": "docId"
+    },
+    {
+      "name": "update-before-id",
+      "side": "server",
+      "where": "functions/src/lib/publish.ts commitNewVersion: after the dedup and every refusal (editors, pending, accepted in the draft), before the version id is chosen (max(N)+1)",
+      "key": "docId"
+    },
+    {
+      "name": "update-after-upload",
+      "side": "server",
+      "where": "functions/src/lib/publish.ts commitNewVersion: between the upload of v(N+1)/ and the transaction that makes it current",
+      "key": "docId"
+    }
+  ]
+}

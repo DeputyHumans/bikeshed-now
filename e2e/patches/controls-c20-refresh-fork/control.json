@@ -1,0 +1,13 @@
+{
+  "oracle": "identical pairs under concurrent spends of one refresh token (C20b): every spend answers the same rotated pair and the grant rotates once",
+  "what": "refreshGrant in functions/src/oauth/grants.ts treats a spend of the previous refresh token as a spend of the current one, inside and outside its transaction, so a concurrent spend that lost the race rotates the grant again and answers a pair of its own",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C20b N refreshes of one bsr_ (SYNC-T): an app spends one refresh token N times at one instant; every refresh answers the identical rotated pair, the grant rotated once and stays connected, the new bsa_ reaches /mcp and the new bsr_ refreshes again (SPEC §23) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C20b race: the 2 spends got 2 distinct pair\\(s\\)"
+  }
+}

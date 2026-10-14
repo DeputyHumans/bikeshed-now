@@ -1,0 +1,13 @@
+{
+  "oracle": "a deck's own preventDefault wins over the viewer's paging (A16.2)",
+  "what": "useDeck no longer yields to defaultPrevented, so a key a trusted deck already took is paged again by the viewer: D moves past the slide its own script chose, and a flat deck that took ArrowDown is scrolled anyway",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.2 keys scroll a flat deck and the rail follows; on a stacked trusted deck they go into the deck through its own keys without scrolling it; the deck's own preventDefault wins inside the frame, stacked or flat",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^defaultPrevented wins"
+  }
+}

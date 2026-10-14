@@ -1,0 +1,13 @@
+{
+  "oracle": "get_comments says when it cut the list (A20.2.get_comments): 51 open threads come back as the oldest 50 with truncated true",
+  "what": "get_comments reads exactly COMMENT_LIMIT open threads instead of one more (functions/src/mcp/tools.ts), so a list over fifty is cut silently and truncated stays false",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.get_comments returns each unresolved thread with its quote and comments, oldest first, at most 50 with truncated beyond; threads names ids; a stranger, an absent id and an unknown version are refused",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "51 open threads: the oldest 50, truncated"
+  }
+}

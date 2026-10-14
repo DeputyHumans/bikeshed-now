@@ -1,0 +1,12 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -822,7 +822,8 @@ export const TOOLS: ToolDefinition[] = [
+       // Optional, so an older client keeps working; absent, the update replaces
+       // whatever is current, as it always has.
+       const revisedFrom = str(args, "baseVersion");
+-      if (revisedFrom && revisedFrom !== baseVersion) {
++      // controls-c09-one-winner: the base the caller revised from is never compared.
++      if (revisedFrom === "e2e-control-never") {
+         throw new Error(
+           `the document is at ${baseVersion} now, not ${revisedFrom}: somebody published since you read it. ` +
+             "Read it again with get_document, then update that",

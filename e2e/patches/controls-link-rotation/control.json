@@ -1,0 +1,11 @@
+{
+  "oracle": "link rotation (A3.6): a grant made with an old key reads nothing",
+  "what": "readBasis accepts any link grant, whatever token it names, so rotating the link no longer revokes the grants it made",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.6 rotating the link (private, then unlisted) kills the old k and every grant made with it, on /content, /unlock, /view and /d, while the new k works"
+  },
+  "expect": {
+    "message": "holder /content, old grant: 200"
+  }
+}

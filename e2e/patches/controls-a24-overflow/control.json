@@ -1,0 +1,13 @@
+{
+  "oracle": "no screen scrolls sideways on a 400 px phone (A24.1)",
+  "what": "the app header gets a 480 px min-width, wider than a phone, so every screen that carries the header scrolls sideways at 400 px",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^screens that scroll sideways at 400 px"
+  }
+}

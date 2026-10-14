@@ -1,0 +1,10 @@
+--- a/app/src/edit.ts
++++ b/app/src/edit.ts
+@@ -122,5 +122,6 @@
+   flush: () => Promise<boolean>,
+   commit: () => Promise<CommitResult>,
+ ): Promise<CommitResult | null> {
+-  return (await flush()) ? commit() : null;
++  await flush();
++  return commit();
+ }

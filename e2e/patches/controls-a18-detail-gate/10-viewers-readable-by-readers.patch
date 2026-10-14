@@ -1,0 +1,22 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -181,7 +181,7 @@
+       // Usage stats (SPEC §4). The AGGREGATE lives on the doc itself, so every
+       // member sees it. The per-person breakdown is editor-gated.
+       match /viewers/{uid} {
+-        allow read: if isDocEditor(docData(docId));
++        allow read: if canRead(docId, docData(docId));
+         allow write: if false; // recordView, via the Admin SDK
+       }
+       match /views/{sessionId} {
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -184,7 +184,7 @@
+       // Usage stats (SPEC §4). The AGGREGATE lives on the doc itself, so every
+       // member sees it. The per-person breakdown is editor-gated.
+       match /viewers/{uid} {
+-        allow read: if isDocEditor(docData(docId));
++        allow read: if canRead(docId, docData(docId));
+         allow write: if false; // recordView, via the Admin SDK
+       }
+       match /views/{sessionId} {

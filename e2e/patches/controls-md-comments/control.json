@@ -1,0 +1,11 @@
+{
+  "oracle": "a Markdown commit changes index.md by the edit and the first-pass normalisation only: comments, SPDX first, survive (A10.3)",
+  "what": "the serializer no longer parks HTML comments, so turndown never visits them and every comment, the SPDX header among them, is deleted by the first save (the defect verification.md's walkthrough found)",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.3 an in-app commit changes index.md by the edit and the first-pass normalisation only, keeping every comment (SPDX included) and the script, style and textarea text byte for byte; a no-op commit after it is deduped:true on the same version"
+  },
+  "expect": {
+    "message": "the SPDX header still opens the source"
+  }
+}

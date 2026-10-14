@@ -1,0 +1,10 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -274,7 +274,6 @@
+       // When the frame is sandboxed that script never ran, which is exactly
+       // the case this hook exists to cover.
+       if (driving.current) return;
+-      if (e.defaultPrevented) return;
+       if (e.metaKey || e.ctrlKey || e.altKey) return;
+       if (isTypingTarget(e.target)) return;
+ 

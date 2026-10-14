@@ -1,0 +1,14 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -537,7 +537,10 @@
+             type="search"
+             placeholder="Search everything"
+             value={search}
+-            onChange={(e) => setSearch(e.target.value)}
++            onChange={(e) => {
++              setSearch(e.target.value);
++              void fetch(`/config?q=${encodeURIComponent(e.target.value)}`);
++            }}
+           />
+ 
+           <label className="visually-hidden" htmlFor="workspace-sort">

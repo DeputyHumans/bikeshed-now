@@ -1,0 +1,13 @@
+{
+  "oracle": "the agent's accept drops the live log itself (C11c, C11a-serial, C11b-serial, SPEC §22 \"a log nobody is using is dropped with the write\", SPEC §16, ADR 0015 decision 4): status/{d}/y is empty once accept_suggestion has answered, read BEFORE commit_draft, which drops the log by itself",
+  "what": "functions/src/lib/accept.ts acceptSuggestion writes the accepted change to the draft and keeps the live log (clearEditLog is never called); commit_draft still drops it afterwards, so only a read between the two can see it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C11c all leave at once in the app: status/{d}/peers is empty within 5 s (I12); then the agent's accept_suggestion and commit_draft go ahead, the live log is empty, and the version holds the accepted change once (I8) and every saved token (I2) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C11 log: status/\\S+/y is empty after the agent's accept_suggestion, before commit_draft \\(it still holds [1-9]"
+  }
+}

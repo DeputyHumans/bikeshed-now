@@ -1,0 +1,13 @@
+diff --git a/functions/src/index.ts b/functions/src/index.ts
+index e7ea2df..ad3791e 100644
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1318,6 +1318,8 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
+   };
+   const proof = await linkProofFor(docRef, data, caller, null);
+   if (!canEdit(data, caller, proof)) {
++    // e2e control: a refused caller's commit is made anyway, then refused
++    await commitDraft({ db: db(), docRef, baseVersion, draft: data.draft, emailLower: caller.emailLower, actor: actorFrom(caller, req) });
+     res.status(refusal(data, caller, proof)).end();
+     return;
+   }

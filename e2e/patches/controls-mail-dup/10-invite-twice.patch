@@ -1,0 +1,11 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -103,7 +103,7 @@
+   subject: { title: string; kind: "document" | "folder" | "team"; url: string },
+ ): Promise<void> {
+   const origin = publicOrigin();
+-  for (const target of targets) {
++  for (const target of [...targets, ...targets]) {
+     const props: InviteProps = {
+       origin,
+       inviterEmail,

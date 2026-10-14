@@ -1,0 +1,11 @@
+--- a/functions/src/lib/access.ts
++++ b/functions/src/lib/access.ts
+@@ -242,7 +242,7 @@
+   }
+   const nowMs = Date.now();
+   if (ms <= nowMs) return { error: "an expiry must be in the future" };
+-  if (ms > nowMs + MAX_EXPIRY_MS) {
++  if (ms > nowMs + MAX_EXPIRY_MS * 1000) {
+     return { error: "an expiry must be within a hundred years" };
+   }
+   return { value: ms };

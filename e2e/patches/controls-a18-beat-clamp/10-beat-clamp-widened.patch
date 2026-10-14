@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2208,7 +2208,8 @@
+     const isNewSession = !sessionSnap.exists;
+     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
+     const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
+-    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS);
++    // e2e control: the per-beat clamp is a thousand times too wide.
++    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS * 1000);
+     const sessionMs = storedMs + delta;
+ 
+     tx.set(

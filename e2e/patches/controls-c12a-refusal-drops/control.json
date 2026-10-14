@@ -1,0 +1,13 @@
+{
+  "oracle": "a refused update leaves the draft and its live log as they were (C12a 'left alone', SPEC §6a: \"a refused or deduplicated update leaves both alone\"): the draft's record and objects (name, generation, metageneration, md5, size, as admin.mjs listObjects {meta: true} lists them) read right before the send and right after both answers are the same, and status/{d}/y, watched through the Admin SDK's listener (admin.mjs watchRtdb), never takes a value with no entries",
+  "what": "functions/src/lib/publish.ts commitNewVersion, refused for the editors, first calls dropReplacedDraft(docId, true), deleting docs/{d}/draft/ and clearing status/{d}/y, then answers editorsRefusal's exact 409; the editors' next autosaves and keys write both back, so only a check made at the answers can see it",
+  "target": {
+    "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
+    "case": "C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C12a left alone: a refused update leaves the draft and its live log as they were \\(SPEC §6a \"a refused or deduplicated update leaves both alone\"\\) — status/\\{d\\}/y was emptied .*object\\(s\\) under docs/\\{d\\}/draft/ deleted"
+  }
+}

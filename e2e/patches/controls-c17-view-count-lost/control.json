@@ -1,0 +1,13 @@
+{
+  "oracle": "a counter under a race (C17d): N anonymous sessions opened at one instant raise stats.views by exactly N and stats.totalMs by their sum, which holds only if recordView's requests interleave on the server and the oracle sees a lost increment",
+  "what": "recordView in functions/src/index.ts writes stats.views and stats.totalMs as the document's plain read before the transaction plus this session's, a read-then-write outside any transaction in place of FieldValue.increment, so sessions opened at once overwrite each other's counts",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17d anonymous views (SYNC-T): N anonymous readers of an unlisted link each open a reading session at one instant; stats.views rises by exactly N and totalMs by their sum, N anonymous sessions are recorded and no viewer (SPEC §4, §17) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "C17d race: stats\\.views rose by the 2 session\\(s\\) and totalMs by their sum"
+  }
+}

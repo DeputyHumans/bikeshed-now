@@ -1,0 +1,11 @@
+--- a/app/src/expiry.ts
++++ b/app/src/expiry.ts
+@@ -98,7 +98,7 @@
+   nowMs: number = Date.now(),
+ ): boolean {
+   const at = expiryMs(value);
+-  return at !== null && at > nowMs && at - nowMs < 7 * DAY;
++  return at !== null && at > nowMs && at - nowMs < 8 * DAY;
+ }
+ 
+ /**

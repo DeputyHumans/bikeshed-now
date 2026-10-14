@@ -1,0 +1,13 @@
+{
+  "oracle": "comment email cooldown, witnessed (A23.4): inside the 30 min window the owner is sent no second comment notice, shown by the same trigger run reaching a participant decided after the owner",
+  "what": "claimCommentCooldown no longer checks the window (functions/src/email/notify.ts), so every comment on a document sends the owner another notice",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.4 cooldowns: a second comment on a document within 30 min sends the owner nothing; a suggestion right after a comment is still sent; a second suggestion within 30 min is not; a comment on a different document is",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a second comment within 30 min sent the owner another notice"
+  }
+}

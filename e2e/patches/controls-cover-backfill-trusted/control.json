@@ -1,0 +1,13 @@
+{
+  "oracle": "no cover backfill for a trusted scripted document (A14.6)",
+  "what": "useCoverBackfill no longer skips a document whose scripts every reader runs, so the workspace captures a trusted deck without its scripts",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no cover POST for the trusted scripted deck"
+  }
+}

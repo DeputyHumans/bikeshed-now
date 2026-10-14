@@ -1,0 +1,13 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -150,7 +150,9 @@
+     return null;
+   }
+   const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
+-  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
++  // e2e negative control (controls-c06-editors-refusal): presence is read,
++  // and nobody in it ever counts as editing.
++  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "e2e-never").length;
+   const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
+   return { editors, log };
+ }

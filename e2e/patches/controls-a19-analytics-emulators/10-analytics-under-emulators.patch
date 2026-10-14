@@ -1,0 +1,13 @@
+--- a/app/src/analytics.ts
++++ b/app/src/analytics.ts
+@@ -56,7 +56,9 @@
+  * a dark pattern in the shape of diligence.
+  */
+ export function analyticsConfigured(): boolean {
+-  return Boolean(MEASUREMENT_ID) && !USE_EMULATORS;
++  // e2e negative control (controls-a19-analytics-emulators): the emulator guard
++  // dropped, so a stack built with a measurement id initializes analytics.
++  return Boolean(MEASUREMENT_ID) && (!USE_EMULATORS || USE_EMULATORS);
+ }
+ 
+ /**

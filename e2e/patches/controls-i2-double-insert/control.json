@@ -1,0 +1,13 @@
+{
+  "oracle": "I2: every token exactly once, contiguous, inside its target, on every peer",
+  "what": "applyRemote writes every remote text insert into the DOM twice (app/src/crdt/sync.ts), so a peer shows another's token doubled where it lands",
+  "target": {
+    "spec": "e2e/specs/concurrency/canary.spec.mjs",
+    "case": "canary I2: two editors type tokens into their own paragraphs, and every token is once and whole on both peers",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I2: p[12]: "
+  }
+}

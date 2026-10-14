@@ -1,0 +1,15 @@
+--- a/app/src/viewer/useCommentsOpen.ts
++++ b/app/src/viewer/useCommentsOpen.ts
+@@ -49,11 +49,7 @@
+ 
+   const settle = useCallback(
+     (annotations: Annotation[]) =>
+-      setState((s) =>
+-        s.docId === docId && s.open !== null
+-          ? s
+-          : { docId, open: annotations.some((a) => !a.resolved) },
+-      ),
++      setState(() => ({ docId, open: annotations.some((a) => !a.resolved) })),
+     [docId],
+   );
+ 

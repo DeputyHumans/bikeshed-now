@@ -1,0 +1,13 @@
+{
+  "oracle": "I12: status/{d}/peers empty within 5 s of everyone leaving",
+  "what": "the presence handle's leave() removes nothing (app/src/presence.ts), so a reader who leaves the document in the app stays a peer while the connection lives",
+  "target": {
+    "spec": "e2e/specs/concurrency/canary.spec.mjs",
+    "case": "canary I12: when both editors leave the document in the app, status/{d}/peers is empty within 5 s",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I12: status/\\S+/peers still holds 2 peer"
+  }
+}

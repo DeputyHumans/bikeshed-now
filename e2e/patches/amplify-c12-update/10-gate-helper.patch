@@ -1,0 +1,33 @@
+--- /dev/null
++++ b/functions/src/lib/e2eC12Gate.ts
+@@ -0,0 +1,30 @@
++// SPDX-License-Identifier: Apache-2.0
++// e2e only, applied to a stack copy by e2e/patches/amplify-c12-update: a server pause point in POST /draft that asks the stack's gate service whether to go on (SPEC §12).
++
++import { randomUUID } from "crypto";
++
++/**
++ * Never part of the product: the e2e harness applies this file, and the
++ * call to it, to a stack's COPY of the tree (e2e/lib/gates.mjs). The stack
++ * that applies it sets E2E_GATE_URL in functions/.env.local.
++ *
++ * A file of its own rather than another set's helper, so this set applies to
++ * a clean tree alone and beside amplify-mint-join or amplify-c08-mint-races.
++ *
++ * FAILS CLOSED. Without E2E_GATE_URL, or when the gate service does not
++ * answer 200, the call throws and the request fails: a patched stack that
++ * cannot pause here must never go on as if it had paused.
++ *
++ * WHO CALLS. Each call is its own request, so each names a caller of its
++ * own (run 1): a spec waiting for distinct callers counts requests.
++ */
++export async function e2eC12Gate(name: string, key: string): Promise<void> {
++  const base = process.env.E2E_GATE_URL;
++  if (!base) {
++    throw new Error(`e2e gate ${name}: E2E_GATE_URL is not set on this patched stack, so the pause point cannot be honoured; refusing to go on`);
++  }
++  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=server&caller=${encodeURIComponent(randomUUID())}&run=1`;
++  const res = await fetch(url, { method: "POST" });
++  const text = await res.text();
++  if (res.status !== 200) throw new Error(`e2e gate ${name}: the gate service answered ${res.status} ${text.slice(0, 200)}`);
++}
