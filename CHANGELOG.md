@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Challenge expiry clearing through its actual HTTP field-deletion path; the control now retains the old deadline and proves the restored feedback-permission assertion detects it.
+
 - Pin and behaviorally reproduce the local Firestore emulator’s serial trigger delivery, document its narrow overlap limitation, and retain each feedback burst’s wire timings and conservative warm-up memory reservation.
 
 - Preserve sufficient patch context for the Done-deadline negative control while keeping its mutation limited to the timeout.

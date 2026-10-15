@@ -1,6 +1,6 @@
 {
-  "oracle": "Keep null deadlines frozen after the owner clears expiry",
-  "what": "Keep null deadlines frozen after the owner clears expiry",
+  "oracle": "Clearing expiry restores authorized feedback writes",
+  "what": "Ignore the explicit null expiry update, leaving the previous expired deadline in the document after the owner clears it",
   "target": {
     "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
     "case": "A2.c6.Exp-V a viewer may not create, change or delete annotations and comments after expiry: DENY",

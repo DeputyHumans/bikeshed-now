@@ -1,18 +1,13 @@
---- a/config/templates/firestore.rules.tmpl
-+++ b/config/templates/firestore.rules.tmpl
-@@ -94,5 +94,5 @@
-     // remain readable under their normal membership policy (SPEC §17).
-     function feedbackWritable(d) {
--      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
-+      return !('expiresAt' in d) || (d.expiresAt != null && d.expiresAt > request.time);
-     }
- 
---- a/firestore.rules
-+++ b/firestore.rules
-@@ -97,5 +97,5 @@
-     // remain readable under their normal membership policy (SPEC §17).
-     function feedbackWritable(d) {
--      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
-+      return !('expiresAt' in d) || (d.expiresAt != null && d.expiresAt > request.time);
-     }
- 
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -975,9 +975,7 @@
+     updatedAt: now(),
+   };
+   // Omission is not a request to unfreeze the document. Explicit null clears.
+-  if (changesExpiry) update.expiresAt = expiry.value === null
+-    ? FieldValue.delete()
+-    : Timestamp.fromMillis(expiry.value);
++  if (changesExpiry && expiry.value !== null) update.expiresAt = Timestamp.fromMillis(expiry.value);
+   if (visibility === "unlisted") {
+     // Reuse an existing token so an already-circulated link keeps working
+     // through an unrelated setting change.
