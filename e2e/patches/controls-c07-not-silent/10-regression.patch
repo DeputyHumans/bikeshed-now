@@ -22,8 +22,8 @@
          },
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -103,7 +103,7 @@
-         setError(cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
+@@ -109,7 +109,7 @@
+           : cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
            ? "An older editing session must be saved first. Save or publish from its original tab, then reload this page."
            : "Live editing could not start. Reload to retry. Keep other editing tabs open until their changes are saved.");
 -        setState("off");

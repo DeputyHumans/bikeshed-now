@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Retarget refused-append and oversized-live-document controls around the new delivery/recovery guards, retaining each original mutation and failure assertion.
+
 - Explicitly retry Done in large-peer latency and held-save scenarios after an intentional delivery deadline, preserving their save-order, token and convergence assertions.
 
 - Challenge expiry clearing through its actual HTTP field-deletion path; the control now retains the old deadline and proves the restored feedback-permission assertion detects it.
