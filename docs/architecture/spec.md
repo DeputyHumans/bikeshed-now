@@ -833,6 +833,11 @@ normalized into an editor's model. The **normative** property is that a document
 survives a round trip through the wire format byte-identical; the sample bundles
 are the fixtures that hold it.
 
+A live co-editor autosave is confirmation of merged work and does not offer a
+competing-copy notice. Saves from outside the live editor still offer that
+choice. A newer-version announcement names the current head only and is shown
+only while the reader remains on an older version.
+
 Deletion beats concurrent typing: if one person removes a passage while another
 edits it, the passage goes. That is the CRDT's semantics, not a policy choice,
 and it is tested rather than assumed.

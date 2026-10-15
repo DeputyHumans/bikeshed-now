@@ -1,0 +1,11 @@
+{
+  "oracle": "one orphan uses singular grammar",
+  "what": "controls-a06-singular-orphan",
+  "target": {
+    "spec": "e2e/specs/functional/a06-comments.spec.mjs",
+    "case": "A6.7 a draft that edits commented passages away shows the editor the orphan banner and (no longer in the text), and a viewer of the version neither"
+  },
+  "expect": {
+    "message": "one orphan uses singular grammar"
+  }
+}

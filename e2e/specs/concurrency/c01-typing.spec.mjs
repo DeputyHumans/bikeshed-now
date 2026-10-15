@@ -640,10 +640,19 @@ scenario("C1 BODYATTR: the draft disjoint typing left carries no spellcheck attr
   assert.deepEqual({ body: s.body.draft, html: s.html.draft }, { body: s.body.v1, html: s.html.v1 }, `S3 oracle (I5 BODYATTR): the draft's spellcheck attribute is not v1's: ${JSON.stringify(s)}`);
 });
 
-scenario('C1 banner: no co-editor is shown "<peer> saved a change while you were editing" while the others type and autosave', { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S9" }, async (ctx) => {
+scenario('C1 banner: no co-editor is shown "<peer> saved a change while you were editing" while the others type and autosave', { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const seen = observation(ctx, "C1", "banner");
   ctx.step(`conflict banners seen: ${Object.entries(seen).map(([u, rows]) => `${u} ×${rows.length}`).join(", ") || "none"}`);
   assert.deepEqual(seen, {}, 'S9 oracle: no co-editor is shown "<peer> saved a change while you were editing"');
+});
+
+scenario("C1 shared save notice: a live co-editor autosave never offers competing copies", { tiers: BOTH, n: [2], timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users } = await join(ctx, ctx.n, "C1 shared save notice");
+  const watches = await Promise.all(users.map((u) => u.watchFor(BANNER_SEL, CONFLICT_RE)));
+  const log = tokenLog(ctx.target.runId);
+  await users[0].typeAndAutosave(idSelector("e2e-1"), log.next(users[0].name, "e2e-1"), { delay: KEY_DELAY_MS, timeout: 60_000 });
+  await settle(ctx, users, docId, ctx.n);
+  assert.deepEqual(await bannerSightings(users, watches), {}, "a live co-editor autosave never offers competing copies");
 });
 
 // --- C1-serial (and C21's serial control) ------------------------------------------------------

@@ -358,6 +358,7 @@ export function DocViewer() {
     shownVersion: doc.currentVersion,
     emailLower,
     isEditing: mode.kind === "editing",
+    liveEditorEmails: shared.state === "shared" ? presence.peers.filter((peer) => peer.mode === "edit").map((peer) => peer.email) : [],
     showsDraft: mode.kind === "reading" && mode.draft,
     hold: suggesting !== null || commenting,
     onPeerSavedDraft: frame.reload,

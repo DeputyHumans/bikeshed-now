@@ -1,12 +1,11 @@
 --- a/app/src/viewer/useLiveSync.ts
 +++ b/app/src/viewer/useLiveSync.ts
-@@ -88,7 +88,8 @@
+@@ -89,7 +89,7 @@
       * reader pinned to an older version is the one it is for, and once they
       * open the new one this clears on its own.
       */
--    newVersion: newVersion !== null && newVersion !== shownVersion ? newVersion : null,
-+    // e2e control: the banner is offered to every reader, followed or not.
-+    newVersion: newVersion !== null ? newVersion : null,
+-    newVersion: newVersion !== null && newVersion !== shownVersion && newVersion === meta?.currentVersion ? newVersion : null,
++    newVersion: newVersion,
      dismissNewVersion: () => setNewVersion(null),
    };
  }

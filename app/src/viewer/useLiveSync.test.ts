@@ -126,3 +126,30 @@ describe("useLiveSync: a peer saves the draft", () => {
     expect(reloads).toEqual([1]);
   });
 });
+
+
+describe("useLiveSync: render-level announcements", () => {
+  it("never renders the previous announcement while following a second new version", () => {
+    const announcements: Array<string | null> = [];
+    const view = renderHook(({ version }) => {
+      const live = useLiveSync({ meta: meta(version), shownVersion: version, emailLower: "reader@example.com", isEditing: false, showsDraft: false, onPeerSavedDraft: () => {} });
+      announcements.push(live.newVersion);
+      return live;
+    }, { initialProps: { version: "v1" } });
+    view.rerender({ version: "v2" });
+    view.rerender({ version: "v3" });
+    expect(announcements.filter((value) => value !== null)).toEqual([]);
+  });
+
+  it("live co-editor autosaves do not offer conflicting copies, while an outside save still does", () => {
+    const saved = (at: number, email: string) => ({ ...meta("v1"), draft: { updatedAt: { toMillis: () => at }, updatedByEmail: email } }) as unknown as DocMeta;
+    const view = renderHook(({ document }) => useLiveSync({
+      meta: document, shownVersion: "v1", emailLower: "reader@example.com", isEditing: true,
+      showsDraft: false, liveEditorEmails: ["peer@example.com"], onPeerSavedDraft: () => {},
+    }), { initialProps: { document: meta("v1") } });
+    view.rerender({ document: saved(1, "peer@example.com") });
+    expect(view.result.current.conflict).toBeNull();
+    view.rerender({ document: saved(2, "outside@example.com") });
+    expect(view.result.current.conflict).toEqual({ byEmail: "outside@example.com" });
+  });
+});

@@ -895,6 +895,16 @@ scenario("A6.7 a draft that edits commented passages away shows the editor the o
   });
   await v.openComments({ timeout: UI_MS });
   assert.equal(await v.page.locator(".comments-panel .thread-quote em").count(), 0, "no thread is marked orphaned for the viewer");
+
+  ctx.step("restore the first passage in the draft; the remaining orphan uses singular grammar");
+  const oneOrphan = FIXTURE_HTML.replace(/<p id="e2e-8">[^<]*<\/p>\n/, "");
+  const restored = await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: oneOrphan });
+  precondition(restored.status === 200, "the single-orphan draft saved");
+  await o.open(docId, { timeout: PAGE_MS });
+  await o.waitForFrame({ match: /\/draft\//, timeout: PAGE_MS });
+  const singular = o.page.locator(".viewer-banners .banner", { hasText: "no longer match" });
+  await singular.waitFor({ state: "visible", timeout: UI_MS });
+  assert.equal((await singular.textContent()).replace(/\s+/g, " ").trim(), "1 comment no longer matches the text it was written about. It is still in the panel.", "one orphan uses singular grammar");
 });
 
 // --- A6.8 ---------------------------------------------------------------------

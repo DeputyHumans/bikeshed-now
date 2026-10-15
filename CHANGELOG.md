@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Live co-editor autosaves no longer offer competing-copy notices. Unpinned
+  readers never flash an obsolete version announcement when following another
+  publish, and a single orphaned comment uses singular grammar.
+
 - Refused draft commits and uploaded updates remove only their unreferenced
   candidate bundle. Live-log retirement retries an empty browser cache against
   the server instead of silently leaving the consumed log.
@@ -90,6 +94,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Version and withdrawal checks read immutable snapshot paths, keep retired
+  byte evidence, and detect uploads without a committed version record.
 
 - Concurrency cleanup checks follow immutable storage pointers, retain retired
   paths after metadata deletion, and detect unreachable refused candidates.

@@ -9,10 +9,9 @@ import type { DocMeta } from "../types";
  *
  * An observer sees the draft refresh on each of the editor's autosaves — the
  * existing debounce, not a new channel — while the peer's caret updates five
- * times a second. That split is precisely what avoids needing a CRDT: the
- * POINTER is what the eye tracks, so it has to feel live; the TEXT arriving a
- * second later reads as natural, because that is roughly the cadence at which a
- * person finishes a sentence.
+ * times a second. Editors merge through the shared CRDT; idle readers of the
+ * draft refresh from autosaves. A live co-editor's save is confirmation of the
+ * shared work, not a competing copy to load or discard.
  *
  * Nothing here diffs or patches. It refreshes the src of a frame the viewer
  * already knows how to reload without losing the reader's place — and only a
@@ -28,11 +27,13 @@ export function useLiveSync(options: {
   isEditing: boolean;
   /** The frame shows the draft. A published version does not change when the draft is saved. */
   showsDraft: boolean;
+  /** Editors whose changes already merge through this reader's live connection. */
+  liveEditorEmails?: readonly string[];
   /** The reader is writing something a reload would throw away; catch up once they finish. */
   hold?: boolean;
   onPeerSavedDraft: () => void;
 }) {
-  const { meta, shownVersion, emailLower, isEditing, showsDraft, hold = false, onPeerSavedDraft } = options;
+  const { meta, shownVersion, emailLower, isEditing, showsDraft, liveEditorEmails = [], hold = false, onPeerSavedDraft } = options;
 
   const lastDraftAt = useRef<number>(0);
   const owedReload = useRef(false);
@@ -52,7 +53,7 @@ export function useLiveSync(options: {
       const first = lastDraftAt.current === 0;
       lastDraftAt.current = draftAt;
       if (byPeer) {
-        if (isEditing) {
+        if (isEditing && !liveEditorEmails.includes(draft.updatedByEmail)) {
           // Last-writer-wins, never auto-clobbered: the choice is offered, and
           // silence keeps YOUR work rather than theirs.
           setConflict({ byEmail: draft.updatedByEmail });
@@ -68,7 +69,7 @@ export function useLiveSync(options: {
       setNewVersion(meta.currentVersion);
     }
     lastVersion.current = meta.currentVersion;
-  }, [meta, emailLower, isEditing, showsDraft, hold, onPeerSavedDraft]);
+  }, [meta, emailLower, isEditing, showsDraft, liveEditorEmails, hold, onPeerSavedDraft]);
 
   // The reload a reader was spared while writing, made once they are done.
   useEffect(() => {
@@ -78,7 +79,7 @@ export function useLiveSync(options: {
   }, [hold, showsDraft, isEditing, onPeerSavedDraft]);
 
   return {
-    conflict,
+    conflict: conflict && !liveEditorEmails.includes(conflict.byEmail) ? conflict : null,
     dismissConflict: () => setConflict(null),
     /**
      * News only to a reader who is not looking at it. With no version pinned
@@ -88,7 +89,7 @@ export function useLiveSync(options: {
      * reader pinned to an older version is the one it is for, and once they
      * open the new one this clears on its own.
      */
-    newVersion: newVersion !== null && newVersion !== shownVersion ? newVersion : null,
+    newVersion: newVersion !== null && newVersion !== shownVersion && newVersion === meta?.currentVersion ? newVersion : null,
     dismissNewVersion: () => setNewVersion(null),
   };
 }
