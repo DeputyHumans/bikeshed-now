@@ -109,11 +109,10 @@ test("clients: the CLI runs against the stack origin: list --json shows both doc
   assert.ok(ids.includes(ctx.docId) && ids.includes(ctx.mcpDocId), `listed: ${JSON.stringify(ids)}`);
 });
 
-test("clients: the operator script publishes a sample into this stack", async (t) => {
+test("clients: the operator script publishes a sample into this stack", async () => {
   const r = await publishOperator(target, { sample: "bikeshed-tour", owner: ctx.owner.account });
   assert.equal(r.code, 0, r.stderr || r.stdout);
-  // Not asserted here: a missing mirror is suspect S16, recorded in findings.jsonl.
-  t.diagnostic(`presence/edit mirror after scripts/publish.mjs: ${JSON.stringify(r.mirror)}`);
+  assert.deepEqual(r.mirror, { presence: true, edit: true, expectEdit: true, ok: true }, "operator publish installs the owner's presence and edit mirrors");
   const doc = await readDoc(target, `docs/${r.docId}`);
   assert.equal(doc.ownerEmail, ctx.owner.account.email);
   const c = await ctx.owner.http.get(`/content/${r.docId}/${doc.currentVersion}/index.html`);

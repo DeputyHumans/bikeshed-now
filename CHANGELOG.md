@@ -22,6 +22,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Initialize operator Realtime Database handles with an explicit emulator URL
+  and demo namespace, so publish and access changes install their mirrors.
+
 - Refresh regression controls for current permission mirrors and cursor rules;
   assert both live-log directions before a denied join stops the editor.
 

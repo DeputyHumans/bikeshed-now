@@ -1,0 +1,7 @@
+--- a/scripts/lib/firebase.mjs
++++ b/scripts/lib/firebase.mjs
+@@ -101,3 +101,3 @@
+     // set. Pin this invocation's demo namespace; never inherit a deployment.
+-    return `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}/?ns=${encodeURIComponent(getProjectId(projectOverride))}`;
++    return undefined;
+   }

@@ -13488,6 +13488,23 @@
         "controls-c04-joiner-write"
       ],
       "note": "C04 uses control-only metadata written from the current Firestore snapshot and directional test-only rule gates. The case checks authenticated read and valid empty-update append before browser join, retaining I3/I13 browser assertions. Prior duplicate-seed failure expectations were obsolete after fail-closed joining. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "S16"
+      ],
+      "scope": "operator emulator RTDB initialization; fresh smoke and local E2E pending",
+      "tests": [
+        "Installed Admin SDK regression fails before fix: operator handle is null; fixed config suite5 pass",
+        "Operator configuration, publication and withdrawal focused27 pass",
+        "Two isolated regressions fail assertions after clean5-pass copies: missing URL and wrong namespace"
+      ],
+      "evidence": "e2e/.out/operator-sdk-controls-LKUIql/proof.json",
+      "controls": [
+        "controls-smoke-operator-mirror"
+      ],
+      "note": "B6 smoke on86f4188 printed both operator mirrors false while reporting PASS. The emulator branch returned undefined databaseURL; Admin DatabaseService.ensureUrl requires an explicit URL before emulator rewriting. The fix pins the local host and demo namespace and ignores ambient deployment URLs. The smoke diagnostic is now an assertion. No campaign item closed."
     }
   ]
 }

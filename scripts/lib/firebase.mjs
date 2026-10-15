@@ -97,9 +97,9 @@ function getDatabaseUrl(projectOverride) {
     if (!getProjectId(projectOverride).startsWith("demo-")) {
       throw new Error("Realtime Database emulator use requires a demo- project");
     }
-    // The SDK derives the emulator namespace from the demo project. A local
-    // invocation must not inherit a deployment's database URL or namespace.
-    return undefined;
+    // Admin's database service requires a URL even when an emulator host is
+    // set. Pin this invocation's demo namespace; never inherit a deployment.
+    return `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}/?ns=${encodeURIComponent(getProjectId(projectOverride))}`;
   }
   const value = process.env.BIKESHED_DATABASE_URL ?? deployConfig().databaseURL;
   if (value === undefined || value === "") return undefined;
