@@ -1,0 +1,10 @@
+--- a/app/src/viewer/usePrinting.ts
++++ b/app/src/viewer/usePrinting.ts
+@@ -67,6 +67,7 @@
+       // Idempotent: once open there is no overflow and the position reads 0,
+       // so a second beforeprint must not overwrite what the first remembered.
+       if (frame.style.height) return;
++      document.body.appendChild(document.createElement("iframe"));
+       scrollTop = scroller().scrollTop;
+       frame.style.height = `${doc.documentElement.scrollHeight}px`;
+     };

@@ -1,0 +1,13 @@
+{
+  "oracle": "A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-origin allow-modals whose document has no decoration, script, on* handler or javascript: URL; the label and footer stamps come first with every locked property !important, placeholders filled, label ≤ 40 and footer ≤ 300 characters; Cmd/Ctrl+P prints the same; marking off removes the stamps and nothing else",
+  "what": "print decoration",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-origin allow-modals whose document has no decoration, script, on* handler or javascript: URL; the label and footer stamps come first with every locked property !important, placeholders filled, label ≤ 40 and footer ≤ 300 characters; Cmd/Ctrl+P prints the same; marking off removes the stamps and nothing else",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "DECOR: decoration in the print snapshot"
+  }
+}

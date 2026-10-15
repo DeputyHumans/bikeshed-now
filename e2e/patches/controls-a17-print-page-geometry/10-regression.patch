@@ -1,0 +1,12 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -154,6 +154,9 @@
+     base.href = opts.baseHref;
+     head.insertBefore(base, head.firstChild);
+   }
++  const imposedPage = parsed.createElement("style");
++  imposedPage.textContent = "@page { size: A4; margin: 0; }";
++  head.appendChild(imposedPage);
+   // No `@page` of ours. One used to be appended here, and because `@page`
+   // cascades by order it beat every page the document declared: a deck sized
+   // `200mm 120mm; margin: 0` printed each slide across two pages. It also

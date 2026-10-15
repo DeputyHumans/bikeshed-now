@@ -1,0 +1,10 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -46,7 +46,6 @@
+   opacity: "1",
+   transform: "none",
+   scale: "1",
+-  rotate: "none",
+   translate: "none",
+   "offset-path": "none",
+   "mask-image": "none",

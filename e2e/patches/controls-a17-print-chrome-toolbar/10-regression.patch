@@ -1,0 +1,10 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -365,7 +365,6 @@
+  */
+ @media print {
+   .app-header,
+-  .viewer-toolbar,
+   .viewer-banners,
+   .comments-panel,
+   .consent,

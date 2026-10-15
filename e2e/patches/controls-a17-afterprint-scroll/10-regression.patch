@@ -1,0 +1,12 @@
+--- a/app/src/viewer/usePrinting.ts
++++ b/app/src/viewer/usePrinting.ts
+@@ -72,7 +72,8 @@
+     };
+     const close = () => {
+       frame.style.height = "";
+-      scroller().scrollTop = scrollTop;
++      void scrollTop; // regression: forget the captured reader position.
++      scroller().scrollTop = 0;
+     };
+     window.addEventListener("beforeprint", open);
+     window.addEventListener("afterprint", close);

@@ -1,0 +1,10 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -368,7 +368,6 @@
+   .viewer-toolbar,
+   .viewer-banners,
+   .comments-panel,
+-  .consent,
+   .slide-rail,
+   .slide-overview,
+   .selection-fab,

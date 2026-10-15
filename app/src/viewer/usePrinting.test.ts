@@ -123,8 +123,10 @@ describe("File → Print", () => {
     const { frame, doc } = mountFrame(4200);
     mount(doc);
 
+    const before = { frames: document.querySelectorAll("iframe").length, html: doc.body.innerHTML };
     window.dispatchEvent(new Event("beforeprint"));
     expect(frame.style.height).toBe("4200px");
+    expect({ frames: document.querySelectorAll("iframe").length, html: doc.body.innerHTML }).toEqual(before);
 
     window.dispatchEvent(new Event("afterprint"));
     expect(frame.style.height).toBe("");

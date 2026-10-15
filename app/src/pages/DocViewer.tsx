@@ -624,9 +624,9 @@ export function DocViewer() {
       title: doc.title,
       version: doc.currentVersion,
       user: emailLower,
-    });
+    }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Could not open a print view."));
     logEvent({ name: "export", params: { kind: "pdf" } });
-  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower]);
+  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower, toast]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the

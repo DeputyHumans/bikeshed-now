@@ -7,13 +7,14 @@
  * 2's version):
  *
  *   17.1  "Print or save as PDF" (and Cmd/Ctrl+P with the focus in the
- *         document) hands print() a frame sandboxed exactly
+ *         document or app toolbar) hands print() a frame sandboxed exactly
  *         `allow-same-origin allow-modals`, whose document carries no
  *         decoration (DECOR against v1: no highlight, no injected style), no
  *         script, no on* handler and no javascript: URL, while the author's
  *         own data-bshd="whatever" survives; the label and footer stamps are
  *         the first two children of <body>, every locked property inline
- *         with !important, text only; the footer's placeholders are filled;
+ *         with !important, text only, fixed in the top layer; authored @page
+ *         rules are unchanged; the footer's placeholders are filled;
  *         POST /marking clamps the label to 40 and the footer to 300
  *         characters and strips control characters; with marking off the
  *         stamps are absent and every scrub still holds
@@ -25,10 +26,11 @@
  *         !important, on selectors matching the stamps, under print media:
  *         each locked property computes to what it computes to with no
  *         author CSS, and both stamps paint readable glyphs on the page
- *   17.2b the same snapshot with vectors SPEC §20 does not list (`scale`,
- *         `translate`, `mask-image`, `mix-blend-mode`, `offset-path`), each
- *         live alone at its own viewport width: "hostile bundle CSS cannot
- *         suppress the marking" — X-a17-export-2, see the case
+ *   17.2b the same snapshot with independent transforms (`scale`, `rotate`,
+ *         `translate`), masking, blending and motion paths, each live alone
+ *         at its own viewport width: hostile CSS cannot hide the marking
+ *   17.2c html/body transforms, filters and containment retain visible
+ *         authored content and both page-edge markings
  *   17.3  "Export an image…": a section's PNG at 1×, 2× and 3× is its
  *         border box × the scale, a diagram's PNG likewise, the SVG is the
  *         diagram as authored plus the owner's label; DECOR 0 on what was
@@ -111,8 +113,8 @@
  * page shows go through User.waitShown, which loads the page again only when
  * that page saw the stack stall.
  *
- * Negative controls. Three patch sets, each red with its patch and green
- * without (`run.mjs controls`): controls-a17-print-scrub (17.1),
+ * Historical negative controls. The original three patch sets were red with
+ * their patch and green without (`run.mjs controls`): controls-a17-print-scrub (17.1),
  * controls-a17-stamp-lock (17.2) and controls-a17-file-print (17.6). The rest
  * are spec mutants, a copy of this file with one bug planted, run with
  * --spec-file and each seen red on its own message. 17.3: the 3× export
@@ -129,7 +131,12 @@
  * snapshot unscrubbed; 17.5c with no account default, and the hand-off
  * unreadable. And those oracles can pass: the SVG file with its wrapper
  * unwrapped (17.3b) and a box checked at the hand-off (17.5c) each end
- * "passed unexpectedly".
+ * "passed unexpectedly". The current controls-a17-* sets additionally target
+ * fixed placement, page geometry, both shortcut listeners, each independent
+ * transform, authored ancestor layout, decoration, pagination, all five
+ * rendered chrome classes, scroll/height cleanup, and unintended File → Print
+ * stamps or frames. Their current execution proof belongs to the campaign
+ * evidence, not this historical description.
  */
 
 import assert from "node:assert/strict";
@@ -154,6 +161,7 @@ import { createHttp } from "../../lib/http.mjs";
 import { colourPixels, pngSize } from "../../lib/png.mjs";
 import { holdListen } from "../../lib/sync.mjs";
 import { postThumb } from "../../lib/thumbs.mjs";
+import { patchCapability } from "../../lib/options.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -180,10 +188,10 @@ const STAMP_SELECTOR = `.${MARK_CLASS}, .${FOOTER_CLASS}`;
 /** Every property app/src/export/pdf.ts LOCK sets inline with !important, as of this suite's writing. */
 const LOCKED = Object.freeze([
   "display", "visibility", "opacity", "transform", "filter", "clip-path", "clip", "content-visibility",
-  "position", "z-index", "margin", "max-height", "max-width", "height", "width", "overflow", "pointer-events", "zoom",
+  "position", "z-index", "margin", "border", "background", "max-height", "max-width", "height", "width", "overflow", "pointer-events", "zoom",
   "-webkit-text-fill-color", "-webkit-text-stroke", "text-indent", "text-shadow", "letter-spacing", "word-spacing",
   "white-space", "text-transform",
-  "scale", "translate", "mask-image", "mix-blend-mode", "offset-path",
+  "scale", "rotate", "translate", "mask-image", "mix-blend-mode", "offset-path",
 ]);
 
 /** The hiding vectors SPEC §20 names, box then text: each must be among the locked ones. */
@@ -192,7 +200,7 @@ const SPEC_VECTORS = Object.freeze([
   "max-height", "max-width", "overflow", "zoom",
   "-webkit-text-fill-color", "-webkit-text-stroke", "text-indent", "text-shadow", "letter-spacing", "word-spacing",
   "white-space", "text-transform",
-  "scale", "translate", "mask-image", "mix-blend-mode", "offset-path",
+  "scale", "rotate", "translate", "mask-image", "mix-blend-mode", "offset-path",
 ]);
 
 /** The stamp colours pdf.ts writes: the label's red and the footer's grey (the glyphs the oracle looks for). */
@@ -478,12 +486,17 @@ function printExtract(d, locked) {
       className: el.getAttribute("class"),
       tag: el.localName,
       text: el.textContent,
+      topLayer: el.matches(":popover-open"),
       childElements: el.children.length,
       parentIsBody: el.parentElement === body,
       index: kids.indexOf(el),
       priorities: Object.fromEntries(locked.map((p) => [p, el.style.getPropertyPriority(p)])),
       values: Object.fromEntries(locked.map((p) => [p, el.style.getPropertyValue(p)])),
     })),
+    pageRules: Array.from(d.styleSheets).flatMap((sheet) => {
+      const collect = (rules) => Array.from(rules).flatMap((rule) => rule.type === CSSRule.PAGE_RULE ? [rule.cssText] : rule.cssRules ? collect(rule.cssRules) : []);
+      return collect(sheet.cssRules);
+    }),
     firstChildren: kids.slice(0, 3).map((e) => e.getAttribute("class") || e.localName),
     date: new Date().toLocaleDateString(undefined, { dateStyle: "medium" }),
     year: String(new Date().getFullYear()),
@@ -587,8 +600,16 @@ function stampsVisible(out) {
  * each stamp paints. printRenderer settles the page first (its fonts ready,
  * two animation frames), so what is read and shot is the page as painted.
  */
-function renderStamps(r, html, { width = PAGE.width, probe = null } = {}) {
-  return r.render(html, { width, computed: { selector: STAMP_SELECTOR, properties: LOCKED }, probe, without: STAMP_SELECTOR, regions: stampRegions(width) });
+function renderStamps(r, html, { width = PAGE.width, probe = null, openMarks = hostilePrint.openMarks } = {}) {
+  return r.render(html, { width, probe: async (page) => {
+    await page.evaluate((classes) => classes.forEach((name) => document.getElementsByClassName(name)[0]?.showPopover()), openMarks);
+    const probed = probe ? await probe(page) : null;
+    const elements = await page.evaluate(({ selector, properties }) => Array.from(document.querySelectorAll(selector)).map((el) => {
+      const css = getComputedStyle(el), r = el.getBoundingClientRect();
+      return { className: el.className, rect: [r.x, r.y, r.width, r.height], computed: Object.fromEntries(properties.map((p) => [p, css.getPropertyValue(p)])) };
+    }), { selector: STAMP_SELECTOR, properties: LOCKED });
+    return { probed, elements };
+  }, without: STAMP_SELECTOR, regions: stampRegions(width) }).then((out) => ({ ...out, ...out.probed }));
 }
 
 /** A render result without its PNG buffers, for evidence. */
@@ -602,7 +623,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const title = `Print probe ${t}`;
-  const html = probeDoc({ title });
+  const html = probeDoc({ title, hostile: "@page { size: 200mm 120mm; margin: 9mm; }" });
   const up = await publishDoc(ctx, owner.http, { body: html, filename: "index.html", title, name: "a171-print" });
   precondition(up.versionId === "v1", `publish answered ${up.status} ${JSON.stringify(up.json)}`);
   const docId = up.docId;
@@ -651,9 +672,18 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   ], "exactly two stamps, text only");
   for (const v of SPEC_VECTORS) assert.ok(LOCKED.includes(v), `SPEC §20's vector ${v} is among the locked properties`);
   for (const s of snap.stamps) {
+    assert.equal(s.topLayer, true, `${s.className}: the stamp is isolated from authored ancestor layout`);
+    assert.equal(s.values.position, "fixed", `${s.className}: the stamp repeats on every printed page`);
     const notImportant = LOCKED.filter((p) => s.priorities[p] !== "important" || !s.values[p]);
     assert.deepEqual(notImportant, [], `${s.className}: locked properties not set inline with !important`);
   }
+
+  const authoredPages = await (await u.frame()).evaluate(() => {
+    const collect = (rules) => Array.from(rules).flatMap((rule) => rule.type === CSSRule.PAGE_RULE ? [rule.cssText] : rule.cssRules ? collect(rule.cssRules) : []);
+    return Array.from(document.styleSheets).flatMap((sheet) => collect(sheet.cssRules));
+  });
+  precondition(authoredPages.length === 1, "the authored document declares one non-default page geometry");
+  assert.deepEqual(snap.pageRules, authoredPages, "printing preserves authored page rules and imposes no page geometry");
 
   ctx.step("the label is the stored label; the footer is the stored footer with {year} {date} {title} {version} {user} filled");
   const footer = expected.footer
@@ -674,6 +704,16 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   assert.deepEqual(key.stamps.map((s) => [s.className, s.text]), snap.stamps.map((s) => [s.className, s.text]), "the shortcut stamps the same label and footer");
   assert.deepEqual(await activeContent(parser, key.html), { scripts: 0, handlers: [], jsUrls: [] }, "the shortcut's snapshot is scrubbed");
   assert.deepEqual(printDecor(await fingerprint(parser, key.html), fp1, { stamps: true }), [], "DECOR: the shortcut's snapshot");
+
+  ctx.step("Cmd/Ctrl+P with focus on the app toolbar also prints one stamped, scrubbed snapshot");
+  await u.page.getByRole("button", { name: "More actions", exact: true }).focus();
+  precondition(await u.page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "More actions"), "the shortcut begins on the app toolbar, outside the document iframe");
+  const { frame: appFrame, snap: appPrint } = await printOnce(ctx, u, () => u.page.keyboard.press("ControlOrMeta+p"), "the app-window print shortcut");
+  assert.equal(appFrame.sandbox, "allow-same-origin allow-modals", "the app shortcut's print frame sandbox");
+  assert.deepEqual(appPrint.stamps.map((s) => [s.className, s.text]), snap.stamps.map((s) => [s.className, s.text]), "the app shortcut stamps the same label and footer");
+  assert.deepEqual(await activeContent(parser, appPrint.html), { scripts: 0, handlers: [], jsUrls: [] }, "the app shortcut's snapshot is scrubbed");
+  assert.deepEqual(printDecor(await fingerprint(parser, appPrint.html), fp1, { stamps: true }), [], "DECOR: the app shortcut's snapshot");
+  assert.deepEqual(appPrint.pageRules, authoredPages, "the app shortcut preserves authored page geometry");
 
   ctx.step("marking off: POST /marking {enabled:false} stores off; after a reload the print has no stamp, and every scrub still holds");
   const off = await setMarking(ctx, owner, docId, { enabled: false, label: "KEEP", footer: "KEEP" });
@@ -796,6 +836,7 @@ const LISTED_HOSTILE = [
  * them unconditionally.
  */
 const UNLISTED = Object.freeze([
+  { vector: "rotate", width: 806, css: "rotate: x 90deg", prop: "rotate", expect: "x 90deg" },
   { vector: "scale", width: 801, css: "scale: 0", prop: "scale", expect: "0" },
   { vector: "translate", width: 802, css: "translate: -100000px -100000px", prop: "translate", expect: "-100000px -100000px" },
   { vector: "mask-image", width: 803, css: "-webkit-mask-image: linear-gradient(transparent, transparent); mask-image: linear-gradient(transparent, transparent)", prop: "mask-image", expect: "linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0))" },
@@ -810,7 +851,7 @@ const HOSTILE_CSS = [
 ].join("\n");
 
 /** What A17.2 leaves for A17.2b: the snapshot print() received for the hostile document. */
-const hostilePrint = { html: null };
+const hostilePrint = { html: null, openMarks: [] };
 
 async function hostileSnapshot(ctx) {
   if (hostilePrint.html) return hostilePrint.html;
@@ -829,6 +870,7 @@ async function hostileSnapshot(ctx) {
   ctx.ev.text("print-snapshot.html", snap.html);
   precondition(snap.html.includes('id="hostile"') && snap.stamps.length === 2, "the snapshot carries the hostile stylesheet and both stamps");
   hostilePrint.html = snap.html;
+  hostilePrint.openMarks = snap.stamps.filter((s) => s.topLayer).map((s) => s.className);
   return snap.html;
 }
 
@@ -839,7 +881,8 @@ scenario("A17.2 a document whose CSS sets every hiding vector SPEC §20 lists wi
   const r = await ctx.users.printRenderer();
   try {
     const live = await renderStamps(r, snap.html, { probe: (page) => page.evaluate(() => getComputedStyle(document.getElementById("canary")).display) });
-    const ref = await r.render(snap.html, { stripAuthorStyles: true, computed: { selector: STAMP_SELECTOR, properties: LOCKED } });
+    const withoutCss = await (await ctx.users.parser()).evaluate((html) => { const d = new DOMParser().parseFromString(html, "text/html"); d.querySelectorAll('style, link[rel~="stylesheet"]').forEach((e) => e.remove()); return d.documentElement.outerHTML; }, snap.html);
+    const ref = await renderStamps(r, withoutCss);
     const hidden = await renderStamps(r, snap.html, {
       probe: (page) => page.evaluate((sel) => document.querySelectorAll(sel).forEach((el) => el.style.setProperty("display", "none", "important")), STAMP_SELECTOR),
     });
@@ -884,6 +927,42 @@ scenario("A17.2b independent transforms, masks, blending and motion paths cannot
   } finally {
     await r.close();
   }
+});
+
+// Ancestor layout is separate from the stamp's own style cascade. Each rule
+// offsets its containing block but compensates the authored content with padding.
+const ANCESTOR_VECTORS = ["body", "html"].flatMap((ancestor, i) => [
+  { ancestor, vector: "transform", css: "transform: translateZ(0)", property: "transform", expected: "matrix(1, 0, 0, 1, 0, 0)", width: 807 + i * 3 },
+  { ancestor, vector: "filter", css: "filter: opacity(1)", property: "filter", expected: "opacity(1)", width: 808 + i * 3 },
+  { ancestor, vector: "contain", css: "contain: paint", property: "contain", expected: "paint", width: 809 + i * 3 },
+]);
+
+scenario("A17.2c authored html and body containing blocks cannot move or clip the print stamps while the document's own content still paints", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
+  const { owner, accounts } = await ownerSession(ctx);
+  const css = ANCESTOR_VECTORS.map((v) => `@media print and (width: ${v.width}px) { ${v.ancestor} { ${v.css}; position: relative; top: -10000px; padding-top: 10000px; } }`).join("\n");
+  const html = `<!doctype html><html><head><style>html,body{margin:0;background:white}#authored{width:220px;height:80px;background:rgb(0,128,0);color:white} ${css}</style></head><body><div id="authored">Authored content remains visible</div></body></html>`;
+  const up = await publishDoc(ctx, owner.http, { body: html, filename: "index.html", title: `Ancestor print ${tag()}`, name: "a172c-ancestors" });
+  await setMarking(ctx, owner, up.docId, { enabled: true, label: SUGGESTED_LABEL, footer: "Visible footer" });
+  const u = await signedIn(ctx, accounts[0], "owner");
+  await openDoc(ctx, u, up.docId);
+  const { snap } = await printOnce(ctx, u, "Print or save as PDF", "the ancestor-layout document's print");
+  const openMarks = snap.stamps.filter((s) => s.topLayer).map((s) => s.className);
+  ctx.ev.text("ancestor-print.html", snap.html);
+  ctx.ev.json("ancestor-print-state", { openMarks });
+  const renderer = await ctx.users.printRenderer();
+  const results = [];
+  try {
+    for (const v of ANCESTOR_VECTORS) {
+      const out = await renderStamps(renderer, snap.html, { width: v.width, openMarks, probe: (page) => page.evaluate(({ ancestor, property }) => getComputedStyle(document.querySelector(ancestor)).getPropertyValue(property), v) });
+      precondition(out.probed === v.expected, `${v.ancestor} ${v.vector} is active: ${out.probed}`);
+      const content = colourPixels(out.basePng, { color: [0, 128, 0], tol: 0 });
+      precondition(content.count > 1000, `${v.ancestor} ${v.vector} leaves authored content visible, rather than blanking the document: ${content.count} green pixels`);
+      const visible = stampsVisible(out);
+      results.push({ ancestor: v.ancestor, vector: v.vector, content, visible, stamps: renderSummary(out) });
+      ctx.ev.json("ancestor-vectors", results);
+      assert.deepEqual(visible, { label: true, footer: true }, `${v.ancestor} ${v.vector}: visible authored content must retain both page-fixed export stamps`);
+    }
+  } finally { await renderer.close(); }
 });
 
 // --- A17.3 and A17.3b ------------------------------------------------------------------
@@ -1112,7 +1191,7 @@ scenario("A17.3c the section's PNG, exported while the reader's comment is highl
  * whose read A17.4b shows the rules refuse, LINK_MENU_SETTLE_MS.
  */
 const MEMBER_MENU_MS = 60_000;
-const LINK_MENU_SETTLE_MS = 15_000;
+const LINK_MENU_SETTLE_MS = 60_000;
 
 /** What a member is offered for a Markdown document (one version, two files): A17.4 asserts it, A17.4b expects it. */
 const MD_DOWNLOADS = Object.freeze(["Download the rendered HTML", "Download the Markdown source", "Download everything as a .zip"]);
@@ -1246,7 +1325,7 @@ scenario("A17.4b an anonymous holder of an unlisted link is offered the Markdown
   ctx.step(`the anonymous link holder's More menu, read for up to ${LINK_MENU_SETTLE_MS} ms`);
   const anon = await ctx.users.user({ name: "link-holder" });
   await openDoc(ctx, anon, md.docId, { k });
-  const offered = await downloadsOffered(anon, "Download the Markdown source");
+  const offered = await memberDownloads(anon, "Download the Markdown source");
   ctx.ev.json("menu", offered);
   assert.deepEqual(offered.labels, [...MD_DOWNLOADS], "the link holder is offered the Markdown source and bundle permitted by the content and download endpoints");
   await privateAgain(ctx, owner, md.docId);
@@ -1623,6 +1702,19 @@ scenario("A17.6 File → Print (the browser's own print): the frame opens to its
 
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, up.docId);
+  await quietDoc(target, up.docId);
+  await commentOn(u, "#p-1", P1_QUOTE, `Print chrome ${t}`);
+  await u.openComments();
+  const chromeSelectors = [".app-header", ".viewer-toolbar", ".viewer-banners", ".comments-panel", ".consent"];
+  const chromeBefore = await u.page.evaluate((selectors) => Object.fromEntries(selectors.map((selector) => {
+    const el = document.querySelector(selector);
+    return [selector, el ? { display: getComputedStyle(el).display, visible: el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 } : null];
+  })), chromeSelectors);
+  for (const selector of chromeSelectors.filter((s) => s !== ".consent")) precondition(chromeBefore[selector]?.visible && chromeBefore[selector]?.display !== "none", `${selector} is rendered and visible before printing`);
+  if (target.capabilities.has("measurement-id") && target.capabilities.has(patchCapability("a19-analytics-live"))) precondition(chromeBefore[".consent"]?.visible, "the analytics-live target renders consent before printing");
+  // The standard local build never asks for analytics consent. If this target
+  // does render it, it must be hidden on paper as every other chrome surface.
+  ctx.ev.json("chrome-before-print", chromeBefore);
   const frame = await u.frame();
   const before = await frame.evaluate(() => {
     const s = document.scrollingElement ?? document.documentElement;
@@ -1690,8 +1782,8 @@ scenario("A17.6 File → Print (the browser's own print): the frame opens to its
 
   ctx.step("on paper the viewer's chrome is hidden (print media)");
   await u.page.emulateMedia({ media: "print" });
-  const chrome = await u.page.evaluate(() => Object.fromEntries([".app-header", ".viewer-toolbar"].map((s) => [s, document.querySelector(s) ? getComputedStyle(document.querySelector(s)).display : "absent"])));
+  const chrome = await u.page.evaluate((selectors) => Object.fromEntries(selectors.map((s) => [s, document.querySelector(s) ? getComputedStyle(document.querySelector(s)).display : "absent"])), chromeSelectors);
   await u.page.emulateMedia({ media: null });
-  assert.deepEqual(chrome, { ".app-header": "none", ".viewer-toolbar": "none" }, "the header and toolbar are hidden in print media");
+  assert.deepEqual(chrome, Object.fromEntries(chromeSelectors.map((s) => [s, chromeBefore[s] ? "none" : "absent"])), "all rendered viewer chrome is hidden in print media");
   noPageErrors([u]);
 });

@@ -8,15 +8,18 @@ import { resolveFooter } from "../marking";
 import type { Marking } from "../types";
 
 /**
- * Two hardening properties, and it is worth being precise about which one is
- * doing the work.
+ * Three hardening properties protect different parts of the print snapshot.
  *
  * THE SANDBOX is the real guarantee. The print frame gets `allow-same-origin`
  * (so the parent can write into it) and `allow-modals` (so print() works) and
  * deliberately NOT `allow-scripts`, so no snapshot JavaScript can run
  * same-origin during export. The attribute scrub below is defence in depth.
  *
- * THE INLINE `!important` is what makes the marking unsuppressable. An important
+ * THE TOP LAYER keeps authored html/body transforms, filters and containment
+ * from moving the stamps with their ancestors. Their own fixed boxes repeat
+ * on each printed page. The mounted snapshot activates their manual popovers.
+ *
+ * THE INLINE `!important` prevents the document from styling the stamp itself. An important
  * declaration in an element's style attribute outranks any selector-based
  * author !important rule, because the style attribute has the highest
  * specificity there is — and a sandboxed document has no JavaScript with which
@@ -43,6 +46,7 @@ const LOCK: Record<string, string> = {
   opacity: "1",
   transform: "none",
   scale: "1",
+  rotate: "none",
   translate: "none",
   "offset-path": "none",
   "mask-image": "none",
@@ -54,6 +58,8 @@ const LOCK: Record<string, string> = {
   position: "fixed",
   "z-index": "2147483647",
   margin: "0",
+  border: "0",
+  background: "transparent",
   "max-height": "none",
   "max-width": "none",
   height: "auto",
@@ -82,6 +88,9 @@ function stampElement(
 ): HTMLElement {
   const el = doc.createElement("div");
   el.className = className;
+  // Top-layer placement is activated after the snapshot is mounted. It keeps
+  // authored html/body containing blocks from moving or clipping the marking.
+  el.setAttribute("popover", "manual");
   // textContent, never innerHTML: the label and footer are user-supplied, and
   // this is the one place they reach a document.
   el.textContent = text;
@@ -209,6 +218,16 @@ export function buildPrintHtml(sourceDoc: Document, opts: PrintOptions = {}): st
   return `<!DOCTYPE html>\n${parsed.documentElement.outerHTML}`;
 }
 
+/** Place only the generated marks above authored ancestor layout, without modifying that layout. */
+export function activatePrintMarks(doc: Document): void {
+  for (const mark of Array.from(doc.querySelectorAll<HTMLElement>(`.${PRINT_MARK_CLASS}, .${PRINT_FOOTER_CLASS}`))) {
+    if (typeof mark.showPopover !== "function") {
+      throw new Error("This browser cannot safely print export markings. Update your browser and try again.");
+    }
+    mark.showPopover();
+  }
+}
+
 /**
  * Open the browser's print dialog for a stamped snapshot.
  *
@@ -243,6 +262,7 @@ export async function printDoc(
   // produces a page of unstyled text, which looks like a bug in the document.
   await new Promise((r) => setTimeout(r, 250));
   try {
+    activatePrintMarks(fdoc);
     frame.contentWindow?.focus();
     frame.contentWindow?.print();
   } finally {

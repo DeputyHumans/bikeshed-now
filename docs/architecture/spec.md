@@ -2642,15 +2642,20 @@ type Marking = { enabled: boolean; label: string; footer: string };
 Stamp styles are set **inline with `!important`**. An important inline
 declaration outranks any selector-based author `!important` rule, so hostile
 bundle CSS cannot suppress the locked properties. Hiding vectors are locked — box
-(`display`, `visibility`, `opacity`, `transform`, `scale`, `translate`,
+(`display`, `visibility`, `opacity`, `transform`, `scale`, `rotate`, `translate`,
 `offset-path`, `mask-image`, `mix-blend-mode`, `filter`, `clip`, `clip-path`,
 `content-visibility`, `max-height/width`, `overflow`, `zoom`) and text
 (`-webkit-text-fill-color`, `-webkit-text-stroke`, `text-indent`, `text-shadow`,
 `letter-spacing`, `word-spacing`, `white-space`, `text-transform`).
 
 Rendering happens in a print iframe sandboxed `allow-same-origin allow-modals`
-with deliberately **no** `allow-scripts`. `position: fixed` repeats the stamp on
-every page. `{year}` is computed at export time.
+with deliberately **no** `allow-scripts`. Generated stamp nodes are manual
+popovers in the top layer: authored `html` or `body` transforms, filters and
+containment cannot move or clip them while leaving the document visible.
+Their `position: fixed` boxes repeat on every page without modifying authored
+ancestor styles. A browser without this placement API refuses a marked export
+with a visible error rather than printing a suppressible stamp. `{year}` is
+computed at export time.
 
 **The export imposes no page geometry.** The document's own `@page` — or,
 absent one, the print dialog — decides size and margins; `@page` cascades by

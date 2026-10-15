@@ -2,7 +2,7 @@
 // The export stamp has to be unsuppressable, and this is what proves it (SPEC §20).
 
 import { describe, expect, it } from "vitest";
-import { LOCKED_PROPERTIES, buildPrintHtml, scrubActiveContent } from "./pdf";
+import { LOCKED_PROPERTIES, activatePrintMarks, buildPrintHtml, scrubActiveContent } from "./pdf";
 import { PRINT_FOOTER_CLASS, PRINT_MARK_CLASS } from "../brand/dom";
 import type { Marking } from "../types";
 
@@ -94,7 +94,7 @@ describe("the export stamp", () => {
 
   it("locks independent transforms, masks, blending and motion paths to their visible values", () => {
     const out = parse(buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING }));
-    const expected = { scale: "1", translate: "none", "offset-path": "none", "mask-image": "none", "mix-blend-mode": "normal" };
+    const expected = { rotate: "none", scale: "1", translate: "none", "offset-path": "none", "mask-image": "none", "mix-blend-mode": "normal" };
     for (const className of [PRINT_MARK_CLASS, PRINT_FOOTER_CLASS]) {
       const el = out.querySelector(`.${className}`) as HTMLElement;
       for (const [property, value] of Object.entries(expected)) {
@@ -106,9 +106,11 @@ describe("the export stamp", () => {
 
   it("repeats on every page, and sits above everything", () => {
     const out = parse(buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING }));
-    const el = out.querySelector(`.${PRINT_MARK_CLASS}`) as HTMLElement;
-    expect(el.style.getPropertyValue("position")).toBe("fixed");
-    expect(Number(el.style.getPropertyValue("z-index"))).toBeGreaterThan(2000000000);
+    for (const className of [PRINT_MARK_CLASS, PRINT_FOOTER_CLASS]) {
+      const el = out.querySelector(`.${className}`) as HTMLElement;
+      expect(el.style.getPropertyValue("position")).toBe("fixed");
+      expect(Number(el.style.getPropertyValue("z-index"))).toBeGreaterThan(2000000000);
+    }
   });
 
   it("writes the text as textContent, never as markup", () => {
@@ -224,5 +226,36 @@ describe("page geometry", () => {
     expect(children[0].className).toBe(PRINT_MARK_CLASS);
     expect(children[1].className).toBe(PRINT_FOOTER_CLASS);
     expect(children.at(-1)?.tagName).toBe("SECTION");
+  });
+});
+
+
+describe("ancestor-independent print marks", () => {
+  it("promotes each generated stamp to the top layer without changing authored ancestors", () => {
+    const out = parse(buildPrintHtml(makeDoc('<main style="transform:translateY(4px)">authored</main>', '<style>body{transform:translateZ(0)}</style>'), { marking: MARKING }));
+    const authored = out.querySelector("main")!.outerHTML;
+    const called: string[] = [];
+    for (const el of out.querySelectorAll<HTMLElement>(`.${PRINT_MARK_CLASS}, .${PRINT_FOOTER_CLASS}`)) {
+      expect(el.getAttribute("popover")).toBe("manual");
+      Object.defineProperty(el, "showPopover", { value: () => called.push(el.className) });
+    }
+    activatePrintMarks(out);
+    expect(called).toEqual([PRINT_MARK_CLASS, PRINT_FOOTER_CLASS]);
+    expect(out.querySelector("main")!.outerHTML).toBe(authored);
+    expect(out.querySelector("style")!.textContent).toBe("body{transform:translateZ(0)}");
+  });
+
+  it("refuses a marked print when top-layer isolation is unavailable, while unmarked prints need none", () => {
+    const marked = parse(buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING }));
+    for (const el of marked.querySelectorAll(`.${PRINT_MARK_CLASS}, .${PRINT_FOOTER_CLASS}`)) Object.defineProperty(el, "showPopover", { value: undefined });
+    expect(() => activatePrintMarks(marked)).toThrow("cannot safely print export markings");
+    expect(() => activatePrintMarks(parse(buildPrintHtml(makeDoc("<p>x</p>"))))).not.toThrow();
+  });
+
+  it("keeps the authored page geometry and strips live decoration before stamping", () => {
+    const out = parse(buildPrintHtml(makeDoc('<p>A <mark class="bshd-hl" data-bshd-ann="thread">passage</mark></p>', '<style>@page { size: 200mm 120mm; margin: 9mm }</style>'), { marking: MARKING }));
+    expect(out.querySelectorAll("style")).toHaveLength(1);
+    expect(out.querySelector("style")!.textContent).toBe("@page { size: 200mm 120mm; margin: 9mm }");
+    expect(out.querySelector("p")!.innerHTML).toBe("A passage");
   });
 });

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep print markings visible above authored ancestor transforms, filters and containment, and lock independent rotation. Expand export coverage for page geometry, both print shortcuts, decoration, browser print cleanup, pagination and every chrome surface, with directional regression controls.
+
 - Cover withdrawal and remint change-feed events, current-content deduplication and trust, and pinned version menus with directional E2E controls; limit report claims to the DOM and final-state evidence actually observed.
 
 - Strengthen change-feed coverage with a real tied page boundary, saved publish and fork cursors, unseen events before writes, generated-note and page-local reply checks, and existing-draft privacy. Classify evidenced emulator timeouts without suppressing extra events, and add directional regression controls.
