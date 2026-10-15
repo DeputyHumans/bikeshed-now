@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Retain bounded fresh-document attempts for natural review, publish and feedback-trigger races; assert every attempt, and distinguish refused local review commands from legitimate remote-merge autosaves.
+
 - Validate the live epoch as reserved access-mirror metadata in sharing concurrency snapshots, while continuing to reject malformed grants and retain unknown keys for membership comparison.
 
 - Match affected concurrency scenarios to their actual expanded result identities without losing the recorded peer count or trial; reject contradictory suffix metadata and unrelated scenarios.

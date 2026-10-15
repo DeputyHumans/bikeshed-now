@@ -154,8 +154,9 @@ import { publish, readFixture, updateUpload } from "../../lib/seed.mjs";
 import { shareMany } from "../../lib/grant.mjs";
 import { grantEditors } from "../../lib/live.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
-import { settleStill } from "../../lib/assert.mjs";
+import { eventually, settleStill } from "../../lib/assert.mjs";
 import { assertBrowserFeedback } from "../../lib/feedback-oracles.mjs";
+import { naturalRaceAttempts } from "../../lib/review-race.mjs";
 import { requireConclusive, syncHttp } from "../../lib/sync.mjs";
 import { gates, holdCalls } from "../../lib/gates.mjs";
 import { ACCEPT, DEFAULT_PROTOCOL, parseMcpBody, toolOutcome } from "../../lib/mcp.mjs";
@@ -165,8 +166,8 @@ import { clientFirestore, firestoreOrigin, toFields } from "../../lib/firestore-
 import { anchorIn, autoId, commentData, commentPath, webAnnotationWrite, webReply, webResolve, webThread } from "../../lib/web.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { measure } from "../../lib/evidence.mjs";
-import { staticWarmUrl } from "../../lib/workers.mjs";
-import { FIRESTORE_TRIGGERS, caseFunctionRuns } from "../../lib/logs.mjs";
+import { admitWorkers, staticWarmUrl } from "../../lib/workers.mjs";
+import { FIRESTORE_TRIGGERS, caseFunctionRuns, logMark } from "../../lib/logs.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -700,10 +701,35 @@ const commitHeldBack = (a) => a.isError && (OPEN_RE.test(a.text) || PENDING_RE.t
 const uploadAnswer = (r) => ({ who: "owner", what: "POST /publish?update=", status: r.status, isError: r.status !== 200, text: r.status === 200 ? "published" : String(r.json?.error ?? r.status), json: r.json ?? null });
 const landedBy = (state) => Object.fromEntries(state.versions.map((v) => [v, state.threads.filter((t) => t.version === v).map((t) => `${t.kind[0]}${t.channel === "web" ? "w" : ""}${t.open ? "" : "x"}`).join("")]));
 
-/** C14 SYNC-T against commitDraft: the work (its judges read it). */
+/** Keep each attempt's artifacts separate; measurements also survive a passing case's evidence cleanup. */
+function attemptContext(ctx, attempt) {
+  return { ...ctx, step: text => ctx.step(`attempt ${attempt}: ${text}`), ev: { ...ctx.ev,
+    json: (name, value) => ctx.ev.json(`attempt-${attempt}-${name}`, value),
+    text: (name, value) => ctx.ev.text(`attempt-${attempt}-${name}`, value) } };
+}
+
+/** C14 SYNC-T against commitDraft: bounded fresh documents, never a held request or altered transport. */
 async function c14SyncWork(ctx) {
+  const result = await naturalRaceAttempts({
+    run: async attempt => {
+      const scoped = attemptContext(ctx, attempt);
+      await c14SyncAttempt(scoped);
+      const obs = observed.get(keyOf("C14 SYNC-T", ctx));
+      return { achieved: obs.state.published, diagnostic: obs.state };
+    },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref: "C14 SYNC-T", naturalAttempts: attempts }); },
+  });
+  ctx.step(`natural publish window: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
+}
+
+async function c14SyncAttempt(ctx) {
   await working(ctx, "C14 SYNC-T", async (obs) => {
     const s = await c14Stage(ctx, "C14 race", { web: true });
+    if (ctx.target.kind === "local") {
+      await admitWorkers(ctx, { requests: ctx.n + 1, what: "C14 feedback and publisher workers" });
+      await Promise.all([...s.feedback, s.publisher].map(agent => agent.mcp.initialize()));
+      ctx.step("feedback and publisher workers answered initialization before the unchanged simultaneous request burst");
+    }
     obs.stage = "staged";
     const calls = numbered([
       ...s.feedback.map((a, i) => (i % 2 === 0 ? tool(a, "add_comment", commentArgs(s, i + 1, a.name)) : tool(a, "suggest_edit", suggestArgs(s, i + 1, a.name)))),
@@ -737,6 +763,9 @@ async function c14SyncWork(ctx) {
       assert.ok(state.threads.some((t) => t.version === "v1" && t.open), "C14: a commit refused for open feedback had open feedback on v1 to see");
     }
     assertNoneLeftBehind(state, { pick: SUGGESTION, what: "suggestions, SPEC §22: never left behind on a version nobody reads" });
+    // Judge every attempt before another may replace its observation.
+    if (published) assertNoneLeftBehind(state, { pick: AGENT_COMMENT, what: "add_comment threads (S12)" });
+    assertBrowserFeedback(state, feedback);
   });
 }
 
@@ -1278,7 +1307,37 @@ async function settleStorm(ctx, docId, cursor0, t0, want) {
  * every account with notifications off and each grant through the operator
  * script (scripts/set-access.mjs: no email, the production path), no I11.
  */
+async function warmCommentTriggers(ctx) {
+  if (ctx.target.kind !== "local") return;
+  await admitWorkers(ctx, { requests: ctx.n, what: "C15 comment trigger warm-up" });
+  const d = await ownerDoc(ctx, "C15 trigger warm-up"), web = await webOf(ctx, d.owner, "warmup-firestore");
+  const since = logMark({ target: ctx.target });
+  await Promise.all(Array.from({ length: ctx.n }, (_, i) => webThread(web.fs, d.owner.account,
+    { docId: d.docId, versionId: "v1", anchor: anchorOf(i + 1), body: `warm-up ${i + 1}` })));
+  const runs = await eventually(() => {
+    const value = caseFunctionRuns(ctx, { since });
+    return value && (value.runs.onCommentCreated ?? 0) >= ctx.n && !(value.open.onCommentCreated > 0) ? value : false;
+  }, { timeout: LOG_MS, interval: 200, message: "isolated comment warm-up triggers finished before the storm" });
+  ctx.ev.json("trigger-warmup", runs);
+  record(ctx, { ref: "C15 trigger warm-up", triggerRuns: runs });
+}
+
 async function c15Storm(ctx, { ref, email }) {
+  if (!email) return c15StormAttempt(ctx, { ref, email });
+  await warmCommentTriggers(ctx);
+  const result = await naturalRaceAttempts({
+    run: async attempt => {
+      await c15StormAttempt({ ...attemptContext(ctx, attempt), logSince: logMark({ target: ctx.target }) }, { ref, email });
+      const obs = observed.get(keyOf(ref, ctx));
+      return { achieved: (obs.i11.triggerRuns?.peak.onCommentCreated ?? 0) >= 2,
+        diagnostic: { triggerRuns: obs.i11.triggerRuns, messages: obs.i11.messages, eligible: obs.i11.eligible } };
+    },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref, naturalAttempts: attempts }); },
+  });
+  ctx.step(`natural trigger overlap: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
+}
+
+async function c15StormAttempt(ctx, { ref, email }) {
   await working(ctx, ref, async (obs) => {
     const n = ctx.n;
     const tag = rand4();
@@ -1331,6 +1390,10 @@ async function c15Storm(ctx, { ref, email }) {
       },
       { what: "C15 setup events", key: (v) => (v.ready ? JSON.stringify(v.counts) : `not ready at read ${v.read}: ${JSON.stringify(v.counts)}`), quietMs: SETUP_QUIET_MS, deadlineMs: LOG_MS, step: stepOf(ctx) },
     );
+    if (email) await eventually(() => {
+      const runs = caseFunctionRuns(ctx);
+      return runs && (runs.runs.onCommentCreated ?? 0) >= 1 && !(runs.open.onCommentCreated > 0);
+    }, { timeout: LOG_MS, interval: 200, message: "T0's setup comment trigger finished before the measured storm" });
     let cursor0 = null;
     for (let since = "all"; ; ) {
       const head = await poller.ok("get_changes", { id: docId, since });
@@ -1349,6 +1412,7 @@ async function c15Storm(ctx, { ref, email }) {
         storm.push(webReplyCall(a.name, partWeb[i].fs, parts[i].account, partWeb[i].tok, { docId, annId: t0, body: `C15 ${tag}: ${a.name} replies in T0` }));
         storm.push(tool(a, "suggest_edit", { id: docId, exact: exactOf(20 + i + 1), replacement: `Paragraph ${20 + i + 1} (${tag} ${a.name}).` }));
       }
+      const stormSince = ctx.target.kind === "local" ? logMark({ target: ctx.target }) : null;
       const stormFired = await fireAtOnce(ctx, numbered(storm), "storm");
       obs.stage = "stormed";
       const stormOdd = stormFired.answers.filter((a) => (a.what === "web reply" ? a.isError : !madeOn(a, "v1")));
@@ -1373,7 +1437,7 @@ async function c15Storm(ctx, { ref, email }) {
       const suggestions = anns.filter((a) => a.data.suggestion?.state === "pending");
       const t = await flipNotesOf(docId, t0);
       const flipRows = settled.rows.filter(isFlipOn(t0));
-      const triggerRuns = caseFunctionRuns(ctx);
+      const triggerRuns = caseFunctionRuns(ctx, { since: stormSince });
       ctx.ev.json("function-runs", triggerRuns);
       ctx.step(runsLine(triggerRuns));
       record(ctx, { ref, race: stormFired.race, threads: threads.length, suggestions: suggestions.length, t0Human: t.human, notes: t.notes, flips: flipRows.length, rounds: rounds.map((r) => ({ round: r.round, flips: r.flips, types: r.types, notes: r.notes })), polls: feed.polls.length, feed: feed.events.length, log: settled.counts, waitedOut: settled.waitedOut, triggerRuns });
@@ -1415,7 +1479,7 @@ async function c15Storm(ctx, { ref, email }) {
       ctx.ev.json("mail", mail);
       ctx.step(`notices: ${messages.length} message(s) about “${title}”${mail.settled ? `; every eligible one came and the mailboxes held still (${Math.round(mail.waitedMs / 1000)} s)` : `; a second notice reached ${mail.twice.map((x) => `${x.to} (${x.kind} ×${x.n})`).join(", ")}: I11 judges it`}`);
       // The runs that decided the notices: read after they were all sent.
-      const decided = caseFunctionRuns(ctx);
+      const decided = caseFunctionRuns(ctx, { since: stormSince });
       ctx.ev.json("function-runs-at-mail", decided);
       obs.i11 = { messages, eligible, triggerRuns: decided };
       obs.stage = "measured I11";
@@ -1445,6 +1509,7 @@ scenario("C15 I11 race judge: the storm's notices were decided by onCommentCreat
   n: N,
   timeoutMs: JUDGE_MS,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C15", ctx))) await c15Storm(ctx, { ref: "C15", email: true });
   const m = observation(ctx, "C15", "i11");
   const runs = m.triggerRuns;
   if (!runs) ctx.inconclusive("the case's window of emulators.log was not readable, so whether any two onCommentCreated runs overlapped is unknown");
