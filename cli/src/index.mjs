@@ -1027,7 +1027,6 @@ async function open(flags, [ref]) {
  * still be three round trips per keystroke-pause.
  */
 async function watchFile(file, run) {
-  console.log(`watching ${basename(file)} — ctrl-C to stop`);
   let timer = null;
   watch(file, () => {
     if (timer) clearTimeout(timer);
@@ -1035,6 +1034,9 @@ async function watchFile(file, run) {
       run().catch((e) => console.error(`error: ${e.message}`));
     }, 250);
   });
+  // Status belongs on stderr; stdout may be a stream of --json results.
+  // Announce readiness after registering the watcher so the next save is seen.
+  console.error(`watching ${basename(file)} — ctrl-C to stop`);
   await new Promise(() => {}); // until interrupted
 }
 

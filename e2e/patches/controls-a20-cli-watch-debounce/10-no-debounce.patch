@@ -1,8 +1,8 @@
 --- a/cli/src/index.mjs
 +++ b/cli/src/index.mjs
-@@ -1030,10 +1030,7 @@
-   console.log(`watching ${basename(file)} — ctrl-C to stop`);
-   let timer = null;
+@@ -1029,8 +1029,4 @@
+ async function watchFile(file, run) {
+-  let timer = null;
    watch(file, () => {
 -    if (timer) clearTimeout(timer);
 -    timer = setTimeout(() => {
@@ -10,5 +10,3 @@
 -    }, 250);
 +    run().catch((e) => console.error(`error: ${e.message}`));
    });
-   await new Promise(() => {}); // until interrupted
- }

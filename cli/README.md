@@ -113,6 +113,9 @@ bikeshed comments 'https://bikeshed.now/d/build-estimate?k=…'
 `bikeshed --help` lists the rest — listing documents, folders, and installing the
 agent skills a deployment serves.
 
+With `publish --watch --json` or `update --watch --json`, stdout contains one
+JSON result per completed upload. Watch status and errors go to stderr.
+
 ## Forking
 
 To revise a document you can read but do not own, fork it. You get your own

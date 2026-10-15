@@ -27,11 +27,8 @@
  * are known, so a later act on them passes the production guard and
  * quarantine finds them.
  *
- * Three cases are known to fail today, each with its own defect id, and each
- * prints human text on stdout under --json. They do not rest on the same text:
- *   - X-a20-cli-3, `publish --watch --json` (class P): SPEC §19 spec.md:2257-2260
- *     has publish send its notices to stderr, "which keeps `--json` output
- *     parseable", and the watch's notice goes to stdout between its results.
+ * The watch-output regression is asserted as a normal case. Two remaining
+ * cases retain their SPEC-question tags for human text on stdout under --json:
  *   - X-a20-cli-1, `open --json`, and X-a20-cli-2, `login --paste --json`
  *     (class Q, a SPEC QUESTION): SPEC §19 spec.md:2231 says only "Every
  *     command takes `--json`." It never says what either prints under it, and
@@ -1193,8 +1190,8 @@ async function watchBursts(o) {
   const w = await spawnCli(target, args, { token: o.token, home, maxMs: WATCH_MAX_MS });
   let watching = false;
   try {
-    // The CLI says it is watching after the first publish; it says so on stdout
-    // today (X-a20-cli-3), so either stream counts.
+    // The readiness precondition accepts either stream, so a regressed notice
+    // reaches the stdout oracle instead of making the watch look absent.
     await eventually(() => w.exited !== null || /watching watched\.html/.test(w.stdout + w.stderr), { timeout: 180_000, interval: 100, message: "the first publish, then the watch" });
     watching = w.exited === null;
     if (watching) {
@@ -1256,30 +1253,13 @@ scenario(NAMES.s, { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnStackTimeout:
 });
 
 /**
- * X-a20-cli-3 is a SPEC violation (class P). SPEC §19 spec.md:2257-2260:
- * "`publish --id <id>` asks for the docId. When the deployment answers with a
- * different one, because the id was taken or because a deployment too old to
- * know the parameter ignored it, the CLI says so on stderr, which keeps
- * `--json` output parseable." So publish sends its notices to stderr to keep
- * its --json output parseable. `publish --watch` is publish (spec.md:2230,
- * "plus `publish --watch`"), and it prints one JSON result per publish
- * (spec.md:2245-2247 says what publish --json prints). Its notice "watching
- * <file> — ctrl-C to stop" goes to stdout, between the first result and the
- * next (cli/src/index.mjs:1030, watchFile's console.log, whatever --json
- * says). That breaks exactly the property the SPEC sentence keeps. The CLI's
- * own --id notice is on stderr "so `--json` stays parseable"
- * (cli/src/index.mjs:458-462).
- *
- * The harm: a consumer that reads the stream of results from `publish --watch
- * --json` meets a line that is not JSON after the first result.
- *
- * Only the oracle can make this case a TODO. That a result printed and that
- * the watch ran are preconditions: a watch that never started, or exited
- * after its first publish, prints no notice and would otherwise read as
- * "passed unexpectedly".
+ * Publish notices go to stderr to preserve the machine-readable result stream
+ * (SPEC §19). The watch remains alive and produces a real result before this
+ * assertion: a process that exited before watching cannot pass by omission.
+ * controls-a20-watch-json restores the old stdout notice.
  */
 // The same watch as A20.7s (its background phase runs once, for both cases).
-scenario(NAMES.t, { tiers: BOTH, defect: "X-a20-cli-3", timeoutMs: 600_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.t, { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const { bg } = await setup(ctx, "s");
   const { docs, stray } = jsonStream(bg.stdout);
   // Its oracle is the text between results: once one result printed, a later cut-off leaves it judged.
@@ -1289,9 +1269,7 @@ scenario(NAMES.t, { tiers: BOTH, defect: "X-a20-cli-3", timeoutMs: 600_000, inco
   assert.deepEqual(
     stray,
     [],
-    `X-a20-cli-3 (class P): publish --watch --json wrote ${JSON.stringify(stray)} on stdout between its JSON results. ` +
-      "SPEC §19 spec.md:2259-2260: the CLI says so on stderr, \"which keeps `--json` output parseable\" (publish's notices; publish --watch is publish, spec.md:2230). " +
-      "The watch's notice is printed on stdout (cli/src/index.mjs:1030)",
+    `X-a20-cli-3: publish --watch --json wrote ${JSON.stringify(stray)} outside its JSON results (SPEC §19: notices belong on stderr)`,
   );
 });
 

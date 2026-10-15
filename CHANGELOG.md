@@ -110,6 +110,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Tests
 
+- Spawned publish and update watchers verify that both JSON results stay on
+  stdout while the readiness notice goes to stderr after registration.
+
 - Framing controls apply to the stack's expanded Firebase configuration, and
   the grant-refusal case imports its HTTP-answer classifier.
 
