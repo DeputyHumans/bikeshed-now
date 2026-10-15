@@ -110,6 +110,29 @@ describe("saving on the way out of the editor", () => {
     view.unmount();
   });
 
+  it("an old Done deadline cannot change the replacement editing session", async () => {
+    let release!: () => void;
+    saveDraft.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({}); }));
+    const assets = { current: null };
+    const first = new DOMParser().parseFromString("<p>Old session</p>", "text/html");
+    const replacement = new DOMParser().parseFromString("<p>Replacement session</p>", "text/html");
+    const view = renderHook(({ doc, epoch }) => useInlineEditor({ mode: EDITING, doc, epoch, docId: "d1", authoredAssets: assets, onStale: () => {} }),
+      { initialProps: { doc: first, epoch: 1 } });
+    act(() => first.dispatchEvent(new Event("input", { bubbles: true })));
+    let oldDone!: Promise<boolean>;
+    act(() => { oldDone = view.result.current.flushUnsaved(); });
+    view.rerender({ doc: replacement, epoch: 2 });
+    await act(async () => { expect(await view.result.current.flushUnsaved()).toBe(true); });
+    expect(view.result.current.saveState).toBe("saved");
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(view.result.current.saveState, "an expired old Done must not overwrite the replacement session").toBe("saved");
+      expect(view.result.current.saveError).toBeNull();
+      expect(replacement.body.textContent).toBe("Replacement session");
+      expect(await oldDone).toBe(false);
+    } finally { release(); await act(() => oldDone); view.unmount(); }
+  });
+
   it("a remote edit during delivery is saved before Done leaves", async () => {
     let release!: () => void;
     const flushShared = vi.fn().mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; })).mockResolvedValue(undefined);

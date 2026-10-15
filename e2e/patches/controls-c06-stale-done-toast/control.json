@@ -1,0 +1,13 @@
+{
+  "oracle": "An old document Done completion cannot display an error toast or close a replacement editor.",
+  "what": "Ignore editor identity when a previously started Done operation completes.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 a timed-out Done from another document cannot change the replacement editor or report its failure there [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C6 stale Done: an old completion must not report its error in the replacement document"
+  }
+}

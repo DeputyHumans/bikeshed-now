@@ -1803,7 +1803,9 @@ updates to be acknowledged before leaving; a refused append or a 10-second
 acknowledgment deadline keeps the editor open with an explicit retry message.
 Remote edits received during that wait are saved before leaving too. The entire
 Done attempt has a 30-second deadline, including continuously arriving remote
-edits; expiry keeps the editor open and lets any in-flight save finish safely. Normal
+edits; expiry keeps the editor open and lets any in-flight save finish safely. Its
+deadline and completion apply only to the editing session that started it; changing
+documents cannot transfer an old save error or close the replacement editor. Normal
 navigation gives pending updates the same bounded drain before disposing the
 connection. Closing a page with pending live updates requests the browser's
 unsaved-work warning even when the HTTP draft save has succeeded; forced closure

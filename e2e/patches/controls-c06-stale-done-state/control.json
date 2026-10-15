@@ -1,0 +1,13 @@
+{
+  "oracle": "A pending Done in one document cannot replace the saved state of the next document after SPA navigation.",
+  "what": "Allow an old Done deadline to write save state into a replacement editing session.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 a timed-out Done from another document cannot change the replacement editor or report its failure there [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C6 stale Done: an old deadline must not replace the new session"
+  }
+}

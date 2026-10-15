@@ -653,8 +653,13 @@ export function DocViewer() {
     onFile: openUpload,
   });
 
+  const activeEditor = useRef({ origin: editingOrigin, doc: frame.doc });
+  activeEditor.current = { origin: editingOrigin, doc: frame.doc };
   const stopEditing = useCallback(async () => {
-    if (!(await editor.flushUnsaved())) {
+    const started = activeEditor.current;
+    const saved = await editor.flushUnsaved();
+    if (activeEditor.current.origin !== started.origin || activeEditor.current.doc !== started.doc) return;
+    if (!saved) {
       toast.error("Your changes are not fully saved and shared. Keep this editor open and try again.");
       return;
     }

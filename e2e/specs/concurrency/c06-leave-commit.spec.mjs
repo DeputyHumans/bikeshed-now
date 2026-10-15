@@ -173,7 +173,7 @@ import { closeAdmin, emailKey, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
-import { readFixture } from "../../lib/seed.mjs";
+import { publish, readFixture } from "../../lib/seed.mjs";
 import { operatorSetAccess, unshare } from "../../lib/grant.mjs";
 import { mintToken } from "../../lib/session.mjs";
 import { bodyAttrDiff, diffFingerprint, fingerprint, KNOWN_OWN_VALUES, parseAndRun } from "../../lib/bytes.mjs";
@@ -958,6 +958,47 @@ async function c6Serial(ctx, n, { latencyMs = 0 } = {}) {
 
 scenario("C6-serial positive control: the same typing and Done inside the debounce one editor after another, then the agent's commit_draft: nobody stays in the editor, the live log is empty, the version is clean and holds every token once (I2) and every peer's body (I5), and status/{d}/peers empties within 5 s (I12)", { tiers: BOTH, n: NS, trials: CONTROL_TRIALS, timeoutMs: SERIAL_MS, ...LIVE }, async (ctx) => {
   await c6Serial(ctx, ctx.n);
+});
+
+scenario("C6 a timed-out Done from another document cannot change the replacement editor or report its failure there", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users, owner } = await join(ctx, { n: 2, title: "C6 old Done session" });
+  const [writer, peer] = users;
+  const next = await publish(owner.http, { fixture: FIXTURE, name: "replacement-session", title: "C6 replacement editing session" });
+  const tokens = tokenLog(ctx.target.runId);
+  const oldToken = tokens.next(writer.name, paragraph(0));
+  const newToken = tokens.next(writer.name, paragraph(1));
+  const held = holdRequests(writer.page, isDraftPost, 1, { method: "POST", timeoutMs: 15_000 });
+  try {
+    await held.installed;
+    await typeTokens(writer, paragraph(0), [oldToken]);
+    const since = writer.toastMark();
+    const started = Date.now();
+    await clickDone(writer);
+    await held.held;
+    // Keep this JavaScript realm alive: a real SPA navigation reuses the
+    // viewer instance, unlike page.goto/reload which would kill the old timer.
+    await writer.page.evaluate((id) => {
+      history.pushState({}, "", `/d/${encodeURIComponent(id)}`);
+      dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+    }, next.docId);
+    await writer.waitForFrame({ timeout: 30_000, match: new RegExp(`/content/(?:[^/]+/)?${next.docId}/`) });
+    await writer.enterEdit({ waitShared: true });
+    await writer.typeAndAutosave(idSelector(paragraph(1)), newToken, { delay: KEY_DELAY_MS, at: "end", timeout: 30_000 });
+    precondition(Date.now() - started < 28_000, "the replacement editor saves before the old Done deadline");
+    await sleep(Math.max(0, started + 31_000 - Date.now()));
+    assert.equal(await writer.saveState(), "saved", "C6 stale Done: an old deadline must not replace the new session's Saved state");
+    assert.deepEqual(writer.toastsSince(since).filter((toast) => toast.kind === "error" && /not fully saved and shared/.test(toast.text)), [],
+      "C6 stale Done: an old completion must not report its error in the replacement document");
+    const released = await held.release();
+    assert.equal(released.records[0].status, 200, "C6 stale Done: the old save may finish after its session is gone");
+    assert.equal(await writer.page.getByRole("toolbar", { name: "Formatting" }).count(), 1, "C6 stale Done: an old completion must not close the replacement editor");
+    const body = await (await writer.frame()).evaluate(() => document.body.textContent);
+    assert.ok(body.includes(newToken) && !body.includes(oldToken), "C6 stale Done: the replacement keeps its own text");
+    assert.ok((await readDraft(owner, next.docId)).includes(newToken), "C6 stale Done: the replacement's save remains durable");
+    assert.ok((await readDraft(owner, docId)).includes(oldToken), "C6 stale Done: the original saved typing remains durable too");
+    await clickDone(writer); await editorClosed(writer);
+    await clickDone(peer); await editorClosed(peer);
+  } finally { await held.unroute(); }
 });
 
 scenario("C6 Done deadline preserves the editor while a durable save is held and permits retry after its answer", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {

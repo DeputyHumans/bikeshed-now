@@ -252,8 +252,8 @@ export function useInlineEditor(options: {
     /** Save first, then deliver queued shared updates before the connection is torn down. */
     flushUnsaved: useCallback(async () => {
       let expired = false;
+      const currentSession = session.current;
       const attempt = async () => {
-        const currentSession = session.current;
         do {
           if (unsaved.current || inFlight.current?.session === currentSession) {
             if (!(await flush())) return false;
@@ -281,8 +281,10 @@ export function useInlineEditor(options: {
       const bounded = new Promise<boolean>((resolve) => {
         timeout = setTimeout(() => {
           expired = true;
-          setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
-          setSaveState("error");
+          if (session.current === currentSession) {
+            setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
+            setSaveState("error");
+          }
           resolve(false);
         }, DONE_TIMEOUT_MS);
       });
