@@ -5545,6 +5545,13 @@ The functional areas share long-running stacks. On one:
 
 ## Known weaknesses
 
+The [local repair campaign](../docs/development/e2e-campaign.md) now preserves
+these findings in [`campaign.json`](campaign.json), including the source
+observations, overlap mappings, historical closure reports, product suspects
+and the full execution matrix. `node tools/check-e2e-campaign.mjs` is the
+strict completion gate; `--validate` checks structure only. The counts below
+are the imported baseline, not a claim about current fixes.
+
 The suite landed **concurrency first**. Completeness critics read every
 functional spec against the plan's catalogue and the control ledger, and
 the maintainer chose to spend the time on C1–C23 instead of filling what
@@ -5626,8 +5633,8 @@ The `storage-preconditions` cases (Capabilities) likewise need
 refused in this build.
 
 **A `defect:` case is not a pass.** Each one is a known product defect, or a
-SPEC question or report-and-ask item under triage. The list is tracked
-outside this repository. Its TODO ("failed as expected") means the defect is
+SPEC question or report-and-ask item under triage. The list and its unresolved decisions are tracked in
+[`campaign.json`](campaign.json). Its TODO ("failed as expected") means the defect is
 still there, and "passed unexpectedly" means it may have been fixed and wants
 a look. `run` exits 0 over both, so read `summary.md`, not the exit code,
 before saying a feature works.
