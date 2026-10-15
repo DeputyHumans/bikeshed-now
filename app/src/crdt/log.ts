@@ -69,6 +69,11 @@ export function fromBase64(value: string): Uint8Array {
  * depend on it, because an uncompacted log and a compacted one describe the
  * same document.
  */
+// Base64 characters, matching the server rule and below the SDK leaf ceiling.
+export const LOG_ENTRY_MAX = 2 * 1024 * 1024;
+export class LiveLogSizeError extends Error {
+  constructor() { super("This document is too large for live editing (2 MiB encoded update limit). Reduce its size or update it through an upload, then reopen the editor."); }
+}
 export const COMPACT_AFTER = 64;
 export const SEED_KEY = "_seed";
 
@@ -166,6 +171,7 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
     const consumed = [...seen].filter((key) => key !== SEED_KEY);
     try {
       const payload = toBase64(Y.encodeStateAsUpdate(doc));
+      if (payload.length > LOG_ENTRY_MAX) return;
       const merged = await log.append(payload);
       if (!merged) return;
       seen.add(merged); payloads.set(merged, payload);

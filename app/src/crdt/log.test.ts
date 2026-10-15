@@ -2,10 +2,13 @@
 // Two peers on one log converge, and the log does not grow forever (SPEC §6b).
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { seedFragment } from "./binding";
 import { createHash, webcrypto } from "node:crypto";
 import * as Y from "yjs";
 import { bindSync } from "./sync";
-import { COMPACT_AFTER, connect, fromBase64, toBase64, type UpdateLog } from "./log";
+import { COMPACT_AFTER, LOG_ENTRY_MAX, connect, fromBase64, toBase64, type UpdateLog } from "./log";
 
 beforeAll(() => vi.stubGlobal("crypto", webcrypto));
 afterAll(() => vi.unstubAllGlobals());
@@ -316,4 +319,37 @@ it("retains the complete log when compaction receives no append acknowledgement"
     expect(text(late)).toBe(text(doc));
     joined.destroy(); late.destroy();
   } finally { conn.destroy(); doc.destroy(); }
+});
+
+it("the large-document regression seed and a 20-editor compaction fit the bounded transport", () => {
+  const html = readFileSync(join(__dirname, "../../../e2e/fixtures/large-doc.html"), "utf8");
+  const dom = new DOMParser().parseFromString(html, "text/html"), doc = new Y.Doc();
+  seedFragment(doc.getXmlFragment("body"), dom.body);
+  const seed = toBase64(Y.encodeStateAsUpdate(doc));
+  expect(seed.length).toBeGreaterThan(470_000);
+  expect(seed.length).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+  for (let i = 0; i < 20; i++) doc.getText("size-probe").insert(0, `editor-${i} changes`);
+  expect(toBase64(Y.encodeStateAsUpdate(doc)).length).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+  doc.destroy();
+});
+it("the client bound matches the generated security rule's accepted payload length", () => {
+  const rules = readFileSync(join(__dirname, "../../../database.rules.json"), "utf8");
+  expect(rules).toContain(`newData.val().length <= ${LOG_ENTRY_MAX}`);
+});
+it("skips oversized compaction without dropping any seed or deltas, so late joiners still converge", async () => {
+  const log = makeLog(), doc = new Y.Doc(), seed = new Y.Doc();
+  seed.getText("t").insert(0, "s".repeat(1_400_000));
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(seed));
+  const append = vi.spyOn(log, "append"), remove = vi.spyOn(log, "remove");
+  try {
+    doc.getText("t").insert(doc.getText("t").length, "d".repeat(300_000)); await settle();
+    for (let i = 0; i < COMPACT_AFTER; i++) { doc.getText("t").insert(doc.getText("t").length, "x"); await settle(); }
+    expect(toBase64(Y.encodeStateAsUpdate(doc)).length).toBeGreaterThan(LOG_ENTRY_MAX);
+    expect(Math.max(...append.mock.calls.map(([payload]) => payload.length))).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+    expect(remove).not.toHaveBeenCalled();
+    expect(log.entries.has("_seed")).toBe(true);
+    const late = new Y.Doc(), joined = connect(late, log); await joined.initialize();
+    expect(text(late)).toBe(text(doc));
+    joined.destroy(); late.destroy();
+  } finally { conn.destroy(); doc.destroy(); seed.destroy(); }
 });

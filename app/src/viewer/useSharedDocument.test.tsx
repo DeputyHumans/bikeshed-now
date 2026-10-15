@@ -4,7 +4,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
-import type { UpdateLog } from "../crdt/log";
+import { LiveLogSizeError, type UpdateLog } from "../crdt/log";
 import { useSharedDocument } from "./useSharedDocument";
 
 beforeAll(() => vi.stubGlobal("crypto", webcrypto));
@@ -117,5 +117,17 @@ it("explains legacy recovery and permits solo binding only without a configured 
     await waitFor(() => expect(view.result.current.bound).toBe(true));
     expect(view.result.current).toMatchObject({ state: "off", error: null });
     expect(view.result.current.causalStamp()).toBeNull();
+  } finally { view.unmount(); }
+});
+
+it("shows an actionable size refusal and keeps an oversized document unbound", async () => {
+  transport.current = { ...memoryLog(), initialize: async () => { throw new LiveLogSizeError(); } };
+  const doc = new DOMParser().parseFromString("<p>Large authored content</p>", "text/html");
+  const view = renderHook(() => useSharedDocument(sharedOptions(doc)));
+  try {
+    await waitFor(() => expect(view.result.current.error).toMatch(/too large.*2 MiB/));
+    expect(view.result.current).toMatchObject({ bound: false, state: "off" });
+    expect(view.result.current.error).toMatch(/upload/);
+    expect(doc.body.textContent).toBe("Large authored content");
   } finally { view.unmount(); }
 });

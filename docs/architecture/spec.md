@@ -1717,15 +1717,15 @@ It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
 
 The peer list is readable at `status/{docId}/peers` by members. Shared draft
-reads at `status/{docId}/y/{liveEpoch}` require the editor mirror and its
-current epoch, just like writes: viewers
+reads at `status/{docId}/y` and its epoch children require the editor mirror: viewers
 and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
 not client-readable. A public open editor with `editAccess/*` may read and write
 `y`, but gains no access to members' peer presence. These rules apply independently
 of any UI affordance or the HTTP draft endpoint.
 
-Each epoch's parent accepts an editor's delete-only transaction while that
-session is current and the document unexpired. Its immutable `_seed` identifies
+Each epoch's parent accepts an editor's delete-only transaction while the
+document is unexpired. Non-delete entry writes require the current epoch. Its
+immutable `_seed` identifies
 the shared history; compaction preserves it. Publication and external draft
 replacement advance `liveEpoch` inside their Firestore transaction, refresh the
 access mirror, then remove only the captured old epoch. They never delete the
@@ -1739,7 +1739,12 @@ Failed append bytes stay queued, merge with subsequent local deltas, and retry
 with bounded backoff. The toolbar says Off while delivery is unacknowledged and
 Shared only once that queue drains. Destroying the session cancels its retries.
 A configured transport that refuses initialization never enables the editor or
-falls back to a solo autosave.
+falls back to a solo autosave. The encoded seed and each update are bounded at
+2,097,152 base64 characters (2 MiB), below the installed database SDK's 10 MiB
+leaf limit. An oversized seed blocks editing with the supported limit and an
+upload/reduction recovery path. This is a wire-update bound, not a promise that
+every document of a particular HTML byte size fits. An oversized compaction is
+skipped; its original seed and deltas remain available to later joiners.
 
 ### Concurrent editing
 

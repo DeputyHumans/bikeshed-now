@@ -331,8 +331,9 @@ describe("realtime database rules", () => {
 
   it("rejects an entry that is not a bounded string", async () => {
     const db = verified(env, MEMBER).database();
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/boundary"), "x".repeat(2 * 1024 * 1024)));
     await assertFails(set(ref(db, "status/doc1/y/initial/e5"), { not: "a string" }));
-    await assertFails(set(ref(db, "status/doc1/y/initial/e6"), "x".repeat(200_001)));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e6"), "x".repeat(2 * 1024 * 1024 + 1)));
   });
 
   it("the withdrawn lock node is rejected outright", async () => {

@@ -3,7 +3,7 @@
 
 import { get, onChildAdded, onValue, push, ref, runTransaction, update } from "firebase/database";
 import { rtdb } from "../firebase";
-import { SEED_KEY, type UpdateLog } from "./log";
+import { SEED_KEY, LOG_ENTRY_MAX, LiveLogSizeError, type UpdateLog } from "./log";
 
 /**
  * Shared document state rides the node presence already uses.
@@ -47,6 +47,7 @@ export function rtdbLog(docId: string, liveEpoch = "initial"): UpdateLog | null 
       }
     },
     async initialize(payload) {
+      if (payload.length > LOG_ENTRY_MAX) throw new LiveLogSizeError();
       // Every simultaneous empty-log join proposes a different Yjs identity.
       // Elect one atomically so all peers adopt the same authored structure.
       const result = await runTransaction(ref(rtdb!, `status/${docId}/y/${liveEpoch}/${SEED_KEY}`),

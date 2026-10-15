@@ -94,73 +94,14 @@
  *     Needs a stack built with --rtdb-proxy (capability rtdb-proxy); without
  *     it the C5 cases are skipped, with that reason.
  *
- * C7  A ~300 KB DOCUMENT, STAGGERED JOINS (SPEC §6b: "their edits merge and
- *     every copy converges"; §16: "edits merge, and every copy converges on
- *     the same document whatever order the updates arrive in").
- *     e2e/fixtures/large-doc.html (316,320 bytes, 600 paragraphs). Its Yjs
- *     seed, the first editor's whole document as one log entry, is 473,536
- *     base64 characters; database.rules.json allows an entry of at most
- *     200,000 (S10). The editors enter edit ONE AT A TIME, 1.5 s apart, each
- *     typing a token into its own paragraph as it arrives (peer i takes
- *     #large-<(i mod 10)+1>-<floor(i/10)+1>: sections 1–10 only, so every
- *     peer's paragraph is inside the size control's cut at every N); then p1
- *     and pN each type a probe. Oracles, in this order:
- *       - every peer shown as "Shared" receives both probes within the plan's
- *         settle deadline (I13's liveness; latency is recorded, not judged);
- *       - the session settles (I1);
- *       - every token once and whole on every peer and in GET /draft (I2);
- *       - the sentinel once and v1's top-level count on every peer (I3).
- *     What the live log holds (entry count, the longest entry) and each
- *     page's permission_denied lines are recorded for the mechanism.
- *     S10 has two fixes (the plan): Tier 1 catches the refused append and
- *     drops visibly to "editing alone" (no ask); Tier 2 chunks the seed. The
- *     convergence case above stays TODO after Tier 1 (the copies still
- *     diverge, now visibly; its I13 then finds no Shared peer) and is Tier
- *     2's regression case. Tier 1's own regression case is:
- *       C7 not silent  the same staggered joins on the ~300 KB document,
- *                   without probes: no peer shows "Shared" while the live log
- *                   refuses its writes (each page's "set at
- *                   /status/<d>/y/… failed: permission_denied" lines, which
- *                   the database SDK logs whether or not the app catches the
- *                   refusal), judged once those counts are still for 3 s.
- *                   Known defect S10 (Tier 1).
- *     In both ~300 KB cases a peer enters edit without waiting for "Shared"
- *     (until joining ends): after Tier 1 a peer that drops to editing alone
- *     is the fix, not a failed sync precondition.
- *       C7 size control   the same staggered joins on the first 10 sections
- *                   of the same document (79 KB; seed 118,020 characters,
- *                   under the rule): must pass.
- *       C7 not-silent size control   the not-silent judge on the same 10
- *                   sections: must pass (no write is refused).
- *       C7 serial control  the same ~300 KB document edited by one editor at
- *                   a time (enter, type, autosave, Done): every joiner sees
- *                   every earlier token, and every reader and the draft hold
- *                   them all (I2). Must pass. (Its editors show "Shared"
- *                   while their seeds are refused too, so the not-silent
- *                   judge is not applied to it: the failure is size, not
- *                   concurrency.)
- *       C7 compaction (refutation of S10's other half: "a seed OR
- *                   compaction over 200k"). The first 16 sections (a seed of
- *                   about 189k, measured live and required under 200,000).
- *                   p1 (and p2 from N=3) enter; p1 pastes a passage sized
- *                   from the measured seed so that the merged state passes
- *                   200,000 while every entry stays under it; then 6 tokens
- *                   (about 100 keystrokes, one log entry each) take the log
- *                   past log.ts COMPACT_AFTER (64), where every compaction
- *                   (Y.encodeStateAsUpdate of the whole document) is refused
- *                   and caught; the rest join late, one at a time, each
- *                   typing a token. I1, I2 (every peer and the draft), I3 and
- *                   the pasted passage once on every peer and in the draft.
- *                   The refused compactions per page, the uncaught
- *                   PERMISSION_DENIED errors (refused appends, none
- *                   expected) and the client→database bytes they cost
- *                   (through --rtdb-proxy) are recorded. No refused
- *                   compaction is INCONCLUSIVE: the case did not test what
- *                   it claims.
- *     controls-c07-seed-refused targets the size control [N=2];
- *     controls-c07-not-silent targets the not-silent size control [N=2].
- *     Known defect S10 on the ~300 KB convergence case (Tier 2) and the
- *     not-silent case (Tier 1).
+ * C7 proves the ~300 KB fixture (473,536 base64 seed characters) joins,
+ * converges and saves under the bounded 2 MiB transport. Staggered and serial
+ * joins cover existing-state adoption. The not-silent cases inspect rejected
+ * initialization without waiting for an editable body that must stay disabled.
+ * A document above the supported seed bound explains recovery and cannot edit.
+ * A merged snapshot above the bound skips compaction while keeping every seed
+ * and delta available to late joiners. Controls restore the old 200k rule,
+ * mislabel rejected initialization Shared, hide the size limit, and drop deltas.
  *
  * Positive controls run 2/1/1/1 trials at N = 2/5/10/20 rather than the
  * plan's 10/5/3/3: they show the oracle passes without the race, which needs
@@ -1046,8 +987,8 @@ scenario("C5 edge serial control: the same typing at the caret, then the deletio
 // --- C7 -------------------------------------------------------------------------------
 
 const LARGE = "large-doc.html";
-/** database.rules.json status/$docId/y/$entry: `newData.val().length <= 200000`. */
-const LOG_ENTRY_MAX = 200_000;
+/** database.rules.json status/$docId/y/$entry: `newData.val().length <= 2097152`. */
+const LOG_ENTRY_MAX = 2 * 1024 * 1024;
 const STAGGER_MS = 1_500;
 const SMALL_SECTIONS = 10;
 const C7_TIMEOUT_MS = 900_000;
@@ -1107,15 +1048,16 @@ async function liveLog(ctx, docId) {
  * ends is INCONCLUSIVE.
  */
 async function enterJoined(ctx, u, { timeout = 90_000 } = {}) {
-  try {
-    return await u.enterEdit({ waitShared: false, timeout });
-  } catch (err) {
-    const state = await u.shareState().catch(() => "unknown");
-    if (/share-state|joining|within|Timeout/i.test(String(err?.message))) {
-      ctx.inconclusive(`the sync precondition did not hold: ${u.name} never finished joining within ${timeout} ms (share state ${JSON.stringify(state)})`);
-    }
-    throw err;
-  }
+  await u.page.locator('.viewer-toolbar [aria-label="Edit"]').first().click();
+  u.inEdit = true;
+  await u.waitForFrame({ timeout, match: /\/draft\// });
+  return eventually(async () => {
+    const share = await u.shareState();
+    const frame = await u.frame();
+    const editable = await frame.evaluate(() => document.body.getAttribute("contenteditable") === "true");
+    const error = (await u.page.locator('[role="alert"]').allTextContents()).join(" ");
+    return share !== "joining" && (editable || error) ? { share, editable, error } : false;
+  }, { timeout, interval: 100, message: `${u.name} joins or shows an explicit editing refusal` });
 }
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1130,7 +1072,7 @@ const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * caught and logs only the warning). {refused, uncaught, first}.
  */
 function refusedLiveWrites(u, docId) {
-  const re = new RegExp(`(?:set|update) at /status/${escapeRe(docId)}/y\\S* failed: permission_denied`);
+  const re = new RegExp(`(?:set|update|transaction) at /status/${escapeRe(docId)}/y\\S* failed: permission_denied`);
   const lines = (u.log?.console ?? []).filter((c) => re.test(String(c.text)));
   const uncaught = (u.log?.errors ?? []).filter((e) => /PERMISSION_DENIED/.test(String(e.message))).length;
   return { refused: lines.length, uncaught, first: lines.length ? String(lines[0].text).slice(0, 200) : null };
@@ -1209,7 +1151,7 @@ async function c7Staggered(ctx, { n = ctx.n, body, title, probes = true, require
   requireIds(body, n);
   const baseline = await shapeOf(ctx, body);
   precondition(baseline.sentinels === 1, "the document has its sentinel once");
-  // Reading mode, before any entering and before joinShared's seed-in-log precondition, which S10 never meets.
+  // Start in reading mode so a rejected seed can be judged directly.
   const { docId, users, owner } = await joinShared(ctx, { n, body, title, enter: false });
   const log = tokenLog(ctx.target.runId);
   const ids = users.map((_, i) => ownParagraph(i));
@@ -1218,12 +1160,15 @@ async function c7Staggered(ctx, { n = ctx.n, body, title, probes = true, require
   for (let i = 0; i < n; i += 1) {
     const u = users[i];
     const t0 = Date.now();
-    const entered = requireShared ? await enterShared(ctx, u) : await enterJoined(ctx, u);
+    const entered = await enterJoined(ctx, u);
+    if (requireShared || probes) assert.ok(entered.share === "shared" && entered.editable, `C7 live editing refused: ${u.name} ${entered.share}: ${entered.error}`);
     const text = await frameText(await u.frame());
     const earlier = log.typed.map((t) => t.token);
     const seen = earlier.filter((t) => text.includes(t));
-    const tok = log.next(u.name, ownParagraph(i));
-    await typeProbe(u, sel(ownParagraph(i)), tok);
+    if (entered.editable) {
+      const tok = log.next(u.name, ownParagraph(i));
+      await typeProbe(u, sel(ownParagraph(i)), tok);
+    }
     joins.push({ name: u.name, joinMs: Date.now() - t0, share: entered?.share ?? null, sawEarlier: `${seen.length}/${earlier.length}`, y: await liveLog(ctx, docId) });
     if (i < n - 1) await sleep(STAGGER_MS);
   }
@@ -1260,18 +1205,9 @@ async function c7Judge(ctx, s) {
   assertInvariant(checkI3({ peers: await readI3All(s.users), baseline: s.baseline }));
 }
 
-// S10: the first editor's seed (473,536 characters) is refused by the rule's
-// 200,000; log.ts onUpdate appends with no rejection handler, so the refusal
-// is an unhandled PERMISSION_DENIED; every later joiner finds no seed in the
-// log, seeds its own copy (refused too), and shows "Shared" (useSharedDocument
-// reports it once bound) while no keystroke of anyone else can ever apply.
-// This case is S10's Tier-2 regression case (the convergence SPEC §6b and §16
-// promise): it stays TODO after the Tier-1 fix, where the copies still
-// diverge, visibly, and I13 finds no peer shown as Shared. Tier 1's own
-// regression case is "C7 not silent" below.
-scenario("C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)", {
+// S10 regression: the measured large seed must be supported and converge.
+scenario("C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)", {
   tiers: ["local", "prod"],
-  defect: "S10",
   n: [2, 5, 10, 20],
   timeoutMs: C7_TIMEOUT_MS,
   ...ON_STACK,
@@ -1300,11 +1236,9 @@ async function c7NotSilent(ctx, { body, title }) {
   assert.deepEqual(failures, [], `C7 not silent: ${failures.join("; ")}`);
 }
 
-// S10, Tier 1 ("catch append failures and drop visibly to editing alone",
-// no ask): today every peer's seed is refused and every peer shows "Shared".
+// A rejected initial seed must never claim Shared or enable a solo editor.
 scenario("C7 not silent: on the ~300 KB document joined in turn, no peer shows Shared while the live log refuses its writes", {
   tiers: ["local", "prod"],
-  defect: "S10",
   n: [2, 5, 10, 20],
   timeoutMs: C7_TIMEOUT_MS,
   ...ON_STACK,
@@ -1313,7 +1247,7 @@ scenario("C7 not silent: on the ~300 KB document joined in turn, no peer shows S
 });
 
 // controls-c07-not-silent targets this scenario's "[N=2]" case (its runs pass --n 2 --trials 1).
-scenario("C7 not-silent size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule): no peer shows Shared while the live log refuses its writes", {
+scenario("C7 not-silent size control: the same staggered joins on the document's first 10 sections (a seed under the 2MiB bound): no peer shows Shared while the live log refuses its writes", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1324,7 +1258,7 @@ scenario("C7 not-silent size control: the same staggered joins on the document's
 });
 
 // controls-c07-seed-refused targets this scenario's "[N=2]" case (its runs pass --n 2 --trials 1).
-scenario("C7 size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule) converge, every token once on every peer and in the draft", {
+scenario("C7 size control: the same staggered joins on the document's first 10 sections (a seed under the 2MiB bound) converge, every token once on every peer and in the draft", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1414,7 +1348,7 @@ async function fillerCounts(users, parser, draftHtml, filler) {
   return out;
 }
 
-scenario("C7 compaction over the 200k rule: a seed under the rule whose merged state passes it after typing: the refused compactions lose nothing, and every peer, late joiners included, converges with every token once (I1, I2, I3)", {
+scenario("C7 compaction over the 2MiB bound: a seed under the bound whose merged state passes it after typing: skipped compactions lose nothing, and every peer, late joiners included, converges with every token once (I1, I2, I3)", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1477,9 +1411,9 @@ scenario("C7 compaction over the 200k rule: a seed under the rule whose merged s
     const bytesUp = lat ? (await lat.stats()).stats.bytesUp - bytesBefore : null;
     const totalRefused = Object.values(refusedAfterTyping).reduce((a, r) => a + r.refused, 0);
     ctx.step(`after the typing (refusals still after ${stillMs} ms): status/${docId}/y ${typedLog.entries} entr(ies), the longest ${typedLog.longest}, ${typedLog.total} characters; refused writes ${Object.entries(refusedAfterTyping).map(([k, r]) => `${k} ×${r.refused} (uncaught ${r.uncaught})`).join(", ")}${bytesUp == null ? "" : `; ${bytesUp} bytes client→database during the typing`}`);
-    if (totalRefused === 0) ctx.inconclusive(`no compaction was refused, so this case did not test S10's compaction half: seed ${seed}, paste ${filler.length} characters, the log after the typing ${JSON.stringify(typedLog)}`);
+    assert.ok(typedLog.total > LOG_ENTRY_MAX && typedLog.entries >= COMPACT_AFTER, `C7 compaction: the oversized merged state retains its seed and deltas (${JSON.stringify(typedLog)})`);
 
-    ctx.step(`${late.map((u) => u.name).join(", ")} join late, one at a time, ${STAGGER_MS} ms apart: each enters edit after the refused compactions and types a token into its own paragraph`);
+    ctx.step(`${late.map((u) => u.name).join(", ")} join late, one at a time, ${STAGGER_MS} ms apart: each enters edit after the skipped compactions and types a token into its own paragraph`);
     const joins = [];
     for (const u of late) {
       await enterShared(ctx, u);
@@ -1507,4 +1441,18 @@ scenario("C7 compaction over the 200k rule: a seed under the rule whose merged s
     const counts = await fillerCounts(users, parser, r.text, filler);
     assert.deepEqual(Object.entries(counts).filter(([, c]) => c !== 1), [], `C7 compaction: the pasted passage is once in #${FILLER_PARAGRAPH} on every peer and in the draft (${JSON.stringify(counts)})`);
   });
+});
+
+scenario("C7 unsupported size: an encoded seed above 2MiB keeps editing disabled and explains recovery", {
+  tiers: ["local", "prod"], n: [2], trials: 1, timeoutMs: C7_TIMEOUT_MS, ...ON_STACK,
+}, async (ctx) => {
+  const body = `<!doctype html><html><body><p id="large-unsupported">${"large document ".repeat(150_000)}</p></body></html>`;
+  const { docId, users } = await joinShared(ctx, { n: ctx.n, body, title: "C7 unsupported size", enter: false });
+  for (const u of users) {
+    const entered = await enterJoined(ctx, u);
+    assert.equal(entered.editable, false, `C7 unsupported size: ${u.name} must remain unbound`);
+    assert.equal(entered.share, "off", `C7 unsupported size: ${u.name} must not claim sharing`);
+    assert.match(entered.error, /too large.*2 MiB.*upload/, `C7 unsupported size: ${u.name} needs an actionable size limit`);
+  }
+  assert.equal((await liveLog(ctx, docId)).entries, 0, "C7 unsupported size: no seed is written for an unsupported document");
 });

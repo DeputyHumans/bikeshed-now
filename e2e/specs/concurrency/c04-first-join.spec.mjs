@@ -644,7 +644,7 @@ async function releaseOneAtATime(ctx, g, users, docId) {
     const still = users.filter((x) => !order.includes(x));
     if (still.length === 0) break;
     keys ??= await waitLogged(ctx, docId);
-    await eventually(() => still.every((x) => x.log.wsFrames.received.some((f) => keys.some((key) => f.includes(key)))), {
+    await eventually(() => still.every((x) => x.log.wsFrames.received.some((f) => keys.some((key) => f.includes(key.split("/").at(-1))))), {
       timeout: 30_000, interval: 50, message: "the first seed on every still-held joiner's websocket",
     }).catch(() => ctx.inconclusive(`the sync precondition did not hold: the first seed (${keys.join(", ")}) never reached every still-held joiner's websocket within 30 s`));
     // The SDK applies a frame as it arrives; this only spaces the next release from that.

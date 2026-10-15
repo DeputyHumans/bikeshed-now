@@ -2,6 +2,7 @@
 // Atomic log retirement retains seed dependencies whenever an update races publication (SPEC §6b, §16).
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LOG_ENTRY_MAX, LiveLogSizeError } from "./log";
 import { clearLog, rtdbLog } from "./rtdb";
 
 const calls = vi.hoisted(() => ({
@@ -74,4 +75,13 @@ it("refuses legacy flat entries without mistaking nested retired epochs for them
   calls.get.mockResolvedValueOnce({ val: () => ({ retired: { old: "bytes" } }) });
   const nested = rtdbLog("d1")!; ready();
   await expect(nested.ready()).resolves.toBeUndefined();
+});
+
+it("accepts the bounded seed exactly and refuses a larger one before contacting the database", async () => {
+  calls.onValue.mockImplementation(() => vi.fn());
+  calls.transaction.mockResolvedValue({ snapshot: { val: () => "seed" } });
+  const log = rtdbLog("d1", "epoch")!;
+  await expect(log.initialize("x".repeat(LOG_ENTRY_MAX))).resolves.toBe("seed");
+  await expect(log.initialize("x".repeat(LOG_ENTRY_MAX + 1))).rejects.toBeInstanceOf(LiveLogSizeError);
+  expect(calls.transaction).toHaveBeenCalledOnce();
 });

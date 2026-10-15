@@ -22,6 +22,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Support the measured large-document live seed with a bounded 2 MiB encoded-update
+  limit, explain oversized seed refusals, and retain every delta when a merged
+  compaction is too large.
+
 - Accept an untouched empty shared document's causal history, and replay the
   delayed-save regression through its authenticated owner session.
 

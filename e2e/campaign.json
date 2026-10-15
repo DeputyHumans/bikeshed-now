@@ -9850,7 +9850,7 @@
     },
     {
       "id": "X-c01-typing-2",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G06-live-log-append-refused",
       "classification": "P",
@@ -9885,11 +9885,18 @@
           "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "status": "implemented; immutable E2E and applicable clean/red control pairs pending",
+        "evidence": "e2e/.out/epoch-app-green.txt; epoch-backend-green.txt; epoch-rules-restored-green.txt; size-app-restored-green.txt; size-rules-red-restored-green.txt",
+        "controls": [
+          "controls-c01-append-retry"
+        ]
+      }
     },
     {
       "id": "S10",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G06-live-log-append-refused",
       "classification": "U (P pending W2 minimal repro + 2 skeptics)",
@@ -9909,7 +9916,7 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
           "n": 2
         },
         {
@@ -9917,7 +9924,7 @@
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
           "n": 5
         },
         {
@@ -9925,7 +9932,7 @@
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
           "n": 10
         },
         {
@@ -9933,14 +9940,24 @@
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
           "n": 20
         },
         {
           "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 not silent: on the ~300 KB document joined in turn, no peer shows Shared while the live log refuses its writes",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "status": "implemented; immutable E2E and applicable clean/red control pairs pending",
+        "evidence": "e2e/.out/epoch-app-green.txt; epoch-backend-green.txt; epoch-rules-restored-green.txt; size-app-restored-green.txt; size-rules-red-restored-green.txt",
+        "controls": [
+          "controls-c07-seed-refused",
+          "controls-c07-not-silent",
+          "controls-c07-size-message",
+          "controls-c07-compaction-keeps-deltas"
+        ]
+      }
     },
     {
       "id": "X-a12-versions-2",
@@ -13421,6 +13438,32 @@
         "controls-a16-single-slide-navigator"
       ],
       "note": "The existing useful two-slide behavior is preserved. SPEC §6d now distinguishes recognized two-slide decks from three-candidate prose heuristics. A16.1b checks visible navigation, both actual scroll destinations and the single-slide boundary. All four patches apply and targets declare; the DocViewer threshold mutant awaits live E2E proof. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-c01-typing-2",
+        "S10",
+        "S8"
+      ],
+      "scope": "G06 transport plus shared epoch fence; local only, immutable browser coverage pending",
+      "tests": [
+        "Epoch app37/backend22 and full rules85 pass;18 focused source/oracle regressions and4 epoch rule mutants fail, then restored green",
+        "Size app33 pass;6 size mutants fail;2 size-rule mutants fail, restored RTDB24 pass",
+        "Measured actual fixture seed473536 and 20-editor compaction474280 base64 characters"
+      ],
+      "evidence": "e2e/.out/epoch-*.txt; e2e/.out/size-*.txt; e2e/.out/large-seed-size.json",
+      "controls": [
+        "controls-c01-append-retry",
+        "controls-a09-log-retirement",
+        "controls-c06-log-kept",
+        "controls-c06-accept-keeps-log",
+        "controls-c07-seed-refused",
+        "controls-c07-not-silent",
+        "controls-c07-size-message",
+        "controls-c07-compaction-keeps-deltas"
+      ],
+      "note": "Failed appends retain dependent updates and retry; epoch names isolate retired sessions and stamped seed identity blocks stale reseeding. Cleanup oracles inspect every epoch plus legacy strings. The 2MiB encoded-update bound supports the measured300KB fixture; oversized seeds fail closed with actionable recovery and oversized compactions keep all deltas. C7 observes initialization refusal directly and classifies a supported seed refusal as FAIL. No campaign item is resolved."
     }
   ]
 }

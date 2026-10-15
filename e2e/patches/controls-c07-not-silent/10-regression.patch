@@ -1,0 +1,33 @@
+--- a/config/templates/database.rules.json.tmpl
++++ b/config/templates/database.rules.json.tmpl
+@@ -106,7 +106,7 @@
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) && !newData.exists()",
+             "$entry": {
+               ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) && (root.child('editAccess').child($docId).child('__liveEpoch').val() == $epoch || (!root.child('editAccess').child($docId).child('__liveEpoch').exists() && $epoch == 'initial')) && ($entry != '_seed' || !data.exists() || newData.val() == data.val())",
+-              ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2097152)"
++              ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50000)"
+             }
+           }
+         },
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -109,7 +109,7 @@
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) && !newData.exists()",
+             "$entry": {
+               ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) && (root.child('editAccess').child($docId).child('__liveEpoch').val() == $epoch || (!root.child('editAccess').child($docId).child('__liveEpoch').exists() && $epoch == 'initial')) && ($entry != '_seed' || !data.exists() || newData.val() == data.val())",
+-              ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2097152)"
++              ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50000)"
+             }
+           }
+         },
+--- a/app/src/viewer/useSharedDocument.ts
++++ b/app/src/viewer/useSharedDocument.ts
+@@ -103,7 +103,7 @@
+         setError(cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
+           ? "An older editing session must be saved first. Save or publish from its original tab, then reload this page."
+           : "Live editing could not start. Reload to retry. Keep other editing tabs open until their changes are saved.");
+-        setState("off");
++        setState("shared");
+         setBound(false);
+         connection?.destroy();
+         connection = null;

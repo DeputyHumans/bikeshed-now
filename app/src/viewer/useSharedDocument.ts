@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
-import { connect, type Connection } from "../crdt/log";
+import { connect, LiveLogSizeError, type Connection } from "../crdt/log";
 import { rtdbLog } from "../crdt/rtdb";
 import { seedFragment } from "../crdt/binding";
 import { bindSync, type Sync } from "../crdt/sync";
@@ -100,7 +100,7 @@ export function useSharedDocument(options: {
         if (cancelled) return;
         // Configured live state is authoritative. A read/seed failure cannot
         // become a solo autosave over a newer shared draft.
-        setError(cause instanceof Error && cause.message.includes("legacy")
+        setError(cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
           ? "An older editing session must be saved first. Save or publish from its original tab, then reload this page."
           : "Live editing could not start. Reload to retry. Keep other editing tabs open until their changes are saved.");
         setState("off");
