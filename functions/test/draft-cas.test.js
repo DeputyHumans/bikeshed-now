@@ -64,7 +64,7 @@ for (const [name, patch, extra, detail] of [
     await assert.rejects(save(options), error => Boolean(error.detail?.[detail]));
     assert.equal(attempts(), 1, "a newly invalid snapshot cannot reach a second write");
     for (const [key, value] of Object.entries(patch)) assert.deepEqual(store.get("docs/d")[key], value);
-    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 1, "an SDK precondition refusal may follow an acknowledged-lost commit, so retain its candidate");
+    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 0, "a terminal refusal removes its candidate only after a durable reference check");
   });
 });
 
@@ -81,7 +81,7 @@ for (const [name, candidate, newer] of [
     assert.equal(result.storagePrefix, fresh.storagePrefix);
     assert.deepEqual(store.get("docs/d").draft, fresh);
     assert.equal(objects.get("docs/d/bundles/new/index.html").toString(), "newer");
-    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 2, "the newer draft and the uncertain candidate both remain intact");
+    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 1, "the newer draft remains and the proven unreferenced candidate is removed");
   });
 });
 
@@ -121,7 +121,7 @@ for (const retireLive of [false, true]) test(`a committed conditional write foll
   });
 });
 
-for (const advancedEpoch of [false, true]) test(`a lost acknowledgement followed by another writer preserves the uncertain candidate, advanced epoch=${advancedEpoch}`, async () => {
+for (const advancedEpoch of [false, true]) test(`a lost acknowledgement followed by another writer removes only the unreferenced candidate, advanced epoch=${advancedEpoch}`, async () => {
   await world(async ({ save, docRef, db, store, objects }) => {
     const update = docRef.update.bind(docRef); let candidate;
     docRef.update = async (...args) => {
@@ -134,12 +134,12 @@ for (const advancedEpoch of [false, true]) test(`a lost acknowledgement followed
     if (advancedEpoch) await assert.rejects(save({ causal: causal({ 1: 2 }) }), error => error.detail?.liveReset === true);
     else assert.equal((await save({ causal: causal({ 1: 2 }) })).storagePrefix, "docs/d/bundles/later");
     assert.equal(store.get("docs/d").draft.storagePrefix, "docs/d/bundles/later");
-    assert.equal(objects.get(`${candidate}/index.html`)?.toString(), "candidate", "absence from the latest snapshot does not prove the candidate never committed");
+    assert.equal(objects.has(`${candidate}/index.html`), false, "a terminal write can retire its candidate once no draft or version references it");
     assert.equal(objects.get("docs/d/bundles/later/index.html")?.toString(), "later");
   });
 });
 
-test("the elapsed retry budget stops writes and retains the unresolved candidate", async t => {
+test("the elapsed retry budget stops writes and removes a proven unreferenced candidate", async t => {
   await world(async ({ save, docRef, objects }) => {
     let clock = 1000; t.mock.method(Date, "now", () => clock);
     let writes = 0;
@@ -147,7 +147,7 @@ test("the elapsed retry budget stops writes and retains the unresolved candidate
     await assert.rejects(save(), error => error.detail?.draftChanged === true);
     assert.equal(writes, 1);
     assert.equal(objects.get("docs/d/bundles/old/index.html")?.toString(), "old");
-    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 1);
+    assert.equal([...objects.keys()].filter(key => !key.includes("/old/")).length, 0, "the deadline does not bypass safe candidate cleanup");
   });
 });
 
@@ -176,4 +176,24 @@ test("remembered link authority stays transactional and a concurrent grant delet
     assert.ok(calls >= 2, "the grant conflict must rerun the actual transaction");
     assert.equal(store.get("docs/d").draft.storagePrefix, "docs/d/bundles/old");
   }, { ownerUid: "other", ownerEmail: "other@example.com", visibility: "unlisted", publicEdit: true, linkToken: "link-token" });
+});
+
+for (const reused of [false, true]) for (const reference of ["version", "unreadable"]) test(`a terminal CAS candidate is retained when ${reference}, reused=${reused}`, async () => {
+  await world(async ({ save, docRef, db, store, objects }) => {
+    const update = docRef.update.bind(docRef); let candidate;
+    docRef.update = async (...args) => {
+      candidate = args[0].draft.storagePrefix;
+      await update(...args);
+      if (reference === "version") await db.doc("docs/d/versions/v0").set({ storagePrefix: candidate });
+      await db.doc("docs/d").update({ liveEpoch: reused ? "initial" : "later", draft: { baseVersion: "v1", entry: "index.html", storagePrefix: "docs/d/bundles/later", causal: stored(causal({ 1: 3 })) } });
+      objects.set("docs/d/bundles/later/index.html", Buffer.from("later"));
+      if (reference === "unreadable") db.runTransaction = async () => { throw new Error("reference inventory unavailable"); };
+      throw Object.assign(new Error("SDK retry after lost acknowledgement"), { code: 9 });
+    };
+    if (reused) await save({ causal: causal({ 1: 2 }) });
+    else await assert.rejects(save({ causal: causal({ 1: 2 }) }), error => error.detail?.liveReset === true);
+    assert.equal(objects.get(`${candidate}/index.html`)?.toString(), "candidate", "cleanup must retain bytes selected by a version or lacking a complete reference proof");
+    assert.equal(objects.get("docs/d/bundles/later/index.html")?.toString(), "later");
+    assert.equal(store.get("docs/d").draft.storagePrefix, "docs/d/bundles/later");
+  });
 });

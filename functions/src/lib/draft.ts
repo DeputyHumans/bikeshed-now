@@ -332,17 +332,19 @@ export async function writeDraft(args: {
       }
     }
   } catch (error) {
-    // A retry callback may refuse after an earlier commit lost its ACK. A
-    // staged transaction candidate needs a fresh proof of no durable pointer.
+    // A transaction or conditional-write retry may refuse after an earlier
+    // commit lost its ACK. Prove no durable pointer selects its candidate
+    // before deleting; a refused retry alone is not that proof.
     if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
       if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
-      else if (transactionCandidateStaged) await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
+      else await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
     }
     throw error;
   }
   if (transactionCandidateStaged) await clearReceipt(docRef, linkSave);
   if (reused) {
     if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+    else await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
     return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
   }
   await removeDraftSnapshot(docRef.id, previous);

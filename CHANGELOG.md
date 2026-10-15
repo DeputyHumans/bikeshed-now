@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Remove discarded autosave uploads after conditional-write contention only when a fresh transaction proves neither the draft nor any published version references them. Cover terminal refusals, newer causal drafts, lost acknowledgements and failed reference reads; keep uncertain transport results intact.
+
 - Restore per-callback generated-note allocation in the thread acknowledgement fault control so it reproduces the intended stale-decision overwrite. The former plant hit an immutable-create refusal before changing state; retain that invalid attempt and keep the original later-reopen assertion unchanged.
 
 - Bind native acknowledgement-loss evidence to each held caller’s actual committed callback ordinal. Allow normal precommit contention without mistaking the following native retry for a failed fault injection; retain exact caller, loss order and contiguous retry checks, record the sequence, and preserve every product assertion.
