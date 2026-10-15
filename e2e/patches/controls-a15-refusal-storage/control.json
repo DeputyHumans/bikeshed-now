@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.4 a fork into a stranger's folder is 403 and into an absent folder 404, each saying why and writing nothing; into the caller's own folder it is filed there",
+  "what": "Validate the destination only after copying the source, leaving orphan bytes on refusal.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.4 a fork into a stranger's folder is 403 and into an absent folder 404, each saying why and writing nothing; into the caller's own folder it is filed there",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a forbidden destination leaves no copied objects"
+  }
+}

@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2380,3 +2380,3 @@
+   }
+-  res.status(200).json(projection);
++  res.status(200).json({ ...projection, forked: false });
+ });

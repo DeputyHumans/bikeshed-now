@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise fork privacy and expiry across ancestors, descendants and public projections; prove that copied versions exclude feedback and unrelated files, refused destinations leave no bytes, and sign-in intents wait for the authenticated unlock answer.
+
 - Require separate positive campaign runs for the three added CLI capability variants, retaining all 48 original acceptance cells and refusing a ledger that drops any new cell.
 
 - Make presentation hiding checks start with visible comments and banners, require real deck keyboard dispatch, pin thumbnail cache duration independently, and exercise two-image cover refusals and thumbnail side effects with directional controls.

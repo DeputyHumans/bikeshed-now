@@ -62,15 +62,16 @@ import { after } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
-import { openSession } from "../../lib/session.mjs";
+import { mintToken, openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, fork, ledgerDoc, publish, updateUpload } from "../../lib/seed.mjs";
 import { closeWindows, setVisibility, share, shareFolder } from "../../lib/grant.mjs";
-import { closeAdmin, queryCollection, readCollection, readDoc, writeUser } from "../../lib/admin.mjs";
+import { closeAdmin, queryCollection, readCollection, readDoc, listObjects } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { entryHtml, rehashZip } from "../../lib/bytes.mjs";
 import { zipFiles } from "../../lib/zipread.mjs";
 import { frameText } from "../../lib/frame.mjs";
+import { observeForkOrder } from "../../lib/fork-order.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -123,7 +124,7 @@ function docHtml(title, marker) {
  * cut-off 504 (`cutoffError`), so no request of the case reads it as an answer.
  */
 async function sessions(ctx, roles) {
-  const accounts = await cast(target, roles);
+  const accounts = await cast(target, roles, { notifications: false });
   const out = {};
   for (const a of accounts) {
     out[a.role] = (await untilLanded(ctx, `POST /session (${a.role})`, () => openSession(target, a, { cutoffError: true }), null)).out;
@@ -308,28 +309,11 @@ async function signedOutFork(ctx, visibility) {
     const k = visibility === "unlisted" ? opened.linkToken : null;
     precondition(visibility !== "unlisted" || (typeof k === "string" && k.length >= 22), "the unlisted document has a link key");
     const keyQuery = k ? `k=${encodeURIComponent(k)}&` : "";
-    const grantPath = `docs/${S.docId}/linkGrants/${forker.uid}`;
-
     const u = await ctx.users.user({ name: "reader" });
-    // Every POST /fork {op: "create"} this page sends, with the page's URL
-    // (and, unlisted, whether the account's link grant exists) while the
-    // request is held.
-    const creates = [];
-    await u.page.route((url) => url.pathname === "/fork", async (route) => {
-      const req = route.request();
-      let body = null;
-      try {
-        body = req.postDataJSON();
-      } catch {
-        body = null;
-      }
-      if (req.method() === "POST" && body?.op === "create") {
-        const href = await u.page.evaluate(() => location.href).catch((e) => `unreadable: ${e.message}`);
-        const grant = k ? Boolean(await readDoc(target, grantPath).catch(() => null)) : null;
-        creates.push({ at: Date.now(), docId: body.docId, versionId: body.versionId ?? null, k: body.k === k ? "the link key" : body.k ?? null, href, grant });
-      }
-      return route.fallback();
-    });
+    // Capture create order synchronously; hold the authenticated unlock answer
+    // so a missing resolvedFor guard cannot win a fast local response race.
+    const order = await observeForkOrder(u.page, { origin: target.origin, docId: S.docId, key: k });
+    const creates = order.creates;
 
     ctx.step(`signed out, the reader opens the ${visibility} document${k ? " with its key" : ""} and presses Fork in the toolbar`);
     await u.goto(`/d/${encodeURIComponent(S.docId)}${k ? `?k=${encodeURIComponent(k)}` : ""}`);
@@ -344,18 +328,19 @@ async function signedOutFork(ctx, visibility) {
     assert.equal(creates.length, 0, "nothing is forked while signed out");
 
     ctx.step("the reader signs in on that page; the app returns to the document and opens the fork it made");
+    order.beginSignIn();
     await u.signInUi(forker.email, forker.password, { here: true, timeout: UI_WAIT_MS });
     const forkId = await u.poll(() => openedOther(u, S.docId), { timeout: UI_WAIT_MS, what: "the fork opened in the viewer" });
     ledgerUiFork(forkId, S.docId, forker.email, "reader");
     await u.waitForFrame({ timeout: UI_WAIT_MS });
     assert.ok((await frameText(await u.frame())).includes(S.marker), "the fork shows the source's text");
 
-    ctx.step("the first request: from the source's page, for the current version" + (k ? ", carrying the key, after the account's link grant was recorded" : ""));
+    ctx.step("the first request: from the source's page, for the current version" + (k ? ", carrying the key, after the authenticated unlock answered" : ""));
     precondition(creates.length >= 1, "the page sent a POST /fork create");
     const sent = new URL(creates[0].href);
     assert.deepEqual(
-      { path: sent.pathname, k: sent.searchParams.get("k") === k, docId: creates[0].docId, versionId: creates[0].versionId, key: creates[0].k, grant: creates[0].grant },
-      { path: `/d/${S.docId}`, k: true, docId: S.docId, versionId: null, key: k ? "the link key" : null, grant: k ? true : null },
+      { path: sent.pathname, k: sent.searchParams.get("k") === k, docId: creates[0].docId, versionId: creates[0].versionId, key: creates[0].k, unlockAnswered: creates[0].unlockAnswered },
+      { path: `/d/${S.docId}`, k: true, docId: S.docId, versionId: null, key: k ? "the link key" : null, unlockAnswered: k ? true : null },
       "the first POST /fork create",
     );
     const made = await record(forkId);
@@ -386,6 +371,7 @@ async function signedOutFork(ctx, visibility) {
       { intentAtSend: null, backEntry: { path: `/d/${S.docId}`, fork: null }, createsAfterReload: 1, forks: [forkId], statsForks: 1 },
       `the signed-out fork, once: ${JSON.stringify(cells)}`,
     );
+    await order.restore();
   });
 }
 
@@ -420,7 +406,15 @@ scenario("A15.2 a fork of a trusted public document is private, trusted:false, f
   const marked = await idempotent(ctx, O, "/marking", { docId: S.docId, marking: ownerMarking });
   precondition(marked.status === 200, `POST /marking: ${marked.status} ${marked.text.slice(0, 200)}`);
   // The account default is the app's own client write to users/{uid} (Account page); set here directly.
-  await writeUser(target, R.uid, { defaultMarking: readerDefault });
+  const preferences = await clientFirestore(target, { idToken: R.idToken, http: ctx.http({ actor: "reader-preferences" }) }).set(
+    `users/${R.uid}`, { uid: R.uid, email: R.account.email, defaultMarking: readerDefault }, { merge: true },
+  );
+  precondition(preferences.verdict === "ALLOW", `the reader writes their default marking under the rules: ${preferences.status}`);
+  const { token } = await mintToken(O, { name: `a15 source feedback ${tag}`, channel: "mcp" });
+  const agent = ctx.mcp({ token, actor: "source-feedback", cutoffError: true });
+  await agent.initialize();
+  const thread = await agent.ok("add_comment", { id: S.docId, exact: S.marker, body: `Source-only comment ${tag}` });
+  precondition(typeof thread.threadId === "string" && (await readCollection(target, `docs/${S.docId}/versions/v1/annotations`)).length === 1, "the source has feedback that could be copied");
 
   await windowOn(ctx, O, S.docId, "public", async () => {
     const view = await R.http.postJson("/view", { docId: S.docId, versionId: "v1", sessionId: `a15${randomBytes(8).toString("hex")}`, ms: 1000 });
@@ -444,7 +438,20 @@ scenario("A15.2 a fork of a trusted public document is private, trusted:false, f
     assert.ok(!JSON.stringify(rec).includes(S.docId), `docs/{fork} carries only forked:true, never the parent's id: ${JSON.stringify(Object.keys(rec).sort())}`);
     assert.deepEqual(rec.marking, readerDefault, "the fork's marking is the reader's account default, not the source owner's policy");
     assert.equal(rec.stats, undefined, "views are not copied: the fork has no stats");
+    assert.deepEqual(await readCollection(target, `docs/${forkId}/versions/v1/annotations`), [], "the fork copies no source annotations or comments");
     assert.equal(await readDoc(target, `public/${forkId}`), null, "a private fork has no public projection");
+
+    ctx.step("public and unlisted fork projections retain only the forked flag, never the parent id");
+    await setVisibility(target, { owner: R, doc: forkId, visibility: "public", expiresAt: null, patient: { ctx } });
+    const publicFork = await readDoc(target, `public/${forkId}`);
+    assert.equal(publicFork?.forked, true, "the public fork projection says forked:true");
+    assert.ok(!JSON.stringify(publicFork).includes(S.docId), "the public fork projection never names its parent");
+    const unlistedFork = await setVisibility(target, { owner: R, doc: forkId, visibility: "unlisted", expiresAt: null, patient: { ctx } });
+    const unlockFork = await ctx.http({ actor: "anonymous-fork" }).postJson("/unlock", { docId: forkId, k: unlistedFork.linkToken });
+    assert.equal(unlockFork.status, 200, "the unlisted fork key unlocks");
+    assert.equal(unlockFork.json?.forked, true, "the unlock answer says forked:true");
+    assert.ok(!JSON.stringify(unlockFork.json).includes(S.docId), "the unlock answer never names the parent");
+    await setVisibility(target, { owner: R, doc: forkId, visibility: "private", expiresAt: null, patient: { ctx } });
 
     ctx.step("its only version is v1, publishedVia fork, with the source's hash; the downloaded bytes are the source's and REHASH to it");
     const versions = await readCollection(target, `docs/${forkId}/versions`);
@@ -511,7 +518,7 @@ scenario("A15.3 lineage over two hops: nearest first, ownerEmail only to a membe
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
   ctx.step("cast four accounts and a stranger: A's owner, B's owner, C's owner, C's viewer");
-  const { oa: Oa, ob: Ob, oc: Oc, dv: D, stranger: X } = await sessions(ctx, ["oa", "ob", "oc", "dv", "stranger"]);
+  const { oa: Oa, ob: Ob, oc: Oc, dv: D, editor: E, approver: P, stranger: X } = await sessions(ctx, ["oa", "ob", "oc", "dv", "editor", "approver", "stranger"]);
   const tag = caseTag();
   const A = await publishDoc(ctx, Oa, "a15-3-origin", `A15.3 origin ${tag}`);
 
@@ -525,6 +532,8 @@ scenario("A15.3 lineage over two hops: nearest first, ownerEmail only to a membe
     await share(target, { owner: Oc, doc: C, account: Ob.account, role: "viewer", patient: { ctx } });
     await share(target, { owner: Oc, doc: C, account: D.account, role: "viewer", patient: { ctx } });
 
+    await share(target, { owner: Oc, doc: C, account: E.account, role: "editor", patient: { ctx } });
+    await share(target, { owner: Oc, doc: C, account: P.account, role: "approver", patient: { ctx } });
     const aEntry = { docId: A.docId, title: A.title, versionId: "v1" };
     const bEntry = (changed) => ({ docId: B, title: Bt, versionId: "v1", ownerEmail: Ob.account.email, changed });
     const cListing = { docId: C, title: Ct, visibility: "private", forkedAt: "number", ownerEmail: Oc.account.email };
@@ -537,6 +546,7 @@ scenario("A15.3 lineage over two hops: nearest first, ownerEmail only to a membe
       forks: { total: 0, hidden: 0, visible: [] },
     }, "lineage of C as its owner (a member of B, a public reader of A)");
     assert.deepEqual(await lineageOf(D, C), { forked: true, ancestors: [], hiddenAncestor: true }, "lineage of C as its viewer, who cannot open B");
+    for (const member of [E, P]) assert.deepEqual(await lineageOf(member, C), { forked: true, ancestors: [], hiddenAncestor: true }, `lineage omits the owner's fork inventory for ${member.account.role}`);
     assert.deepEqual(await lineageOf(Ob, B), {
       forked: true,
       ancestors: [{ ...aEntry, changed: false }],
@@ -611,6 +621,14 @@ scenario("A15.3b a key opens only the document it was presented for: a parent re
       forks: { total: 0, hidden: 0, visible: [] },
     }, "lineage of the fork once the forker holds the origin's grant");
     assert.deepEqual(await lineageOf(Oa, A.docId), { forked: false, ancestors: [], hiddenAncestor: false, forks: { total: 1, hidden: 1, visible: [] } }, "the origin's owner counts the fork it cannot open");
+    const openedFork = await setVisibility(target, { owner: Ob, doc: B, visibility: "unlisted", expiresAt: null, patient: { ctx } });
+    assert.deepEqual((await lineageOf(Oa, A.docId)).forks, { total: 1, hidden: 1, visible: [] }, "an unlisted descendant stays hidden without its own grant");
+    assert.equal((await Oa.http.postJson("/unlock", { docId: B, k: openedFork.linkToken })).status, 200);
+    assert.deepEqual((await lineageOf(Oa, A.docId)).forks, { total: 1, hidden: 0, visible: [{ docId: B, title: Bt, visibility: "unlisted", forkedAt: "number" }] }, "the descendant's own grant makes it visible, without its owner's email");
+    const expiry = Date.now() + LEAD_MS;
+    await setVisibility(target, { owner: Ob, doc: B, visibility: "public", expiresAt: expiry });
+    await eventually(async () => (await Oa.http.get(`/content/${B}/v1/`)).status === 404, { timeout: TAKE_EFFECT_MS, interval: 500, message: "the descendant expires for the origin owner" });
+    assert.deepEqual((await lineageOf(Oa, A.docId)).forks, { total: 1, hidden: 1, visible: [] }, "an expired public descendant is counted but hidden");
   });
 });
 
@@ -635,7 +653,9 @@ scenario("A15.4 a fork into a stranger's folder is 403 and into an absent folder
 
     ctx.step("into the stranger's folder: 403 with the reason; into an absent folder: 404 with the reason");
     const intoTheirs = await forkAs(R, S.docId, { folderId: theirs });
+    assert.deepEqual(await listObjects(target, `docs/${wouldBe}/`), [], "a forbidden destination leaves no copied objects");
     const intoNowhere = await forkAs(R, S.docId, { folderId: nowhere });
+    assert.deepEqual(await listObjects(target, `docs/${wouldBe}/`), [], "an absent destination leaves no copied objects");
     assert.deepEqual(
       { theirs: { status: intoTheirs.status, error: intoTheirs.json?.error ?? null }, nowhere: { status: intoNowhere.status, error: intoNowhere.json?.error ?? null } },
       { theirs: { status: 403, error: FOLDER_FORBIDDEN }, nowhere: { status: 404, error: FOLDER_ABSENT } },
@@ -675,6 +695,8 @@ scenario("A15.4b a fork into a folder the caller only views is 403 and writes no
     ctx.step("a folder the reader can read but not edit: 403 with the reason, and nothing written");
     const refused = await forkAs(R, S.docId, { folderId });
     assert.deepEqual({ status: refused.status, error: refused.json?.error ?? null }, { status: 403, error: FOLDER_FORBIDDEN }, "into a folder the caller views");
+    const wouldBe = S.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    assert.deepEqual(await listObjects(target, `docs/${wouldBe}/`), [], "a viewer-only destination leaves no copied objects");
     assert.deepEqual(await forksNaming(S.docId), [], "forks/* naming the source");
     assert.equal((await record(S.docId)).stats?.forks ?? 0, 0, "the source's stats.forks");
 
@@ -736,8 +758,10 @@ scenario("A15.4c an expired source is the absent id's bare 404 to its viewer for
   assert.deepEqual((await forksNaming(S.docId)).map((f) => f.id), [live.docId], "no fork was made from the expired source");
   assert.equal((await record(S.docId)).stats?.forks, 1, "the source's stats.forks is unchanged");
 
+  assert.deepEqual(await lineageOf(V, live.docId), { forked: true, ancestors: [], hiddenAncestor: true, forks: { total: 0, hidden: 0, visible: [] } }, "an expired source stops a live fork's ancestor walk");
   ctx.step("the owner, for whom it has not expired, still forks it");
   const ownFork = await mustFork(O, S.docId);
+  assert.deepEqual((await lineageOf(O, ownFork.docId)).ancestors, [{ docId: S.docId, title: S.title, versionId: "v1", ownerEmail: O.account.email, changed: false }], "the source owner can still follow the expired ancestor");
   assert.deepEqual((await forksNaming(S.docId)).map((f) => f.id).sort(), [live.docId, ownFork.docId].sort(), "the owner's fork is recorded");
 });
 
@@ -781,6 +805,9 @@ scenario("A15.4d Fork this version, on an old version in the viewer, forks that 
   assert.deepEqual({ parentId: ptr?.parentId, parentVersion: ptr?.parentVersion, parentContentHash: ptr?.parentContentHash }, { parentId: S.docId, parentVersion: "v1", parentContentHash: srcV1.contentHash }, "the pointer names the version on screen");
   const forkV1 = await versionRecord(forkId, "v1");
   assert.equal(forkV1.contentHash, srcV1.contentHash, "the fork's v1 hash is the source's v1 hash");
+  assert.deepEqual((await readCollection(target, `docs/${forkId}/versions`)).map((v) => v.id), ["v1"], "forking an old version copies no other version records");
+  assert.ok(typeof forkV1.storagePrefix === "string" && forkV1.storagePrefix.startsWith(`docs/${forkId}/`), "the fork names its own immutable storage prefix");
+  assert.deepEqual(await listObjects(target, `docs/${forkId}/`), [`${forkV1.storagePrefix}/index.html`], "forking an old version copies only its selected bundle objects");
 
   ctx.step("REHASH: the fork's downloaded bytes are v1's upload and hash to the recorded contentHash");
   const bytes = await stored(V.http, forkId, "v1");

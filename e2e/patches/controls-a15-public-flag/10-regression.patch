@@ -1,0 +1,9 @@
+--- a/functions/src/lib/publicdoc.ts
++++ b/functions/src/lib/publicdoc.ts
+@@ -218,5 +218,5 @@
+       ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx))
+       : null;
+-    if (projection) tx.set(publicRef, projection);
++    if (projection) tx.set(publicRef, { ...projection, forked: false });
+     else tx.delete(publicRef);
+   });

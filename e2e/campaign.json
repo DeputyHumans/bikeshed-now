@@ -14098,6 +14098,27 @@
       ],
       "evidence": "e2e/.out/a16-controls-proof/oracle-proof.json; e2e/.out/a16-controls-proof/compile-proof.json",
       "note": "B10 6c38cc6: four affected cases pass and restore at 20261015T064956Z-p40498-09ch; fourteen scratch controls reach intended assertions at 20261015T064453Z-p24697-vkij. Fourteen stored product controls apply/typecheck. Fresh exact-revision patched-stack pairs and final matrix remain required; canonical states unchanged."
+    },
+    {
+      "kind": "fork-coverage-implementation",
+      "items": [
+        "deep:a15-forks:05",
+        "deep:a15-forks:06",
+        "deep:a15-forks:07",
+        "deep:a15-forks:08",
+        "deep:a15-forks:09",
+        "deep:a15-forks:10",
+        "deep:a15-forks:12",
+        "deep:a15-forks:13"
+      ],
+      "scope": "Local B10 product 6c38cc6; source assertions and controls, not campaign closure",
+      "checks": [
+        "Full A15 file passes 9/9; final origin-scoped sign-in ordering probe rerun passes 2/2",
+        "28 backend, five app and two probe tests pass",
+        "Thirteen directional product source mutants and four ordering-probe mutants fail their intended assertions"
+      ],
+      "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T065146Z-p50852-02bt/summary.md; e2e/.out/2610142309-3nfp/invocations/20261015T065427Z-p66010-bbii/summary.md; e2e/.out/a15-controls-proof/{proof,app-proof,judge-proof}.json",
+      "note": "The initial expanded run had one fixture precondition failure from reading feedback outside its version collection; it remains recorded. New actual patched-stack red/restored pairs remain required; no product defect or production verification claimed."
     }
   ]
 }
