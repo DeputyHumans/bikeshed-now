@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Register additional E2E campaign mechanisms without closing original findings; keep harness defects, product fixes and unresolved runtime failures distinct.
+
 - Keep long-paragraph input points visible in scaled frames and exercise concurrent typing as an uninterrupted keystroke sequence, so the driver does not move fast writers into a peer’s unfinished word.
 
 - Cancel pending Done UI effects when its viewer unmounts, and separately exercise a real iframe replacement while a save is held; distinguish each lifecycle guard with its own negative control.

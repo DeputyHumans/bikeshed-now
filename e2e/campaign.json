@@ -8986,7 +8986,17 @@
       "implementation": {
         "status": "implemented and N2/trials1 regression passed; full matrix and applicable product control pairs pending",
         "evidence": "e2e/.out/2610142210-0t7t/invocations/20261015T053525Z-p1625-gsk6/results.json"
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "86f4188",
+            "9eec327",
+            "8fc0e44"
+          ],
+          "additionalMechanism": "Generation-scoped retirement fences logs first created after the editors check and old-peer writes after publication, including deduplicated commits; new generation must not adopt old entries."
+        }
+      ]
     },
     {
       "id": "S18",
@@ -9897,7 +9907,16 @@
       "witnessMapping": {
         "reason": "Actual local operator grant/revoke now exercises Firestore, both RTDB mirrors and permitted/refused authenticated access. Baseline N=2 describes two actors; functional witness has no concurrency expansion. Mirror-delivery failure remains the existing SPEC §16 limitation.",
         "aliases": []
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "6e66181",
+            "92f7976"
+          ],
+          "additionalMechanism": "Operator database URL resolution and the actual grant/revoke command path both need proof. Process termination is a distinct proposed discovery."
+        }
+      ]
     },
     {
       "id": "X-a11-live-1",
@@ -10719,7 +10738,15 @@
       "implementation": {
         "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
         "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending"
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "6c38cc6"
+          ],
+          "additionalMechanism": "Stamp visibility includes authored ancestor transforms/containment as well as direct hostile stamp selectors; no broader claim about all CSS is inferred."
+        }
+      ]
     },
     {
       "id": "X-a17-export-3",
@@ -10859,6 +10886,14 @@
           "caseId": "e2e/specs/functional/a09-editing.spec.mjs::A9.11 BODYATTR: the committed v2's <html> and <body> attributes equal v1's",
           "n": null
         }
+      ],
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "93a01ca"
+          ],
+          "additionalMechanism": "Preserve authored root attributes while excluding editor-owned body attributes and live placeholder decoration. Reader overlay comparisons are DOM/content oracles; persisted bytes still require unconditional decoration exclusion."
+        }
       ]
     },
     {
@@ -10957,6 +10992,14 @@
         {
           "caseId": "e2e/specs/functional/a11-live.spec.mjs::A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does",
           "n": null
+        }
+      ],
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "93a01ca"
+          ],
+          "additionalMechanism": "Preserve authored root attributes while excluding editor-owned body attributes and live placeholder decoration. Reader overlay comparisons are DOM/content oracles; persisted bytes still require unconditional decoration exclusion."
         }
       ]
     },
@@ -11826,6 +11869,16 @@
           "caseId": "e2e/specs/functional/a09-editing.spec.mjs::A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s",
           "n": null
         }
+      ],
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "86f4188",
+            "9eec327",
+            "8fc0e44"
+          ],
+          "additionalMechanism": "Generation-scoped retirement fences logs first created after the editors check and old-peer writes after publication, including deduplicated commits; new generation must not adopt old entries."
+        }
       ]
     },
     {
@@ -12144,7 +12197,16 @@
         "status": "source fixed; old-product E2E harm and rule red/restored proof observed; fixed-stack E2E pending",
         "spec": "SPEC §17",
         "reason": "The authorized freeze includes feedback writes. The read/list exception preserves existing workspace and comment visibility; it does not permit mutation after expiry. All six direct feedback mutation rules now compare the current deadline with request.time, including owner writes. Original Q classification and baseline claims are retained."
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "0d83d63"
+          ],
+          "additionalMechanism": "Expiry gates annotation and comment create/update/delete, including owner writes. Metadata reads remain permitted, and clearing expiry restores writes. Original observation only named annotation creation; all additional write families remain explicit witnesses.",
+          "distinction": "Existing expiry finding extended, not a new silently merged defect."
+        }
+      ]
     },
     {
       "id": "X-a03-visibility-1",
@@ -12369,7 +12431,15 @@
       "witnessMapping": {
         "reason": "New recovery witness requires no silent remount, retention of late local text, refusal of stale saves, and explicit reload at all Ns. Original record-only co-editor case remains historical evidence, not substitute proof.",
         "aliases": []
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "8559532"
+          ],
+          "additionalMechanism": "A stale editor must retain its original base, refuse autosave and provide explicit reload after another editor publishes; reloaded content must be current before editing resumes."
+        }
+      ]
     },
     {
       "id": "X-c16-access-2",
@@ -12560,7 +12630,15 @@
         "remaining": [
           "fresh E2E and red/restored control evidence across required N values"
         ]
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "494c15e"
+          ],
+          "additionalMechanism": "Whole-document solo/link saves bind to the exact loaded draft revision and explicit editing snapshot; stale frame and prepare-origin variants remain separate witnesses."
+        }
+      ]
     },
     {
       "id": "S26",
@@ -13557,7 +13635,507 @@
         "remaining": [
           "Fresh repaired-stack E2E and stored control pairs"
         ]
-      }
+      },
+      "mechanismExtensions": [
+        {
+          "sourceCommits": [
+            "efaf7ee"
+          ],
+          "additionalMechanism": "Block-start inline-code insertion has separate native Chrome proof and an exact stored control; retains style and undo behavior."
+        }
+      ]
+    },
+    {
+      "id": "live-done-queued-delta-loss",
+      "state": "in-progress",
+      "claim": "Done could tear down the shared connection after its HTTP draft saved but before queued Yjs updates were acknowledged, discarding buffered typing that a remaining editor never received. Preserve the queue, bound delivery, retain the editor on failure, and drain before teardown.",
+      "sourceCommit": "8e6f96de446f64bd244d6792ff686471f6105bd5",
+      "relatedOriginalItems": [
+        "X-c05-structure-1",
+        "X-c01-typing-2"
+      ],
+      "controls": [
+        {
+          "set": "controls-c06-live-drain",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 delivery timeout keeps saved local typing open until the live queue recovers [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 delivery: unacknowledged live updates"
+        },
+        {
+          "set": "controls-c06-delivery-failure",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 delivery timeout keeps saved local typing open until the live queue recovers [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 delivery: unacknowledged live updates"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/c06-delivery-proof/proof.json",
+        "e2e/.out/2610150056-njpa/invocations/20261015T083719Z-p41094-0ho5/results.json",
+        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "distinction": "This is transport acknowledgement/teardown loss, distinct from the original missing remote-autosave scheduler and the reader-overlay equality oracle.",
+      "fixedBrowserStatus": "Inspected B15 report: four recovery/serial checks PASS, zero failures/inconclusive/TODO, three explicit unselected-N skips. Seven new plus one refreshed actual control pairs still running at audit."
+    },
+    {
+      "id": "live-forced-close-partial-history-adoption",
+      "state": "in-progress",
+      "claim": "A forced close can leave a durable saved causal frontier ahead of the acknowledged live log. A later join could adopt partial history over the complete saved HTML. Warn on pending delivery; validate the session frontier; block incomplete adoption and offer explicit Leave editing/agent recovery.",
+      "sourceCommit": "8e6f96de446f64bd244d6792ff686471f6105bd5",
+      "relatedOriginalItems": [
+        "X-c05-structure-1",
+        "S17"
+      ],
+      "controls": [
+        {
+          "set": "controls-c06-beforeunload",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 abrupt close: pending shared delivery warns"
+        },
+        {
+          "set": "controls-c06-saved-frontier",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 abrupt close: incomplete history must be refused"
+        },
+        {
+          "set": "controls-c06-session-frontier",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 abrupt close: incomplete history must be refused"
+        },
+        {
+          "set": "controls-c06-leave-recovery",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 abrupt close: a blocked join offers Leave editing"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/c06-delivery-proof/proof.json",
+        "e2e/.out/causal-adoption-proof/proof.json",
+        "e2e/.out/2610150056-njpa/invocations/20261015T084001Z-p50918-sohj/results.json",
+        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "baselineBoundary": "The old-product browser case stopped at the close-warning assertion; later partial-adoption guards have separate exact unit mutation proof. Do not infer later browser assertions ran in that failed invocation.",
+      "fixedBrowserStatus": "Inspected B15 report: four recovery/serial checks PASS, zero failures/inconclusive/TODO, three explicit unselected-N skips. Seven new plus one refreshed actual control pairs still running at audit."
+    },
+    {
+      "id": "live-done-unbounded-wait",
+      "state": "in-progress",
+      "claim": "Done could wait without a total deadline when durable saving remained in flight or remote input repeatedly extended saving. Bound the whole operation, retain a retryable editor without aborting a potentially committed request, and allow a later retry.",
+      "sourceCommit": "8e6f96de446f64bd244d6792ff686471f6105bd5",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-c06-done-deadline",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 Done deadline preserves the editor while a durable save is held and permits retry after its answer [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 Done deadline: a held save must produce a bounded retryable outcome"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/campaign-discovery-evidence/soapbox-c06-done-bound-red.log",
+        "e2e/.out/campaign-discovery-evidence/soapbox-c06-done-bound-green.log",
+        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "observedUnitTest": "Done must finish with a retryable refusal despite continuous remote input",
+      "fixedBrowserStatus": "Inspected B15 report: four recovery/serial checks PASS, zero failures/inconclusive/TODO, three explicit unselected-N skips. Seven new plus one refreshed actual control pairs still running at audit."
+    },
+    {
+      "id": "operator-realtime-client-lifecycle",
+      "state": "in-progress",
+      "claim": "Once operator RTDB initialization was corrected, completed commands retained an open Admin SDK connection and hung until killed. Close the owned app only after work settles, preserving dry-run laziness and error reporting.",
+      "sourceCommit": "68dc727417fbf5bb177a0143c7d4851c4798dfa7",
+      "relatedOriginalItems": [
+        "S16"
+      ],
+      "controls": [
+        {
+          "set": "controls-smoke-operator-exit",
+          "target": {
+            "spec": "e2e/specs/smoke/clients.spec.mjs",
+            "case": "clients: the operator script publishes a sample into this stack",
+            "suite": "smoke"
+          },
+          "intendedFailure": "operator publish exits after its completed writes:"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/operator-exit-controls-AM7MKs/proof.json"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "empty-shared-history-rejected",
+      "state": "in-progress",
+      "claim": "An untouched empty document legitimately has an empty Yjs insertion vector; the new causal parser rejected this valid history, preventing normal shared saves. Permit zero entries while retaining malformed-clock/range validation.",
+      "sourceCommit": "580032b82fd3a466bb762d53ec701e5485b88aa5",
+      "relatedOriginalItems": [
+        "S17"
+      ],
+      "controls": [
+        {
+          "set": "controls-a11-empty-history",
+          "target": {
+            "spec": "e2e/specs/functional/a11-live.spec.mjs",
+            "case": "A11.14 an untouched empty shared body can save its empty causal history before publication",
+            "suite": "functional"
+          },
+          "intendedFailure": "A11 empty history: the real editor's empty causal history must be accepted"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/empty-history-proof/proof.json",
+        "e2e/.out/controls-20261015-090901z/ledger.json"
+      ],
+      "remaining": [
+        "Final frozen-source acceptance and matching controls remain required; authoring evidence does not close this row."
+      ],
+      "evidenceStatus": "source-regression-and-committed-fix; exact historical negative not yet linked"
+    },
+    {
+      "id": "review-entry-resets-active-editor",
+      "state": "in-progress",
+      "claim": "Starting a review pass inside an active editor re-entered asynchronous draft preparation, cleared the pass and remounted unsaved content. Ordinary entry now preserves the active editing snapshot; Reload and Take theirs remain explicit.",
+      "sourceCommit": "01666e1769a9ba407fcef8a7f39bfd692a50dd08",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-a08-review-keeps-session",
+          "target": {
+            "spec": "e2e/specs/functional/a08-review.spec.mjs",
+            "case": "A8.2 the pass marks the quote with the CSS highlight API and zero mutations of the frame's document; Accept sends claim, then POST /draft, then accept, each after the last answered; the change lands once",
+            "suite": "functional"
+          },
+          "intendedFailure": "the pass shows"
+        },
+        {
+          "set": "controls-a09-frame-snapshot",
+          "target": {
+            "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+            "case": "A9.1 entering edit mode on a trusted document mounts a new iframe with sandbox=allow-same-origin, src /draft/…?r=N, an editable body and the Formatting toolbar",
+            "suite": "functional"
+          },
+          "intendedFailure": "the editor frame requests exactly the prepared version, epoch and revision"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/harness-review-controls/review-session/negative-controls.json",
+        "e2e/.out/harness-review-controls/review-session/restored-green.txt"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "mcp-update-loses-presented-link-proof",
+      "state": "in-progress",
+      "claim": "MCP update_document initially authorized an unlisted open-editing link but dropped its presented key before final transactional authority validation, refusing a legitimate update. Carry only the request proof through the final check and still reject a rotated key or revoked real editor.",
+      "sourceCommit": "fde5b4fdc51e93f9a9579b3b348ebaec3730c1f4",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-a20-update-link-proof",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+            "case": "A20.6 a link key opens an unlisted open-editing document to a non-member on each of the nine tools SPEC §19 names; without it, or with a wrong one, each answers exactly as for an id that does not exist",
+            "suite": "functional"
+          },
+          "intendedFailure": "update_document with k:"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "unit-test",
+          "file": "functions/test/update-guards.test.js",
+          "test": "a nonmember MCP update carries its presented link key through the commit check",
+          "fileExists": true,
+          "testNamePresent": true
+        },
+        {
+          "kind": "unit-test",
+          "file": "functions/test/update-guards.test.js",
+          "test": "a link rotated while an MCP update uploads cannot authorize its final commit",
+          "fileExists": true,
+          "testNamePresent": true
+        }
+      ],
+      "remaining": [
+        "Link the exact stored control pair or unit mutation from the A20 batch; source tests alone do not close this row.",
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "print-comments-pane-hides-document",
+      "state": "in-progress",
+      "claim": "Native printing activated the phone comments-pane rule and hid the document, yielding an incomplete print and restoring scroll into a hidden frame. Restrict pane switching to screen media and test the complete compiled app stylesheet in real Chrome.",
+      "sourceCommit": "16ca66e81e1a40e5d4968be4e0afbaa1a56f3e1e",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-a17-print-comments-pane",
+          "target": {
+            "spec": "e2e/specs/functional/a17-export.spec.mjs",
+            "case": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+            "suite": "functional"
+          },
+          "intendedFailure": "the document paginates: 1 PDF pages"
+        },
+        {
+          "set": "controls-a17-print-pagination",
+          "target": {
+            "spec": "e2e/specs/functional/a17-export.spec.mjs",
+            "case": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+            "suite": "functional"
+          },
+          "intendedFailure": "the document paginates: 1 PDF pages"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/harness-review-controls/a17-gaps/full-css-negative-controls.json",
+        "e2e/.out/harness-review-controls/a17-gaps/full-css-green.txt"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "print-chrome-cascade-leak",
+      "state": "in-progress",
+      "claim": "Later feature display rules could override print hiding and include application chrome in printed output. The full app stylesheet now preserves print hiding across its cascade, with independent rendered-chrome assertions.",
+      "sourceCommit": "16ca66e81e1a40e5d4968be4e0afbaa1a56f3e1e",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-a17-print-chrome-cascade",
+          "target": {
+            "spec": "e2e/specs/functional/a17-export.spec.mjs",
+            "case": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+            "suite": "functional"
+          },
+          "intendedFailure": "all rendered viewer chrome is hidden in print media"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/harness-review-controls/a17-gaps/full-css-negative-controls.json",
+        "e2e/.out/harness-review-controls/a17-gaps/full-css-green.txt"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "changes-partial-cursor-restarts-feed",
+      "state": "in-progress",
+      "claim": "A cursor with a partial position, such as event fields without the sequence field, could silently restart the feed. This is separate from the original empty event-id cursor and must retain its own malformed-position witness.",
+      "sourceCommit": "f0d60e9b132196faa27f5c2d38d78a6e979f7a67",
+      "relatedOriginalItems": [
+        "X-a21-changes-1"
+      ],
+      "controls": [
+        {
+          "set": "controls-a21-partial-cursor",
+          "target": {
+            "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+            "case": "A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor",
+            "suite": "functional"
+          },
+          "intendedFailure": "a partial position is refused"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "unit-test",
+          "file": "functions/test/events.test.js",
+          "test": "a malformed cursor with ${label} is rejected without throwing or replaying",
+          "fileExists": true,
+          "testNamePresent": true
+        }
+      ],
+      "remaining": [
+        "Link exact A21 parser negative/restored evidence or final stored control pair.",
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "coverageObservation": "deep:a21-changes:05"
+    },
+    {
+      "id": "refused-upload-leaves-unreachable-bundle",
+      "state": "in-progress",
+      "claim": "Immutable version candidates uploaded before a known transaction refusal remained unreachable in Storage. Delete only candidates known not to have committed; retain bytes after uncertain outcomes.",
+      "sourceCommit": "2e4a75015b1782f70f71b744b51afda2a51d661c",
+      "relatedOriginalItems": [
+        "S4",
+        "S4b"
+      ],
+      "controls": [
+        {
+          "set": "controls-c08-candidate-cleanup",
+          "target": {
+            "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+            "case": "C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C8 cleanup:"
+        },
+        {
+          "set": "controls-c09-candidate-cleanup",
+          "target": {
+            "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+            "case": "C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C9 cleanup:"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/draft-race-controls/candidate-cleanup-red.log",
+        "e2e/.out/draft-race-controls/candidate-cleanup-green.log"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "observedFailures": 4
+    },
+    {
+      "id": "postcommit-projection-failure-reports-refusal",
+      "state": "in-progress",
+      "claim": "A projection refresh failure after an external draft transaction had committed could turn the response into a refused write, misleading callers about persisted state. Treat postcommit projection maintenance separately from transactional success.",
+      "sourceCommit": "86f4188fcb70f96304bc8c75bb74d7741759c438",
+      "relatedOriginalItems": [
+        "S5"
+      ],
+      "controls": [],
+      "evidence": [
+        "e2e/.out/campaign-discovery-evidence/soapbox-g05-projection-red.log",
+        "e2e/.out/mechanism-proof-audit/restored-verify-b13.log",
+        {
+          "kind": "unit-test",
+          "file": "functions/test/draft-races.test.js",
+          "test": "projection refresh failure cannot turn a committed external draft change into a refused write",
+          "fileExists": true,
+          "testNamePresent": true
+        }
+      ],
+      "remaining": [
+        "This dependency-failure mechanism has exact unit proof; decide whether final acceptance uses that structural/local witness or an added narrow E2E control.",
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ]
+    },
+    {
+      "id": "account-optout-restoration-race",
+      "state": "in-progress",
+      "claim": "Saved analytics opt-out was restored only on the account page, allowing collection before preference resolution on normal entry; an SDK load already in flight also needed to recheck changed consent/opt-out. Resolve preferences at session entry, fail closed while pending, and recheck after asynchronous boundaries.",
+      "sourceCommit": "cd41cff9f166263bb8423757986d32f1d129e4fb",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-a19-optout-restore",
+          "target": {
+            "spec": "e2e/specs/functional/a19-account.spec.mjs",
+            "case": "A19.2 account analytics opt-out survives reload and another browser, and the checkbox can enable and disable collection"
+          },
+          "intendedFailure": "a saved opt-out fetches no measurement script after reload"
+        },
+        {
+          "set": "controls-a19-consent-sequence",
+          "target": {
+            "spec": "e2e/specs/functional/a19-account.spec.mjs",
+            "case": "A19.2 with analytics live, declining fetches nothing and is remembered, and \"unanswered → Allow\" in one page fetches the measurement script once, with page views off; every analytics request is fulfilled locally"
+          },
+          "intendedFailure": "after Allow, in the same page, the measurement script is requested"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/harness-review-controls/a19/optout-ignored.log",
+        "e2e/.out/harness-review-controls/a19/late-optout-ignored.log",
+        "e2e/.out/harness-review-controls/a19/app-green.log"
+      ],
+      "remaining": [
+        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+      ],
+      "boundary": "The unchanged route-redaction guarantee and ordinary consent-sequence coverage are not counted as additional product defects without their own observed original failure."
+    },
+    {
+      "id": "n20-common-document-transaction-timeouts",
+      "state": "open",
+      "classification": "unresolved-product-vs-emulator-boundary",
+      "claim": "At N20, common-document view/thumbnail/draft traffic produced ABORTED transaction lock timeouts and Functions worker/socket failures. The exact installed lock-upgrade cycle reproduces independently; attribution of each request and the required product response remain under investigation.",
+      "evidence": "e2e/.out/n20-transaction-audit/proof.json",
+      "mustNotDo": [
+        "Do not silently classify the N20 matrix as a local limit.",
+        "Do not lower N, relax every-save200 assertions, or substitute serialized requests."
+      ]
+    },
+    {
+      "id": "stale-done-completes-in-replacement-editor",
+      "state": "in-progress",
+      "claim": "An old Done deadline can set error state in a replacement editing session, and an unmounted viewer can show its old global failure toast after navigation. Bind pending completion to its originating session and viewer lifetime.",
+      "implementation": {
+        "remaining": [
+          "Fresh actual controls for timer state, same-viewer identity and unmounted-viewer lifetime are running.",
+          "Final frozen-source acceptance and matching controls remain required."
+        ],
+        "evidence": [
+          "e2e/.out/2610150215-ja2o/invocations/20261015T091904Z-p78403-gghr/results.json"
+        ],
+        "sourceCommits": [
+          "7a41bbf",
+          "58ebb16"
+        ]
+      },
+      "controls": [
+        {
+          "set": "controls-c06-stale-done-state",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 a timed-out Done from a replaced frame cannot change its new editing session [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 stale Done: an old deadline must not replace the new session"
+        },
+        {
+          "set": "controls-c06-stale-done-toast",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 a timed-out Done from another document cannot change the replacement editor or report its failure there [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 stale Done: an old completion must not report its error in the replacement document"
+        }
+      ]
     }
   ],
   "acceptance": {
@@ -15354,6 +15932,28 @@
       ],
       "evidence": "e2e/.out/2610150009-srus/invocations/20261015T074712Z-p77088-4l5c/results.json; e2e/.out/feedback-expiry-controls/{proof,extra-proof}.json; /tmp/soapbox-feedback-expiry-rules-{red,green}.log",
       "note": "Existing feedback remains readable and unchanged while frozen. Absent/null/future expiry controls pass; clearing the deadline restores existing permissions without widening authorship. Fixed-stack E2E proof remains pending."
+    },
+    {
+      "kind": "n20-authoring-boundaries",
+      "scope": "Original N20 and every assertion retained; no acceptance or finding closure",
+      "checks": [
+        "13 PASS, 4 FAIL and 62 unselected/capability SKIP before the Database emulator heap failure interrupted the run.",
+        "Exact binding probe proves that per-token end-of-paragraph caret resets can intentionally split a slower writer’s word; continuous real input preserves it and still fails with the original caret guard removed.",
+        "The continuous C2 browser case passes and its actual caret-control pair fails at I2 as intended.",
+        "Two oversized input-point assertions fail against the old driver; all 13 focused browser self-tests pass after the boundary-scroll fix."
+      ],
+      "sourceCommit": "a996646",
+      "evidence": [
+        "e2e/.out/2610150146-d4pm/invocations/20261015T085726Z-p7849-wmdt/invocation.json",
+        "e2e/.out/c02-typing-intent/result.json",
+        "e2e/.out/c02-typing-intent/caret-negative.log",
+        "e2e/.out/controls-20261015-092245z/ledger.json",
+        "e2e/.out/oversized-point-proof/proof.json"
+      ],
+      "remaining": [
+        "Reproduce and repair the transaction failure path; validate exact-rule coverage recycling without changing permissions or data.",
+        "Fresh complete N20, every other original N/trial, controls and final acceptance remain required."
+      ]
     }
   ]
 }
