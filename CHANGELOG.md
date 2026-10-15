@@ -18,6 +18,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Competing version publishes upload into isolated immutable bundles. The
+  committed version record selects the bytes served, downloaded, forked and
+  edited, so a losing request cannot overwrite the winner's content.
 - Concurrent suggestion requests share the twenty-pending limit atomically;
   only one request can take the final slot, with no orphan opening comment.
 - Editing restores the document's original body attributes before saving and

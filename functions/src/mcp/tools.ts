@@ -35,6 +35,7 @@
  * both are decisions a person makes, and the guide says so in the same words.
  */
 
+import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { bucketName, publicOrigin } from "../config";
@@ -300,7 +301,7 @@ async function locateInCurrentVersion(
   const entry = String(vSnap.data()?.entry ?? "index.html");
   let html = "";
   try {
-    const [bytes] = await admin.storage().bucket(bucketName()).file(`docs/${ref.id}/${versionId}/${entry}`).download();
+    const [bytes] = await admin.storage().bucket(bucketName()).file(`${versionStoragePrefix(ref.id, versionId, vSnap.data() ?? {})}/${entry}`).download();
     html = bytes.toString("utf8");
   } catch {
     throw new Error("could not read the current version");
@@ -598,7 +599,7 @@ export const TOOLS: ToolDefinition[] = [
 
       const sourceRel =
         typeof v.sourceEntry === "string" ? v.sourceEntry : String(v.entry ?? "index.html");
-      const key = `docs/${ref.id}/${versionId}/${sourceRel}`;
+      const key = `${versionStoragePrefix(ref.id, versionId, v)}/${sourceRel}`;
       let source = "";
       try {
         const [bytes] = await admin.storage().bucket(bucketName()).file(key).download();

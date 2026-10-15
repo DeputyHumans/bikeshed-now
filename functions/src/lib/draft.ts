@@ -3,6 +3,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { newBundlePrefix, versionStoragePrefix } from "./storage";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
@@ -31,6 +32,7 @@ export interface VersionMeta {
   entry: string;
   format: "html" | "markdown";
   sourceEntry?: string;
+  storagePrefix?: string;
 }
 
 export async function loadVersionMeta(docRef: DocRef, versionId: string): Promise<VersionMeta | null> {
@@ -41,6 +43,7 @@ export async function loadVersionMeta(docRef: DocRef, versionId: string): Promis
   if (!entry) return null;
   return {
     entry,
+    storagePrefix: versionStoragePrefix(docRef.id, versionId, v),
     format: v.format === "markdown" ? "markdown" : "html",
     sourceEntry: typeof v.sourceEntry === "string" ? (safeRelPath(v.sourceEntry) ?? undefined) : undefined,
   };
@@ -169,7 +172,7 @@ export async function readWorkingCopy(
   const read = (rel: string) =>
     readFirst([
       ...(hasDraft ? [`docs/${docRef.id}/draft/${rel}`] : []),
-      `docs/${docRef.id}/${baseVersion}/${rel}`,
+      `${version.storagePrefix}/${rel}`,
     ]);
   if (version.format === "markdown") {
     const markdown = await read(version.sourceEntry ?? "index.md");
@@ -245,7 +248,7 @@ export async function commitDraft(args: {
   // Assemble: base assets, with anything the draft carries overriding it. That
   // one rule covers both formats — for Markdown the draft carries index.md and
   // index.html, for HTML just the entry — with no branch here.
-  const basePrefix = `docs/${docId}/${baseVersion}/`;
+  const basePrefix = `${version.storagePrefix}/`;
   const draftPrefix = `docs/${docId}/draft/`;
   const baseFiles = await readPrefix(basePrefix);
   const draftFiles = await readPrefix(draftPrefix);
@@ -280,12 +283,13 @@ export async function commitDraft(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docId}/${versionId}`;
+  const storagePrefix = newBundlePrefix(docId);
 
   for (const f of files) {
     await bucket().file(`${storagePrefix}/${f.rel}`).save(f.data, {
       contentType: mime.lookup(f.rel) || "application/octet-stream",
       resumable: false,
+      preconditionOpts: { ifGenerationMatch: 0 },
     });
   }
 

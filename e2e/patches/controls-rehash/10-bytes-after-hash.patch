@@ -1,12 +1,12 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -283,7 +283,8 @@
-   const storagePrefix = `docs/${docId}/${versionId}`;
- 
+@@ -286,7 +286,8 @@
+   const storagePrefix = newBundlePrefix(docId);
+
    for (const f of files) {
 -    await bucket().file(`${storagePrefix}/${f.rel}`).save(f.data, {
 +    const stored = f.rel === version.entry ? Buffer.concat([f.data, Buffer.from("\n<!-- e2e control: bytes after the hash -->\n")]) : f.data;
 +    await bucket().file(`${storagePrefix}/${f.rel}`).save(stored, {
        contentType: mime.lookup(f.rel) || "application/octet-stream",
        resumable: false,
-     });
+       preconditionOpts: { ifGenerationMatch: 0 },

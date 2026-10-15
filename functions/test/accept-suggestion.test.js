@@ -187,7 +187,7 @@ test("an approver's agent accepts two, rejects one, closes the thread, and publi
   assert.equal(published.deduped, false);
   assert.equal(w.doc().currentVersion, "v2");
   assert.equal(w.doc().draft, undefined, "the draft became the version");
-  const v2 = w.text("docs/d1/v2/index.html");
+  const v2 = w.text(`${w.store.get("docs/d1/versions/v2").storagePrefix}/index.html`);
   assert.match(v2, /cut over in two weekends/);
   assert.match(v2, /Compare vs\. Codex/);
   assert.equal(w.text("docs/d1/draft/index.html"), undefined);

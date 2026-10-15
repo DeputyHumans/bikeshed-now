@@ -19,6 +19,7 @@
  * the id alone can come to name different bytes.
  */
 
+import { versionStoragePrefix } from "./storage";
 import { addEvent } from "./events";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -176,7 +177,7 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   const target = await resolveFolderTarget(db, input.folderId, caller);
   if (!target.ok) return refuse(target.status, target.error);
 
-  const srcPrefix = `docs/${input.sourceId}/${versionId}/`;
+  const srcPrefix = `${versionStoragePrefix(input.sourceId, versionId, v)}/`;
   const [listed] = await input.bucket.getFiles({ prefix: srcPrefix });
   const objects = listed.filter((obj) => {
     const rel = obj.name.slice(srcPrefix.length);

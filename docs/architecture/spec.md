@@ -586,6 +586,12 @@ documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
 Withdrawing a version also deletes its thumbnails and clears a `thumb` naming
 it, since a re-minted id would otherwise inherit them.
 
+Every publish attempt uploads into its own immutable bundle prefix. The
+version record's `storagePrefix` selects those bytes only after the transaction
+commits; a competing or refused upload cannot replace them. All content,
+source, download, fork and subsequent-edit reads follow that pointer. Older
+records without a pointer retain their original version-based path.
+
 `createdAt` is set once. `updatedAt` is bumped on every publish.
 
 **A docId** is the document's address, `/d/{docId}`, and never changes. The
@@ -1032,7 +1038,7 @@ functions/src/
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
-  lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{publish,draft,storage,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx

@@ -20,6 +20,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { newBundlePrefix, versionStoragePrefix } from "./storage";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
@@ -218,7 +219,7 @@ export async function reviseDocument(args: {
     format: v.format === "markdown" ? "markdown" : "html",
     ...(sourceEntry ? { sourceEntry } : {}),
     // An archive replaces everything, so the base's bytes are not read for it.
-    files: extracted.archive ? [] : await readPrefix(`docs/${docRef.id}/${baseVersion}/`),
+    files: extracted.archive ? [] : await readPrefix(`${versionStoragePrefix(docRef.id, baseVersion, v)}/`),
   };
 
   const compiled = compileRevision(base, extracted, args.title, MAX_BUNDLE_BYTES);
@@ -499,8 +500,8 @@ export async function commitNewVersion(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docRef.id}/${versionId}`;
-  await uploadBundle(storagePrefix, compiled.files);
+  const storagePrefix = newBundlePrefix(docRef.id);
+  await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 
   const base = args.baseVersion ?? "";
   try {
@@ -523,7 +524,7 @@ export async function commitNewVersion(args: {
       const held = await refuseIfAcceptedInDraft(docRef, base);
       if (held) return held;
     }
-    if (reason === "STALE" || reason === "PENDING" || reason === "ACCEPTED") {
+    if (reason === "STALE" || reason === "CONFLICT" || reason === "PENDING" || reason === "ACCEPTED") {
       const fresh = await docRef.get();
       return {
         error: "Somebody published a newer version while this one was uploading. Read it, then update it again.",

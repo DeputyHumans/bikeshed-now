@@ -14,6 +14,7 @@
  * bypasses rules, and are therefore the only sanctioned write path.
  */
 
+import { versionStoragePrefix } from "./lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
@@ -522,15 +523,6 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `docs/${docId}/${versionId}/`;
-  const objectKey = `${prefix}${relPath}`;
-  // Defence in depth: the resolved key must stay under the version prefix even
-  // if a segment check above were ever loosened.
-  if (!objectKey.startsWith(prefix) || objectKey.includes("..")) {
-    res.status(404).end();
-    return;
-  }
-
   const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
   if (!gate) {
     res.status(404).end();
@@ -539,6 +531,15 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
 
   const versionSnap = await gate.docSnap.ref.collection("versions").doc(versionId).get();
   if (!versionSnap.exists) {
+    res.status(404).end();
+    return;
+  }
+
+  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
+  const objectKey = `${prefix}${relPath}`;
+  // Defence in depth: the resolved key must stay under the version prefix even
+  // if a segment check above were ever loosened.
+  if (!objectKey.startsWith(prefix) || objectKey.includes("..")) {
     res.status(404).end();
     return;
   }
@@ -703,7 +704,7 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `docs/${docId}/${versionId}/`;
+  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
   const [objects] = await bucket().getFiles({ prefix });
   const files: BundleEntry[] = [];
   let total = 0;
@@ -1262,7 +1263,9 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
 
   const draftKey = `docs/${docId}/draft/${relPath}`;
-  const baseKey = `docs/${docId}/${baseVersion}/${relPath}`;
+  const version = await loadVersionMeta(docSnap.ref, baseVersion);
+  if (!version) { res.status(404).end(); return; }
+  const baseKey = `${version.storagePrefix}/${relPath}`;
   let objectKey = draftKey;
   const [draftExists] = await bucket().file(draftKey).exists();
   if (!draftExists) {
@@ -2871,7 +2874,7 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
     // even where the range is ignored.
     stage = "stream";
     const stream = bucket()
-      .file(`docs/${docId}/${decision.versionId}/${entry}`)
+      .file(`${versionStoragePrefix(docId, decision.versionId, data)}/${entry}`)
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
     stage = "scan";
