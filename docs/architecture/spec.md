@@ -2445,8 +2445,11 @@ and `update_document` from a caller who may only suggest names `suggest_edit`.
 
 **An agent raises points as well as answering them.** `add_comment` finds its
 passage exactly as `suggest_edit` does, with the same refusals, and writes the
-annotation and its first comment in one batch, stamped with the caller's
-actor. Anyone who can read a document may comment on it, as in the browser.
+annotation and its first comment in one transaction, stamped with the caller's
+actor. The transaction rechecks the current version, read authority and expiry
+after locating the passage. If publication wins, the call refuses the newer
+version rather than opening a thread on a replaced head. Anyone who can read
+a document may comment on it, as in the browser.
 The anchor is stored with `strict: true`, because its offsets mean nothing in
 the page (§6). Nothing caps how many threads an agent opens, as nothing caps a
 person. Like every thread it stays on its version, and it holds back a new

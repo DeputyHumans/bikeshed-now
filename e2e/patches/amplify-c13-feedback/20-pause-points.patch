@@ -29,8 +29,8 @@
 +      // e2e amplify: pause after reading the head and anchor, before writing the thread.
 +      await e2eGate("comment-before-write", ref.id);
 +
-       // One batch: a thread with no comment in it is a highlight that says nothing.
-       const batch = ctx.db.batch();
+       // The anchor was found on the observed head. Recheck that head and the
+       // reader's authority atomically with both writes, so a racing publish
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
 @@ -19,4 +19,5 @@

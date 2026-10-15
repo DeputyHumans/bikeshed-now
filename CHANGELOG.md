@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - Close the operator-owned Admin app after awaited publishing, access, withdrawal or teardown work, so a live realtime mirror connection cannot keep a completed command running.
 
+- Recheck the current version and reader permission atomically when MCP opens a comment, so publication or access revocation during passage lookup cannot leave new feedback behind.
+
 - Judge retired live logs by entry count and observe OAuth return state without waiting for Firebase listeners to become network-idle; fix the default-marking matrix command.
 
 - Carry the supplied MCP link key through the final content transaction, recheck it after token rotation, and preserve the stricter upload editor gate after access revocation.

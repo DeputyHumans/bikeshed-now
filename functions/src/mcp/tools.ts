@@ -69,7 +69,7 @@ import {
   type EventActor,
 } from "../lib/events";
 import { extractBundle } from "../lib/bundle";
-import { linkProofFor } from "../lib/linkgrant";
+import { grantTokenOf, linkGrantRef, linkProofFor } from "../lib/linkgrant";
 import {
   BAD_DOC_ID,
   createFolderRecord,
@@ -1638,17 +1638,32 @@ export const TOOLS: ToolDefinition[] = [
         actor: ctx.actor,
         createdAt: FieldValue.serverTimestamp(),
       };
-      // One batch: a thread with no comment in it is a highlight that says nothing.
-      const batch = ctx.db.batch();
-      batch.create(annRef, {
-        annId: annRef.id,
-        anchor: { ...anchor, strict: true },
-        ...author,
-        color: ANNOTATION_COLOR,
-        resolved: false,
+      // The anchor was found on the observed head. Recheck that head and the
+      // reader's authority atomically with both writes, so a racing publish
+      // either sees this open thread or makes this attempt retry and refuse.
+      await ctx.db.runTransaction(async (tx) => {
+        const current = await tx.get(ref);
+        const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };
+        let proof = { k: str(args, "k"), grantToken: null as string | null };
+        if (current.exists && !canRead(currentData, ctx.caller, proof)
+          && visibilityOf(currentData) === "unlisted" && ctx.caller.uid) {
+          proof = { ...proof, grantToken: grantTokenOf(await tx.get(linkGrantRef(ref, ctx.caller.uid))) };
+        }
+        if (!current.exists || !canRead(currentData, ctx.caller, proof)
+          || (isExpired(currentData, Date.now()) && !canManageSharing(currentData, ctx.caller.emailLower))) {
+          throw new Error(`no document with id "${ref.id}"`);
+        }
+        refuseIfExpired(currentData);
+        if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
+        tx.create(annRef, {
+          annId: annRef.id,
+          anchor: { ...anchor, strict: true },
+          ...author,
+          color: ANNOTATION_COLOR,
+          resolved: false,
+        });
+        tx.create(commentRef, { commentId: commentRef.id, body, ...author });
       });
-      batch.create(commentRef, { commentId: commentRef.id, body, ...author });
-      await batch.commit();
       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
     },
   },

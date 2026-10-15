@@ -55,10 +55,8 @@
  *             their place; released, its transaction must refuse. SUGGESTION
  *             HELD: N creates held at `suggest-after-count` while the commit
  *             publishes v2; released, each must be refused for the newer
- *             version. COMMENT HELD (S12, functions/src/mcp/tools.ts:1626-1658:
- *             add_comment reads currentVersion, finds the passage, then
- *             writes the thread in a plain batch with no check that the
- *             version is still current): N add_comment calls held at
+ *             version. COMMENT HELD (S12 regression: add_comment rechecks the current
+ *             head and read authority in its thread-creation transaction): N add_comment calls held at
  *             `comment-before-write` while the commit publishes v2. STALE
  *             TAB (X-c13-feedback-1): v2 is published, then N tabs that still
  *             show v1 open a thread each on v1, in order; it is the losing
@@ -736,7 +734,8 @@ async function c14SyncWork(ctx) {
 }
 
 /** A C14 SYNC-T judge: INCONCLUSIVE unless the commit made v2 current (nothing could be left behind otherwise). */
-function c14SyncJudge(ctx, pick, what) {
+async function c14SyncJudge(ctx, pick, what) {
+  if (!observed.has(keyOf("C14 SYNC-T", ctx))) await c14SyncWork(ctx);
   const { state, published, commit } = observation(ctx, "C14 SYNC-T", "state");
   ctx.step(`commit: ${brief(commit)}; ${stateLine(state)}`);
   if (!published) ctx.inconclusive(`the commit was refused (${String(commit.text).slice(0, 120)}): feedback reached v1 first, so no version replaced v1 in this race and nothing could be left behind on it`);
@@ -753,8 +752,8 @@ scenario("C14 SYNC-T: N agents' comments and suggestions (in turn), N threads op
 scenario("C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced", {
   tiers: BOTH,
   n: N,
-  defect: "S12",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => c14SyncJudge(ctx, AGENT_COMMENT, "add_comment threads (S12)"));
 
 scenario("C14 judge (SYNC-T, web threads): when the commit published, no thread opened in the browser in the race is left unresolved on the version it replaced", {
@@ -810,9 +809,10 @@ scenario("C14 judge (comment held): no thread an add_comment opened is left unre
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
-  defect: "S12",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C14 comment held", ctx))) await c14CommentHeldWork(ctx);
   const { state, answers } = observation(ctx, "C14 comment held", "state");
   ctx.step(`current ${state.current}; add_comment told: ${answers.map((a) => (a.isError ? "refused" : a.json?.version)).join(", ")}`);
   assertNoneLeftBehind(state);

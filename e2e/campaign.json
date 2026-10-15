@@ -13734,6 +13734,23 @@
         "controls-smoke-operator-exit"
       ],
       "note": "B7 smoke reproduced a completed publish retaining its live RTDB connection. Commands now close only their owned Admin app in finally after durable work and mirror writes. Error ordering is covered for publish, set-access, delete-version and teardown. No forced harness exit or E2E closure."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "S12"
+      ],
+      "scope": "current-only MCP comment admission; E2E pending",
+      "tests": [
+        "14 add-comment tests pass, with four observed pre-fix race failures",
+        "32 combined authority/update/comment tests pass",
+        "Three isolated regressions compile and fail assertions; amplifier plus exact control patch applies"
+      ],
+      "evidence": "e2e/.out/comment-head-controls-TLROpe/proof.json; e2e/.out/unit-controls-expiry/comment-head-red.log",
+      "controls": [
+        "controls-c14-comment-head"
+      ],
+      "note": "Create annotation and first comment in a transaction that rechecks head, current read authority, expiry and any remembered link grant after locating the anchor. The held-head judge can run independently and both S12 judges are now normal assertions. Explicit browser historical commenting is intentional and remains available; its separate X-c13 question is not closed by this source repair. No E2E closure."
     }
   ]
 }
