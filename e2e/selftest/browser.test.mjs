@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { BrowserPool, classifyUrl, isGoogleHost } from "../lib/browser.mjs";
-import { bodyHash, frameGeometry, frameText, idSelector } from "../lib/frame.mjs";
+import { bodyHash, elementPoint, frameGeometry, frameText, idSelector } from "../lib/frame.mjs";
 
 const DOC = `<!doctype html><html><head><style>body{font:16px/1.5 sans-serif;margin:20px}p{margin:0 0 12px}</style></head>
 <body contenteditable="true"><p id="p1">First paragraph here.</p><p id="2">Second paragraph, digit id.</p><p id="p3">Third one.</p></body></html>`;
@@ -115,6 +115,23 @@ test("typeInFrame clicks through a 0.5 CSS scale into the right paragraph (digit
   } finally {
     await pool.close();
   }
+});
+
+for (const at of ["start", "end"]) test(`typeInFrame reaches the ${at} of a paragraph taller than its scaled frame`, async () => {
+  const pool = new BrowserPool({ target });
+  try {
+    const u = await pool.user();
+    await u.goto("/");
+    await u.waitForFrame();
+    const frame = await u.frame();
+    const original = "A long paragraph with many visible lines. ".repeat(400).trimEnd();
+    await frame.evaluate((text) => { document.querySelector("#p1").textContent = text; }, original);
+    const point = await elementPoint(frame, "#p1", at);
+    const height = await frame.evaluate(() => innerHeight);
+    assert.ok(point.y > 0 && point.y < height, `${at} line of an oversized paragraph must be in the frame viewport; y=${point.y}, height=${height}`);
+    await u.typeInFrame("#p1", "MARKER", { at });
+    assert.equal(await frame.locator("#p1").textContent(), at === "start" ? `MARKER${original}` : `${original}MARKER`, "real keystrokes reach the requested text boundary");
+  } finally { await pool.close(); }
 });
 
 test("toasts are captured by the init script; NEGATIVE: waiting for one that never shows times out", async () => {

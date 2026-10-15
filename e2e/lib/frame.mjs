@@ -477,7 +477,11 @@ export async function elementPoint(frame, selector, where = "end") {
     ({ selector, where }) => {
       const el = document.querySelector(selector);
       if (!el) return { error: `no element ${selector}` };
-      el.scrollIntoView({ block: "center", inline: "nearest" });
+      // A long collaborative paragraph can be taller than the frame. Centering
+      // that element hides both text boundaries; align the boundary we will
+      // actually click, without changing selection or any document content.
+      const oversized = el.getBoundingClientRect().height > innerHeight;
+      el.scrollIntoView({ block: oversized && (where === "start" || where === "end") ? where : "center", inline: "nearest" });
       const range = document.createRange();
       range.selectNodeContents(el);
       const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);

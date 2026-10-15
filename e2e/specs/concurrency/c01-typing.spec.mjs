@@ -265,9 +265,14 @@ async function withRss(ctx, n, body) {
 
 // --- typing, and proving it was a race --------------------------------------------------------
 
-/** Type `tokens` one after another at the end of #id, as a person does (a real click, then the keys). */
+/**
+ * Start at #id's end, then type one uninterrupted sequence of real keys.
+ * Clicking the current end before every token can deliberately move a fast
+ * writer into a slower peer's unfinished word. That tests a new caret choice,
+ * not whether remote changes preserve the writer's existing caret (S2).
+ */
 async function typeTokens(u, id, tokens) {
-  for (const t of tokens) await u.typeInFrame(idSelector(id), t, { delay: KEY_DELAY_MS, at: "end" });
+  if (tokens.length) await u.typeInFrame(idSelector(id), tokens.join(""), { delay: KEY_DELAY_MS, at: "end" });
 }
 
 /** Per user, the page-clock recording of save states and input events (User.recordSaveStates) and a capture of every POST /draft. */
