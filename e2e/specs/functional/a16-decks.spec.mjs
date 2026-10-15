@@ -19,11 +19,9 @@
  *           opens it too. Escape closes the
  *           overview and nothing else, even while presenting; with the
  *           overview shut it is left untouched (not defaultPrevented).
- *   A16.1b  "the navigator appears only above two slides" (SPEC §6d), read
- *           literally: a deck of exactly two viewport-tall slides gets no
- *           navigator. Tagged X-a16-decks-2: DocViewer.tsx gates on
- *           `slides.length > 1`, so two slides do get one. A SPEC question as
- *           much as a defect: either the sentence or the code has to move.
+ *   A16.1b  a recognized two-slide deck keeps its rail and navigation; a
+ *           single slide has no navigator. X-a16-decks-2 was a specification
+ *           mismatch: useful two-slide navigation is retained (SPEC §6d).
  *   A16.2   flat Q: every paging key on the parent scrolls the frame to the
  *           right slide and the rail follows; a key inside the frame too.
  *           Stacked D (trusted): a parent ArrowRight, a rail click, End and
@@ -463,9 +461,8 @@ scenario("A16.1 the rail and the slide buttons appear for viewport-tall decks of
   noPageErrors([o]);
 });
 
-scenario("A16.1b a deck of exactly two viewport-tall slides gets no navigator: \"the navigator appears only above two slides\" (SPEC §6d)", {
+scenario("A16.1b a recognized two-slide deck has a navigator that reaches both slides; a single slide has none (SPEC §6d)", {
   tiers: ["local", "prod"],
-  defect: "X-a16-decks-2",
   timeoutMs: 300_000,
   ...STALLS,
 }, async (ctx) => {
@@ -473,16 +470,34 @@ scenario("A16.1b a deck of exactly two viewport-tall slides gets no navigator: \
   const t = tag();
   const three = (await publish(owner.http, { body: sectionsDoc({ n: 3, minHeight: "100vh" }), filename: "index.html", title: `Three ${t}`, name: "a161b-three", patient: { ctx, stopAt: "budget" } })).docId;
   const two = (await publish(owner.http, { body: sectionsDoc({ n: 2, minHeight: "100vh" }), filename: "index.html", title: `Two ${t}`, name: "a161b-two", patient: { ctx, stopAt: "budget" } })).docId;
+  const one = (await publish(owner.http, { body: sectionsDoc({ n: 1, minHeight: "100vh" }), filename: "index.html", title: `One ${t}`, name: "a161b-one", patient: { ctx, stopAt: "budget" } })).docId;
   const o = await ownerBrowser(ctx, accounts[0]);
 
   ctx.step("control: the same slides, three of them, get the navigator (so the slides are detected and measured paged)");
   const s3 = await openDeck(o, three);
   precondition(s3.rail === 3 && s3.slidesButton, `three viewport-tall slides get a rail of three (got ${JSON.stringify({ rail: s3.rail, slidesButton: s3.slidesButton })})`);
 
-  ctx.step("two of them: no rail, no Slides, no All slides");
+  ctx.step("two of them: both rail entries, Slides and All slides remain available");
   const s2 = await openDeck(o, two, { expectRail: false });
   ctx.ev.json("two-slides", s2);
-  assert.deepEqual({ rail: s2.rail, slidesButton: s2.slidesButton, allSlidesButton: s2.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, "two slides are not above two: no navigator");
+  assert.deepEqual({ rail: s2.rail, slidesButton: s2.slidesButton, allSlidesButton: s2.allSlidesButton }, { rail: 2, slidesButton: true, allSlidesButton: true }, "a recognized two-slide deck has its navigator");
+  const layout = await frameState(o);
+  precondition(layout.offsets.length === 2 && layout.offsets[1] > layout.offsets[0], "the two slides occupy separate pages");
+  const reaches = async (index) => eventually(async () => {
+    const frame = await frameState(o);
+    const viewer = await viewerState(o);
+    return Math.abs(frame.y - layout.offsets[index]) <= 2 && viewer.current === index;
+  }, { timeout: 5_000, interval: 100, stableSamples: 3, message: `two-slide navigation reaches ${index + 1}` }).catch(() => false);
+  await o.page.locator(".slide-rail .slide-thumb").nth(1).click();
+  assert.equal(await reaches(1), true, "the two-slide navigator reaches the second slide");
+  await focusParent(o);
+  await o.page.keyboard.press("Home");
+  assert.equal(await reaches(0), true, "the two-slide navigator returns to the first slide");
+
+  ctx.step("a single recognized slide needs no navigator");
+  const s1 = await openDeck(o, one, { expectRail: false });
+  assert.deepEqual({ rail: s1.rail, slidesButton: s1.slidesButton, allSlidesButton: s1.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, "a single slide has no navigator");
+  noPageErrors([o]);
 });
 
 // --- A16.2 ----------------------------------------------------------------------

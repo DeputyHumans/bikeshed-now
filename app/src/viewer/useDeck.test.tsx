@@ -106,6 +106,18 @@ function mountStackedDeck(consumesKeys = true) {
 }
 
 describe("useDeck", () => {
+  it("keeps both pages of a two-slide deck reachable, including Home", () => {
+    const { doc, sections } = mountDeck('<main><section class="slide"><h2>One</h2></section><section class="slide"><h2>Two</h2></section></main>', 700, 700);
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    expect(result.current.slides).toHaveLength(2);
+    expect(result.current.paged).toBe(true);
+    act(() => result.current.goTo(1));
+    expect(sections[1].scrollIntoView).toHaveBeenCalled();
+    press(window, "Home");
+    expect(sections[0].scrollIntoView).toHaveBeenCalled();
+    expect(result.current.current).toBe(0);
+  });
+
   it("hears a key pressed inside the frame, where the reader's focus is", () => {
     const { doc, sections } = mountDeck(DECK);
     renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));

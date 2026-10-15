@@ -20,6 +20,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Clarify that a recognized two-slide deck keeps its navigator; cover both
+  destinations and the single-slide boundary in the end-to-end suite.
+
 - Keep delayed autosaves from overwriting merged work using insertion and deletion
   histories. Capture each editor's version and live epoch, autosave remote merges,
   and retire only the session consumed by a publish or accepted suggestion.

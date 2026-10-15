@@ -944,7 +944,9 @@ normative:
 - **Detection never runs the document.** It reads markup, which is what makes
   it work in the sandboxed case that needs it most.
 - **A document that is not a deck is unaffected.** Candidates must be siblings
-  of one parent, and the navigator appears only above two slides.
+  of one parent. A recognized deck with at least two slides gets a navigator
+  when its slides measure as pages; a single slide does not. The lower-confidence
+  rules for uniform or id-bearing prose sections still require three candidates.
 
 Navigation **scrolls** the document and never styles it, so §7's rule stands
 unchanged — with one measured exception. A deck that runs its own JavaScript

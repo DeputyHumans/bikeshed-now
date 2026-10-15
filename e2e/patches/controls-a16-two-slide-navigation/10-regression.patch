@@ -1,0 +1,6 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -228,2 +228,3 @@
+     (index: number) => {
++      if (slides.length === 2 && index === 1) return;
+       const slide = slides[Math.max(0, Math.min(slides.length - 1, index))];

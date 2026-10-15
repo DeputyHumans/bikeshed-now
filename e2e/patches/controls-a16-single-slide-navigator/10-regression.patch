@@ -1,0 +1,24 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -400,3 +400,3 @@
+   // record behind them changes every minute somebody reads (SPEC §2, §6d).
+-  const isDeck = deck.slides.length > 1 && deck.paged;
++  const isDeck = deck.slides.length > 0 && deck.paged;
+   const thumb = doc.meta?.thumb;
+@@ -895,3 +895,3 @@
+    */
+-  const hasSlides = deck.slides.length > 1 && deck.paged;
++  const hasSlides = deck.slides.length > 0 && deck.paged;
+   // The published deck's stored rail, when this is exactly what was captured:
+--- a/app/src/viewer/deck.ts
++++ b/app/src/viewer/deck.ts
+@@ -138,3 +138,3 @@
+   const group = largestSiblingGroup(tagged);
+-  if (group.length < 2 || !mostHaveHeadings(group)) return null;
++  if (group.length < 1 || !mostHaveHeadings(group)) return null;
+   return toSlides(group);
+@@ -244,3 +244,3 @@
+ export function isPaged(heights: number[], viewportHeight: number): boolean {
+-  if (viewportHeight <= 0 || heights.length < 2) return false;
++  if (viewportHeight <= 0 || heights.length < 1) return false;
+   // Not "fits in the viewport" — a short section fits too, and a document of

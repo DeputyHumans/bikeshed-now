@@ -13376,6 +13376,25 @@
         "controls-c01-late-autosave"
       ],
       "note": "Shared draft stamps include insertion clocks and deletion intervals; older or identical snapshots retain current bytes, concurrent or foreign-generation histories refuse. An editor latches its version and epoch and saves remote merges. Draft retirement advances an opaque epoch before exact scoped cleanup, including deduplicated commits and external suggestion accepts. Uncertain commit responses preserve candidate bytes; failed mirror projection refresh never reports a durable content write as refused. C01 delayed request is replayed after corrective autosaves finish so they cannot mask the regression. No item closed."
+    },
+    {
+      "kind": "spec-alignment-observation",
+      "items": [
+        "X-a16-decks-2"
+      ],
+      "scope": "two-slide navigation contract; local E2E pending",
+      "tests": [
+        "Deck detection and navigation focused:52 pass,0 fail",
+        "Three isolated control mutations fail assertions after clean52-pass copies: second-page navigation, Home navigation and single-slide boundary"
+      ],
+      "evidence": "e2e/.out/g21-unit-controls-TWLUcc/proof.json",
+      "controls": [
+        "controls-a16-two-slide-navigator",
+        "controls-a16-two-slide-navigation",
+        "controls-a16-two-slide-home",
+        "controls-a16-single-slide-navigator"
+      ],
+      "note": "The existing useful two-slide behavior is preserved. SPEC §6d now distinguishes recognized two-slide decks from three-candidate prose heuristics. A16.1b checks visible navigation, both actual scroll destinations and the single-slide boundary. All four patches apply and targets declare; the DocViewer threshold mutant awaits live E2E proof. No campaign item closed."
     }
   ]
 }
