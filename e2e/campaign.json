@@ -10556,7 +10556,17 @@
         "unit": "a12-versions"
       },
       "proofs": [],
-      "controls": [],
+      "controls": [
+        {
+          "set": "controls-a12-late-draft-base",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.6 (racing a commit) a POST /draft on the base a concurrent commit is superseding is refused or lands first: it never leaves a draft on the superseded version, which GET /draft would serve to every editor (SPEC §2)",
+            "suite": "functional"
+          },
+          "intendedFailure": "no draft is left on a superseded base"
+        }
+      ],
       "requiredCases": [
         {
           "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12b straddle draft write (SYNC-P, amplify-c12-update): every curl draft is held after POST /draft's base check while the agent's update publishes v2 and drops the draft, then lets go; once the server holds still nothing of a draft of v1 is left: no docs/{d}.draft on v1 and no object under docs/{d}/draft/",
@@ -17064,6 +17074,26 @@
         "e2e/.out/ack-matrix-controls-loooLP/proof.json"
       ],
       "note": "Added whole-spec projection, endpoint acknowledgement and operator acknowledgement cells. Actual new ACK pairs, full selftest and final frozen acceptance remain outstanding. Broader retry audit has separately reproduced suggestion create/revise issues still under repair."
+    },
+    {
+      "date": "2026-10-15",
+      "scope": "A12.6 current-snapshot refusal authoring; original X-a12-versions-2 stays open",
+      "checks": [
+        "Observed original A12.6 precondition failure after four valid publisher-wins attempts and a fifth legitimate snapshot-CAS refusal.",
+        "A safe opposite ordering must preserve the exact late draft, its stored/served bytes, current head and immutable version before another fresh attempt; it never qualifies as the publisher-wins witness.",
+        "Added controls-a12-late-draft-base to the original finding, retaining all five required cases and original concurrency axes. Current catalog: 717 directional controls across 735 total patch/capability sets.",
+        "Refusal comparator15/15 PASS; eleven isolated removed-assertion controls fail as intended, restored15/15 PASS. New product patch applies and typechecks; actual pair remains pending.",
+        "Two actual focused runs PASS; the second contains three publisher-wins attempts and two fully preserved snapshot refusals. Actual product-control pair still pending."
+      ],
+      "evidence": [
+        "e2e/.out/a12-race-refusal-proof/baseline.json",
+        "e2e/.out/a12-race-refusal-proof/inverse-proof.json",
+        "e2e/.out/a12-race-refusal-proof/patch-proof.json",
+        "e2e/.out/2610150524-ug92/invocations/20261015T124125Z-p26824-oelc/results.json",
+        "e2e/.out/2610150524-ug92/invocations/20261015T124226Z-p28017-v38u/results.json",
+        "e2e/.out/a12-race-refusal-proof/control-catalog.json"
+      ],
+      "note": "Authoring observations are not final acceptance. No canonical item or discovery is resolved."
     }
   ]
 }

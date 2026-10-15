@@ -108,6 +108,7 @@ import { rtdbAs } from "../../lib/rtdb.mjs";
 import { changeLog, settleLog } from "../../lib/changes.mjs";
 import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
+import { assertDraftRaceRefusal, DRAFT_SNAPSHOT_REFUSAL } from "../../lib/draft-race-oracles.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -1143,7 +1144,10 @@ scenario("A12.6 a stale base is refused naming the current version (/publish?upd
  * shape) and the late save was refused, as a fixed product refuses it. One
  * answered 200 with no draft left landed first and measured nothing, and the
  * case is INCONCLUSIVE when no attempt ran the race (seen: a copy with no
- * padding, whose late saves all landed first). Under the defect a 409 is a
+ * padding, whose late saves all landed first). A publisher snapshot conflict
+ * is another valid opposite ordering, but only after the exact late draft and
+ * published head are shown intact; it cannot supply the publisher-wins witness.
+ * Under the defect a 409 is a
  * check that came after the pointer moved, so five of those in a row would
  * pass it unexpectedly: none of the 25 measured attempts at 2–4 MB was one
  * (at 8 MB, 2 of 8 were: the larger body reached the check later).
@@ -1163,6 +1167,8 @@ scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit 
     const title = `A12.6 race ${tag()}`;
     const docId = await publishDoc(ctx, owner, { title, name: "a126-race" });
     await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 2) }, { expect: 200 });
+    const beforeVersion = plain(await versionRecord(docId, "v1"));
+    const beforeBytes = await versionObject(docId, "v1", "index.html");
     const lateHtml = docHtml(title, 2, " A late autosave.") + padding(RACE_PAD_BYTES);
     const ms = {};
     const t0 = Date.now();
@@ -1172,15 +1178,32 @@ scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit 
     await new Promise((resolve) => setTimeout(resolve, RACE_LEAD_MS));
     ms.commitSent = Date.now() - t0;
     const [late, c] = await Promise.all([lateSent, timed("commitAnswered", owner.http.postJson("/commit", { docId, baseVersion: "v1" }))]);
-    precondition(c.status === 200 && c.json?.versionId === "v2", `/commit: ${c.status} ${c.text.slice(0, 200)}`);
     precondition(late.status === 200 || late.status === 409, `the late POST /draft was answered ${late.status} ${late.text.slice(0, 200)}`);
     const rec = await docRecord(docId);
+    const served = await owner.http.get(`/draft/${docId}/index.html`);
+    const draftBase = rec.draft?.baseVersion ?? null;
+    assert.ok(draftBase === null || draftBase === rec.currentVersion, "no draft is left on a superseded base: the late save cannot survive on a retired publication");
+    const commitRefused = c.status === 409 && c.json?.draftChanged === true && c.json?.error === DRAFT_SNAPSHOT_REFUSAL;
+    if (commitRefused) {
+      assertDraftRaceRefusal({ commit: c, late, beforeVersion, beforeBytes, record: rec,
+        versions: (await readCollection(target, `docs/${docId}/versions`)).map(({ id, data }) => ({ id, data: plain(data) })),
+        versionBytes: await readObject(target, `${beforeVersion.storagePrefix}/index.html`),
+        draftBytes: rec.draft ? await readDraftObject(target, docId, "index.html") : null, served, lateHtml });
+      ctx.ev.json(`refused-commit-${attempt}`, { commit: c.json, lateDraft: late.json.draft, beforeVersion,
+        currentVersion: rec.currentVersion, draft: plain(rec.draft), liveEpoch: rec.liveEpoch,
+        publishedSha256: sha(beforeBytes), lateSha256: sha(lateHtml) });
+      const row = { attempt, docId, lateDraft: late.status, commit: c.status, inFlightTogether: ms.commitSent < ms.lateAnswered, ms,
+        currentVersion: rec.currentVersion, draftBase, raced: "no: the publisher refused its superseded snapshot; the exact late save and published head survived" };
+      rows.push(row);
+      ctx.ev.json("race", rows);
+      ctx.step(`attempt ${attempt}: ${JSON.stringify(row)}`);
+      continue; // This safe opposite ordering never satisfies the publisher-wins witness.
+    }
+    precondition(c.status === 200 && c.json?.versionId === "v2", `/commit: ${c.status} ${c.text.slice(0, 200)}`);
     // The commit's transaction, by the server's clock (functions/src/lib/draft.ts now() is a server timestamp).
     ms.pointerMoved = ((await versionRecord(docId, "v2"))?.publishedAt?.toMillis?.() ?? NaN) - t0;
     // What an editor's frame loads in edit mode (frameMode.ts frameSrc) and an editor reading the head with a draft present.
-    const served = await owner.http.get(`/draft/${docId}/index.html`);
     const says = /This is revision (\d+) of the versions document\.( A late autosave\.)?/.exec(served.text ?? "");
-    const draftBase = rec.draft?.baseVersion ?? null;
     const stale = draftBase !== null && draftBase !== rec.currentVersion;
     const inFlightTogether = ms.commitSent < ms.lateAnswered;
     const row = {
