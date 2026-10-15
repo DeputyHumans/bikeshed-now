@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Operator sharing and publishing now use transactional records and isolated,
+  create-only uploads. The E2E mirror repair uses revision fences and conditional
+  node writes, preserving concurrent revocations.
+
 - Concurrent document, folder and team sharing changes preserve every successful
   delta. Membership cascades retry changed dependencies, removed team admins
   lose management rights, and invitations belong to the operation that added access.

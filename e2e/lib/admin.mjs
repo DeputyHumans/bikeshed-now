@@ -84,6 +84,17 @@ export async function readDoc(target, path) {
   return snap.exists ? snap.data() : null;
 }
 
+/** A document and its commit revision, for version-fenced mirror repair. */
+export async function readDocRevision(target, path) {
+  const snap = await adminFor(target).db.doc(path).get();
+  if (!snap.exists) return null;
+  if (!snap.updateTime) throw new Error(`readDocRevision ${path}: missing updateTime`);
+  return {
+    data: snap.data(),
+    revision: `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`,
+  };
+}
+
 /** Every document in a collection: [{id, data}]. */
 export async function readCollection(target, path) {
   const snap = await adminFor(target).db.collection(path).get();

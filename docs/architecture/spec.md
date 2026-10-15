@@ -1085,11 +1085,21 @@ credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
 and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
-`firebase`, `hash`, `membership`, `endpoints`.
+`firebase`, `hash`, `membership`, `operator-writes`, `endpoints`.
 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
 They authenticate with the Admin SDK and require `--account` explicitly on every
 real run; the CLI authenticates with a personal access token over HTTPS.
+
+Operator access deltas use the same transaction boundary as endpoints: the
+current document, parent and team inputs are read together before grants and
+membership are written. Operator publishing uploads to a unique immutable
+bundle with create-only Storage writes, then selects and creates a version in
+a Firestore transaction. A duplicate content hash returns its existing version;
+a different publish from a base that advanced during upload refuses and must
+be rerun. Current sharing is preserved during version selection. Unselected
+attempt bundles can remain unreferenced; they never overwrite selected bytes.
+
 
 `publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin
 credentials bypass every endpoint and rule, so a refusal there would be advice,

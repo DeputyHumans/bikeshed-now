@@ -30,13 +30,7 @@ import mime from "mime";
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails } from "./lib/email.mjs";
 import { hashBundle, hashBundleFiles } from "./lib/hash.mjs";
-import {
-  computeMembership,
-  grantLists,
-  grantsOf,
-  loadFolderMembership,
-  loadTeamIndex,
-} from "./lib/membership.mjs";
+import { commitOperatorVersion, uploadOperatorBundle } from "./lib/operator-writes.mjs";
 import { syncPresenceAccess } from "./lib/presence.mjs";
 import {
   REPO_ROOT,
@@ -215,10 +209,10 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   if (dry) {
     console.log("  --dry-run: no Firestore or Storage writes.");
     console.log(`  would query docs/${docId}/versions for this contentHash; NO-OP if found.`);
-    console.log("  otherwise would upload (target version v{maxN+1}):");
+    console.log("  otherwise would upload to a unique immutable bundle, then select version v{maxN+1} transactionally:");
     for (const f of files) {
       console.log(
-        `    gs://${bucketName}/docs/${docId}/v{N}/${f.rel}  (${mime.getType(f.rel) || "application/octet-stream"})`,
+        `    gs://${bucketName}/docs/${docId}/bundles/{attempt}/${f.rel}  (${mime.getType(f.rel) || "application/octet-stream"})`,
       );
     }
     console.log(`  would upsert docs/${docId} and move currentVersion.`);
@@ -257,97 +251,35 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     }
   }
 
-  const allVersions = await versionsRef.get();
-  let maxN = 0;
-  for (const d of allVersions.docs) {
-    const m = /^v(\d+)$/.exec(d.id);
-    if (m) maxN = Math.max(maxN, Number(m[1]));
-  }
-  const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docId}/${versionId}`;
-
-  console.log(`  uploading ${fileCount} file(s) to gs://${bucketName}/${storagePrefix}/ ...`);
-  for (const f of files) {
-    const destination = `${storagePrefix}/${f.rel}`;
-    const contentType = mime.getType(f.rel) || "application/octet-stream";
-    await bucket.file(destination).save(f.data, { contentType, resumable: false });
-    console.log(`    + ${destination} (${contentType})`);
-  }
-
-  const snap = await docRef.get();
-  const existing = snap.exists ? (snap.data() ?? {}) : {};
-  const mergedViewers = [...new Set([...(existing.viewers ?? []), ...viewers])].sort();
-  const mergedEditors = [...new Set([...(existing.editors ?? []), ...editors])].sort();
-  const ownerForMembers = existing.ownerEmail ?? ownerEmail;
-  const folderId = existing.folderId ?? null;
-
-  // Effective membership, computed through the SAME function the server uses.
-  // The original of this design recomputed members here without the parent
-  // folder's, so publishing into a shared folder silently revoked every
-  // inherited reader.
-  // Every other role's grants are carried over as they stand: a republish that
-  // rebuilt only viewers and editors would write the rest out of membership.
-  const grants = { ...grantsOf(existing), viewers: mergedViewers, editors: mergedEditors };
-  const parent = await loadFolderMembership(db, folderId);
-  const teams = await loadTeamIndex(db, ...grantLists(grants));
-  const membership = computeMembership(ownerForMembers, grants, parent, teams);
+  console.log(`  uploading ${fileCount} file(s) into an immutable attempt bundle ...`);
+  const storagePrefix = await uploadOperatorBundle(bucket, docId, files);
 
   const actor = {
-    // Null because an operator script authenticates with Admin credentials, not
-    // as an account. `channel: "cli"` with no tokenId is what identifies it.
     uid: null,
-    email: values.account ?? ownerForMembers,
+    email: values.account ?? before.data()?.ownerEmail ?? ownerEmail,
     channel: "cli",
     client: CLIENT,
   };
-
-  const batch = db.batch();
-  batch.set(
-    docRef,
-    {
-      docId,
-      title,
-      slug,
-      ...(snap.exists ? {} : { ownerUid: null, ownerEmail, createdAt: FieldValue.serverTimestamp() }),
-      ...(snap.exists ? {} : { visibility: "private", publicEdit: false, folderId: null }),
-      ...grants,
-      ...membership,
-      currentVersion: versionId,
-      // CLI provenance: the publisher is authenticated and deliberate, so the
-      // bundle's own scripts run un-sandboxed. Browser uploads are the opposite
-      // case and are created trusted:false (SPEC §6c).
-      trusted: true,
-      updatedAt: FieldValue.serverTimestamp(),
+  const result = await commitOperatorVersion(db, docRef, {
+    existed: before.exists,
+    baseVersion: before.data()?.currentVersion ?? null,
+    ownerEmail, title, slug, viewers, editors,
+    label: values.label ?? manifest.label,
+    version: {
+      entry: storedEntry, format,
+      ...(sourceEntry ? { sourceEntry } : {}),
+      ...(rendererVersion ? { rendererVersion } : {}),
+      storagePrefix, fileCount, bytes, contentHash, files: files.map((f) => f.rel),
+      publishedVia: "cli", publishedByEmail: actor.email, publishedBy: actor,
     },
-    { merge: true },
-  );
-  batch.set(versionsRef.doc(versionId), {
-    versionId,
-    label: values.label ?? manifest.label ?? versionId,
-    entry: storedEntry,
-    format,
-    ...(sourceEntry ? { sourceEntry } : {}),
-    ...(rendererVersion ? { rendererVersion } : {}),
-    storagePrefix,
-    fileCount,
-    bytes,
-    contentHash,
-    files: files.map((f) => f.rel),
-    parentVersion: maxN > 0 ? `v${maxN}` : null,
-    publishedVia: "cli",
-    publishedByEmail: actor.email,
-    publishedBy: actor,
-    publishedAt: FieldValue.serverTimestamp(),
-  });
-  await batch.commit();
+  }, FieldValue.serverTimestamp());
+  if (result.duplicate) {
+    console.log(`  already published as ${result.versionId} (contentHash match) — NO-OP.`);
+    return;
+  }
+  await syncPresenceAccess(docId, result.membership.members, result.membership.editorMembers, values.project);
+  console.log(`  published ${docId} ${result.versionId} (currentVersion=${result.versionId}, ${result.existed ? "updated" : "created"}).`);
 
-  // Presence reads are gated by a mirror of `members` in RTDB, so every path
-  // that recomputes membership has to refresh it — including this one.
-  await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
-
-  console.log(
-    `  published ${docId} ${versionId} (currentVersion=${versionId}, ${snap.exists ? "updated" : "created"}).`,
-  );
 }
 
 /** Pick the entry when neither a flag nor the manifest names one. */

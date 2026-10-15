@@ -1240,9 +1240,10 @@ now, so they must already behave:
   or `grantEditors`, or `writeMirror` from `lib/grant.mjs`). It is the
   mirror the product's own grant path would have written, read from the
   document's record, and it goes only through its own narrow guard,
-  `mirrorWriteVerdict`, on every target: one PATCH of the target's
-  database root, for a document in the run's ledger, naming run accounts
-  only, recorded in `findings.jsonl` beside the S16 finding (see THE
+  `mirrorWriteVerdict`, on every target: ETag reads and conditional replacements
+  of each access node, with the source document's revision fence, for a document
+  in the run's ledger, naming run accounts only (plus public editing when the
+  document enables it), recorded in `findings.jsonl` beside the S16 finding (see THE
   MIRROR, WRITTEN BY THE HARNESS under Seed, fixtures and grants).
 - Every account, document, folder, token, grant, OAuth client and team a spec
   creates through `lib/` is appended to the run's `ledger.jsonl`
@@ -3381,44 +3382,27 @@ actor = "operator-mirror", evidence, timeoutMs = 60_000, admin = null,
 fetchImpl = null})` → `{docId, members, editorMembers, update, status}`
 does it:
 
-- It reads `docs/<id>` through Admin and sends ONE multi-path update, a
-  PATCH of the database root (`<origin>/.json` with the databaseURL's own
-  query, `?ns=` locally), of `mirrorUpdate(id, record)`.
-- `mirrorUpdate(docId, {members, editorMembers})` →
-  `{"presenceAccess/<id>": {<key>: true, …}, "editAccess/<id>": {…}}` is
-  what `functions/src/lib/presence.ts` `syncPresenceAccess` writes on a
-  grant (`persistDocMembership`; set-access.mjs's twin, when it can): keys
-  lower-cased with dots as commas, an empty list `{}` (the node removed, as
-  the product's whole-node replace does), and no open-edit key `*` (the
-  grant path never passes publicEdit). `selftest/mirror-write.test.mjs`
-  pins it to the product's source.
-- It writes as the database's admin: the emulator's `Bearer owner` on a
-  local stack, the operator's ADC token elsewhere (as `rtdbGet` reads).
-- It goes through `createHttp` (the isolation check, one row in the case's
-  `http.jsonl`, a token redacted) with its OWN guard in place of the
-  zero-email guard, whose `RTDB_REST` lets a run write only under
-  `status/<run doc>`: `mirrorWriteVerdict(req, {target, docs, accounts,
-  docId = null})` → `{allow, rule[, reason]}` (`docs` the Set of the run's
-  document ids, `ledgerDocIds`; `accounts` its accounts' addresses, or
-  `ledgerAccounts`' Map), pure, asked before the credential is fetched and
-  again on the request as sent, on EVERY target.
-  It allows only that PATCH, for a document in the run's ledger
-  (`mirror-ledger`), of exactly `presenceAccess/<d>` and `editAccess/<d>`
-  as objects of `<key>: true` (`mirror-body`), naming run accounts only
-  (`mirror-account`: the reason counts the others and never names them);
-  any other method (`mirror-method`) or URL (`mirror-url`) is refused. A
-  refusal is `E2E_GUARD` (`rule`), with nothing sent; a document outside
-  the ledger is refused before its record is even read.
-- `E2E_MIRROR`: no record, a record whose lists are not lists of
-  addresses, a database answer that is not 200 (`status`), or none
-  (`status: null`).
-- A write made appends `{kind: "mirror-written", suspect: "S16", docId,
-  members, editors, by: "harness"}` to `findings.jsonl`, beside share()'s
-  `mirror-missing`.
-- It writes what the record says NOW, whatever the mirror holds: call it
-  once, after the grants.
-- `admin` is a self-test's `{readDoc, authorization?}`, `fetchImpl` its
-  fetch.
+- It reads `docs/<id>` and its `updateTime` through Admin. Each node carries
+  `__revision` in the product's timestamp format. It reads `editAccess/<id>`
+  with an ETag, then conditionally replaces it; `presenceAccess/<id>` follows.
+  A newer revision is retained. An ETag conflict retries up to five times.
+- `mirrorUpdate(docId, {members, editorMembers})` builds the boolean email
+  maps (lower case, dots replaced by commas). `writeMirror` adds the revision
+  and the open-edit `*` key only for a public document with public editing enabled.
+- Requests use `createHttp`, the database admin credential, isolation checks
+  and a redacted trace row per request. No database-root read or write occurs.
+- `mirrorWriteVerdict(req, {target, docs, accounts, docId = null})` →
+  `{allow, rule[, reason]}` guards run-owned document nodes and run-account
+  grants. Its internal `publicEdit` option permits the wildcard only when the
+  source document enables it. GET and conditional PUT are the only methods;
+  PUT requires a quoted ETag and valid revision. Any refusal is `E2E_GUARD`.
+  All intended grants are checked before credentials are obtained.
+- `E2E_MIRROR` covers missing records/revisions, malformed membership, missing
+  ETags, unexpected responses or no answer, and exhausted conflict retries.
+- A successful synchronization appends `{kind: "mirror-written", suspect:
+  "S16", docId, members, editors, by: "harness"}` to `findings.jsonl`.
+- `admin` is a self-test's `{readDocRevision, authorization?}`; its reader
+  returns `{data, revision}`. `fetchImpl` is the stand-in fetch.
 
 `MIRROR_MODES` = `["stop", "write-missing"]`: what `grantEditors`,
 `joinShared` and `addMember` (`lib/live.mjs`) do, with their `mirror`
@@ -4377,7 +4361,7 @@ is unchanged, and the product writes the mirror on it.
 **`mirror: "write-missing"` gets past it, as the plan prescribes.** Once
 every grant is made, the harness writes the document's mirror from its
 record, as the product's grant path would have (`lib/grant.mjs`
-`writeMirror`: one PATCH of the database root through its own narrow guard,
+`writeMirror`: per-node ETag compare-and-set through its own narrow guard,
 for run documents and run accounts only; see THE MIRROR, WRITTEN BY THE
 HARNESS under Seed, fixtures and grants), reads every missing grantee's
 mirror back, records `mirror-written` beside the S16 finding, steps
