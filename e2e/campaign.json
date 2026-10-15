@@ -13964,6 +13964,36 @@
       ],
       "evidence": "e2e/.out/promotion-oracle-controls/proof.json",
       "note": "S10 elected seed is 189060 encoded characters; oversized compaction probe longest entry 1912120, zero refused writes, 92 retained entries, and filler exactly once for late join and save. A first compaction fixture failed below its threshold; a background-frame animation wait retry was cancelled. Both remain historical evidence. No campaign closure: broad matrix and current-revision product control pairs are pending."
+    },
+    {
+      "kind": "oauth-coverage-implementation",
+      "items": [
+        "deep:a22-oauth:01",
+        "deep:a22-oauth:02",
+        "deep:a22-oauth:03",
+        "deep:a22-oauth:04",
+        "deep:a22-oauth:05",
+        "deep:a22-oauth:06",
+        "deep:a22-oauth:07",
+        "deep:a22-oauth:08",
+        "deep:a22-oauth:09",
+        "deep:a22-oauth:10",
+        "deep:a22-oauth:11",
+        "deep:a22-oauth:12",
+        "deep:a22-oauth:13",
+        "deep:a22-oauth:14",
+        "deep:a22-oauth:15",
+        "deep:a22-oauth:16"
+      ],
+      "scope": "Local B10 product 6c38cc6; source assertions and controls, not campaign closure",
+      "checks": [
+        "Full A22 functional file: 10 pass, zero fail/TODO/inconclusive/skip",
+        "50 backend OAuth tests, 22 consent/legal app tests, 29 static deployment tests, 24 focused harness selftests pass; app typecheck passes",
+        "34 directional product source mutants fail their intended unit assertions; four harness setup/order/focus mutants fail",
+        "Real native focus transition required disabling renderer focus emulation again after navigation; two earlier inconclusive probes remain recorded"
+      ],
+      "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T061955Z-p64380-hobs/summary.md; e2e/.out/a22-controls-proof/{proof,app-proof,static-proof,setup-proof}.json",
+      "note": "Fresh patched-stack red/restored pairs remain required for all new controls. Historical A22 flakiness classifications are retained for separate evidence review; a current pass does not rewrite them."
     }
   ]
 }

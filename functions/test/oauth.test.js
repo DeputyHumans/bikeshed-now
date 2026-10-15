@@ -306,15 +306,18 @@ test("registration writes nothing, and its client_id carries the registration", 
 });
 
 test("registration refuses a redirect URI that could run in the browser", () => {
-  for (const uri of ["javascript:alert(1)", "http://evil.example/cb", "data:,x"]) {
+  for (const uri of ["javascript:alert(1)", "http://evil.example/cb", "data:,x", "blob:https://example.com/id", "https://u:p@example.com/cb", "https://example.com/cb#fragment", "https://example.com/cb\n", " javaScript:alert(1)"]) {
     assert.equal(registerClient({ redirect_uris: [uri] }).status, 400, uri);
   }
   assert.equal(registerClient({}).status, 400);
 });
 
 test("a hand-built registration id is re-validated, not trusted because it decodes", async () => {
-  const forged = `bsdcr_${Buffer.from(JSON.stringify({ n: "Claude", r: ["javascript:alert(1)"] })).toString("base64url")}`;
-  assert.equal(await resolveClient(forged), null);
+  for (const uri of ["javascript:alert(1)", "http://evil.example/cb", "data:,x", "blob:https://example.com/id", "https://u:p@example.com/cb", "https://example.com/cb#fragment", "https://example.com/cb\n", " javaScript:alert(1)"]) {
+    const forged = `bsdcr_${Buffer.from(JSON.stringify({ n: "Claude", r: [uri] })).toString("base64url")}`;
+    assert.equal(await resolveClient(forged), null, uri);
+  }
+
 });
 
 test("a client's chosen name loses control and format characters", () => {
@@ -331,4 +334,14 @@ test("the command line is a built-in client that may only return to this compute
   assert.ok(cli.redirectUris.every((u) => parseRedirectUri(u).kind === "loopback"));
   assert.ok(cli.redirectUris.some((u) => redirectMatches(u, "http://127.0.0.1:61234/callback")));
   assert.ok(!cli.redirectUris.some((u) => redirectMatches(u, "https://evil.example/callback")));
+  assert.ok(!cli.redirectUris.some((u) => redirectMatches(u, "http://localhost:61234/callback")));
+});
+
+
+test("private-use app schemes register and resolve as application redirects", async () => {
+  for (const uri of ["com.example.app:/callback", "example-app://desktop/callback"]) {
+    const registered = registerClient({ redirect_uris: [uri] });
+    assert.equal(registered.status, 201);
+    assert.deepEqual((await resolveClient(registered.body.client_id)).redirectUris, [uri]);
+  }
 });

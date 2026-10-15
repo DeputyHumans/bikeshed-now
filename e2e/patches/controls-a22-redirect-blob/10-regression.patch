@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/redirect.ts
++++ b/functions/src/oauth/redirect.ts
+@@ -76,3 +76,3 @@
+   if (!/^[a-z][a-z0-9+.-]*:$/.test(protocol)) return null;
+-  if (FORBIDDEN_SCHEMES.has(protocol)) return null;
++  if (FORBIDDEN_SCHEMES.has(protocol) && protocol !== "blob:") return null;
+   return { raw, url, kind: "app" };

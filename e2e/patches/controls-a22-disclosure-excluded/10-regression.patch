@@ -1,0 +1,6 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -229,3 +229,2 @@
+             <li>Delete anything, or rename a folder</li>
+-            <li>Set or clear an expiry</li>
+           </ul>

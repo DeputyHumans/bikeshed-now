@@ -1,0 +1,7 @@
+--- a/tools/stamp-deployment.mjs
++++ b/tools/stamp-deployment.mjs
+@@ -242,3 +242,3 @@
+     const stamped = stamp(text, origin);
+-    if (stamped !== text) writeFileSync(path, stamped);
++    if (stamped !== text && !rel.endsWith("SKILL.md")) writeFileSync(path, stamped);
+     files.push({ path: rel, count });

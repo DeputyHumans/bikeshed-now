@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise OAuth focus rearming, resource and client binding, live identity closure, hostile redirects, duplicate parameters and capability disclosure; exchange short-lived credentials before unrelated waits and add directional source controls for the protocol and public entry points.
+
 - Keep the document visible and the reader’s place intact when File → Print runs with Comments selected: phone pane switching now applies only on screen, and print hiding overrides later chrome styles. Exercise the complete stylesheet and real printing hook, including consent’s independent print guard.
 
 - Make Inline code wrap the selected rich text with native undo, preserving authored whitespace and styles, and request link destinations from the app window so the sandboxed editor can insert links. Exercise every formatting control through autosave and require the draft banner to show when it was saved.

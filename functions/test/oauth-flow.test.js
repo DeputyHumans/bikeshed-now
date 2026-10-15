@@ -324,7 +324,8 @@ test("the command line gets an ordinary personal token through the same consent"
   assert.match(r.body.access_token, /^bsk_[0-9a-f]{32}\./);
   assert.equal(r.body.refresh_token, undefined);
 
-  const caller = await w.run(() => resolveCaller({ headers: { authorization: `Bearer ${r.body.access_token}` } }));
+  const caller = await w.run(() => resolveCaller({ path: "/publish", headers: { authorization: `Bearer ${r.body.access_token}` } }));
+  assert.ok(caller, "the CLI personal token authenticates beyond MCP at /publish");
   assert.equal(caller.uid, "u-ana");
   assert.equal(caller.channel, "cli");
   const row = (await w.listTokens()).body.tokens.find((x) => x.tokenId === caller.tokenId);
@@ -611,4 +612,38 @@ test("a refused /mcp request tells the client where to sign in", async () => {
   const get = await w.run(() => invoke(mcp, { method: "GET", path: "/mcp", headers: {} }));
   assert.equal(get.status, 405);
   assert.equal(get.headers["cache-control"], "private, no-store", "the 405 must not inherit Hosting's max-age=600");
+});
+
+
+test("wrong authorization and refresh resource/client binding do not consume the legitimate grant", async () => {
+  const w = world();
+  const clientId = await w.register();
+  const bad = await w.consent("describe", authorizeParams(clientId, pkce().challenge, { resource: "https://bikeshed.example/not-mcp" }));
+  assert.equal(bad.body.error, "invalid_target");
+  const { pair } = await connect(w);
+  for (const extra of [{ resource: "https://bikeshed.example/not-mcp" }, { client_id: "bsdcr_other" }]) {
+    const r = await w.token({ grant_type: "refresh_token", refresh_token: pair.refresh_token, ...extra });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, extra.resource ? "invalid_target" : "invalid_grant");
+    assert.equal((await w.mcp(pair.access_token)).status, 200);
+  }
+  assert.equal((await w.token({ grant_type: "refresh_token", refresh_token: pair.refresh_token })).status, 200);
+});
+
+test("JSON exchange is accepted and repeated form verifier or redirect fields are refused before spending", async () => {
+  const w = world();
+  const clientId = await w.register();
+  const { verifier, challenge } = pkce();
+  const code = await approve(w, authorizeParams(clientId, challenge));
+  const fields = { grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT };
+  for (const key of ["code_verifier", "redirect_uri"]) {
+    const form = new URLSearchParams(fields);
+    form.append(key, fields[key]);
+    const r = await w.token(form.toString());
+    assert.equal(r.status, 400);
+    assert.match(r.body.error_description, /repeated/);
+  }
+  const accepted = await w.run(() => invoke(oauth, { path: "/oauth/token", body: fields, headers: { "content-type": "application/json" } }));
+  assert.equal(accepted.status, 200);
+  assert.ok(accepted.body.access_token.startsWith("bsa_"));
 });

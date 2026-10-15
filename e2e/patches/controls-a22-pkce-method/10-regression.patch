@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/consent.ts
++++ b/functions/src/oauth/consent.ts
+@@ -107,3 +107,3 @@
+   }
+-  if (params.code_challenge_method !== "S256" || !PKCE_CHALLENGE.test(params.code_challenge ?? "")) {
++  if (!PKCE_CHALLENGE.test(params.code_challenge ?? "")) {
+     return fail("invalid_request", "The app's request was missing a security check this server requires.", "PKCE with S256 is required");

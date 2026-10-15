@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -315,3 +315,3 @@
+   if (opts.clientId && opts.clientId !== g.client?.id) return invalidGrant("refresh token was issued to another client");
+-  if (opts.resource && opts.resource !== g.resource) {
++  if (false) {
+     return { ok: false, status: 400, error: "invalid_target", description: "refresh token was issued for another resource" };

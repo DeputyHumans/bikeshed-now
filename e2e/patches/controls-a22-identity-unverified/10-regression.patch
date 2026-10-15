@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -257,3 +257,3 @@
+   if (user.disabled) return "closed";
+-  if (user.emailVerified !== true) return "closed";
++  // The live identity condition is ignored.
+   const email = typeof user.email === "string" ? user.email.toLowerCase() : "";

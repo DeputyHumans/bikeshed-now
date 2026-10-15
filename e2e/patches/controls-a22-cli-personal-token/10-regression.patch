@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -160,3 +160,3 @@
+     const now = Timestamp.fromMillis(Date.now());
+-    if (stored.registration === "builtin" && stored.clientId === CLI_CLIENT_ID) {
++    if (stored.clientId === CLI_CLIENT_ID && false) {
+       // The command line gets an ordinary personal token. It calls endpoints

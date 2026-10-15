@@ -1,0 +1,6 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -217,3 +217,2 @@
+           <ul className="connect-list">
+-            <li>Read what you can read</li>
+             <li>Publish, revise and rename documents</li>

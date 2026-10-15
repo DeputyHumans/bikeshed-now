@@ -1,0 +1,7 @@
+--- a/app/src/pages/Legal.tsx
++++ b/app/src/pages/Legal.tsx
+@@ -45,3 +45,3 @@
+     <main className="legal" id="main">
+-      <h1>Terms of service</h1>
++      <h1>Terms unavailable</h1>
+       <p className="legal__updated">Last updated {UPDATED}</p>

@@ -5,7 +5,7 @@
    const showInvalid = (result: ConsentInvalid) => {
      clearAuthorizeRequest();
 +    const autoBack = result.back ? safeNavigate(result.back, request?.redirect_uri) : null;
-+    if (autoBack) setTimeout(() => window.location.assign(autoBack), 150);
++    if (autoBack) setTimeout(() => leave(autoBack), 1500);
      setView({
        kind: "invalid",
        message: result.message || "This request can't be completed.",
