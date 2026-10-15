@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Judge C14 wire overlap from unrounded request timestamps while accepting a positive sub-tenth-millisecond margin displayed as zero; a true zero overlap still refuses the evidence.
+
 - Keep stale-draft, delayed-autosave and checked-snapshot negative controls applicable to both draft commit paths after the snapshot-precondition repair.
 
 - Bind the separate C14 local safety assessment to every original natural and forced trial, exact saved bytes, request timing, completed records, and actual directional controls. Retain raw inconclusive observations and the original open obligation, so local acceptance never claims full completion.

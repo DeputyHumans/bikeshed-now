@@ -221,3 +221,15 @@ test("capture refuses source drift and writes only an ignored proposal after unc
   assert.throws(() => captureCompositeEvidence(f.campaign, f.manifest, path, { root: f.root, snapshot: () => calls++ ? { ...source, fingerprint: "e".repeat(64) } : source }), /source changed/);
   assert.throws(() => captureCompositeEvidence(f.campaign, f.manifest, "e2e/campaign.json", { root: f.root, snapshot: () => source }), /proposals belong under/);
 });
+
+
+test("a rounded zero margin requires a genuinely positive raw wire overlap", t => {
+  const f = fixture(t), run = f.runs[0];
+  for (const row of run.rows) {
+    if (row.kind === "natural") row.race.overlapMarginMs = 0;
+    if (row.ref === "request burst") for (const request of row.timing) request.firstByteAt = 101.02;
+  }
+  f.saveRun(run); assert.doesNotThrow(f.capture, "strictly positive raw overlap remains valid after display rounding");
+  run.rows.find(r => r.ref === "request burst").timing[0].firstByteAt = 101;
+  f.saveRun(run); assert.throws(f.capture, /simultaneous overlap/);
+});

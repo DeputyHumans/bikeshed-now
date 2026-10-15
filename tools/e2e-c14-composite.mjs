@@ -105,7 +105,7 @@ function measurement(row, n, kind) {
   need(!state.threads.some(t => t.open && t.version !== state.current && (t.kind === "suggestion" || t.channel === "mcp")), "open current-only feedback was left behind");
   if (kind === "natural" || kind === "commit-held-web") assertBrowserFeedback(state, answers);
   if (kind === "natural") {
-    need(row.race?.kind === "sync-t" && Number.isFinite(row.race.spreadMs) && row.race.spreadMs >= 0 && row.race.spreadMs <= 15 && Number.isFinite(row.race.overlapMarginMs) && row.race.overlapMarginMs > 0, "natural requests did not actually overlap");
+    need(row.race?.kind === "sync-t" && Number.isFinite(row.race.spreadMs) && row.race.spreadMs >= 0 && row.race.spreadMs <= 15 && Number.isFinite(row.race.overlapMarginMs) && row.race.overlapMarginMs >= 0, "natural requests did not actually overlap");
     need(won || state.threads.some(t => t.version === "v1" && t.open), "review refusal had no open feedback");
   } else {
     const gate = kind === "comment-held" ? "comment-before-write" : kind === "suggestion-held" ? "suggest-after-count" : "commit-before-tx", count = kind.startsWith("commit-held") ? 1 : n;
