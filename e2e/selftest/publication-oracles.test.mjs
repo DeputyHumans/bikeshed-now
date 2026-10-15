@@ -2,7 +2,24 @@
 // Refute missing, redirected and changed publication data in refused-commit evidence (SPEC §6a, §12).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertPublicationBaseline, assertPublicationPreserved } from "../lib/publication-oracles.mjs";
+import { assertPublicationBaseline, assertPublicationPreserved, isPublicationReviewRefusal } from "../lib/publication-oracles.mjs";
+
+const refusal = text => ({ status: 200, isError: true, text });
+const singular = "1 suggested edit is waiting for a decision. Only the owner or an approver can accept or reject it, and no new version can be published until then. If it is yours, you may withdraw it.";
+test("only full documented review messages qualify as refusals", () => {
+  assert.equal(isPublicationReviewRefusal(refusal("Resolve all comments before publishing a new version.")), true);
+  assert.equal(isPublicationReviewRefusal(refusal(singular)), true);
+  assert.equal(isPublicationReviewRefusal(refusal("2 suggested edits are waiting for a decision. Only the owner or an approver can accept or reject them, and no new version can be published until then. Any that are yours you may withdraw.")), true);
+});
+for (const [name, value] of [
+  ["generic error", refusal("Unknown publication failure.")],
+  ["truncated known prefix", refusal("1 suggested edit is waiting for a decision.")],
+  ["extra suffix", refusal(singular + " Try again later.")],
+  ["zero count", refusal(singular.replace("1 suggested", "0 suggested"))],
+  ["wrong grammar", refusal(singular.replace("edit is", "edits are"))],
+  ["transport error", { ...refusal(singular), status: 500 }],
+  ["successful response", { ...refusal(singular), isError: false }],
+]) test(`safe-refusal predicate rejects ${name}`, () => assert.equal(isPublicationReviewRefusal(value), false));
 
 const object = key => ({ key, size: 12, sha256: "a".repeat(64) });
 const sample = () => ({ currentVersion: "v1", liveEpoch: { present: false }, draft: { entry: "index.html", storagePrefix: "docs/d/bundles/draft", baseVersion: "v1", causal: { generation: "g", vector: "a", deletes: [] } }, versions: [{ id: "v1", metadata: { entry: "index.html", storagePrefix: "docs/d/bundles/old" }, objects: [object("docs/d/bundles/old/index.html")] }], draftObjects: [object("docs/d/bundles/draft/index.html")] });

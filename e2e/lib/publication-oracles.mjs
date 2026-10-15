@@ -6,6 +6,17 @@ import { draftStoragePrefix, listObjects, readCollection, readDoc, readObject } 
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
+/** Only the complete documented review refusal is a safe serialization result. */
+export function isPublicationReviewRefusal(answer) {
+  if (answer?.status !== 200 || answer.isError !== true || typeof answer.text !== "string") return false;
+  if (answer.text === "Resolve all comments before publishing a new version.") return true;
+  const match = /^([1-9]\d*) suggested edits? /.exec(answer.text);
+  if (!match) return false;
+  const singular = match[1] === "1";
+  const expected = `${match[1]} suggested ${singular ? "edit is" : "edits are"} waiting for a decision. Only the owner or an approver can accept or reject ${singular ? "it" : "them"}, and no new version can be published until then. ${singular ? "If it is yours, you may withdraw it." : "Any that are yours you may withdraw."}`;
+  return answer.text === expected;
+}
+
 /** Direct object bytes, never metadata alone or the current content proxy. */
 async function inventory(target, prefix) {
   return Promise.all((await listObjects(target, `${prefix}/`)).map(async key => {

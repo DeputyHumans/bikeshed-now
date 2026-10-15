@@ -156,7 +156,7 @@ import { grantEditors } from "../../lib/live.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually, settleStill } from "../../lib/assert.mjs";
 import { assertBrowserFeedback } from "../../lib/feedback-oracles.mjs";
-import { publicationSnapshot, assertPublicationBaseline, assertPublicationPreserved } from "../../lib/publication-oracles.mjs";
+import { publicationSnapshot, assertPublicationBaseline, assertPublicationPreserved, isPublicationReviewRefusal } from "../../lib/publication-oracles.mjs";
 import { naturalRaceAttempts } from "../../lib/review-race.mjs";
 import { requireConclusive, syncHttp } from "../../lib/sync.mjs";
 import { gates, holdCalls } from "../../lib/gates.mjs";
@@ -698,7 +698,7 @@ function feedbackAnswerOk(a, published) {
 }
 
 const commitOk = (a) => !a.isError && typeof a.json?.versionId === "string" && a.json?.deduped !== true;
-const commitHeldBack = (a) => a.isError && (OPEN_RE.test(a.text) || PENDING_RE.test(a.text));
+const commitHeldBack = isPublicationReviewRefusal;
 /** POST /publish?update= → fireAtOnce's shape: made {versionId, deduped}, or refused with its error. */
 const uploadAnswer = (r) => ({ who: "owner", what: "POST /publish?update=", status: r.status, isError: r.status !== 200, text: r.status === 200 ? "published" : String(r.json?.error ?? r.status), json: r.json ?? null });
 const landedBy = (state) => Object.fromEntries(state.versions.map((v) => [v, state.threads.filter((t) => t.version === v).map((t) => `${t.kind[0]}${t.channel === "web" ? "w" : ""}${t.open ? "" : "x"}`).join("")]));
