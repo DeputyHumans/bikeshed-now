@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Reconcile original comments, review, change-feed and OAuth failures from their saved artifacts, preserving uncertain attempts and historical outcomes instead of treating current passing runs as retroactive proof.
+
 - Explain when a suggestion changed after its previous replacement reached the draft, so an approver can review or undo that edit instead of being told to retry a now-stale acceptance.
 
 - Add directional account controls for populated-team deletion, consent and script loading, token revocation, hashing, read privacy and names; judge delayed token-use records with an explicit final assertion.

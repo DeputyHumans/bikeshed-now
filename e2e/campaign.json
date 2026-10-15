@@ -14141,6 +14141,25 @@
       ],
       "evidence": "/tmp/soapbox-a08-changed-unit-{red,green}.log; e2e/.out/2610142309-3nfp/invocations/20261015T070056Z-p92639-iw3o/results.json",
       "note": "User-authorized misleading-state harm repair. Original classification and evidence retained, canonical item remains open pending current control pair and full matrix."
+    },
+    {
+      "kind": "historical-attempt-review",
+      "items": [
+        "deep:a21-changes:01",
+        "deep:a22-oauth:16",
+        "r1:10",
+        "r1:11",
+        "deep:a08-review:13",
+        "r1:13"
+      ],
+      "scope": "Original local wr3h and 0a2t artifacts; interpretation only, no changed outcomes or canonical closure",
+      "checks": [
+        "81 original FAIL attempts reviewed:65 environment,11 harness,5 indeterminate to the evidentiary bar",
+        "Per-attempt report API classifications and merged annotations refreshed; original status and FLAKY histories retained",
+        "57 focused current setup/stall/budget/cast/mirror/OAuth receiver selftests pass"
+      ],
+      "evidence": "docs/development/e2e-historical-triage.md; e2e/.out/history-a21-a22/{review,review-more}.json; /tmp/soapbox-history-judges.log",
+      "note": "Five early A06/A21 observations retain uncertainty. Historical loaded-stack conclusions are not borrowed across attempts. A08 current repeated runs and refreshed controls remain pending."
     }
   ]
 }
