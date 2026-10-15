@@ -8,11 +8,12 @@ import { createRequire } from "node:module";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { crc32, deflateRawSync } from "node:zlib";
 import { OUT_DIR, REPO_ROOT } from "../lib/paths.mjs";
 import { firebaseTools } from "../lib/prerequisites.mjs";
 import { installJavaWrapper } from "../lib/jvm.mjs";
 import { capabilitiesFor } from "../lib/options.mjs";
-import { RTDB_APPEND_CHANGE, RTDB_RUNTIME_CAPABILITY, beginRtdbInvocationChild, RTDB_STOCK_PIN, assertRtdbLaunchReceipt, deriveRtdbJar, inspectRtdbDerivation, parseClassMethods, prepareRtdbRuntime, verifyRtdbEngine, writeRtdbInvocationEvidence } from "../lib/rtdb-runtime.mjs";
+import { RTDB_APPEND_CHANGE, RTDB_RUNTIME_CAPABILITY, beginRtdbInvocationChild, RTDB_STOCK_PIN, assertRtdbLaunchReceipt, deriveRtdbJar, inspectRtdbDerivation, readRtdbZipMember, parseClassMethods, prepareRtdbRuntime, verifyRtdbEngine, writeRtdbInvocationEvidence } from "../lib/rtdb-runtime.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
 
 const hash = b => createHash("sha256").update(b).digest("hex");
@@ -171,4 +172,44 @@ test("a later child capture failure clears the earlier tier completion and updat
   assert.deepEqual(evidence.before, f.receipt, "the earliest before receipt still brackets the invocation");
   const source = readFileSync(join(REPO_ROOT, "e2e/run.mjs"), "utf8");
   assert.match(source, /if \(target\.rtdbEngine\) \{[\s\S]*?rtdbBefore = await beginRtdbInvocationChild[\s\S]*?const code = await nodeTest/, "every child starts through invalidation before nodeTest");
+});
+
+test("all member identities and the pinned profile verify within a 128 MiB JavaScript heap", () => {
+  const program = `import { readFileSync } from "node:fs"; import { deriveRtdbJar, inspectRtdbDerivation } from ${JSON.stringify(new URL('../lib/rtdb-runtime.mjs',import.meta.url).href)}; const stock = readFileSync(process.argv[1]); const result = deriveRtdbJar(stock); const again = inspectRtdbDerivation(stock,result.bytes); if(JSON.stringify(again)!==JSON.stringify(result.facts)) throw Error("inspection is unstable"); console.log(JSON.stringify({facts:again,heapUsed:process.memoryUsage().heapUsed}));`;
+  const result = spawnSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", program, fixture().sourcePath], { encoding: "utf8", timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+  assert.equal(result.error, undefined, "bounded inspection completes before its fixed deadline");
+  assert.equal(result.signal, null, `bounded inspection must not exhaust its heap or be killed: ${result.stderr}`);
+  assert.equal(result.status, 0, result.stderr);
+  const actual = JSON.parse(result.stdout);
+  assert.equal(actual.facts.memberCount, 17956);
+  assert.equal(actual.facts.actualSha256, "919e70261efbd666cd605621deb41f2dbf8c1d042a08b55e937bc06d8d09a18f");
+  assert.equal(actual.facts.profileSha256, "ea69a817b0ba05d6193621617ad696700ff354575f87f474ea6ef0926f878b35");
+  assert.deepEqual(actual.facts.changedMembers, [RTDB_APPEND_CHANGE.className]);
+});
+
+function zipMemberFixture({ data = Buffer.from("an independently checked member"), size = data.length, crc = crc32(data), suffix = Buffer.alloc(0), localName = "entry", centralName = "entry" } = {}) {
+  const compressed = Buffer.concat([deflateRawSync(data), suffix]), local = Buffer.alloc(30), central = Buffer.alloc(46), end = Buffer.alloc(22);
+  local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(crc, 14); local.writeUInt32LE(compressed.length, 18); local.writeUInt32LE(size, 22); local.writeUInt16LE(Buffer.byteLength(localName), 26);
+  central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(crc, 16); central.writeUInt32LE(compressed.length, 20); central.writeUInt32LE(size, 24); central.writeUInt16LE(Buffer.byteLength(centralName), 28);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(central.length + Buffer.byteLength(centralName), 12); end.writeUInt32LE(local.length + Buffer.byteLength(localName) + compressed.length, 16);
+  return Buffer.concat([local, Buffer.from(localName), compressed, central, Buffer.from(centralName), end]);
+}
+
+test("the bounded ZIP reader validates actual payload CRC, size, compression consumption and local identity", () => {
+  const data = Buffer.from("123456789");
+  assert.equal(crc32(data), 0xcbf43926, "CRC uses the independent standard golden vector");
+  assert.deepEqual(readRtdbZipMember(zipMemberFixture({ data }), "entry"), data);
+  assert.equal(readRtdbZipMember(zipMemberFixture({ data: Buffer.alloc(0) }), "entry").length, 0, "empty entries remain valid");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ crc: 0 }), "entry"), /ZIP member CRC mismatch/, "matching corrupt header CRCs cannot attest changed payload bytes");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ size: 1024 * 1024 + 1 }), "entry"), /audited size bound/, "member size cannot request an unbounded inflate");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ size: 32 }), "entry"), /uncompressed member size differs/, "declared output length must equal actual bytes");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ size: 1 }), "entry"), /invalid or oversized compressed ZIP member/, "inflate stops at the declared output limit");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ suffix: Buffer.from([0]) }), "entry"), /trailing bytes/, "every declared compressed byte must belong to the deflate stream");
+  assert.throws(() => readRtdbZipMember(zipMemberFixture({ localName: "other" }), "entry"), /member name differs/, "local and central filenames identify the same bytes");
+  const mismatched = zipMemberFixture(); mismatched.writeUInt32LE(0, 14);
+  assert.throws(() => readRtdbZipMember(mismatched, "entry"), /local\/central CRC or size differs/, "local metadata must agree before decompression");
+  const encoding = zipMemberFixture(); encoding.writeUInt16LE(1, 6);
+  assert.throws(() => readRtdbZipMember(encoding, "entry"), /unexpected ZIP member encoding/, "encrypted or descriptor-driven entries cannot qualify");
 });

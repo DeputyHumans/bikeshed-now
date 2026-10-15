@@ -3,16 +3,13 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { deflateRawSync } from "node:zlib";
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { OUT_DIR, REPO_ROOT, assertPath } from "./paths.mjs";
 import { commandLine, environments, markedPids, processStartSecs } from "./proc.mjs";
 import { jvmEvents } from "./jvm.mjs";
 import { rtdbRulesFile } from "./patch.mjs";
 
-const require = createRequire(join(REPO_ROOT, "functions", "package.json"));
-const AdmZip = require("adm-zip"); // Existing Functions runtime dependency; no additional dependency.
 export const RTDB_STOCK_PIN = Object.freeze({ firebase: "15.25.1", database: "4.11.2", sha256: "b70d99344caf17c98b6f910fa8f6edf32a7c016cb1035e8915f70d38901eb97f" });
 export const RTDB_DERIVED_PIN = Object.freeze({ actualSha256: "919e70261efbd666cd605621deb41f2dbf8c1d042a08b55e937bc06d8d09a18f", profileSha256: "ea69a817b0ba05d6193621617ad696700ff354575f87f474ea6ef0926f878b35" });
 export const RTDB_RUNTIME_KIND = "request-context-sync-v1";
@@ -96,17 +93,41 @@ function zipDirectory(bytes) {
   return { end, offset, rows };
 }
 
+/** The audited archive has only ordinary DEFLATE entries; inflate at most one bounded member at a time. */
+function readZipEntry(bytes, row, directoryOffset) {
+  const at = row.local;
+  need(at + 30 <= directoryOffset && bytes.readUInt32LE(at) === 0x04034b50, "invalid ZIP local header");
+  need(row.flags === 0 && row.method === 8 && bytes.readUInt16LE(at + 6) === row.flags && bytes.readUInt16LE(at + 8) === row.method, "unexpected ZIP member encoding");
+  need(row.size <= 1024 * 1024, "ZIP member exceeds the audited size bound");
+  need(bytes.readUInt32LE(at + 14) === row.crc && bytes.readUInt32LE(at + 18) === row.compressed && bytes.readUInt32LE(at + 22) === row.size, "ZIP local/central CRC or size differs");
+  const nameSize = bytes.readUInt16LE(at + 26), start = at + 30 + nameSize + bytes.readUInt16LE(at + 28), end = start + row.compressed;
+  need(start <= directoryOffset && end <= directoryOffset, "ZIP member overlaps directory");
+  need(bytes.subarray(at + 30, at + 30 + nameSize).equals(Buffer.from(row.name, "utf8")), "ZIP local/central member name differs");
+  let inflated;
+  try { inflated = inflateRawSync(bytes.subarray(start, end), { info: true, maxOutputLength: Math.max(1, row.size) }); }
+  catch { need(false, "invalid or oversized compressed ZIP member"); }
+  need(inflated.engine.bytesWritten === row.compressed, "ZIP compressed member has trailing bytes");
+  const data = inflated.buffer;
+  need(data.length === row.size, "ZIP uncompressed member size differs");
+  need(crc32(data) === row.crc, "ZIP member CRC mismatch");
+  return data;
+}
+
+/** Inspect a member through the same strict reader used for every attested payload. */
+export function readRtdbZipMember(bytes, name) {
+  const directory = zipDirectory(bytes), row = directory.rows.find(entry => entry.name === name);
+  need(row, "ZIP member is missing");
+  return readZipEntry(bytes, row, directory.offset);
+}
+
 /** Preserve every other compressed member and header; only target CRC/size and shifted offsets change. */
 function canonicalDerived(stock) {
   need(hash(stock) === RTDB_STOCK_PIN.sha256, "unrecognized stock JAR");
   const directory = zipDirectory(stock), row = directory.rows.find(e => e.name === RTDB_APPEND_CHANGE.className);
   need(row && row.flags === 0 && row.method === 8, "unexpected target ZIP encoding");
-  const zip = new AdmZip(stock), before = zip.getEntry(row.name).getData(), after = changedClass(before);
-  const entry = new AdmZip(stock).getEntry(row.name); entry.setData(after);
-  const compressed = deflateRawSync(after), crc = entry.header.crc, delta = compressed.length - row.compressed;
-  need(stock.readUInt32LE(row.local) === 0x04034b50 && stock.readUInt16LE(row.local + 6) === 0 && stock.readUInt16LE(row.local + 8) === 8, "unexpected target local header");
+  const before = readZipEntry(stock, row, directory.offset), after = changedClass(before);
+  const compressed = deflateRawSync(after), crc = crc32(after), delta = compressed.length - row.compressed;
   const start = row.local + 30 + stock.readUInt16LE(row.local + 26) + stock.readUInt16LE(row.local + 28), oldEnd = start + row.compressed;
-  need(oldEnd <= directory.offset, "target overlaps directory");
   const prefix = Buffer.from(stock.subarray(0, start));
   prefix.writeUInt32LE(crc, row.local + 14); prefix.writeUInt32LE(compressed.length, row.local + 18);
   const central = Buffer.from(stock.subarray(directory.offset, directory.end));
@@ -125,16 +146,23 @@ export function inspectRtdbDerivation(stock, derived) {
   need(derived.equals(canonicalDerived(stock)), "derived archive differs from the canonical one-bit transform");
   const originalDirectory = zipDirectory(stock), nextDirectory = zipDirectory(derived);
   need(same(originalDirectory.rows.map(r => r.name), nextDirectory.rows.map(r => r.name)), "ZIP member order changed");
-  const a = new AdmZip(stock), b = new AdmZip(derived), members = [], changedMembers = [];
-  for (const row of originalDirectory.rows) {
-    const before = a.getEntry(row.name).getData(), after = b.getEntry(row.name).getData();
+  const members = createHash("sha256"), changedMembers = []; let afterClassSha256;
+  members.update("[");
+  for (let i = 0; i < originalDirectory.rows.length; i++) {
+    const row = originalDirectory.rows[i], next = nextDirectory.rows[i];
+    const before = readZipEntry(stock, row, originalDirectory.offset), after = readZipEntry(derived, next, nextDirectory.offset);
     const changed = !before.equals(after);
     if (changed) changedMembers.push(row.name);
     need(row.name === RTDB_APPEND_CHANGE.className ? after.equals(changedClass(before)) : !changed, `unexpected changed member ${row.name}`);
-    members.push([row.name, hash(before), hash(after)]);
+    const afterHash = hash(after);
+    if (row.name === RTDB_APPEND_CHANGE.className) afterClassSha256 = afterHash;
+    // Byte-identical to JSON.stringify(all member tuples), without retaining 17,956 tuples or ZIP objects.
+    if (i) members.update(",");
+    members.update(JSON.stringify([row.name, hash(before), afterHash]));
   }
+  members.update("]");
   need(same(changedMembers, [RTDB_APPEND_CHANGE.className]), "changed member inventory differs");
-  const facts = { kind: RTDB_RUNTIME_KIND, originalSha256: hash(stock), actualSha256: hash(derived), mutation: RTDB_APPEND_CHANGE, afterClassSha256: hash(b.getEntry(RTDB_APPEND_CHANGE.className).getData()), memberCount: members.length, membersSha256: hash(JSON.stringify(members)), changedMembers };
+  const facts = { kind: RTDB_RUNTIME_KIND, originalSha256: hash(stock), actualSha256: hash(derived), mutation: RTDB_APPEND_CHANGE, afterClassSha256, memberCount: originalDirectory.rows.length, membersSha256: members.digest("hex"), changedMembers };
   return { ...facts, profileSha256: hash(JSON.stringify(facts)) };
 }
 

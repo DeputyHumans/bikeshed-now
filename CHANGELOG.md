@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Verify the derived Database archive one bounded ZIP member at a time so the full campaign checker fits its unchanged memory limit. Preserve every member digest, CRC, canonical archive bytes and reviewed runtime profile; reject malformed local metadata, oversized output and trailing compressed data.
+
 - Keep the CAS pause patch composable with the existing feedback and minting pauses without changing its resulting code. Load the runtime dependency in isolated capability-parser controls so both admission faults reach their intended assertions.
 
 - Exercise both conditional-draft candidate disposal paths with captured CAS pauses, exact byte preservation and separate product controls. Bind every discovered product defect to its current affected cases while preserving original claims, native ACK obligations and unresolved evidence; extend the existing cleanup finding with the observed CAS draft failures.
