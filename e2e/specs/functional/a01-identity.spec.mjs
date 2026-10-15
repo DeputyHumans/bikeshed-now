@@ -11,14 +11,10 @@
  *         code mail, /verify/complete {verified:true}, the next /session "ok"
  *         with the cookie attributes §2 names, users/{uid} = {uid, email}. The
  *         account is created with accounts:signUp (what the SDK's
- *         createUserWithEmailAndPassword sends), because:
- *   A1.2b the form's "Create account" never enables against the Auth
- *         emulator, which answers the password-policy fetch 501 (suspected
- *         defect X-a01-identity-1). Any failed fetch does the same: the form
- *         then holds no requirements, and allMet([]) is false
- *         (app/src/passwordPolicy.ts), though PasswordForm's catch says the
- *         server still enforces the policy on submit. A served policy enables
- *         it, so where the fetch succeeds this case passes
+ *         createUserWithEmailAndPassword sends); A1.2b covers the browser form.
+ *   A1.2b the form enables after a rejected policy request and creates an
+ *         unverified account locally through the real browser Auth SDK. This
+ *         guards X-a01-identity-1: allMet([]) formerly disabled it forever.
  *   A1.3  five wrong codes are each 400; the sixth attempt — the RIGHT code —
  *         is 429 and the verification is deleted; the account stays unverified
  *   A1.4  a second start inside 60 s is 429 and the mail count holds at 1; the
@@ -43,16 +39,14 @@
  *         X-a01-identity-3)
  *   A1.9  /connect and /signup send X-Frame-Options: DENY and
  *         frame-ancestors 'none' (§23 Consent)
- *   A1.9b /SIGNUP, /Signup, /CONNECT and /Connect render the same sign-in page
- *         (the router matches case-insensitively), and a plain anonymous GET of
- *         each is answered without those headers (suspected defect
- *         X-a01-identity-2). Response headers are what the emulator cannot
- *         vouch for (CLAUDE.md): whether production Hosting matches the
- *         /signup and /connect header sources case-sensitively is exactly what
- *         this case, prod-safe, is there to measure
+ *   A1.9b mixed case, trailing slash and encoded routes, and protected account
+ *         and folder routes, render sign-in and carry the same frame headers.
+ *         Production Hosting headers require a production observation; local
+ *         execution proves only the emulator (X-a01-identity-2).
  *   A1.9c the framing proof, local only (it needs a stack spare port for the
- *         other origin): such a page can frame each variant with the sign-in
- *         form showing, though not /signup itself (X-a01-identity-2)
+ *         other origin): another origin cannot show sign-in in any variant.
+ *   A1.9d every app-shell entry path, including paths that client-redirect,
+ *         carries frame headers; document byte routes remain embeddable.
  *
  * Email-sending cases are local only and declare their effects. Only e2e/lib/
  * talks to the stack. Waits for the server's answer allow ANSWER_MS: a shared
@@ -73,6 +67,7 @@ import { after } from "node:test";
 import { answered, caseBudget, currentTarget, functionKill, onAnsweringStack, pageStall, precondition, scenario, untilLanded } from "../../lib/test.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
 import { cast, castUnverified, localEmail, passwordFor, rand4, runTag } from "../../lib/accounts.mjs";
+import { appendLedger } from "../../lib/ledger.mjs";
 import { closeSession, idToken, openSession } from "../../lib/session.mjs";
 import { createFolder, createTeam, publish } from "../../lib/seed.mjs";
 import { share, shareFolder, teamMembers } from "../../lib/grant.mjs";
@@ -328,7 +323,6 @@ scenario("A1.2 password sign-up at /signup: unverified, one code mail, /verify/c
 
 scenario("A1.2b Create account enables at /signup for a password the deployment's policy accepts, so a person can sign up there", {
   tiers: ["local", "prod"],
-  defect: "X-a01-identity-1",
   timeoutMs: 60_000,
 }, async (ctx) => {
   const email = localEmail(target, "create");
@@ -351,6 +345,22 @@ scenario("A1.2b Create account enables at /signup for a password the deployment'
       throw new Error(`Create account never enabled for a policy-satisfying password within 15 s: the password-policy fetch answered ${JSON.stringify(policyFetch())} and the form shows ${shown} requirement(s) and no reason`);
     }
   });
+  if (target.kind === "local") {
+    ctx.step("Create account submits to Auth and reaches the unverified account gate");
+    const created = u.page.waitForResponse((r) => /\/accounts:signUp$/.test(new URL(r.url()).pathname) && r.request().method() === "POST", { timeout: 20_000 });
+    const session = u.page.waitForResponse((r) => new URL(r.url()).pathname === "/session" && r.request().method() === "POST", { timeout: 20_000 });
+    await create.click();
+    const response = await created;
+    const data = await response.json();
+    assert.equal(response.status(), 200, "the enabled signup form creates the account");
+    assert.equal(typeof data.localId, "string", "Auth returned the new account uid");
+    appendLedger(target, { kind: "account", role: "create", email, uid: data.localId, tier: "local", verified: false, via: "browser-signup" });
+    const answer = await session;
+    assert.deepEqual(await answer.json(), { status: "unverified" }, "creating an account never bypasses email verification");
+    assert.equal((await adminFor(target).auth.getUser(data.localId)).emailVerified, false);
+    await u.page.locator(".auth-step[aria-current=step]", { hasText: "3. Verify" }).waitFor({ state: "visible", timeout: 15_000 });
+    assert.equal(await u.sessionCookie(), null, "an unverified signup receives no session cookie");
+  }
 });
 
 // --- A1.3 ---------------------------------------------------------------------
@@ -953,12 +963,12 @@ async function framedShowsSignIn(u, framerOrigin, url) {
   }, { timeout: 15_000, interval: 200, message: `the framed ${url} settled` });
 }
 
-/** The variant paths: the same app routes, matched case-insensitively by the router. */
-const FRAME_VARIANTS = Object.freeze(["/SIGNUP", "/Signup", "/CONNECT", "/Connect"]);
+/** Alternate and protected routes that render sign-in at the requested path. */
+const FRAME_VARIANTS = Object.freeze(["/SIGNUP", "/Signup", "/CONNECT", "/Connect", "/signup/", "/CONNECT/", "/%73ignup", "/account", "/folder/e2e-framing"]);
 
 /** Did each variant, in an anonymous browser, show the sign-in form at its own path? Throws a precondition when one did not: the case's premise. */
 async function variantsRenderSignIn(ctx, u) {
-  ctx.step("each variant renders the same sign-in page as /signup, at its own path (the router matches paths case-insensitively)");
+  ctx.step("each alternate or protected route renders sign-in at its own path");
   for (const p of FRAME_VARIANTS) {
     await u.goto(p);
     await u.page.locator("#auth-password").waitFor({ state: "visible", timeout: 15_000 });
@@ -971,7 +981,6 @@ const framesDenied = (h) => h.xfo === "DENY" && h.ancestors === "frame-ancestors
 
 scenario("A1.9b case variants of /signup and /connect (/SIGNUP, /Signup, /CONNECT, /Connect) render the sign-in page, so a GET of each is answered with X-Frame-Options: DENY and frame-ancestors 'none' too", {
   tiers: ["local", "prod"],
-  defect: "X-a01-identity-2",
   timeoutMs: 120_000,
 }, budgeted(120_000, async (ctx) => {
   const http = httpFor(ctx, "anonymous");
@@ -1004,7 +1013,6 @@ scenario("A1.9b case variants of /signup and /connect (/SIGNUP, /Signup, /CONNEC
 scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNUP, /Signup, /CONNECT or /Connect, as it cannot frame /signup itself", {
   tiers: ["local"],
   needs: ["spare-pool"],
-  defect: "X-a01-identity-2",
   timeoutMs: 120_000,
 }, budgeted(120_000, async (ctx) => {
   const u = await ctx.users.user({ name: "anonymous" });
@@ -1033,4 +1041,25 @@ scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNU
   ctx.step(`framed by another origin with the sign-in form showing: ${JSON.stringify(framed)}`);
   const exposed = FRAME_VARIANTS.filter((p) => framed[p]);
   assert.deepEqual(exposed, [], `variant paths another origin framed with the sign-in form showing, though it could not frame /signup: ${exposed.join(", ")}`);
+}));
+
+scenario("A1.9d every app-shell entry path denies framing before client navigation, while content byte routes remain embeddable", {
+  tiers: ["local", "prod"], timeoutMs: 60_000,
+}, budgeted(60_000, async (ctx) => {
+  const http = httpFor(ctx, "anonymous");
+  const paths = ["/", "/index.html", "/terms", "/privacy", "/e2e-unknown-shell", "/content", "/%73ignup", "/SIGNUP/", "/account", "/folder/e2e-framing"];
+  const exposed = [];
+  for (const path of paths) {
+    const response = answered(await http.get(path));
+    const h = frameHeaders(response);
+    if (h.status !== 200 || !framesDenied(h)) exposed.push({ path, ...h });
+  }
+  assert.deepEqual(exposed, [], `app-shell paths missing frame protection: ${JSON.stringify(exposed)}`);
+  // These are absent documents, so no protected bytes need to be fetched to
+  // prove the Hosting rule leaves the application's iframe routes alone.
+  for (const prefix of ["content", "draft", "thumb"]) {
+    const h = frameHeaders(answered(await http.get(`/${prefix}/e2e-absent-framing/v1/index.html`)));
+    assert.equal(h.xfo, null, `${prefix} remains embeddable`);
+    assert.equal(h.ancestors, null, `${prefix} remains embeddable`);
+  }
 }));

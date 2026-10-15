@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Sign in, or create an account, with an address and a password (SPEC §13).
+// Sign in, or create an account, with an address and a password (SPEC §14).
 
 import { useEffect, useState } from "react";
 import { validatePassword } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../auth";
-import { allMet, requirementsFrom, type Requirement } from "../passwordPolicy";
+import { requirementsFrom, type Requirement } from "../passwordPolicy";
 
 /**
  * Why this is a separate credential form rather than a third provider button.
@@ -28,6 +28,7 @@ export function PasswordForm({ busy, setBusy }: { busy: boolean; setBusy: (b: bo
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [policy, setPolicy] = useState<{ password: string; state: "pending" | "valid" | "invalid" | "unavailable" }>({ password: "", state: "pending" });
   const [sentReset, setSentReset] = useState(false);
 
   /**
@@ -41,17 +42,23 @@ export function PasswordForm({ busy, setBusy }: { busy: boolean; setBusy: (b: bo
   useEffect(() => {
     if (mode !== "signup" || password.length === 0) {
       setRequirements([]);
+      setPolicy({ password: "", state: "pending" });
       return;
     }
     let live = true;
+    setRequirements([]);
+    setPolicy({ password, state: "pending" });
     void validatePassword(auth, password)
       .then((status) => {
-        if (live) setRequirements(requirementsFrom(status));
+        if (live) {
+          setRequirements(requirementsFrom(status));
+          setPolicy({ password, state: status.isValid ? "valid" : "invalid" });
+        }
       })
       .catch(() => {
-        // The policy could not be fetched. Say nothing rather than inventing
-        // requirements; the server still enforces them on submit.
-        if (live) setRequirements([]);
+        // A missing advisory policy must not disable account creation forever.
+        // Auth still validates the password when creating the account.
+        if (live) setPolicy({ password, state: "unavailable" });
       });
     return () => {
       live = false;
@@ -61,7 +68,7 @@ export function PasswordForm({ busy, setBusy }: { busy: boolean; setBusy: (b: bo
   const ready =
     email.trim().length > 0 &&
     password.length > 0 &&
-    (mode === "signin" || allMet(requirements));
+    (mode === "signin" || (policy.password === password && (policy.state === "valid" || policy.state === "unavailable")));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +131,12 @@ export function PasswordForm({ busy, setBusy }: { busy: boolean; setBusy: (b: bo
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {mode === "signup" && policy.password === password && policy.state === "unavailable" ? (
+        <p className="field-hint" role="status">
+          We could not load the password requirements. We will check your password when you create the account.
+        </p>
       ) : null}
 
       {error ? (

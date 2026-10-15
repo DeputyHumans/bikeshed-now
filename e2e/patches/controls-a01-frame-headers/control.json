@@ -1,6 +1,6 @@
 {
   "oracle": "/connect and /signup are 200 with X-Frame-Options: DENY and frame-ancestors 'none' (A1.9)",
-  "what": "firebase.json's header rule for /connect names a path nothing requests, so /connect is served without its frame headers while /signup keeps them",
+  "what": "Remove the broad app-shell frame policy and make the canonical /connect header rule miss, leaving /signup protected",
   "target": {
     "spec": "e2e/specs/functional/a01-identity.spec.mjs",
     "case": "A1.9 /connect and /signup send X-Frame-Options: DENY and Content-Security-Policy frame-ancestors 'none'",

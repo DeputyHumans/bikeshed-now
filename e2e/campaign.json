@@ -12881,6 +12881,34 @@
         }
       ],
       "note": "Rule-level evidence only. Browser and full product E2E cases remain required; no campaign item is closed. Parent delete-only y grant supports atomic unchanged-snapshot retirement; late old-generation appends remain a separate protocol limitation."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a01-identity-1",
+        "X-a01-identity-2"
+      ],
+      "scope": "local working tree; production headers not verified",
+      "tests": [
+        "app/src/components/PasswordForm.test.tsx + passwordPolicy.test.ts (10 pass)",
+        "functions/test/frame-headers.test.js + wiring.test.js (23 pass)",
+        "app TypeScript noEmit (pass)"
+      ],
+      "controls": [
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/password-original.log",
+          "result": "Original PasswordForm fails unavailable-policy signup, valid verdict without displayed rules, and pending-new-password assertions (3 fail,2 pass). Current form passes all5."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/frame-original.log",
+          "result": "Original Hosting configuration fails broad app-shell frame policy assertion; current configuration passes."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/password-extra-controls.json",
+          "result": "Isolated known-invalid-as-valid and stale-policy-reply mutants each fail their targeted assertion (1 fail each, no source mutation). Stale reply assertion also retains current password requirements."
+        }
+      ],
+      "note": "Frame policy includes every SPA shell entry path because client-side navigation can reach signup or consent from otherwise unprotected routes. Document byte prefixes remain excluded. A1.2b now actually creates an unverified account in the local Auth emulator after the enabled-button assertion. A1.9b/c cover mixed case, trailing slash, encoded signup, account and folder routes; A1.9d covers all shell entry headers and byte-route exclusions. Three new E2E controls and one refreshed canonical-header control apply and name declared targets in .out/a01-patches-LilCzY. E2E runs pending; items remain open."
     }
   ]
 }

@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Password signup remains usable when the policy request is unavailable, while
+  Auth still validates submitted passwords. Every app-shell entry path denies
+  framing, covering case variants and client-side navigation to consent.
+
 - Simultaneous live editors elect one initial document, retain its CRDT seed
   through compaction, and preserve carets and pending local edits when remote
   updates arrive. Editing waits for initial adoption. Autosave, Done and

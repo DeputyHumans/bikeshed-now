@@ -1404,6 +1404,14 @@ sharing an address would be an ACL bug.
 
 ### Sign-up
 
+Password signup asks Firebase for the current password policy. While its answer
+is pending the form waits; a known-invalid password stays disabled with its
+requirements. If the policy request fails, the form explains that Auth will
+validate on submit and permits the attempt. It does not invent local policy or
+skip Auth's account-creation validation. A valid SDK verdict is sufficient even
+when no requirement rows are displayed. Responses for an older password cannot
+change the current password's verdict.
+
 1. Choose a provider.
 2. If no email came back, collect one.
 3. If the email is unverified, send a code and **block until verified**.
@@ -2851,9 +2859,12 @@ check on the raw string:
   - it does not render inside a frame
   - Approve stays disabled until the page has had focus for a second and a
     pointer or key event
-- **`/connect` and `/signup` both send** `frame-ancestors 'none'` and
-  `X-Frame-Options: DENY`. `/signup` is included because `?next=` reaches the
-  consent page without loading it from Hosting.
+- **Every app-shell entry path sends** `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing
+  slashes and unknown paths that the client redirects. An app-shell page can
+  navigate to signup and consent without another Hosting request, so protecting
+  only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**`
+  and `/thumb/**` byte routes remain embeddable in the app's iframe (§2).
 - **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every
   authorization response carries `iss` (RFC 9207).
 
