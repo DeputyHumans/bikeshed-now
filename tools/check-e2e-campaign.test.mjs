@@ -79,7 +79,7 @@ test("negative controls: removing baseline observations, overlap links, a later 
   for (const change of [
     (c) => c.coverage.observations.pop(),
     (c) => c.coverage.items.find((i) => i.observations.length > 1).observations.pop(),
-    (c) => c.discoveries.pop(),
+    (c) => { c.discoveries = c.discoveries.filter((d) => d.id !== "coverage-new-version-drop"); },
     (c) => c.acceptance.requirements.pop(),
     (c) => c.items.pop(),
   ]) {

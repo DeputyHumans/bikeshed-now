@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the campaign ledger deletion control pinned to its required discovery when new findings are appended.
+
 - Preserve intentional historical browser comments and test their selected version, passage, body and newer-version notice, replacing the contradictory concurrency expectation that no old version may receive feedback.
 
 - Let the operator smoke case create its own owner when selected alone, so its negative controls reach the command under test.
