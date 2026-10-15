@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Live editing preserves the identity of repeated letters through concurrent
+  typing and deletion by honoring the browser's input range. Applied remote
+  edits notify autosave after the DOM binding has settled.
+
 - Give each browser tab its own presence record, cancel departed callbacks, and
   retain editing status while any tab of a person edits. Revoked sessions can
   clean up their own records; readers cannot claim editing to block publishing.

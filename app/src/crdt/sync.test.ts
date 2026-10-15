@@ -336,3 +336,114 @@ describe("the real selection during remote changes", () => {
     } finally { binding.destroy(); remote.sync.destroy(); y.destroy(); remote.y.destroy(); iframe.remove(); }
   });
 });
+
+describe("browser edit intent preserves text item identity", () => {
+  function writer(html: string) {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = html;
+    const y = new Y.Doc();
+    const sync = bindSync(y.getXmlFragment("body"), doc.body);
+    return { doc, y, sync, body: doc.body, destroy() { sync.destroy(); y.destroy(); iframe.remove(); } };
+  }
+
+  async function input(w: ReturnType<typeof writer>, at: number, remove: number, text: string, type = "insertText", selectionEnd = at) {
+    const node = w.body.querySelector("p")!.firstChild as Text;
+    w.doc.getSelection()!.setBaseAndExtent(node, at, node, selectionEnd);
+    node.parentElement!.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: type, data: text || null }));
+    const start = type === "deleteContentBackward" && at === selectionEnd ? at - remove : at;
+    node.replaceData(start, remove, text);
+    w.doc.getSelection()!.collapse(node, start + text.length);
+    node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: type, data: text || null }));
+    await flush();
+  }
+
+  it("keeps a repeated typed letter in its token when a peer deletes the original word", async () => {
+    const a = writer("<p>russet Umber</p>");
+    const b = peer("", a.y);
+    try {
+      await input(a, 0, 0, "r");
+      await input(a, 1, 0, "X");
+      b.body.querySelector("p")!.firstChild!.nodeValue = "Umber";
+      await flush();
+      exchange(a, b);
+      expect(a.body.textContent).toBe("rXUmber");
+      expect(b.body.textContent).toBe("rXUmber");
+    } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+  });
+
+  for (const type of ["deleteContentBackward", "deleteContentForward"] as const) {
+    it(`deletes the intended repeated letter with ${type} while a peer types beside it`, async () => {
+      const a = writer("<p>aaa</p>");
+      const b = peer("", a.y);
+      try {
+        await input(a, type === "deleteContentBackward" ? 1 : 0, 1, "", type);
+        b.body.querySelector("p")!.firstChild!.nodeValue = "aXaa";
+        await flush();
+        exchange(a, b);
+        expect(a.body.textContent).toBe("Xaa");
+        expect(b.body.textContent).toBe("Xaa");
+      } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+    });
+  }
+
+  it("uses the browser target range for an equal-text replacement, even when the selection differs", async () => {
+    const a = writer("<p>aaa</p>");
+    const b = peer("", a.y);
+    try {
+      const node = a.body.querySelector("p")!.firstChild as Text;
+      a.doc.getSelection()!.collapse(node, 3);
+      const event = new InputEvent("beforeinput", { bubbles: true, inputType: "insertReplacementText", data: "a" });
+      Object.defineProperty(event, "getTargetRanges", { value: () => [{ startContainer: node, startOffset: 0, endContainer: node, endOffset: 1 }] });
+      node.parentElement!.dispatchEvent(event);
+      node.replaceData(0, 1, "a");
+      node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText", data: "a" }));
+      await flush();
+      // The other writer deletes the original first item. The new replacement
+      // has equal bytes but a different identity, so it must survive.
+      const text = (b.y.getXmlFragment("body").get(0) as Y.XmlElement).get(0) as Y.XmlText;
+      text.delete(0, 1);
+      exchange(a, b);
+      expect(a.body.textContent).toBe("aaa");
+      expect(b.body.textContent).toBe("aaa");
+    } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+  });
+
+  it("falls back to the text diff when a mutation does not match the captured input range", async () => {
+    const a = writer("<p>one two</p>");
+    try {
+      const node = a.body.querySelector("p")!.firstChild as Text;
+      a.doc.getSelection()!.collapse(node, 0);
+      node.parentElement!.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: "x" }));
+      node.data = "one TWO";
+      node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "x" }));
+      await flush();
+      expect(a.sync.html()).toBe("<p>one TWO</p>");
+    } finally { a.destroy(); }
+  });
+});
+
+it("notifies autosave once after a changed remote transaction is applied, without echoing it", async () => {
+  const a = peer("<p>one</p>");
+  const doc = document.implementation.createHTMLDocument("");
+  const y = new Y.Doc();
+  Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+  const seen: string[] = [];
+  const binding = bindSync(y.getXmlFragment("body"), doc.body, () => { seen.push(doc.body.innerHTML); });
+  try {
+    expect(seen).toEqual([]);
+    a.body.querySelector("p")!.firstChild!.nodeValue = "two";
+    await flush();
+    Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+    expect(seen).toEqual(["<p>two</p>"]);
+    const vector = [...Y.encodeStateVector(y)];
+    await flush();
+    Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+    expect([...Y.encodeStateVector(y)]).toEqual(vector);
+    expect(seen).toEqual(["<p>two</p>"]);
+    doc.body.querySelector("p")!.firstChild!.nodeValue = "local";
+    await flush();
+    expect(seen).toEqual(["<p>two</p>"]);
+  } finally { binding.destroy(); y.destroy(); a.sync.destroy(); a.y.destroy(); }
+});

@@ -835,6 +835,13 @@ normalized into an editor's model. The **normative** property is that a document
 survives a round trip through the wire format byte-identical; the sample bundles
 are the fixtures that hold it.
 
+Text edits preserve the browser's `beforeinput` target range (or its selection
+when target ranges are unavailable), provided the unchanged text around that
+range matches the observed mutation. This keeps a newly typed or replaced
+letter distinct from an equal adjacent letter in the CRDT. A concurrent
+deletion of the old letter cannot remove or reorder the newly typed one.
+Mutations without a matching input range use the minimal text diff.
+
 A live co-editor autosave is confirmation of merged work and does not offer a
 competing-copy notice. Saves from outside the live editor still offer that
 choice. A newer-version announcement names the current head only and is shown

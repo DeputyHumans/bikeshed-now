@@ -46,7 +46,7 @@ function isDecoration(el: Element): boolean {
 // the fragment. A descendant's contenteditable belongs to the author.
 const INJECTED_ATTRS = new Set([EMPTY_ATTR]);
 
-export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
+export function bindSync(fragment: Y.XmlFragment, host: Element, onRemote?: () => void): Sync {
   const doc = host.ownerDocument;
   const win = doc.defaultView;
   const ORIGIN = Symbol("local");
@@ -54,6 +54,8 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
   const domOf = new Map<YNode, Node>();
   const yOf = new WeakMap<Node, YNode>();
   let applyingRemote = false;
+  type InputIntent = { node: Text; before: string; start: number; end: number; event: InputEvent };
+  let inputIntent: InputIntent | null = null;
 
   const link = (y: YNode, node: Node) => {
     domOf.set(y, node);
@@ -230,6 +232,8 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
 
   function onMutations(records: MutationRecord[]): void {
     if (applyingRemote) return;
+    let intent = inputIntent;
+    inputIntent = null;
     fragment.doc?.transact(() => {
       for (const record of records) {
         if (record.type === "characterData") {
@@ -237,19 +241,37 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
           if (!y) continue;
           const now = (record.target as Text).data;
           const was = y.toString();
-          if (now === was) continue;
-          // Diff by common prefix and suffix. Typing changes one place, so this
-          // is both cheap and, more importantly, minimal — replacing the whole
-          // string would make every keystroke conflict with a peer's.
-          let start = 0;
-          while (start < was.length && start < now.length && was[start] === now[start]) start += 1;
-          let end = 0;
-          while (
-            end < was.length - start &&
-            end < now.length - start &&
-            was[was.length - 1 - end] === now[now.length - 1 - end]
-          ) {
-            end += 1;
+          // Equal adjacent characters do not have equal CRDT identities. Use
+          // the browser's pre-edit range when its unchanged surroundings prove
+          // the splice; a longest-prefix diff alone can swap a typed letter
+          // with its neighbour and lose it to a concurrent deletion.
+          let start = intent?.start ?? 0;
+          let until = intent?.end ?? 0;
+          const inputType = intent?.event.inputType ?? "";
+          if (intent && start === until && inputType.startsWith("delete")) {
+            const removed = Math.max(0, was.length - now.length);
+            if (inputType.endsWith("Backward")) start -= removed;
+            else if (inputType.endsWith("Forward")) until += removed;
+          }
+          let end = was.length - until;
+          const intended = intent?.node === record.target && intent.before === was && !intent.event.defaultPrevented &&
+            start >= 0 && until <= was.length && start <= until && now.length >= start + end &&
+            now.slice(0, start) === was.slice(0, start) && now.slice(now.length - end) === was.slice(until);
+          if (intent?.node === record.target) intent = null;
+          if (now === was && !intended) continue;
+          if (!intended) {
+            // Programmatic changes and structural edits have no single text
+            // range. Keep the minimal diff as their conservative fallback.
+            start = 0;
+            while (start < was.length && start < now.length && was[start] === now[start]) start += 1;
+            end = 0;
+            while (
+              end < was.length - start &&
+              end < now.length - start &&
+              was[was.length - 1 - end] === now[now.length - 1 - end]
+            ) {
+              end += 1;
+            }
           }
           const removed = was.length - start - end;
           if (removed > 0) y.delete(start, removed);
@@ -340,24 +362,48 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
     attributes: true,
   });
 
+  const flushLocal = () => {
+    const records = observer?.takeRecords() ?? [];
+    if (records.length) onMutations(records);
+  };
+  const beforeInput = (event: Event) => {
+    flushLocal();
+    inputIntent = null;
+    const input = event as InputEvent;
+    const ranges = input.getTargetRanges?.() ?? [];
+    const selection = doc.getSelection();
+    const range = ranges.length === 1 ? ranges[0] : ranges.length === 0 && selection?.rangeCount === 1 ? selection.getRangeAt(0) : null;
+    if (!range || range.startContainer !== range.endContainer || range.startContainer.nodeType !== Node.TEXT_NODE || !host.contains(range.startContainer)) return;
+    const node = range.startContainer as Text;
+    if (!(yOf.get(node) instanceof Y.XmlText)) return;
+    inputIntent = { node, before: node.data, start: range.startOffset, end: range.endOffset, event: input };
+  };
+  const afterInput = () => {
+    flushLocal();
+    inputIntent = null;
+  };
+  host.addEventListener("beforeinput", beforeInput);
+  host.addEventListener("input", afterInput);
+
   const onDeep = (events: Y.YEvent<any>[], tx: Y.Transaction) => {
     if (tx.origin === ORIGIN) return;
     // Anything the observer has queued but not delivered describes the DOM as
     // it was BEFORE this remote patch, so acting on it afterwards would replay
     // stale structure into the shared document.
     observer?.takeRecords();
+    inputIntent = null;
     applyRemote(events);
     observer?.takeRecords();
+    if (events.length) onRemote?.();
   };
   fragment.observeDeep(onDeep);
 
   return {
-    flush() {
-      const records = observer?.takeRecords() ?? [];
-      if (records.length) onMutations(records);
-    },
+    flush: flushLocal,
     destroy() {
       observer?.disconnect();
+      host.removeEventListener("beforeinput", beforeInput);
+      host.removeEventListener("input", afterInput);
       fragment.unobserveDeep(onDeep);
       domOf.clear();
     },

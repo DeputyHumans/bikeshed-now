@@ -13247,6 +13247,23 @@
         "controls-a20-parse-expose"
       ],
       "note": "Installed Firebase CLI 15.25.1 runs bodyParser.json before the function; onRequest does not expose a parser bypass. HTTP 400 with a runtime diagnostic is an explicit limitation, not a JSON-RPC-only fix. Handler-reached parse failures remain -32700. The new A20.3.parse case checks no rename/version/draft mutation. Seven mocked oracle variants (clean plus six bad responses/state) prove assertion sensitivity only; they are not live E2E proof (g15-oracle-controls.json). No campaign item is closed. Corrected mutant proof: e2e/.out/g15-normalized-Kilw6O/proof.json uses patchFirebaseJson plus functions/package.json. Earlier scratch mutant exits in g15-oracle-controls.json were module-loading failures, not assertion proof; their mutant rows are superseded. The mocked oracle rows remain valid sensitivity checks."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-c05-structure-3"
+      ],
+      "scope": "local working tree; E2E pending",
+      "tests": [
+        "CRDT binding, log and serialization tests: 57 pass, 0 fail",
+        "Original source: 4 new failures (repeated insertion, backspace, forward-delete and remote autosave callback); equal-text target-range replacement separately fails before its fix",
+        "Five isolated mutants each fail assertions: missing input intent, ignored target ranges, unvalidated intent, missing remote callback and callback before DOM apply"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/g04-green.log",
+      "controls": [
+        "controls-c05-input-identity"
+      ],
+      "note": "C05 edge race promoted, with an N=2 control discarding beforeinput intent. The browser range is accepted only if its unchanged prefix and suffix match the actual mutation; other mutations retain minimal diff behavior. onRemote notifies the caller after changed remote DOM application and observer draining, without notifying for local writes or duplicate updates. Parent owns G05 autosave integration. g04-controls.json records isolated assertion failures and patch/target validation. No campaign item closed."
     }
   ]
 }

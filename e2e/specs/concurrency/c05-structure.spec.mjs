@@ -81,12 +81,12 @@
  *     That is a SPEC question, X-c05-structure-2 (class Q: ADR 0010 says
  *     "paragraph", SPEC §6b "passage"), never a P; both races carry it.
  *     X-c05-structure-3 (seen first by chance, when a run id put an "l" in
- *     the tokens typed before "lantern"): sync.ts records a typed character
+ *     the tokens typed before "lantern"): the old sync.ts recorded a typed character
  *     that equals the one after the caret one place to the right (its diff
  *     takes the longest common prefix), so the CRDT swaps the two; a
  *     concurrent deletion of the old text then takes the original letter
  *     from inside the new token and leaves the typed one where the deleted
- *     words were. The edge race carries it. From N=3 the typists at that
+ *     words were. The edge race guards the beforeinput-range repair. From N=3 the typists at that
  *     one caret also nest each other's tokens with no deletion at all (seen
  *     at N=5 when the edge serial control still let them type at once), so
  *     every serial control types one typist at a time, each once the one
@@ -1011,7 +1011,7 @@ scenario("C5 across serial control: the same typing inside the three paragraphs,
   await c5PassageJudge(ctx, await c5PassageSession(ctx, { v, title: `C5 across serial N=${ctx.n}`, serial: true }), v);
 });
 
-// X-c05-structure-3: every token's "r", typed just before "russet", is
+// X-c05-structure-3 regression: every token's "r", typed just before "russet", was
 // recorded after russet's own "r" (sync.ts onMutations: the longest common
 // prefix runs across the equal letter), so the CRDT holds russet's "r" inside
 // the token and the token's "r" at the head of "russet". p1's deletion takes
@@ -1022,7 +1022,6 @@ scenario("C5 across serial control: the same typing inside the three paragraphs,
 scenario("C5 delete the words right after a caret while N−1 type at it: the words go and every token typed at the caret stays once and whole on every peer (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-3",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
