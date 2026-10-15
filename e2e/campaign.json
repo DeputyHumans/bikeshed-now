@@ -12528,7 +12528,7 @@
             "VITE_EXPORT_MARK_FOOTER": "E2E footer"
           }
         },
-        "command": "node e2e/run.mjs run --suite functional --spec a19-account.spec.mjs --app-env VITE_EXPORT_MARK_ENABLED=true --app-env \"VITE_EXPORT_MARK_LABEL=E2E marking\" --app-env \"VITE_EXPORT_MARK_FOOTER=E2E footer\"",
+        "command": "node e2e/run.mjs run --suite functional --spec a19-account.spec.mjs --app-env VITE_EXPORT_MARK_ENABLED=1 --app-env \"VITE_EXPORT_MARK_LABEL=E2E marking\" --app-env \"VITE_EXPORT_MARK_FOOTER=E2E footer\"",
         "proofs": []
       },
       {
@@ -14193,6 +14193,20 @@
       ],
       "evidence": "e2e/.out/a08-controls-proof/{oracle-proof,compile-proof,changed-proof}.json; e2e/.out/2610150009-srus/invocations/20261015T071055Z-p26482-a655/results.json",
       "note": "All12 source rows implemented-source; historical deep:13/r1:13 classification retained. Exact current patched-stack pairs and repeated full runs/matrix remain required. Initial whitespace-only failures were native NBSP representation; normalization preserves exact space count. No canonical closure."
+    },
+    {
+      "kind": "audience-tier-coverage",
+      "items": [
+        "deep:a21-changes:03"
+      ],
+      "scope": "Local execution only; production branch exercised in memory, no production calls",
+      "checks": [
+        "A21.3 passes on B13 product96f5e18 in20261015T073300Z-p17302-xmmi",
+        "Six setup/audience selftests pass after two original scope regressions fail",
+        "Five isolated source controls fail tier availability, access count, conditional payload, local principal and fork privacy assertions"
+      ],
+      "evidence": "e2e/.out/a21-scope-controls/proof.json; /tmp/a21-scope-{before,green}.log; e2e/.out/2610150009-srus/invocations/20261015T073300Z-p17302-xmmi/results.json",
+      "note": "A21.3 uses share() on both tiers; expected access.changed count is2*SHARE_EVENTS and only its payload check is conditional. All other audience/cursor/draft assertions execute on both tiers. Original wrong-tier criticism retained; no production verification or canonical closure."
     }
   ]
 }

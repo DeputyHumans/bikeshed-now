@@ -18,9 +18,9 @@
  *   A21.2  a quiet poll returns the cursor it was given and writes nothing; a
  *          page of only the caller's own events still moves the cursor; the
  *          next event is reported once from it
- *   A21.3  audience (LOCAL: access.changed is written only by POST /access,
- *          which sends invitations and which the production guard refuses;
- *          the operator script it uses there records no event): a viewer gets
+ *   A21.3  audience on both tiers (access.changed assertions are LOCAL:
+ *          share() uses POST /access locally and the email-free operator
+ *          path on production, which records no access event): a viewer gets
  *          reader events only, never access.changed or another editors' event,
  *          yet its cursor moves past them; an editor gets those; only the
  *          owner gets fork.created, dated to the day and by nobody; the draft
@@ -70,8 +70,9 @@
  *
  * EMAIL. Every account is cast with notifications off, so no comment, reply or
  * resolve sends a notice on either tier, and production's quietDoc() holds.
- * Sharing goes through share() (on production the operator script). Only
- * A21.3 needs POST /access itself; it is LOCAL and declares that effect.
+ * Sharing goes through share() (on production the operator script). A21.3
+ * checks access.changed only locally; its other audience assertions run on
+ * both tiers without bypassing that helper or the production guard.
  */
 
 import assert from "node:assert/strict";
@@ -296,15 +297,14 @@ scenario("A21.2 a quiet poll returns the same cursor and writes nothing; a page 
 // --- A21.3 ----------------------------------------------------------------------
 
 scenario("A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only", {
-  tiers: ["local"],
-  effects: ["email:POST /access"],
+  tiers: ["local", "prod"],
   inconclusiveOnFunctionKill: true,
   timeoutMs: 600_000,
 }, async (ctx) => {
   const { owner, accounts, agent, docId } = await stage(ctx, ["viewer", "editor"], "a213-audience", "A21.3 audience");
   const [ownerAcct, viewerAcct, editorAcct] = accounts;
 
-  ctx.step("the owner shares with a viewer and an editor (POST /access, two access.changed), trusts the document (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
+  ctx.step("the owner shares with a viewer and an editor (two access.changed locally; email-free operator grants on production), trusts the document (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
   await share(target, { owner, doc: docId, account: viewerAcct, role: "viewer" });
   await share(target, { owner, doc: docId, account: editorAcct, role: "editor" });
   await owner.http.postJson("/trust", { docId, trusted: true }, { expect: 200 });
@@ -318,7 +318,7 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   await thread(await browserOf(ctx, viewerAcct), docId, "v1", "e2e-6", `A21.3 ${tag()}`);
   const [viewer, editor] = [await sessionOf(viewerAcct), await sessionOf(editorAcct)];
   await fork(viewer.http, { docId, title: `A21.3 fork ${tag()}`, ownerEmail: viewerAcct.email, expect: 200 });
-  const ALL = { "version.published": 1, "access.changed": 2, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
+  const ALL = { "version.published": 1, "access.changed": 2 * SHARE_EVENTS, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
   await settle(docId, ALL, "every change is recorded");
   ctx.step("the editor saves a real unpublished draft, with their identity in its metadata");
   const secretDraft = `A21 private draft ${tag()}`;
@@ -338,15 +338,18 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   assert.deepEqual(typesOf(ro), counts(Object.entries(ALL).flatMap(([t, n]) => Array(n).fill(t))), "the owner receives every event, fork.created included");
   assert.deepEqual([rv.cursor, re.cursor], [ro.cursor, ro.cursor], "every reader's cursor is the position after the last event read, whoever may see it");
 
-  ctx.step("what an editor learns from access.changed, and what the owner learns of the fork");
-  assert.deepEqual(
-    re.events.filter((e) => e.type === "access.changed").map(stripAt),
-    [
-      { type: "access.changed", channel: "web", added: [viewerAcct.email], removed: [], by: ownerAcct.email },
-      { type: "access.changed", channel: "web", added: [editorAcct.email], removed: [], by: ownerAcct.email },
-    ],
-    "access.changed: who was added and removed, and by whom",
-  );
+  if (SHARE_EVENTS) {
+    ctx.step("locally, the editor receives both access.changed payloads");
+    assert.deepEqual(
+      re.events.filter((e) => e.type === "access.changed").map(stripAt),
+      [
+        { type: "access.changed", channel: "web", added: [viewerAcct.email], removed: [], by: ownerAcct.email },
+        { type: "access.changed", channel: "web", added: [editorAcct.email], removed: [], by: ownerAcct.email },
+      ],
+      "access.changed: who was added and removed, and by whom",
+    );
+  }
+  ctx.step("the owner receives the anonymous fork event on either tier");
   const forked = ro.events.filter((e) => e.type === "fork.created");
   assert.equal(forked.length, 1);
   assert.match(forked[0].at, DAY, "a fork is dated to the day (SPEC §21)");
