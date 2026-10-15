@@ -1,0 +1,11 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -74,7 +74,7 @@
+
+     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+     const last = Number(cooldowns[own] ?? 0);
+-    if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
++    if ((kind === "comment" && last > 0) || now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
+
+     const pruned: Record<string, number> = { [own]: now };
+     for (const [key, at] of Object.entries(cooldowns)) {

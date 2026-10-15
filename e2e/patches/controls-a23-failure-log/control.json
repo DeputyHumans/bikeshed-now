@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.6 when the provider refuses a send (shim 500), POST /access, /folder-access and /team-members still answer 200 with the grant made, the next recipient in the same request still gets theirs, and the product logs the failure",
+  "what": "silently swallow the provider failure without the diagnostic",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.6 when the provider refuses a send (shim 500), POST /access, /folder-access and /team-members still answer 200 with the grant made, the next recipient in the same request still gets theirs, and the product logs the failure"
+  },
+  "expect": {
+    "message": "no line matching.*send failed"
+  }
+}

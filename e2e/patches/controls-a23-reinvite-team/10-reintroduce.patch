@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2720,7 +2720,7 @@
+   // was granted, and adding someone must grant it. Both are the same recompute.
+   const affected = await refanTeam(teamId);
+
+-  const beforeSet = new Set(before);
++  const beforeSet = new Set(before.filter(() => false));
+   const invitees: InviteTarget[] = members
+     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
+     .map((email) => ({ email, role: "viewer" as const }));

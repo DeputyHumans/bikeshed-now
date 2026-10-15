@@ -1,0 +1,11 @@
+--- a/functions/src/email/templates/CommentNotice.tsx
++++ b/functions/src/email/templates/CommentNotice.tsx
+@@ -61,7 +61,7 @@
+       ) : null}
+       {p.quote ? <Text style={textStyles.quote}>{p.quote}</Text> : null}
+       {p.suggestion ? <Text style={textStyles.paragraph}>{changeLine(p.suggestion)}</Text> : null}
+-      {p.body ? <Text style={textStyles.paragraph}>{p.body}</Text> : null}
++      {p.body && !p.body.startsWith("Withdrawn.") ? <Text style={textStyles.paragraph}>{p.body}</Text> : null}
+       <Button href={p.url} style={textStyles.button}>
+         {p.suggestion ? "Review it in context" : "Reply in context"}
+       </Button>

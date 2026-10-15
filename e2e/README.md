@@ -158,10 +158,22 @@ I11 (at most one email per recipient, document and kind in 30 min) is
 controlled by `controls-a23-cooldown`: the window is not checked, so a
 second comment's notice is sent, and A23.4 goes red. A control may be built
 on an amplify set: its `stack` names `--patches amplify-<name>`, which both
-sides get, before the control's own set. A control may target one case of
+sides get, before the control's own set. The same setup field accepts the
+explicit capability-only sets `a19-analytics-live` and
+`a20-cli-bad-skill-name`; arbitrary product-fix or other control sets are
+refused there, so the green side cannot silently inherit the mutant. A control may target one case of
 a scenario with `n`, as `"<scenario> [N=<k>]"`: both sides then run with
 `--n <k> --trials 1` (see Adding a negative control), so no fixed-N copy of
 the scenario is needed.
+
+A23 also exercises cooldown expiry by aging only its own account's cooldown
+keys on a local `admin-emulator` stack, then sending fresh comments and
+suggestions through the normal product paths. Its HTML content, recipient,
+filing, re-grant and provider-failure controls are listed under
+`e2e/patches/controls-a23-*`. Provider failure tests require an actual 200
+response. A Hosting or client cutoff remains inconclusive even when the shim
+recorded a refusal: timestamps alone do not establish why the product did
+not answer. No cutoff counts as a successful failure-handling test.
 
 ## Prerequisites
 

@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1824,7 +1824,7 @@
+   const beforeMembers = before.members;
+   await recomputeSubtree(db(), folderId);
+
+-  const beforeSet = new Set(beforeMembers);
++  const beforeSet = new Set(beforeMembers.filter(() => false));
+   const invitees: InviteTarget[] = after.members
+     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
+     .map((email) => ({ email, role: roleOf(email, after) }));

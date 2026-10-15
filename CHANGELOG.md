@@ -79,6 +79,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Tests
 
+- Email E2E coverage now checks cooldown expiry, rendered notice content,
+  removed readers, repeated grants, filing silence and provider failures.
+  A request cutoff stays inconclusive instead of counting as delivery-handling
+  success; each added control is independently buildable.
+
 - Regression controls can share the explicit analytics and CLI capability
   setup with their clean run. Routing fixtures isolate account restoration,
   and thumbnail checks preserve authored editing attributes.

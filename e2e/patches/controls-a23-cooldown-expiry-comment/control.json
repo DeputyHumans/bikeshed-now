@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.4b an expired comment or suggestion cooldown permits a new notice on the same document",
+  "what": "a previously claimed comment cooldown never expires",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.4b an expired comment or suggestion cooldown permits a new notice on the same document"
+  },
+  "expect": {
+    "message": "waitFor: no message"
+  }
+}
