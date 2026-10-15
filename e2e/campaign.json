@@ -13464,6 +13464,30 @@
         "controls-c07-compaction-keeps-deltas"
       ],
       "note": "Failed appends retain dependent updates and retry; epoch names isolate retired sessions and stamped seed identity blocks stale reseeding. Cleanup oracles inspect every epoch plus legacy strings. The 2MiB encoded-update bound supports the measured300KB fixture; oversized seeds fail closed with actionable recovery and oversized compactions keep all deltas. C7 observes initialization refusal directly and classifies a supported seed refusal as FAIL. No campaign item is resolved."
+    },
+    {
+      "kind": "harness-repair-observation",
+      "items": [
+        "S27",
+        "X-a21-changes-1"
+      ],
+      "scope": "control refresh and cursor-reader parity; live control pairs pending",
+      "tests": [
+        "Seven refreshed control sets apply and targets declare, including normalized Hosting JSON",
+        "C04 generated rules confirm read-only or append-only denial; epoch expiry and opposite permissions remain intact",
+        "Cursor selftests11 pass; original reader and unsafe-id variant each produce assertion failures before repair"
+      ],
+      "evidence": "e2e/.out/refresh-controls-NxjdHo/proof.json",
+      "controls": [
+        "controls-a19-token-shown-once",
+        "controls-a21-cursor-binding",
+        "controls-a19-notify-optout",
+        "controls-a03-nosniff",
+        "controls-c18-dot-shape",
+        "controls-c04-open-edit-read",
+        "controls-c04-joiner-write"
+      ],
+      "note": "C04 uses control-only metadata written from the current Firestore snapshot and directional test-only rule gates. The case checks authenticated read and valid empty-update append before browser join, retaining I3/I13 browser assertions. Prior duplicate-seed failure expectations were obsolete after fail-closed joining. No campaign item closed."
     }
   ]
 }

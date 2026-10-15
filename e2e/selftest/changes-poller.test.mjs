@@ -135,7 +135,7 @@ test("pinned to the product: encodeCursor's fields and version, decodeCursor's s
   const events = readFileSync(join(REPO_ROOT, EVENTS_SOURCE), "utf8");
   assert.match(events, new RegExp(`^const CURSOR_VERSION = ${CURSOR_VERSION};$`, "m"));
   assert.match(events, /v: CURSOR_VERSION,\s*d: c\.docId,\s*\.\.\.\(c\.at && c\.id \? \{ s: c\.at\.seconds, n: c\.at\.nanoseconds, e: c\.id \} : \{\}\),/);
-  assert.match(events, /if \(parsed\.s === undefined\) return \{ docId, at: null, id: null \};/);
+  assert.match(events, /if \(parsed\.s === undefined\) \{\s*return parsed\.n === undefined && parsed\.e === undefined\s*\? \{ docId, at: null, id: null \}\s*:\s*\{ error: "that is not a cursor this server gave out" \};\s*\}/, "only a cursor with no position fields denotes the start");
   assert.match(events, /q = q\.startAfter\(cursor\.at, cursor\.id\)/, "the product reads strictly after the cursor");
   const tools = readFileSync(join(REPO_ROOT, "functions/src/mcp/tools.ts"), "utf8");
   assert.match(tools, /at: v\.type === "fork\.created" && at \? at\.slice\(0, 10\) : at,/);
@@ -158,8 +158,13 @@ test("cursorPosition: a position, the start, \"all\"; refused: \"last\", another
     ["not-a-cursor", /is not a get_changes cursor/],
     [encode({ v: 2, d: DOC }), /a cursor of version 2; this reader knows version 1/],
     [encode({ v: 1 }), /names no document/],
+    [encode({ v: 1, d: DOC, n: 0 }), /position is not/],
+    [encode({ v: 1, d: DOC, e: "x" }), /position is not/],
+    [encode({ v: 1, d: DOC, s: -62135596801, n: 0, e: "x" }), /position is not/],
+    [encode({ v: 1, d: DOC, s: 253402300800, n: 0, e: "x" }), /position is not/],
     [encode({ v: 1, d: DOC, s: 1.5, n: 0, e: "x" }), /position is not \(seconds, nanoseconds, id\)/],
     [encode({ v: 1, d: DOC, s: 1, n: 1_000_000_000, e: "x" }), /position is not/],
+    ...["", ".", "..", "a/b", "a\\b", "a\0b"].map((e) => [encode({ v: 1, d: DOC, s: 1, n: 0, e }), /position is not/]),
   ];
   for (const [c, re] of refused) assert.throws(() => cursorPosition(c, { docId: DOC }), (e) => e instanceof TypeError && re.test(e.message), String(c));
   assert.throws(() => cursorPosition(cursorOf("e2e-0poll-other-doc"), { docId: DOC }), /the cursor belongs to e2e-0poll-other-doc, not e2e-0poll-doc-abcd/);

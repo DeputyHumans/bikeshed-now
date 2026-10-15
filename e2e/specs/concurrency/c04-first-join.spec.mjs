@@ -132,20 +132,14 @@
  *                         its own seed, are not.
  *   C4b positive control  the same N (n: N_ALL), the same members and the
  *                         same membersEnter path, with the joiner granted
- *                         editor after open editing (a member, so it may read
- *                         the log): must PASS. The grant comes after open
- *                         editing, as the C4b joiner meets the document; that
- *                         share drops editAccess/{d}/* (X-a11-live-3,
- *                         folders.ts:453 calls syncPresenceAccess without
- *                         publicEdit), which the row records as star:false.
- *                         It is immaterial here: every member, the joiner
- *                         included, writes through its own key
- *                         (database.rules.json:100), and `*` is only a
- *                         non-member's. It is the target of three controls:
- *                         controls-c04-open-edit-read (write without read:
- *                         a second body, the member's keys never arrive),
- *                         controls-c04-joiner-write (read without write: the
- *                         joiner's keys never reach the members, I3 holds)
+ *                         editor after open editing: must PASS. An authenticated
+ *                         read and valid empty-update append check each direction
+ *                         before a refused join can stop the browser editor.
+ *                         The remaining I3/I13 checks still exercise real peers.
+ *                         It targets controls-c04-open-edit-read (only that
+ *                         editor's log reads denied) and controls-c04-joiner-write
+ *                         (only that editor's log appends denied), using test-only
+ *                         authoritative mirror tags plus directional rules,
  *                         and controls-c04-joiner-alone (shareLive off for
  *                         everyone but the owner on an open-editing
  *                         document: the joiner edits alone).
@@ -189,7 +183,7 @@
  * the defect's TODO. Everything that is setup is a precondition().
  */
 
-import { readLiveLogs } from "../../lib/live-log.mjs";
+import { liveLogPath, readLiveLogs } from "../../lib/live-log.mjs";
 import { AssertionError } from "node:assert";
 import { after } from "node:test";
 import { currentTarget, escapeRe, precondition, scenario } from "../../lib/test.mjs";
@@ -1095,8 +1089,16 @@ async function openEditJoin(ctx, { member }) {
     await joiner.open(docId, { timeout: 90_000 });
     precondition((await joiner.page.locator(EDIT_BUTTON).count()) === 1, "open editing gives the joiner an Edit button");
     // The mechanism, for the record: what the joiner's own ID token may do to the live log (rules, ?auth=).
-    const read = await rtdbAs(ctx.target, { idToken: await idToken(ctx.target, acct), http: ctx.http({ actor: "rtdb" }) }).get(`status/${docId}/y`).catch((err) => ({ verdict: null, error: firstLine(err) }));
-    row.joinerRead = read.verdict ?? read.status ?? read.error;
+    const joinerDb = rtdbAs(ctx.target, { idToken: await idToken(ctx.target, acct), http: ctx.http({ actor: "rtdb" }) });
+    const read = await joinerDb.get(`status/${docId}/y`);
+    row.joinerRead = read.verdict ?? read.status;
+    assert.equal(read.verdict, "ALLOW", "C4b: the joiner can read the shared live log");
+    // The members have seeded this epoch already. A valid empty Yjs update
+    // changes no document bytes, but exercises this joiner's actual append
+    // permission before a denied join can safely stop the browser editor.
+    const write = await joinerDb.put(`${await liveLogPath(ctx.target, docId)}/joinerPermissionProbe`, "AAA=");
+    row.joinerWrite = write.verdict ?? write.status;
+    assert.equal(write.verdict, "ALLOW", "C4b: the joiner can append to the shared live log");
     const pressedAt = Date.now();
     await joiner.enterEdit({ waitShared: false, timeout: 90_000 });
     const joined = await joinerShareAfter(joiner, pressedAt);

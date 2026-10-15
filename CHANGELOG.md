@@ -22,6 +22,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Refresh regression controls for current permission mirrors and cursor rules;
+  assert both live-log directions before a denied join stops the editor.
+
 - Support the measured large-document live seed with a bounded 2 MiB encoded-update
   limit, explain oversized seed refusals, and retain every delta when a merged
   compaction is too large.
