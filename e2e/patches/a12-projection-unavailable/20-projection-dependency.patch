@@ -1,19 +1,11 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -18,6 +18,7 @@
- import { renderMarkdown } from "./markdown/render";
- import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
+@@ -20,2 +20,3 @@
  import { syncPublicProjection } from "./publicdoc";
 +import { e2eProjectionUnavailable } from "./e2eProjectionUnavailable";
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
-
- /**
-@@ -123,7 +124,7 @@
- /** Publish the new access fence before deleting only the retired session's log. */
- export async function retireLiveSession(db: Db, docId: string, retiredEpoch: string): Promise<void> {
+@@ -145,3 +146,3 @@
    await syncPresenceAccess(docId, [], []);
 -  try { await syncPublicProjection(db, docId); }
 +  try { await syncPublicProjection(e2eProjectionUnavailable(db, docId), docId); }
    catch {
-     // The content write is already committed. Its Firestore trigger retries
-     // projection repair; retain the old log until that metadata is current.

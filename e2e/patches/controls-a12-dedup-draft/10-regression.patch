@@ -1,7 +1,7 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -467,3 +467,3 @@
+@@ -495,3 +495,3 @@
          retiredEpoch = String(current?.liveEpoch ?? "initial");
 -        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: retirementEpoch, updatedAt: now() });
 +        tx.update(docRef, { liveEpoch: retirementEpoch, updatedAt: now() });
-         retirementMayHaveCommitted = true;
+         // Later publications replace liveEpoch. Keep this invocation's own

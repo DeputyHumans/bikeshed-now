@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Refresh six retained fault patches after transaction receipts changed source context. Keep their projection, minting, deduplication, rename and thumbnail mutations unchanged; verify the complete patch catalog reverses exactly and the affected directional unit checks still detect their faults.
+
 - Distinguish a native OAuth code-exchange retry from independent code replay after another request refreshes the grant. Keep the newer credentials valid, refuse obsolete original credentials without revocation, and retain independent replay protection; cover the real recovery→refresh→retry ordering with a keyed endpoint control.
 
 - Keep the feedback publication pause points applicable after bounded retry receipts changed their imports. Preserve the original gates and directional controls, with exact patch reversal and composed compiler checks.

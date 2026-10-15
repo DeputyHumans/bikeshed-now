@@ -3,7 +3,7 @@
 @@ -21,2 +21,3 @@
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
-
+ import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
 @@ -486,2 +487,4 @@
 
 +  await e2eGate("mint-before-id", docId);

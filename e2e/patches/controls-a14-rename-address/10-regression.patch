@@ -1,11 +1,7 @@
 --- a/functions/src/lib/rename.ts
 +++ b/functions/src/lib/rename.ts
-@@ -32,7 +32,7 @@
-   }
-   await db.runTransaction(async (tx) => {
-     const was = String((await tx.get(ref)).data()?.title ?? "");
+@@ -39,3 +39,3 @@
+     const was = String(snap.data()?.title ?? "");
 -    tx.set(ref, { title, slug: slugify(title), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 +    tx.set(ref, { docId: slugify(title), title, slug: slugify(title), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
      if (was !== title) {
-       addEvent(tx, ref, { type: "doc.renamed", audience: "readers", actor: eventActor(actor), data: { from: was, to: title } });
-     }
