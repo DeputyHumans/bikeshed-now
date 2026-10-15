@@ -435,7 +435,7 @@ scenario("A19.2 with analytics live, declining fetches nothing and is remembered
   await a.page.getByRole("heading", { name: "Terms of service", level: 1 }).waitFor({ timeout: RECORD_WAIT_MS });
   const confidential = `private-a19-${tag()}`;
   await a.page.evaluate((path) => { history.pushState(null, "", path); dispatchEvent(new PopStateEvent("popstate")); }, `/d/${confidential}/v1`);
-  const pageView = await eventually(() => a.page.evaluate(() => (window.dataLayer ?? []).map((e) => Array.from(e)).find((e) => e[0] === "event" && e[1] === "page_view" && e[2]?.page_path === "/d/:docId/:versionId")), { timeout: RECORD_WAIT_MS, message: "the document route emits its pattern" });
+  const pageView = await eventually(() => a.page.evaluate(() => (window.dataLayer ?? []).map((e) => Array.from(e)).find((e) => e[0] === "event" && e[1] === "page_view" && e[2]?.page_path === "/d/:docId/:versionId") ?? false), { timeout: RECORD_WAIT_MS, message: "the document route emits its pattern" });
   assert.deepEqual({ path: pageView[2].page_path, location: pageView[2].page_location, title: pageView[2].page_title }, { path: "/d/:docId/:versionId", location: "/d/:docId/:versionId", title: "/d/:docId/:versionId" }, "every page-view field is the route pattern");
   assert.ok(!(await a.page.evaluate(() => JSON.stringify(window.dataLayer))).includes(confidential), "the concrete document slug never reaches the data layer");
   await sleep(ANALYTICS_SETTLE_MS);

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Wait for analytics route events with the harness's explicit pending sentinel, and make the repeated-script control insert a fresh executable script so it proves the later fetch-count assertion.
+
 - Keep change-feed audience checks reusable on both tiers, expecting access events only from local sharing while retaining fork and draft privacy checks everywhere.
 
 - Audit the original smoke, live-editing, workspace and account attempts; preserve unresolved save and page-close causes, and distinguish the account shared-stack one-of-three result from dedicated runs.
