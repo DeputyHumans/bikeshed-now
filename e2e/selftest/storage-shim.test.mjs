@@ -27,9 +27,8 @@ import http from "node:http";
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { BLOCK_SIZE, namePorts } from "../lib/ports.mjs";
 import { sparePorts } from "../lib/spare.mjs";
@@ -45,6 +44,8 @@ import {
   startStorageShim, storageRequestKind, storageShim, storageShimEnv,
 } from "../lib/storage-shim.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
+import { firebaseTools } from "../lib/prerequisites.mjs";
+import { firebaseBehavior, PROBE_PARENT_ENV, PROBE_STORAGE_HOST } from "./helpers/firebase-probes.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LIB = join(HERE, "..", "lib");
@@ -782,27 +783,31 @@ test("stack.mjs: --storage-shim reaches the ports, the aux, the emulator's env a
   assert.match(run, /if \(values\.attach && values\["storage-shim"\]\) fail\(/);
 });
 
-function firebaseToolsRoot() {
-  try {
-    let root = dirname(realpathSync(execFileSync("/usr/bin/which", ["firebase"], { encoding: "utf8" }).trim()));
-    while (root !== dirname(root) && !existsSync(join(root, "package.json"))) root = dirname(root);
-    return existsSync(join(root, "lib", "emulator", "functionsEmulator.js")) ? root : null;
-  } catch {
-    return null;
-  }
-}
-
-test("the installed firebase-tools hands a worker its Storage hosts after the functions' .env.local, from its registry, and the CLI's own env with them (why the preload, not a dotenv line)", (t) => {
-  const root = firebaseToolsRoot();
-  if (!root) return t.skip("firebase-tools is not installed here");
-  const fe = readFileSync(join(root, "lib", "emulator", "functionsEmulator.js"), "utf8");
-  const envJs = readFileSync(join(root, "lib", "emulator", "env.js"), "utf8");
-  const runtimeEnvs = fe.slice(fe.indexOf("getRuntimeEnvs(backend, trigger) {"), fe.indexOf("async resolveSecretEnvs("));
-  assert.ok(runtimeEnvs.indexOf("...this.getUserEnvs(backend)") < runtimeEnvs.indexOf("...this.getEmulatorEnvs()"), "user envs (.env.local) first, the registry's after");
-  assert.match(envJs, /case types_1\.Emulators\.STORAGE:\s*env\[constants_1\.Constants\.FIREBASE_STORAGE_EMULATOR_HOST\] = host;\s*env\[constants_1\.Constants\.CLOUD_STORAGE_EMULATOR_HOST\] = `http:\/\/\$\{host\}`;/);
-  assert.match(fe, /env: \{\s*node: backend\.bin,\s*METADATA_SERVER_DETECTION: "none",\s*\.\.\.process\.env,\s*\.\.\.envs,/, "a worker gets the CLI's env (NODE_OPTIONS, E2E_STORAGE_SHIM_*) under the runtime envs");
-  assert.match(fe, /envs\.FUNCTIONS_EMULATOR = "true";/);
-  t.diagnostic(`firebase-tools ${JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version}`);
+test("the installed firebase-tools hands a worker its Storage hosts after the functions' .env.local, from its registry, and the CLI's own env with them (why the preload, not a dotenv line)", async (t) => {
+  const firebase = firebaseTools({ optional: true });
+  if (!firebase) return t.skip("firebase-tools is not installed here");
+  t.diagnostic(`firebase-tools ${firebase.version}: ${firebase.bin}`);
+  const judge = ({ runtimeEnv, spawned }) => {
+    assert.equal(runtimeEnv.STORAGE_EMULATOR_HOST, `http://${PROBE_STORAGE_HOST}`, "the registry's Storage host replaces dotenv");
+    assert.equal(runtimeEnv.FIREBASE_STORAGE_EMULATOR_HOST, PROBE_STORAGE_HOST, "both Storage hosts come from the registry");
+    assert.equal(runtimeEnv.FROM_DOTENV, "kept", "unrelated user env survives");
+    assert.equal(runtimeEnv.FUNCTIONS_EMULATOR, "true", "the worker is marked as an emulator");
+    assert.equal(spawned.length, 1, "one worker was requested");
+    const env = spawned[0].options.env;
+    assert.equal(env.STORAGE_EMULATOR_HOST, `http://${PROBE_STORAGE_HOST}`, "runtime env wins over the parent's Storage host");
+    assert.equal(env.NODE_OPTIONS, PROBE_PARENT_ENV.NODE_OPTIONS, "the worker inherits the preload");
+    assert.equal(env.E2E_STORAGE_SHIM_HOST, PROBE_PARENT_ENV.E2E_STORAGE_SHIM_HOST, "the worker inherits the shim's host");
+  };
+  judge(await firebaseBehavior(firebase.root));
+  const source = readFileSync(join(firebase.root, "lib", "emulator", "functionsEmulator.js"), "utf8");
+  const noRegistry = source.replace("getRuntimeEnvs(backend, trigger) {", "getRuntimeEnvs(backend, trigger) { return this.getUserEnvs(backend);");
+  assert.notEqual(noRegistry, source, "the env-order control was planted");
+  const lostRegistry = await firebaseBehavior(firebase.root, { source: noRegistry });
+  assert.throws(() => judge(lostRegistry), /the registry's Storage host replaces dotenv/, "NEGATIVE: dotenv winning is detected");
+  const noParent = source.replaceAll("process.env", "({})");
+  assert.notEqual(noParent, source, "the inheritance control was planted");
+  const lostParent = await firebaseBehavior(firebase.root, { source: noParent });
+  assert.throws(() => judge(lostParent), /the worker inherits the preload/, "NEGATIVE: dropping the parent env is detected");
 });
 
 test("the product's Storage SDK dials what the shim routes: its endpoint is STORAGE_EMULATOR_HOST itself, a simple upload POSTs /upload/storage/v1/b/<b>/o?name=, a copy POSTs …/rewriteTo/b/<b>/o/<n>?ifGenerationMatch=", (t) => {

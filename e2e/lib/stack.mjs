@@ -124,7 +124,8 @@ import { E2E_DIR, STACKS_DIR, LOCKS_DIR, ensureDir, logsDir, newRunId, runDir as
 import { allocateBlock, isPidAlive, lockIsLive, updateLockFile, releaseLockFile } from "./ports.mjs";
 import { materializeTree, removeTree } from "./tree.mjs";
 import { BUCKET, PROJECT_ID, applyPatchSet, parseDotenv, patchAppConfig, patchFirebaseJson, writeFunctionsEnv } from "./patch.mjs";
-import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, nodeVersion, processTable, processesUnder, requireTool, resolveNodeBin, rssBytes, run, spawnDetached } from "./proc.mjs";
+import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, processTable, processesUnder, requireTool, rssBytes, run, spawnDetached } from "./proc.mjs";
+import { firebaseTools, node24 } from "./prerequisites.mjs";
 import { tailLog } from "./logs.mjs";
 import { localTarget, writeTarget } from "./target.mjs";
 import { describeGuard, egressEnv, installEgressGuard } from "./egress.mjs";
@@ -610,9 +611,12 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
   const lifetime = lifetimeConfig({ ttlHours });
   const debugMaxBytes = debugLogMaxBytes();
   const pollMs = watchdogPollMs();
-  const nodeBin = resolveNodeBin();
-  const nodeV = nodeVersion(nodeBin);
-  const firebaseBin = requireTool("firebase", "E2E_FIREBASE_BIN");
+  const node = node24();
+  const nodeBin = node.bin;
+  const nodeV = node.version;
+  const firebase = firebaseTools();
+  const firebaseBin = firebase.bin;
+  say(log, `toolchain: ${JSON.stringify({ node, firebase })}`);
   const mailpitBin = requireTool("mailpit", "E2E_MAILPIT_BIN");
   const javaBin = requireTool("java", "E2E_JAVA_BIN");
 
@@ -672,6 +676,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     lockPath: block.lockPath,
     node: { bin: nodeBin, version: nodeV },
     tools: { firebase: firebaseBin, mailpit: mailpitBin, java: javaBin },
+    toolchain: { node, firebase },
     logs: {
       emulators: join(ld, "emulators.log"),
       mailpit: join(ld, "mailpit.log"),

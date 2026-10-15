@@ -29,6 +29,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   cooldown is claimed. Prior participation no longer mails new content to a
   removed reader; expiry and rotated link grants are checked too.
 
+### Tests
+
+- E2E self-tests and stacks select Node 24 and the same explicit Firebase
+  executable, reporting both versions. Installed-tool probes check environment
+  precedence and watcher behavior without depending on source formatting.
+  Mail settling and log-rotation tests wait for the conditions they measure.
+
 ## 0.16.1 — 2026-10-13
 
 Tests and documentation only, so a patch release. The product is unchanged.

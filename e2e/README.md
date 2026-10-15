@@ -174,6 +174,22 @@ the scenario is needed.
 | Chrome | system Chrome for the browser specs; `playwright-core` never downloads one |
 | deps | `npm run install:all` in the checkout; stacks symlink its `node_modules` |
 
+`--self-test` resolves and checks Node 24 before launching the suite, even
+when the calling shell uses another Node version. It also requires an
+installed firebase-tools package, prints the selected executables and
+versions, and pins `E2E_FIREBASE_BIN` for every child. Stacks use the same
+resolver and save these selections in `stack.json`'s `toolchain` field.
+An explicit missing or unusable override fails before testing; it never
+falls back to a different installation. Individual installed-tool probes
+may skip only when no Firebase installation or override exists.
+
+When several Firebase installations exist, set `E2E_FIREBASE_BIN` explicitly
+alongside `E2E_NODE_BIN` (the Node 24 bin directory). Merely invoking a
+particular `node` does not select a Firebase executable elsewhere on PATH.
+The installed-tool probes exercise env precedence and watcher behavior;
+they do not require one transpiler's object-spread spelling or a particular
+order of watcher ignore rules.
+
 ## Tiers
 
 | Tier | Lock | What |

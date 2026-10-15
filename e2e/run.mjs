@@ -105,6 +105,7 @@ import { assertTargetDeclared, controlVerdict, findTarget, greenGroups, greenRun
 import { parseAppEnvArgs } from "./lib/options.mjs";
 import { CASE_TIMEOUT_ENV, tierTimeouts } from "./lib/budget.mjs";
 import { specFilePlan } from "./lib/specfile.mjs";
+import { selfTestToolchain } from "./lib/prerequisites.mjs";
 import { relFile } from "./lib/reporter.mjs";
 
 /**
@@ -180,9 +181,16 @@ async function stopChildGroup(child, { graceMs = 10_000 } = {}) {
 }
 
 async function selfTest() {
+  let toolchain;
+  try {
+    toolchain = selfTestToolchain();
+  } catch (err) {
+    fail(`self-test prerequisites: ${err.message}`);
+  }
+  log(`self-test toolchain: ${JSON.stringify({ node: toolchain.node, firebase: toolchain.firebase })}`);
   const files = readdirSync(SELFTEST_DIR).filter((n) => n.endsWith(".test.mjs")).sort().map((n) => join(SELFTEST_DIR, n));
   if (files.length === 0) fail("no self-tests found");
-  const child = spawn(process.execPath, ["--test", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, stdio: "inherit" });
+  const child = spawn(toolchain.node.executable, ["--test", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit" });
   const code = await new Promise((r) => child.on("close", (c) => r(c ?? 1)));
   process.exit(code);
 }
