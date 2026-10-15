@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Give the projection-failure E2E case the same bounded setup budget as the rest of its area, so its session setup reaches the product before the response and storage assertions run.
+
 - Preserve saved and published bytes when Firestore retries a transaction after losing its commit acknowledgement. Recognize each request's committed immutable prefix or retirement epoch before retry-only refusals, keep later heads intact, and retain potentially committed bytes when the result remains uncertain.
 
 - Preserve thumbnails when the database commits an upload but loses its acknowledgement. A transaction retry recognizes that request's recorded key, reports the completed upload, and finishes retiring obsolete images instead of deleting the new JPEGs.

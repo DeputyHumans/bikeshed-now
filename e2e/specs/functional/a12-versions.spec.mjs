@@ -188,7 +188,7 @@ const docRecord = (docId) => readDoc(target, `docs/${docId}`);
 const versionRecord = (docId, v) => readDoc(target, `docs/${docId}/versions/${v}`);
 
 scenario("A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes", {
-  tiers: ["local"], needs: ["admin-emulator", "logs", "patch:a12-projection-unavailable"], timeoutMs: 180_000,
+  tiers: ["local"], needs: ["admin-emulator", "logs", "patch:a12-projection-unavailable"], timeoutMs: 180_000, ...STALLS,
 }, async (ctx) => {
   const { owner } = await castWithOwner(ctx, []);
   const title = `Projection fault ${tag()}`;
