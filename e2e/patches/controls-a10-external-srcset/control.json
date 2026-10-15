@@ -1,0 +1,13 @@
+{
+  "oracle": "no HTML attribute, source set, refresh or CSS resource points outside the bundle",
+  "what": "Regress external srcset",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.2 a .md upload records format markdown, entry index.html, sourceEntry index.md and the pinned rendererVersion; Storage and the zip hold exactly both files, index.md as uploaded; headings are sections with GitHub slugs and no URL is external",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no HTML attribute, source set, refresh or CSS resource points outside the bundle"
+  }
+}

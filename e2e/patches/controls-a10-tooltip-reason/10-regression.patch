@@ -1,0 +1,9 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -250,5 +250,5 @@
+         key={control.id}
+         className={unavailable ? "toolbar-unavailable" : undefined}
+-        data-reason={unavailable ? unavailableReason : undefined}
++        data-reason={undefined}
+       >
+         <button

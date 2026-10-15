@@ -14029,6 +14029,17 @@
       ],
       "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T063519Z-p5991-gqn9/summary.md; e2e/.out/a13-controls-proof/{proof,app-proof,listener-proof}.json",
       "note": "New patched-stack red/restored pairs remain required. The operator database URL and connection lifecycle were repaired in earlier commits and exercised locally; no production execution is claimed."
+    },
+    {
+      "scope": "a10-markdown coverage obligations; source reconciliation and local browser proof",
+      "checks": [
+        "Full current A10 passes 7/7; exact-count tightened A10.4 restores 1/1",
+        "Eleven scratch oracle controls fail intended assertions, including duplicate-comment loss previously missed by includes",
+        "Ten real-Chrome inspector tests plus two source negatives and restore; 22 focused control/inspector selftests pass",
+        "Twelve new product controls apply/typecheck; existing late-format expectation accepts earlier held-palette assertion"
+      ],
+      "evidence": "e2e/.out/a10-controls-proof/oracle-proof.json; e2e/.out/a10-controls-proof/compile-proof.json",
+      "note": "B10 6c38cc6: full A10 7/7 pass at 20261015T063924Z-p14391-xdw6; exact authored-count final A10.4 restored at 20261015T064539Z-p26831-n1n4. Eleven scratch controls reached intended assertion failures (oracle-proof.json), ten inspector selftests and two source mutants restored green. Twelve stored product controls apply/typecheck. Fresh exact-revision patched-stack pairs and matrix remain required; canonical states unchanged."
     }
   ]
 }

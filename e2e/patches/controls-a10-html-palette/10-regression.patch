@@ -1,0 +1,9 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -325,5 +325,5 @@
+             aria-label="Font"
+             title={presentationUnavailable ? unavailableReason : "Font"}
+-            disabled={presentationUnavailable || sharing === "joining"}
++            disabled={format === "html" || presentationUnavailable || sharing === "joining"}
+             onChange={(e) => run({ kind: "exec", command: "fontName", value: e.target.value })}
+             defaultValue={EDITOR_FONT_CHOICES[0].value}

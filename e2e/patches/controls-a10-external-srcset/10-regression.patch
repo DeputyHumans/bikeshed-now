@@ -1,0 +1,8 @@
+--- a/functions/src/lib/markdown/render.ts
++++ b/functions/src/lib/markdown/render.ts
+@@ -227,4 +227,5 @@
+ </head>
+ <body>
++<img srcset="https://outside.invalid/a.png 2x">
+ <main>
+ ${body.trimEnd()}

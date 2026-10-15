@@ -1,0 +1,9 @@
+--- a/functions/src/lib/markdown/render.ts
++++ b/functions/src/lib/markdown/render.ts
+@@ -102,5 +102,5 @@
+         while (
+           openLevels.length > 0 &&
+-          openLevels[openLevels.length - 1] >= level
++          openLevels[openLevels.length - 1] >= 0
+         ) {
+           out.push(close());
