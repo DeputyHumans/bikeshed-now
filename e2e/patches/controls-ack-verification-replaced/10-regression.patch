@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2523,3 +2523,3 @@
+     const currentIdentity = identity(verification);
+-    if (checkedIdentity !== undefined && checkedIdentity !== currentIdentity) {
++    if (checkedIdentity === "never" && checkedIdentity !== currentIdentity) {
+       return { status: 409, error: "that code was replaced; use the latest code" };

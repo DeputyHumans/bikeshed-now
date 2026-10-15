@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2500,3 +2500,3 @@
+
+-    await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
++    if (reservationId === "never") await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
+     res.status(200).json({ sent: true, email });

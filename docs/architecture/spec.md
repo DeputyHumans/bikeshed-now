@@ -1155,7 +1155,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
-  lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
+  lib/{head,html,htmltext,http,marking,thumbs,shell,transaction-receipts}.ts
   lib/{publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
@@ -1576,13 +1576,20 @@ and updated transactionally. Email delivery and Firebase Auth updates happen
 outside transaction retries. A successful completion retires only the
 challenge it checked, preserving a newer challenge reserved while Auth was
 updating. An Auth failure leaves the checked challenge available for retry.
+A lost transaction acknowledgement does not reserve and mail another code or
+charge the same request for another wrong guess. Wrong-guess receipts belong
+to the challenge that was checked; a retry cannot spend a replacement
+challenge's budget.
 
 ### Email
 
 Sharing invitations use only the effective access added by that operation's
 transaction, comparing current grants against the same parent and team inputs.
 A document grant does not invite an already inherited reader; a folder grant
-does not invite people added by a later concurrent request.
+does not invite people added by a later concurrent request. Native transaction
+retries retain that operation's committed before/after delta, even if another
+operation changes membership before the acknowledgement arrives; they neither
+repeat the mutation nor replace the original invitation delta.
 
 Exactly three messages: **invitation** (a new grant, never a re-grant),
 **verification**, **new comment**. Deliberately not built: digests, weekly
@@ -1599,6 +1606,9 @@ the recipient's current link grant, including expiry and key rotation. A removed
 reader is not entitled to later passages or comments by having participated
 before. A per-(recipient, doc) cooldown lives on the user record. No queue, no
 scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`.
+A unique claim receipt distinguishes the winning notification from another
+call in the same millisecond. Its native retry still checks current opt-out,
+read authority and expiry before sending; a receipt cannot bypass revocation.
 
 A suggested edit is a branch of the comment email, not a fourth message. Its
 opening comment is addressed to the owner and every approver − the author,
@@ -2220,6 +2230,18 @@ Automated reads record a view session with `ms: 0` and count into
 both and filters to human-only or automation-only. Each automated session has a
 server `startedAt` retained across repeated reads and a refreshed `lastBeatAt`,
 so the Activity query includes it; session and aggregate counters update together.
+One automated fetch increments its read count once across native transaction
+retries. A human reading beat likewise applies its time cap once, even when the
+SDK retries after losing the first commit acknowledgement.
+
+Where a mutable operation needs a receipt rather than an existing immutable
+result, it keeps `transactionReceipts` on its existing record. Each entry holds
+an opaque operation ID, a server time and the bounded non-secret result, never
+a document snapshot or credential. A new write attempt stops after five
+minutes; a later real write may prune entries older than ten minutes. A
+matching receipt still acknowledges the original committed result after that
+new-write deadline. Once the SDK resolves, best-effort cleanup removes only
+that operation's marker. This adds no collection or event stream.
 Comments and highlights
 created through an automation channel carry a visible "via MCP" marker.
 
@@ -2295,7 +2317,12 @@ how `docs` and `folders` already behave.
 admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no
 signature change. Member and administrator deltas read, authorize and write the
 team in one transaction. Removing a member also removes their administrator
-grant; the owner remains a member and can always manage the team.
+grant; the owner remains a member and can always manage the team. A native retry
+acknowledges its already committed result, including an administrator removing
+their own membership, before applying authority checks for a new mutation.
+Its bounded receipt (§17) preserves the original invitation delta without
+repeating writes over a later membership change. The access cascade still
+recomputes from current grants, parents and teams.
 
 ### Fan-out is bounded and reuses the existing cascade
 

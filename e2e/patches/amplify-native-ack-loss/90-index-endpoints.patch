@@ -1,0 +1,22 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2269,3 +2269,3 @@
+
+-  const result = await db().runTransaction(async (tx) => {
++  const result = await e2eAckTransaction(db(), docId, "reading-beat", async (tx) => {
+     const sessionSnap = await tx.get(sessionRef);
+@@ -2471,3 +2471,3 @@
+     const reservationId = randomBytes(16).toString("hex");
+-    const reserved = await db().runTransaction(async (tx) => {
++    const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx) => {
+       const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+@@ -2515,3 +2515,3 @@
+   let checkedIdentity: string | undefined;
+-  const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
++  const checked = await e2eAckTransaction(db(), uid, "verification-complete", async (tx): Promise<VerificationCheck> => {
+     const verification = (await tx.get(ref)).data()?.verification as
+@@ -2783,3 +2783,3 @@
+   type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
+-  const result = await db().runTransaction(async (tx) => {
++  const result = await e2eAckTransaction(db(), teamId, "team-members", async (tx) => {
+     const snap = await tx.get(ref);

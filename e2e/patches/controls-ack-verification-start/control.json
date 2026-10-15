@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK verification start: its durable reservation returns200",
+  "what": "Reintroduce the verification-start acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11a a verification reservation survives native acknowledgement loss and mails its current code exactly once",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK verification start: its durable reservation returns200"
+  }
+}

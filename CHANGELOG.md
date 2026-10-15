@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve one endpoint operation when Firestore commits but loses its acknowledgement: verification sends its reserved code, wrong codes spend one guess, replaced challenges retain their budget, reading beats consume one cap, and team changes acknowledge prior authority while keeping their invitation delta. Add six real fault-gated endpoint cases and ten directional controls.
+
 - Drain MCP acknowledgement probes after releasing their gate even when setup inspection fails, so a completed case leaves no request running in the next case.
 
 - Forward explicit native Firestore transaction options through the acknowledgement-loss capability, preserving endpoint retry budgets and testing a dropped-options inverse.

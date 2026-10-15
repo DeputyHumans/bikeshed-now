@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2473,3 +2473,3 @@
+       const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+-      if (existing?.reservationId === reservationId) return true;
++      if (reservationId === "never" && existing?.reservationId === reservationId) return true;
+       const at = Date.now();

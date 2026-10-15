@@ -36,6 +36,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as cookie from "cookie";
 import * as mime from "mime-types";
 import { randomBytes, createHash } from "crypto";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./lib/transaction-receipts";
 
 import {
   MAX_BEAT_MS,
@@ -2262,6 +2263,9 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
 
   const sessionRef = docRef.collection("views").doc(sessionId);
   const viewerRef = caller ? docRef.collection("viewers").doc(caller.uid) : null;
+  // A native retry may follow a successful commit whose acknowledgement was
+  // lost. One HTTP beat must not consume another cap on each callback attempt.
+  let beatCeiling: number | undefined;
 
   const result = await db().runTransaction(async (tx) => {
     const sessionSnap = await tx.get(sessionRef);
@@ -2276,7 +2280,8 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     const isNewSession = !sessionSnap.exists;
     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
     const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
-    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS);
+    beatCeiling ??= storedMs + MAX_BEAT_MS;
+    const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
     const sessionMs = storedMs + delta;
 
     tx.set(
@@ -2463,8 +2468,10 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     }
 
     const code = sixDigitCode();
+    const reservationId = randomBytes(16).toString("hex");
     const reserved = await db().runTransaction(async (tx) => {
-      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number } | undefined;
+      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+      if (existing?.reservationId === reservationId) return true;
       const at = Date.now();
       if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return false;
       // Reserve once before sending: retrying this transaction never mails an
@@ -2479,6 +2486,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
             expiresAt: at + VERIFY_TTL_MS,
             attempts: 0,
             sentAt: at,
+            reservationId,
           },
         },
         { merge: true },
@@ -2503,13 +2511,24 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
   const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");
   const identity = (value: { hash?: string; email?: string; sentAt?: number; expiresAt?: number }) =>
     JSON.stringify([value.hash, value.email, value.sentAt, value.expiresAt]);
+  const attemptId = randomBytes(16).toString("hex");
+  let checkedIdentity: string | undefined;
   const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
     const verification = (await tx.get(ref)).data()?.verification as
-      | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number }
+      | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number; attemptIds?: string[] }
       | undefined;
     if (!verification?.hash || !verification.email) {
       return { status: 409, error: "no verification in progress" };
     }
+    const currentIdentity = identity(verification);
+    if (checkedIdentity !== undefined && checkedIdentity !== currentIdentity) {
+      return { status: 409, error: "that code was replaced; use the latest code" };
+    }
+    checkedIdentity = currentIdentity;
+    // The challenge allows at most five wrong attempts, so this receipt list
+    // is bounded by the existing limit and survives other concurrent guesses.
+    const attemptIds = Array.isArray(verification.attemptIds) ? verification.attemptIds : [];
+    if (attemptIds.includes(attemptId)) return { status: 400, error: "that code is not right" };
     if (Number(verification.expiresAt ?? 0) < Date.now()) {
       tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
       return { status: 409, error: "that code has expired" };
@@ -2521,7 +2540,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     if (expected !== verification.hash) {
       tx.set(
         ref,
-        { verification: { attempts: Number(verification.attempts ?? 0) + 1 } },
+        { verification: { attempts: Number(verification.attempts ?? 0) + 1, attemptIds: [...attemptIds, attemptId] } },
         { merge: true },
       );
       return { status: 400, error: "that code is not right" };
@@ -2760,8 +2779,12 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
   }
 
   const ref = db().collection("teams").doc(teamId);
+  const receipt = freshReceiptId();
+  type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
   const result = await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    const completed = readReceipt<TeamChange>(snap, receipt);
+    if (completed.found) return completed.result;
     if (!snap.exists) {
       return { status: 404 as const };
     }
@@ -2792,9 +2815,12 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
     }
 
     tx.set(ref, { members, admins, updatedAt: now() }, { merge: true });
-    return { status: 200 as const, team, before, members, admins };
+    const completedChange: TeamChange = { status: 200, team: { name: typeof team.name === "string" ? team.name : "a team" }, before, members, admins };
+    recordReceipt(tx, ref, snap, receipt, completedChange);
+    return completedChange;
   });
   if (result.status !== 200) { res.status(result.status).end(); return; }
+  await clearReceipt(ref, receipt);
   const { team, before, members, admins } = result;
 
   // Removing someone from a team must revoke their access everywhere the team
