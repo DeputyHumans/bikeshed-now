@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2265,7 +2265,7 @@
+         stats: {
+           // Members receive this map. Reading identities belong only in the
+           // editor-gated views/viewers records, including on legacy documents.
+-          lastViewedByEmail: FieldValue.delete(),
++          lastViewedByEmail: caller?.emailLower ?? "old-reader@example.com",
+           ...(automated
+           ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
+           : {

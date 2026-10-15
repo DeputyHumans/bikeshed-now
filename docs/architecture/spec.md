@@ -589,6 +589,11 @@ Missing ⇒ treated as trusted.
 counts with no extra reads and any member can see the AGGREGATE. Written only by
 the Admin SDK, always as a nested map under `set(..., { merge: true })` so the
 view writer and the edit writer never clobber each other.
+Reading identities never appear in this member-readable map. They live only in
+the editor-gated `views` and `viewers` collections; `lastViewedAt` is an
+anonymous aggregate timestamp. Read writers delete the legacy
+`stats.lastViewedByEmail` field. An existing installation must also run
+`scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again.
 `recordView` deliberately does NOT touch `updatedAt` — that field means "bumped
 on every publish", and a read must not masquerade as a publish.
 

@@ -412,7 +412,10 @@ async function recordApiRead(
         startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
         lastBeatAt: FieldValue.serverTimestamp(),
       }, { merge: true });
-      tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) });
+      tx.update(docRef, {
+        "stats.apiReads": FieldValue.increment(1),
+        "stats.lastViewedByEmail": FieldValue.delete(),
+      });
     });
   } catch {
     /* statistics are best-effort and never fail the read */

@@ -27,10 +27,8 @@
  *         an open editor and anonymous, and the panel shows readers to
  *         editors and only the aggregate, with a hint, to a viewer; an open
  *         editor has no Activity entry at all
- *   A18.4 (who read it last), tagged X-a18-stats-1, a SPEC QUESTION
- *         (class Q), not a confirmed defect: the document record every member
- *         may read carries stats.lastViewedByEmail, and no SPEC sentence says
- *         whether it may (the comment above the case gives both readings)
+ *   A18.4 (who read it last): shared stats never reveal a reader's identity;
+ *         the protected per-person history still records it for editors
  *   A18.4 (automation filter), known defect X-a18-stats-3: the panel's
  *         Automation filter never lists an MCP read (no startedAt)
  *   A18.5 POST /view on an unlisted document without its key (anonymous or
@@ -253,8 +251,8 @@ scenario("A18.1 a member's reading session counts one view, its active time is t
 
   ctx.step("stats and viewers/{uid} after the final beat");
   assert.deepEqual(
-    pick(visit.final, ["views", "totalMs", "viewers", "lastViewedByEmail"]),
-    { views: 1, totalMs: S.ms, viewers: 1, lastViewedByEmail: email },
+    { ...pick(visit.final, ["views", "totalMs", "viewers"]), lastViewedByEmail: visit.final.lastViewedByEmail ?? null },
+    { views: 1, totalMs: S.ms, viewers: 1, lastViewedByEmail: null },
     "stats: one view, the session's active time, one identified viewer",
   );
   const row = await readDoc(target, `docs/${D.docId}/viewers/${viewer.uid}`);
@@ -536,57 +534,8 @@ scenario("A18.4 the Activity panel's per-person detail is for the owner and edit
 
 // --- A18.4, who read it last --------------------------------------------------------
 
-/**
- * X-a18-stats-1, a SPEC QUESTION (class Q; ask at G1), not a confirmed
- * defect. The tag stays so that the observation stays pinned until the user
- * rules.
- *
- * What happens: recordView writes `stats.lastViewedByEmail`, the address of
- * whoever read the document last, onto docs/{id}
- * (functions/src/index.ts:2256). Every member may get that record
- * (firestore.rules:147), and the app's watchDoc (app/src/firestore.ts:141)
- * streams it to every member's browser. No UI reads the field.
- *
- * Why no SPEC sentence decides it:
- *   - SPEC §4 spec.md:560-561: "`stats` is the denormalized usage rollup, so
- *     the workspace list renders counts with no extra reads and any member
- *     can see the AGGREGATE." That gives the map's purpose. It does not say
- *     the map holds aggregates only.
- *   - SPEC §4 spec.md:465-466: "`app/src/types.ts` is the typed source of
- *     truth; this section is normative about meaning". app/src/types.ts:155
- *     declares `lastViewedByEmail?: string` on ViewStats, the type of this
- *     same member-readable map.
- *   - SPEC §17 spec.md:1889-1891 relies on a per-person field in the same
- *     map, "`lastEditedByEmail` is now the whole of the answer", and
- *     app/src/types.ts:158 declares it on ViewStats.
- *   - SPEC §17 spec.md:1902-1905, "The activity panel … Gated to
- *     `isDocEditor`", gates the panel and its collections (viewers, views,
- *     acl: firestore.rules:184-200). It says nothing about docs/{id}.
- *
- * The concrete harm, if the user rules against the field: a viewer or a
- * suggester who polls the record they already receive learns each identified
- * reader's address, and with stats.lastViewedAt when that person read it.
- * Polling rebuilds the per-person reading history that the rules give only to
- * the owner and editors. StatsPanel tells that same viewer: "Only the owner
- * and its editors can see who read this document." The nearest normative
- * text against the field is not about stats: ADR 0012:77-79 says a grant list
- * the owner can see "would also make grants a reading history and so
- * editor-only". SPEC §1.4a spec.md:95-97 gates presence so that an account
- * cannot "learn who reads what". docs/architecture/threat-model.md:10 and :13
- * put "usage stats" on docs/{docId} for members and "per-person reading
- * history" in viewers and views for the owner and real editors. It does not
- * say which side this field is on.
- *
- * Today the oracle (the last assertion) fails, so the case is a TODO. It
- * passes if the field leaves the record. If the user rules the field is
- * intended, this case and its tag go. If the user rules against it, A18.1's
- * oracle, which expects `lastViewedByEmail: email`, has to change with the
- * product.
- * Its own case, so that the tag cannot turn an A18.4 failure into a TODO.
- * Everything before the last assertion is a precondition, so only that
- * assertion can make the case a TODO.
- */
-scenario("A18.4 (who read it last) the document record a viewer may read names none of its readers: stats.lastViewedByEmail is the per-person detail the Activity panel withholds from a viewer", { tiers: ["local", "prod"], defect: "X-a18-stats-1", timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+/** Reading identities are editor-only; the member-readable rollup is aggregate (SPEC §4, §17). */
+scenario("A18.4 (who read it last) the document record a viewer may read names none of its readers: stats.lastViewedByEmail is the per-person detail the Activity panel withholds from a viewer", { tiers: ["local", "prod"], timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const [owner, editor, viewer] = await castSessions(["owner", "editor", "viewer"]);
   const D = await publishPage(owner, "last-reader");
   await share(target, { owner, doc: D.docId, account: editor.account, role: "editor" });
@@ -606,23 +555,13 @@ scenario("A18.4 (who read it last) the document record a viewer may read names n
   precondition((await view(editor.http, beatBody(D.docId, sid(), 0))).status === 200, "the editor's beat");
   precondition((await fs.list(`docs/${D.docId}/viewers`)).verdict === "DENY", "the viewer may not list viewers/{uid} (A18.4)");
 
-  ctx.step("the viewer reads the document record again: the aggregate, and does it name a reader? (SPEC question X-a18-stats-1)");
+  ctx.step("the viewer reads the document record again: the aggregate without a reading identity");
   const stats = await recordAsViewer();
   precondition(stats.views === 1, `the viewer sees the aggregate: views ${stats.views}`);
   ctx.step(`stats keys the viewer receives: ${Object.keys(stats).sort().join(", ")}`);
-  const isEditors = stats.lastViewedByEmail === editor.account.email.toLowerCase();
-  assert.equal(
-    stats.lastViewedByEmail ?? null,
-    null,
-    `X-a18-stats-1, SPEC QUESTION (class Q; ask at G1), not a confirmed defect: a viewer learns who read the document last from its record. stats.lastViewedByEmail ${isEditors ? "is the editor's address" : `is ${JSON.stringify(stats.lastViewedByEmail)}`}. ` +
-      "No SPEC sentence limits stats to aggregates. SPEC §4 spec.md:560-561 gives its purpose (\"any member can see the AGGREGATE\"). " +
-      "spec.md:465-466 makes app/src/types.ts the typed source of truth, and types.ts:155 declares lastViewedByEmail. " +
-      "SPEC §17 spec.md:1891 relies on lastEditedByEmail, a per-person field that types.ts:158 declares in the same map. " +
-      "spec.md:1905 (\"Gated to `isDocEditor`\") gates the activity panel, not docs/{id}. " +
-      "Harm: by polling, a viewer or suggester rebuilds who read the document and when (lastViewedAt), the per-person history the rules keep in viewers and views for the owner and editors (firestore.rules:184-193). " +
-      "StatsPanel tells that viewer \"Only the owner and its editors can see who read this document.\" " +
-      "Nearest text against it: ADR 0012:77-79 (a reading history is \"editor-only\")",
-  );
+  assert.equal(Object.hasOwn(stats, "lastViewedByEmail"), false, "member-readable stats never reveal the last reader's email");
+  const history = await readDoc(target, `docs/${D.docId}/viewers/${editor.uid}`);
+  assert.equal(history.email, editor.account.email.toLowerCase(), "editor-gated history retains the reader's identity");
 });
 
 // --- A18.4, the automation filter ---------------------------------------------------

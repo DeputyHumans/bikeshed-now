@@ -2262,15 +2262,19 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     tx.set(
       docRef,
       {
-        stats: automated
+        stats: {
+          // Members receive this map. Reading identities belong only in the
+          // editor-gated views/viewers records, including on legacy documents.
+          lastViewedByEmail: FieldValue.delete(),
+          ...(automated
           ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
           : {
               views: FieldValue.increment(isNewSession ? 1 : 0),
               viewers: FieldValue.increment(isNewViewer ? 1 : 0),
               totalMs: FieldValue.increment(delta),
               lastViewedAt: now(),
-              ...(caller ? { lastViewedByEmail: caller.emailLower } : {}),
-            },
+            }),
+        },
         // `updatedAt` is deliberately NOT touched: it means "bumped on every
         // publish", and a read must not masquerade as a publish.
       },

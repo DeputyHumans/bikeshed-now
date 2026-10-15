@@ -11459,7 +11459,7 @@
     },
     {
       "id": "X-a18-stats-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "Every member of a document, viewers and suggesters included, can read who read it last. recordView writes the last reader's address onto the document record, which every member may get and which the app streams to every member.",
@@ -13585,6 +13585,23 @@
         "controls-a20-paste-prompt"
       ],
       "note": "SPEC §19 now defines successful --json result streams. Open returns the complete keyed URL and invokes the opener; paste login returns origin/saved/via without the token and saves the matching config. Both former spec-question cases are normal assertions. CLI patch release remains parent-owned. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a18-stats-1"
+      ],
+      "scope": "reader privacy; local only; existing deployment migration and E2E pending",
+      "tests": [
+        "32 focused backend and operator tests pass",
+        "Original reader writer fails3 privacy assertions",
+        "Five isolated read/MCP/migration regressions fail assertions, restored32 pass"
+      ],
+      "evidence": "e2e/.out/reader-privacy-controls/ledger.json",
+      "controls": [
+        "controls-a18-reader-privacy"
+      ],
+      "note": "Authorized repair of demonstrated reading-history exposure: shared stats no longer name the last reader; protected history remains. Human and automated reads erase the legacy field. A bounded idempotent operator redaction supports dry-run and preserves counters. Existing deployments require that migration; none was run remotely. A18.1 agrees with the privacy oracle. No item closed."
     }
   ]
 }

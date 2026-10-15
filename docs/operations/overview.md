@@ -353,6 +353,19 @@ for the Realtime Database; without it the script reports that step as skipped.
 **The terminal client is published separately**, to npm as `bikeshed-now`, and
 a deployment is not involved: [`publishing-the-cli.md`](publishing-the-cli.md).
 
+**Legacy last-reader statistics need redaction.** After deploying a version that
+stops writing `stats.lastViewedByEmail`, preview and run the bounded cleanup:
+
+```sh
+node scripts/redact-reader-stats.mjs --dry-run --project <id>
+node scripts/redact-reader-stats.mjs --yes --account you@example.com --project <id>
+```
+
+It deletes only that member-readable field. Counts, edit provenance and the
+editor-only reading history remain. New human and automated reads also erase
+the field, but cannot clean documents nobody opens again. A source change alone
+does not establish that an existing deployment's records have been redacted.
+
 **A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
 are part of the content hash, so bumping `markdown-it`, `turndown` or
 `turndown-plugin-gfm` changes every Markdown document's hash and the next save

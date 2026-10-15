@@ -406,3 +406,12 @@ test('MCP reads have a stable startedAt for the Activity query while counts and 
   assert.ok(second.lastBeatAt.toMillis() >= first.lastBeatAt.toMillis());
   assert.deepEqual({ reads: second.reads, ms: second.ms, automated: second.automated, apiReads: w.store.get('docs/d1').stats.apiReads }, { reads: 2, ms: 0, automated: true, apiReads: 2 });
 });
+
+test('MCP reads erase a legacy last reader from member-visible stats while retaining editor-only provenance', async () => {
+  const w = world();
+  w.store.get('docs/d1').stats = { lastViewedByEmail: 'former-reader@example.com', commits: 7 };
+  await w.call('get_document', OWNER, {});
+  assert.equal(Object.hasOwn(w.store.get('docs/d1').stats, 'lastViewedByEmail'), false, 'MCP also removes a legacy reading identity');
+  assert.equal(w.store.get('docs/d1').stats.commits, 7);
+  assert.equal(w.store.get('docs/d1/views/api-t1-v1').email, OWNER.emailLower);
+});

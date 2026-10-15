@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep reading identities in editor-only history, remove the legacy last-reader email from shared stats, and provide a bounded redaction command for existing records.
+
 - Cover upload-revision refusals from workspace actions and document-frame drops, including permission and expiry changes after opening, pending and accepted suggestions, and active peers; pin readable errors, retry state and unchanged stored content with negative controls.
 
 - Bound email provider requests to ten seconds, including incomplete response bodies, so saved access and later recipients survive a stalled provider; cover both phases with recipient-scoped local holds and regression controls.

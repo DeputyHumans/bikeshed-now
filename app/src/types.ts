@@ -153,7 +153,6 @@ export interface ViewStats {
   viewers: number;
   totalMs: number;
   lastViewedAt?: Timestamp;
-  lastViewedByEmail?: string;
   commits: number;
   lastEditedAt?: Timestamp;
   lastEditedByEmail?: string;

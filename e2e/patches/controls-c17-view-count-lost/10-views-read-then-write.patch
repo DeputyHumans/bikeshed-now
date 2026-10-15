@@ -1,15 +1,14 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2249,9 +2249,10 @@
-         stats: automated
+@@ -2269,9 +2269,9 @@
+           ...(automated
            ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
            : {
 -              views: FieldValue.increment(isNewSession ? 1 : 0),
-+              // e2e negative control (controls-c17-view-count-lost): views and totalMs written as the plain read before the transaction plus this session's, a read-then-write outside any transaction, so sessions opened at once lose each other's counts.
 +              views: Number((docData as unknown as { stats?: { views?: unknown } }).stats?.views ?? 0) + (isNewSession ? 1 : 0),
                viewers: FieldValue.increment(isNewViewer ? 1 : 0),
 -              totalMs: FieldValue.increment(delta),
 +              totalMs: Number((docData as unknown as { stats?: { totalMs?: unknown } }).stats?.totalMs ?? 0) + delta,
                lastViewedAt: now(),
-               ...(caller ? { lastViewedByEmail: caller.emailLower } : {}),
-             },
+             }),
+         },
