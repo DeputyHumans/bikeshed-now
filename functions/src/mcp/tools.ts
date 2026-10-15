@@ -1646,16 +1646,12 @@ export const TOOLS: ToolDefinition[] = [
       // The anchor was found on the observed head. Recheck that head and the
       // reader's authority atomically with both writes, so a racing publish
       // either sees this open thread or makes this attempt retry and refuse.
-      let attempted = false;
+      const receipt = freshReceiptId();
       await ctx.db.runTransaction(async (tx) => {
-        // These two server-allocated IDs identify this call's atomic commit.
-        // Confirm it before applying new-write guards after an SDK retry.
-        if (attempted) {
-          const ownThread = await tx.get(annRef);
-          const ownComment = await tx.get(commentRef);
-          if (ownThread.exists && ownComment.exists) return;
-        }
         const current = await tx.get(ref);
+        // Feedback rows remain author-deletable. Their later deletion cannot
+        // erase this operation's acknowledgement or make its retry recreate them.
+        if (readReceipt(current, receipt).found) return;
         const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };
         let proof = { k: str(args, "k"), grantToken: null as string | null };
         if (current.exists && !canRead(currentData, ctx.caller, proof)
@@ -1668,7 +1664,7 @@ export const TOOLS: ToolDefinition[] = [
         }
         refuseIfExpired(currentData);
         if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
-        attempted = true;
+        recordReceipt(tx, ref, current, receipt, true);
         tx.create(annRef, {
           annId: annRef.id,
           anchor: { ...anchor, strict: true },
@@ -1678,6 +1674,7 @@ export const TOOLS: ToolDefinition[] = [
         });
         tx.create(commentRef, { commentId: commentRef.id, body, ...author });
       });
+      await clearReceipt(ref, receipt);
       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
     },
   },

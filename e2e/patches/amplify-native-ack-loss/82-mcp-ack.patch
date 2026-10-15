@@ -10,7 +10,7 @@
 +    await e2eAckTransaction(ctx.db, docRef.id, "mcp-read", async (tx) => {
        const before = await tx.get(viewRef);
 @@ -1649,3 +1650,3 @@
-       let attempted = false;
+       const receipt = freshReceiptId();
 -      await ctx.db.runTransaction(async (tx) => {
 +      await e2eAckTransaction(ctx.db, ref.id, "mcp-comment", async (tx) => {
-         // These two server-allocated IDs identify this call's atomic commit.
+         const current = await tx.get(ref);

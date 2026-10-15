@@ -9,6 +9,7 @@ import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
 import { logFile, logMark, readLog, waitForLog } from "../../lib/logs.mjs";
+import { clientFirestore } from "../../lib/firestore-client.mjs";
 
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
@@ -23,7 +24,7 @@ async function setup(ctx) {
   const token = await mintToken(owner, { name: "MCP ACK", channel: "mcp" });
   const mcp = ctx.mcp({ token: token.token, actor: "mcp-ack", timeoutMs: HTTP_MS, cutoffError: true });
   await mcp.initialize();
-  return { docId: made.docId, tokenId: token.tokenId, mcp };
+  return { docId: made.docId, tokenId: token.tokenId, mcp, owner };
 }
 async function loseAcks(ctx, docId, operation, send, inspect, count = 1) {
   const g = gates(target), gate = "ack-after-commit", key = `${operation}:${docId}`;
@@ -88,4 +89,36 @@ scenario("A20.7b overlapping MCP get_document calls count each committed read on
   assert.equal(later.isError, false);
   assert.equal((await readDoc(target, viewPath)).reads, 3, "ACK MCP read: a later independent fetch still counts");
   assert.equal((await readDoc(target, `docs/${s.docId}`)).stats.apiReads, 3, "ACK MCP read: a later independent fetch advances the aggregate");
+});
+
+scenario("A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry", CASE, async ctx => {
+  for (const removed of ["thread", "comment", "both"]) {
+    const s = await setup(ctx), path = `docs/${s.docId}/versions/v1/annotations`;
+    const fs = clientFirestore(target, { session: s.owner });
+    const { responses: [answer], committed } = await loseAcks(ctx, s.docId, "mcp-comment", () => s.mcp.call("add_comment", { id: s.docId, exact: "An exact acknowledgement passage.", body: "The author removes this later." }), async () => {
+      const rows = await readCollection(target, path);
+      precondition(rows.length === 1, "MCP author deletion: one real thread committed before its acknowledgement is lost");
+      const comments = await readCollection(target, `${path}/${rows[0].id}/comments`);
+      precondition(comments.length === 1, "MCP author deletion: one real opening comment committed atomically");
+      if (removed !== "thread") {
+        const deletion = await fs.remove(`${path}/${rows[0].id}/comments/${comments[0].id}`);
+        precondition(deletion.verdict === "ALLOW", "MCP author deletion: the real author client is allowed to remove its comment");
+      }
+      if (removed !== "comment") {
+        const deletion = await fs.remove(`${path}/${rows[0].id}`);
+        precondition(deletion.verdict === "ALLOW", "MCP author deletion: the real author client is allowed to remove its thread");
+      }
+      return { annId: rows[0].id, commentId: comments[0].id, removed };
+    });
+    assert.equal(answer.isError, false, "ACK MCP author deletion: the committed creation still succeeds");
+    assert.equal(answer.json?.threadId, committed.annId, "ACK MCP author deletion: the answer identifies the original committed thread");
+    assert.deepEqual({
+      threads: (await readCollection(target, path)).map(row => row.id),
+      comments: (await readCollection(target, `${path}/${committed.annId}/comments`)).map(row => row.id),
+    }, {
+      threads: removed === "comment" ? [committed.annId] : [],
+      comments: removed === "thread" ? [committed.commentId] : [],
+    }, "ACK MCP author deletion: the native retry never resurrects deleted feedback");
+    assert.deepEqual(Object.keys((await readDoc(target, `docs/${s.docId}`)).transactionReceipts ?? {}), [], "ACK MCP author deletion: the completed request removes its bounded receipt");
+  }
 });

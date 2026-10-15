@@ -1,6 +1,6 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -1669,3 +1669,2 @@
+@@ -1665,3 +1665,2 @@
          refuseIfExpired(currentData);
 -        if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
-         attempted = true;
+         recordReceipt(tx, ref, current, receipt, true);

@@ -1,7 +1,7 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -1655,3 +1655,3 @@
-           const ownComment = await tx.get(commentRef);
--          if (ownThread.exists && ownComment.exists) return;
-+          if (false && ownThread.exists && ownComment.exists) return;
-         }
+@@ -1653,3 +1653,3 @@
+         // erase this operation's acknowledgement or make its retry recreate them.
+-        if (readReceipt(current, receipt).found) return;
++        if (false && readReceipt(current, receipt).found) return;
+         const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };

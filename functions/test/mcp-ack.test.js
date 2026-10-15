@@ -70,3 +70,23 @@ for (const overlap of [false, true]) test(`MCP automated reads count each reques
   assert.ok(w.store.get("docs/d/views/api-t-v1").startedAt.isEqual(first));
   assert.equal(count().failures, 1);
 });
+
+for (const removed of ["thread", "comment", "both"]) test(`MCP add_comment preserves a later author deletion of ${removed} through native retry`, async () => {
+  const w = world(); let annId, commentId;
+  const count = loseFirstTransactionAcknowledgement(w.db, { afterCommit: async () => {
+    const [annPath, ann] = annotations(w)[0], [commentPath, comment] = comments(w)[0];
+    assert.equal(ann.authorUid, w.ctx.caller.uid);
+    assert.equal(comment.authorUid, w.ctx.caller.uid);
+    annId = ann.annId; commentId = comment.commentId;
+    // These exact author deletes are permitted by the annotation/comment rules.
+    if (removed !== "thread") await w.db.doc(commentPath).delete();
+    if (removed !== "comment") await w.db.doc(annPath).delete();
+  } });
+  let answer;
+  await assert.doesNotReject(async () => { answer = await w.call("add_comment", { exact: "Old phrase.", body: "Deleted later." }); }, "the original MCP call acknowledges its committed creation even after an author deletes its receipt rows");
+  assert.equal(answer.threadId, annId);
+  assert.deepEqual(annotations(w).map(([, data]) => data.annId), removed === "comment" ? [annId] : [], "retry does not resurrect a later deleted thread");
+  assert.deepEqual(comments(w).map(([, data]) => data.commentId), removed === "thread" ? [commentId] : [], "retry does not resurrect a later deleted comment");
+  assert.deepEqual(count(), { failures: 1, callbackCalls: 2 });
+  assert.deepEqual(Object.keys(w.store.get("docs/d").transactionReceipts ?? {}), [], "the deleted-feedback call clears its own bounded receipt");
+});
