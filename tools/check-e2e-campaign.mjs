@@ -7,6 +7,7 @@ import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseExpandedCase } from "../e2e/lib/controls.mjs";
 import { commandCounts } from "./e2e-campaign-evidence.mjs";
+import { verifyLocalLimit } from "./e2e-local-limit.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STATES = new Set(["open", "in-progress", "resolved", "historical-closed"]);
@@ -32,6 +33,7 @@ function affectedCaseMatches(proof, required) {
 export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = {}) {
   const errors = [];
   const pending = [];
+  const unresolvedDeploymentWitnesses = [];
   const need = (ok, why) => { if (!ok) errors.push(why); return ok; };
   const index = (rows, label) => {
     const map = new Map();
@@ -109,7 +111,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const id of array(r?.controls)) need(controls.has(id), `${item.id}: unknown control ${id}`);
   }
   for (const p of proofs.values()) {
-    need(["e2e-case", "e2e-run", "command"].includes(p.kind) && ["PASS", "FAIL"].includes(p.outcome), `${p.id}: unsupported proof kind/outcome`);
+    need(["e2e-case", "e2e-run", "command"].includes(p.kind) && (["PASS", "FAIL"].includes(p.outcome) || p.kind === "e2e-run" && p.outcome === "LOCAL-LIMIT"), `${p.id}: unsupported proof kind/outcome`);
     need(SHA.test(p.revision) && text(p.version) && text(p.artifact), `${p.id}: revision, version and artifact required`);
     if (p.kind.startsWith("e2e")) need(text(p.runId) && text(p.invocation), `${p.id}: run and invocation required`);
     if (p.kind === "e2e-case") need(text(p.caseId), `${p.id}: exact case id required`);
@@ -124,7 +126,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   for (const r of requirements.values()) {
     need(["e2e-run", "command"].includes(r.kind) && text(r.command), `${r.id}: matrix kind and executable command required`);
     if (array(r.proofs).length === 0) pending.push(`matrix:${r.id}: no evidence`);
-    for (const id of array(r.proofs)) need(proofs.get(id)?.kind === r.kind && proofs.get(id)?.outcome === "PASS", `matrix:${r.id}: ${id} is not a matching PASS proof`);
+    for (const id of array(r.proofs)) need(proofs.get(id)?.kind === r.kind && (proofs.get(id)?.outcome === "PASS" || r.kind === "e2e-run" && proofs.get(id)?.outcome === "LOCAL-LIMIT"), `matrix:${r.id}: ${id} is not a matching PASS or qualified LOCAL-LIMIT proof`);
   }
   if (!validateOnly) {
     if (!SHA.test(acceptance.revision) || !text(acceptance.version)) pending.push("acceptance: pin the exact tested revision and version");
@@ -174,14 +176,16 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(!stack.fingerprint?.dirty || (HASH.test(p.fingerprint) && p.fingerprint === stack.fingerprint.sha256), `${p.id}: dirty stack needs its exact fingerprint`);
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
-        if (p.outcome === "PASS") need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
+        if (["PASS", "LOCAL-LIMIT"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
         const cases = array(report.cases);
         need(cases.length > 0, `${p.id}: report contains no cases`);
         if (p.kind === "e2e-case") {
           const found = cases.filter((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1));
           need(found.length === 1 && (p.outcome === "PASS" ? purePass(found[0]) : pureFail(found[0])), `${p.id}: selected case is not an unqualified ${p.outcome}`);
         }
-        loaded.set(p.id, { report, stack, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
+        const limit = p.outcome === "LOCAL-LIMIT" ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
+        if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
+        loaded.set(p.id, { report, stack, limit, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
@@ -223,7 +227,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       need(!report.invocation?.grep, `matrix:${r.id}: a full matrix cell may not use --grep`);
       if (r.spec) need(array(report.cases).some((c) => basename(c.file ?? "") === r.spec), `matrix:${r.id}: required spec was not executed`);
       else need(array(report.invocation?.spec).length === 0 && !report.invocation?.grep, `matrix:${r.id}: full suite may not be filtered`);
-      if (r.n) need(array(report.cases).some((c) => c.n === r.n), `matrix:${r.id}: N=${r.n} was not executed`);
+      if (r.n) need(report.invocation?.n?.length === 1 && report.invocation.n[0] === r.n && array(report.cases).some((c) => c.n === r.n), `matrix:${r.id}: N=${r.n} was not executed`);
       if (r.planTrials) need(report.invocation?.trials === null, `matrix:${r.id}: use plan-default trial counts`);
       for (const cap of array(r.capabilities)) need(report.invocation?.capabilities?.includes(cap), `matrix:${r.id}: missing capability ${cap}`);
       if (r.options?.patches) need(JSON.stringify(array(stack.patches).map((p) => p.set ?? p).sort()) === JSON.stringify([...r.options.patches].sort()), `matrix:${r.id}: patch set differs`);
@@ -232,6 +236,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       for (const [k, v] of Object.entries(r.options?.appEnv ?? {})) need(stack.options?.appEnv?.[k] === v, `matrix:${r.id}: ${k} differs`);
       for (const c of array(report.cases)) {
         if (purePass(c)) continue;
+        if (got.limit?.observations.includes(key(c))) continue;
         const skipped = c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced;
         const exclusion = exclusions.find((e) => e.caseId === c.id && text(e.reason) && all.some((i) => i.id === e.item && i.state === "resolved" && i.resolution?.kind === "local-limit"));
         need(skipped && (passedKeys.has(key(c)) || exclusion), `matrix:${r.id}: ${c.id} [N=${c.n ?? "-"}, trial=${c.trial ?? 1}] is incomplete (${c.status}${c.todo ? ", TODO" : ""})`);
@@ -244,15 +249,16 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       need(JSON.stringify([...recorded].sort()) === JSON.stringify([...controlCell.controlSets].sort()), "matrix:controls: completed sets differ from the frozen control inventory");
     }
   }
-  return { valid: errors.length === 0, complete: !validateOnly && errors.length === 0 && pending.length === 0, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
+  const localComplete = !validateOnly && errors.length === 0 && pending.length === 0;
+  return { valid: errors.length === 0, complete: localComplete && unresolvedDeploymentWitnesses.length === 0, localComplete, unresolvedDeploymentWitnesses, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const allowed = new Set(["--validate", "--json"]);
+  const allowed = new Set(["--validate", "--json", "--local-only"]);
   const files = args.filter((a) => !a.startsWith("--"));
   if (args.some((a) => a.startsWith("--") && !allowed.has(a)) || files.length > 1) {
-    console.error("usage: node tools/check-e2e-campaign.mjs [--validate] [--json] [ledger.json]");
+    console.error("usage: node tools/check-e2e-campaign.mjs [--validate] [--local-only] [--json] [ledger.json]");
     process.exitCode = 2;
   } else {
     try {
@@ -262,10 +268,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         console.log(`campaign: ${result.valid ? "valid ledger" : "invalid ledger"}; ${result.complete ? "COMPLETE" : "NOT COMPLETE"}`);
         console.log(JSON.stringify(result.counts));
         console.log(`${result.errors.length} evidence/schema errors; ${result.pending.length} unresolved obligations`);
+        if (result.unresolvedDeploymentWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; ${result.unresolvedDeploymentWitnesses.length} deployment-bound concurrency witness(es) remain unresolved. No case outcome was changed.`);
         for (const error of result.errors) console.error(`- ${error}`);
         if (args.includes("--validate")) console.log("Structural validation only; this does not establish completion.");
       }
-      process.exitCode = result.valid ? (args.includes("--validate") || result.complete ? 0 : 1) : 2;
+      process.exitCode = result.valid ? (args.includes("--validate") || (args.includes("--local-only") ? result.localComplete : result.complete) ? 0 : 1) : 2;
     } catch (e) { console.error(`campaign: ${e.message}`); process.exitCode = 2; }
   }
 }

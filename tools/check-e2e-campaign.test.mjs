@@ -8,6 +8,9 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { checkCampaign } from "./check-e2e-campaign.mjs";
+import { captureLocalLimit, importRun } from "./e2e-campaign-evidence.mjs";
+import { C15_WORK, C15_JUDGE, localLimitReference } from "./e2e-local-limit.mjs";
+import { PIN } from "./probe-e2e-trigger-queue.mjs";
 
 const imported = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url), "utf8"));
 const sha = "a".repeat(40);
@@ -38,7 +41,7 @@ function fixture(t) {
       Object.assign(p, { runId: id, invocation: "invocation-1" });
       const file = `e2e/specs/${r.suite}/${r.spec ?? "synthetic.spec.mjs"}`;
       const cases = [{ id: `${file}::synthetic assertion`, file, status: "pass", n: r.n ?? null, trial: 1, todo: null, error: null }];
-      write(root, artifact, { runId: id, invocation: { id: p.invocation, suite: r.suite, spec: r.spec ? [r.spec] : [], grep: null, trials: null, capabilities: r.capabilities ?? [] }, malformed: [], cases });
+      write(root, artifact, { runId: id, invocation: { id: p.invocation, suite: r.suite, n: r.n ? [r.n] : null, spec: r.spec ? [r.spec] : [], grep: null, trials: null, capabilities: r.capabilities ?? [] }, malformed: [], cases });
       write(root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: (r.options?.patches ?? []).map((set) => ({ set })), options: { emailOff: r.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((r.options?.appEnvPresent ?? []).map((k) => [k, "synthetic"])), ...(r.options?.appEnv ?? {}) } } });
     }
     c.proofs.push(p);
@@ -293,4 +296,146 @@ test("expanded concurrency witnesses satisfy canonical affected cases without ch
   }
   setIdentity(`${scenario} [N=5]`, 5, 1);
   assert.deepEqual(checkCampaign(c, { root }).errors, [], "a single-trial expansion matches without a trial suffix");
+});
+
+function limitFixture(t) {
+  const f = fixture(t), cell = f.c.acceptance.requirements.find(r => r.id === "concurrency-natural-n20");
+  const proof = f.c.proofs.find(p => p.id === cell.proofs[0]), report = JSON.parse(readFileSync(join(f.root, proof.artifact)));
+  const file = "e2e/specs/concurrency/c13-feedback.spec.mjs";
+  report.mergedAt = "2026-10-15T10:00:00.000Z";
+  report.invocation.capabilities = [...new Set([...report.invocation.capabilities, "local", "logs", "mailpit"])];
+  report.cases = [];
+  const metrics = [];
+  for (let trial = 1; trial <= 3; trial++) {
+    const suffix = ` [N=20]${trial === 1 ? "" : ` #${trial}`}`;
+    const name = C15_WORK + suffix;
+    report.cases.push({ id: `${file}::${name}`, file, name, n: 20, trial, status: "pass", error: null });
+    report.cases.push({ id: `${file}::${C15_JUDGE}${suffix}`, file, name: C15_JUDGE + suffix, n: 20, trial, status: "inconclusive", error: null, inconclusive: "the sync precondition did not hold: no two onCommentCreated runs overlapped while C15 ran (10 run(s), peak 1 at once; 1 Firestore trigger(s) of any kind at once, while the HTTP functions reached 4; 0 failure line(s)), so claimCommentCooldown's transaction was never contended: I11 held in sequence, not in a race" });
+    metrics.push({ ref: "C15", case: name, n: 20, trial, naturalAttempts: [1, 2, 3].map(attempt => ({ attempt, outcome: "window-missed", diagnostic: { triggerRuns: { exact: true, peak: { onCommentCreated: 1 }, runs: { onCommentCreated: 10 }, failed: 0, open: {} } } })) });
+  }
+  const stackPath = `e2e/.out/${proof.runId}/stack.json`, stack = JSON.parse(readFileSync(join(f.root, stackPath)));
+  stack.toolchain = { firebase: { version: PIN.firebase } }; write(f.root, stackPath, stack);
+  const probePath = "e2e/.out/local-limit/probe.json";
+  const probe = { schemaVersion: 1, kind: "unsupported-local-trigger-overlap", toolchain: { ...PIN }, structure: { core: 0, maximum: 4, queue: "unbounded LinkedBlockingQueue", delivery: "blocking HttpRequest.execute" }, behavior: { installedConfiguration: { core: 0, maximum: 4, active: 1, queued: 3 }, counterfactualCoreFour: { core: 4, maximum: 4, active: 4, queued: 0 } }, source: { revision: sha, version, fingerprint }, command: "node tools/e2e-campaign-evidence.mjs capture-local-limit", observedAt: "2026-10-15T11:00:00.000Z" };
+  report.invocation.runId = proof.runId;
+  const completed = { ...structuredClone(report.invocation), endedAt: "2026-10-15T10:00:01.000Z", exit: 3, interrupted: null, stackDown: null };
+  function flush() {
+    write(f.root, proof.artifact, report); write(f.root, probePath, probe);
+    write(f.root, `${dirname(proof.artifact)}/invocation.json`, completed);
+    writeFileSync(join(f.root, dirname(proof.artifact), "c13-feedback.jsonl"), metrics.map(r => JSON.stringify(r)).join("\n") + "\n");
+    proof.outcome = "LOCAL-LIMIT"; proof.localLimit = localLimitReference(f.root, probePath, proof.artifact);
+  }
+  flush();
+  return { ...f, cell, proof, report, probe, probePath, metrics, stack, completed, flush };
+}
+
+test("a pinned local limit preserves raw INC cases and full completion remains false", t => {
+  const f = limitFixture(t), result = checkCampaign(f.c, { root: f.root });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.localComplete, true);
+  assert.equal(result.complete, false);
+  assert.equal(result.unresolvedDeploymentWitnesses.length, 1);
+  assert.equal(result.unresolvedDeploymentWitnesses[0].cases.length, 3);
+  assert.ok(f.report.cases.filter(c => c.name.startsWith(C15_JUDGE)).every(c => c.status === "inconclusive"));
+  const imported = importRun(f.c, f.proof.artifact, { root: f.root, cellId: f.cell.id, localLimitArtifact: f.probePath });
+  const run = imported.candidate.proofs.find(p => p.id === `run-${f.proof.runId}-${f.proof.invocation}`);
+  assert.equal(run.outcome, "LOCAL-LIMIT");
+  assert.equal(run.localLimit.observations.length, 3);
+  assert.equal(imported.importedCases, 3, "only ordinary work PASS cases become case proofs");
+  assert.equal(imported.unfinished.length, 3, "the original incomplete cases remain reported");
+});
+
+test("local limits reject arbitrary INC, unrelated cases and failed ordinary assertions", t => {
+  const f = limitFixture(t), clean = structuredClone(f.report);
+  for (const mutate of [
+    r => { r.cases[1].inconclusive = "server timed out"; },
+    r => { r.cases[1].id = r.cases[1].id.replace("C15 I11", "C14 I11"); r.cases[1].name = r.cases[1].name.replace("C15 I11", "C14 I11"); },
+    r => { r.cases[0].status = "fail"; r.cases[0].error = "I11 duplicate email"; },
+    r => { r.cases[1].todo = "known bug"; },
+    r => { r.cases.push({ ...r.cases[1], id: "unrelated", name: "unrelated" }); },
+  ]) {
+    Object.assign(f.report, structuredClone(clean)); mutate(f.report); f.flush();
+    assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+    assert.throws(() => importRun(f.c, f.proof.artifact, { root: f.root, cellId: f.cell.id, localLimitArtifact: f.probePath }));
+  }
+});
+
+test("local limits reject colliding case keys and inconsistent report identities", t => {
+  const f = limitFixture(t), clean = structuredClone(f.report);
+  for (const mutate of [
+    r => { r.cases.push({ ...r.cases[1], file: "e2e/specs/concurrency/other.spec.mjs", status: "fail", error: "unrelated product failure", inconclusive: null }); },
+    r => { r.cases[1].name = "unrelated observer"; },
+    r => { const row = { ...r.cases[0], id: "other.spec.mjs::another passing observer", file: "other.spec.mjs", name: "another passing observer" }; r.cases.push(row, { ...row }); },
+
+    r => { r.cases.push({ ...r.cases[1], status: "fail", error: "duplicate judge failure", inconclusive: null }); },
+  ]) {
+    Object.assign(f.report, structuredClone(clean)); mutate(f.report); f.flush();
+    assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+    assert.throws(() => importRun(f.c, f.proof.artifact, { root: f.root, cellId: f.cell.id, localLimitArtifact: f.probePath }));
+  }
+});
+
+test("local limitation proof is pinned to versions, bytes, frozen source and a completed run", t => {
+  const f = limitFixture(t), clean = structuredClone(f.probe);
+  for (const mutate of [
+    p => { p.toolchain.firebase = "different"; }, p => { p.toolchain.firestore = "different"; }, p => { p.toolchain.sha256 = "0".repeat(64); },
+    p => { p.source.revision = "b".repeat(40); }, p => { p.source.version = "old"; }, p => { p.source.fingerprint = "0".repeat(64); },
+    p => { p.observedAt = "2026-10-15T09:00:00.000Z"; }, p => { p.behavior.installedConfiguration.active = 4; },
+  ]) {
+    Object.assign(f.probe, structuredClone(clean)); mutate(f.probe); f.flush();
+    assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+  }
+});
+
+test("local limitation requires every N/trial axis, capabilities and exact retained attempts", t => {
+  const f = limitFixture(t), report = structuredClone(f.report), metrics = structuredClone(f.metrics);
+  for (const mutate of [
+    () => f.report.cases.pop(), () => { f.report.invocation.n = [10]; }, () => { f.report.invocation.capabilities = []; },
+    () => { f.report.invocation.trials = 1; }, () => { f.metrics[0].naturalAttempts.pop(); },
+    () => { f.metrics[0].naturalAttempts[0].diagnostic.triggerRuns.exact = false; },
+    () => { f.metrics[0].naturalAttempts[0].diagnostic.triggerRuns.peak.onCommentCreated = 2; },
+    () => { f.metrics[0].naturalAttempts[0].diagnostic.triggerRuns.failed = 1; },
+  ]) {
+    Object.assign(f.report, structuredClone(report)); f.metrics.splice(0, f.metrics.length, ...structuredClone(metrics)); mutate(); f.flush();
+    assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+  }
+});
+
+test("local limitation artifacts and exact observation references cannot be substituted", t => {
+  const f = limitFixture(t);
+  f.proof.localLimit.observations = ["another case"];
+  assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /observation identities/);
+  f.flush(); writeFileSync(join(f.root, f.probePath), "{}");
+  assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /digest differs/);
+  f.flush(); writeFileSync(join(f.root, f.proof.localLimit.measurements.artifact), "{}\n");
+  assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /digest differs/);
+});
+
+test("local limits reject partial, interrupted or mismatched invocation completion", t => {
+  const f = limitFixture(t), clean = structuredClone(f.completed);
+  for (const mutate of [
+    c => { delete c.endedAt; }, c => { c.exit = 0; }, c => { c.exit = 1; },
+    c => { c.interrupted = "SIGTERM"; }, c => { c.stackDown = "gone"; },
+    c => { c.endedAt = "2026-10-15T12:00:00.000Z"; }, c => { c.n = [2]; },
+  ]) {
+    Object.assign(f.completed, structuredClone(clean)); mutate(f.completed); f.flush();
+    assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+  }
+});
+
+test("capturing a local boundary runs the probe and refuses source changes", async t => {
+  const f = limitFixture(t), source = { revision: sha, version, fingerprint }; let calls = 0;
+  const captured = await captureLocalLimit(f.c, "e2e/.out/captured-limit.json", { root: f.root, snapshot: () => source, probe: async () => { calls++; return f.probe; } });
+  assert.equal(calls, 1); assert.deepEqual(captured.source, source);
+  let reads = 0;
+  await assert.rejects(captureLocalLimit(f.c, "e2e/.out/changed-limit.json", { root: f.root, snapshot: () => ++reads === 1 ? source : { ...source, fingerprint: "changed" }, probe: async () => f.probe }), /source changed/);
+  await assert.rejects(captureLocalLimit(f.c, "e2e/.out/stale-limit.json", { root: f.root, snapshot: () => ({ ...source, version: "old" }), probe: async () => f.probe }), /source version differs/);
+});
+
+test("a matrix cell cannot use unselected N rows as execution proof", t => {
+  const f = fixture(t), cell = f.c.acceptance.requirements.find(r => r.id === "concurrency-natural-n20"), proof = f.c.proofs.find(p => p.id === cell.proofs[0]);
+  const report = JSON.parse(readFileSync(join(f.root, proof.artifact))); report.invocation.n = [2];
+  write(f.root, proof.artifact, report);
+  assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /N=20 was not executed/);
+  assert.throws(() => importRun(f.c, proof.artifact, { root: f.root, cellId: cell.id }), /matrix N differs/);
 });

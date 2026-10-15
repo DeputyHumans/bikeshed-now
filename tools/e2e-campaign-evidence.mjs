@@ -9,6 +9,8 @@ import { execFileSync, spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 import { worktreeFiles } from "../e2e/lib/tree.mjs";
 import { listControlSets, readControl, assertTargetDeclared, greenGroups, findTarget, declaresName } from "../e2e/lib/controls.mjs";
+import { probeInstalledTriggerQueue } from "./probe-e2e-trigger-queue.mjs";
+import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const hash = (s) => createHash("sha256").update(s).digest("hex");
@@ -86,7 +88,7 @@ function caseProof(campaign, loaded, c, outcome) {
   if (outcome === "PASS") need((stack.patches ?? []).every((p) => positivePatch(p.set ?? p)), "a product mutant cannot provide positive evidence");
   return { id: `case-${hash(`${rel}\0${key(c)}\0${outcome}`).slice(0, 24)}`, kind: "e2e-case", revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: stack.fingerprint.sha256, artifact: rel, runId: report.runId, invocation: report.invocation.id, caseId: c.id, n: c.n ?? null, trial: c.trial ?? 1, outcome };
 }
-export function importRun(campaign, artifact, { root = ROOT, cellId = null } = {}) {
+export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null } = {}) {
   const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root);
   for (const c of loaded.report.cases) if (pass(c) || fail(c)) upsert(candidate.proofs, caseProof(candidate, loaded, c, pass(c) ? "PASS" : "FAIL"));
   const unfinished = loaded.report.cases.filter((c) => !pass(c) && !(c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced));
@@ -96,18 +98,36 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null } = {
     const inv = loaded.report.invocation;
     need(!inv.grep, "a matrix cell cannot use grep");
     need(cell.spec ? loaded.report.cases.some((c) => basename(c.file ?? "") === cell.spec) : !inv.spec?.length, "matrix spec selection differs");
-    if (cell.n) need(loaded.report.cases.some((c) => c.n === cell.n), "matrix N differs");
+    if (cell.n) need(inv.n?.length === 1 && inv.n[0] === cell.n && loaded.report.cases.some((c) => c.n === cell.n), "matrix N differs");
     if (cell.planTrials) need(inv.trials === null, "matrix requires plan-default trials");
     need((cell.capabilities ?? []).every((c) => inv.capabilities?.includes(c)), "matrix capabilities differ");
     if (cell.options?.patches) need(JSON.stringify((loaded.stack.patches ?? []).map((p) => p.set ?? p).sort()) === JSON.stringify(cell.options.patches.toSorted()), "matrix patch set differs");
     if (cell.options?.emailOff) need(loaded.stack.options?.emailOff === true, "matrix email-off option differs");
     for (const [k, v] of Object.entries(cell.options?.appEnv ?? {})) need(loaded.stack.options?.appEnv?.[k] === v, `matrix ${k} differs`);
     for (const k of cell.options?.appEnvPresent ?? []) need(loaded.stack.options?.appEnv?.[k], `matrix ${k} absent`);
-    need(!unfinished.length && loaded.report.cases.some(pass), "matrix run has failed or unjudged cases");
     const p = { id: `run-${loaded.report.runId}-${loaded.report.invocation.id}`, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version, fingerprint: loaded.stack.fingerprint.sha256, artifact: loaded.rel, runId: loaded.report.runId, invocation: loaded.report.invocation.id, outcome: "PASS" };
+    let limited = [];
+    if (unfinished.length && localLimitArtifact) {
+      p.outcome = "LOCAL-LIMIT";
+      p.localLimit = localLimitReference(root, localPath(root, localLimitArtifact), loaded.rel);
+      limited = verifyLocalLimit(candidate, p, loaded, { root }).observations;
+      p.localLimit.observations = limited;
+    }
+    need(unfinished.every(c => limited.includes(key(c))) && loaded.report.cases.some(pass), "matrix run has failed or unjudged cases");
     upsert(candidate.proofs, p); cell.proofs = [...new Set([...cell.proofs, p.id])];
   }
   return { candidate, importedCases: loaded.report.cases.filter((c) => pass(c) || fail(c)).length, unfinished: unfinished.map((c) => ({ id: c.id, status: c.status })) };
+}
+
+/** Capture an actual pinned probe after the matrix runs, bound to unchanged frozen source. */
+export async function captureLocalLimit(campaign, out, { root = ROOT, probe = probeInstalledTriggerQueue, snapshot = snapshotWorktree } = {}) {
+  const before = snapshot(root);
+  for (const k of ["revision", "version", "fingerprint"]) need(before[k] === campaign.acceptance[k], `local-limit source ${k} differs from frozen acceptance`);
+  const result = await probe();
+  need(JSON.stringify(snapshot(root)) === JSON.stringify(before), "source changed while capturing local limit");
+  const report = { ...result, source: before, command: "node tools/e2e-campaign-evidence.mjs capture-local-limit" };
+  writeProposal(root, out, report);
+  return report;
 }
 export function importControls(campaign, ledgerPath, { root = ROOT, readDefinition = readControl } = {}) {
   const candidate = structuredClone(campaign), ledger = json(resolve(root, localPath(root, ledgerPath))), imported = [], refused = [];
@@ -207,7 +227,7 @@ export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) 
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { positionals, values } = parseArgs({ allowPositionals: true, options: { campaign: { type: "string", default: "e2e/campaign.json" }, out: { type: "string" }, tree: { type: "string", default: "worktree" }, cell: { type: "string" }, artifact: { type: "string" }, sets: { type: "string" }, report: { type: "string", multiple: true, default: [] } } });
+  const { positionals, values } = parseArgs({ allowPositionals: true, options: { campaign: { type: "string", default: "e2e/campaign.json" }, out: { type: "string" }, tree: { type: "string", default: "worktree" }, cell: { type: "string" }, artifact: { type: "string" }, "local-limit": { type: "string" }, sets: { type: "string" }, report: { type: "string", multiple: true, default: [] } } });
   const [command] = positionals, c = json(resolve(ROOT, values.campaign)); need(values.out, "--out under e2e/.out is required");
   if (command === "plan") {
     const controls = listControlSets().map((set) => { const c = readControl(set); c.selection = assertTargetDeclared(c); return c; });
@@ -215,10 +235,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     prepared.plan.witnesses = inventoryWitnesses(c, { reports: values.report });
     writeProposal(ROOT, values.out, prepared.plan); writeProposal(ROOT, values.out.replace(/\.json$/, "") + "-campaign.json", prepared.candidate);
   } else if (command === "capture") await captureCommand(c, values.cell, values.out, { sets: values.sets?.split(",").filter(Boolean) ?? [] });
+  else if (command === "capture-local-limit") await captureLocalLimit(c, values.out);
   else {
     need(values.artifact, "--artifact is required");
-    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell }) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
-    need(result, "expected plan, capture, import-run, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
+    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell, localLimitArtifact: values["local-limit"] }) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
+    need(result, "expected plan, capture, capture-local-limit, import-run, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
     process.stdout.write(JSON.stringify({ imported: result.imported ?? result.importedCases ?? null, refused: result.refused ?? [], unfinished: result.unfinished ?? [] }) + "\n");
   }
 }

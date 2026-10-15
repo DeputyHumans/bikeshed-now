@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Bind the local trigger-overlap limitation to completed run metadata, exact case identities and pinned runtime evidence; retain inconclusive outcomes and distinguish local acceptance from full completion.
+
 - Retarget refused-append and oversized-live-document controls around the new delivery/recovery guards, retaining each original mutation and failure assertion.
 
 - Explicitly retry Done in large-peer latency and held-save scenarios after an intentional delivery deadline, preserving their save-order, token and convergence assertions.
