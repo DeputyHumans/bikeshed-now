@@ -9,7 +9,8 @@ import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { mcpClient } from "../../lib/mcp.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
@@ -30,10 +31,11 @@ scenario("A7.8 a thread resolution acknowledges its committed note after native 
   const g = gates(target), gate = "ack-after-commit", operation = "thread-resolve", key = `${operation}:${docId}`;
   const file = logFile(target.runId), since = logMark(file);
   let pending, answered = false, preserved;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = client.call("resolve_thread", { id: docId, threadId }).catch(error => ({ isError: true, text: String(error?.message ?? error) })).then(response => { answered = true; return response; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     precondition(!answered && (await readDoc(target, path)).resolved === true, "thread ACK first resolution really committed while its caller still waits");
     precondition((await notes()).filter(row => row.body === "Resolved.").length === 1, "thread ACK first decision wrote its real generated note");
     const reopened = await client.call("reopen_thread", { id: docId, threadId });
@@ -44,9 +46,8 @@ scenario("A7.8 a thread resolution acknowledges its committed note after native 
     await g.release(gate, { key });
   } finally { await g.release(gate, { key }).catch(() => undefined); }
   const response = await pending;
-  const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`), { file, since });
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${loss[1]} callback2`, { file, since });
-  ctx.ev.json("thread-ack-result", { docId, threadId, caller: loss[1], response });
+  const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: docId });
+  ctx.ev.json("thread-ack-result", { docId, threadId, caller: ack.caller, ack, response });
   assert.deepEqual({ resolved: (await readDoc(target, path)).resolved, notes: await notes() }, { resolved: false, notes: preserved }, "ACK thread: retry preserves the later reopen and both original notes");
   assert.equal(response.isError, false, "ACK thread: original completed resolution returns success");
   assert.equal(response.json?.resolved, true, "ACK thread: response acknowledges its original resolution");

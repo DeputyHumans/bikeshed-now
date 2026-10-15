@@ -12,6 +12,7 @@ import { setVisibility } from "../../lib/grant.mjs";
 import { closeAdmin, emailKey, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { rtdbAs } from "../../lib/rtdb.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
+import { assertNativeAckProof } from "../../lib/native-ack.mjs";
 import { runOperator } from "../../lib/operator.mjs";
 
 const target = currentTarget();
@@ -47,10 +48,11 @@ async function setup(mode) {
 async function loseOperatorAck(ctx, s, operation, script, args, expectedHead, afterHeld = async () => {}) {
   const g = gates(target), gate = "ack-after-commit", key = `${operation}:${s.docId}`;
   let pending, finished = false;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = runOperator(target, script, args, { timeoutMs: 120_000, env: { E2E_GATE_URL: g.url } }).then(r => { finished = true; return r; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     precondition(!finished, "operator ACK: command remains pending after the real commit");
     const committed = await record(s.docId);
     precondition(committed.currentVersion === expectedHead && !committed.draft && committed.liveEpoch !== s.epoch, "operator ACK: version, draft removal and epoch committed before ACK loss");
@@ -62,9 +64,8 @@ async function loseOperatorAck(ctx, s, operation, script, args, expectedHead, af
     if (pending) await pending.catch(() => undefined);
   }
   const result = await pending;
-  const loss = result.stdout.match(new RegExp(`E2E_ACK_LOSS ${operation} ${s.docId} ([a-f0-9-]+)`));
-  precondition(loss && result.stdout.includes(`E2E_ACK_RETRY ${operation} ${s.docId} ${loss[1]} callback2`), "operator ACK: one native commit loss and its retry share the same caller");
-  ctx.ev.json("operator-ack-result", { operation, docId: s.docId, caller: loss[1], code: result.code, signal: result.signal });
+  const [ack] = assertNativeAckProof(result.stdout, { held: ackHeld, operation, id: s.docId });
+  ctx.ev.json("operator-ack-result", { operation, docId: s.docId, caller: ack.caller, ack, code: result.code, signal: result.signal });
   return result;
 }
 
@@ -116,10 +117,11 @@ scenario("A12.10c an operator access grant ACK retry preserves a later real revo
   precondition(created.status === 200, "operator access ACK fixture creates its document");
   const docId = created.docId, g = gates(target), gate = "ack-after-commit", operation = "operator-access", key = `${operation}:${docId}`;
   let pending, finished = false;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = runOperator(target, "set-access.mjs", ["--doc", docId, "--add", reader.account.email, "--role", "editor", "--account", owner.account.email, "--project", target.projectId], { timeoutMs: 120_000 }).then(result => { finished = true; return result; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     precondition(!finished && (await record(docId)).editorMembers.includes(reader.account.email), "operator access ACK grant committed before loss");
     const removed = await owner.http.postJson("/access", { docId, remove: [reader.account.email] }, { timeoutMs: 90_000 });
     precondition(removed.status === 200 && !(await record(docId)).members.includes(reader.account.email), "operator access ACK later real request revoked the reader");
@@ -129,12 +131,11 @@ scenario("A12.10c an operator access grant ACK retry preserves a later real revo
     if (pending) await pending.catch(() => undefined);
   }
   const result = await pending;
-  const loss = result.stdout.match(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`));
-  precondition(loss && result.stdout.includes(`E2E_ACK_RETRY ${operation} ${docId} ${loss[1]} callback2`), "operator access ACK bound native loss and retry");
+  const [ack] = assertNativeAckProof(result.stdout, { held: ackHeld, operation, id: docId });
   const current = await record(docId), readerKey = emailKey(reader.account.email);
   assert.deepEqual({ members: current.members, editors: current.editors, edit: await rtdbGet(target, `editAccess/${docId}/${readerKey}`), presence: await rtdbGet(target, `presenceAccess/${docId}/${readerKey}`) }, { members: [owner.account.email], editors: [], edit: null, presence: null }, "ACK operator access: original retry preserves the later revocation and mirrors");
   assert.equal(result.code, 0, "ACK operator access: committed grant command exits successfully");
-  ctx.ev.json("operator-access-ack-result", { docId, caller: loss[1], code: result.code });
+  ctx.ev.json("operator-access-ack-result", { docId, caller: ack.caller, ack, code: result.code });
 });
 
 scenario("A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication", CASE, async ctx => {

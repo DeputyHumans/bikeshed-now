@@ -11,7 +11,8 @@ import { openSession } from "../../lib/session.mjs";
 import { approveViaApi, exchangeCode, pkce, register, refresh } from "../../lib/oauth.mjs";
 import { closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
 scenario("A20.oauth-ack the CLI first code exchange survives native ACK loss with one usable token while an independent replay still revokes it", {
@@ -27,10 +28,11 @@ scenario("A20.oauth-ack the CLI first code exchange survives native ACK loss wit
   const file = logFile(target.runId), since = logMark(file);
   const exchange = () => exchangeCode(owner.http, { code: approved.code, verifier: proof.verifier, clientId: "bikeshed-cli", redirectUri, resource });
   let pending, finished = false, tokenId;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = exchange().then(result => { finished = true; return result; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     const committed = await readDoc(target, `oauthCodes/${codeId}`); tokenId = committed?.tokenId;
     precondition(!finished && committed?.usedAt && tokenId && (await readDoc(target, `tokens/${tokenId}`))?.revokedAt === null, "OAuth ACK code and unrevoked token committed while the first exchange waits");
     ctx.ev.json("oauth-ack-held", { codeId, tokenId, held });
@@ -40,8 +42,7 @@ scenario("A20.oauth-ack the CLI first code exchange survives native ACK loss wit
     if (pending) await pending.catch(() => undefined);
   }
   const response = await pending;
-  const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${codeId} ([a-f0-9-]+)`), { file, since });
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${codeId} ${loss[1]} callback2`, { file, since });
+  const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: codeId });
   assert.equal(response.status, 200, "ACK CLI OAuth: the first exchange acknowledges its committed token");
   assert.match(response.json?.access_token ?? "", new RegExp(`^bsk_${tokenId}\\.`), "ACK CLI OAuth: response returns the one committed credential");
   assert.equal((await readDoc(target, `tokens/${tokenId}`)).revokedAt, null, "ACK CLI OAuth: native callback does not revoke its own token");
@@ -51,7 +52,7 @@ scenario("A20.oauth-ack the CLI first code exchange survives native ACK loss wit
   assert.equal(replay.status, 400, "ACK CLI OAuth: an independent replay remains invalid");
   assert.equal(replay.json?.error, "invalid_grant");
   assert.ok((await readDoc(target, `tokens/${tokenId}`)).revokedAt, "ACK CLI OAuth: an independent replay revokes the committed token");
-  ctx.ev.json("oauth-ack-result", { codeId, tokenId, caller: loss[1], firstStatus: response.status, authenticatedStatus: authenticated.status, replayStatus: replay.status });
+  ctx.ev.json("oauth-ack-result", { codeId, tokenId, caller: ack.caller, ack, firstStatus: response.status, authenticatedStatus: authenticated.status, replayStatus: replay.status });
 });
 
 scenario("A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed grant while independent code replay still can", {
@@ -68,10 +69,11 @@ scenario("A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed 
   const file = logFile(target.runId), since = logMark(file);
   const exchange = () => exchangeCode(owner.http, { code: approved.code, verifier: proof.verifier, clientId, redirectUri, resource });
   let pending, finished = false;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = exchange().catch(error => ({ status: null, error: String(error?.message ?? error) })).then(result => { finished = true; return result; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     const committed = await readDoc(target, `oauthCodes/${codeId}`), tokenId = committed?.tokenId;
     precondition(!finished && committed?.usedAt && tokenId, "DCR ACK original code is committed and unanswered");
     // Recovery is read-only and refresh uses another transaction entry point;
@@ -84,8 +86,7 @@ scenario("A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed 
     ctx.ev.json("dcr-ack-held", { codeId, tokenId, held, generation: advanced.generation });
     await g.release(gate, { key });
     const original = await pending;
-    const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${codeId} ([a-f0-9-]+)`), { file, since });
-    await waitForLog(`E2E_ACK_RETRY ${operation} ${codeId} ${loss[1]} callback2`, { file, since });
+    const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: codeId });
     const retained = await readDoc(target, `tokens/${tokenId}`);
     assert.deepEqual({ generation: retained.generation, revokedAt: retained.revokedAt }, { generation: 1, revokedAt: null }, "ACK DCR OAuth: own retry preserves the newer unrevoked generation");
     assert.equal(original.status, 400, "ACK DCR OAuth: obsolete original credentials are not returned as usable");
@@ -95,7 +96,7 @@ scenario("A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed 
     const replay = await exchange();
     assert.equal(replay.status, 400, "ACK DCR OAuth: an independent advanced-generation replay remains invalid");
     assert.ok((await readDoc(target, `tokens/${tokenId}`)).revokedAt, "ACK DCR OAuth: an independent advanced-generation replay still revokes the grant");
-    ctx.ev.json("dcr-ack-result", { codeId, tokenId, caller: loss[1], originalStatus: original.status, usableStatus: usable.status, replayStatus: replay.status });
+    ctx.ev.json("dcr-ack-result", { codeId, tokenId, caller: ack.caller, ack, originalStatus: original.status, usableStatus: usable.status, replayStatus: replay.status });
   } finally {
     await g.release(gate, { key }).catch(() => undefined);
     if (pending) await pending.catch(() => undefined);

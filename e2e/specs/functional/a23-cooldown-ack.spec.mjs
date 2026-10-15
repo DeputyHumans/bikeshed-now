@@ -13,6 +13,7 @@ import { anchorIn, webThread, webReply } from "../../lib/web.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
 import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
 const CASE = { tiers: ["local"], needs: ["admin-emulator", "email", "mailpit", "logs", "gates", "patch:amplify-native-ack-loss"], effects: ["email:comment", "email:suggestion", "email:POST /access"], timeoutMs: 300_000, inconclusiveOnHttpStall: true, inconclusiveOnRequestStall: true };
@@ -30,10 +31,11 @@ async function setup(ctx, roles) {
 async function claimWithLoss(ctx, s, recipient, kind, trigger, duringHold = async () => {}) {
   const operation = "email-cooldown", id = `${recipient.uid}:${s.docId}:${kind}`, key = `${operation}:${id}`, gate = "ack-after-commit", g = gates(target);
   const file = logFile(target.runId), since = logMark(file); let sent;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     sent = await trigger();
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     const own = kind === "suggestion" ? `${s.docId}:suggestions` : s.docId;
     const user = await readDoc(target, `users/${recipient.uid}`);
     precondition(typeof user?.emailCooldowns?.[own] === "number" && typeof user?.emailCooldownClaims?.[own] === "string", "cooldown ACK numeric timestamp and unique claim really committed before loss");
@@ -41,10 +43,9 @@ async function claimWithLoss(ctx, s, recipient, kind, trigger, duringHold = asyn
     await duringHold(user.emailCooldowns[own]);
     await g.release(gate, { key });
   } finally { await g.release(gate, { key }).catch(() => undefined); }
-  const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${id} ([a-f0-9-]+)`), { file, since });
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${id} ${loss[1]} callback2`, { file, since });
+  const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id });
   const { match: completed } = await waitForLog(new RegExp(`E2E_COOLDOWN_RESULT ${id} (true|false)`), { file, since });
-  ctx.ev.json(`cooldown-ack-retry-${kind}`, { docId: s.docId, recipientUid: recipient.uid, kind, caller: loss[1], permitted: completed[1] === "true" });
+  ctx.ev.json(`cooldown-ack-retry-${kind}`, { docId: s.docId, recipientUid: recipient.uid, kind, caller: ack.caller, ack, permitted: completed[1] === "true" });
   return { sent, permitted: completed[1] === "true" };
 }
 async function noticeCount(s, to, subject, count, message) {

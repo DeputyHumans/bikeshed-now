@@ -8,7 +8,8 @@ import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, readLog, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 
 const target = currentTarget();
@@ -30,10 +31,11 @@ async function loseAcks(ctx, docId, operation, send, inspect, count = 1) {
   const g = gates(target), gate = "ack-after-commit", key = `${operation}:${docId}`;
   const file = logFile(target.runId), since = logMark(file);
   let pending = [], answered = 0, committed;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = Array.from({ length: count }, () => send().catch(error => ({ isError: true, transportError: String(error?.message ?? error) })).then(response => { answered++; return response; }));
-    const held = await requireHeld(ctx, g, gate, count, { key, timeoutMs: HTTP_MS });
+    const held = ackHeld = await requireHeld(ctx, g, gate, count, { key, timeoutMs: HTTP_MS });
     precondition(answered === 0, "MCP ACK calls remain unanswered after their actual commits");
     committed = await inspect();
     ctx.ev.json(`mcp-ack-held-${operation}`, { docId, operation, held, committed });
@@ -43,11 +45,9 @@ async function loseAcks(ctx, docId, operation, send, inspect, count = 1) {
     await Promise.allSettled(pending);
   }
   const responses = await Promise.all(pending);
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${docId}`, { file, since });
-  const callers = [...readLog(file, since).matchAll(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`, "g"))].map(match => match[1]);
-  precondition(new Set(callers).size === count, `MCP ACK capability injected exactly ${count} actual committed losses`);
-  for (const caller of callers) await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${caller} callback2`, { file, since });
-  ctx.ev.json(`mcp-ack-result-${operation}`, { docId, operation, callers, responses, committed });
+  const proof = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: docId, count });
+  const callers = proof.map(row => row.caller);
+  ctx.ev.json(`mcp-ack-result-${operation}`, { docId, operation, callers, proof, responses, committed });
   return { responses, committed };
 }
 

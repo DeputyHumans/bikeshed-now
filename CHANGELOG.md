@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Bind native acknowledgement-loss evidence to each held caller’s actual committed callback ordinal. Allow normal precommit contention without mistaking the following native retry for a failed fault injection; retain exact caller, loss order and contiguous retry checks, record the sequence, and preserve every product assertion.
+
 - Keep the late-save publication race conclusive only when the publisher wins an overlapping attempt. Accept an exact snapshot conflict only after proving the winning late draft and published head remain intact; preserve the stale-draft invariant and add a product fault control for the retired-base guard.
 
 - Make the large-document transport regression deterministic by fixing its Yjs client ID width. Preserve the existing payload floor and transport limit; retain observed failures for a short-ID fixture, the old limit and a disabled oversized-compaction guard.

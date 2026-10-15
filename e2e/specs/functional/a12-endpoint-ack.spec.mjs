@@ -8,7 +8,8 @@ import { cast, castUnverified } from "../../lib/accounts.mjs";
 import { idToken, openSession } from "../../lib/session.mjs";
 import { adminFor, closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { publish, createTeam } from "../../lib/seed.mjs";
 import { setVisibility } from "../../lib/grant.mjs";
@@ -22,10 +23,11 @@ const hash = (uid, code) => createHash("sha256").update(`${uid}:${code}`).digest
 async function lost(ctx, id, operation, send, inspect) {
   const g = gates(target), gate = "ack-after-commit", key = `${operation}:${id}`, file = logFile(target.runId), since = logMark(file);
   let pending, outcome, answered = false;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = send().then(response => { answered = true; return { response }; }, error => ({ error }));
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
     precondition(!answered, "endpoint ACK: response remains pending after the real commit");
     const durable = await inspect();
     ctx.ev.json(`ack-held-${operation}`, { operation, id, held, durable });
@@ -36,9 +38,8 @@ async function lost(ctx, id, operation, send, inspect) {
   }
   if (outcome?.error) throw outcome.error;
   const response = outcome.response;
-  const { match } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${id} ([a-f0-9-]+)`), { file, since });
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${id} ${match[1]} callback2`, { file, since });
-  ctx.ev.json(`ack-response-${operation}`, { status: response.status, json: response.json, caller: match[1] });
+  const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id });
+  ctx.ev.json(`ack-response-${operation}`, { status: response.status, json: response.json, caller: ack.caller });
   return response;
 }
 async function oneMail(box, to, assertion) {

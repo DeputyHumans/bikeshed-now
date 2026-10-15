@@ -8,7 +8,8 @@ import { openSession } from "../../lib/session.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
 scenario("A14.9 a rename acknowledges its own native commit without overwriting a later rename or duplicating its change event", {
@@ -35,8 +36,8 @@ scenario("A14.9 a rename acknowledges its own native commit without overwriting 
     ctx.ev.json("rename-ack-held", { docId, caller, preserved });
     await g.release(gate, { key, count: 1, disarm: false });
     const response = await first;
-    await waitForLog(`E2E_ACK_LOSS ${operation} ${docId} ${caller}`, { file, since });
-    await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${caller} callback2`, { file, since });
+    const [ack] = await waitForNativeAckProof({ file, since, held, operation, id: docId });
+    ctx.ev.json("rename-ack-retry", { docId, ack });
     const row = await readDoc(target, `docs/${docId}`);
     assert.deepEqual({ title: row.title, slug: row.slug, events: await events() }, { title: "Newer", slug: "newer", events: preserved }, "ACK rename: original retry preserves the newer title and exact two events");
     assert.equal(response.status, 200, "ACK rename: original committed rename returns success");

@@ -8,7 +8,8 @@ import { openSession } from "../../lib/session.mjs";
 import { createFolder, publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 
 const target = currentTarget();
@@ -50,13 +51,12 @@ async function membershipAck(ctx, kind) {
     // broken original callback and hide that it replayed an old grant.
     await g.release(gate, { key, count: 1, disarm: false });
     const response = await first;
-    await waitForLog(`E2E_ACK_LOSS ${operation} ${id} ${firstCaller}`, { file, since });
-    await waitForLog(`E2E_ACK_RETRY ${operation} ${id} ${firstCaller} callback2`, { file, since });
+    const [ack] = await waitForNativeAckProof({ file, since, held: heldFirst, operation, id });
     assert.deepEqual({ state: await state(), events: await events() }, { state: { viewers: [], members: [owner.account.email] }, events: committedEvents }, `ACK ${kind} membership: original retry preserves the later revocation and exact events`);
     assert.equal(response.status, 200, `ACK ${kind} membership: original committed grant returns success`);
     const sent = (await shim.requests({ to: reader })).map(row => ({ status: row.status, subject: row.subject }));
     assert.deepEqual(sent, [{ status: 200, subject: `${owner.account.email} shared “${title}” with you` }], `ACK ${kind} membership: original invitation delta sends exactly one message`);
-    ctx.ev.json(`membership-ack-result-${kind}`, { id, reader, firstCaller, response, sent });
+    ctx.ev.json(`membership-ack-result-${kind}`, { id, reader, firstCaller, ack, response, sent });
   } finally {
     await g.release(gate, { key }).catch(() => undefined);
     if (second) await second;

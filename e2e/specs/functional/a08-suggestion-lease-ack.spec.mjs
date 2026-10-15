@@ -8,7 +8,8 @@ import { openSession } from "../../lib/session.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
@@ -36,10 +37,11 @@ for (const op of ["claim", "release"]) scenario(NAMES[op], CASE, async ctx => {
   const g = gates(target), gate = "ack-after-commit", operation = `suggestion-${op}`, key = `${operation}:${docId}`;
   const file = logFile(target.runId), since = logMark(file);
   let pending, answered = false;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = send({ op, annId }).catch(error => ({ status: null, error: String(error?.message ?? error) })).then(response => { answered = true; return response; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: HTTP_MS });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: HTTP_MS });
     precondition(!answered, "lease ACK original request is held after its actual commit");
     const first = (await readDoc(target, path)).suggestion?.claim ?? null;
     precondition((first !== null) === (op === "claim"), "lease ACK original lease operation committed");
@@ -53,10 +55,9 @@ for (const op of ["claim", "release"]) scenario(NAMES[op], CASE, async ctx => {
     ctx.ev.json(`lease-ack-held-${op}`, { docId, annId, held, first, later });
     await g.release(gate, { key });
     const response = await pending;
-    const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`), { file, since });
-    await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${loss[1]} callback2`, { file, since });
+    const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: docId });
     const current = await readDoc(target, path);
-    ctx.ev.json(`lease-ack-result-${op}`, { docId, annId, caller: loss[1], response, later, current });
+    ctx.ev.json(`lease-ack-result-${op}`, { docId, annId, caller: ack.caller, ack, response, later, current });
     assert.deepEqual(current.suggestion?.claim ?? null, later, `ACK suggestion ${op}: native retry preserves the later lease operation`);
     assert.equal(response.status, 200, `ACK suggestion ${op}: its own durable operation is acknowledged with 200`);
     assert.deepEqual(current.transactionReceipts ?? {}, {}, `ACK suggestion ${op}: completed requests retire only their own receipts`);

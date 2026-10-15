@@ -8,7 +8,8 @@ import { openSession } from "../../lib/session.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
-import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { logFile, logMark } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
 
 const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
@@ -29,19 +30,19 @@ async function loseAck(ctx, docId, op, send, inspect) {
   const g = gates(target), gate = "ack-after-commit", operation = `suggestion-${op}`, key = `${operation}:${docId}`;
   const file = logFile(target.runId), since = logMark(file);
   let pending, answered = false, committed;
+  let ackHeld;
   try {
     await g.hold(gate, { key });
     pending = send().catch(error => ({ status: null, error: String(error?.message ?? error) })).then(response => { answered = true; return response; });
-    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: HTTP_MS });
+    const held = ackHeld = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: HTTP_MS });
     precondition(!answered, "suggestion ACK original request remains unanswered after its actual commit");
     committed = await inspect();
     ctx.ev.json(`suggestion-ack-held-${op}`, { docId, operation, held, committed });
     await g.release(gate, { key });
   } finally { await g.release(gate, { key }).catch(() => undefined); }
   const response = await pending;
-  const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`), { file, since });
-  await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${loss[1]} callback2`, { file, since });
-  ctx.ev.json(`suggestion-ack-result-${op}`, { docId, operation, caller: loss[1], response, committed });
+  const [ack] = await waitForNativeAckProof({ file, since, held: ackHeld, operation, id: docId });
+  ctx.ev.json(`suggestion-ack-result-${op}`, { docId, operation, caller: ack.caller, ack, response, committed });
   return { response, committed };
 }
 
