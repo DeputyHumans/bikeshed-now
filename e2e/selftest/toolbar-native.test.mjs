@@ -64,3 +64,22 @@ test('Cancelling the app link prompt preserves content and the editor selection'
   assert.equal(await body(), original);
   assert.equal(await user.page.evaluate(() => document.querySelector('iframe').contentDocument.getSelection().toString()), 'bold & safe');
 });
+
+test('Inline code preserves a plain-text selection in a paragraph with the document font', async () => {
+  await mount();
+  await user.page.evaluate(() => {
+    const doc = document.querySelector('iframe').contentDocument;
+    doc.body.style.fontFamily = 'system-ui,sans-serif';
+    doc.body.innerHTML = '<p id="subject" style="text-align:right">Paragraph 3. Rest of the paragraph.</p>';
+    const range = doc.createRange(); range.setStart(doc.querySelector('p').firstChild, 0); range.setEnd(doc.querySelector('p').firstChild, 11);
+    doc.getSelection().removeAllRanges(); doc.getSelection().addRange(range); doc.defaultView.focus();
+  });
+  const original = await body();
+  await user.page.getByRole('button', { name: 'Inline code', exact: true }).click();
+  const actual = await user.page.evaluate(() => { const doc = document.querySelector('iframe').contentDocument; return { code: doc.querySelector('code')?.textContent, html: doc.body.innerHTML, text: doc.body.textContent }; });
+  assert.equal(actual.code, 'Paragraph 3', `plain text receives a semantic code element: ${actual.html}`);
+  assert.equal(actual.text, 'Paragraph 3. Rest of the paragraph.');
+  assert.ok(actual.html.startsWith('<p id="subject" style="text-align:right"><code>'), 'the original block and style survive the insertion');
+  await user.page.evaluate(() => document.querySelector('iframe').contentDocument.execCommand('undo'));
+  assert.equal(await body(), original, 'one undo also restores a block-start edit');
+});

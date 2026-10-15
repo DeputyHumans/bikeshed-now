@@ -1,0 +1,11 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -212,7 +212,7 @@
+         styleHost.style.setProperty("white-space", "pre-wrap", "important");
+         // At a block start Chromium merges away the leading inline wrapper.
+         // Treat the insertion host as inline for this synchronous command only.
+-        styleHost.style.setProperty("display", "inline", "important");
++
+         try { doc.execCommand("insertHTML", false, code.outerHTML); }
+         finally {
+           if (authoredStyle === null) styleHost.removeAttribute("style");

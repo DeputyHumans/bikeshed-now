@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve inline-code markup at the start of a paragraph without changing the authored block or native undo. Exercise the commit/autosave race by holding only a completed response, with exact draft cleanup and request-count checks; the response-delay helper preserves redirects and never resends a completed request during cleanup.
+
 - Distinguish revoked-reader responses from absent-document responses byte for byte, require fresh unrecovered listener failures before excusing a sharing observation, and add directional controls for team and folder removals, invitation contents, inherited rows and private editing.
 
 - Exercise CLI saved-sign-in revocation beside a shell token, already-dead credentials and immediate CI refusal; retain large-source change cursors and add directional controls for logout, replacement arguments, move destinations and wait timeouts.

@@ -210,6 +210,9 @@ export function EditToolbar({
         const styleHost = host ?? doc.body;
         const authoredStyle = styleHost.getAttribute("style");
         styleHost.style.setProperty("white-space", "pre-wrap", "important");
+        // At a block start Chromium merges away the leading inline wrapper.
+        // Treat the insertion host as inline for this synchronous command only.
+        styleHost.style.setProperty("display", "inline", "important");
         try { doc.execCommand("insertHTML", false, code.outerHTML); }
         finally {
           if (authoredStyle === null) styleHost.removeAttribute("style");

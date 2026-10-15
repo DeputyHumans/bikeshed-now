@@ -121,6 +121,7 @@
  */
 
 import { readLiveLogs } from "../../lib/live-log.mjs";
+import { delayHostingResponse } from "../../lib/response-delay.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
@@ -950,6 +951,7 @@ async function commitAndMeasureLog(ctx) {
   ctx.step(`status/${docId}/y holds ${before} entries before the commit`);
 
   ctx.step("the owner presses Save as new version");
+  const toastStart = o.toastMark();
   const commit = await commitInApp(o);
   const at = Date.now();
   assert.deepEqual({ outcome: commit.outcome, text: commit.text, kind: commit.toast.kind }, { outcome: "published", text: "Published v2.", kind: "info" });
@@ -964,6 +966,8 @@ async function commitAndMeasureLog(ctx) {
   Object.assign(liveLog, { measured: true, rules, before, left: Object.keys(left ?? {}).length, leftAfterMs: Date.now() - at, docId });
   ctx.ev.json("live-log", liveLog);
 
+  await sleep(Math.max(0, QUIET_MS - (Date.now() - at)));
+  assert.deepEqual(o.log.toasts.slice(toastStart).filter((x) => x.kind !== "busy").map((x) => `${x.kind}: ${x.text}`), ["info: Published v2."], "an ordinary commit has no later error after the quiet window");
   await leftEditor(o);
   assert.equal(new URL(o.page.url()).pathname, `/d/${docId}`, "the viewer returns to the document's head");
   const meta = await readDoc(target, `docs/${docId}`);
@@ -991,15 +995,14 @@ scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty wi
 });
 
 scenario("A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const { accounts, docId } = await stage(ctx, { name: "a98-quick", title: "A9.8 quick commit" });
+  const { owner, accounts, docId } = await stage(ctx, { name: "a98-quick", title: "A9.8 quick commit" });
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   await openEditor(o);
   const rec = await o.recordSaveStates();
   const drafts = o.capture({ paths: "/draft" });
   const commits = o.capture({ paths: "/commit" });
-  ctx.step("this page's first POST /draft (the pre-commit save) is delayed 1.5 s, longer than the debounce; a second one, if any, is delivered only after the commit has answered");
-  const commitAnswered = () => commits.waitFor((r) => r.status !== null, { timeout: COMMIT_MS, settled: false });
-  const slow = await o.delayRequests("/draft", { rules: [1_500, commitAnswered] });
+  ctx.step("send every request immediately; hold only the real /commit response for 1.5 s after the backend has completed the commit");
+  const slow = await delayHostingResponse(o, "/commit", { delayMs: 1_500 });
   const t = tok("q");
   let commit;
   let since;
@@ -1030,10 +1033,22 @@ scenario("A9.8 Save as new version pressed inside the debounce is followed by no
     toasts,
     drafts: postRows(drafts, lastInput),
     commits: postRows(commits, lastInput),
-    delayed: slow.rows.map((x) => ({ seq: x.seq, rule: x.rule, ms: x.ms, released: x.released, heldMs: x.releasedAt === null ? null : Math.round(x.releasedAt - x.heldAt), ruleError: x.ruleError })),
+    delayedResponses: slow.rows,
     meta: { currentVersion: meta.currentVersion, draft: meta.draft ? { baseVersion: meta.draft.baseVersion } : null },
   });
   if (savingAt === null || savingAt - lastInput >= AUTOSAVE_MS) ctx.inconclusive(`the pre-commit save began ${savingAt === null ? "never" : `${Math.round(savingAt - lastInput)} ms`} after the last key, not inside the debounce`);
+  precondition(slow.rows.length === 1 && slow.rows[0].status === 200 && slow.rows[0].error === null, "exactly one real successful commit response was held");
+  precondition(slow.rows[0].backendAnsweredAt < lastInput + AUTOSAVE_MS && slow.rows[0].releasedAt > lastInput + AUTOSAVE_MS, "the backend finished the commit before the debounce, while its response stayed held beyond it");
+  assert.equal("draft" in meta, false, "quick commit leaves no stale meta.draft after the quiet window");
+  assert.equal(await draftObject(docId), null, "quick commit leaves no selected draft after the quiet window");
+  const savedDraft = drafts.find(row => row.status === 200)?.json?.draft;
+  precondition(typeof savedDraft?.storagePrefix === "string", "the pre-commit save identifies its immutable draft snapshot");
+  const retiredObject = `${draftStoragePrefix(docId, savedDraft)}/${savedDraft.entry ?? "index.html"}`;
+  assert.equal(await readObject(target, retiredObject), null, "quick commit leaves no stale draft object after the quiet window");
+  assert.equal(postRows(drafts, lastInput).length, 1, "quick commit posts the one edit to /draft exactly once");
+  assert.equal(meta.currentVersion, "v2", "quick commit leaves v2 current");
+  const v2 = await storedVersion(owner.http, docId, "v2");
+  assert.ok(v2.html.includes(t), "quick commit preserves the edit in v2");
   // Send times are this process's wall clock and the last key the page's: on one machine, within a few ms.
   assert.deepEqual(toasts, ["info: Published v2."], `after publishing, the publisher sees only "Published v2." (the one edit was posted ${drafts.length} times: ${drafts.map((x) => `${x.status} sent +${Math.round(x.t - lastInput)} ms after the last key`).join(", ")})`);
 });

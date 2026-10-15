@@ -12398,13 +12398,16 @@
         ],
         "controls": [
           "controls-a09-format-inline-code",
-          "controls-a09-format-link"
+          "controls-a09-format-link",
+          "controls-a09-code-block-start"
         ],
         "evidence": "e2e/.out/toolbar-native-controls/proof.json",
         "covered": [
           "Both original product bugs failed on the kept B9 stack",
           "Five isolated native Chrome mutations failed at their intended assertions and all three restored tests passed",
-          "Eight formerly uncovered formatting actions now assert live and stored semantics and retained authored text"
+          "Eight formerly uncovered formatting actions now assert live and stored semantics and retained authored text",
+          "Full-editor follow-up exposed Chromium dropping code at the start of a block; the native fixture now reproduces this and checks exact block/style restoration and one undo",
+          "Six intended native Chrome mutants failed; all four restored tests passed"
         ],
         "remaining": [
           "Fresh repaired-stack E2E and stored control pairs"
