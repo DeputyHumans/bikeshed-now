@@ -1,11 +1,16 @@
 --- a/scripts/lib/withdraw-version.mjs
 +++ b/scripts/lib/withdraw-version.mjs
-@@ -50,7 +50,7 @@
+@@ -54,12 +54,7 @@
      }
      tx.update(docRef, update);
      if (data.visibility === 'public') {
--      tx.update(publicRef, { currentVersion: plan.repoint, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html', publishedAt: version.publishedAt ?? null });
+-      tx.update(publicRef, {
+-        currentVersion: plan.repoint, liveEpoch, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html',
+-        sourceEntry: typeof version.sourceEntry === 'string' ? version.sourceEntry : null,
+-        fileCount: Number.isSafeInteger(version.fileCount) && version.fileCount > 0 ? version.fileCount : 1,
+-        publishedAt: version.publishedAt ?? null,
+-      });
 +      // Leave the old public pointer behind.
      } else if (projection.exists) tx.delete(publicRef);
+     return { retiredEpoch, draftPrefix };
    });
- }

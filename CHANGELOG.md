@@ -20,6 +20,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Operator publishing and withdrawal atomically advance the live editing epoch,
+  refresh public version metadata, and retire only the captured log and draft
+  bytes after updating the access mirror.
+
 - Live editing preserves the identity of repeated letters through concurrent
   typing and deletion by honoring the browser's input range. Applied remote
   edits notify autosave after the DOM binding has settled.

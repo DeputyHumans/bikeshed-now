@@ -30,8 +30,7 @@ import mime from "mime";
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails } from "./lib/email.mjs";
 import { hashBundle, hashBundleFiles } from "./lib/hash.mjs";
-import { commitOperatorVersion, uploadOperatorBundle } from "./lib/operator-writes.mjs";
-import { syncPresenceAccess } from "./lib/presence.mjs";
+import { commitOperatorVersion, finishOperatorReplacement, uploadOperatorBundle } from "./lib/operator-writes.mjs";
 import {
   REPO_ROOT,
   FieldValue,
@@ -277,7 +276,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     console.log(`  already published as ${result.versionId} (contentHash match) — NO-OP.`);
     return;
   }
-  await syncPresenceAccess(docId, result.membership.members, result.membership.editorMembers, values.project);
+  await finishOperatorReplacement(docId, result, { bucket, project: values.project });
   console.log(`  published ${docId} ${result.versionId} (currentVersion=${result.versionId}, ${result.existed ? "updated" : "created"}).`);
 
 }

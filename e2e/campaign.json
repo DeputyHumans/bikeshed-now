@@ -13333,6 +13333,28 @@
         "controls-a17-png-canvas"
       ],
       "note": "Five independent print hiding vectors are locked; bounded owner marking and current-version download metadata reach public/unlisted readers; legacy public mirrors refresh through the gated reader endpoint. Public marking updates refresh the mirror. SVG strips decoration on its clone; PNG recomputes styles in a clean inert document at the source viewport and preserves authored canvas pixels. A17.2b and A17.3c perform setup when selected alone. A17.5b is now a normal assertion following the prior account-default fix. liveEpoch is included as non-secret generation metadata for the root epoch batch. No item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "S8",
+        "S17",
+        "X-c06-leave-commit-1"
+      ],
+      "scope": "operator replacement and withdrawal parity; local E2E pending",
+      "tests": [
+        "Operator and withdrawal focused:22 pass,0 fail",
+        "Full tools suite:83 pass,0 fail",
+        "Original source:4 new assertions fail,14 pass",
+        "Eight isolated regressions fail assertions, including epoch rotation, stale draft retention, stale public projection, cleanup ordering and legacy-map preservation"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/operator-epoch-green.log",
+      "controls": [
+        "controls-a12-withdraw-epoch",
+        "controls-a12-withdraw-mirror",
+        "controls-a12-withdraw-log"
+      ],
+      "note": "A12.7 seeds an owner-authorized log entry and checks all raw logs, retired epoch, access mirror and public projection after withdrawal. Existing projection/version-byte/draft-byte controls are refreshed and all6 patch targets apply (.out/operator-epoch-controls-M1cT3y/proof.json). Transaction retries capture the winning epoch and draft; cleanup never selects a later snapshot. No campaign item closed."
     }
   ]
 }

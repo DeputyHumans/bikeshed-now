@@ -1,8 +1,8 @@
 --- a/scripts/delete-version.mjs
 +++ b/scripts/delete-version.mjs
-@@ -288,7 +288,7 @@
-     console.log("    done.");
-   }
+@@ -286,7 +286,7 @@
+   await finishOperatorReplacement(docId, result, { bucket, project: values.project });
+   console.log("    done.");
    console.log(`  deleting gs://${bucketName}/${prefix} ...`);
 -  await bucket.deleteFiles({ prefix, force: true });
 +  await bucket.deleteFiles({ prefix: `docs/${docId}/${doomed}/`, force: true });

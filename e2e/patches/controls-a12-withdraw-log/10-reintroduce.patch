@@ -1,0 +1,11 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -106,7 +106,7 @@
+   await mirror(docId, result.membership?.members ?? [], result.membership?.editorMembers ?? [], project);
+   const rtdb = database();
+   if (rtdb) {
+-    await rtdb.ref(`status/${docId}/y/${retiredEpoch}`).remove();
++    await rtdb.ref(`status/${docId}/y/${retiredEpoch}`).once("value");
+     if (retiredEpoch === 'initial') {
+       const root = rtdb.ref(`status/${docId}/y`);
+       const legacy = (await root.once('value')).val();

@@ -37,7 +37,7 @@ test('repoint updates the existing public projection in the same transaction', a
   const {db,store}=world();
   await repointWithdrawal(db,db.doc('docs/d'),plan);
   assert.equal(store.get('docs/d').currentVersion,'v1');
-  assert.deepEqual(store.get('public/d'), { currentVersion:'v1',entry:'notes.html',format:'markdown',title:'Shared',visibility:'public',publishedAt:null });
+  assert.deepEqual(store.get('public/d'), { currentVersion:'v1',liveEpoch:store.get('docs/d').liveEpoch,entry:'notes.html',format:'markdown',sourceEntry:null,fileCount:1,title:'Shared',visibility:'public',publishedAt:null });
   assert.equal(store.get('docs/d').draft,undefined);
   assert.equal(store.get('docs/d').thumb,undefined);
 });
@@ -59,4 +59,16 @@ test('an absent public projection refuses without destructive changes', async ()
   const {db,store}=world();await db.doc('public/d').delete();const before=new Map(store);
   await assert.rejects(repointWithdrawal(db,db.doc('docs/d'),plan), /public projection.*missing/);
   assert.deepEqual(store,before);
+});
+
+test('withdrawal advances the epoch in both views and captures only the retired session', async () => {
+  const { db, store } = world();
+  await db.doc('docs/d').update({ liveEpoch: 'withdrawn-session' });
+  const out = await repointWithdrawal(db, db.doc('docs/d'), plan);
+  assert.match(store.get('docs/d').liveEpoch, /^[a-f0-9-]{36}$/);
+  assert.equal(store.get('public/d').liveEpoch, store.get('docs/d').liveEpoch);
+  assert.equal(out.retiredEpoch, 'withdrawn-session');
+  assert.equal(out.draftPrefix, 'docs/d/bundles/old-draft/');
+  assert.equal(store.get('public/d').sourceEntry, null);
+  assert.equal(store.get('public/d').fileCount, 1);
 });

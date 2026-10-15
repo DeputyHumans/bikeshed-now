@@ -1142,12 +1142,24 @@ a different publish from a base that advanced during upload refuses and must
 be rerun. Current sharing is preserved during version selection. Unselected
 attempt bundles can remain unreferenced; they never overwrite selected bytes.
 
+An operator replacement also advances `liveEpoch` and clears the current draft
+in that transaction. Its return value captures the retired epoch and exact
+draft prefix from the successful transaction attempt. Public replacements
+atomically refresh the existing projection's version, epoch and source/bundle
+metadata while preserving its bounded marking policy; a missing public
+projection refuses before any write. After the access mirror is refreshed,
+cleanup removes only the captured epoch and draft prefix. A legacy `initial`
+retirement additionally removes captured flat string entries, preserving
+every nested epoch map. A newer save or session cannot be swept up by this
+cleanup. A duplicate publish leaves its draft and epoch untouched, and an
+uncertain transaction result retains all candidate bytes.
+
 Version withdrawal resolves exact version and draft prefixes from captured metadata
 (with legacy-path fallbacks) before deleting bytes. The repoint transaction checks
 that the current version, doomed version bytes and draft have not changed, and
 that the retained version still exists. It refuses to delete a prefix referenced
 by a retained version. The same transaction updates the existing public
-projection's version, entry, format and publish time, or removes a stale projection
+projection's version, live epoch, entry, format, source/bundle metadata and publish time, or removes a stale projection
 for a private/unlisted document. A public document with a missing projection must
 be repaired before destructive withdrawal. This keeps anonymous readers on the
 retained version and prevents deletion of a newer draft created after the preview.

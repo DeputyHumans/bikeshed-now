@@ -98,13 +98,14 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { docIdFor, publish, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { postThumb } from "../../lib/thumbs.mjs";
 import { runOperator } from "../../lib/operator.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
+import { rtdbAs } from "../../lib/rtdb.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -1052,6 +1053,10 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const mcp = await mcpFor(ctx, owner, "owner-mcp");
   await addComment(mcp, docId, 2, `A12.7 thread on v2 ${tag()}`);
   await owner.http.postJson("/draft", { docId, baseVersion: "v2", html: docHtml(title, 2, " Drafted.") }, { expect: 200 });
+  const epoch = (await docRecord(docId)).liveEpoch ?? "initial";
+  const live = rtdbAs(target, { idToken: owner.idToken, http: ctx.http({ actor: "owner-live-log" }) });
+  const logged = await live.put(`status/${docId}/y/${epoch}/withdrawalProbe`, "AAA=");
+  precondition(logged.status === 200, `the owner wrote a retiring live-log entry: ${logged.status}`);
 
   /** Everything the withdrawal touches, as plain data. */
   const snapshot = async () => {
@@ -1059,6 +1064,8 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     const views = Object.fromEntries((await readCollection(target, `docs/${docId}/views`)).map((r) => [r.id, r.data.versionId]));
     return {
       currentVersion: rec.currentVersion,
+      liveEpoch: rec.liveEpoch ?? "initial",
+      liveLog: await rtdbGet(target, `status/${docId}/y`),
       draft: rec.draft ? rec.draft.baseVersion : null,
       thumb: rec.thumb ? rec.thumb.versionId : null,
       commits: rec.stats?.commits ?? null,
@@ -1071,6 +1078,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     };
   };
   const before = await snapshot();
+  precondition(before.liveLog?.[epoch]?.withdrawalProbe === "AAA=", "the retiring live log exists before withdrawal");
   precondition(
     before.currentVersion === "v2" && before.draft === "v2" && before.thumb === "v2" && before.commits === 1 && before.v2Annotations === 1 && before.objects.v2.length === 1 && before.objects.thumbsV2.length === 1 && before.objects.draft.length === 1,
     `the setup is in place: ${JSON.stringify(before)}`,
@@ -1122,10 +1130,15 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   assert.equal(run.code, 0, `exit ${run.code}: ${scrub(run.stderr).slice(0, 300)}`);
   assert.ok(run.stdout.includes(`withdrew ${docId}/v2; currentVersion is now v1.`), "it says what it did");
   const afterRun = await snapshot();
+  assert.match(afterRun.liveEpoch, /^[a-f0-9-]{36}$/, "withdrawal selects a fresh live epoch");
+  assert.notEqual(afterRun.liveEpoch, before.liveEpoch, "withdrawal retires the previous live epoch");
+  assert.equal((await rtdbGet(target, `editAccess/${docId}`))?.__liveEpoch, afterRun.liveEpoch, "withdrawal publishes the new live epoch to the edit-access mirror");
   ctx.ev.json("after", afterRun);
   const v1rec = await versionRecord(docId, "v1");
   assert.deepEqual(afterRun, {
     currentVersion: "v1",
+    liveEpoch: afterRun.liveEpoch,
+    liveLog: null,
     draft: null,
     thumb: null,
     commits: 0,
@@ -1171,6 +1184,8 @@ scenario("A12.7 (public projection) withdrawing the current version of a public 
     ctx.step("delete-version withdraws v2");
     const run = await deleteVersion(ctx, ["--doc", docId, "--project", target.projectId, "--yes", "--account", ownerEmail, "--version", "v2"], "real run");
     precondition(run.code === 0 && (await docRecord(docId)).currentVersion === "v1", `the withdrawal ran: exit ${run.code} ${scrub(run.stderr).slice(0, 300)}`);
+    const current = await docRecord(docId);
+    const publicAfter = await readDoc(target, `public/${docId}`);
 
     ctx.step("an anonymous reader opens /d/<doc>, which resolves the version from public/{docId} (useDocument.ts resolveReader)");
     const anon = await reader(ctx, "anonymous");
@@ -1182,6 +1197,8 @@ scenario("A12.7 (public projection) withdrawing the current version of a public 
     ctx.ev.json("anonymous", { src, ...observed });
     ctx.step(`observed ${JSON.stringify(observed)}`);
     assert.deepEqual(observed, { projection: "v1", frameVersion: "v1", contentStatus: 200 }, "public/{docId} follows the repoint, and the anonymous reader loads v1");
+    assert.notEqual(current.liveEpoch, row.liveEpoch ?? "initial", "public withdrawal retires the previous live epoch");
+    assert.equal(publicAfter?.liveEpoch, current.liveEpoch, "public readers receive the repointed live epoch");
   } finally {
     await setVisibility(target, { owner, doc: docId, visibility: "private", timeoutMs: HTTP_MS }).catch(() => undefined);
   }

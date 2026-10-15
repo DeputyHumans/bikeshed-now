@@ -1,11 +1,7 @@
 --- a/scripts/delete-version.mjs
 +++ b/scripts/delete-version.mjs
-@@ -284,7 +284,7 @@
-
-   if (meta.draft) {
-     console.log("  deleting draft objects ...");
--    await bucket.deleteFiles({ prefix: draftPrefix, force: true });
-+    await bucket.deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
-     console.log("    done.");
-   }
-   console.log(`  deleting gs://${bucketName}/${prefix} ...`);
+@@ -285,3 +285,3 @@
+   console.log("  retiring the old live editing session and captured draft objects ...");
+-  await finishOperatorReplacement(docId, result, { bucket, project: values.project });
++  await finishOperatorReplacement(docId, { ...result, draftPrefix: result.draftPrefix ? `docs/${docId}/draft/` : null }, { bucket, project: values.project });
+   console.log("    done.");

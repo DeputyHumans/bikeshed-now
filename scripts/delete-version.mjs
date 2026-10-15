@@ -29,6 +29,7 @@
 
 import { parse, fail } from "./lib/args.mjs";
 import { withdrawalPrefix, repointWithdrawal } from "./lib/withdraw-version.mjs";
+import { finishOperatorReplacement } from "./lib/operator-writes.mjs";
 import {
   getBucket,
   getBucketName,
@@ -216,7 +217,6 @@ async function main() {
   }
 
   const prefix = withdrawalPrefix(docId, doomed, target);
-  const draftPrefix = meta.draft ? withdrawalPrefix(docId, 'draft', meta.draft) : null;
   const [objects] = await bucket.getFiles({ prefix });
   const files = objects.filter((o) => !o.name.endsWith("/"));
   const totalBytes = files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);
@@ -276,17 +276,15 @@ async function main() {
 
   console.log("");
   console.log(`  repointing currentVersion -> ${repoint} ...`);
-  await repointWithdrawal(db, docRef, {
+  const result = await repointWithdrawal(db, docRef, {
     currentVersion: meta.currentVersion, doomed, repoint, version: target,
     draft: meta.draft ?? null, keepStats: values["keep-stats"],
   });
   console.log("    done.");
 
-  if (meta.draft) {
-    console.log("  deleting draft objects ...");
-    await bucket.deleteFiles({ prefix: draftPrefix, force: true });
-    console.log("    done.");
-  }
+  console.log("  retiring the old live editing session and captured draft objects ...");
+  await finishOperatorReplacement(docId, result, { bucket, project: values.project });
+  console.log("    done.");
   console.log(`  deleting gs://${bucketName}/${prefix} ...`);
   await bucket.deleteFiles({ prefix, force: true });
   console.log("    done.");
