@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.2 removing a member gives them the absent id's 404 within 2 s, takes away their presence mirror, and the RTDB rules then refuse their reads and writes",
+  "what": "Make a denied existing document distinguishable from an absent id through its cache.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.2 removing a member gives them the absent id's 404 within 2 s, takes away their presence mirror, and the RTDB rules then refuse their reads and writes",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a removed member receives the absent id's headers"
+  }
+}

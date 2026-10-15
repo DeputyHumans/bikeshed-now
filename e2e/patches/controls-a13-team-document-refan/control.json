@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.5 a team grant expands to the team's members; removing one from the team revokes them from the document and the folder the team was granted on",
+  "what": "Skip only direct document team re-fan; folder re-fan and the reported affected count remain unchanged.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.5 a team grant expands to the team's members; removing one from the team revokes them from the document and the folder the team was granted on",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "still lists the removed member"
+  }
+}

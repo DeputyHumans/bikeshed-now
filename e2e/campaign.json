@@ -14005,6 +14005,27 @@
       ],
       "evidence": "e2e/.out/a18-controls-proof/oracle-proof.json; e2e/.out/a18-controls-proof/reading-proof.json; e2e/.out/a18-controls-proof/compile-proof.json; e2e/.out/2610142309-3nfp/invocations/20261015T062444Z-p75711-t6i1/results.json",
       "note": "Final-reading evidence now matches the exact native page-exit payload against both stored records and a later server timestamp. Chromium navigation beacons do not appear in Playwright request events; the initial capture-only attempt failed and remains recorded. Native transport/Blob behavior is preserved. Added MCP-specific metrics, both activity filters, API tile, malformed absolute beats and editor/open-editor gates. All six map rows are implemented-source; canonical obligations remain open until exact current control pairs and matrix proof."
+    },
+    {
+      "kind": "sharing-coverage-implementation",
+      "items": [
+        "deep:a13-sharing:01",
+        "deep:a13-sharing:02",
+        "deep:a13-sharing:03",
+        "deep:a13-sharing:04",
+        "deep:a13-sharing:05",
+        "deep:a13-sharing:06",
+        "deep:a13-sharing:07",
+        "deep:a13-sharing:08"
+      ],
+      "scope": "Local B10 product 6c38cc6; source assertions and controls, not campaign closure",
+      "checks": [
+        "Full A13 functional file: 10 pass, zero fail/TODO/inconclusive/skip",
+        "27 focused backend, 20 SharePanel app and three listener-judge selftests pass",
+        "Eleven directional product source mutants and three listener-judge mutants fail their intended assertions"
+      ],
+      "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T063519Z-p5991-gqn9/summary.md; e2e/.out/a13-controls-proof/{proof,app-proof,listener-proof}.json",
+      "note": "New patched-stack red/restored pairs remain required. The operator database URL and connection lifecycle were repaired in earlier commits and exercised locally; no production execution is claimed."
     }
   ]
 }

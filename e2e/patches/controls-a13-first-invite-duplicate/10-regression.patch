@@ -1,0 +1,9 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -122,5 +122,5 @@
+ ): Promise<void> {
+   const origin = publicOrigin();
+-  for (const target of targets) {
++  for (const target of [...targets, ...targets]) {
+     const props: InviteProps = {
+       origin,

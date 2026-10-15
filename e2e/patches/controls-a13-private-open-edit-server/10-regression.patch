@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -972,5 +972,5 @@
+   const update: Record<string, unknown> = {
+     visibility,
+-    publicEdit: body?.publicEdit === true && visibility !== "private",
++    publicEdit: body?.publicEdit === true,
+     updatedAt: now(),
+   };

@@ -1,0 +1,9 @@
+--- a/app/src/components/VisibilitySection.tsx
++++ b/app/src/components/VisibilitySection.tsx
+@@ -124,5 +124,5 @@
+       </div>
+
+-      {state.visibility !== "private" ? (
++      {true ? (
+         <>
+           <div className="link-row">

@@ -81,7 +81,8 @@ import { createFolder, createTeam, publish } from "../../lib/seed.mjs";
 import { ROLES, principalOf, share, shareFolder, teamMembers, trackWindow, unshare, unshareFolder } from "../../lib/grant.mjs";
 import { closeAdmin, emailKey, readDoc, rtdbGet } from "../../lib/admin.mjs";
 import { rtdbAs, rtdbRulesStatus } from "../../lib/rtdb.mjs";
-import { eventually } from "../../lib/assert.mjs";
+import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
+import { unrecoveredListenerLoss } from "../../lib/listener-loss.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 
@@ -159,10 +160,12 @@ async function grantOnFolder(owner, folder, grants) {
   for (const [account, role] of grants) await shareFolder(target, { owner, folder, account, role, timeoutMs: REQ_MS });
 }
 
-/** GET /content of v1 as this session (or an anonymous client) → status. */
-async function contentStatus(http, docId, { k = null } = {}) {
-  const r = answered(await http.get(`/content/${encodeURIComponent(docId)}/v1/`, k ? { query: { k } } : {}), `GET /content/${docId}/v1/`);
-  return r.status;
+/** GET /content of v1, retaining denial bytes and headers for parity checks. */
+async function contentReply(http, docId, { k = null } = {}) {
+  return answered(await http.get(`/content/${encodeURIComponent(docId)}/v1/`, k ? { query: { k } } : {}), `GET /content/${docId}/v1/`);
+}
+async function contentStatus(http, docId, options = {}) {
+  return (await contentReply(http, docId, options)).status;
 }
 
 /** Every principal a record names in any of its four grant lists. */
@@ -377,8 +380,9 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
   const reads = [];
   for (;;) {
     const sentAfter = Date.now() - removedAt;
-    const status = await contentStatus(V.http, docId);
-    reads.push({ sentAfter, status, answeredAfter: Date.now() - removedAt });
+    const response = await contentReply(V.http, docId);
+    const status = response.status;
+    reads.push({ sentAfter, status, answeredAfter: Date.now() - removedAt, response });
     if (status === 404 || sentAfter > 2_000) break;
     await new Promise((r) => setTimeout(r, 100)); // the poll's own interval
   }
@@ -387,6 +391,8 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
   ctx.step(`404 for a read sent ${notFound.sentAfter} ms after the removal (answered at ${notFound.answeredAfter} ms; ${reads.length} read(s))`);
   const absent = answered(await anon.get(`/content/${encodeURIComponent(`${docId}-absent`)}/v1/`), "GET /content of an absent id");
   assert.equal(absent.status, 404, "an absent id is 404 too");
+  assert.equal(sameBytes(notFound.response.buffer, absent.buffer).equal, true, "a removed member receives the absent id's exact body bytes");
+  assert.equal(sameHeadersExceptDate(notFound.response, absent).equal, true, `a removed member receives the absent id's headers: ${JSON.stringify(sameHeadersExceptDate(notFound.response, absent).diff)}`);
 
   ctx.step("the RTDB rules refuse the removed viewer's read of status/{doc}/peers and write of their peer node; the other viewer is still allowed");
   assert.equal(verdictOf(await vdb.get(`status/${docId}/peers`), "V's read after"), "DENY", "the removed viewer's RTDB read is refused");
@@ -431,6 +437,7 @@ scenario("A13.3 changing a member's role sends no email, and Edit appears in the
     window.__a13 = v;
   }, marker);
 
+  let roleWriteAt;
   if (target.kind === "local") {
     ctx.step("the owner changes the member to Can edit with the row's select in Share");
     const o = await signedInAt(ctx, "owner", O, docId);
@@ -438,29 +445,22 @@ scenario("A13.3 changing a member's role sends no email, and Edit appears in the
     const select = dialog.getByLabel(`Access for ${M.account.email}`);
     await select.waitFor({ state: "visible", timeout: 20_000 });
     assert.equal(await select.inputValue(), "viewer");
+    roleWriteAt = Date.now();
     const changed = await posting(o, "/access", () => select.selectOption("editor"));
     assert.equal(changed.status, 200, `POST /access from the row's select: ${JSON.stringify(changed.json)}`);
     assert.deepEqual({ viewers: changed.json?.viewers, editors: changed.json?.editors }, { viewers: [], editors: [M.account.email] }, "one role per principal: moved, not added");
   } else {
     ctx.step("the operator changes the member to editor (production: set-access.mjs, which sends nothing)");
+    roleWriteAt = Date.now();
     const up = await share(target, { owner: O, doc: docId, account: M.account, role: "editor", timeoutMs: REQ_MS });
     assert.equal(up.status, 200);
   }
 
   ctx.step("Edit appears in the member's open viewer, and the page was not reloaded");
-  const waitFrom = Date.now();
   const appeared = await edit.first().waitFor({ state: "visible", timeout: 30_000 }).then(() => true, () => false);
   if (!appeared) {
-    // The viewer learns the role from its Firestore listener on the record.
-    // A page whose listener lost the emulator in this window (its own
-    // "Could not reach Cloud Firestore backend", or the SDK's network test,
-    // which it sends only after its Listen channel errors) was never told:
-    // nothing was measured. A page whose listener stayed up FAILS.
-    const lost = [
-      ...m.log.console.filter((c) => c.t >= waitFrom - 30_000 && /Could not reach Cloud Firestore backend/.test(c.text ?? "")),
-      ...(m.log.sdkProbes ?? []).filter((p) => p.t >= waitFrom - 30_000),
-    ];
-    if (lost.length > 0) ctx.inconclusive(`Edit did not appear within 30 s, while the member's page's Firestore client had lost the emulator (${lost.length} sign(s) in the window): the role change never reached the page`);
+    const loss = unrecoveredListenerLoss(m, roleWriteAt);
+    if (loss) ctx.inconclusive(`Edit did not appear after the role write while this member's listener remained disconnected (${loss.signs} new sign(s), no later successful Listen response)`);
   }
   assert.ok(appeared, "Edit did not appear in the member's open viewer within 30 s of the role change");
   assert.equal(await m.page.evaluate(() => window.__a13), marker, "the member's page is the same page: no reload");
@@ -866,7 +866,7 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
 
   ctx.step("Private again: open editing is withdrawn with it, and the box and the link are gone");
   await pick("private");
-  assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null });
+  assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "making private withdraws open editing");
   await eventually(async () => (await openEdit.count()) === 0 && (await link.count()) === 0, { timeout: 10_000, message: "no #public-edit and no link while private" });
 
   ctx.step("expiry: a date a month out is stored as the end of that day; Clear removes it");

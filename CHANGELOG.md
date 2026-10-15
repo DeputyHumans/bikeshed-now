@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Distinguish revoked-reader responses from absent-document responses byte for byte, require fresh unrecovered listener failures before excusing a sharing observation, and add directional controls for team and folder removals, invitation contents, inherited rows and private editing.
+
 - Exercise CLI saved-sign-in revocation beside a shell token, already-dead credentials and immediate CI refusal; retain large-source change cursors and add directional controls for logout, replacement arguments, move destinations and wait timeouts.
 
 - Make reading-statistics E2E checks wait for the exact page-exit beacon in both stored records, and add independent controls for automated metrics, both activity filters, malformed beats and editor detail gates.

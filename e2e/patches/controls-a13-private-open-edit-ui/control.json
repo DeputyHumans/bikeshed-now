@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+  "what": "Render the link and open-edit checkbox for private documents.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^no link row and no #public-edit while private"
+  }
+}

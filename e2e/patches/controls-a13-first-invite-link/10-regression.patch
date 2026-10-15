@@ -1,0 +1,9 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -135,5 +135,5 @@
+       subject: `${inviterEmail} shared “${subject.title}” with you`,
+       body: React.createElement(Invite, props),
+-      text: inviteText(props),
++      text: inviteText({ ...props, url: origin }),
+     });
+   }
