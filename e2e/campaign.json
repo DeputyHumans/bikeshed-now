@@ -12432,7 +12432,7 @@
             "VITE_EXPORT_MARK_FOOTER": "E2E footer"
           }
         },
-        "command": "node e2e/run.mjs run --suite functional --spec a19-account.spec.mjs --app-env VITE_EXPORT_MARK_ENABLED --app-env \"VITE_EXPORT_MARK_LABEL=E2E marking\" --app-env \"VITE_EXPORT_MARK_FOOTER=E2E footer\"",
+        "command": "node e2e/run.mjs run --suite functional --spec a19-account.spec.mjs --app-env VITE_EXPORT_MARK_ENABLED=true --app-env \"VITE_EXPORT_MARK_LABEL=E2E marking\" --app-env \"VITE_EXPORT_MARK_FOOTER=E2E footer\"",
         "proofs": []
       },
       {

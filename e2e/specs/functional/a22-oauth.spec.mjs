@@ -66,7 +66,7 @@ import { idToken, listTokens, mintToken, openSession, bearerHttp } from "../../l
 import { approveViaApi, armingProbe, authorizeParams, consent, discover, exchangeCode, pkce, readArming, refresh, register, startReceiver } from "../../lib/oauth.mjs";
 import { openCrossSitePage } from "../../lib/browser.mjs";
 import { adminFor, closeAdmin, readDoc } from "../../lib/admin.mjs";
-import { assertHeaderMatrix, eventually } from "../../lib/assert.mjs";
+import { assertHeaderMatrix, eventually, settleStill } from "../../lib/assert.mjs";
 import { appendLedger } from "../../lib/ledger.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { REPO_ROOT } from "../../lib/paths.mjs";
@@ -728,7 +728,11 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     await u.goto(`/connect?${new URLSearchParams(refusedParams)}`);
     const goBack = card.getByRole("button", { name: "Go back to 127.0.0.1", exact: true });
     await goBack.waitFor({ state: "visible", timeout: ROUND_TRIP_MS });
-    await u.page.waitForLoadState("networkidle");
+    // Firebase listeners intentionally keep network activity alive. Observe
+    // the navigation/receiver state after the refusal rendered instead.
+    await settleStill(() => ({ url: u.page.url(), heard: receiver.heard() }), {
+      quietMs: 1000, deadlineMs: 5000, intervalMs: 50, what: "the refusal remains until a deliberate Go back",
+    });
     assert.equal(new URL(u.page.url()).pathname, "/connect", "the page did not leave by itself");
     assert.equal(receiver.heard(), false, "the receiver heard nothing before the button was pressed");
     await goBack.click();

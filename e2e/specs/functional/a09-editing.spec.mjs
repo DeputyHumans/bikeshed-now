@@ -890,9 +890,9 @@ async function commitAndMeasureLog(ctx) {
   let left = yBefore;
   await eventually(async () => {
     left = await readLiveLogs(target, docId);
-    return left === null;
+    return Object.keys(left ?? {}).length === 0;
   }, { timeout: 2_000, interval: 100, message: "the live log is cleared" }).catch(() => undefined);
-  Object.assign(liveLog, { measured: true, rules, before, left: left ? Object.keys(left).length : null, leftAfterMs: Date.now() - at, docId });
+  Object.assign(liveLog, { measured: true, rules, before, left: Object.keys(left ?? {}).length, leftAfterMs: Date.now() - at, docId });
   ctx.ev.json("live-log", liveLog);
 
   await leftEditor(o);
@@ -916,7 +916,7 @@ scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty wi
   precondition(liveLog.before > 0, `the live log held entries before the commit (${liveLog.before})`);
   ctx.step(`status/${liveLog.docId}/y: ${liveLog.before} entries before the commit, ${liveLog.left ?? 0} ${liveLog.leftAfterMs} ms after "Published v2."`);
   assert.ok(
-    liveLog.left === null,
+    liveLog.left === 0,
     `S8: the published draft's live log still holds ${liveLog.left} entries ${liveLog.leftAfterMs} ms after "Published v2."`,
   );
 });

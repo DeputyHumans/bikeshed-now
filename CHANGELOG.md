@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Judge retired live logs by entry count and observe OAuth return state without waiting for Firebase listeners to become network-idle; fix the default-marking matrix command.
+
 - Carry the supplied MCP link key through the final content transaction, recheck it after token rotation, and preserve the stricter upload editor gate after access revocation.
 
 - Let new presence sessions register disconnect cleanup before announcing themselves, while rechecking ownership so queued cleanup cannot remove another person.

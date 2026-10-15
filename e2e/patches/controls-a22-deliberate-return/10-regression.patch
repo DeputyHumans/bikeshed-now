@@ -1,0 +1,11 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -291,6 +291,8 @@
+   /** A dead request: say why, and offer the way back only if it is safe. */
+   const showInvalid = (result: ConsentInvalid) => {
+     clearAuthorizeRequest();
++    const autoBack = result.back ? safeNavigate(result.back, request?.redirect_uri) : null;
++    if (autoBack) setTimeout(() => window.location.assign(autoBack), 150);
+     setView({
+       kind: "invalid",
+       message: result.message || "This request can't be completed.",
