@@ -1,15 +1,11 @@
 --- a/functions/src/lib/presence.ts
 +++ b/functions/src/lib/presence.ts
-@@ -104,9 +104,10 @@
-     // ONE multi-path update, so the two mirrors can never disagree about a
-     // person: a window where `editAccess` still names somebody `presenceAccess`
-     // has dropped is a window where a revoked reader can still write.
-+    // e2e negative control (controls-c16-i14-mirror-merge): the mirrors are merged key by key instead of replaced, so a removed member keeps both.
-     await db.ref().update({
--      [`presenceAccess/${docId}`]: keyed(members),
--      [`editAccess/${docId}`]: edit,
-+      ...Object.fromEntries(Object.keys(keyed(members)).map((k) => [`presenceAccess/${docId}/${k}`, true])),
-+      ...Object.fromEntries(Object.keys(edit).map((k) => [`editAccess/${docId}/${k}`, true])),
-     });
-   } catch {
-     /* presence is best-effort and must never fail the request it rode in on */
+@@ -115,7 +115,7 @@
+         // Legacy nodes have no fence. Reject only a validated newer revision;
+         // the server alone writes these maps, and arbitrary keys stay visible.
+         if (typeof prior === "string" && /^\d{12}:\d{9}$/.test(prior) && prior > revision) return;
+-        return next;
++        return { ...current, ...next };
+       });
+     };
+     // Revoke writes before reads. Each node has its own ordering fence, so a

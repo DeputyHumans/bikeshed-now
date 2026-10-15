@@ -127,6 +127,7 @@ import {
   isValidDocId,
   membershipOf,
   persistDocMembership,
+  persistFolderMembership,
   recomputeSubtree,
   resolveFolderTarget,
   slugify,
@@ -841,8 +842,8 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
     return;
   }
 
-  const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
+  let beforeMembers = asArray(data.members);
+  let next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
 
   // Recompute EFFECTIVE membership rather than just writing the new grants:
   // otherwise a direct-sharing change silently drops every reader who had access
@@ -853,13 +854,13 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   const membership = await persistDocMembership(
     db(),
     ref,
-    {
-      ownerEmail: String(data.ownerEmail),
-      grants: next,
-      folderId: (data.folderId as string | null) ?? null,
+    (current) => {
+      beforeMembers = asArray(current.members);
+      next = applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta);
+      return { ...next };
     },
-    {},
-    (m) => {
+    (m, _before, previous) => {
+      beforeMembers = previous.members;
       const was = new Set(beforeMembers);
       const now = new Set(m.members);
       const added = m.members.filter((e) => !was.has(e));
@@ -1797,30 +1798,18 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
   }
 
   const ref = db().collection("folders").doc(folderId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as FolderAclData & {
-    name?: string;
-    viewers?: unknown;
-    editors?: unknown;
-    members?: unknown;
-  };
-  if (!canManageFolder(data, caller.emailLower)) {
-    res.status(403).end();
-    return;
-  }
-
-  const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-
-  await ref.set({ ...next, updatedAt: now() }, { merge: true });
+  // Ownership is immutable, but a missing/deleted folder must never be recreated.
+  const initial = await ref.get();
+  if (!initial.exists) { res.status(404).end(); return; }
+  if (!canManageFolder(initial.data() as FolderAclData, caller.emailLower)) { res.status(403).end(); return; }
+  const result = await persistFolderMembership(db(), ref, (current) => ({
+    ...applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta),
+  }));
+  if (!result) { res.status(404).end(); return; }
+  const { data, grants: next, membership: after, before } = result;
+  const beforeMembers = before.members;
   await recomputeSubtree(db(), folderId);
 
-  const fresh = await ref.get();
-  const after = membershipOf(fresh.data());
   const beforeSet = new Set(beforeMembers);
   const invitees: InviteTarget[] = after.members
     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
@@ -1943,12 +1932,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     await persistDocMembership(
       db(),
       ref,
-      {
-        ownerEmail: String(data.ownerEmail || ""),
-        grants: grantsOf(data),
-        folderId: target.id,
-      },
-      { folderId: target.id },
+      () => ({ folderId: target.id }),
       () =>
         fromFolder === target.id
           ? []
@@ -2027,12 +2011,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     await recomputeSubtree(db(), newParent);
   } else {
     for (const d of childDocs.docs) {
-      const dd = d.data();
-      await persistDocMembership(db(), d.ref, {
-        ownerEmail: String(dd.ownerEmail || ""),
-        grants: grantsOf(dd),
-        folderId: null,
-      });
+      await persistDocMembership(db(), d.ref);
     }
   }
 
@@ -2564,12 +2543,7 @@ async function refanTeam(teamId: string): Promise<number> {
     const ref = db().collection("docs").doc(id);
     const snap = await ref.get();
     if (!snap.exists) continue;
-    const d = snap.data() || {};
-    await persistDocMembership(db(), ref, {
-      ownerEmail: String(d.ownerEmail || ""),
-      grants: grantsOf(d),
-      folderId: (d.folderId as string | null) ?? null,
-    });
+    await persistDocMembership(db(), ref);
   }
   for (const id of folderIds) {
     await recomputeSubtree(db(), id);
@@ -2686,39 +2660,42 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
   }
 
   const ref = db().collection("teams").doc(teamId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const team = snap.data() as TeamAclData & { name?: string; members?: unknown };
-  if (!canManageTeam(team, caller.emailLower)) {
-    res.status(403).end();
-    return;
-  }
-
-  const before = asArray(team.members);
-  const set = new Set(before);
-  for (const e of remove.map(normalizeEmail)) {
-    // The owner is never removed: a team with no owner has no one who can fix it.
-    if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
-  }
-  for (const e of add.map(normalizeEmail)) if (e) set.add(e);
-  const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);
-
-  let admins = asArray(team.admins);
-  if (body?.admin && typeof body.admin === "object") {
-    const a = body.admin as { email?: unknown; isAdmin?: unknown };
-    const email = normalizeEmail(typeof a.email === "string" ? a.email : "");
-    if (email && members.includes(email)) {
-      const adminSet = new Set(admins);
-      if (a.isAdmin === true) adminSet.add(email);
-      else if (email !== String(team.ownerEmail || "").toLowerCase()) adminSet.delete(email);
-      admins = [...adminSet].sort();
+  const result = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      return { status: 404 as const };
     }
-  }
+    const team = snap.data() as TeamAclData & { name?: string; members?: unknown };
+    if (!canManageTeam(team, caller.emailLower)) {
+      return { status: 403 as const };
+    }
 
-  await ref.set({ members, admins, updatedAt: now() }, { merge: true });
+    const before = asArray(team.members);
+    const set = new Set(before);
+    for (const e of remove.map(normalizeEmail)) {
+      // The owner is never removed: a team with no owner has no one who can fix it.
+      if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
+    }
+    for (const e of add.map(normalizeEmail)) if (e) set.add(e);
+    const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);
+
+    let admins = asArray(team.admins).filter((email) => members.includes(email));
+    if (body?.admin && typeof body.admin === "object") {
+      const a = body.admin as { email?: unknown; isAdmin?: unknown };
+      const email = normalizeEmail(typeof a.email === "string" ? a.email : "");
+      if (email && members.includes(email)) {
+        const adminSet = new Set(admins);
+        if (a.isAdmin === true) adminSet.add(email);
+        else if (email !== String(team.ownerEmail || "").toLowerCase()) adminSet.delete(email);
+        admins = [...adminSet].sort();
+      }
+    }
+
+    tx.set(ref, { members, admins, updatedAt: now() }, { merge: true });
+    return { status: 200 as const, team, before, members, admins };
+  });
+  if (result.status !== 200) { res.status(result.status).end(); return; }
+  const { team, before, members, admins } = result;
 
   // Removing someone from a team must revoke their access everywhere the team
   // was granted, and adding someone must grant it. Both are the same recompute.

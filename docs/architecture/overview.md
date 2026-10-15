@@ -59,8 +59,9 @@ are stored lowercased as an invariant, and it is why teams expand server-side
 into emails rather than appearing in `members` as ids.
 
 The cost is write fan-out: sharing a folder, or removing someone from a team,
-recomputes every affected document. A single batched BFS handles it, parent
-before child. **A 50-person team granted on 200 documents is 200 writes.** For a
+recomputes every affected document. A single BFS visits parents before children;
+each node's transaction reads its current grants, parent and teams so concurrent
+changes cannot overwrite one another from stale snapshots. **A 50-person team granted on 200 documents is 200 writes.** For a
 small-team tool that is the right trade. At 10,000 documents it would not be,
 and the fix would be a job queue — stated here so nobody discovers it in
 production.

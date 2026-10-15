@@ -144,6 +144,10 @@ test("I14: the mirror is the membership, and a revoked write is denied", () => {
   fails(checkI14({ members, editorMembers: editors, presenceAccess: presence, editAccess: { ...edit, "r@x,io": true } }), /editAccess has extra r@x,io/);
   fails(checkI14({ members, editorMembers: editors, presenceAccess: { "o@x,io": true }, editAccess: edit }), /presenceAccess lacks e@x,io, v@x,io/);
   fails(checkI14({ members, editorMembers: editors, presenceAccess: presence, editAccess: edit, revokedWrites: [{ email: "r@x.io", verdict: "ALLOW" }] }), /r@x\.io was revoked, and a y write answered ALLOW/);
+  holds(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __revision: "000000000001:000000002" }, editAccess: edit }));
+  fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __revision: true }, editAccess: edit }), /invalid revision fence/);
+  fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, unknown: true }, editAccess: edit }), /extra unknown/);
+  fails(checkI14({ members, editorMembers: editors, presenceAccess: presence, editAccess: { ...edit, "o@x,io": false } }), /not a true access grant/);
 });
 
 test("I15: each event once, the counts as caused", () => {

@@ -1,10 +1,10 @@
 {
-  "what": "One server pause point in POST /folder-access (setFolderAccess), asking the stack's gate service whether to go on after the folder's grants are read and the request's delta applied to them, and before they are written. For a deterministic lost update between concurrent folder grants: C16b folder grants S18 (N grants on one folder, held after every one has read the grants, then let go one at a time). Its own helper (functions/src/lib/e2eFolderAccessGate.ts), so it applies alone or beside the other amplify sets, amplify-c16-access included",
+  "what": "Pause POST /folder-access before its membership transaction, outside pessimistic locks. Requests resume one at a time and each delta applies to current grants.",
   "gates": [
     {
       "name": "folder-access-before-write",
       "side": "server",
-      "where": "functions/src/index.ts setFolderAccess: after the folder is read, the caller authorized and the delta applied to the grants read, before ref.set writes them and recomputeSubtree runs",
+      "where": "functions/src/index.ts setFolderAccess: after ownership check, before persistFolderMembership starts its transaction",
       "key": "folderId"
     }
   ]

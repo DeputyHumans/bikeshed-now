@@ -1,12 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2698,7 +2698,8 @@
-   const set = new Set(before);
-   for (const e of remove.map(normalizeEmail)) {
-     // The owner is never removed: a team with no owner has no one who can fix it.
--    if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
-+    // e2e negative control (controls-c16-team-removal-ignored): a removal is accepted and ignored, so the removed member stays in the team and keeps every grant the team holds.
-+    if (e && e !== String(team.ownerEmail || "").toLowerCase()) void set;
-   }
-   for (const e of add.map(normalizeEmail)) if (e) set.add(e);
-   const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);
+@@ -2674,7 +2674,7 @@
+     const set = new Set(before);
+     for (const e of remove.map(normalizeEmail)) {
+       // The owner is never removed: a team with no owner has no one who can fix it.
+-      if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
++      if (e && e !== String(team.ownerEmail || "").toLowerCase()) void set;
+     }
+     for (const e of add.map(normalizeEmail)) if (e) set.add(e);
+     const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);

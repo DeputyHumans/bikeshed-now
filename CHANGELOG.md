@@ -18,6 +18,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Concurrent document, folder and team sharing changes preserve every successful
+  delta. Membership cascades retry changed dependencies, removed team admins
+  lose management rights, and invitations belong to the operation that added access.
+  Realtime access mirrors reject older writes, and public projections cannot
+  reappear from a stale snapshot after a document becomes private.
+
 - Competing version publishes upload into isolated immutable bundles. The
   committed version record selects the bytes served, downloaded, forked and
   edited, so a losing request cannot overwrite the winner's content.

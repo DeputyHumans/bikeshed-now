@@ -8,7 +8,7 @@
  * is refused, and joinShared ends every C-scenario INCONCLUSIVE there. The
  * plan prescribes writing the mirror the way functions/src/lib/presence.ts
  * syncPresenceAccess does, for run documents only. These cases cover:
- *   - mirrorUpdate against the product's own source (what a grant writes);
+ *   - mirrorUpdate as a legacy boolean fixture, distinct from the product revision fence;
  *   - mirrorWriteVerdict, the write's own narrow guard, request by request;
  *   - writeMirror end to end against a loopback stand-in database (one
  *     PATCH of the root, the admin's credential, a redacted trace row, the
@@ -76,7 +76,7 @@ function readerOf(rec = record(), extra = {}) {
 const findings = (target) => (existsSync(join(target.runDir, "findings.jsonl")) ? readFileSync(join(target.runDir, "findings.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 const key = (e) => e.toLowerCase().split(".").join(",");
 
-test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writes on a grant: one update, both nodes, keys lower-cased with dots as commas, no open-edit key", () => {
+test("mirrorUpdate stages a legacy access fixture: both nodes, email keys, no revision or open-edit key", () => {
   assert.deepEqual(mirrorUpdate(DOC, { members: ["Owner-MW@Example.test", P2, ""], editorMembers: [OWNER_EMAIL] }), {
     [`presenceAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true, [key(P2)]: true },
     [`editAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true },
@@ -85,19 +85,8 @@ test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writ
   for (const bad of ["", "a/b", "a.b", "a#b", "a[b", 7, null]) assert.throws(() => mirrorUpdate(bad, {}), TypeError, JSON.stringify(bad));
   for (const lists of [{ members: "x" }, { editorMembers: [1] }, { members: [null] }]) assert.throws(() => mirrorUpdate(DOC, lists), TypeError, JSON.stringify(lists));
 
-  // The product's source, so a change there shows here.
-  const presence = readFileSync(repo("functions/src/lib/presence.ts"), "utf8");
-  assert.ok(presence.includes('return email.toLowerCase().split(".").join(",");'), "presence.ts emailKey: lower case, dots as commas");
-  assert.ok(presence.includes("if (key.length > 0) out[key] = true;"), "presence.ts keyed(): an empty key left out");
-  assert.ok(/await db\.ref\(\)\.update\(\{\s*\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: edit,\s*\}\);/.test(presence), "presence.ts: ONE multi-path update of the two nodes");
-  assert.ok(presence.includes("if (publicEdit) edit[OPEN_EDIT_KEY] = true;"), "the open-edit key only with publicEdit");
-  const folders = readFileSync(repo("functions/src/lib/folders.ts"), "utf8");
-  assert.ok(folders.includes("await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);"), "the grant path (persistDocMembership) passes no publicEdit, so no open-edit key");
-  const twin = readFileSync(repo("scripts/lib/presence.mjs"), "utf8");
-  assert.ok(/\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: keyed\(editorMembers\),/.test(twin), "set-access.mjs's twin writes the same two nodes, when it can");
-  const setAccess = readFileSync(repo("scripts/set-access.mjs"), "utf8");
-  assert.ok(setAccess.includes("await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);"), "set-access.mjs mirrors members and editorMembers");
-
+  // This opt-in harness repair writes a legacy boolean fixture. The product
+  // uses revision-fenced transactions; its ordering is tested in presence-races.
   assert.deepEqual(MIRROR_MODES, ["stop", "write-missing"]);
   const live = readFileSync(repo("e2e/lib/live.mjs"), "utf8");
   assert.ok(live.includes(`const MIRROR_MODES = Object.freeze(${JSON.stringify(MIRROR_MODES).replace(/,/g, ", ")});`), "live.mjs's copy of MIRROR_MODES is grant.mjs's");

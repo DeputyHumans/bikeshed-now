@@ -2,254 +2,18 @@
 // Concurrency C16a–d: concurrent sharing changes — grants, folder + document + team, team admins, visibility against a revoke — leave every membership set what was asked (I16) and the RTDB mirrors equal to the record, a revoked editor's live write refused (I14) (SPEC §2, §13, §16, §18).
 
 /**
- * THE SCENARIOS (each n: [2, 5, 10, 20]; races and gated cases K trials per
- * N by the plan, serial positive controls 2/1/1/1). Every case is HTTP and
- * RTDB REST only: no browser.
+ * Local sharing races and serial controls (SPEC §4, §13, §14, §16, §18).
+ * S18/S19/S20 and X-c16-access-1/-2/-3 are regression assertions, not TODOs.
+ * Natural races need an unpatched stack. The amplified run pauses outside
+ * Firestore transactions, since holding pessimistic document locks would
+ * deadlock an N-way barrier. Unit tests separately hold actual snapshots and
+ * verify conflict retries. Cascade discovery and post-commit mirror gates
+ * still force older operations to finish after newer operations.
  *
- * C16a  N concurrent grants. One owner, one document, N grantees; request i
- *       is the owner's POST /access adding grantee i (roles cycle editor,
- *       viewer, approver, suggester).
- *         race, S18 (SYNC-T)  the N requests fired from N worker threads at
- *              one instant (lib/sync.mjs syncHttp: spread ≤ 15 ms and the
- *              overlap proof, or INCONCLUSIVE), after N concurrent
- *              GET /access warmed N function workers. Judged on S18's own
- *              oracle; I14 is measured only (a step and a measure row).
- *         race, mirrors (SYNC-T)  the same race, judged on I14, which is
- *              X-c16-access-1's own oracle; I16 against what was asked is
- *              measured only. One race shows both defects in some trials
- *              and S18 alone in others, and a case carries one defect, so
- *              each defect has a race of its own and neither verdict
- *              depends on whether the other defect happened to occur.
- *         S18 (SYNC-P, amplify-c16-access)  the N requests held at
- *              doc-membership-before-write (persistDocMembership, after
- *              every one has read the grants) and let go one at a time,
- *              each answered before the next (so each writes its record
- *              and its mirrors before the next writes: the lost update is
- *              the only race left; mirrors written out of order are C16d's
- *              mirror-order case).
- *         serial positive control  the same requests one after another.
- *       S18's own oracle: I16 against what was asked (the record's grant
- *       lists and its four sets equal computeMembership over every grant
- *       asked for), and every grantee reads the document (200). Other
- *       oracles: every request answered 200; I16 closure (the record equals
- *       computeMembership over what it stores); I14 (presenceAccess and
- *       editAccess equal members and editorMembers); I11 (each grantee
- *       invited exactly once, the owner never).
- *
- * C16b  A folder grant, a document grant and team additions at once. The
- *       document D is filed in the owner's folder F; N−2 teams of the owner
- *       are granted on D (viewer) beforehand. Request 0 is POST
- *       /folder-access giving a person editor on F, request 1 POST /access
- *       giving another viewer on D, requests 2… POST /team-members adding a
- *       person to team k. Every one of them reaches D's membership: the
- *       folder's through recomputeSubtree, the others through
- *       persistDocMembership.
- *         race (SYNC-T)  as C16a, the workers warmed by GET /access,
- *              GET /folder-access and a refused POST /team-members.
- *         S18 stale parent (SYNC-P)  the document-side writers (the grant
- *              and every team re-fan) held at doc-membership-before-write,
- *              having read F before the folder grant; the folder grant then
- *              runs to its answer; then they are let go one at a time.
- *         S18 stale grants (SYNC-P)  the folder's cascade held at
- *              subtree-docs-before-write, having read D's grants; the
- *              document-side writers run to their answers one after
- *              another; then it is let go.
- *         folder grantee's invitation (SYNC-P)  the folder's cascade held
- *              at subtree-before-docs-read, F written and D not yet read;
- *              the document-side writers run one after another; then it is
- *              let go. Nothing is lost in this order (the cascade reads D
- *              afresh), but the document grant computes its invitees from
- *              D's members as it read them, before the cascade, against a
- *              membership that folds in F's new members: the folder grantee
- *              is invited to the document too, which neither serial order
- *              does (X-c16-access-2; both serial orders are run below). Its
- *              own oracle: the folder grantee's mailbox holds the folder's
- *              invitation only. The same holds for a person a team re-fan
- *              brings in while the document grant is in flight (seen at
- *              N=5). So the race and the S18 cases judge the mailboxes of
- *              everyone who reaches D through F or a team leniently (their
- *              own invitation once, a document invitation at most once,
- *              nothing else; each recorded), and the serial controls judge
- *              every mailbox exactly.
- *         serial positive control  the same requests one after another,
- *              the folder grant first.
- *         serial positive control, the document side first  the document
- *              grant and the team additions, then the folder grant: the
- *              serial order nearest the gated invitation case, where the
- *              document side finishes before the cascade reaches D.
- *       S18's own oracle: I16 closure and against what was asked, on D and
- *       on F, and every new person reads D. Others: 200s, each team record
- *       what was asked, I14 on D, I11 (the document grantee's invitation
- *       once, the owner none, the others as above).
- *       Folder grants. The owner's folder F holding document D; N grantees;
- *       request i is the owner's POST /folder-access adding grantee i on F
- *       (roles cycle as in C16a). Two writers of F's grant lists:
- *       setFolderAccess reads F, applies its delta to the grants it read and
- *       writes them, then recomputeSubtree re-fans F and D.
- *         race (SYNC-T)  warmed by N GET /folder-access.
- *         S18 (SYNC-P, amplify-c16-folder-access)  the N requests held at
- *              folder-access-before-write (each has read F's grants and
- *              applied its delta), let go one at a time, each answered
- *              before the next.
- *         serial positive control  one after another.
- *       S18's own oracle: I16 against what was asked on F (its grant lists
- *       and sets) and on D (its sets, F's asked membership as its parent),
- *       and every grantee reads D (200). Others: 200s, I16 closure on F and
- *       D, I14 on D, I11 (each grantee invited once, to the folder; the
- *       owner never). In the race I11 is measured only: setFolderAccess
- *       computes its invitees from a FRESH read of F after its own cascade,
- *       which another request's write can change in either direction, so
- *       who is invited there is an outcome of the race (each grantee's
- *       folder invitations are recorded), while the gated case and the
- *       serial control judge it exactly.
- *         folder invitations (SYNC-P, amplify-c16-access)  F also holds an
- *              empty folder C, the cascade's last stop. Grant 1 is held at
- *              subtree-before-docs-read keyed on C (it has written F's grants
- *              and sets and re-fanned D, and not yet read F afresh); grants
- *              2…N then run to their answers one after another, each let
- *              past C alone (releaseCaller), each reading F after the one
- *              before it wrote, so nothing is lost; then grant 1 goes on.
- *              Its fresh read of F holds every later grantee, none of whom
- *              was in the members it read at its start, so it invites them
- *              all a second time (X-c16-access-3). Own oracle: I11, each
- *              grantee's mailbox exactly one folder invitation; the
- *              membership oracles are others. Serial positive control: the
- *              same grants, one after another, with C.
- *
- * C16c  N team admins. The owner and N−1 admins of one team T, granted on
- *       the owner's document D (viewer); admin i adds person i.
- *         race (SYNC-T)  warmed by refused POST /team-members.
- *         S19 (SYNC-P)  the N additions held at team-members-after-read
- *              (every one has read the team) and let go one at a time, each
- *              answered before the next.
- *         serial positive control  one after another.
- *       S19's own oracle: the team record holds everyone asked, D's sets
- *       equal computeMembership over the team ASKED for, and every added
- *       person reads D. Others: 200s, the admins unchanged, I16 closure (D's
- *       sets against the team as STORED: a lost write to teams/{t} cannot
- *       break it, since D is re-fanned from whatever the team holds; only
- *       re-fan writes of D landing out of order with the team's can, which
- *       is S18's read-then-write in refanTeam and persistDocMembership),
- *       I14 on D, I11 (each added person invited once, by the admin who
- *       added them).
- *       Lost removal. The same team, granted EDITOR on D, also holds a
- *       member who is no admin, the leaver; the leaver's y write is allowed
- *       first. The owner removes the leaver while the N−1 admins each add
- *       one person.
- *         S19 lost removal (SYNC-P)  the N requests held at
- *              team-members-after-read (each has read the team, the leaver
- *              in it); the removal let go alone first (releaseCaller) and
- *              answered; then the additions one at a time, each answered
- *              before the next. Each addition writes the members it read.
- *         serial positive control  the removal, then the additions.
- *       S19's own oracle: the team holds exactly what was asked (the leaver
- *       gone, every joiner in), D's sets equal computeMembership over that
- *       team, every joiner reads D and the leaver gets the absent id's 404
- *       (SPEC §18 l.1954: "Removing someone from a team must revoke access
- *       everywhere the team was granted"), and the leaver's own-token y
- *       write is DENIED (I14's revoked-write leg). Others: 200s, the admins
- *       unchanged, I16 closure, I14's mirror equality, I11 (each joiner
- *       invited once by its admin; the leaver's mailbox holds only its two
- *       set-up invitations).
- *
- * C16d  Visibility against a revoke. The owner and N−1 editors, shared in one
- *       request; each editor's y write is allowed first. The owner removes
- *       every editor (one POST /access) while making the document unlisted
- *       (POST /visibility).
- *         race (SYNC-T)  the two requests at one instant.
- *         S20 (SYNC-P)  POST /visibility held at visibility-before-mirror
- *              (it read the members, editors included, and wrote its
- *              record); the removal runs to its answer; then it is let go.
- *         serial positive control  the removal, then the visibility change.
- *       S20's own oracle: I14 — presenceAccess and editAccess equal the
- *       record's members and editorMembers, and every revoked editor's y
- *       write (lib/rtdb.mjs rtdbAs, the editor's own ID token as ?auth=,
- *       never a Bearer header) is DENIED. Others: 200s, I16 (the members are
- *       the owner alone), each removed editor's read is the absent id's 404,
- *       the owner's own y write is allowed, the document is unlisted.
- *       Mirror order (SYNC-P)  the same revocation against a concurrent
- *              GRANT instead: the owner's POST /access adding a newcomer is
- *              held at doc-mirror-before-write (its record written, its
- *              mirrors not yet); the owner's removal of every editor then
- *              reads that record, writes its own, is let past the same
- *              pause point alone (releaseCaller) and answers; then the grant
- *              writes the mirrors it computed. Nothing is lost in the
- *              record, but persistDocMembership writes the mirrors from the
- *              membership its own request computed, after its batch, with
- *              nothing ordering them against another request's, so the
- *              revoked editors are back in editAccess (X-c16-access-1).
- *              Its own oracle: I14 as above. Serial positive control: the
- *              grant, then the removal.
- *       S18 lost revoke (SYNC-P)  the same grant and removal, the grant held
- *              EARLIER, at doc-membership-before-write (it has read the
- *              grants, every editor in them, and not written); the removal
- *              reads the same record, is let past that pause point alone
- *              (releaseCaller), writes its record and mirrors and answers;
- *              then the grant writes the grant lists it read, every editor
- *              back IN THE RECORD. S18's own oracle: I16 against what was
- *              asked (the owner and the newcomer; each removed editor reads
- *              the absent id's 404) and every revoked editor's y write
- *              DENIED. Others: 200s, I16 closure, I14's mirror equality,
- *              the owner's y write, I11 (the newcomer invited once). Serial
- *              positive controls: the removal, then the grant (the order
- *              the gate lets them write in), and the mirror order's.
- *
- * STACKS. Every SYNC-T race needs an UNPATCHED product ("!gates", as c04's
- * free-running races): on a stack built with an amplify set even an unarmed
- * pause point is a loopback request to the gate service, and each of this
- * unit's sits inside a window a race measures (doc-membership-before-write
- * between persistDocMembership's reads and its batch, team-members-after-read
- * between the team read and its write, doc-mirror-before-write between the
- * record and its mirrors, visibility-before-mirror between the record and the
- * stale mirror write). The gated cases need the gate service and the amplify
- * sets; the serial controls run on either. So the file runs twice, and each
- * run SKIPS what the other runs, with the capability as the reason:
- *   node e2e/run.mjs run --suite concurrency --spec c16-access.spec.mjs \
- *     --n 2 --trials 2
- *   node e2e/run.mjs run --suite concurrency --spec c16-access.spec.mjs \
- *     --patches amplify-c16-access --patches amplify-c16-folder-access \
- *     --n 2 --trials 2
- * A held request is let go well inside the Hosting emulator's 60 s cut-off;
- * one that got Hosting's 504 instead is the stack's answer, not the
- * product's, and the case is INCONCLUSIVE. A race reserves memory for its
- * warm-up and its burst first (lib/workers.mjs admitWorkers), and warms each
- * racer's socket on the static file, never on a function.
- *
- * SPEC (docs/architecture/spec.md):
- *   §2 POST /access (l. 311–317) "Owner-only. Applies deltas with set
- *     semantics … expands team grants, folds in the parent folder chain, and
- *     writes the four grant lists … the four effective sets … Syncs the
- *     presence mirror (§16)"; POST /folder-access (l. 400–401) "same delta
- *     shape as /access; owner-only; cascade-recomputes the whole subtree".
- *   §13 (l. 1261–1268) "Inheritance is denormalized, not resolved at read
- *     time: … members = union(suggesterMembers, self viewers, parent.members)";
- *     (l. 1287–1288) "Any folder-share change or move re-fans the affected
- *     subtree server-side".
- *   §16 (l. 1529–1531) "presenceAccess/{docId}/{emailKey} is written by …
- *     syncPresenceAccess(docId, members) as a whole-node set() — an atomic
- *     replace, so revocations propagate"; (l. 1565–1566) "Writes to the
- *     shared log are gated by editAccess/{docId}, a second mirror, of
- *     editorMembers".
- *   §13 (l. 1298–1300) "Filing is sharing, and it is silent … invitations go
- *     out only when sharing itself changes"; §14 (l. 1364) "invitation (a new
- *     grant, never a re-grant)".
- *   §18 (l. 1919–1922) grants: the server "expands them at write time into
- *     the flat effective sets" (the closure oracles; a lost team write leaves
- *     this sentence true); (l. 1948–1949) "POST /team-members (add / remove,
- *     admin-gated)" (the add and remove contract S19 breaks); (l. 1954–1955)
- *     "Removing someone from a team must revoke access everywhere the team
- *     was granted" (the lost removal).
- *   ADR 0006 "recomputed server-side whenever anything that feeds them
- *     changes … Revocation correctness depends entirely on every path
- *     recomputing".
- *
- * In a `defect:` case only that defect's own oracle is an AssertionError (a
- * TODO); every other oracle that fails there is a plain error, a FAIL, so one
- * defect never hides another failure. A failed sync precondition (a spread
- * over 15 ms, no overlap, a gate that never held its callers) is
- * INCONCLUSIVE, never FAIL. Adding people sends invitations, so every case is
- * LOCAL, with its email effects; POST /access, /folder-access, /team and
- * /team-members are refused on production by the guard anyway.
+ * Run this file on both an unpatched stack and one with amplify-c16-access
+ * plus amplify-c16-folder-access. Serial cases run on either. Failed overlap
+ * or gate preconditions are INCONCLUSIVE. Adding people sends invitations,
+ * so every case is local and declares its email effects.
  */
 
 import assert from "node:assert/strict";
@@ -301,7 +65,12 @@ const settled = (p) => p.then((value) => ({ ok: true, value }), (error) => ({ ok
 const emailOf = (s) => String(s.account.email).toLowerCase();
 const tagOf = () => `${runTag(target.runId)} ${rand4()}`;
 const sorted = (xs) => [...xs].sort();
-const keysOf = (o) => (o && typeof o === "object" ? Object.keys(o).sort() : []);
+const keysOf = (o) => {
+  if (!o || typeof o !== "object") return [];
+  if (o.__revision !== undefined) assert.match(o.__revision, /^\d{12}:\d{9}$/, "the reserved mirror revision is a timestamp fence");
+  for (const [key, value] of Object.entries(o)) if (key !== "__revision") assert.equal(value, true, `${key} is an access grant`);
+  return Object.keys(o).filter((key) => key !== "__revision").sort();
+};
 const asSet = (keys) => Object.fromEntries(keys.map((k) => [k, true]));
 const slug = (s) => String(s).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
 /** The invitation's subject, every kind (functions/src/email/notify.ts sendInvitations). */
@@ -778,7 +547,6 @@ scenario("C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, ea
   effects: ACCESS_MAIL,
   needs: ["mailpit", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -787,7 +555,7 @@ scenario("C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, ea
   await warm(ctx, s.reqs.map(warmCall), "GET /access");
   const { rows, run } = await fire(ctx, s.reqs, "C16a race S18");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16a(ctx, s, rows, "C16a race S18", { defect: "S18", own: "intent", measuredOnly: "mirror" });
+  await judgeC16a(ctx, s, rows, "C16a race S18", { defect: null, own: "intent", measuredOnly: "mirror" });
 });
 
 scenario("C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged", {
@@ -795,7 +563,6 @@ scenario("C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access
   effects: ACCESS_MAIL,
   needs: ["mailpit", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "X-c16-access-1",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -804,15 +571,14 @@ scenario("C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access
   await warm(ctx, s.reqs.map(warmCall), "GET /access");
   const { rows, run } = await fire(ctx, s.reqs, "C16a race mirrors");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16a(ctx, s, rows, "C16a race mirrors", { defect: "X-c16-access-1", own: "mirror", measuredOnly: "intent" });
+  await judgeC16a(ctx, s, rows, "C16a race mirrors", { defect: null, own: "mirror", measuredOnly: "intent" });
 });
 
-scenario("C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)", {
+scenario("C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)", {
   tiers: LOCAL,
   effects: ACCESS_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -824,13 +590,13 @@ scenario("C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee
     await g.hold(gate, { key: s.docId });
     pending = sendAll(s.reqs);
     const h = await held(ctx, g, gate, s.reqs.length, s.docId, pending);
-    ctx.step(`all ${s.reqs.length} grants are held in persistDocMembership, each having read the grants (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
+    ctx.step(`all ${s.reqs.length} grants are held in persistDocMembership, before its membership transaction (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
     await releaseInTurn(ctx, g, gate, s.docId, pending);
   } finally {
     await releaseAll(g, [gate]);
   }
   const rows = await rowsOf(ctx, pending, "C16a S18");
-  await judgeC16a(ctx, s, rows, "C16a S18", { defect: "S18" });
+  await judgeC16a(ctx, s, rows, "C16a S18", { defect: null });
 });
 
 scenario("C16a serial positive control: the same N POST /access one after another leave every grant in the record and every grantee reading the document (I16), the mirrors equal to the record (I14), and each grantee invited once (I11)", {
@@ -968,7 +734,6 @@ scenario("C16b folder + document + team grants (SYNC-T): a folder grant, a docum
   effects: ALL_MAIL,
   needs: ["mailpit", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -977,15 +742,14 @@ scenario("C16b folder + document + team grants (SYNC-T): a folder grant, a docum
   await warm(ctx, s.reqs.map(warmCall), "GET /folder-access, GET /access and refused POST /team-members, one per racing request");
   const { rows, run } = await fire(ctx, s.reqs, "C16b race");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16b(ctx, s, rows, "C16b race", { defect: "S18", mail: "tolerant" });
+  await judgeC16b(ctx, s, rows, "C16b race", { defect: null, mail: "tolerant" });
 });
 
-scenario("C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership after reading the folder, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)", {
+scenario("C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)", {
   tiers: LOCAL,
   effects: ALL_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -999,7 +763,7 @@ scenario("C16b S18 stale parent (SYNC-P): the document grant and every team re-f
     await g.hold(gate, { key: s.docId });
     pending = sendAll(docSide);
     await held(ctx, g, gate, docSide.length, s.docId, pending);
-    ctx.step(`the ${docSide.length} document-side writer(s) are held in persistDocMembership, having read the folder; the folder grant runs to its answer`);
+    ctx.step(`the ${docSide.length} document-side writer(s) are held in persistDocMembership, before their membership transactions; the folder grant runs to its answer`);
     const f = answered(await s.folderReq.send(), "the folder grant (POST /folder-access)");
     folderRow = { name: s.folderReq.name, status: f.status, json: f.json };
     ctx.step(`the folder grant answered ${f.status}; let the document-side writers go one at a time, each answered before the next`);
@@ -1008,15 +772,14 @@ scenario("C16b S18 stale parent (SYNC-P): the document grant and every team re-f
     await releaseAll(g, [gate]);
   }
   const rows = [folderRow, ...(await rowsOf(ctx, pending, "C16b stale parent"))];
-  await judgeC16b(ctx, s, rows, "C16b stale parent", { defect: "S18", mail: "tolerant" });
+  await judgeC16b(ctx, s, rows, "C16b stale parent", { defect: null, mail: "tolerant" });
 });
 
-scenario("C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after reading the document's grants, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)", {
+scenario("C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)", {
   tiers: LOCAL,
   effects: ALL_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1030,14 +793,14 @@ scenario("C16b S18 stale grants (SYNC-P): the folder grant's cascade held in rec
     await g.hold(gate, { key: s.F.folderId });
     pending = sendAll([s.folderReq]);
     await held(ctx, g, gate, 1, s.F.folderId, pending);
-    ctx.step(`the folder grant's cascade is held in recomputeSubtree, having read ${s.docId}'s grants; the ${docSide.length} document-side writer(s) run one after another`);
+    ctx.step(`the folder grant's cascade is held in recomputeSubtree, before recomputing ${s.docId}; the ${docSide.length} document-side writer(s) run one after another`);
     docRows = await sendSerially(ctx, docSide, "C16b stale grants, the document side");
     await g.release(gate);
   } finally {
     await releaseAll(g, [gate]);
   }
   const rows = [...(await rowsOf(ctx, pending, "C16b stale grants, the folder grant")), ...docRows];
-  await judgeC16b(ctx, s, rows, "C16b stale grants", { defect: "S18", mail: "tolerant" });
+  await judgeC16b(ctx, s, rows, "C16b stale grants", { defect: null, mail: "tolerant" });
 });
 
 scenario("C16b folder grantee's invitation (SYNC-P): the folder grant's cascade held after writing the folder and before reading its documents, the document grant and every team addition then answered one after another, then the cascade goes on; the folder grantee is invited once, to the folder only (I11), as in every serial order", {
@@ -1045,7 +808,6 @@ scenario("C16b folder grantee's invitation (SYNC-P): the folder grant's cascade 
   effects: ALL_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "X-c16-access-2",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1066,7 +828,7 @@ scenario("C16b folder grantee's invitation (SYNC-P): the folder grant's cascade 
     await releaseAll(g, [gate]);
   }
   const rows = [...(await rowsOf(ctx, pending, "C16b folder invitation, the folder grant")), ...docRows];
-  await judgeC16b(ctx, s, rows, "C16b folder invitation", { defect: "X-c16-access-2", mail: "own" });
+  await judgeC16b(ctx, s, rows, "C16b folder invitation", { defect: null, mail: "own" });
 });
 
 scenario("C16b serial positive control: the same folder grant, document grant and team additions one after another leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)", {
@@ -1179,7 +941,6 @@ scenario("C16b folder grants (SYNC-T): the owner's N POST /folder-access on one 
   effects: FOLDER_MAIL,
   needs: ["mailpit", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1188,15 +949,14 @@ scenario("C16b folder grants (SYNC-T): the owner's N POST /folder-access on one 
   await warm(ctx, s.reqs.map(warmCall), "GET /folder-access");
   const { rows, run } = await fire(ctx, s.reqs, "C16b folder race");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16bFolder(ctx, s, rows, "C16b folder race", { defect: "S18", mail: "measured" });
+  await judgeC16bFolder(ctx, s, rows, "C16b folder race", { defect: null, mail: "measured" });
 });
 
-scenario("C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held after every one has read the folder's grants and before any writes them, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)", {
+scenario("C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)", {
   tiers: LOCAL,
   effects: FOLDER_MAIL,
   needs: ["mailpit", ...FOLDER_GATED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1208,13 +968,13 @@ scenario("C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on 
     await g.hold(gate, { key: s.F.folderId });
     pending = sendAll(s.reqs);
     const h = await held(ctx, g, gate, s.reqs.length, s.F.folderId, pending);
-    ctx.step(`all ${s.reqs.length} folder grants are held in setFolderAccess, each having read ${s.F.folderId}'s grants (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
+    ctx.step(`all ${s.reqs.length} folder grants are held in setFolderAccess, before its folder membership transaction (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
     await releaseInTurn(ctx, g, gate, s.F.folderId, pending);
   } finally {
     await releaseAll(g, [gate]);
   }
   const rows = await rowsOf(ctx, pending, "C16b folder S18");
-  await judgeC16bFolder(ctx, s, rows, "C16b folder S18", { defect: "S18" });
+  await judgeC16bFolder(ctx, s, rows, "C16b folder S18", { defect: null });
 });
 
 scenario("C16b folder grants serial positive control: the same N POST /folder-access one after another leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, the mirrors equal to the record (I14), and each invited once (I11)", {
@@ -1231,12 +991,11 @@ scenario("C16b folder grants serial positive control: the same N POST /folder-ac
   await judgeC16bFolder(ctx, s, rows, "C16b folder serial");
 });
 
-scenario("C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order", {
+scenario("C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order", {
   tiers: LOCAL,
   effects: FOLDER_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "X-c16-access-3",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1252,7 +1011,7 @@ scenario("C16b folder invitations (SYNC-P): the owner's first folder grant held 
     first = sendAll([s.reqs[0]]);
     const h1 = await held(ctx, g, gate, 1, key, first);
     const firstCaller = h1.callers[0]?.caller;
-    ctx.step(`${s.reqs[0].name} wrote ${s.F.folderId}'s grants and sets and re-fanned ${s.docId}; its cascade is held at the child folder, before its fresh read of the folder; the other ${s.reqs.length - 1} grant(s) run to their answers one after another, each let past the child alone`);
+    ctx.step(`${s.reqs[0].name} wrote ${s.F.folderId}'s grants and sets and re-fanned ${s.docId}; its cascade is held at the child folder, before sending its invitations; the other ${s.reqs.length - 1} grant(s) run to their answers one after another, each let past the child alone`);
     for (const q of s.reqs.slice(1)) {
       const p = sendAll([q]);
       rest.push(...p);
@@ -1263,13 +1022,13 @@ scenario("C16b folder invitations (SYNC-P): the owner's first folder grant held 
       if (rel.caller !== caller) ctx.inconclusive(`the sync precondition did not hold: releasing ${q.name} alone released ${rel.caller}`);
       await rowsOf(ctx, p, `C16b folder invitations, ${q.name}`);
     }
-    ctx.step(`every later grant answered; let ${s.reqs[0].name} go on to its fresh read of the folder`);
+    ctx.step(`every later grant answered; let ${s.reqs[0].name} send its invitations`);
     await g.release(gate);
   } finally {
     await releaseAll(g, [gate]);
   }
   const rows = [...(await rowsOf(ctx, first, "C16b folder invitations, the first grant")), ...(await rowsOf(ctx, rest, "C16b folder invitations, the others"))];
-  await judgeC16bFolder(ctx, s, rows, "C16b folder invitations", { defect: "X-c16-access-3", mail: "own" });
+  await judgeC16bFolder(ctx, s, rows, "C16b folder invitations", { defect: null, mail: "own" });
 });
 
 scenario("C16b folder invitations serial positive control: the same N POST /folder-access on a folder holding a document and an empty child folder, one after another, leave every grant in the folder's record, every set what was asked (I16), every grantee reading the document, the mirrors equal to the record (I14), and each grantee invited once, to the folder (I11)", {
@@ -1354,7 +1113,6 @@ scenario("C16c N team admins (SYNC-T): the owner and N−1 admins of one team ea
   effects: TEAM_MAIL,
   needs: ["mailpit", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "S19",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1363,15 +1121,14 @@ scenario("C16c N team admins (SYNC-T): the owner and N−1 admins of one team ea
   await warm(ctx, s.reqs.map(warmCall), "refused POST /team-members, one per admin");
   const { rows, run } = await fire(ctx, s.reqs, "C16c race");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16c(ctx, s, rows, "C16c race", { defect: "S19" });
+  await judgeC16c(ctx, s, rows, "C16c race", { defect: null });
 });
 
-scenario("C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)", {
+scenario("C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)", {
   tiers: LOCAL,
   effects: TEAM_MAIL,
   needs: ["mailpit", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S19",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1383,13 +1140,13 @@ scenario("C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team
     await g.hold(gate, { key: s.team.teamId });
     pending = sendAll(s.reqs);
     const h = await held(ctx, g, gate, s.reqs.length, s.team.teamId, pending);
-    ctx.step(`all ${s.reqs.length} additions are held in manageTeamMembers, each having read the team (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
+    ctx.step(`all ${s.reqs.length} additions are held in manageTeamMembers, before its membership transaction (seq ${h.callers.map((c) => c.seq).join(", ")}); let go one at a time, each answered before the next`);
     await releaseInTurn(ctx, g, gate, s.team.teamId, pending);
   } finally {
     await releaseAll(g, [gate]);
   }
   const rows = await rowsOf(ctx, pending, "C16c S19");
-  await judgeC16c(ctx, s, rows, "C16c S19", { defect: "S19" });
+  await judgeC16c(ctx, s, rows, "C16c S19", { defect: null });
 });
 
 scenario("C16c serial positive control: the same N additions to one team one after another; the team holds everyone added, every one of them reads the document the team is granted on (I16), the mirrors equal the record (I14), and each is invited once (I11)", {
@@ -1489,12 +1246,11 @@ async function judgeC16cRemoval(ctx, s, rows, label, { defect = null } = {}) {
   verdict({ defect, others, own });
 }
 
-scenario("C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document", {
+scenario("C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document", {
   tiers: LOCAL,
   effects: TEAM_MAIL,
   needs: ["mailpit", "rtdb-rules", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S19",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1514,7 +1270,7 @@ scenario("C16c S19 lost removal (SYNC-P): the owner removes a member from a team
     const all = await held(ctx, g, gate, 1 + s.additions.length, key, [...first, ...rest]);
     const addCallers = all.callers.filter((c) => c.caller !== removalCaller);
     if (!removalCaller || addCallers.length !== s.additions.length) ctx.inconclusive(`the sync precondition did not hold: the removal and ${s.additions.length} addition(s) held as distinct callers at ${gate} (${JSON.stringify(all.callers.map((c) => c.caller))})`);
-    ctx.step(`the removal and the ${s.additions.length} addition(s) are held in manageTeamMembers, each having read the team with the leaver in it; let the removal go alone`);
+    ctx.step(`the removal and the ${s.additions.length} addition(s) are held in manageTeamMembers, before its team membership transaction; let the removal go alone`);
     const rel = await g.releaseCaller(gate, { key, caller: removalCaller });
     if (rel.caller !== removalCaller) ctx.inconclusive(`the sync precondition did not hold: releasing the removal alone released ${rel.caller}`);
     removed = await rowsOf(ctx, first, "C16c lost removal, the removal");
@@ -1524,7 +1280,7 @@ scenario("C16c S19 lost removal (SYNC-P): the owner removes a member from a team
     await releaseAll(g, [gate]);
   }
   const rows = [...removed, ...(await rowsOf(ctx, rest, "C16c lost removal, the additions"))];
-  await judgeC16cRemoval(ctx, s, rows, "C16c lost removal", { defect: "S19" });
+  await judgeC16cRemoval(ctx, s, rows, "C16c lost removal", { defect: null });
 });
 
 scenario("C16c lost removal serial positive control: the owner's removal of a member from a team granted editor on a document, then the N−1 admins' additions one after another; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), every added person reads the document, and each is invited once (I11)", {
@@ -1620,7 +1376,6 @@ scenario("C16d visibility vs revoke (SYNC-T): the owner removes every editor whi
   effects: ACCESS_MAIL,
   needs: ["mailpit", "rtdb-rules", ...UNPATCHED],
   n: [2, 5, 10, 20],
-  defect: "S20",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1630,7 +1385,7 @@ scenario("C16d visibility vs revoke (SYNC-T): the owner removes every editor whi
   await warm(ctx, [s.remove, s.unlist].map(warmCall), "GET /access and a refused POST /visibility");
   const { rows, run } = await fire(ctx, [s.remove, s.unlist], "C16d race");
   requireConclusive(ctx, { spread: run, overlap: run.overlap });
-  await judgeC16d(ctx, s, rows, "C16d race", { defect: "S20" });
+  await judgeC16d(ctx, s, rows, "C16d race", { defect: null });
 });
 
 scenario("C16d S20 (SYNC-P): POST /visibility held after reading the members (the editors among them) and writing its record, the removal of every editor then answered, then the visibility change rewrites the mirrors; they still equal the record and every revoked editor's live write is refused (I14)", {
@@ -1638,7 +1393,6 @@ scenario("C16d S20 (SYNC-P): POST /visibility held after reading the members (th
   effects: ACCESS_MAIL,
   needs: ["mailpit", "rtdb-rules", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S20",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1661,7 +1415,7 @@ scenario("C16d S20 (SYNC-P): POST /visibility held after reading the members (th
     await releaseAll(g, [gate]);
   }
   const rows = [removed, ...(await rowsOf(ctx, pending, "C16d S20"))];
-  await judgeC16d(ctx, s, rows, "C16d S20", { defect: "S20" });
+  await judgeC16d(ctx, s, rows, "C16d S20", { defect: null });
 });
 
 scenario("C16d serial positive control: the removal of every editor, then the visibility change; the mirrors equal the record and every revoked editor's live write is refused (I14)", {
@@ -1679,12 +1433,11 @@ scenario("C16d serial positive control: the removal of every editor, then the vi
   await judgeC16d(ctx, s, rows, "C16d serial");
 });
 
-scenario("C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)", {
+scenario("C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)", {
   tiers: LOCAL,
   effects: ACCESS_MAIL,
   needs: ["mailpit", "rtdb-rules", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "X-c16-access-1",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1712,7 +1465,7 @@ scenario("C16d mirror order (SYNC-P): a grant to a newcomer held after writing i
   } finally {
     await releaseAll(g, [gate]);
   }
-  await judgeC16d(ctx, s, rows, "C16d mirror order", { defect: "X-c16-access-1", unlisted: false, granted: true });
+  await judgeC16d(ctx, s, rows, "C16d mirror order", { defect: null, unlisted: false, granted: true });
 });
 
 scenario("C16d mirror order serial positive control: the grant to a newcomer, then the removal of every editor; the mirrors equal the record and every revoked editor's live write is refused (I14)", {
@@ -1729,12 +1482,11 @@ scenario("C16d mirror order serial positive control: the grant to a newcomer, th
   await judgeC16d(ctx, s, rows, "C16d mirror order serial", { unlisted: false, granted: true });
 });
 
-scenario("C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)", {
+scenario("C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)", {
   tiers: LOCAL,
   effects: ACCESS_MAIL,
   needs: ["mailpit", "rtdb-rules", ...GATED],
   n: [2, 5, 10, 20],
-  defect: "S18",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1748,7 +1500,7 @@ scenario("C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after readin
     pending = sendAll([s.grant]);
     const first = await held(ctx, g, gate, 1, s.docId, pending);
     const grantCaller = first.callers[0]?.caller;
-    ctx.step(`the grant to ${s.newcomer.account.role} read the grants, every editor in them, and is held before writing; the removal of every editor is sent`);
+    ctx.step(`the grant to ${s.newcomer.account.role} is held before its membership transaction; the removal of every editor is sent`);
     const removal = sendAll([s.remove]);
     const both = await held(ctx, g, gate, 2, s.docId, [...pending, ...removal]);
     const removalCaller = both.callers.find((c) => c.caller !== grantCaller)?.caller;
@@ -1756,13 +1508,13 @@ scenario("C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after readin
     const rel = await g.releaseCaller(gate, { key: s.docId, caller: removalCaller });
     if (rel.caller !== removalCaller) ctx.inconclusive(`the sync precondition did not hold: releasing the removal alone released ${rel.caller}`);
     const removed = await rowsOf(ctx, removal, "C16d lost revoke, the removal");
-    ctx.step("the removal read the same record, wrote it without the editors, wrote its mirrors and answered; let the grant write the grants it read");
+    ctx.step("the removal read the same record, wrote it without the editors, wrote its mirrors and answered; let the grant apply its delta to the current grants");
     await g.release(gate);
     rows = [...removed, ...(await rowsOf(ctx, pending, "C16d lost revoke, the grant"))];
   } finally {
     await releaseAll(g, [gate]);
   }
-  await judgeC16d(ctx, s, rows, "C16d lost revoke", { defect: "S18", unlisted: false, granted: true, own: "record" });
+  await judgeC16d(ctx, s, rows, "C16d lost revoke", { defect: null, unlisted: false, granted: true, own: "record" });
 });
 
 scenario("C16d S18 lost revoke serial positive control: the removal of every editor, then the grant to a newcomer; every removed editor stays out of the record and reads 404 (I16), the mirrors equal the record and every revoked editor's live write is refused (I14), and the newcomer is invited once (I11)", {

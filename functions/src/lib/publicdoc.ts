@@ -157,13 +157,15 @@ export function projectPublicDoc(
 async function withVersionFields(
   docRef: admin.firestore.DocumentReference,
   data: Record<string, unknown>,
+  tx?: admin.firestore.Transaction,
 ): Promise<Record<string, unknown>> {
   const versionId =
     typeof data.currentVersion === "string" ? data.currentVersion : "";
   let entry = "index.html";
   let format: "html" | "markdown" = "html";
   if (versionId) {
-    const vSnap = await docRef.collection("versions").doc(versionId).get();
+    const versionRef = docRef.collection("versions").doc(versionId);
+    const vSnap = tx ? await tx.get(versionRef) : await versionRef.get();
     if (vSnap.exists) {
       const v = vSnap.data() || {};
       if (typeof v.entry === "string") entry = v.entry;
@@ -189,19 +191,13 @@ export async function readerProjection(
 export async function syncPublicProjection(db: Db, docId: string): Promise<void> {
   const docRef = db.collection("docs").doc(docId);
   const publicRef = db.collection("public").doc(docId);
-  const snap = await docRef.get();
-  if (!snap.exists) {
-    await publicRef.delete();
-    return;
-  }
-  const data = snap.data() || {};
-  const projection =
-    visibilityOf(data as DocAclData) === "public"
-      ? projectPublicDoc(docId, await withVersionFields(docRef, data))
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const data = snap.data() || {};
+    const projection = snap.exists && visibilityOf(data as DocAclData) === "public"
+      ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx))
       : null;
-  if (!projection) {
-    await publicRef.delete();
-    return;
-  }
-  await publicRef.set(projection);
+    if (projection) tx.set(publicRef, projection);
+    else tx.delete(publicRef);
+  });
 }

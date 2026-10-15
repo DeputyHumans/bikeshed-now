@@ -38,7 +38,7 @@ import {
 } from "./access";
 import { canEditFolder, type FolderAclData } from "./acl";
 import { safeSegment } from "./http";
-import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
+import { EMPTY_TEAM_INDEX, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
 
@@ -303,6 +303,42 @@ export async function createFolderRecord(
   return { folderId: ref.id, name };
 }
 
+/** Read every dependency through the same transaction as its membership write. */
+async function transactionTeams(db: Db, tx: admin.firestore.Transaction, grants: RoleGrants): Promise<TeamIndex> {
+  const index = new Map<string, string[]>();
+  for (const id of referencedTeamIds(...grantLists(grants))) {
+    const snap = await tx.get(db.collection("teams").doc(id));
+    if (snap.exists) index.set(id, asArray(snap.data()?.members).map(normalizeEmail).filter(Boolean));
+  }
+  return index;
+}
+
+/** Recompute one folder and its own grant delta against current dependencies. */
+export async function persistFolderMembership(
+  db: Db,
+  ref: admin.firestore.DocumentReference,
+  change: (data: admin.firestore.DocumentData) => Record<string, unknown> = () => ({}),
+): Promise<{ data: admin.firestore.DocumentData; before: Membership; membership: Membership; grants: RoleGrants } | null> {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const data = snap.data() || {};
+    const patch = change(data);
+    const parentId = typeof data.parentId === "string" ? data.parentId : null;
+    const parentSnap = parentId ? await tx.get(db.collection("folders").doc(parentId)) : null;
+    const parent = parentSnap?.exists ? membershipOf(parentSnap.data()) : null;
+    const parentAncestors = parentSnap?.exists ? asArray(parentSnap.data()?.ancestors) : [];
+    const grants = grantsOf({ ...data, ...patch });
+    const teams = await transactionTeams(db, tx, grants);
+    const beforeTeams = await transactionTeams(db, tx, grantsOf(data));
+    const before = computeMembership(String(data.ownerEmail || ""), grantsOf(data), parent, beforeTeams);
+    const membership = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
+    const ancestors = parentId ? [...parentAncestors, parentId] : [];
+    tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { data, before, membership, grants };
+  });
+}
+
 /**
  * Recompute and persist members/editorMembers/ancestors/depth for a folder and
  * everything beneath it.
@@ -312,103 +348,28 @@ export async function createFolderRecord(
  * (unchanged) parent; each descendant is recomputed against its just-written
  * parent, so the traversal always visits a parent before its children. Folder
  * writes are awaited individually because a child must read its parent's fresh
- * values; each folder's documents are flushed in one batch.
+ * values; each node is recomputed in a transaction with its dependencies.
  *
  * The cost is honest and bounded: a folder shared with 50 people containing 200
- * documents is 200 document writes. That is a batch, not a job queue, and the
+ * documents is 200 document writes. Each is a transaction; the
  * trade is stated in docs/architecture/overview.md so it is not discovered at scale.
  */
 export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
   const queue: string[] = [rootId];
   const visited = new Set<string>();
-
   while (queue.length > 0) {
     const folderId = queue.shift() as string;
-    if (visited.has(folderId)) continue; // defensive against a corrupt cycle
+    if (visited.has(folderId)) continue;
     visited.add(folderId);
-
     const ref = db.collection("folders").doc(folderId);
-    const snap = await ref.get();
-    if (!snap.exists) continue;
-    const data = snap.data() || {};
-
-    const parentId: string | null =
-      typeof data.parentId === "string" ? data.parentId : null;
-    const parentSnap = parentId
-      ? await db.collection("folders").doc(parentId).get()
-      : null;
-    const parent: Membership | null =
-      parentSnap && parentSnap.exists ? membershipOf(parentSnap.data()) : null;
-    const parentAncestors =
-      parentSnap && parentSnap.exists ? asArray(parentSnap.data()?.ancestors) : [];
-
-    const grants = grantsOf(data);
-    const teams = await loadTeamIndex(db, ...grantLists(grants));
-    const membership = computeMembership(
-      String(data.ownerEmail || ""),
-      grants,
-      parent,
-      teams,
-    );
-    const ancestors = parentId ? [...parentAncestors, parentId] : [];
-
-    await ref.set(
-      {
-        ...membership,
-        ancestors,
-        depth: ancestors.length,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    // Documents directly in this folder inherit its fresh membership.
-    const docSnaps = await db
-      .collection("docs")
-      .where("folderId", "==", folderId)
-      .get();
-    if (!docSnaps.empty) {
-      // One team read for the whole folder rather than one per document: the
-      // grants in a folder overlap heavily, and N documents should not mean N
-      // round trips.
-      const docTeams = await loadTeamIndex(
-        db,
-        ...docSnaps.docs.flatMap((d) => grantLists(grantsOf(d.data()))),
-      );
-      const batch = db.batch();
-      const touched: { id: string; membership: Membership }[] = [];
-      for (const docSnap of docSnaps.docs) {
-        const dd = docSnap.data() || {};
-        const docMembership = computeMembership(
-          String(dd.ownerEmail || ""),
-          grantsOf(dd),
-          membership,
-          docTeams,
-        );
-        batch.set(
-          docSnap.ref,
-          { ...docMembership, updatedAt: FieldValue.serverTimestamp() },
-          { merge: true },
-        );
-        touched.push({ id: docSnap.id, membership: docMembership });
-      }
-      await batch.commit();
-      // Presence is gated by a mirror of `members` in RTDB and shared document
-      // state by a mirror of `editorMembers`, so every place that recomputes
-      // membership must refresh BOTH — or a revoked reader keeps seeing who
-      // else is in the document, and a revoked editor keeps typing into it
-      // (SPEC §16).
-      for (const t of touched) {
-        await syncPresenceAccess(t.id, t.membership.members, t.membership.editorMembers);
-      }
-    }
-
-    // Enqueue child folders, recomputed against this now-fresh folder.
-    const childFolders = await db
-      .collection("folders")
-      .where("parentId", "==", folderId)
-      .get();
-    for (const child of childFolders.docs) queue.push(child.id);
+    const result = await persistFolderMembership(db, ref);
+    if (!result) continue;
+    // The traversal only discovers ids. Each write rereads its current node,
+    // parent and teams, so an older traversal cannot restore revoked access.
+    const docs = await db.collection("docs").where("folderId", "==", folderId).get();
+    for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
+    const children = await db.collection("folders").where("parentId", "==", folderId).get();
+    for (const child of children.docs) queue.push(child.id);
   }
 }
 
@@ -422,34 +383,32 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
 export async function persistDocMembership(
   db: Db,
   docRef: admin.firestore.DocumentReference,
-  fields: {
-    ownerEmail: string;
-    grants: RoleGrants;
-    folderId: string | null;
-  },
-  extra: Record<string, unknown> = {},
-  /**
-   * The change-log events this write makes, given the membership it computed:
-   * written in the same batch, so the record and its event cannot disagree.
-   */
-  events: (membership: Membership) => EventInput[] = () => [],
+  /** Apply a delta to the transaction's current record, never a caller's snapshot. */
+  change: (data: admin.firestore.DocumentData) => Record<string, unknown> = () => ({}),
+  events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
 ): Promise<Membership> {
-  const parent = await loadFolderMembership(db, fields.folderId);
-  const teams = await loadTeamIndex(db, ...grantLists(fields.grants));
-  const membership = computeMembership(fields.ownerEmail, fields.grants, parent, teams);
-  const batch = db.batch();
-  batch.set(
-    docRef,
-    {
-      ...fields.grants,
-      ...membership,
-      updatedAt: FieldValue.serverTimestamp(),
-      ...extra,
-    },
-    { merge: true },
-  );
-  for (const e of events(membership)) addEvent(batch, docRef, e);
-  await batch.commit();
+  const membership = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists) throw new Error("document no longer exists");
+    const before = snap.data() || {};
+    const patch = change(before);
+    const data = { ...before, ...patch };
+    const folderId = typeof data.folderId === "string" ? data.folderId : null;
+    const parentSnap = folderId ? await tx.get(db.collection("folders").doc(folderId)) : null;
+    const parent = parentSnap?.exists ? membershipOf(parentSnap.data()) : null;
+    const grants = grantsOf(data);
+    const teams = await transactionTeams(db, tx, grants);
+    const beforeFolderId = typeof before.folderId === "string" ? before.folderId : null;
+    const beforeParentSnap = beforeFolderId && beforeFolderId !== folderId
+      ? await tx.get(db.collection("folders").doc(beforeFolderId)) : null;
+    const beforeParent = beforeFolderId === folderId ? parent : beforeParentSnap?.exists ? membershipOf(beforeParentSnap.data()) : null;
+    const beforeTeams = await transactionTeams(db, tx, grantsOf(before));
+    const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams);
+    const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
+    tx.set(docRef, { ...patch, ...next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    for (const event of events(next, before, previous)) addEvent(tx, docRef, event);
+    return next;
+  });
   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
   await syncPublicProjection(db, docRef.id);
   return membership;

@@ -1,12 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -841,7 +841,8 @@
-   }
- 
-   const beforeMembers = asArray(data.members);
--  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-+  // e2e negative control (controls-c16-i16-lost-grant): each delta replaces the grants instead of applying to them, so every grant but the latest is lost.
-+  const next = applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(data.ownerEmail), parsed.delta);
- 
-   // Recompute EFFECTIVE membership rather than just writing the new grants:
-   // otherwise a direct-sharing change silently drops every reader who had access
+@@ -856,7 +856,7 @@
+     ref,
+     (current) => {
+       beforeMembers = asArray(current.members);
+-      next = applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta);
++      next = applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(current.ownerEmail), parsed.delta);
+       return { ...next };
+     },
+     (m, _before, previous) => {

@@ -312,7 +312,10 @@ Owner-only. Applies deltas with set semantics (one role per principal; the owner
 is never removed and never stored in a role), expands team grants, folds in the
 parent folder chain, and writes the four grant lists `{ viewers, suggesters,
 editors, approvers }`, the four effective sets `{ members, suggesterMembers,
-editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. Records an
+editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. The delta,
+current document, parent membership and referenced teams are read in the same
+Firestore transaction as the grant and effective-set write, so concurrent
+successful deltas compose. Records an
 entry in `docs/{docId}/acl` with the acting `Actor` (§17). Syncs the presence
 mirror (§16) and the public projection (§17).
 
@@ -1301,8 +1304,12 @@ is replayed as an edit in their own session; the reverse would make a role
 that could accept text it could not type.
 
 Because each node only needs its DIRECT parent's already-computed arrays, the
-cascade is a single BFS (`recomputeSubtree`), parent before child. Any
-folder-share change or move re-fans the affected subtree server-side. The
+cascade is a single BFS (`recomputeSubtree`), parent before child. Traversal
+queries discover ids; each node is recomputed in a transaction that rereads
+its current grants, parent membership and referenced teams. An older cascade
+cannot overwrite a newer membership from stale snapshots. Folder grant deltas
+and that folder's effective sets are committed together. Any folder-share
+change or move re-fans the affected subtree server-side. The
 doc-list query, its composite index and the `canRead`/`list` rules are
 UNCHANGED.
 
@@ -1377,6 +1384,11 @@ documents. This is the most tempting shortcut in the whole feature and is
 recorded as such in `docs/architecture/threat-model.md`.
 
 ### Email
+
+Sharing invitations use only the effective access added by that operation's
+transaction, comparing current grants against the same parent and team inputs.
+A document grant does not invite an already inherited reader; a folder grant
+does not invite people added by a later concurrent request.
 
 Exactly three messages: **invitation** (a new grant, never a re-grant),
 **verification**, **new comment**. Deliberately not built: digests, weekly
@@ -1548,13 +1560,26 @@ revisions — exactly what quote-plus-position anchoring was built for.
 
 ### The presence mirror
 
-`presenceAccess/{docId}/{emailKey}` is written by
-`functions/src/lib/presence.ts syncPresenceAccess(docId, members)` as a
-whole-node `set()` — an atomic replace, so revocations propagate. It is called
-from exactly the places that already recompute `members`: `createDoc`,
-`forkDocument`, `setAccess`, `organize`, `folders.ts recomputeSubtree`,
-`manageTeamMembers`, and the admin scripts. It no-ops when RTDB is unconfigured,
-is wrapped in try/catch, and never fails the request.
+`functions/src/lib/presence.ts syncPresenceAccess` and its operator-script twin
+reread the latest document snapshot before writing the two server-only maps.
+Each map reserves `__revision`, a string containing Firestore `updateTime` as
+12 decimal second digits, a colon, and 9 nanosecond digits. A whole-node RTDB
+transaction replaces the grants only if its revision is at least the current
+validated revision. An older writer cannot restore access after a newer writer
+has completed. `editAccess` is updated before `presenceAccess`, withdrawing
+write access before read access during revocation.
+
+A legacy node without a revision is accepted and gains the fence on its next
+sync. Clients already read individual email keys or `*` as boolean grants;
+the server-only metadata changes neither client reads nor rules. The ordering
+guarantee requires all writers to use the fence: an older deployed writer can
+erase it, so mixed-version writers must drain before relying on the guarantee.
+
+The helper runs after document creation, forks, sharing and visibility changes,
+filing, subtree recomputation and team changes. It no-ops when RTDB is
+unconfigured, is wrapped in try/catch, and never fails the request. A backend
+failure can leave a stale mirror; the revision fence orders successful writes
+and is not a delivery queue.
 
 It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
@@ -1748,7 +1773,9 @@ only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
 `visibility`, `publicEdit`, `trusted`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
-are the same refusal.
+are the same refusal. The source document, current version and projection
+set/delete share a Firestore transaction, so an older public snapshot cannot
+restore the projection after a newer visibility change has completed.
 
 An **unlisted** document is not mirrored. Anything in `public/` is readable by
 whoever knows an id, and once was listable by anyone at all; an unlisted
@@ -1969,14 +1996,16 @@ how `docs` and `folders` already behave.
 
 `POST /team` (create / rename / delete), `POST /team-members` (add / remove,
 admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no
-signature change.
+signature change. Member and administrator deltas read, authorize and write the
+team in one transaction. Removing a member also removes their administrator
+grant; the owner remains a member and can always manage the team.
 
 ### Fan-out is bounded and reuses the existing cascade
 
 Removing someone from a team must revoke access everywhere the team was granted:
-an `array-contains` query over `team:{teamId}` grants feeding the **same batched
-BFS recompute** that folder-access changes already use. A 50-person team granted
-on 200 documents is 200 writes — a batch, not a job queue. For a small-team tool
+an `array-contains` query over `team:{teamId}` grants feeding the **same BFS
+recompute with per-node transactions** that folder-access changes already use.
+A 50-person team granted on 200 documents requires 200 document writes. For a small-team tool
 that is the right trade, and it is stated in `docs/architecture/overview.md` so nobody is
 surprised at 10,000 documents.
 

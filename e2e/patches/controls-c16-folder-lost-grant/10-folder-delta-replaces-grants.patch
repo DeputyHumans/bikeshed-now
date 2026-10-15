@@ -1,12 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -1811,7 +1811,8 @@
-   }
- 
-   const beforeMembers = asArray(data.members);
--  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-+  // e2e negative control (controls-c16-folder-lost-grant): each delta replaces the folder's grants instead of applying to them, so every folder grant but the latest is lost.
-+  const next = applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(data.ownerEmail), parsed.delta);
- 
-   await ref.set({ ...next, updatedAt: now() }, { merge: true });
-   await recomputeSubtree(db(), folderId);
+@@ -1803,7 +1803,7 @@
+   if (!initial.exists) { res.status(404).end(); return; }
+   if (!canManageFolder(initial.data() as FolderAclData, caller.emailLower)) { res.status(403).end(); return; }
+   const result = await persistFolderMembership(db(), ref, (current) => ({
+-    ...applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta),
++    ...applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(current.ownerEmail), parsed.delta),
+   }));
+   if (!result) { res.status(404).end(); return; }
+   const { data, grants: next, membership: after, before } = result;

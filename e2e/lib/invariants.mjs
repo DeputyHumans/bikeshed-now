@@ -768,9 +768,13 @@ export function checkI14({ members, editorMembers, presenceAccess, editAccess, r
   needArray(members, "members", "checkI14");
   needArray(editorMembers, "editorMembers", "checkI14");
   needArray(revokedWrites, "revokedWrites", "checkI14");
-  const keys = (o) => new Set(Object.keys(o ?? {}).filter((k) => !ignore.includes(k)));
+  const keys = (o) => new Set(Object.keys(o ?? {}).filter((k) => k !== "__revision" && !ignore.includes(k)));
   const diff = (want, got) => ({ missing: [...want].filter((k) => !got.has(k)).sort(), extra: [...got].filter((k) => !want.has(k)).sort() });
   const failures = [];
+  for (const [name, map] of [["presenceAccess", presenceAccess], ["editAccess", editAccess]]) {
+    if (map?.__revision !== undefined && (typeof map.__revision !== "string" || !/^\d{12}:\d{9}$/.test(map.__revision))) failures.push(`${name} has an invalid revision fence`);
+    for (const [key, value] of Object.entries(map ?? {})) if (key !== "__revision" && value !== true) failures.push(`${name}/${key} is not a true access grant`);
+  }
   for (const [name, want, got] of [["presenceAccess", new Set(members.map(emailKey)), keys(presenceAccess)], ["editAccess", new Set(editorMembers.map(emailKey)), keys(editAccess)]]) {
     const d = diff(want, got);
     if (d.missing.length || d.extra.length) failures.push(`${name} ${d.missing.length ? `lacks ${d.missing.join(", ")}` : ""}${d.missing.length && d.extra.length ? " and " : ""}${d.extra.length ? `has extra ${d.extra.join(", ")}` : ""}`);

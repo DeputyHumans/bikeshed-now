@@ -2,6 +2,7 @@
 // The server-maintained presence access mirror in RTDB (SPEC §1.4a, §16).
 
 import * as admin from "firebase-admin";
+import { opensEditingToAnyAccount } from "./acl";
 
 /**
  * Why this exists
@@ -26,7 +27,7 @@ import * as admin from "firebase-admin";
  * Keyed by EMAIL, not uid, because the server does not learn a grantee's uid
  * until their first sign-in and a share has to work the moment it is granted.
  *
- * Written as a whole-node `set()` — an atomic replace — so a revocation
+ * Written as version-fenced whole-node transactions, so a revocation
  * propagates rather than leaving a stale key behind. It fails CLOSED: a missing
  * entry means presence goes dark for that document, never that a stranger can
  * read it.
@@ -90,24 +91,37 @@ export async function syncPresenceAccess(
 ): Promise<void> {
   const db = database();
   if (!db) return;
-  const keyed = (list: readonly string[]): Record<string, true> => {
-    const out: Record<string, true> = {};
-    for (const m of list) {
-      const key = emailKey(m);
-      if (key.length > 0) out[key] = true;
-    }
-    return out;
-  };
-  const edit = keyed(editorMembers) as Record<string, true>;
-  if (publicEdit) edit[OPEN_EDIT_KEY] = true;
+  // The parameters retain the call-site contract; only the latest committed
+  // Firestore snapshot is authoritative. A visibility request may have read
+  // its member arrays before a concurrent revocation completed.
+  void members; void editorMembers; void publicEdit;
   try {
-    // ONE multi-path update, so the two mirrors can never disagree about a
-    // person: a window where `editAccess` still names somebody `presenceAccess`
-    // has dropped is a window where a revoked reader can still write.
-    await db.ref().update({
-      [`presenceAccess/${docId}`]: keyed(members),
-      [`editAccess/${docId}`]: edit,
-    });
+    const snap = await admin.firestore().collection("docs").doc(docId).get();
+    if (!snap.exists || !snap.updateTime) return;
+    const data = snap.data() || {};
+    const revision = `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`;
+    const keyed = (list: unknown): Record<string, true | string> => {
+      const out: Record<string, true | string> = { __revision: revision };
+      for (const member of Array.isArray(list) ? list : []) {
+        if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
+      }
+      return out;
+    };
+    const edit = keyed(data.editorMembers);
+    if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
+    const replace = async (path: string, next: Record<string, true | string>) => {
+      await db.ref(path).transaction((current) => {
+        const prior = current?.__revision;
+        // Legacy nodes have no fence. Reject only a validated newer revision;
+        // the server alone writes these maps, and arbitrary keys stay visible.
+        if (typeof prior === "string" && /^\d{12}:\d{9}$/.test(prior) && prior > revision) return;
+        return next;
+      });
+    };
+    // Revoke writes before reads. Each node has its own ordering fence, so a
+    // slow older request cannot reopen access after a newer one has returned.
+    await replace(`editAccess/${docId}`, edit);
+    await replace(`presenceAccess/${docId}`, keyed(data.members));
   } catch {
     /* presence is best-effort and must never fail the request it rode in on */
   }

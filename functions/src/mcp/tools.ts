@@ -56,7 +56,6 @@ import {
   type DocAclData,
   type FolderAclData,
 } from "../lib/acl";
-import { grantsOf } from "../lib/access";
 import { documentAudience, filedIn, firstPeople, folderAudience } from "../lib/audience";
 import {
   decodeCursor,
@@ -1244,12 +1243,7 @@ export const TOOLS: ToolDefinition[] = [
       await persistDocMembership(
         ctx.db,
         ref,
-        {
-          ownerEmail: String(data.ownerEmail ?? ""),
-          grants: grantsOf(data),
-          folderId: target.id,
-        },
-        { folderId: target.id },
+        () => ({ folderId: target.id }),
         () =>
           fromFolder === target.id
             ? []
