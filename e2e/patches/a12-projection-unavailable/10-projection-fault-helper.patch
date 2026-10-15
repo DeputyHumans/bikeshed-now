@@ -1,0 +1,20 @@
+--- /dev/null
++++ b/functions/src/lib/e2eProjectionUnavailable.ts
+@@ -0,0 +1,17 @@
++// SPDX-License-Identifier: Apache-2.0
++// Local E2E dependency fault: reject only the postcommit projection transaction, without changing the durable draft write (SPEC §6a).
++
++import type * as admin from "firebase-admin";
++
++export function e2eProjectionUnavailable(db: admin.firestore.Firestore, docId: string): admin.firestore.Firestore {
++  return new Proxy(db, {
++    get(target, property) {
++      if (property === "runTransaction") return async () => {
++        console.error(`E2E_PROJECTION_UNAVAILABLE ${docId}`);
++        throw new Error("e2e injected projection transaction unavailable");
++      };
++      const value = Reflect.get(target, property, target);
++      return typeof value === "function" ? value.bind(target) : value;
++    },
++  });
++}

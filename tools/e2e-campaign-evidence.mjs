@@ -22,7 +22,7 @@ const pass = (c) => c?.status === "pass" && !c.todo && !c.skipReason && !c.incon
 const fail = (c) => c?.status === "fail" && !c.todo && !c.skipReason && !c.inconclusive && !c.notReproduced && (!c.outcome || c.outcome === "FAIL");
 const message = (c) => typeof c?.error === "string" ? c.error : c?.error?.message ?? "";
 const key = (c) => `${c.id}::${c.n ?? "-"}::${c.trial ?? 1}`;
-const positivePatch = (name) => name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name);
+const positivePatch = (name) => name.startsWith("amplify-") || ["a12-projection-unavailable", "a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name);
 
 function localPath(root, path) {
   const rel = relative(root, resolve(root, path));

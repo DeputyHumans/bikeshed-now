@@ -180,7 +180,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(!stack.fingerprint?.dirty || (HASH.test(p.fingerprint) && p.fingerprint === stack.fingerprint.sha256), `${p.id}: dirty stack needs its exact fingerprint`);
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
-        if (["PASS", "LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
+        if (["PASS", "LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a12-projection-unavailable", "a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
         const cases = array(report.cases);
         need(cases.length > 0, `${p.id}: report contains no cases`);
         if (p.kind === "e2e-case") {

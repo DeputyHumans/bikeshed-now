@@ -17,6 +17,14 @@ function assertSetup(parse) {
   assert.throws(() => parse(["--keep"]), /not a stack option/);
 }
 test("stack setup admits only amplifiers and the explicit capability patch allowlist", () => assertSetup(parseStackOptionArgs));
+test("postcommit projection controls share the precise dependency fault on both sides", () => {
+  assert.deepEqual(parseStackOptionArgs(["--patches", "a12-projection-unavailable"]).patches, ["a12-projection-unavailable"]);
+  const control = readControl("controls-a12-projection-refusal");
+  const patches = (args) => args.flatMap((arg, i) => arg === "--patches" ? [args[i + 1]] : []);
+  assert.deepEqual(patches(greenRunArgs(greenGroups([control])[0])), ["a12-projection-unavailable"]);
+  assert.deepEqual(patches(redRunArgs(control)), ["a12-projection-unavailable", control.set]);
+  assert.throws(() => parseStackOptionArgs(["--patches", "a12-projection-unavailable-extra"]), /not a stack option/);
+});
 test("A19 live controls put identical capability setup on green and red, adding only their own mutant on red", () => {
   const control = readControl("controls-a19-route-privacy");
   const green = greenRunArgs(greenGroups([control])[0]);

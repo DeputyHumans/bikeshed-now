@@ -1,0 +1,11 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -128,7 +128,7 @@
+     // The content write is already committed. Its Firestore trigger retries
+     // projection repair; retain the old log until that metadata is current.
+     console.error("could not refresh the retired live session projection");
+-    return;
++    throw new Error("e2e control: postcommit projection failure");
+   }
+   try { await clearEditLog(docId, retiredEpoch); }
+   catch { console.error("could not remove a retired live session"); }

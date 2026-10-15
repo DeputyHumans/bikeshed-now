@@ -82,6 +82,17 @@ test("the real ledger validates but the completion gate refuses open coverage, p
   assert.ok(gate.pending.some((p) => p.startsWith("matrix:")));
   assert.ok(gate.pending.some((p) => p.startsWith("S3:")));
 });
+test("projection dependency setup is allowed for positive proof without admitting adjacent product mutations", (t) => {
+  const { c, root, positive, report } = fixture(t);
+  const proof = { ...positive, id: "projection-case", runId: "projection-stack", artifact: "e2e/.out/projection-stack/report.json" };
+  c.proofs.push(proof);
+  write(root, proof.artifact, { ...report, runId: proof.runId, invocation: { ...report.invocation, runId: proof.runId } });
+  const stack = { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: [{ set: "a12-projection-unavailable" }] };
+  write(root, "e2e/.out/projection-stack/stack.json", stack);
+  assert.deepEqual(checkCampaign(c, { root }).errors, []);
+  write(root, "e2e/.out/projection-stack/stack.json", { ...stack, patches: [{ set: "a12-projection-unavailable-extra" }] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /positive evidence contains a product mutant/);
+});
 test("a partial all-pass report cannot close a full matrix cell", (t) => {
   const { c, root } = fixture(t);
   const proof = c.proofs.find(p => p.kind === "e2e-run");

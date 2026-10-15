@@ -51,6 +51,14 @@ test("run imports exact case identities and leaves all states unresolved", (t) =
   assert.equal(result.candidate.acceptance.requirements.find((r) => r.id === "functional").proofs.length, 1);
   for (const field of ["revision", "version", "fingerprint"]) { const c = structuredClone(f.c); c.acceptance[field] = "wrong"; assert.throws(() => importRun(c, f.report, { root: f.root }), /differs/); }
 });
+test("projection dependency setup is positive evidence but a nearby product mutant is refused", (t) => {
+  const f = fixture(t), path = "e2e/.out/green/stack.json";
+  const stack = JSON.parse(readFileSync(join(f.root, path)));
+  write(f.root, path, { ...stack, patches: [{ set: "a12-projection-unavailable" }] });
+  assert.equal(importRun(f.c, f.report, { root: f.root }).importedCases, 1);
+  write(f.root, path, { ...stack, patches: [{ set: "a12-projection-unavailable-extra" }] });
+  assert.throws(() => importRun(f.c, f.report, { root: f.root }), /product mutant/);
+});
 test("filtered, TODO and inconclusive matrix results cannot be imported as completed cells", (t) => {
   const f = fixture(t), clean = JSON.parse(readFileSync(join(f.root, f.report)));
   for (const patch of [{ status: "todo", todo: "known" }, { status: "inconclusive" }, { status: "pass", notReproduced: true }]) {

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise an unavailable postcommit projection dependency through the draft API, binding successful responses to durable storage pointers and exact read-back bytes; add explicit local fault capability and directional controls without changing product behavior.
+
 - Add a default-trial thumbnail authority matrix cell while retaining every original campaign axis, and record the targeted N20 repair evidence without closing final acceptance.
 
 - Judge C14 wire overlap from unrounded request timestamps while accepting a positive sub-tenth-millisecond margin displayed as zero; a true zero overlap still refuses the evidence.

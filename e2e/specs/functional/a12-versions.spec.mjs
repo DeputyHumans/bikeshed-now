@@ -101,6 +101,7 @@ import { runOperator } from "../../lib/operator.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
 import { rtdbAs } from "../../lib/rtdb.mjs";
 import { changeLog, settleLog } from "../../lib/changes.mjs";
+import { logFile, logMark, readLog } from "../../lib/logs.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -185,6 +186,37 @@ const grant = (ctx, owner, docId, account, role) => share(target, { owner, doc: 
 
 const docRecord = (docId) => readDoc(target, `docs/${docId}`);
 const versionRecord = (docId, v) => readDoc(target, `docs/${docId}/versions/${v}`);
+
+scenario("A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes", {
+  tiers: ["local"], needs: ["admin-emulator", "logs", "patch:a12-projection-unavailable"], timeoutMs: 180_000,
+}, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Projection fault ${tag()}`;
+  const docId = await publishDoc(ctx, owner, { title, name: "a12-projection" });
+  const visibility = await setVisibility(target, { owner, doc: docId, visibility: "public", timeoutMs: HTTP_MS });
+  precondition(visibility.status === 200, "the public projection exists before saving the draft");
+  const before = await docRecord(docId);
+  const html = docHtml(title, 2, " Exact durable bytes after projection failure.");
+  const log = logFile(target.runId), since = logMark(log);
+  // A thrown dependency may drop the response on the inverse build. Retain that
+  // observation and inspect durable state before judging the required response.
+  const response = await owner.http.postJson("/draft", { docId, baseVersion: "v1", liveEpoch: before.liveEpoch ?? "initial", html }, { timeoutMs: HTTP_MS })
+    .catch((error) => ({ status: null, json: undefined, error: String(error?.message ?? error) }));
+  const marker = `E2E_PROJECTION_UNAVAILABLE ${docId}`;
+  await eventually(() => readLog(log, since).includes(marker), { timeout: 10_000, interval: 100, message: "the exact draft reached the injected projection transaction failure" });
+  const after = await docRecord(docId);
+  assert.equal(after.currentVersion, "v1", "postcommit projection: saving a draft does not mint a version");
+  assert.equal(after.draft?.baseVersion, "v1", "postcommit projection: draft metadata committed before the dependency failed");
+  assert.notEqual(after.liveEpoch, before.liveEpoch ?? "initial", "postcommit projection: external draft retirement committed");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), html, "postcommit projection: committed candidate bytes remain reachable and exact");
+  ctx.ev.json("projection-failure-after-commit", { docId, marker, response, storagePrefix: after.draft.storagePrefix, liveEpoch: after.liveEpoch });
+  assert.equal(response.status, 200, "postcommit projection: a durable draft must still answer 200 after projection failure");
+  assert.equal(response.json?.draft?.storagePrefix, after.draft.storagePrefix, "postcommit projection: success names the exact persisted draft pointer");
+  assert.equal(response.json?.draft?.liveEpoch, after.liveEpoch, "postcommit projection: success names the committed epoch");
+  const served = await owner.http.get(`/draft/${docId}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "postcommit projection: the successful draft can be read back");
+  assert.equal(served.text, html, "postcommit projection: read-back serves the committed bytes");
+});
 
 /**
  * A setup update through /publish?update= that must mint `want`. A request
