@@ -70,7 +70,7 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
-import { currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
+import { answered, currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { absentDocId, fork, publish } from "../../lib/seed.mjs";

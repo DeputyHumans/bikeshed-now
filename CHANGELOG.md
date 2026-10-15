@@ -18,6 +18,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- CLI publish/update watch status goes to stderr, keeping `--json` stdout a
+  stream of parseable results while the watcher remains active.
+
 - Browser file drops use the document title and address defaults. Upload dialogs
   adopt late account marking defaults until the uploader chooses, and explicit
   stamp-off remains off when sent to the server.
@@ -102,6 +105,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Framing controls apply to the stack's expanded Firebase configuration, and
+  the grant-refusal case imports its HTTP-answer classifier.
 
 - Workspace coverage checks independent sort orders, inherited folder movement,
   invitation silence, thumbnail backfill and both revision-upload entry paths,

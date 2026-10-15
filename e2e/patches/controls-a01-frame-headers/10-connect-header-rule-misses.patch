@@ -1,25 +1,12 @@
 --- a/firebase.json
 +++ b/firebase.json
-@@ -48,13 +48,6 @@
-     ],
-     "headers": [
+@@ -176,3 +176,3 @@
        {
 -        "source": "!/{content,draft,thumb}/**",
--        "headers": [
--          { "key": "X-Frame-Options", "value": "DENY" },
--          { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" }
--        ]
--      },
--      {
-         "source": "/content/**",
-         "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
-       },
-@@ -74,7 +67,7 @@
-         "headers": [{ "key": "Cache-Control", "value": "private, no-store" }]
-       },
++        "source": "/__frame_control_unused__/**",
+         "headers": [
+@@ -229,3 +229,3 @@
        {
 -        "source": "/connect",
 +        "source": "/connect-unframed",
          "headers": [
-           { "key": "X-Frame-Options", "value": "DENY" },
-           { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
