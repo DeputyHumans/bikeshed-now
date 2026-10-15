@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep an active editor and its unsaved changes when entering a review pass; only explicit Reload or Take theirs prepares a new draft snapshot. Verify editor frame parameters against that prepared snapshot.
+
 - Let accessibility judges perform their shared setup when selected alone, while preserving inconclusive results after an earlier failed measurement and inheriting the setup budget and side effects.
 
 - Clarify and test text-range deletion: remove observed characters, retain unseen concurrent insertions at the cut in surviving parents, and remove descendants of deleted elements. Preserve the serial deletion controls.

@@ -146,7 +146,7 @@ export function DocViewer() {
   // A file dropped onto the document, waiting in the upload dialog.
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const currentLiveEpoch = doc.meta?.liveEpoch ?? doc.publicDoc?.liveEpoch ?? "initial";
-  const { origin: editingOrigin, error: editOpenError, setEditing: setWantsEdit } = useEditSession(docId, doc.currentVersion);
+  const { origin: editingOrigin, error: editOpenError, setEditing: setWantsEdit, reloadEditing } = useEditSession(docId, doc.currentVersion);
   const wantsEdit = editingOrigin !== null;
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
@@ -995,7 +995,7 @@ export function DocViewer() {
       {editOpenError || frame.loadError || editor.reloadRequired ? (
         <div className="banner banner-warn" role="alert">
           {editOpenError ?? frame.loadError ?? editor.saveError}{" "}
-          <button className="btn btn-sm" onClick={() => void setWantsEdit(true)}>Reload draft</button>
+          <button className="btn btn-sm" onClick={() => void reloadEditing()}>Reload draft</button>
         </div>
       ) : null}
       {mode.kind === "editing" && shared.error ? (
@@ -1010,7 +1010,7 @@ export function DocViewer() {
         conflict={live.conflict}
         onTakeTheirs={() => {
           live.dismissConflict();
-          void setWantsEdit(true);
+          void reloadEditing();
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}

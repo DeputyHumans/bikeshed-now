@@ -9,7 +9,10 @@ export function useEditSession(docId: string, baseVersion: string) {
   const [error, setError] = useState<string | null>(null);
   const request = useRef(0);
   useEffect(() => { request.current += 1; setOrigin(null); setError(null); return () => { request.current += 1; }; }, [docId]);
-  const setEditing = useCallback(async (editing: boolean) => {
+  const setEditing = useCallback(async (editing: boolean, options: { reload?: boolean } = {}) => {
+    // Review can enter an editor that already owns unsaved DOM. Only an
+    // explicit Reload may discard that snapshot and ask for different bytes.
+    if (editing && origin?.docId === docId && !options.reload) return;
     const current = ++request.current;
     setOrigin(null);
     setError(null);
@@ -20,6 +23,7 @@ export function useEditSession(docId: string, baseVersion: string) {
     } catch (e) {
       if (request.current === current) setError((e as Error).message);
     }
-  }, [docId, baseVersion]);
-  return { origin: origin?.docId === docId ? origin : null, error, setEditing };
+  }, [docId, baseVersion, origin]);
+  const reloadEditing = useCallback(() => setEditing(true, { reload: true }), [setEditing]);
+  return { reloadEditing, origin: origin?.docId === docId ? origin : null, error, setEditing };
 }

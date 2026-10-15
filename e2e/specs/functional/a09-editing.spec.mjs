@@ -431,6 +431,7 @@ scenario("A9.1 entering edit mode on a trusted document mounts a new iframe with
   });
 
   ctx.step("the owner presses Edit");
+  const sessionAt = o.responseMark();
   await openEditor(o);
   const edit = await o.page.evaluate(() => {
     const el = document.querySelector("iframe.doc-frame");
@@ -447,7 +448,15 @@ scenario("A9.1 entering edit mode on a trusted document mounts a new iframe with
   ctx.ev.json("edit-frame", edit);
   assert.deepEqual({ sameElement: edit.sameElement, frames: edit.frames }, { sameElement: false, frames: 1 }, "edit mode mounted a NEW iframe element, and only one");
   assert.equal(edit.sandbox, "allow-same-origin", "the edit frame is sandboxed without scripts, whatever trust says");
-  assert.match(edit.src, new RegExp(`^/draft/${docId}/index\\.html\\?r=\\d+$`), "the edit frame loads the draft path, cache-busted");
+  const preparedRows = o.findResponses((r) => r.method === "GET" && r.path === `/draft/${docId}` && r.query.get("session") === "1", { since: sessionAt });
+  assert.equal(preparedRows.length, 1, "entering Edit prepares exactly one checked draft snapshot");
+  assert.equal(preparedRows[0].status, 200, "the prepared draft snapshot was authorized");
+  const prepared = await preparedRows[0].response.json();
+  const editUrl = new URL(edit.src, target.origin);
+  assert.equal(editUrl.pathname, `/draft/${docId}/${prepared.entry}`, "the editor loads the checked snapshot's entry");
+  assert.match(editUrl.searchParams.get("r") ?? "", /^\d+$/, "the edit frame remains cache-busted");
+  assert.match(prepared.draftRevision, /^[a-f0-9]{64}$/, "the prepared snapshot has an opaque revision");
+  assert.deepEqual(Object.fromEntries([...editUrl.searchParams].filter(([k]) => k !== "r")), { baseVersion: prepared.baseVersion, liveEpoch: prepared.liveEpoch, draftRevision: prepared.draftRevision }, "the editor frame requests exactly the prepared version, epoch and revision");
   assert.deepEqual({ contenteditable: edit.contenteditable, isContentEditable: edit.isContentEditable }, { contenteditable: "true", isContentEditable: true });
   const bar = o.page.getByRole("toolbar", { name: "Formatting", exact: true });
   assert.equal(await bar.count(), 1, "exactly one toolbar named Formatting");

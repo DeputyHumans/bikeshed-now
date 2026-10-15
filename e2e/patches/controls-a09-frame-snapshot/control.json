@@ -1,0 +1,13 @@
+{
+  "oracle": "A9.1 entering edit mode on a trusted document mounts a new iframe with sandbox=allow-same-origin, src /draft/…?r=N, an editable body and the Formatting toolbar",
+  "what": "Omit the bytes-bound revision from the editor frame request",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.1 entering edit mode on a trusted document mounts a new iframe with sandbox=allow-same-origin, src /draft/…?r=N, an editable body and the Formatting toolbar",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the editor frame requests exactly the prepared version, epoch and revision"
+  }
+}

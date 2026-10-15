@@ -15,7 +15,7 @@ it("retains the opened snapshot until the user explicitly reloads editing", asyn
   await act(() => view.result.current.setEditing(true));
   view.rerender({ id: "d", version: "v2" });
   expect(view.result.current.origin).toEqual({ docId: "d", ...snapshot() });
-  await act(() => view.result.current.setEditing(true));
+  await act(() => view.result.current.reloadEditing());
   expect(view.result.current.origin).toEqual({ docId: "d", ...snapshot("v2", "new") });
   expect(openDraftSession.mock.calls).toEqual([["d", "v1"], ["d", "v2"]]);
   view.rerender({ id: "other", version: "v1" });
@@ -46,4 +46,31 @@ it("shows a refused session without opening an editor and clears it on retry", a
   await act(() => view.result.current.setEditing(true));
   expect(view.result.current.error).toBeNull();
   expect(view.result.current.origin?.draftRevision).toBe("a".repeat(64));
+});
+
+
+it("entering Review inside an active editor preserves its exact snapshot without an intermediate reading render", async () => {
+  openDraftSession.mockResolvedValue(snapshot());
+  const seen: (string | null)[] = [];
+  const view = renderHook(() => {
+    const session = useEditSession("d", "v1");
+    seen.push(session.origin?.draftRevision ?? null);
+    return session;
+  });
+  await act(() => view.result.current.setEditing(true));
+  const active = view.result.current.origin;
+  seen.length = 0;
+  await act(() => view.result.current.setEditing(true));
+  expect(view.result.current.origin).toBe(active);
+  expect(seen).not.toContain(null);
+  expect(openDraftSession).toHaveBeenCalledTimes(1);
+  let resolve!: (value: ReturnType<typeof snapshot>) => void;
+  openDraftSession.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  let pending!: Promise<void>;
+  act(() => { pending = view.result.current.reloadEditing(); });
+  expect(view.result.current.origin).toBeNull();
+  expect(seen).toContain(null);
+  await act(async () => { resolve(snapshot("v1", "new")); await pending; });
+  expect(openDraftSession).toHaveBeenCalledTimes(2);
+  expect(view.result.current.origin?.liveEpoch).toBe("new");
 });

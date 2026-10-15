@@ -1,0 +1,10 @@
+--- a/app/src/viewer/useEditSession.ts
++++ b/app/src/viewer/useEditSession.ts
+@@ -12,7 +12,6 @@
+   const setEditing = useCallback(async (editing: boolean, options: { reload?: boolean } = {}) => {
+     // Review can enter an editor that already owns unsaved DOM. Only an
+     // explicit Reload may discard that snapshot and ask for different bytes.
+-    if (editing && origin?.docId === docId && !options.reload) return;
+     const current = ++request.current;
+     setOrigin(null);
+     setError(null);
