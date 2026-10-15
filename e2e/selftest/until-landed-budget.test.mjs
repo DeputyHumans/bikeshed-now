@@ -122,9 +122,18 @@ test("stopAt \"budget\": an effect found in a cut look is taken", async () => {
   assert.deepEqual([r.out, r.landed, r.attempts, send.count], [null, { trusted: true }, 1, 1]);
 });
 
-test("stopAt \"budget\": a failure with no time left is not looked after at all, and ends it at once", { timeout: 15_000 }, async () => {
+test("stopAt \"budget\": a failure with no time left is not looked after at all, and ends it at once", { timeout: 15_000 }, async (t) => {
+  // A requested 400 ms timer may be observed as 399 ms by the wall clock.
+  // Bind the retry estimate to that observed interval, independently of scheduling.
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
   const ctx = budgetCtx(200);
-  const send = unansweredSend(400);
+  const send = async () => {
+    send.count += 1;
+    now += 399;
+    throw new Error("timeout after 400 ms");
+  };
+  send.count = 0;
   let reads = 0;
   const err = await untilLanded(ctx, "POST /access d6", send, async () => {
     reads += 1;
@@ -132,7 +141,7 @@ test("stopAt \"budget\": a failure with no time left is not looked after at all,
   }, { lookupMs: 60_000, stopAt: "budget" }).then(() => null, (e) => e);
   assert.equal(err?.code, "E2E_INCONCLUSIVE");
   assert.deepEqual([send.count, reads], [1, 0]);
-  assert.match(err.reason, /POST \/access d6 got no answer 1 time\(s\) \(the last: a request to the stack got no answer: timeout after 400 ms\), and no time was left in the case's budget to look for its effect; it was not sent again: one more send and its look, about 604\d\d ms, would not end within the case's budget \(0 ms left\)$/);
+  assert.equal(err.reason, `${LEAD}POST /access d6 got no answer 1 time(s) (the last: a request to the stack got no answer: timeout after 400 ms), and no time was left in the case's budget to look for its effect; it was not sent again: one more send and its look, about 60399 ms, would not end within the case's budget (0 ms left)`);
   assert.match(ctx.steps[0], /; no time is left in the case's budget to look for its effect \(attempt 1 of 3\)$/);
 });
 
