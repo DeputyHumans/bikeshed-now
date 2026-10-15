@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve a completed rename across native transaction retries without replaying it over a later name or duplicating its change event. Reject a missing document instead of recreating a partial record; retain regression tests and a keyed endpoint control.
+
 - Preserve an accepted thumbnail upload after a later publication and thumbnail replace its current key. A bounded receipt retains the original success and obsolete-image cleanup without repointing the newer head, epoch or JPEGs; retain native retry regressions and four directional E2E controls.
 
 - Keep operator sharing and withdrawal results across native commit retries even after a later revocation or publication. Share bounded receipt semantics with Functions through an ESM helper and golden tests; add two real operator fault schedules with directional controls.
