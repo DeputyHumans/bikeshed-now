@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Make Inline code wrap the selected rich text with native undo, preserving authored whitespace and styles, and request link destinations from the app window so the sandboxed editor can insert links. Exercise every formatting control through autosave and require the draft banner to show when it was saved.
+
 - Promote seven repaired concurrency regressions after local browser proof, make causal-save retries preserve pending suggestions and authored document checks, and cover the 2 MiB live-log boundary and compaction fallback with explicit negative controls.
 
 - Keep print markings visible above authored ancestor transforms, filters and containment, and lock independent rotation. Expand export coverage for page geometry, both print shortcuts, decoration, browser print cleanup, pagination and every chrome surface, with directional regression controls.

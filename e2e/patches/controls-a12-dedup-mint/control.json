@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "/publish?update= answers"
+    "message": "/publish\\?update= answers"
   }
 }

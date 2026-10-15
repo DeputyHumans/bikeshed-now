@@ -1,0 +1,13 @@
+{
+  "oracle": "Align centre: live frame applies the requested paragraph alignment",
+  "what": "Align centre performs the requested native editing action",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.3b Align centre changes the selected content and survives autosave",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Align centre: live frame applies the requested paragraph alignment"
+  }
+}

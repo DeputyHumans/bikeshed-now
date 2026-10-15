@@ -1,0 +1,11 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -302,7 +302,7 @@
+             // window and restore the selection before the native edit command.
+             const selection = doc.getSelection();
+             const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+-            const url = window.prompt("Link to");
++            const url = doc.defaultView?.prompt("Link to");
+             if (url) {
+               if (selection && range) { selection.removeAllRanges(); selection.addRange(range); }
+               run({ kind: "exec", command: "createLink", value: url });

@@ -1,0 +1,11 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -67,7 +67,7 @@
+     id: "code",
+     icon: "code",
+     title: "Inline code",
+-    command: { kind: "inline-code" },
++    command: { kind: "exec", command: "formatBlock", value: "code" },
+   },
+ ];
+

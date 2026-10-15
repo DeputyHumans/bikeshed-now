@@ -22,6 +22,7 @@ import type { SourceFormat } from "../types";
  */
 
 export type Command =
+  | { kind: "inline-code" }
   | { kind: "block"; value: string }
   | { kind: "exec"; command: string; value?: string };
 
@@ -66,7 +67,7 @@ const INLINE_CONTROLS: Control[] = [
     id: "code",
     icon: "code",
     title: "Inline code",
-    command: { kind: "exec", command: "formatBlock", value: "code" },
+    command: { kind: "inline-code" },
   },
 ];
 
@@ -195,7 +196,26 @@ export function EditToolbar({
     (command: Command) => {
       if (!doc || sharing === "joining") return;
       doc.defaultView?.focus();
-      if (command.kind === "block") {
+      if (command.kind === "inline-code") {
+        const selection = doc.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+        const code = doc.createElement("code");
+        const range = selection.getRangeAt(0);
+        code.append(range.cloneContents());
+        // insertHTML keeps native undo and preserves selected inline markup.
+        // formatBlock cannot create an inline code element in Chromium.
+        // Native replacement otherwise rebalances adjacent ordinary spaces
+        // into nonbreaking spaces. Preserve the author's whitespace and style.
+        const host = (range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement) as HTMLElement | null;
+        const styleHost = host ?? doc.body;
+        const authoredStyle = styleHost.getAttribute("style");
+        styleHost.style.setProperty("white-space", "pre-wrap", "important");
+        try { doc.execCommand("insertHTML", false, code.outerHTML); }
+        finally {
+          if (authoredStyle === null) styleHost.removeAttribute("style");
+          else styleHost.setAttribute("style", authoredStyle);
+        }
+      } else if (command.kind === "block") {
         doc.execCommand("formatBlock", false, command.value);
       } else {
         doc.execCommand(command.command, false, command.value);
@@ -278,11 +298,15 @@ export function EditToolbar({
           aria-label="Link"
           onClick={() => {
             if (!doc) return;
-            // A prompt, not a popover: the browser's own dialog keeps focus and
-            // the selection intact, and a custom one in the parent frame would
-            // lose the selection inside the iframe the moment it opened.
-            const url = doc.defaultView?.prompt("Link to");
-            if (url) run({ kind: "exec", command: "createLink", value: url });
+            // The editor frame deliberately forbids modals. Ask from the app
+            // window and restore the selection before the native edit command.
+            const selection = doc.getSelection();
+            const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+            const url = window.prompt("Link to");
+            if (url) {
+              if (selection && range) { selection.removeAllRanges(); selection.addRange(range); }
+              run({ kind: "exec", command: "createLink", value: url });
+            }
           }}
         >
           <Icon name="link" size={16} />

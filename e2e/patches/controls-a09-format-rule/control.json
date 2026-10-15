@@ -1,0 +1,13 @@
+{
+  "oracle": "Horizontal rule: live frame inserts one rule",
+  "what": "Horizontal rule performs the requested native editing action",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.3b Horizontal rule changes the selected content and survives autosave",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Horizontal rule: live frame inserts one rule"
+  }
+}

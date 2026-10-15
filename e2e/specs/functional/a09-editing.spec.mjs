@@ -606,6 +606,65 @@ scenario("A9.3 the formatting controls change the text they are used on, and nei
   noPageErrors([o]);
 });
 
+// Each formerly unexercised control is independent, so a broken code or link
+// button cannot hide the other native formatting commands.
+const EXTRA_FORMATS = [
+  { name: "A9.3b Inline code changes the selected content and survives autosave", title: "Inline code", selector: "code", selection: true },
+  { name: "A9.3b Bulleted list changes the selected content and survives autosave", title: "Bulleted list", selector: "ul > li", selection: false },
+  { name: "A9.3b Numbered list changes the selected content and survives autosave", title: "Numbered list", selector: "ol > li", selection: false },
+  { name: "A9.3b Blockquote changes the selected content and survives autosave", title: "Blockquote", selector: "blockquote", selection: false },
+  { name: "A9.3b Horizontal rule changes the selected content and survives autosave", title: "Horizontal rule", selector: "hr", selection: false },
+  { name: "A9.3b Link changes the selected content and survives autosave", title: "Link", selector: "a[href]", selection: true },
+  { name: "A9.3b Align left changes the selected content and survives autosave", title: "Align left", align: "left", selection: false },
+  { name: "A9.3b Align centre changes the selected content and survives autosave", title: "Align centre", align: "center", selection: false },
+];
+function extraFormatIn(doc, action) {
+  const paragraph = doc.getElementById("e2e-3");
+  const matches = action.selector ? Array.from(doc.querySelectorAll(action.selector)) : [];
+  return {
+    text: doc.body.textContent,
+    font: doc.querySelectorAll("font").length,
+    matches: matches.map((node) => ({ text: node.textContent, href: node.getAttribute("href") })),
+    align: paragraph?.style.textAlign ?? null,
+  };
+}
+for (const action of EXTRA_FORMATS) scenario(action.name, { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  const body = FIXTURE_HTML.replace('<p id="e2e-3">', '<p id="e2e-3" style="text-align:right">');
+  const { accounts, docId } = await stage(ctx, { name: "a93-extra", title: `A9.3 ${action.title}`, body });
+  const o = await signedIn(ctx, "owner", accounts[0], docId);
+  await openEditor(o);
+  const before = await inFrameDoc(o, extraFormatIn, action);
+  const selected = "Paragraph 3";
+  if (action.selection) await o.selectText("#e2e-3", selected, { fab: false });
+  else await o.typeInFrame("#e2e-3", "", { at: "end" });
+  const dialogs = [];
+  const onDialog = async (dialog) => { dialogs.push({ type: dialog.type(), message: dialog.message() }); await dialog.accept("https://example.invalid/review"); };
+  o.page.on("dialog", onDialog);
+  try {
+    await o.page.getByRole("toolbar", { name: "Formatting", exact: true }).getByRole("button", { name: action.title, exact: true }).click();
+  } finally { o.page.off("dialog", onDialog); }
+  const judge = (state, where) => {
+    assert.equal(state.text, before.text, `${action.title}: ${where} retains every authored text node`);
+    assert.equal(state.font, 0, `${action.title}: ${where} contains no font element`);
+    if (action.align) assert.equal(state.align, action.align, `${action.title}: ${where} applies the requested paragraph alignment`);
+    else if (action.title === "Horizontal rule") assert.equal(state.matches.length, before.matches.length + 1, `${action.title}: ${where} inserts one rule`);
+    else {
+      const expectedText = action.selection ? selected : paragraph("e2e-3");
+      assert.ok(state.matches.some((node) => node.text === expectedText), `${action.title}: ${where} has the requested semantic element around the selected content`);
+      if (action.title === "Link") assert.ok(state.matches.some((node) => node.text === selected && node.href === "https://example.invalid/review"), `${where}: link retains the supplied destination`);
+    }
+  };
+  judge(await inFrameDoc(o, extraFormatIn, action), "live frame");
+  if (action.title === "Link") assert.deepEqual(dialogs, [{ type: "prompt", message: "Link to" }], "Link asks for its destination once");
+  const saved = await eventually(async () => {
+    const html = await draftObject(docId);
+    return html ? { html, state: await parseAndRun(ctx.users, html, extraFormatIn, action) } : false;
+  }, { timeout: SAVE_MS, interval: 250, message: `${action.title} autosaved` });
+  ctx.ev.json("formatting", { before, stored: saved.state });
+  judge(saved.state, "stored draft");
+  noPageErrors([o]);
+});
+
 // --- A9.4 ---------------------------------------------------------------------
 
 scenario("A9.4 the empty-container marking is in the live edit frame and never reaches the draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
@@ -646,7 +705,7 @@ scenario("A9.4 the empty-container marking is in the live edit frame and never r
 
 // --- A9.5 ---------------------------------------------------------------------
 
-const DRAFT_BANNER = /^You're reading unpublished edits, last saved by (.+?)( just now| \d+[mhd] ago)?\. Everyone else still sees v1 until they're saved as a new version\.$/;
+const DRAFT_BANNER = /^You're reading unpublished edits, last saved by (.+?)( just now| \d+m ago)\. Everyone else still sees v1 until they're saved as a new version\.$/;
 
 async function readerView(u) {
   return u.page.evaluate(() => ({
@@ -695,6 +754,7 @@ scenario("A9.5 with a draft saved, an editor reads it under the unpublished-edit
     assert.ok(banner, `${who}: the draft banner (banners: ${JSON.stringify(r.banners)})`);
     assert.match(banner, DRAFT_BANNER, `${who}: the banner's text`);
     assert.equal(DRAFT_BANNER.exec(banner)[1], by, `${who}: the banner names who saved it`);
+    assert.ok(DRAFT_BANNER.exec(banner)[2], `${who}: the banner says when the draft was saved`);
     assert.match(r.src, new RegExp(`^/draft/${docId}/index\\.html\\?r=\\d+$`), `${who}: the frame reads the draft`);
     assert.ok(r.text.includes(t), `${who}: the frame shows the draft's text`);
   }

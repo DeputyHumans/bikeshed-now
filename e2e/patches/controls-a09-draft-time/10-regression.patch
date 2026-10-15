@@ -1,0 +1,11 @@
+--- a/app/src/components/ViewerBanners.tsx
++++ b/app/src/components/ViewerBanners.tsx
+@@ -52,7 +52,7 @@
+         <Icon name="edit" size={15} />
+         <span>
+           You're reading unpublished edits, last saved by {byYou ? "you" : byEmail}
+-          {when ? ` ${when}` : ""}. Everyone else still sees {version} until they're saved as a
++          {false ? ` ${when}` : ""}. Everyone else still sees {version} until they're saved as a
+           new version.
+         </span>
+         {props.onEdit ? (

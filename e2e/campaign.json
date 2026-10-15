@@ -12385,6 +12385,31 @@
           "fresh browser and control-pair execution"
         ]
       }
+    },
+    {
+      "id": "toolbar-inline-code-and-link",
+      "state": "in-progress",
+      "claim": "Previously unexercised Inline code and Link controls did nothing in the real sandboxed editor. Native inline insertion now retains undo, rich selection, surrounding text and authored styles; link prompts originate in the app window.",
+      "implementation": {
+        "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+        "cases": [
+          "A9.3b Inline code changes the selected content and survives autosave",
+          "A9.3b Link changes the selected content and survives autosave"
+        ],
+        "controls": [
+          "controls-a09-format-inline-code",
+          "controls-a09-format-link"
+        ],
+        "evidence": "e2e/.out/toolbar-native-controls/proof.json",
+        "covered": [
+          "Both original product bugs failed on the kept B9 stack",
+          "Five isolated native Chrome mutations failed at their intended assertions and all three restored tests passed",
+          "Eight formerly uncovered formatting actions now assert live and stored semantics and retained authored text"
+        ],
+        "remaining": [
+          "Fresh repaired-stack E2E and stored control pairs"
+        ]
+      }
     }
   ],
   "acceptance": {
