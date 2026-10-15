@@ -3214,6 +3214,11 @@ ignored.
   - Every check runs before the code is spent: client, `redirect_uri` when
     sent, `resource` when sent, and PKCE. A wrong verifier costs nothing.
   - The code is spent in the transaction that mints the grant.
+  - A native transaction retry of that same request is not an independent
+    code replay. It acknowledges its own unchanged grant even after the
+    independent replay grace window. If a later request has refreshed or
+    revoked that grant, it refuses the obsolete credentials without revoking
+    the newer grant. Independent code replay retains the revocation rule.
 - **Rotation:** the new secrets are `HMAC(spent secret, nonce‖label)`. A retry
   of the same spend within 60 s receives the identical pair, so a timeout cannot
   fork the chain. Outside that window, replaying the previous refresh token or

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The CLI's first OAuth exchange survives a native commit retry while an independent code replay still revokes the credential (SPEC §23).
+// Native OAuth code retries preserve their own results and later grants while independent code replay still revokes the credential (SPEC §23).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after } from "node:test";
@@ -8,7 +8,7 @@ import { cast } from "../../lib/accounts.mjs";
 import { publish } from "../../lib/seed.mjs";
 import { createHttp } from "../../lib/http.mjs";
 import { openSession } from "../../lib/session.mjs";
-import { approveViaApi, exchangeCode, pkce } from "../../lib/oauth.mjs";
+import { approveViaApi, exchangeCode, pkce, register, refresh } from "../../lib/oauth.mjs";
 import { closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
 import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
@@ -52,4 +52,52 @@ scenario("A20.oauth-ack the CLI first code exchange survives native ACK loss wit
   assert.equal(replay.json?.error, "invalid_grant");
   assert.ok((await readDoc(target, `tokens/${tokenId}`)).revokedAt, "ACK CLI OAuth: an independent replay revokes the committed token");
   ctx.ev.json("oauth-ack-result", { codeId, tokenId, caller: loss[1], firstStatus: response.status, authenticatedStatus: authenticated.status, replayStatus: replay.status });
+});
+
+scenario("A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed grant while independent code replay still can", {
+  tiers: ["local"], needs: ["admin-emulator", "logs", "gates", "patch:amplify-native-ack-loss"], timeoutMs: 240_000, inconclusiveOnHttpStall: true, inconclusiveOnRequestStall: true,
+}, async ctx => {
+  const [account] = await cast(target, ["owner"]), owner = await openSession(target, account, { timeoutMs: 90_000, cutoffError: true });
+  const proof = pkce(), redirectUri = "http://127.0.0.1:32100/callback", resource = `${target.origin}/mcp`;
+  const registered = await register(owner.http, { redirectUris: [redirectUri], clientName: "DCR acknowledgement" });
+  precondition(registered.status === 201 && registered.clientId, "DCR ACK fixture registered a real client");
+  const clientId = registered.clientId;
+  const approved = await approveViaApi(owner.http, owner.idToken, { response_type: "code", client_id: clientId, redirect_uri: redirectUri, resource, code_challenge: proof.challenge, code_challenge_method: "S256", state: "native-dcr-ack" });
+  precondition(approved.status === 200 && approved.code, "DCR ACK fixture obtained a real consent code");
+  const codeId = createHash("sha256").update(approved.code).digest("hex"), operation = "oauth-code", key = `${operation}:${codeId}`, gate = "ack-after-commit", g = gates(target);
+  const file = logFile(target.runId), since = logMark(file);
+  const exchange = () => exchangeCode(owner.http, { code: approved.code, verifier: proof.verifier, clientId, redirectUri, resource });
+  let pending, finished = false;
+  try {
+    await g.hold(gate, { key });
+    pending = exchange().catch(error => ({ status: null, error: String(error?.message ?? error) })).then(result => { finished = true; return result; });
+    const held = await requireHeld(ctx, g, gate, 1, { key, timeoutMs: 90_000 });
+    const committed = await readDoc(target, `oauthCodes/${codeId}`), tokenId = committed?.tokenId;
+    precondition(!finished && committed?.usedAt && tokenId, "DCR ACK original code is committed and unanswered");
+    // Recovery is read-only and refresh uses another transaction entry point;
+    // both finish while the original code-exchange commit stays held.
+    const recovered = await exchange();
+    precondition(recovered.status === 200 && recovered.json?.refresh_token, "DCR ACK independent grace recovery returns generation zero");
+    const later = await refresh(owner.http, { refreshToken: recovered.json.refresh_token, clientId, resource });
+    const advanced = await readDoc(target, `tokens/${tokenId}`);
+    precondition(later.status === 200 && later.json?.refresh_token && advanced.generation === 1 && advanced.revokedAt === null, "DCR ACK later real refresh commits an unrevoked generation one");
+    ctx.ev.json("dcr-ack-held", { codeId, tokenId, held, generation: advanced.generation });
+    await g.release(gate, { key });
+    const original = await pending;
+    const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${codeId} ([a-f0-9-]+)`), { file, since });
+    await waitForLog(`E2E_ACK_RETRY ${operation} ${codeId} ${loss[1]} callback2`, { file, since });
+    const retained = await readDoc(target, `tokens/${tokenId}`);
+    assert.deepEqual({ generation: retained.generation, revokedAt: retained.revokedAt }, { generation: 1, revokedAt: null }, "ACK DCR OAuth: own retry preserves the newer unrevoked generation");
+    assert.equal(original.status, 400, "ACK DCR OAuth: obsolete original credentials are not returned as usable");
+    assert.equal(original.json?.error, "invalid_grant");
+    const usable = await refresh(owner.http, { refreshToken: later.json.refresh_token, clientId, resource });
+    assert.equal(usable.status, 200, "ACK DCR OAuth: the newer refresh credential remains usable");
+    const replay = await exchange();
+    assert.equal(replay.status, 400, "ACK DCR OAuth: an independent advanced-generation replay remains invalid");
+    assert.ok((await readDoc(target, `tokens/${tokenId}`)).revokedAt, "ACK DCR OAuth: an independent advanced-generation replay still revokes the grant");
+    ctx.ev.json("dcr-ack-result", { codeId, tokenId, caller: loss[1], originalStatus: original.status, usableStatus: usable.status, replayStatus: replay.status });
+  } finally {
+    await g.release(gate, { key }).catch(() => undefined);
+    if (pending) await pending.catch(() => undefined);
+  }
 });

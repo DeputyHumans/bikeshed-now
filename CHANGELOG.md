@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Distinguish a native OAuth code-exchange retry from independent code replay after another request refreshes the grant. Keep the newer credentials valid, refuse obsolete original credentials without revocation, and retain independent replay protection; cover the real recovery→refresh→retry ordering with a keyed endpoint control.
+
 - Keep the feedback publication pause points applicable after bounded retry receipts changed their imports. Preserve the original gates and directional controls, with exact patch reversal and composed compiler checks.
 
 - Keep a committed MCP comment acknowledged when its author deletes the thread, opening comment or both before a native retry. Store a bounded receipt independently of deletable feedback, preventing false refusals and resurrection, with real author-delete E2E coverage and three directional controls.
