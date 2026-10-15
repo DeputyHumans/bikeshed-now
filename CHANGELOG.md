@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Add separate E2E fault controls for duplicated committed suggestion text, missing co-editor delivery and omitted embedded Markdown styling. Keep the existing cases and exact assertions, and include every new control in the complete catalog obligation.
+
 - Remove discarded autosave uploads after conditional-write contention only when a fresh transaction proves neither the draft nor any published version references them. Cover terminal refusals, newer causal drafts, lost acknowledgements and failed reference reads; keep uncertain transport results intact.
 
 - Restore per-callback generated-note allocation in the thread acknowledgement fault control so it reproduces the intended stale-decision overwrite. The former plant hit an immutable-create refusal before changing state; retain that invalid attempt and keep the original later-reopen assertion unchanged.

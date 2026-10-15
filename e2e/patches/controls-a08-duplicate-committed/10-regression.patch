@@ -1,0 +1,12 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -470,5 +470,8 @@
+   for (const f of baseFiles) byRel.set(f.rel, f.data);
+   for (const f of draftFiles) byRel.set(f.rel, f.data);
+-  const files: BundleFile[] = [...byRel].map(([rel, data]) => ({ rel, data }));
++  const files: BundleFile[] = [...byRel].map(([rel, data]) => ({
++    rel,
++    data: rel === version.entry ? Buffer.from(data.toString("utf8").replace(/(<p\b[^>]*>)([\s\S]*?)(<\/p>)/gi, "$1$2$2$3"), "utf8") : data,
++  }));
+   const totalBytes = files.reduce((n, f) => n + f.data.length, 0);
+   if (totalBytes > MAX_BUNDLE_BYTES) return { status: 409, body: { error: "bundle too large to publish" } };

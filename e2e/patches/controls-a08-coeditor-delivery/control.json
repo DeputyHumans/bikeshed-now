@@ -1,0 +1,13 @@
+{
+  "oracle": "the co-editor reads the replacement in place",
+  "what": "Skip remote DOM delivery after initial shared-body adoption. The approver can claim, save and record the local acceptance, but the co-editor keeps the pre-accept text; its exact replacement oracle must fail. Returning before onRemote prevents a stale co-editor autosave from masking this directional fault.",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.9 the version committed after an in-app accept holds the replacement once and passes REHASH, DECOR and BODYATTR; the accept reached a co-editor once",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the co-editor reads the replacement in place"
+  }
+}
