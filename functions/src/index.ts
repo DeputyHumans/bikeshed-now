@@ -1731,6 +1731,7 @@ async function updateFromUpload(
     extracted,
     actor,
     authorEmail: caller.emailLower,
+    editorsOnly: true,
     via: isAutomated(actor) ? (actor.channel as "cli" | "mcp" | "api") : "upload",
   }).catch((e: Error) => e);
 

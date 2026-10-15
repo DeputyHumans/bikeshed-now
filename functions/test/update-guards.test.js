@@ -26,7 +26,7 @@ const PENDING = {
  * live node. `rtdb` is what the Realtime Database holds, `false` for a
  * deployment without one, or `"broken"` for one whose reads fail.
  */
-function world({ rtdb = false, anns = {} } = {}) {
+function world({ rtdb = false, anns = {}, caller = OWNER, doc = {} } = {}) {
   const { db, store } = fakeFirestore({
     "docs/d1": {
       docId: "d1",
@@ -39,6 +39,7 @@ function world({ rtdb = false, anns = {} } = {}) {
       approverMembers: [OWNER.emailLower],
       visibility: "private",
       draft: { baseVersion: "v1", entry: "index.html", bytes: 70, updatedByEmail: OWNER.emailLower },
+      ...doc,
     },
     "docs/d1/versions/v1": { versionId: "v1", entry: "index.html", format: "html", contentHash: "h1" },
     ...Object.fromEntries(Object.entries(anns).map(([id, a]) => [`docs/d1/versions/v1/annotations/${id}`, a])),
@@ -51,13 +52,13 @@ function world({ rtdb = false, anns = {} } = {}) {
   );
   const ctx = {
     db,
-    caller: { ...OWNER, channel: "mcp", tokenId: "t1" },
-    actor: { uid: OWNER.uid, email: OWNER.emailLower, channel: "mcp", tokenId: "t1" },
+    caller: { ...caller, channel: "mcp", tokenId: "t1" },
+    actor: { uid: caller.uid, email: caller.emailLower, channel: "mcp", tokenId: "t1" },
   };
-  const update = (content) => withFakes(objects, rtdb, () => tool("update_document").run(ctx, { id: "d1", content }));
+  const update = (content, extra = {}) => withFakes(objects, rtdb, () => tool("update_document").run(ctx, { id: "d1", content, ...extra }));
   const upload = (content) =>
     withFakes(objects, rtdb, () =>
-      withFakeAdmin({ db, sessions: { s: { uid: OWNER.uid, email: OWNER.emailLower, email_verified: true } } }, () => {
+      withFakeAdmin({ db, sessions: { s: { uid: caller.uid, email: caller.emailLower, email_verified: true } } }, () => {
         const { createDoc } = require("../lib/index.js");
         return invoke(createDoc, {
           headers: { cookie: "__session=s", "content-type": "application/octet-stream" },
@@ -216,4 +217,33 @@ test("a deployment without a Realtime Database still updates, and still drops th
   const result = await w.update(NEXT);
   assert.equal(result.versionId, "v2");
   assert.equal(w.has("docs/d1/draft/index.html"), false);
+});
+
+test("a nonmember MCP update carries its presented link key through the commit check", async () => {
+  const k = "current-link-token-long-enough";
+  const w = world({ caller: { uid: "u-link", emailLower: "link@example.com" }, doc: { visibility: "unlisted", publicEdit: true, linkToken: k } });
+  let result;
+  await assert.doesNotReject(async () => { result = await w.update(NEXT, { k }); }, "the final write accepts the current presented key");
+  assert.equal(result.versionId, "v2");
+  assert.equal(w.doc().currentVersion, "v2");
+  assert.equal([...w.store.keys()].some((key) => key.includes("/linkGrants/")), false);
+});
+
+test("a link rotated while an MCP update uploads cannot authorize its final commit", async () => {
+  const k = "current-link-token-long-enough";
+  const w = world({ caller: { uid: "u-link", emailLower: "link@example.com" }, doc: { visibility: "unlisted", publicEdit: true, linkToken: k } });
+  const save = w.objects.set.bind(w.objects);
+  w.objects.set = (key, value) => { w.doc().linkToken = "rotated-link-token-long-enough"; return save(key, value); };
+  await assert.rejects(w.update(NEXT, { k }), /no longer have permission/);
+  assert.equal(w.doc().currentVersion, "v1");
+});
+
+test("a revoked real editor cannot finish a bundle replacement via public open editing", async () => {
+  const caller = { uid: "u-upload", emailLower: "upload@example.com" };
+  const w = world({ caller, doc: { visibility: "public", publicEdit: true, members: [OWNER.emailLower, caller.emailLower], editorMembers: [OWNER.emailLower, caller.emailLower] } });
+  const save = w.objects.set.bind(w.objects);
+  w.objects.set = (key, value) => { w.doc().editorMembers = [OWNER.emailLower]; return save(key, value); };
+  const result = await w.upload(NEXT);
+  assert.equal(result.status, 403);
+  assert.equal(w.doc().currentVersion, "v1");
 });

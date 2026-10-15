@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Carry the supplied MCP link key through the final content transaction, recheck it after token rotation, and preserve the stricter upload editor gate after access revocation.
+
 - Let new presence sessions register disconnect cleanup before announcing themselves, while rechecking ownership so queued cleanup cannot remove another person.
 
 - Align visibility coverage with the explicit reader metadata and response-type contracts while retaining strict field allowlists and header controls.

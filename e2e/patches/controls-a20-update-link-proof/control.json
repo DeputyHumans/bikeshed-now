@@ -1,0 +1,13 @@
+{
+  "oracle": "the final MCP update uses the supplied current link key",
+  "what": "controls-a20-update-link-proof",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.6 a link key opens an unlisted open-editing document to a non-member on each of the nine tools SPEC §19 names; without it, or with a wrong one, each answers exactly as for an id that does not exist",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "update_document with k:"
+  }
+}

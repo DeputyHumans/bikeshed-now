@@ -210,6 +210,8 @@ export async function reviseDocument(args: {
   extracted: ExtractedBundle;
   actor: Actor;
   authorEmail: string;
+  k?: string | null;
+  editorsOnly?: boolean;
   via: "cli" | "mcp" | "api" | "upload";
 }): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
@@ -235,6 +237,8 @@ export async function reviseDocument(args: {
     compiled,
     actor: args.actor,
     authorEmail: args.authorEmail,
+    k: args.k,
+    editorsOnly: args.editorsOnly,
     baseVersion,
     via: args.via,
   });
@@ -470,6 +474,8 @@ export async function commitNewVersion(args: {
   compiled: CompiledBundle;
   actor: Actor;
   authorEmail: string;
+  k?: string | null;
+  editorsOnly?: boolean;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
 }): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal> {
@@ -519,7 +525,7 @@ export async function commitNewVersion(args: {
       // above ran before the upload, and either may have changed during it.
       const cur = await tx.get(docRef);
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
-      await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail });
+      await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
       replacedDraft = cur.data()?.draft;

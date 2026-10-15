@@ -843,6 +843,7 @@ export const TOOLS: ToolDefinition[] = [
         actor: ctx.actor,
         authorEmail: ctx.caller.emailLower,
         via: "mcp",
+        k: proof.k,
       });
       if ("error" in committed) throw new Error(committed.error);
       // A comment thread stays on the version it was opened on, and this path

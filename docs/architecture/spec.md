@@ -1882,7 +1882,10 @@ HTTP and MCP enforce expiry using `isExpired` in `lib/acl.ts`:
 `saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
 and `docShell`, document rename/move in `organize`, plus the MCP tools. Content
 write transactions recheck the current deadline and edit authority after upload,
-so expiry or revocation during the upload refuses the metadata commit. A fork
+so expiry or revocation during the upload refuses the metadata commit. A supplied
+MCP link key is compared with the current token inside that transaction; using
+it records no lasting grant. Bundle replacement keeps its stricter real-editor
+requirement through the final check, even when public editing is enabled. A fork
 is a read of every byte, so an expired source cannot be forked out from behind
 its date, and an expired document stops a lineage walk (§21).
 
