@@ -94,6 +94,7 @@ import { acquireTierLock, tierLockMode } from "./lib/locks.mjs";
 import { DEFAULT_MAX_LOAD, GIB, startLoadSampler, waitForLoad } from "./lib/load.mjs";
 import { listStacks, readRecord, reap, saveRecord, stackFailures, startStack, stopStack } from "./lib/stack.mjs";
 import { ADMISSION_CODE } from "./lib/admission.mjs";
+import { coverageMaintenanceEligible } from "./lib/rtdb-coverage.mjs";
 import { jvmHeapConfig } from "./lib/jvm.mjs";
 import { extendLease, readLease } from "./lib/lifetime.mjs";
 import { RUN_OWNER_ENV, reapBrowsers, runOwnerValue } from "./lib/browsers.mjs";
@@ -496,6 +497,7 @@ async function cmdRun(argv) {
       attach: values.attach ?? null,
       stackOptions: values.attach ? null : { emailOff: values["email-off"], appEnv: Object.keys(appEnv), rtdbProxy: values["rtdb-proxy"], gates: values.gates, storageShim: values["storage-shim"] },
       capabilities: [...target.capabilities].sort(),
+      parallelism: Object.fromEntries(plan.map(({ tier }) => [tier, Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier])])),
       timeouts: Object.fromEntries(
         plan.map(({ tier, budget: b }) => [
           tier,
@@ -513,7 +515,8 @@ async function cmdRun(argv) {
       const asked = Date.now();
       lock = await acquireTierLock(tierLock.mode, { runId: target.runId, tier, onWait: (why) => log(`waiting for the ${mode} tier lock: ${why}`) });
       locks[tier] = { ...tierLock, acquiredAt: new Date().toISOString(), waitedMs: Date.now() - asked };
-      updateInvocationMeta(inv.dir, { locks });
+      const recycleCoverage = coverageMaintenanceEligible(target, tier, mode, Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier]));
+      updateInvocationMeta(inv.dir, { locks, maintenance: { rtdbCoverage: recycleCoverage } });
       try {
         if (tier === "concurrency") {
           const max = Number(values["max-load"] ?? DEFAULT_MAX_LOAD);
@@ -530,6 +533,8 @@ async function cmdRun(argv) {
         env[RUN_OWNER_ENV] = runOwnerValue();
         env.E2E_SUITE = tier;
         env.E2E_INVOCATION_DIR = inv.dir;
+        if (recycleCoverage) env.E2E_RTDB_COVERAGE_RECYCLE = "1";
+        else delete env.E2E_RTDB_COVERAGE_RECYCLE;
         env.E2E_EVIDENCE_DIR = inv.dir;
         if (values.n) env.E2E_N = values.n;
         if (values.trials) env.E2E_TRIALS = values.trials;

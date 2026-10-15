@@ -330,6 +330,24 @@ order of watcher ignore rules.
   emulator (pid …) ran out of memory: java.lang.OutOfMemoryError at its
   -Xmx16m cap"), `run` stops its specs and exits 1, and the watchdog marks a
   ready stack failed with that reason and stops it (tree kept).
+- **Quiescent RTDB rule-coverage recycling** (`lib/rtdb-coverage.mjs`). The
+  pinned Database emulator 4.11.2 retains every distinct evaluated rule value,
+  including complete CRDT payload strings, after the application deletes or
+  compacts that data. Serial concurrency measurements holding the exclusive
+  tier lock archive the complete coverage report as streaming gzip before the
+  first case and after a preceding browser case has fully closed. No body,
+  request or marked harness browser may remain active. A whitespace-only rules
+  round trip triggers a fresh tracker (an identical-text PUT is ignored), then
+  restores and verifies the exact staged rule bytes in `finally`. The fresh
+  report must contain zero evaluated values, and anonymous access must still
+  be denied. The archive digest, rule digest, pinned toolchain and before-case
+  boundary are recorded in `maintenance.jsonl` and case diagnostics; read-only
+  judges do not schedule another reset. A failed archive, changed rule file,
+  unknown JAR, abandoned body or incomplete restoration fails the case. Shared
+  authoring and parallel-file runs never recycle coverage. This changes no
+  database data, case outcome, timeout or heap ceiling. The installed-runtime
+  probe is `node tools/probe-e2e-rtdb-coverage.mjs`; the diagnosis and proof
+  boundary are in [the heap note](../docs/development/e2e-rtdb-heap.md).
 - **Periodic debug-log size limits** (`lib/debuglogs.mjs`). Two shared stacks wrote
   22 GB of `firebase-debug.log` and 10 GB of `firestore-debug.log` each, and
   firebase-tools has no way to lower them (the Firestore emulator's
