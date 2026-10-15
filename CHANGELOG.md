@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Suggestion replacements reject Unicode line and paragraph separators and C1
+  controls on both creation and revision, matching the single-line contract.
 - Dialogs keep focus when controls become disabled, the slide overview traps
   Tab, and closing a dialog returns focus to its opener. The hidden file picker
   is no longer a Tab stop. Document frames show their own focus ring.

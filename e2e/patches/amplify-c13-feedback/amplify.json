@@ -4,7 +4,7 @@
     {
       "name": "suggest-after-count",
       "side": "server",
-      "where": "createSuggestion: after a test-only pre-admission count, before its transaction rechecks the limit and creates a suggestion",
+      "where": "functions/src/lib/suggestions.ts createSuggestion: after a test-only pre-admission count, before its transaction rechecks the limit and creates a suggestion",
       "key": "docId"
     },
     {

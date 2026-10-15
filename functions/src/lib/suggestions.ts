@@ -79,7 +79,7 @@ export interface SuggestionAnchor {
  * overrides change what a reader sees without changing what they read.
  */
 // eslint-disable-next-line no-control-regex
-const FORBIDDEN = /[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/;
+const FORBIDDEN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029‎‏‪-‮⁦-⁩]/;
 
 /** Why `text` may not be a replacement, or null when it may. */
 export function replacementProblem(text: string, exact: string): string | null {

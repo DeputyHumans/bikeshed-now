@@ -680,7 +680,7 @@ const NOT_ONE_LINE_MORE = Object.freeze([
   ["next line U+0085 (a C1 control)", "two\u0085weekends"],
 ]);
 
-scenario("A7.3b a replacement holding a line separator, a paragraph separator or a C1 control (NEL) answers 400 like any other line break or control character, on create and on revise", { tiers: BOTH, defect: "X-a07-suggestions-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A7.3b a replacement holding a line separator, a paragraph separator or a C1 control (NEL) answers 400 like any other line break or control character, on create and on revise", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, others } = await setup(ctx, { roles: [{ as: "suggester", role: "suggester" }], name: "a73b-seps", title: "A7.3b separators" });
   const [sugSession] = others;
   const anchor = anchorIn(TEXT["sg-4"], "sg-4", "kept short");
