@@ -1,6 +1,8 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -213,2 +213,3 @@
+@@ -219,4 +219,5 @@
+           // The key list keeps `suggestion` out as well.
            allow create: if canRead(docId, docData(docId)) && authoredBySelf()
 +            && versionId == docData(docId).currentVersion
+             && feedbackWritable(docData(docId))
              && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
