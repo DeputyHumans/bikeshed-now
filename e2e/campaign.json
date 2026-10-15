@@ -8730,6 +8730,72 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 N × update_document on the same base (SYNC-T): N agents' updates on v1 fired at one instant; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the winner's (I7 REHASH)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, uploading v2 and held before its transaction; the agents choose v2 too and upload over it; the editor's version's stored bytes are its own (I7)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 N × update_document on the same base (SYNC-T): N agents' updates on v1 fired at one instant; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the winner's (I7 REHASH)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, uploading v2 and held before its transaction; the agents choose v2 too and upload over it; the editor's version's stored bytes are its own (I7)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 N × update_document on the same base (SYNC-T): N agents' updates on v1 fired at one instant; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the winner's (I7 REHASH)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, uploading v2 and held before its transaction; the agents choose v2 too and upload over it; the editor's version's stored bytes are its own (I7)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 N × update_document on the same base (SYNC-T): N agents' updates on v1 fired at one instant; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the winner's (I7 REHASH)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, uploading v2 and held before its transaction; the agents choose v2 too and upload over it; the editor's version's stored bytes are its own (I7)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)",
           "n": 2
         },
@@ -8793,7 +8859,36 @@
           "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, uploading v2 and held before its transaction; the agents choose v2 too and upload over it; the editor's version's stored bytes are its own (I7)",
           "n": 20
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)",
+            "to": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+            "n": 2,
+            "reason": "Immutable draft CAS refuses stale snapshots; current snapshot publication and byte identity remain required."
+          },
+          {
+            "from": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)",
+            "to": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+            "n": 5,
+            "reason": "Immutable draft CAS refuses stale snapshots; current snapshot publication and byte identity remain required."
+          },
+          {
+            "from": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)",
+            "to": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+            "n": 10,
+            "reason": "Immutable draft CAS refuses stale snapshots; current snapshot publication and byte identity remain required."
+          },
+          {
+            "from": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)",
+            "to": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)",
+            "n": 20,
+            "reason": "Immutable draft CAS refuses stale snapshots; current snapshot publication and byte identity remain required."
+          }
+        ]
+      }
     },
     {
       "id": "S4b",
@@ -8919,6 +9014,136 @@
           "n": 2
         },
         {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 2
+        },
+        {
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
           "n": 2
         },
@@ -9042,7 +9267,132 @@
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
           "n": 20
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held after every one has read the folder's grants and before any writes them, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after reading the document's grants, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership after reading the folder, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held after every one has read the folder's grants and before any writes them, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after reading the document's grants, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership after reading the folder, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held after every one has read the folder's grants and before any writes them, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after reading the document's grants, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership after reading the folder, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held after every one has read the grants and before any writes, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16a S18 (SYNC-P): the owner's N POST /access, each adding one grantee, held before each membership transaction, then let go one at a time, leave every grant in the record and every grantee reading the document (I16)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held after every one has read the folder's grants and before any writes them, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants S18 (SYNC-P): the owner's N POST /folder-access on one folder, held before each folder membership transaction, then let go one at a time, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16), every grantee reading the document, and each invited once (I11)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after reading the document's grants, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale grants (SYNC-P): the folder grant's cascade held in recomputeSubtree after discovering the documents and before their transactions, the document grant and every team addition then answered one after another, then the cascade writes; the document's sets still equal what was asked and its grants (I16)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership after reading the folder, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b S18 stale parent (SYNC-P): the document grant and every team re-fan held in persistDocMembership before their membership transactions, the folder grant then answered, then they write one at a time; the document's sets still equal what was asked and its folder's (I16)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held after reading the grants (every editor in them) and before writing, the removal of every editor then reading the same record, let past alone and answered, then the grant writes the grants it read; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d S18 lost revoke (SYNC-P): a grant to a newcomer held before its membership transaction, the removal of every editor then reading the same record, let past alone and answered, then the grant applies its delta to current grants; every removed editor stays out of the record and reads 404 (I16), and every revoked editor's live write is refused (I14)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          }
+        ]
+      }
     },
     {
       "id": "S19",
@@ -9070,6 +9420,56 @@
           "n": 2
         },
         {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 2
+        },
+        {
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
           "n": 2
         },
@@ -9113,7 +9513,60 @@
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
           "n": 20
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held after every one has read the team and before any writes, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 (SYNC-P): the owner's and N−1 admins' additions to one team, held before each team membership transaction, then let go one at a time; the team holds everyone added and every one of them reads the document the team is granted on (I16)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held after reading the team, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16c S19 lost removal (SYNC-P): the owner removes a member from a team granted editor on a document while N−1 admins each add one person, all held before their team membership transactions, the removal written first and the additions one at a time after it; the team holds exactly what was asked, the removed member reads 404 and cannot write the live log (I16, I14), and every added person reads the document",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          }
+        ]
+      }
     },
     {
       "id": "S20",
@@ -9196,6 +9649,40 @@
           "n": 2
         },
         {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 2
+        },
+        {
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
           "n": 2
         },
@@ -9223,7 +9710,36 @@
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
           "n": 20
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant writes the mirrors it computed; they still equal the record and every revoked editor's live write is refused (I14)",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16d mirror order (SYNC-P): a grant to a newcomer held after writing its record and before its mirrors, the removal of every editor then reading that record and answered, then the grant refreshes the current mirrors; they still equal the record and every revoked editor's live write is refused (I14)",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          }
+        ]
+      }
     },
     {
       "id": "S11",
@@ -9371,7 +9887,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a13-sharing.spec.mjs::A13.9 local operator set-access grants and revokes an editor in Firestore and both RTDB mirrors, changing their actual reads and writes",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Actual local operator grant/revoke now exercises Firestore, both RTDB mirrors and permitted/refused authenticated access. Baseline N=2 describes two actors; functional witness has no concurrency expansion. Mirror-delivery failure remains the existing SPEC §16 limitation.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a11-live-1",
@@ -9419,7 +9945,29 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12a agent update vs editors: while N editors type in the editor, the agent's update_document and the owner's /publish?update= fired at one instant are both refused 409 naming the N editors, nothing is minted, uploaded or dropped, and every editor's typing saves (200) and converges (I1, I2); once everyone has left the editor the update publishes, the live log and the draft are gone, GET /draft serves the new version, and the next editor sees the agent's version",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "The exact current browser/agent refusal case is required at every N, including original N=5. Historical emulator namespace hypothesis remains unproved; a current pass does not explain that attempt.",
+        "aliases": []
+      }
     },
     {
       "id": "S1",
@@ -10334,10 +10882,27 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/functional/a10-markdown.spec.mjs::A10.3b an in-app HTML commit preserves the complete parsed authored DOM plus the edit, including attributes and element whitespace",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/functional/a10-markdown.spec.mjs::A10.3b an in-app commit of an HTML document stores the bytes that went in plus the edit (ADR 0007): the whitespace before <head> and after </body> and </html> stays where the author put it",
           "n": null
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/functional/a10-markdown.spec.mjs::A10.3b an in-app commit of an HTML document stores the bytes that went in plus the edit (ADR 0007): the whitespace before <head> and after </body> and </html> stays where the author put it",
+            "to": "e2e/specs/functional/a10-markdown.spec.mjs::A10.3b an in-app HTML commit preserves the complete parsed authored DOM plus the edit, including attributes and element whitespace",
+            "n": null,
+            "reason": "Normative behavior was clarified or broadened; replacement retains the product obligation."
+          }
+        ]
+      }
     },
     {
       "id": "X-a17-export-1",
@@ -10532,7 +11097,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a06-comments.spec.mjs::A6.7 a draft that edits commented passages away shows the editor the orphan banner and (no longer in the text), and a viewer of the version neither",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "A6.7 explicitly asserts the singular orphan text after restoring the other passage; keep whole-case witness and singular-banner control.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a01-identity-3",
@@ -10579,7 +11154,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a01-identity.spec.mjs::A1.8c an owner's existing document is listed after a delayed first workspace listen, without a false empty state from the offline cache",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "New owner-specific delayed first-listen witness retains the original owner scenario, forces actual SDK offline cache path, and has a direct cache-guard negative control.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a10-markdown-2",
@@ -10769,10 +11354,27 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse a malformed body sent as application/json is answered as the JSON-RPC parse error, -32700, with private, no-store and the exposed WWW-Authenticate like every /mcp response",
           "n": null
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse a malformed body sent as application/json is answered as the JSON-RPC parse error, -32700, with private, no-store and the exposed WWW-Authenticate like every /mcp response",
+            "to": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation",
+            "n": null,
+            "reason": "Normative behavior was clarified or broadened; replacement retains the product obligation."
+          }
+        ]
+      }
     },
     {
       "id": "X-a18-stats-3",
@@ -11007,10 +11609,27 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/functional/a24-responsive-a11y.spec.mjs::A24.1b on the same touch phone walk, every interactive target has a 44×44 CSS px hit area, with an exception for inline prose links",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/functional/a24-responsive-a11y.spec.mjs::A24.1b on the same touch phone walk, every rendered button, [role=button], a.btn and .icon-btn is at least 44×44 CSS px (base.css's coarse-pointer floor)",
           "n": null
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/functional/a24-responsive-a11y.spec.mjs::A24.1b on the same touch phone walk, every rendered button, [role=button], a.btn and .icon-btn is at least 44×44 CSS px (base.css's coarse-pointer floor)",
+            "to": "e2e/specs/functional/a24-responsive-a11y.spec.mjs::A24.1b on the same touch phone walk, every interactive target has a 44×44 CSS px hit area, with an exception for inline prose links",
+            "n": null,
+            "reason": "Normative behavior was clarified or broadened; replacement retains the product obligation."
+          }
+        ]
+      }
     },
     {
       "id": "X-a24-responsive-a11y-2",
@@ -11085,10 +11704,27 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/functional/a16-decks.spec.mjs::A16.1b a recognized two-slide deck has a navigator that reaches both slides; a single slide has none (SPEC §6d)",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/functional/a16-decks.spec.mjs::A16.1b a deck of exactly two viewport-tall slides gets no navigator: \"the navigator appears only above two slides\" (SPEC §6d)",
           "n": null
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/functional/a16-decks.spec.mjs::A16.1b a deck of exactly two viewport-tall slides gets no navigator: \"the navigator appears only above two slides\" (SPEC §6d)",
+            "to": "e2e/specs/functional/a16-decks.spec.mjs::A16.1b a recognized two-slide deck has a navigator that reaches both slides; a single slide has none (SPEC §6d)",
+            "n": null,
+            "reason": "Normative behavior was clarified or broadened; replacement retains the product obligation."
+          }
+        ]
+      }
     },
     {
       "id": "S30",
@@ -11110,7 +11746,45 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 autosave rate: N editors type a token each in step and pause past the debounce, 6 times, so their autosaves land on one document together; no save state is ever \"error\" and every POST /draft is answered 200 (p95 under 3 s asserted on production only)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 autosave rate: N editors type a token each in step and pause past the debounce, 6 times, so their autosaves land on one document together; no save state is ever \"error\" and every POST /draft is answered 200 (p95 under 3 s asserted on production only)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 autosave rate: N editors type a token each in step and pause past the debounce, 6 times, so their autosaves land on one document together; no save state is ever \"error\" and every POST /draft is answered 200 (p95 under 3 s asserted on production only)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 autosave rate: N editors type a token each in step and pause past the debounce, 6 times, so their autosaves land on one document together; no save state is ever \"error\" and every POST /draft is answered 200 (p95 under 3 s asserted on production only)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 draft: after N editors' autosaves raced onto one document (two in flight at once, proven), GET /draft's body equals every peer's and holds every token once and whole (I5 apart from S3's spellcheck, I2 in the draft)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 draft: after N editors' autosaves raced onto one document (two in flight at once, proven), GET /draft's body equals every peer's and holds every token once and whole (I5 apart from S3's spellcheck, I2 in the draft)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 draft: after N editors' autosaves raced onto one document (two in flight at once, proven), GET /draft's body equals every peer's and holds every token once and whole (I5 apart from S3's spellcheck, I2 in the draft)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C21 draft: after N editors' autosaves raced onto one document (two in flight at once, proven), GET /draft's body equals every peer's and holds every token once and whole (I5 apart from S3's spellcheck, I2 in the draft)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Local runs measure successful autosaves and draft equality under concurrent editors. Production latency/capacity is outside the authorized local-only scope; the source p95 assertion runs only on production. No local PASS proves production capacity.",
+        "aliases": []
+      }
     },
     {
       "id": "S8",
@@ -11429,7 +12103,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a02-matrix-http.spec.mjs::A2.E-exp the editor of an expired document: reads 404 as for an absent id, edits 409, owner-only 403",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Harmless established HTTP status distinction is preserved: expired editor reads404, edits409, owner-only403. Generated matrix case is the explicit policy witness.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a02-matrix-data-3",
@@ -11663,7 +12347,29 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "New recovery witness requires no silent remount, retention of late local text, refusal of stale saves, and explicit reload at all Ns. Original record-only co-editor case remains historical evidence, not substitute proof.",
+        "aliases": []
+      }
     },
     {
       "id": "X-c16-access-2",
@@ -11726,6 +12432,24 @@
       "controls": [],
       "requiredCases": [
         {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [
+        {
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
           "n": 2
         },
@@ -11741,7 +12465,36 @@
           "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
           "n": 20
         }
-      ]
+      ],
+      "witnessMapping": {
+        "reason": "Existing explicit case requirements retained. Matching control targets are candidates for the stated claim; final importer must validate exact intended failures and same-revision execution across the frozen acceptance matrix.",
+        "aliases": [
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "n": 2,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "n": 5,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "n": 10,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          },
+          {
+            "from": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before its fresh read of the folder), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "to": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder invitations (SYNC-P): the owner's first folder grant held at the end of its cascade (the folder and its document written, before sending its invitations), the other N−1 grants run to their answers one after another, then it goes on; nothing is lost, and each grantee is invited once, to the folder (I11), as in the serial order",
+            "n": 20,
+            "reason": "Transaction-boundary timing now matches the repaired implementation; same harm and oracle retained."
+          }
+        ]
+      }
     },
     {
       "id": "X-c18-scale-ui-1",
@@ -11866,8 +12619,22 @@
         {
           "caseId": "e2e/specs/functional/a19-account.spec.mjs::A19.5 S15: once the Auth user is disabled, their session is refused, and so is their personal token",
           "n": null
+        },
+        {
+          "caseId": "e2e/specs/functional/a19-account.spec.mjs::A19.5 S15: once the Auth user is deleted, their session is refused, and so is their personal token",
+          "n": null
         }
-      ]
+      ],
+      "originalRequiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a19-account.spec.mjs::A19.5 S15: once the Auth user is disabled, their session is refused, and so is their personal token",
+          "n": null
+        }
+      ],
+      "witnessMapping": {
+        "reason": "Both disabled and deleted Auth identities retain unchanged witness names. New independent PAT controls target current identity checks directly; session refusal remains a positive precondition. Actual pair execution pending at map generation.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a16-decks-1",
@@ -11997,7 +12764,12 @@
         "controls-a08-changed-outcome",
         "controls-a08-changed-notice"
       ],
-      "requiredCases": [],
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a08-review.spec.mjs::A8.7b once the approver's claim has lapsed, an author's revise is taken, and the accept itself is then refused 409 (changed): nothing is recorded and the failure is said",
+          "n": null
+        }
+      ],
       "implementation": {
         "status": "in-progress",
         "files": [
@@ -12006,6 +12778,11 @@
         ],
         "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T070056Z-p92639-iw3o/results.json",
         "note": "Changed-after-apply advice now passes actual real-expiry case on B13 product96f5e18;19test baseline1fail,30focusedreviewgreen. Current control pairs/full matrix pending, canonical state remains open."
+      },
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Changed-after-apply expiry branch is now explicit A8.7b with draft/text retention and accurate outcome/notice controls. Fresh final-revision proof still required.",
+        "aliases": []
       }
     },
     {
@@ -12171,7 +12948,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a11-live.spec.mjs::A11.8 an unlisted open-editing link holder in the editor is not shown as Shared, or receives a member's probe keystroke within 2 s",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "The unlisted link holder must not be shown Shared. The functional witness checks that distinction; CRDT convergence is intentionally not promised for this nonshared path.",
+        "aliases": []
+      }
     },
     {
       "id": "X-c01-typing-1",
@@ -12193,7 +12980,45 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append positive control: the same typing with no append refused converges (I1) and every peer holds the token once and whole (I2)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append positive control: the same typing with no append refused converges (I1) and every peer holds the token once and whole (I2)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append positive control: the same typing with no append refused converges (I1) and every peer holds the token once and whole (I2)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c01-typing.spec.mjs::C1 refused append positive control: the same typing with no append refused converges (I1) and every peer holds the token once and whole (I2)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Namespace503/reset is historical environment evidence, not a diagnosed product cause. Refused-append convergence controls test recovery from the observable transport failure; readiness/rules binding gates reduce recurrence but do not retroactively prove the cause.",
+        "aliases": []
+      }
     },
     {
       "id": "X-c17-identity-1",
@@ -12215,7 +13040,93 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a same id (SYNC-T): N accounts publish at one requested id at one instant; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a same id (SYNC-T): N accounts publish at one requested id at one instant; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a same id (SYNC-T): N accounts publish at one requested id at one instant; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a same id (SYNC-T): N accounts publish at one requested id at one instant; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a serial positive control: N accounts publish at one requested id one after another; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4: an id is taken if a record holds it)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a serial positive control: N accounts publish at one requested id one after another; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4: an id is taken if a record holds it)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a serial positive control: N accounts publish at one requested id one after another; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4: an id is taken if a record holds it)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17a serial positive control: N accounts publish at one requested id one after another; one document has the id and the other N−1 have it with a random six-character suffix, each owned by its publisher and holding the bytes it sent (SPEC §4: an id is taken if a record holds it)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b N forks (SYNC-T): N readers of an unlisted link fork it at one instant, each under a title of its own; stats.forks and the source's fork.created events rise by exactly N, N fork records name the source, and every fork holds its bytes (SPEC §21)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b N forks (SYNC-T): N readers of an unlisted link fork it at one instant, each under a title of its own; stats.forks and the source's fork.created events rise by exactly N, N fork records name the source, and every fork holds its bytes (SPEC §21)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b N forks (SYNC-T): N readers of an unlisted link fork it at one instant, each under a title of its own; stats.forks and the source's fork.created events rise by exactly N, N fork records name the source, and every fork holds its bytes (SPEC §21)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b N forks (SYNC-T): N readers of an unlisted link fork it at one instant, each under a title of its own; stats.forks and the source's fork.created events rise by exactly N, N fork records name the source, and every fork holds its bytes (SPEC §21)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click forks (SYNC-T): N readers of an unlisted link fork it at one instant under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click forks (SYNC-T): N readers of an unlisted link fork it at one instant under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click forks (SYNC-T): N readers of an unlisted link fork it at one instant under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click forks (SYNC-T): N readers of an unlisted link fork it at one instant under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click serial positive control: N readers of an unlisted link fork it one after another under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click serial positive control: N readers of an unlisted link fork it one after another under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click serial positive control: N readers of an unlisted link fork it one after another under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C17b one-click serial positive control: N readers of an unlisted link fork it one after another under the source's own title; one fork has the title's slug and the other N−1 have it with a random suffix, and stats.forks rises by exactly N (SPEC §4, §21)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Plain local Storage explicitly lacks create-only semantics. Required race witnesses must execute with storage-preconditions capability supplied by the checked Storage shim; unsupported plain emulator execution is a capability skip, not correctness proof.",
+        "aliases": []
+      }
     },
     {
       "id": "X-a02-matrix-data-1",
@@ -12236,7 +13147,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a02-matrix-data.spec.mjs::A2.c18.V a viewer may not read the live log status/{doc}/y with their own ID token: DENY",
+          "n": null
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "RTDB readiness reads back exact rules in the selected namespace and proves anonymous refusal before granting rtdb-rules capability. The actual viewer denial witness is supplemental; final capability setup evidence must accompany it.",
+        "aliases": []
+      }
     },
     {
       "id": "W2-c18-N20-firestore-oom",
@@ -12249,7 +13170,17 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 told-serial positive control: on the same unlisted open-editing document the members type, autosave and settle, and stop; then the link holder enters the editor, types and autosaves LAST: its edit is in the draft, so the told judge's oracle passes on a link holder's own POST /draft path",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Historical Firestore OOM remains historical environment evidence. Current JVM/admission limits plus completed final N20 execution are required; lower-N passes do not close it.",
+        "aliases": []
+      }
     },
     {
       "id": "W2-C15-I11-race-judge",
@@ -12262,7 +13193,29 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 I11 race judge: the storm's notices were decided by onCommentCreated runs that overlapped, so the cooldown claim was contended, and still at most one notice went to each person per document and kind",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 I11 race judge: the storm's notices were decided by onCommentCreated runs that overlapped, so the cooldown claim was contended, and still at most one notice went to each person per document and kind",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 I11 race judge: the storm's notices were decided by onCommentCreated runs that overlapped, so the cooldown claim was contended, and still at most one notice went to each person per document and kind",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 I11 race judge: the storm's notices were decided by onCommentCreated runs that overlapped, so the cooldown claim was contended, and still at most one notice went to each person per document and kind",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Unresolved measurement, not an emulator limitation: Firebase15.25 supports concurrent trigger workers. The current bounded fresh storm attempts must prove actual overlapping onCommentCreated executions; peak<2 stays inconclusive.",
+        "aliases": []
+      }
     },
     {
       "id": "W2-c16-natural-race-reporting",
@@ -12275,7 +13228,109 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, S18 (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the record and every grantee reading the document (I16), and each grantee invited once (I11); the mirrors are measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16a N concurrent grants, mirrors (SYNC-T): the owner's N POST /access, each adding one grantee, fired at one instant on the unpatched product, leave presenceAccess and editAccess equal to the record's members and editorMembers (I14), and each grantee invited once (I11); whether every grant is in the record is measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder + document + team grants (SYNC-T): a folder grant, a document grant and N−2 team additions reaching one document, fired at one instant, leave the document's sets equal to what was asked and to its folder, grants and teams (I16), every newcomer reading it, the mirrors equal to the record (I14), and one invitation each (I11)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16b folder grants (SYNC-T): the owner's N POST /folder-access on one folder, each adding one grantee, fired at one instant on the unpatched product, leave every grant in the folder's record, the folder's and its document's sets what was asked (I16) and every grantee reading the document; who is invited is measured, not judged",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16c N team admins (SYNC-T): the owner and N−1 admins of one team each add one person at one instant; the team holds everyone added, the document the team is granted on lets every one of them read it (I16), the mirrors equal the record (I14), and each is invited once (I11)",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d visibility vs revoke (SYNC-T): the owner removes every editor while making the document unlisted, the two requests at one instant; the mirrors equal the record and every revoked editor's live write is refused (I14)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d visibility vs revoke (SYNC-T): the owner removes every editor while making the document unlisted, the two requests at one instant; the mirrors equal the record and every revoked editor's live write is refused (I14)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d visibility vs revoke (SYNC-T): the owner removes every editor while making the document unlisted, the two requests at one instant; the mirrors equal the record and every revoked editor's live write is refused (I14)",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c16-access.spec.mjs::C16d visibility vs revoke (SYNC-T): the owner removes every editor while making the document unlisted, the two requests at one instant; the mirrors equal the record and every revoked editor's live write is refused (I14)",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Current transaction assertions are normal checks, preserving natural and amplified dimensions. Historical TODO-passed outcomes remain historical; final current-revision matrix supplies evidence.",
+        "aliases": []
+      }
     },
     {
       "id": "W2-C14-SYNC-T-judges",
@@ -12288,7 +13343,45 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced",
+          "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Bounded fresh attempts retain every attempt assertion. Agent left-behind judge requires actual publication; no-publish stays inconclusive. Web historical feedback uses the adjudicated selected-version/passage contract. Required final natural/amplified axes remain intact.",
+        "aliases": []
+      }
     },
     {
       "id": "W2-C10b-SYNC-T-judge",
@@ -12301,7 +13394,29 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c10-accepts.spec.mjs::C10b judge (SYNC-T): with two accept saves each made without the other's change (or INCONCLUSIVE: race not achieved), I8, the draft holds every replacement accepted in the app exactly once, in place",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c10-accepts.spec.mjs::C10b judge (SYNC-T): with two accept saves each made without the other's change (or INCONCLUSIVE: race not achieved), I8, the draft holds every replacement accepted in the app exactly once, in place",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c10-accepts.spec.mjs::C10b judge (SYNC-T): with two accept saves each made without the other's change (or INCONCLUSIVE: race not achieved), I8, the draft holds every replacement accepted in the app exactly once, in place",
+          "n": 10
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c10-accepts.spec.mjs::C10b judge (SYNC-T): with two accept saves each made without the other's change (or INCONCLUSIVE: race not achieved), I8, the draft holds every replacement accepted in the app exactly once, in place",
+          "n": 20
+        }
+      ],
+      "originalRequiredCases": [],
+      "witnessMapping": {
+        "reason": "Harness agent is repairing bounded natural race attempts while retaining the actual sync precondition. A held counterpart cannot substitute for final natural-axis proof.",
+        "aliases": []
+      }
     }
   ],
   "discoveries": [

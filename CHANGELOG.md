@@ -16,6 +16,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Tie every reported product finding to current executable witnesses, retaining original case identities and peer counts beside explicit rename rationales; no finding is closed by the mapping.
+
+- Wait for live update acknowledgment before Done tears down editing, retain failed or timed-out work for retry, and bound the whole Done attempt. Warn on closing with pending live typing; refuse incomplete live history over a fuller saved draft and offer an explicit leave-and-publish recovery path.
+
 - Challenge the personal-token current-identity gate independently for disabled and deleted accounts, keeping both existing session-versus-token witnesses selectable and requiring exact patched-stack refusals.
 
 - Follow explicit stale-base reload in the natural co-editor observation, and recognize per-tab peer records in the leave-presence canary precondition.
