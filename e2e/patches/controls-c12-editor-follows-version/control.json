@@ -3,7 +3,8 @@
   "what": "Reintroduce the automatic editing-frame version change when another editor publishes, instead of pinning the version opened by this editor.",
   "target": {
     "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
-    "case": "C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload [N=2]"
+    "case": "C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "C12 recovery (frame|local text):"

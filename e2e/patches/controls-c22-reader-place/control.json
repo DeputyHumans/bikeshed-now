@@ -3,7 +3,8 @@
   "what": "overwrite the visible scroll checkpoint with a still-loading blank frame",
   "target": {
     "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
-    "case": "C22 held loads place: the reader's frame keeps its place though reloads overlapped [N=2]"
+    "case": "C22 held loads place: the reader's frame keeps its place though reloads overlapped [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "S28:.*lost the reader"

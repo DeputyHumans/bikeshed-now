@@ -3,7 +3,8 @@
   "what": "solo advance",
   "target": {
     "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
-    "case": "C23 an unlisted link editor uses a checked draft snapshot: stale replacement is refused, an accepted replacement fences old member saves, and explicit reload resumes merging without losing it [N=2]"
+    "case": "C23 an unlisted link editor uses a checked draft snapshot: stale replacement is refused, an accepted replacement fences old member saves, and explicit reload resumes merging without losing it [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "X-c18 snapshot: a solo writer advances"

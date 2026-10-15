@@ -3,7 +3,8 @@
   "what": "controls-c01-live-conflict",
   "target": {
     "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
-    "case": "C1 shared save notice: a live co-editor autosave never offers competing copies [N=2]"
+    "case": "C1 shared save notice: a live co-editor autosave never offers competing copies [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "a live co-editor autosave never offers competing copies"

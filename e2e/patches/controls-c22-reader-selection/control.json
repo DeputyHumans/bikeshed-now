@@ -3,7 +3,8 @@
   "what": "omit the selected passage from the reload checkpoint",
   "target": {
     "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
-    "case": "C22 selection kept: through the storm the reader's frame keeps its selection of the passage, and the selection toolbar (Comment, Suggest edit) still shows [N=2]"
+    "case": "C22 selection kept: through the storm the reader's frame keeps its selection of the passage, and the selection toolbar (Comment, Suggest edit) still shows [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "S28:.*selection away"

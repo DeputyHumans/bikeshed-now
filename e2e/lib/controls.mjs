@@ -115,6 +115,10 @@ export function readControl(set, root = PATCHES_DIR) {
   new RegExp(c.expect.message);
   const suite = c.target.suite ?? "functional";
   if (!CONTROL_SUITES.includes(suite)) throw new Error(`${set}: target.suite must be one of ${CONTROL_SUITES.join(", ")}`);
+  const specSuite = /^e2e\/specs\/(functional|concurrency)\//.exec(c.target.spec)?.[1];
+  if ((specSuite === "concurrency" && suite !== "concurrency") || (specSuite === "functional" && suite === "concurrency")) {
+    throw new Error(`${set}: target.suite ${suite} cannot select ${specSuite} spec ${c.target.spec}`);
+  }
   const stack = c.stack ?? [];
   if (!Array.isArray(stack) || !stack.every((a) => typeof a === "string")) throw new Error(`${set}: control.json "stack" is a list of stack option arguments`);
   parseStackOptionArgs(stack); // stack options plus amplify/capability-only setup patches

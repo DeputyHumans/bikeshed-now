@@ -3,7 +3,8 @@
   "what": "frame refusal",
   "target": {
     "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
-    "case": "C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes [N=2]"
+    "case": "C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes [N=2]",
+    "suite": "concurrency"
   },
   "expect": {
     "message": "X-c18 frame: refused JSON"
