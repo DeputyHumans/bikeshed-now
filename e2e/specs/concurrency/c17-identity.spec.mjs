@@ -70,7 +70,7 @@
  *       stays unverified; one code mail in all (I11).
  *         race (SYNC-T), S22 (SYNC-P: the burst held at
  *         verify-complete-after-read, every guess having read the count, let
- *         go one at a time), serial positive control.
+ *         go one at a time; the transaction must re-read), serial positive control.
  * C19b  code requests at once (LOCAL). One unverified account sends
  *       STARTS_AT_ONCE[N] POST /verify/start. S23's own oracle: one 200 and
  *       one code mail (the rest 429, the 60 s resend gap). Others: every
@@ -78,7 +78,7 @@
  *       one of those mailed, and it verifies the account.
  *         race (SYNC-T), S23 (SYNC-P: the requests held at
  *         verify-start-after-read, each having read the verification in
- *         progress, let go one at a time), serial positive control.
+ *         progress, let go one at a time; the transaction must re-read), serial positive control.
  * C20a  N exchanges of one code. An app (DCR, a loopback redirect never
  *       followed) is approved through the API; the code is spent N times at
  *       once. Oracles: every exchange 200 with the identical bsa_/bsr_ pair
@@ -177,31 +177,20 @@
  *     stats.views and stats.totalMs, and are never rolled into
  *     viewers/{uid}"; §2 (l. 419–421) POST /view "Carries k in the body for
  *     an unlisted document".
- *   §14 (l. 1351) "If the email is unverified, send a code and block until
- *     verified"; (l. 1357–1360) "Step 3 is security-load-bearing". SPEC
- *     states neither the five-guess limit nor the resend gap; they are
- *     VERIFY_MAX_ATTEMPTS and VERIFY_RESEND_GAP_MS (functions/src/index.ts),
- *     whose comment calls the code "single-use, 15-minute, rate-limited".
+ *   §14 verification challenges: at most five wrong comparisons per code,
+ *     one resend reservation per account in sixty seconds, checked and
+ *     updated transactionally; mail and Auth calls stay outside retries.
  *   §23 (l. 2768–2775) "The code is spent in the transaction that mints the
  *     grant. Rotation: … A retry of the same spend within 60 s receives the
  *     identical pair, so a timeout cannot fork the chain".
  *
- * KNOWN DEFECTS. Class Q under this phase's defect bar: SPEC states no limit,
- * so no SPEC sentence is contradicted, and the harm is concrete. The plan
- * disagrees. Its suspect table marks S22 and S23 R, its fix-direction row
- * "S18–S20, S22, S23" says Ask? no, and its P bar takes "the SPEC or ADR
- * sentence it violates, or a concrete harm". Under the plan they are P
- * candidates, still owing the minimal repro and two skeptics (W2). Nothing
- * is reclassified here: the conflict goes to G1 as it stands. S22: verifyEmail reads the attempt
- * count (functions/src/index.ts:2423) and writes read + 1 (2444-2447) with
- * no transaction, so guesses sent at once are each evaluated against one
- * count: at N=2, 6 at once were all evaluated and 8-10 guesses at one code
- * in all; at N=5, 13 of 13 and 15-17; against VERIFY_MAX_ATTEMPTS 5, in
- * every race and gated trial. S23: a code
- * request reads the verification in progress (2393), checks the 60 s gap
- * (2396), then writes a new code (2402) and mails it (2416), so requests
- * sent at once each mail a code and every code but the last stored is dead.
- * The serial positive controls pass. Nearest SPEC: §14 (l. 1351, 1357).
+ * REGRESSION HISTORY. Before the transaction repair, S22 evaluated 8–10
+ * guesses at N=2 and 15–17 at N=5 because requests read one stale attempt
+ * count, then wrote count + 1. S23 mailed several competing codes after
+ * concurrent requests passed one stale resend check. The authorized repair
+ * treats both as concrete security/correctness harm and §14 now names the
+ * limits. These cases are normal assertions; the historical Q classification
+ * is retained only in campaign baseline evidence.
  *
  * In a `defect:` case only that defect's own oracle is an AssertionError (a
  * TODO); every other oracle that fails there is a plain error, a FAIL, so one
@@ -1159,7 +1148,6 @@ scenario("C19a wrong codes at once (SYNC-T): one account sends a burst of wrong 
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator"],
   n: NS,
-  defect: "S22",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1168,7 +1156,7 @@ scenario("C19a wrong codes at once (SYNC-T): one account sends a burst of wrong 
   const s = await c19aSetup(ctx, label);
   await warmVerify(ctx, s.v, s.reqs.length);
   const { rows } = await fire(ctx, s.reqs, label);
-  await judgeC19a(ctx, s, rows, label, { defect: "S22" });
+  await judgeC19a(ctx, s, rows, label);
 });
 
 scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has read the attempt count and before any is compared, then let go one at a time; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14)", {
@@ -1176,7 +1164,6 @@ scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator", ...GATED],
   n: NS,
-  defect: "S22",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1198,7 +1185,7 @@ scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has
   }
   const rows = await rowsOf(ctx, pending, label);
   workersNow(ctx, `after ${label}`);
-  await judgeC19a(ctx, s, rows, label, { defect: "S22" });
+  await judgeC19a(ctx, s, rows, label);
 });
 
 scenario("C19a serial positive control: the same wrong codes one after another; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14)", {
@@ -1253,7 +1240,6 @@ scenario("C19b code requests at once (SYNC-T): one account asks for a verificati
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator"],
   n: NS,
-  defect: "S23",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1262,7 +1248,7 @@ scenario("C19b code requests at once (SYNC-T): one account asks for a verificati
   const s = await c19bSetup(ctx, label);
   await warmVerify(ctx, s.v, s.reqs.length);
   const { rows } = await fire(ctx, s.reqs, label);
-  await judgeC19b(ctx, s, rows, label, { defect: "S23" });
+  await judgeC19b(ctx, s, rows, label);
 });
 
 scenario("C19b S23 (SYNC-P): the code requests held after every one has read the verification in progress and before any stores a code, then let go one at a time; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14)", {
@@ -1270,7 +1256,6 @@ scenario("C19b S23 (SYNC-P): the code requests held after every one has read the
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator", ...GATED],
   n: NS,
-  defect: "S23",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1292,7 +1277,7 @@ scenario("C19b S23 (SYNC-P): the code requests held after every one has read the
   }
   const rows = await rowsOf(ctx, pending, label);
   workersNow(ctx, `after ${label}`);
-  await judgeC19b(ctx, s, rows, label, { defect: "S23" });
+  await judgeC19b(ctx, s, rows, label);
 });
 
 scenario("C19b serial positive control: the same code requests one after another; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14)", {

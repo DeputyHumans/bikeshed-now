@@ -1,6 +1,7 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -51,6 +51,7 @@
+@@ -52,8 +52,9 @@
+   publicOrigin,
    signInHint,
  } from "./config";
  import { verifyIdToken, verifySessionCookie } from "./lib/auth";
@@ -8,21 +9,29 @@
  import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
  import {
    canEdit,
-@@ -2398,6 +2399,8 @@
+   canManageSharing,
+@@ -2409,8 +2410,12 @@
+       res.status(403).json({ error: "email not permitted by policy" });
        return;
      }
- 
-+    // e2e amplify (amplify-c17-identity): a pause point after the verification in progress is read and the resend gap passed, before a new code is stored and mailed.
+
++    // e2e preliminary snapshot only: hold before the authoritative transaction,
++    // so a request cannot lock the record while other callers reach the gate.
++    await ref.get();
 +    await e2eIdentityGate("verify-start-after-read", uid);
      const code = sixDigitCode();
-     await ref.set(
-       {
-@@ -2439,6 +2442,8 @@
-     return;
+     const reserved = await db().runTransaction(async (tx) => {
+       const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number } | undefined;
+       const at = Date.now();
+@@ -2444,8 +2449,11 @@
    }
- 
-+  // e2e amplify (amplify-c17-identity): a pause point after the verification and its attempt count are read and the expiry and attempt checks passed, before the code is compared and a wrong guess counted.
+
+   const body = jsonBody(req) as { code?: unknown } | null;
+   const code = typeof body?.code === "string" ? body.code.trim() : "";
++  // e2e preliminary snapshot only; the transaction must re-read on release.
++  await ref.get();
 +  await e2eIdentityGate("verify-complete-after-read", uid);
+   type VerificationCheck =
+     | { status: 400 | 409 | 429; error: string }
+     | { status: 200; email: string; identity: string };
    const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");
-   if (expected !== verification.hash) {
-     await ref.set(

@@ -11241,7 +11241,7 @@
     },
     {
       "id": "S22",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "Wrong verification codes sent at once are each evaluated against one stale attempt count, so more than VERIFY_MAX_ATTEMPTS (5) guesses at one code are evaluated: at N=2, 8 (race) and 10 (gated) in every trial; at N=5, 15 and 17.",
@@ -11258,7 +11258,10 @@
         "report": "suspicions-w1c.json Q: no SPEC or ADR sentence states VERIFY_MAX_ATTEMPTS. The code is index.ts:2423-2447, a plain read then set(merge) attempts+1 with no transaction. W2: C19a was TODO at every N; w1c measured 8 to 17 guesses evaluated. PLAN CONFLICT for G1: the plan marks S22 R and \"Ask? no\", and its P bar accepts a concrete harm (K guesses at a 6-digit code)."
       },
       "proofs": [],
-      "controls": [],
+      "controls": [
+        "controls-verify-attempt-race",
+        "controls-verify-lockout"
+      ],
       "requiredCases": [
         {
           "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C19a S22 (SYNC-P): the burst of wrong codes held after every guess has read the attempt count and before any is compared, then let go one at a time; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14)",
@@ -11296,7 +11299,7 @@
     },
     {
       "id": "S23",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "Code requests sent at once each pass the 60 s resend gap, and each stores and mails a code: 2 mails at N=2 and 5 at N=5. Only the last code stored verifies.",
@@ -11313,7 +11316,10 @@
         "report": "suspicions-w1c.json Q: no SPEC sentence states the 60 s resend gap. The code is index.ts:2393-2416, a plain read, gap check, write and mail with no transaction, so N codes are mailed and N-1 are dead. W2: C19b TODO at every N. PLAN CONFLICT for G1, as for S22."
       },
       "proofs": [],
-      "controls": [],
+      "controls": [
+        "controls-verify-resend-race",
+        "controls-verify-lockout"
+      ],
       "requiredCases": [
         {
           "caseId": "e2e/specs/concurrency/c17-identity.spec.mjs::C19b code requests at once (SYNC-T): one account asks for a verification code several times at one instant; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14)",
@@ -13614,6 +13620,26 @@
         "controls-a03-download-attachment"
       ],
       "note": "SPEC section2 requires nosniff on the documented byte and shell paths; no demonstrated harm justifies changing JSON/attachment endpoints. A3.1q now checks declared MIME types, attachment disposition and existing no-store policy without requiring header absence. The reader/public metadata allowlists retain explicit fields and now include bounded marking, download metadata and non-secret live epoch. B6 reproduced stale allowlist failures; fresh execution pending. No item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "S22",
+        "S23"
+      ],
+      "scope": "email verification concurrency; local E2E/control pairs pending",
+      "tests": [
+        "25 focused verification/session/email tests pass; original implementation fails all four new race regressions",
+        "Eight isolated regressions fail assertions, restored eight verification tests pass",
+        "Four amplifier/control patch chains apply and typecheck; exact attempt/resend/lockout patches fail isolated unit assertions; control-selection selftest8 pass"
+      ],
+      "evidence": "e2e/.out/verification-unit-controls-VuXV2P/proof.json; e2e/.out/verification-patch-check-glfsr_n7/{proof,unit-proof}.json; e2e/.out/verification-focused-green.txt",
+      "controls": [
+        "controls-verify-attempt-race",
+        "controls-verify-resend-race",
+        "controls-verify-lockout"
+      ],
+      "note": "Transaction reads reserve one resend challenge and spend at most five wrong guesses across concurrent requests. Code mail and Auth updates stay outside retry callbacks; successful completion retires only the challenge it checked, preserving newer requests. Four C19a/b cases promoted without relaxing their oracles. Gate-only preliminary reads precede authoritative transactions to avoid test-created Firestore read-lock deadlock. No campaign item closed."
     }
   ]
 }

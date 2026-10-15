@@ -1,0 +1,17 @@
+{
+  "oracle": "Concurrent verification requests reserve one live code and mail it once (SPEC §14)",
+  "what": "Use the gate-held stale preliminary verification snapshot instead of reading the authoritative record inside the transaction, reproducing competing resend reservations.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C19b S23 (SYNC-P): the code requests held after every one has read the verification in progress and before any stores a code, then let go one at a time; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c17-identity"
+  ],
+  "expect": {
+    "message": "S23: "
+  }
+}

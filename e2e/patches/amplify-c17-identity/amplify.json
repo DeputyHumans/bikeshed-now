@@ -1,16 +1,16 @@
 {
-  "what": "Two server pause points in email verification (POST /verify/start and POST /verify/complete), each asking the stack's gate service whether to go on: a code request after it read the verification in progress and passed the 60 s resend gap, before it stores a new code and mails it; and a code attempt after it read the verification and its attempt count and passed the expiry and five-attempt checks, before it compares the code and counts a wrong guess. For deterministic interleavings of concurrent requests by one account: C19 (S22, more than five guesses evaluated; S23, more than one code mailed). Its own helper (functions/src/lib/e2eIdentityGate.ts), so it applies alone or beside the other amplify sets",
+  "what": "Two test-only preliminary verification reads and pause points before authoritative transactions. All callers can read the same starting snapshot without holding Firestore locks; release one at a time proves each transaction re-reads the current resend reservation or attempt budget. Gated controls replace that authoritative read with the stale preliminary snapshot to reintroduce S22/S23. No side effects happen at the gates, and the helper fails closed when the gate service is unavailable.",
   "gates": [
     {
       "name": "verify-start-after-read",
       "side": "server",
-      "where": "functions/src/index.ts verifyEmail, action start: after users/{uid}.verification is read and the resend gap check passed, before the new verification is written and the code mailed",
+      "where": "functions/src/index.ts verifyEmail: after a test-only preliminary users/{uid}.verification read, before the authoritative transaction re-reads the current resend reservation",
       "key": "uid"
     },
     {
       "name": "verify-complete-after-read",
       "side": "server",
-      "where": "functions/src/index.ts verifyEmail, action complete: after users/{uid}.verification is read and its expiry and attempt checks passed, before the code is compared and a wrong guess's attempt written",
+      "where": "functions/src/index.ts verifyEmail: after a test-only preliminary users/{uid}.verification read, before the authoritative transaction re-reads the current attempt budget",
       "key": "uid"
     }
   ]

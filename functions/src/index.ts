@@ -2410,29 +2410,34 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
       return;
     }
 
-    const existing = (await ref.get()).data()?.verification as
-      | { sentAt?: number }
-      | undefined;
-    if (existing?.sentAt && Date.now() - existing.sentAt < VERIFY_RESEND_GAP_MS) {
+    const code = sixDigitCode();
+    const reserved = await db().runTransaction(async (tx) => {
+      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number } | undefined;
+      const at = Date.now();
+      if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return false;
+      // Reserve once before sending: retrying this transaction never mails an
+      // obsolete candidate code or resets a newer challenge's attempt budget.
+      tx.set(
+        ref,
+        {
+          verification: {
+            // Only a hash is stored: a leaked record is not a working code.
+            hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
+            email,
+            expiresAt: at + VERIFY_TTL_MS,
+            attempts: 0,
+            sentAt: at,
+          },
+        },
+        { merge: true },
+      );
+      return true;
+    });
+    if (!reserved) {
       res.status(429).json({ error: "a code was just sent; wait a minute" });
       return;
     }
 
-    const code = sixDigitCode();
-    await ref.set(
-      {
-        verification: {
-          // Only a hash is stored: a leaked user record must not contain a
-          // working credential, even one that lives fifteen minutes.
-          hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
-          email,
-          expiresAt: Date.now() + VERIFY_TTL_MS,
-          attempts: 0,
-          sentAt: Date.now(),
-        },
-      },
-      { merge: true },
-    );
     await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
     res.status(200).json({ sent: true, email });
     return;
@@ -2440,48 +2445,53 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 
   const body = jsonBody(req) as { code?: unknown } | null;
   const code = typeof body?.code === "string" ? body.code.trim() : "";
-  const snap = await ref.get();
-  const verification = snap.data()?.verification as
-    | { hash?: string; email?: string; expiresAt?: number; attempts?: number }
-    | undefined;
-  if (!verification?.hash || !verification.email) {
-    res.status(409).json({ error: "no verification in progress" });
-    return;
-  }
-  if (Number(verification.expiresAt ?? 0) < Date.now()) {
-    await ref.set({ verification: FieldValue.delete() }, { merge: true });
-    res.status(409).json({ error: "that code has expired" });
-    return;
-  }
-  if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
-    await ref.set({ verification: FieldValue.delete() }, { merge: true });
-    res.status(429).json({ error: "too many attempts; request a new code" });
-    return;
-  }
-
+  type VerificationCheck =
+    | { status: 400 | 409 | 429; error: string }
+    | { status: 200; email: string; identity: string };
   const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");
-  if (expected !== verification.hash) {
-    await ref.set(
-      { verification: { attempts: Number(verification.attempts ?? 0) + 1 } },
-      { merge: true },
-    );
-    res.status(400).json({ error: "that code is not right" });
+  const identity = (value: { hash?: string; email?: string; sentAt?: number; expiresAt?: number }) =>
+    JSON.stringify([value.hash, value.email, value.sentAt, value.expiresAt]);
+  const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
+    const verification = (await tx.get(ref)).data()?.verification as
+      | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number }
+      | undefined;
+    if (!verification?.hash || !verification.email) {
+      return { status: 409, error: "no verification in progress" };
+    }
+    if (Number(verification.expiresAt ?? 0) < Date.now()) {
+      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      return { status: 409, error: "that code has expired" };
+    }
+    if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
+      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      return { status: 429, error: "too many attempts; request a new code" };
+    }
+    if (expected !== verification.hash) {
+      tx.set(
+        ref,
+        { verification: { attempts: Number(verification.attempts ?? 0) + 1 } },
+        { merge: true },
+      );
+      return { status: 400, error: "that code is not right" };
+    }
+    return { status: 200, email: verification.email, identity: identity(verification) };
+    // At most five wrong-attempt commits and one retirement can race a caller.
+    // Leave room to observe the resulting refusal after those conflicts.
+  }, { maxAttempts: VERIFY_MAX_ATTEMPTS + 3 });
+  if (checked.status !== 200) {
+    res.status(checked.status).json({ error: checked.error });
     return;
   }
 
-  await admin.auth().updateUser(uid, {
-    email: verification.email,
-    emailVerified: true,
+  await admin.auth().updateUser(uid, { email: checked.email, emailVerified: true });
+  await db().runTransaction(async (tx) => {
+    const current = (await tx.get(ref)).data()?.verification;
+    // Auth is outside Firestore: a resend can reserve another challenge while
+    // this call is in flight. Completion retires only the challenge it checked.
+    if (!current || identity(current) !== checked.identity) return;
+    tx.set(ref, { uid, email: checked.email, verification: FieldValue.delete() }, { merge: true });
   });
-  await ref.set(
-    {
-      uid,
-      email: verification.email,
-      verification: FieldValue.delete(),
-    },
-    { merge: true },
-  );
-  res.status(200).json({ verified: true, email: verification.email });
+  res.status(200).json({ verified: true, email: checked.email });
 });
 
 // ---------------------------------------------------------------------------

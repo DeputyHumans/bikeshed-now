@@ -1500,6 +1500,17 @@ address that matches a pending share would hand an attacker someone else's
 documents. This is the most tempting shortcut in the whole feature and is
 recorded as such in `docs/architecture/threat-model.md`.
 
+Verification challenges expire after fifteen minutes. Each challenge permits
+at most five wrong code comparisons; the next attempt, including the right
+code, is refused with 429 and retires the challenge. Concurrent attempts share
+that budget. A resend reserves at most one new challenge per account in sixty
+seconds, so concurrent requests produce one accepted request and one code
+mail; the others receive 429. The reservation and attempt count are checked
+and updated transactionally. Email delivery and Firebase Auth updates happen
+outside transaction retries. A successful completion retires only the
+challenge it checked, preserving a newer challenge reserved while Auth was
+updating. An Auth failure leaves the checked challenge available for retry.
+
 ### Email
 
 Sharing invitations use only the effective access added by that operation's

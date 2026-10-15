@@ -1,0 +1,17 @@
+{
+  "oracle": "Concurrent verification guesses share one five-attempt budget (SPEC §14)",
+  "what": "Use the gate-held stale preliminary verification snapshot instead of reading the authoritative record inside the transaction, reproducing lost attempts.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C19a S22 (SYNC-P): the burst of wrong codes held after every guess has read the attempt count and before any is compared, then let go one at a time; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c17-identity"
+  ],
+  "expect": {
+    "message": "S22: "
+  }
+}

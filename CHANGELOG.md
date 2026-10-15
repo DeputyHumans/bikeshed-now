@@ -28,6 +28,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Enforce the email verification guess budget and resend interval across concurrent requests; preserve newer challenges when an older completion returns late.
+
 - Make CLI `open --json` and `login --paste --json` return structured results,
   keeping paste instructions and prompts on stderr.
 
