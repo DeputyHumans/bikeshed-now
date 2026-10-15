@@ -16,7 +16,8 @@ async function helper(text = source) {
 }
 function nativeDb() {
   const state = { durable: false, commits: 0, callbacks: 0 };
-  return { state, async runTransaction(work) {
+  return { state, async runTransaction(work, options) {
+    state.options = options;
     const batch = { isEmpty: true, _reset() { this.isEmpty = true; } };
     const tx = Object.assign(Object.create(Transaction.prototype), {
       _firestore: { _traceUtil: { startActiveSpan: (_name, fn) => fn({ setAttributes() {}, addEvent() {} }) } },
@@ -29,7 +30,7 @@ function nativeDb() {
     return tx.runTransaction(async (native) => { state.callbacks++; return work(native); });
   } };
 }
-async function exercise({ outcome = "released", status = 200, text = source, environment = true } = {}) {
+async function exercise({ outcome = "released", status = 200, text = source, environment = true, options } = {}) {
   const originalFetch = globalThis.fetch, originalLog = console.log, prior = process.env.E2E_GATE_URL;
   const db = nativeDb(), calls = [], markers = [];
   if (environment) process.env.E2E_GATE_URL = "http://127.0.0.1:1"; else delete process.env.E2E_GATE_URL;
@@ -41,7 +42,7 @@ async function exercise({ outcome = "released", status = 200, text = source, env
   console.log = (line) => markers.push(line);
   try {
     const run = await helper(text);
-    const result = await run(db, "doc", "draft-link", async (tx) => { if (!db.state.durable) tx.update(); return "receipt"; });
+    const result = await run(db, "doc", "draft-link", async (tx) => { if (!db.state.durable) tx.update(); return "receipt"; }, options);
     return { ...db.state, calls, markers, result };
   } finally {
     globalThis.fetch = originalFetch; console.log = originalLog;
@@ -95,4 +96,12 @@ test("operator ESM twin inverses cannot pass the postcommit retry judge", async 
   await assert.rejects(exercise({ text: operatorSource.replace("{ code: 14 }", "{ code: 3 }") }), /acknowledgement lost/);
   const missing = await exercise({ text: operatorSource.replace('throw Object.assign(new Error("e2e: committed transaction acknowledgement lost"), { code: 14 });', 'return;') });
   assert.throws(() => assert.equal(missing.callbacks, 2), { code: "ERR_ASSERTION" });
+});
+
+test("native ACK wrapper forwards exact SDK transaction options and retains their attempt limit", async () => {
+  const options = { maxAttempts: 8 };
+  const result = await exercise({ options });
+  assert.equal(result.options, options, "caller transaction options reach the native SDK unchanged");
+  const inverse = await exercise({ options, text: source.replace("}, options);", "});") });
+  assert.throws(() => assert.equal(inverse.options, options), { code: "ERR_ASSERTION" });
 });

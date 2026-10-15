@@ -5,7 +5,7 @@
 +// Stack-only native Firestore commit acknowledgement loss, keyed to one observed operation (SPEC §2, §6a).
 +
 +import { randomUUID } from "node:crypto";
-+import type { Firestore, Transaction } from "firebase-admin/firestore";
++import type { Firestore, Transaction, ReadWriteTransactionOptions } from "firebase-admin/firestore";
 +
 +type NativeTransaction = Transaction & { commit(): Promise<void>; _writeBatch?: { isEmpty: boolean } };
 +
@@ -13,7 +13,7 @@
 + * deliberately released postcommit gate loses one acknowledgement. Unarmed
 + * setup calls pass; a missing/expired gate never masquerades as injected loss.
 + */
-+export function e2eAckTransaction<T>(db: Firestore, docId: string, operation: string, work: (tx: Transaction) => Promise<T>): Promise<T> {
++export function e2eAckTransaction<T>(db: Firestore, docId: string, operation: string, work: (tx: Transaction) => Promise<T>, options?: ReadWriteTransactionOptions): Promise<T> {
 +  const caller = randomUUID(), wrapped = new WeakSet<object>();
 +  let lost = false, callbacks = 0;
 +  return db.runTransaction(async (tx) => {
@@ -38,7 +38,7 @@
 +      };
 +    }
 +    return work(tx);
-+  });
++  }, options);
 +}
 +
 +async function e2eAckGate(name: string, key: string, caller: string, run: number): Promise<{ outcome?: string }> {

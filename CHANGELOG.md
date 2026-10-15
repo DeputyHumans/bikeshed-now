@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Forward explicit native Firestore transaction options through the acknowledgement-loss capability, preserving endpoint retry budgets and testing a dropped-options inverse.
+
 - Preserve each completed document or folder membership mutation across native commit retries. Bounded receipts keep the original invitation delta and event emission, prevent an old grant or move from overwriting a later one, and leave pure membership recomputation receipt-free.
 
 - Preserve a notification’s winning cooldown claim across a native commit retry, with a unique claim id alongside compatible numeric timestamps. Recheck current opt-out, read authority and expiry before delivering; prune expired claim ids with their cooldown entries.
