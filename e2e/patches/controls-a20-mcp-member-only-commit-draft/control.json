@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.6.extra fork_document, get_lineage, revise_suggestion and withdraw_suggestion take the key too (SPEC §21, §22), and the tools that decide, commit, rename or move never do: with the key a non-member still gets the absent id's answer",
+  "what": "member only commit draft",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.6.extra fork_document, get_lineage, revise_suggestion and withdraw_suggestion take the key too (SPEC §21, §22), and the tools that decide, commit, rename or move never do: with the key a non-member still gets the absent id's answer",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "commit_draft with k"
+  }
+}

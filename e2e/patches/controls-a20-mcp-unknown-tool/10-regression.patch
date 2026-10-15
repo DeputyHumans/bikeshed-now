@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -156,5 +156,5 @@
+       const tool = toolByName(name);
+       if (!tool) {
+-        return rpcError(id, METHOD_NOT_FOUND, `no tool named "${name}"`);
++        return rpcError(id, INVALID_REQUEST, `no tool named "${name}"`);
+       }
+       const args = (params?.arguments as Record<string, unknown>) ?? {};

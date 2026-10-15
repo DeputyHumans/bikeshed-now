@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1219,5 +1219,5 @@
+     },
+     async run(ctx, args) {
+-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
++      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+       // Moving a document changes who inherits access to it: the destination
+       // folder's members become its members. So it takes the REAL editor set,

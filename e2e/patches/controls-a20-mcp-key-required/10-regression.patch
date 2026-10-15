@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -273,5 +273,5 @@
+   const data = snap.data() as DocAclData & Record<string, unknown>;
+   const proof = await linkProofFor(ref, data, ctx.caller, k);
+-  if (!canRead(data, ctx.caller, proof)) throw new Error(`no document with id "${slug}"`);
++  if (!canRead(data, ctx.caller, proof) && data.visibility !== "unlisted") throw new Error(`no document with id "${slug}"`);
+   // An expired document reads as absent to everyone but its owner — the same
+   // answer a document they may not read gives, so expiry cannot be used to

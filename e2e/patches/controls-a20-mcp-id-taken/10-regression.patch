@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -693,5 +693,5 @@
+           ...published,
+           requestedId,
+-          idTaken: published.docId !== requestedId,
++          idTaken: false,
+           ...(await whereAndWho(ctx, published.docId)),
+           // Where get_changes starts: nothing that happens from now on is missed.

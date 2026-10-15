@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.2.move_document files a document into a folder saying who can now read it, and with no folder moves it back to the root; a viewer and a folder of somebody else's are refused",
+  "what": "move root",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.move_document files a document into a folder saying who can now read it, and with no folder moves it back to the root; a viewer and a folder of somebody else's are refused",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "move_document.*missing required argument"
+  }
+}

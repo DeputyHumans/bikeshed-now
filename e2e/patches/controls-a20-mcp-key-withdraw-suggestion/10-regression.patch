@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1004,4 +1004,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       return changeOwnSuggestion(ctx, args, "withdraw", {});
+     },

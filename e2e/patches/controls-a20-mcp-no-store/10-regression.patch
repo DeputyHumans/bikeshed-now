@@ -1,0 +1,19 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -3140,5 +3140,4 @@
+   // Before anything can answer: a GET's 405 and every 401 would otherwise
+   // inherit Hosting's default max-age=600.
+-  noStore(res);
+   const { handleMcp } = await import("./mcp/server");
+   await handleMcp(req, res);
+--- a/firebase.json
++++ b/firebase.json
+@@ -178,8 +178,4 @@
+         "headers": [
+           {
+-            "key": "Cache-Control",
+-            "value": "private, no-store"
+-          },
+-          {
+             "key": "Access-Control-Expose-Headers",
+             "value": "WWW-Authenticate"

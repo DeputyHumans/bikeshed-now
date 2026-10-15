@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -977,4 +977,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       if (typeof args.replacement !== "string") {
+         throw new Error("replacement is required: the new text, or an empty string to propose deleting the passage");

@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -631,5 +631,5 @@
+         // flag it may never reach.
+         truncated,
+-        source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
++        source: truncated ? source.slice(0, SOURCE_LIMIT - 1) : source,
+       };
+     },

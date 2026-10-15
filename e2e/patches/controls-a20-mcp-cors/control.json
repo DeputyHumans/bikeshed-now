@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.4 POST /mcp without a credential is 401 with the Bearer challenge naming the protected-resource metadata; a malformed, unknown, revoked or access-token-shaped credential adds error=\"invalid_token\"; every answer is private, no-store and exposes WWW-Authenticate; GET and DELETE are 405 JSON-RPC, PUT 405 with Allow: POST",
+  "what": "cors",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.4 POST /mcp without a credential is 401 with the Bearer challenge naming the protected-resource metadata; a malformed, unknown, revoked or access-token-shaped credential adds error=\"invalid_token\"; every answer is private, no-store and exposes WWW-Authenticate; GET and DELETE are 405 JSON-RPC, PUT 405 with Allow: POST",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "browser clients receive the CORS origin"
+  }
+}

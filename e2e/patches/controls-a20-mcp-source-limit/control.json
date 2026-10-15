@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.2.get_document returns the stored source with its metadata and an earlier version on request, cuts a source over 200,000 characters at exactly 200,000 and says truncated; a stranger and an absent id get the same refusal, an unknown version its own",
+  "what": "source limit",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.get_document returns the stored source with its metadata and an earlier version on request, cuts a source over 200,000 characters at exactly 200,000 and says truncated; a stranger and an absent id get the same refusal, an unknown version its own",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a source of 200,001 characters is cut at 200,000"
+  }
+}

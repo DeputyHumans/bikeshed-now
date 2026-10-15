@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -3137,5 +3137,5 @@
+  * cross-site request forgery surface to widen by allowing it.
+  */
+-export const mcp = onRequest({ ...PLAIN, cors: true }, async (req, res) => {
++export const mcp = onRequest({ ...PLAIN, cors: false }, async (req, res) => {
+   // Before anything can answer: a GET's 405 and every 401 would otherwise
+   // inherit Hosting's default max-age=600.

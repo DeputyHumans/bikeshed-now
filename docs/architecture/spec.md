@@ -2325,6 +2325,13 @@ whose account holds no link grant. Without it such a document answers exactly as
 an id that does not exist (§17). The CLI accepts the link itself wherever it
 takes an id, because the link is the only place a person holds the key.
 
+`fork_document` and `get_lineage` use the same optional key as their read proof
+(§21). `revise_suggestion` and `withdraw_suggestion` also take `k` to read the
+document; the suggestion must still be the caller's own, pending, and on the
+current version (§22). A key never substitutes for membership on
+`accept_suggestion`, `reject_suggestion`, `commit_draft`, `rename_document` or
+`move_document`.
+
 ### Watching a document: `get_changes`
 
 An agent that publishes a document watches it for what people say. `get_changes`

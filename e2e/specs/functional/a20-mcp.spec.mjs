@@ -34,11 +34,11 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { randomBytes } from "node:crypto";
-import { answered, currentTarget, isHostingCutoff, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
+import { answered, currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession, revokeToken } from "../../lib/session.mjs";
 import { absentDocId, createFolderMcp, docIdFor, forkMcp, ledgerDoc, publishMcp, seedThreads } from "../../lib/seed.mjs";
-import { setVisibility, share, trackWindow } from "../../lib/grant.mjs";
+import { setVisibility, share } from "../../lib/grant.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { ACT_TOOLS, COMMENT_TOOLS } from "../../lib/guard.mjs";
@@ -66,6 +66,91 @@ const SPEC_TOOLS = Object.freeze([
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
   "reply_to_comment", "resolve_thread", "reopen_thread",
 ]);
+/** Required argument names are the public protocol, independent of tools/list's own declarations. */
+const REQUIRED_ARGS = Object.freeze({
+  "list_documents": [],
+  "get_document": [
+    "id"
+  ],
+  "publish_document": [
+    "title",
+    "content"
+  ],
+  "fork_document": [
+    "id"
+  ],
+  "get_lineage": [
+    "id"
+  ],
+  "update_document": [
+    "id",
+    "content"
+  ],
+  "commit_draft": [
+    "id"
+  ],
+  "suggest_edit": [
+    "id",
+    "exact"
+  ],
+  "revise_suggestion": [
+    "id",
+    "threadId"
+  ],
+  "withdraw_suggestion": [
+    "id",
+    "threadId"
+  ],
+  "accept_suggestion": [
+    "id",
+    "threadId"
+  ],
+  "reject_suggestion": [
+    "id",
+    "threadId"
+  ],
+  "list_folders": [],
+  "get_folder": [
+    "id"
+  ],
+  "create_folder": [
+    "name"
+  ],
+  "move_document": [
+    "id"
+  ],
+  "rename_document": [
+    "id",
+    "title"
+  ],
+  "get_comments": [
+    "id"
+  ],
+  "get_changes": [
+    "id",
+    "since"
+  ],
+  "add_comment": [
+    "id",
+    "exact",
+    "body"
+  ],
+  "reply_to_comment": [
+    "id",
+    "threadId",
+    "body"
+  ],
+  "resolve_thread": [
+    "id",
+    "threadId"
+  ],
+  "reopen_thread": [
+    "id",
+    "threadId"
+  ]
+});
+const EXTRA_KEY_TOOLS = ["fork_document", "get_lineage", "revise_suggestion", "withdraw_suggestion"];
+
 /** The nine SPEC §19 says take an optional `k`. */
 const KEY_TOOLS = Object.freeze([
   "get_document", "update_document", "suggest_edit", "get_comments", "get_changes", "add_comment", "reply_to_comment", "resolve_thread", "reopen_thread",
@@ -291,9 +376,10 @@ scenario("A20.1 tools/list names exactly SPEC §19's twenty-three tools, each de
     if (typeof t.description !== "string" || t.description.trim().length < 20) bad.push(`${t.name}: no description`);
     if (t.inputSchema?.type !== "object") bad.push(`${t.name}: inputSchema.type ${JSON.stringify(t.inputSchema?.type)}`);
     for (const r of required) if (!props.includes(r)) bad.push(`${t.name}: requires ${r}, which its schema does not describe`);
-    if (KEY_TOOLS.includes(t.name) && t.inputSchema?.properties?.k?.type !== "string") bad.push(`${t.name}: SPEC §19 says it takes k, its schema has none`);
+    if ([...KEY_TOOLS, ...EXTRA_KEY_TOOLS].includes(t.name) && t.inputSchema?.properties?.k?.type !== "string") bad.push(`${t.name}: SPEC §19 says it takes k, its schema has none`);
   }
   assert.deepEqual(bad, [], "every tool's schema");
+  assert.deepEqual(Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []])), REQUIRED_ARGS, "required argument declarations match the public contract");
 });
 
 // --- A20.2: one case per tool ------------------------------------------------------
@@ -464,6 +550,18 @@ scenario("A20.2.fork_document copies a version the caller can read into a privat
   const row = (await ok(v, "list_documents", {})).documents.find((r) => r.id === f.docId);
   assert.deepEqual({ owner: row?.owner, forked: row?.forked }, { owner: v.email, forked: true }, "the viewer owns it");
   await refused(o, "get_document", { id: f.docId }, ABSENT(f.docId), "the original's owner cannot read the private fork");
+
+  ctx.step("the lineage pointer records the selected historical version and its hash");
+  const [lineage, pointer, parentVersion, forkVersion] = await Promise.all([
+    ok(v, "get_lineage", { id: f.docId }),
+    readDoc(target, `forks/${f.docId}`),
+    readDoc(target, `docs/${d.id}/versions/v1`),
+    readDoc(target, `docs/${f.docId}/versions/v1`),
+  ]);
+  precondition(typeof parentVersion?.contentHash === "string", "the selected source version has its immutable hash");
+  assert.deepEqual(lineage.forkedFrom.map((a) => ({ id: a.id, version: a.version, changedSince: a.changedSince })), [{ id: d.id, version: "v1", changedSince: true }], "historical fork lineage stays pinned to v1 while its source is v2");
+  assert.deepEqual({ id: pointer?.parentId, version: pointer?.parentVersion, hash: pointer?.parentContentHash }, { id: d.id, version: "v1", hash: parentVersion.contentHash }, "the server-only fork pointer preserves the selected version and hash");
+  assert.deepEqual({ via: forkVersion?.publishedVia, hash: forkVersion?.contentHash }, { via: "fork", hash: parentVersion.contentHash }, "the fork's own v1 records fork provenance and the copied content hash");
 
   ctx.step("refused: a stranger, and an absent id, word for word");
   await refused(x, "fork_document", { id: d.id }, ABSENT(d.id), "stranger fork_document");
@@ -1157,12 +1255,14 @@ scenario("A20.4 POST /mcp without a credential is 401 with the Bearer challenge 
   const body401 = { jsonrpc: "2.0", id: null, error: { code: -32600, message: "sign in to connect, or send a personal access token" } };
   const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
   const rows = [];
-  const call = async (label, method, auth, body) => {
+  const clientOrigin = "https://client.example";
+  const call = async (label, method, auth, body, extra = {}) => {
     const http = patientHttp(ctx, { actor: `a20-${label.replace(/\W+/g, "-")}` });
     const r = await http.request(method, "/mcp", {
-      headers: { accept: "application/json, text/event-stream", ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(auth ? { authorization: auth } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: { accept: "application/json, text/event-stream", origin: clientOrigin, ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(auth ? { authorization: auth } : {}), ...extra.headers },
+      body: body === undefined ? undefined : extra.raw ? body : JSON.stringify(body),
     });
+    assert.equal(r.headers.get("access-control-allow-origin"), clientOrigin, `${label}: browser clients receive the CORS origin`);
     rows.push({ label, status: r.status, cache: r.headers.get("cache-control"), expose: r.headers.get("access-control-expose-headers"), www: r.headers.get("www-authenticate"), allow: r.headers.get("allow") });
     return answered(r, `${method} /mcp (${label})`);
   };
@@ -1197,6 +1297,17 @@ scenario("A20.4 POST /mcp without a credential is 401 with the Bearer challenge 
   assert.deepEqual({ status: put.status, allow: put.headers.get("allow"), text: put.text }, { status: 405, allow: "POST", text: "" }, "PUT");
   const notif = await call("a notification", "POST", `Bearer ${o.token}`, { jsonrpc: "2.0", method: "notifications/initialized" });
   assert.equal(notif.status, 202, "a notification");
+
+  ctx.step("CORS preflight, handler parse refusal and both tool outcomes are transport rows too");
+  const preflight = await call("preflight", "OPTIONS", null, undefined, { headers: { "access-control-request-method": "POST", "access-control-request-headers": "authorization,content-type" } });
+  assert.deepEqual({ status: preflight.status, text: preflight.text, headers: preflight.headers.get("access-control-allow-headers") }, { status: 204, text: "", headers: "authorization,content-type" }, "the browser may preflight authenticated JSON POST");
+  assert.ok(preflight.headers.get("access-control-allow-methods")?.split(",").includes("POST"), "the preflight permits POST");
+  const parse = await call("text parse refusal", "POST", `Bearer ${o.token}`, "{not json", { raw: true, headers: { "content-type": "text/plain" } });
+  assert.deepEqual({ status: parse.status, code: parse.json?.error?.code }, { status: 400, code: -32700 }, "text/plain reaches the handler's parse refusal");
+  const goodTool = await call("tools/call success", "POST", `Bearer ${o.token}`, { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_documents", arguments: {} } });
+  assert.deepEqual({ status: goodTool.status, isError: goodTool.json?.result?.isError }, { status: 200, isError: false }, "a successful tool remains an HTTP 200 response");
+  const badTool = await call("tools/call refusal", "POST", `Bearer ${o.token}`, { jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_document", arguments: {} } });
+  assert.deepEqual({ status: badTool.status, isError: badTool.json?.result?.isError }, { status: 200, isError: true }, "a refused tool remains an HTTP 200 response");
 
   ctx.step("every answer: private, no-store and Access-Control-Expose-Headers: WWW-Authenticate");
   ctx.ev.json("mcp-headers", rows);
@@ -1251,67 +1362,17 @@ scenario("A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on th
 async function unlistedOpen(ctx, name) {
   const [o, x] = await crew(ctx, ["owner", "stranger"]);
   const d = await publishDoc(o, name);
-  let vis;
-  try {
-    vis = await setVisibility(target, { owner: o.session, doc: d.id, visibility: "unlisted", publicEdit: true, timeoutMs: CALL_MS });
-  } catch (err) {
-    // LIB-REQUEST: cutoff-opens-window — grant.mjs setVisibility settles a
-    // 504 as a refusal ("nothing changed on the server") and forgets the
-    // window, but Hosting's cut-off 504 only means the function had not
-    // answered within 60 s: it ran on, and the document was left unlisted
-    // with nobody to close it (e2e-44wr3h-a20-key-extra-1o7u, invocation
-    // 20261012T053104Z-p46960-xyr2, found unlisted hours later and made
-    // private by hand). So a request the stack did not answer registers the
-    // window again, and the case's teardown closes it.
-    if (stackDidNotAnswer(err)) trackWindow(target, { owner: o.session, doc: d.id, visibility: "unlisted" });
-    throw err;
-  }
-  precondition(vis.status === 200 && vis.linkToken, `unlisted with open editing: ${vis.status}`);
+  const vis = await setVisibility(target, { owner: o.session, doc: d.id, visibility: "unlisted", publicEdit: true, timeoutMs: CALL_MS, ...(target.kind === "local" ? { patient: { ctx } } : {}) });
+  precondition((vis.status === 200 || vis.landed) && vis.visibility === "unlisted" && vis.publicEdit && vis.linkToken, "unlisted open editing is confirmed by the answer or the current record");
   return { o, x, d, k: vis.linkToken };
 }
 
-/** How many times a case asks for its unlisted document to be private again before its teardown takes over. */
-const CLOSE_TRIES = 3;
-
-// LIB-REQUEST: teardown-cutoff — test.mjs closeCaseWindows(true) FAILS a case
-// whose body passed (E2E_WINDOW_OPEN) when its two tries both meet Hosting's
-// cut-off, though the product judged nothing wrong; under
-// inconclusiveOnStackTimeout it could keep trying while the case has time, or
-// end the case INCONCLUSIVE when the window then closes. makePrivateAgain()
-// below is the local workaround.
-/**
- * The owner makes the document private again, as the case's last act, asking
- * up to CLOSE_TRIES times while the stack does not answer. The teardown
- * scenario() runs (lib/test.mjs closeCaseWindows) tries twice and FAILS a case
- * whose body passed when both tries meet Hosting's 60 s cut-off, though
- * nothing of the product was judged wrong: on the loaded shared stack the
- * teardown of A20.6.extra got 504 at 60 s twice, and the retry a minute later
- * closed it in 458 ms (invocation 20261012T124044Z-p81473-524d). A cut-off 504
- * keeps the window registered (setVisibility restores it on any status but
- * 200), so whatever is still open after these tries is the teardown's again,
- * and it still fails the case. Anything but the stack not answering throws.
- */
+/** The shared helper retains uncertain windows and retries only after reading their effect. */
 async function makePrivateAgain(ctx, owner, docId) {
-  for (let i = 1; i <= CLOSE_TRIES; i++) {
-    try {
-      const r = await setVisibility(target, { owner: owner.session, doc: docId, visibility: "private", expect: [200, 504], timeoutMs: CALL_MS });
-      if (r.status === 200) {
-        // setVisibility forgets the window on any 200, so this is the only check of it.
-        assert.equal(r.visibility, "private", `POST /visibility private answered 200 with visibility ${JSON.stringify(r.visibility)}`);
-        ctx.step(`${docId} is private again${i > 1 ? ` (try ${i})` : ""}`);
-        return;
-      }
-      ctx.step(`try ${i} of ${CLOSE_TRIES} to make ${docId} private: ${notAnswered(r.response)}`);
-    } catch (err) {
-      const why = stackDidNotAnswer(err);
-      if (!why) throw err;
-      ctx.step(`try ${i} of ${CLOSE_TRIES} to make ${docId} private: ${why}`);
-    }
-  }
+  const r = await setVisibility(target, { owner: owner.session, doc: docId, visibility: "private", timeoutMs: CALL_MS, ...(target.kind === "local" ? { patient: { ctx } } : {}) });
+  assert.equal(r.visibility, "private", "the shared visibility helper confirms the document is private again");
+  ctx.step(`${docId} is private again${r.landed ? " (confirmed after the request cutoff)" : ""}`);
 }
-
-/** A short account of a /visibility answer that was not 200. */
-const notAnswered = (r) => (isHostingCutoff(r) ? `504 after ${Math.round(r.ms)} ms, Hosting's cut-off` : `${r.status} after ${Math.round(r.ms ?? 0)} ms`);
 
 scenario("A20.6 a link key opens an unlisted open-editing document to a non-member on each of the nine tools SPEC §19 names; without it, or with a wrong one, each answers exactly as for an id that does not exist", {
   tiers: BOTH,

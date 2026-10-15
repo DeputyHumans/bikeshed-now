@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -145,5 +145,5 @@
+     case "tools/list":
+       return rpcResult(id, {
+-        tools: TOOLS.map((t) => ({
++        tools: TOOLS.slice(1).map((t) => ({
+           name: t.name,
+           description: t.description,

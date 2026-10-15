@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -282,5 +282,5 @@
+   // answer for "accepted, no response body".
+   if (responses.length === 0) {
+-    res.status(202).end();
++    res.status(200).json({});
+     return;
+   }

@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.2.publish_document creates a private v1 at the requested id with its address, filedIn, access and cursor; a taken id is suffixed and says idTaken; a bad id, empty content, a folder that is not there and a folder of somebody else's are refused and create nothing",
+  "what": "id taken",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.publish_document creates a private v1 at the requested id with its address, filedIn, access and cursor; a taken id is suffixed and says idTaken; a bad id, empty content, a folder that is not there and a folder of somebody else's are refused and create nothing",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "idTaken"
+  }
+}
