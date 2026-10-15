@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Save document-authorized drafts with an exact snapshot precondition instead of retaining a read transaction through the write. Recheck base, expiry, current role, live epoch, and causal order on every conflict; keep remembered-link authorization transactional and retain candidate bytes when a lost acknowledgement leaves the commit uncertain.
+
 - Keep the tier-lock recording regression valid when invocation metadata also records guarded RTDB maintenance.
 
 - Require the complete documented review refusal and a successful MCP transport before a natural publication race can count as safe refusal; share that predicate with composite evidence validation.

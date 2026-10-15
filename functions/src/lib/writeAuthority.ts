@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Current expiry and edit authority are checked inside content-write transactions (SPEC §8, §17).
+// Current expiry and edit authority are checked in conditional snapshots and transactions (SPEC §8, §17).
 
 import type * as admin from "firebase-admin";
 import { canEdit, isDocEditor, isExpired, visibilityOf, type DocAclData, type LinkProof } from "./acl";
@@ -12,6 +12,28 @@ export class WriteAuthorityError extends Error {
   }
 }
 
+/** True is fully authorized by this document; false needs a transactional link-grant read. */
+export function assertDocumentWriteAuthority(
+  data: DocAclData,
+  caller: { uid: string; emailLower: string },
+  options: { k?: string | null; editorsOnly?: boolean } = {},
+): boolean {
+  if (isExpired(data, Date.now())) throw new WriteAuthorityError(409, {
+    expired: true,
+    error: "this document has expired — change or clear its expiry to edit it",
+  });
+  if (options.editorsOnly) {
+    if (isDocEditor(data, caller.uid, caller.emailLower)) return true;
+    throw new WriteAuthorityError(403, { error: "You no longer have permission to edit this document." });
+  }
+  if (canEdit(data, caller)) return true;
+  // A supplied key is proof for this request, not a durable grant. Compare
+  // it to the transaction's current token so rotation still revokes it.
+  if (caller.uid && canEdit(data, caller, { k: options.k })) return true;
+  if (caller.uid && visibilityOf(data) === "unlisted" && data.publicEdit === true) return false;
+  throw new WriteAuthorityError(403, { error: "You no longer have permission to edit this document." });
+}
+
 /** Call after reading the current document and before the transaction writes. */
 export async function assertWriteAuthority(
   tx: admin.firestore.Transaction,
@@ -20,18 +42,7 @@ export async function assertWriteAuthority(
   caller: { uid: string; emailLower: string },
   options: { k?: string | null; editorsOnly?: boolean } = {},
 ): Promise<void> {
-  if (isExpired(data, Date.now())) throw new WriteAuthorityError(409, {
-    expired: true,
-    error: "this document has expired — change or clear its expiry to edit it",
-  });
-  if (options.editorsOnly) {
-    if (isDocEditor(data, caller.uid, caller.emailLower)) return;
-    throw new WriteAuthorityError(403, { error: "You no longer have permission to edit this document." });
-  }
-  if (canEdit(data, caller)) return;
-  // A supplied key is proof for this request, not a durable grant. Compare
-  // it to the transaction's current token so rotation still revokes it.
-  if (caller.uid && canEdit(data, caller, { k: options.k })) return;
+  if (assertDocumentWriteAuthority(data, caller, options)) return;
   let proof: LinkProof = {};
   if (caller.uid && visibilityOf(data) === "unlisted" && data.publicEdit === true) {
     // A remembered link is revocable. Reading it in this transaction prevents

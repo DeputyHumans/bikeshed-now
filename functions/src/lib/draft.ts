@@ -3,11 +3,12 @@
 
 import * as admin from "firebase-admin";
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { causalOrder, readStoredCausalStamp, storedCausalStamp, type CausalStamp } from "./causal";
 import { clearEditLog, syncPresenceAccess } from "./presence";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
-import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
+import { assertDocumentWriteAuthority, assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
@@ -182,66 +183,134 @@ export async function writeDraft(args: {
   let previous: unknown;
   let retiredEpoch: string | undefined;
   let reused = false;
+  let conditionalMayHaveCommitted = false;
   let savedEpoch = "initial";
   let draft: Record<string, unknown> = {};
-  try {
-    await args.db.runTransaction(async (tx) => {
-      const snap = await tx.get(docRef);
-      const current = snap.data();
-      checkDraftBase(current, baseVersion);
-      await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: args.actor.uid ?? "", emailLower: args.emailLower });
-      if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
-      if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
-        error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
-      });
-      const epoch = String(current?.liveEpoch ?? "initial");
-      if (args.liveEpoch !== undefined && args.liveEpoch !== epoch) throw new DraftConflict({
+  const caller = { uid: args.actor.uid ?? "", emailLower: args.emailLower };
+  const acknowledgeOwnCandidate = (current: admin.firestore.DocumentData | undefined): boolean => {
+    if (!conditionalMayHaveCommitted || current?.draft?.storagePrefix !== storagePrefix) return false;
+    draft = current.draft;
+    savedEpoch = String(current.liveEpoch ?? "initial");
+    reused = false;
+    return true;
+  };
+  // Both commit paths call this with a freshly authorized snapshot. Never
+  // carry a previous attempt's base, epoch, draft identity or causal decision.
+  const prepare = (current: admin.firestore.DocumentData | undefined): Record<string, unknown> | null => {
+    if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+    if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
+      error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
+    });
+    const epoch = String(current?.liveEpoch ?? "initial");
+    if (args.liveEpoch !== undefined && args.liveEpoch !== epoch) throw new DraftConflict({
+      error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+    });
+    reused = false;
+    savedEpoch = epoch;
+    retiredEpoch = undefined;
+    const currentCausal = readStoredCausalStamp(current?.draft?.causal);
+    if (args.causal && currentCausal) {
+      const order = causalOrder(args.causal, currentCausal);
+      if (order === "generation") throw new DraftConflict({
         error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
       });
-      reused = false;
-      savedEpoch = epoch;
-      retiredEpoch = undefined;
-      const currentCausal = readStoredCausalStamp(current?.draft?.causal);
-      if (args.causal && currentCausal) {
-        const order = causalOrder(args.causal, currentCausal);
-        if (order === "generation") throw new DraftConflict({
-          error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+      if (order === "concurrent") throw new DraftConflict({
+        error: "Other edits are still arriving. Keep this editor open and retry saving after they merge.", draftChanged: true,
+      });
+      if (order === "behind" || order === "same") {
+        draft = current!.draft;
+        reused = true;
+        return null;
+      }
+    }
+    previous = current?.draft;
+    if (args.retireLive) retiredEpoch = epoch;
+    savedEpoch = args.retireLive ? randomUUID() : epoch;
+    draft = {
+      baseVersion, storagePrefix, entry: version.entry,
+      ...(args.causal ? { causal: storedCausalStamp(args.causal) } : {}),
+      ...(sourceEntry ? { sourceEntry } : {}), bytes,
+      updatedByEmail: args.emailLower,
+      editSessions: appendEditSession(current?.draft?.editSessions, args.actor),
+    };
+    return {
+      draft: { ...draft, updatedAt: now() }, updatedAt: now(),
+      ...(args.retireLive ? { liveEpoch: savedEpoch } : {}),
+      "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
+    };
+  };
+  try {
+    // Read/write transactions acquire shared read locks before upgrading them
+    // to write locks. Simultaneous autosaves can exhaust all SDK retries in
+    // that upgrade cycle. A conditional write checks this same snapshot
+    // atomically, without retaining a read lock while other writers arrive.
+    const deadline = Date.now() + 10_000;
+    const contended = () => new DraftConflict({
+      error: "Other edits are still arriving. Keep this editor open and retry saving.", draftChanged: true,
+    });
+    let attempt = 0;
+    for (;;) {
+      const snap = await docRef.get();
+      const current = snap.data();
+      // A conditional SDK commit can succeed, lose its acknowledgement, and
+      // then fail its internal retry's precondition. Our unique prefix proves
+      // that outcome before a retired epoch or later role change can refuse it.
+      if (acknowledgeOwnCandidate(current)) break;
+      if (Date.now() >= deadline) throw contended();
+      checkDraftBase(current, baseVersion);
+      if (!assertDocumentWriteAuthority(current as DocAclData, caller)) {
+        // Remembered link grants live in another document. Keep their read
+        // in a real transaction so revocation races still refuse the write.
+        // Its existing SDK retry duration is separate from the CAS deadline.
+        await args.db.runTransaction(async (tx) => {
+          const fresh = await tx.get(docRef);
+          const data = fresh.data();
+          checkDraftBase(data, baseVersion);
+          await assertWriteAuthority(tx, docRef, data as DocAclData, caller);
+          const update = prepare(data);
+          if (update) tx.update(docRef, update);
         });
-        if (order === "concurrent") throw new DraftConflict({
-          error: "Other edits are still arriving. Keep this editor open and retry saving after they merge.", draftChanged: true,
-        });
-        if (order === "behind" || order === "same") {
-          draft = current!.draft;
-          reused = true;
-          return;
+        break;
+      }
+      const update = prepare(current);
+      if (!update) break;
+      if (!snap.updateTime) throw new Error("Draft snapshot has no update time.");
+      try {
+        await docRef.update(update, { lastUpdateTime: snap.updateTime });
+        break;
+      } catch (error) {
+        // Only retry an explicit precondition/missing-document refusal. SDK
+        // internal transport retries mean it does NOT prove the first commit
+        // was absent. Reconcile our unique prefix and retain unresolved bytes.
+        const code = (error as { code?: unknown }).code;
+        if (code !== 5 && code !== 9) throw error;
+        conditionalMayHaveCommitted = true;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+          if (acknowledgeOwnCandidate((await docRef.get()).data())) break;
+          throw contended();
+        }
+        // Exponential backoff with +/-50% jitter avoids a herd of immediate
+        // re-reads. Keep the retry deadline independent of the attempt count.
+        const basePause = Math.min(2_000, 250 * 1.5 ** Math.min(attempt++, 6));
+        const pause = Math.min(remaining, Math.floor(basePause * (0.5 + Math.random())));
+        await delay(pause);
+        if (Date.now() >= deadline) {
+          if (acknowledgeOwnCandidate((await docRef.get()).data())) break;
+          throw contended();
         }
       }
-      previous = current?.draft;
-      if (args.retireLive) retiredEpoch = epoch;
-      savedEpoch = args.retireLive ? randomUUID() : epoch;
-      draft = {
-        baseVersion, storagePrefix, entry: version.entry,
-        ...(args.causal ? { causal: storedCausalStamp(args.causal) } : {}),
-        ...(sourceEntry ? { sourceEntry } : {}), bytes,
-        updatedByEmail: args.emailLower,
-        editSessions: appendEditSession(current?.draft?.editSessions, args.actor),
-      };
-      tx.update(docRef, {
-        draft: { ...draft, updatedAt: now() }, updatedAt: now(),
-        ...(args.retireLive ? { liveEpoch: savedEpoch } : {}),
-        "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
-      });
-    });
+    }
   } catch (error) {
     // A transport error can follow a committed transaction: retain its bytes
     // unless a known refusal proves the transaction never referenced them.
-    if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
+    if (!conditionalMayHaveCommitted && (error instanceof DraftConflict || error instanceof WriteAuthorityError)) {
       await removeDraftSnapshot(docRef.id, { storagePrefix });
     }
     throw error;
   }
   if (reused) {
-    await removeDraftSnapshot(docRef.id, { storagePrefix });
+    if (!conditionalMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
     return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
   }
   await removeDraftSnapshot(docRef.id, previous);

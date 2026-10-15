@@ -228,6 +228,8 @@ test("an external draft replacement retires its live epoch only after winning it
 
 test("an uncertain transaction outcome retains the candidate bytes that may already be referenced", async () => {
   await world(async ({ save, db, store, objects }) => {
+    await db.doc("docs/d").update({ ownerEmail: "other@example.com", visibility: "unlisted", publicEdit: true, linkToken: "current-token" });
+    await db.doc("docs/d/linkGrants/owner").set({ token: "current-token" });
     const transact = db.runTransaction.bind(db);
     db.runTransaction = async (work) => { await transact(work); throw new Error("commit response lost"); };
     await assert.rejects(save("<p>committed before timeout</p>"), /commit response lost/);
@@ -238,9 +240,7 @@ test("an uncertain transaction outcome retains the candidate bytes that may alre
 
 test("projection refresh failure cannot turn a committed external draft change into a refused write", async () => {
   await world(async ({ save, db, store, objects, draft }) => {
-    const transact = db.runTransaction.bind(db);
-    let calls = 0;
-    db.runTransaction = (work) => ++calls === 1 ? transact(work) : Promise.reject(new Error("projection unavailable"));
+    db.runTransaction = () => Promise.reject(new Error("projection unavailable"));
     const result = await save("<p>accepted and durable</p>", { expectedDraft: draft, retireLive: true });
     assert.equal(store.get("docs/d").draft.storagePrefix, result.storagePrefix);
     assert.equal(objects.get(`${result.storagePrefix}/index.html`).toString(), "<p>accepted and durable</p>");

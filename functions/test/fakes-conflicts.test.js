@@ -11,6 +11,22 @@ function signal() {
   return { promise, resolve };
 }
 
+test("conditional document updates reject a stale or deleted snapshot and accept the current one", async () => {
+  const { db, store } = fakeFirestore({ "docs/one": { value: "original" } });
+  const ref = db.doc("docs/one");
+  const old = await ref.get();
+  await ref.update({ value: "newer" });
+  await assert.rejects(ref.update({ value: "lost" }, { lastUpdateTime: old.updateTime }), { code: 9 });
+  assert.equal(store.get("docs/one").value, "newer");
+  const current = await ref.get();
+  await ref.update({ value: "accepted" }, { lastUpdateTime: current.updateTime });
+  assert.equal(store.get("docs/one").value, "accepted");
+  const beforeDelete = await ref.get();
+  await ref.delete();
+  await assert.rejects(ref.update({ value: "resurrected" }, { lastUpdateTime: beforeDelete.updateTime }), { code: 9 });
+  assert.equal(store.has("docs/one"), false);
+});
+
 test("two increments that read the same value retry instead of losing one", async () => {
   const { db, store } = fakeFirestore({ "counters/one": { value: 0 } });
   const both = signal();

@@ -87,6 +87,9 @@ function fakeFirestore(initial = {}) {
 
   function apply(w) {
     const exists = store.has(w.path);
+    if (w.precondition?.lastUpdateTime && (!exists || !w.precondition.lastUpdateTime.isEqual(new admin.firestore.Timestamp(0, revisions.get(w.path) ?? 0)))) {
+      throw Object.assign(new Error(`fake: stale update time at ${w.path}`), { code: 9 });
+    }
     switch (w.op) {
       case "create":
         if (exists) throw new Error(`fake: ${w.path} already exists`);
@@ -142,7 +145,7 @@ function fakeFirestore(initial = {}) {
       path,
       get: async () => snap(path),
       set: async (data, opts) => apply({ op: "set", path, data, opts }),
-      update: async (data) => apply({ op: "update", path, data }),
+      update: async (data, precondition) => apply({ op: "update", path, data, precondition }),
       create: async (data) => apply({ op: "create", path, data }),
       delete: async () => apply({ op: "delete", path }),
       collection: (name) => collection(`${path}/${name}`),
