@@ -1,0 +1,13 @@
+{
+  "oracle": "operator restoration publishes historical bytes as a new current version",
+  "what": "Restore cross-history deduplication in scripts/publish.mjs",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.4b operator publishing restores historical bytes as a new version and deduplicates only the current version",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "operator restoration publishes historical bytes as a new current version"
+  }
+}

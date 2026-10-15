@@ -11223,7 +11223,7 @@
     },
     {
       "id": "S13",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "SPEC question, recorded rather than tagged. A commit or update whose bytes match an EARLIER version is deduplicated against that version: the answer names v1 while v2 stays current, and the draft is deleted. In the app, reverting an edit to v2's bytes while v3 is current toasts 'No changes to publish — the content is identical.', deletes the draft, and leaves v3 holding the text the user removed.",
@@ -11239,8 +11239,20 @@
         "report": "Recorded SPEC question, never tagged: commit and update dedup against ANY earlier version (draft.ts:263-270), so a revert to v1 bytes answers v1, deletes the draft and toasts \"identical\". SPEC §2 says \"identical bytes -> no-op, clear the draft\". W2: A12.4 PASS, with a spec-question finding in 2610131952-d7qc/findings.jsonl."
       },
       "proofs": [],
-      "controls": [],
-      "requiredCases": []
+      "controls": [
+        "controls-a12-historical-draft",
+        "controls-a12-historical-update",
+        "controls-a12-historical-operator-preflight",
+        "controls-a12-historical-operator-transaction"
+      ],
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.4 restoring historical bytes publishes a new current version through commit, MCP, upload and the editor without changing history"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.4b operator publishing restores historical bytes as a new version and deduplicates only the current version"
+        }
+      ]
     },
     {
       "id": "S22",
@@ -13841,6 +13853,21 @@
         "controls-c05-i4-deletion"
       ],
       "note": "SPEC section6b previously overstated paragraph deletion semantics as applying to any passage. Preserve unseen concurrent text in surviving parents; deleting a whole parent still removes its descendants. Both former question cases now assert observed text removal, exact surviving token counts and cut positions, removed parent absence and convergence. Serial controls still require observed inserted tokens to disappear. Historical claims remain unchanged and cross-group requiredCase mappings follow renamed cases. No product rewrite or E2E closure."
+    },
+    {
+      "scope": "S13 historical content restoration; browser and patched-stack controls pending",
+      "checks": [
+        "50 focused draft/update/operator tests pass",
+        "Original behavior failed all three new restoration tests before the product fix"
+      ],
+      "evidence": "/tmp/soapbox-historical-restore-original.log; /tmp/soapbox-historical-green-final.log",
+      "controls": [
+        "controls-a12-historical-draft",
+        "controls-a12-historical-update",
+        "controls-a12-historical-operator-preflight",
+        "controls-a12-historical-operator-transaction"
+      ],
+      "note": "Resolve the reported ambiguity against demonstrated data loss: compare only with current content. Restoring an earlier hash now mints a new version and retains history. Baseline observations remain unchanged; no E2E closure."
     }
   ]
 }

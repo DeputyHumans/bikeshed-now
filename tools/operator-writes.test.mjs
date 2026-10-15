@@ -13,6 +13,23 @@ const owner = 'owner@example.com';
 const node = { ownerEmail: owner, viewers: [], editors: [], suggesters: [], approvers: [], members: [owner], editorMembers: [owner], currentVersion: 'v1' };
 const input = (hash, prefix) => ({ existed: true, baseVersion: 'v1', ownerEmail: owner, title: 'document', slug: 'd', viewers: [], editors: [], version: { contentHash: hash, storagePrefix: prefix } });
 
+test('an operator restoration mints a new current version despite a matching historical hash', async () => {
+  const { db, store } = fakeFirestore({
+    'docs/d': { ...node, currentVersion: 'v2' },
+    'docs/d/versions/v1': { contentHash: 'old', storagePrefix: 'docs/d/bundles/old' },
+    'docs/d/versions/v2': { contentHash: 'new', storagePrefix: 'docs/d/bundles/new' },
+  });
+  const restored = { ...input('old', 'docs/d/bundles/restored'), baseVersion: 'v2' };
+  const result = await commitOperatorVersion(db, db.doc('docs/d'), restored, null);
+  assert.equal(result.duplicate, false, 'an operator restoration must not disappear into a historical match');
+  assert.equal(result.versionId, 'v3');
+  assert.equal(store.get('docs/d').currentVersion, 'v3');
+  assert.equal(store.get('docs/d/versions/v3').parentVersion, 'v2');
+  assert.equal(store.get('docs/d/versions/v3').contentHash, 'old');
+  const again = await commitOperatorVersion(db, db.doc('docs/d'), { ...restored, baseVersion: 'v3' }, null);
+  assert.deepEqual(again, { duplicate: true, versionId: 'v3' }, 'current content still deduplicates even when the same hash also exists in history');
+});
+
 test('operator access deltas compose and preserve inherited and team membership', async () => {
   const { db, store } = fakeFirestore({
     'docs/d': { ...node, folderId: 'f' },

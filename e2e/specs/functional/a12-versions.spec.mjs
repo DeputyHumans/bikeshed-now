@@ -18,15 +18,9 @@
  *   12.3 (a second new version) the unpinned reader's next new version
  *        renders a stale "Open v2" banner for a render, which a slower CPU
  *        paints every time: X-a12-versions-3
- *   12.4 S13, a SPEC question: committing (or updating to) bytes an EARLIER
- *        version holds is deduplicated against that version. The case
- *        asserts what SPEC §2 says (deduped, nothing minted, draft cleared)
- *        and RECORDS the question (the answer names v1 while v2 stays
- *        current, and the app's toast calls it identical) in findings.jsonl;
- *        an uncaught page error from the update log's ready promise
- *        (app/src/crdt/rtdb.ts) is recorded there too, not failed
- *        (isLogReadyTdz), and so is a reverted draft that holds the body
- *        twice, which leaves the in-app part INCONCLUSIVE
+ *   12.4 restoring historical bytes creates a new current version through
+ *        draft commit, MCP, upload and the real editor. Existing history is
+ *        immutable; only a match with the current version is a no-op.
  *   12.5 /publish?update= refusals: an editor 200, an open editor 403, id /
  *        folderId / title 400, a pending suggestion 409 pendingSuggestions,
  *        an accepted change in the draft 409 acceptedInDraft; a refusal
@@ -96,7 +90,7 @@ import { isDeepStrictEqual } from "node:util";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
-import { docIdFor, publish, updateUpload } from "../../lib/seed.mjs";
+import { docIdFor, publish, publishOperator, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
 import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
@@ -641,7 +635,7 @@ scenario("A12.3 (a second new version) an unpinned reader who followed one new v
 
 // --- A12.4 ----------------------------------------------------------------------
 
-scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the bytes of an earlier version is deduplicated against it (SPEC §2): deduped, nothing minted, the draft cleared", { tiers: BOTH, timeoutMs: 600_000, ...STALLS }, async (ctx) => {
+scenario("A12.4 restoring historical bytes publishes a new current version through commit, MCP, upload and the editor without changing history", { tiers: BOTH, timeoutMs: 600_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner; publish revision 1, then update to revision 2 (v2)");
   const { owner, accounts } = await castWithOwner(ctx, []);
   const title = `A12.4 revert ${tag()}`;
@@ -660,27 +654,32 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   const afterCommit = await docRecord(docId);
   observed.commit = { answer: c.json, currentVersion: afterCommit.currentVersion };
   ctx.step(`/commit answered ${JSON.stringify(c.json)}; currentVersion is ${afterCommit.currentVersion}`);
-  assert.equal(c.json.deduped, true, "identical bytes → no-op, deduped: true (SPEC §2)");
-  assert.equal(c.json.contentHash, v1.contentHash, "the hash is revision 1's");
-  assert.deepEqual({ versions: await versionIds(docId), v3Objects: await objectsUnder(docId, "v3/") }, { versions: ["v1", "v2"], v3Objects: [] }, "nothing minted, nothing uploaded");
-  assert.deepEqual({ draft: afterCommit.draft ?? null, draftObjects: await objectsUnder(docId, "draft/") }, { draft: null, draftObjects: [] }, "the draft is cleared (SPEC §2)");
+  assert.deepEqual(pick(c.json, ["versionId", "deduped", "contentHash"]), { versionId: "v3", deduped: false, contentHash: v1.contentHash }, "restoring v1 publishes v3, rather than discarding the draft as identical");
+  assert.equal(afterCommit.currentVersion, "v3", "the restored version is current");
+  assert.equal(String(await versionObject(docId, "v3", "index.html")), r1, "v3 holds the requested restoration");
+  assert.equal(afterCommit.draft ?? null, null, "the published draft is cleared");
 
-  ctx.step("through a token: update_document and /publish?update= with revision 1's content, based on v2");
+  ctx.step("through a token: restore v2 through update_document, then v1 through /publish?update=");
   const mcp = await mcpFor(ctx, owner, "owner-mcp");
-  // Each answer is judged before the next call, so a channel that minted cannot hide behind the next one's stale refusal.
-  const u = await mcp.call("update_document", { id: docId, content: r1, baseVersion: "v2" });
+  const r2 = docHtml(title, 2);
+  const u = await mcp.call("update_document", { id: docId, content: r2, baseVersion: "v3" });
   assert.equal(u.isError, false, `update_document: ${u.text.slice(0, 300)}`);
   observed.updateDocument = pick(u.json, ["versionId", "deduped", "threadsLeftBehind"]);
-  assert.deepEqual(pick(u.json, ["deduped", "contentHash"]), { deduped: true, contentHash: v1.contentHash }, `update_document: "Identical content is a no-op" (SPEC §19)`);
-  const p = await updateUpload(owner.http, docId, { body: r1, baseVersion: "v2", timeoutMs: HTTP_MS });
+  assert.deepEqual(pick(u.json, ["versionId", "deduped", "contentHash"]), { versionId: "v4", deduped: false, contentHash: v2.contentHash }, "MCP restores historical bytes as a new version");
+  assert.equal((await docRecord(docId)).currentVersion, "v4", "MCP restoration becomes current before the next channel runs");
+  assert.equal(String(await versionObject(docId, "v4", "index.html")), r2, "v4 holds the MCP restoration");
+  const p = await updateUpload(owner.http, docId, { body: r1, baseVersion: "v4", timeoutMs: HTTP_MS });
   assert.equal(p.status, 200, `/publish?update= answered ${p.status}`);
   observed.publishUpdate = pick(p.json, ["versionId", "deduped"]);
-  assert.deepEqual(pick(p.json, ["deduped", "contentHash"]), { deduped: true, contentHash: v1.contentHash }, `/publish?update=: "Identical content is a no-op" (SPEC §19)`);
+  assert.deepEqual(pick(p.json, ["versionId", "deduped", "contentHash"]), { versionId: "v5", deduped: false, contentHash: v1.contentHash }, "upload restores historical bytes as a new version");
   const final = await docRecord(docId);
-  assert.deepEqual({ versions: await versionIds(docId), currentVersion: final.currentVersion }, { versions: ["v1", "v2"], currentVersion: "v2" }, "nothing minted on any channel");
+  assert.deepEqual({ versions: await versionIds(docId), currentVersion: final.currentVersion }, { versions: ["v1", "v2", "v3", "v4", "v5"], currentVersion: "v5" }, "every restoration minted and selected one version");
+  for (const [id, bytes, parent] of [["v1", r1, null], ["v2", r2, "v1"], ["v3", r1, "v2"], ["v4", r2, "v3"], ["v5", r1, "v4"]]) {
+    assert.equal(String(await versionObject(docId, id, "index.html")), bytes, `${id}: immutable bytes`);
+    if (parent) assert.equal((await versionRecord(docId, id)).parentVersion, parent, `${id}: restoration retains linear provenance`);
+  }
 
-  // Optional part: the same thing reached through the editor, as a person would.
-  ctx.step("in the app: an editor round trip reaches the same dedup (paragraph fixture: type A, save; type B, save; delete B, save)");
+  ctx.step("in the app: type A and publish, type B and publish, remove B and publish the restored content");
   const fx = await publish(owner.http, { fixture: "crdt-paragraphs.html", title: `${title} in app`, name: "a124-inapp", timeoutMs: HTTP_MS, patient: { ctx, stopAt: "budget" } });
   precondition(fx.versionId === "v1", `publish answered ${fx.status}`);
   const appDoc = fx.docId;
@@ -724,70 +723,48 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   await saveWith(tokB, "v3");
   await o.enterEdit({ timeout: FRAME_MS });
   await autosave("", { thenBackspace: tokB.length });
-  // The revert reaches S13's situation only if the editor serializes it to
-  // exactly v2's bytes; if it does not, this part measured nothing.
   const v2Bytes = await versionObject(appDoc, "v2", "index.html");
   const draftBytes = await readDraftObject(target, appDoc, "index.html");
-  if (!draftBytes || sha(draftBytes) !== sha(v2Bytes)) {
-    /*
-     * Seen on a loaded l7wb, 3 of 4 diagnostic runs of this case: the draft
-     * was v2's body followed by the whole body again, the earlier sessions'
-     * typing included, autosaved, and "Save as new version" would publish
-     * it. SPEC §16 (spec.md:1556-1557) has a log that holds anything "win
-     * over the bytes it loaded", not be joined to them. That is recorded, and
-     * this part still measured nothing about S13.
-     */
-    const draftText = draftBytes ? String(draftBytes) : null;
-    const hunks = draftText === null ? [] : lineHunks(String(v2Bytes), draftText);
-    const bodies = draftText === null ? 0 : draftText.split('id="e2e-sentinel"').length - 1;
-    ctx.ev.json("revert-draft", { v2: String(v2Bytes), draft: draftText, hunks });
-    const saw = draftText === null ? "no draft was stored" : `the draft holds the fixture's body ${bodies} time(s) and differs from v2 in ${hunks.length} place(s), first at line ${hunks[0]?.line}`;
-    if (bodies > 1) {
-      recordFinding(target, {
-        kind: "product-suspicion",
-        case: "A12.4",
-        appDoc,
-        claim: "after two in-app commits, the third editing session's autosaved draft held the document's body twice: the loaded body, then a second copy carrying the earlier sessions' typing; SPEC §16 (spec.md:1556-1557) has a log that holds anything win over the bytes it loaded, not be joined to them",
-        hunks: hunks.map(({ line, expected, got }) => ({ line, expectedLines: expected.length, gotLines: got.length })),
-      });
-    }
-    ctx.inconclusive(`the editor's revert did not serialize to v2's stored bytes, so the in-app commit could not meet an earlier version's hash: ${saw}${bodies > 1 ? " (recorded in findings.jsonl as a product suspicion)" : ""}`);
-  }
+  ctx.ev.json("revert-draft", { v2: String(v2Bytes), draft: draftBytes && String(draftBytes) });
+  assert.ok(draftBytes && sha(draftBytes) === sha(v2Bytes), "removing B restores exactly v2's bytes, without duplicating the document body");
   const inApp = await save();
   const appRecord = await docRecord(appDoc);
   const v3Bytes = await versionObject(appDoc, "v3", "index.html");
-  observed.inApp = { toast: inApp.text, outcome: inApp.outcome, currentVersion: appRecord.currentVersion, draftEqualsV2: Boolean(draftBytes), currentHoldsB: String(v3Bytes).includes(tokB.trim()) };
-  ctx.step(`in the app: toast "${inApp.text}", currentVersion ${appRecord.currentVersion}`);
-  assert.deepEqual({ outcome: inApp.outcome, text: inApp.text }, { outcome: "nochange", text: DEDUP_TOAST }, "the commit deduplicated (SPEC §2) and the app said so");
-  assert.deepEqual({ versions: await versionIds(appDoc), draft: appRecord.draft ?? null }, { versions: ["v1", "v2", "v3"], draft: null }, "nothing minted; the draft cleared");
+  const v4Bytes = await versionObject(appDoc, "v4", "index.html");
+  observed.inApp = { toast: inApp.text, outcome: inApp.outcome, currentVersion: appRecord.currentVersion };
+  assert.deepEqual({ outcome: inApp.outcome, versionId: inApp.versionId }, { outcome: "published", versionId: "v4" }, "the browser reports a published restoration");
+  assert.notEqual(inApp.text, DEDUP_TOAST, "the app must not call the restored content identical to the current version");
+  assert.deepEqual({ versions: await versionIds(appDoc), currentVersion: appRecord.currentVersion, draft: appRecord.draft ?? null }, { versions: ["v1", "v2", "v3", "v4"], currentVersion: "v4", draft: null }, "the restored version is current and the published draft is cleared");
+  assert.equal(sha(v4Bytes), sha(v2Bytes), "v4 stores exactly the historical content requested");
+  assert.ok(String(v3Bytes).includes(tokB.trim()), "the superseded version retains B unchanged");
+  assert.ok(String(v4Bytes).includes(tokA.trim()) && !String(v4Bytes).includes(tokB.trim()), "current bytes keep A and remove B");
+  await waitFrameAt(ctx, o, appDoc, "v4");
+  const rendered = await frameText(await o.frame());
+  assert.ok(rendered.includes(tokA.trim()) && !rendered.includes(tokB.trim()), "the reader renders the restored content");
+  ctx.ev.json("historical-restoration", observed);
+  noPageErrors([o]);
+});
 
-  // S13, recorded rather than asserted: SPEC §2 says "dedups on contentHash",
-  // not "on the current version's", so this is the question, not a failure.
-  const finding = recordFinding(target, {
-    kind: "spec-question",
-    suspect: "S13",
-    case: "A12.4",
-    docId,
-    appDoc,
-    question: "a revert to an earlier version's bytes is deduplicated against that version: the answer names it while another stays current, the draft is deleted, and the app says the content is identical",
-    observed,
-    versionHashes: { v1: v1.contentHash, v2: v2.contentHash },
-  });
-  ctx.ev.json("s13", finding);
-  ctx.t.diagnostic(`S13 observed: ${JSON.stringify(observed)}`);
-  // The update log's ready TDZ is recorded, not failed (isLogReadyTdz); every other page error fails.
-  const tdz = o.log.errors.filter((e) => isLogReadyTdz(o, e));
-  if (tdz.length > 0) {
-    ctx.step(`recorded, not failed: ${tdz.length} uncaught "${tdz[0].message}" from the update log's ready promise (app/src/crdt/rtdb.ts:26-38), a product defect this case does not own`);
-    ctx.ev.json("log-ready-tdz", recordFinding(target, {
-      kind: "product-suspicion",
-      case: "A12.4",
-      appDoc,
-      claim: "app/src/crdt/rtdb.ts:27-37 calls stop() inside the onValue callback whose return value stop is; onValue raised its first event before returning, so the read threw and resolve() never ran: useSharedDocument.ts:69 waits on ready() for good and the editing session never binds",
-      errors: tdz.map(({ t, message, stack }) => ({ t, message, stack })),
-    }));
-  }
-  assert.deepEqual(o.log.errors.filter((e) => !isLogReadyTdz(o, e)).map((e) => e.message), [], "owner: uncaught page errors (other than the update log's ready TDZ, recorded above)");
+scenario("A12.4b operator publishing restores historical bytes as a new version and deduplicates only the current version", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 180_000, ...STALLS }, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const seeded = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, timeoutMs: 30_000 });
+  precondition(seeded.code === 0, `operator seed exited ${seeded.code}: ${scrub(seeded.stderr)}`);
+  const docId = seeded.docId;
+  const original = await versionObject(docId, "v1", "index.html");
+  const v1 = await versionRecord(docId, "v1");
+  const newer = docHtml(`Operator restore ${tag()}`, 2);
+  await updateTo(ctx, owner.http, docId, { body: newer, baseVersion: "v1", want: "v2" });
+  const restored = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, id: docId, timeoutMs: 30_000 });
+  assert.equal(restored.code, 0, `operator restoration exits: ${scrub(restored.stderr)}`);
+  assert.equal((await docRecord(docId)).currentVersion, "v3", "operator restoration publishes historical bytes as a new current version");
+  const v3 = await versionRecord(docId, "v3");
+  assert.deepEqual(pick(v3, ["contentHash", "parentVersion"]), { contentHash: v1.contentHash, parentVersion: "v2" }, "operator restoration keeps content identity and provenance");
+  assert.equal(sha(await versionObject(docId, "v3", "index.html")), sha(original), "operator restores original bytes");
+  assert.equal(String(await versionObject(docId, "v2", "index.html")), newer, "operator preserves superseded content");
+  const duplicate = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, id: docId, timeoutMs: 30_000 });
+  assert.equal(duplicate.code, 0);
+  assert.match(duplicate.stdout, /already published as v3 .*NO-OP/, "an identical retry names the current version even though an earlier hash also matches");
+  assert.deepEqual(await versionIds(docId), ["v1", "v2", "v3"], "identical current content mints nothing");
 });
 
 // --- A12.5 ----------------------------------------------------------------------

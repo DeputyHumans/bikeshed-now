@@ -47,7 +47,7 @@ export async function commitOperatorVersion(db, docRef, input, timestamp, delete
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     const versions = await tx.get(docRef.collection('versions'));
-    const duplicate = versions.docs.find((version) => version.data().contentHash === input.version.contentHash);
+    const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion && version.data().contentHash === input.version.contentHash);
     if (duplicate) return { duplicate: true, versionId: duplicate.id };
     const current = snap.data() || {};
     if (snap.exists !== input.existed || (current.currentVersion ?? null) !== input.baseVersion) {

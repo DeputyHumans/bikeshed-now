@@ -361,8 +361,9 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   draft, or if any annotation on the current version is unresolved
   (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds
   it, since only an approver can clear a pending suggestion, §6a). Assembles base assets + edited entry, re-renders
-  Markdown if applicable, hashes with the §9 framing, **dedups on `contentHash`**
-  (identical bytes → no-op, clear the draft, `deduped: true`), else uploads and,
+  Markdown if applicable, hashes with the §9 framing, **dedups against the current version's `contentHash`**
+  (identical current bytes → no-op, clear the draft, `deduped: true`). Matching
+  an older version is a restoration, not a no-op. Changed current content uploads and,
   in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
   clears `draft`. Both the mint and dedup transactions require the exact
   snapshot originally read; a newer save returns `409 { draftChanged }` and
@@ -1195,7 +1196,8 @@ Operator access deltas use the same transaction boundary as endpoints: the
 current document, parent and team inputs are read together before grants and
 membership are written. Operator publishing uploads to a unique immutable
 bundle with create-only Storage writes, then selects and creates a version in
-a Firestore transaction. A duplicate content hash returns its existing version;
+a Firestore transaction. A content hash matching the current version returns that version;
+restoring an older version's bytes creates a new version, preserving history;
 a different publish from a base that advanced during upload refuses and must
 be rerun. Current sharing is preserved during version selection. Unselected
 attempt bundles can remain unreferenced; they never overwrite selected bytes.

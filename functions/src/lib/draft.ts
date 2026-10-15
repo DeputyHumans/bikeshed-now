@@ -377,8 +377,8 @@ export async function commitDraft(args: {
   const versionsRef = docRef.collection("versions");
 
   let retiredEpoch = "initial";
-  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
-  if (!dup.empty) {
+  const dup = await versionsRef.doc(baseVersion).get();
+  if (dup.exists && dup.data()?.contentHash === contentHash) {
     try {
       await db.runTransaction(async (tx) => {
         const current = (await tx.get(docRef)).data();
@@ -401,7 +401,7 @@ export async function commitDraft(args: {
     await retireLiveSession(db, docId, retiredEpoch);
     return {
       status: 200,
-      body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
+      body: { versionId: dup.id, contentHash, fileCount, bytes, deduped: true },
     };
   }
 

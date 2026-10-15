@@ -12,6 +12,33 @@ const actor = { uid: "owner", email: "owner@example.com", channel: "web" };
 const oldHtml = "<p>published one</p>";
 const oldHash = hashBundleFiles([{ rel: "index.html", data: Buffer.from(oldHtml) }]).contentHash;
 
+for (const channel of ["draft", "update"]) {
+  test(`${channel} publishes restored historical bytes as a new current version`, async () => {
+    await world(async ({ db, store, objects }) => {
+      const newer = "<p>published two</p>";
+      const draft = { baseVersion: "v2", entry: "index.html", storagePrefix: "docs/d/drafts/revert" };
+      await db.doc("docs/d/versions/v2").set({ entry: "index.html", format: "html", contentHash: hashBundleFiles([{ rel: "index.html", data: Buffer.from(newer) }]).contentHash });
+      await db.doc("docs/d").update({ currentVersion: "v2", draft });
+      objects.set("docs/d/v2/index.html", Buffer.from(newer));
+      objects.set("docs/d/drafts/revert/index.html", Buffer.from(oldHtml));
+      const args = { db, docRef: db.doc("docs/d"), baseVersion: "v2", actor };
+      const result = channel === "draft"
+        ? (await commitDraft({ ...args, draft, emailLower: actor.email })).body
+        : await commitNewVersion({ ...args, authorEmail: actor.email, via: "mcp", compiled: { entry: "index.html", format: "html", files: [{ rel: "index.html", data: Buffer.from(oldHtml) }] } });
+      assert.equal(result.deduped, false, `${channel}: a historical match must publish the requested restoration`);
+      assert.equal(result.versionId, "v3");
+      assert.equal(store.get("docs/d").currentVersion, "v3");
+      const restored = store.get("docs/d/versions/v3");
+      assert.equal(restored.parentVersion, "v2");
+      assert.equal(restored.contentHash, oldHash);
+      assert.equal(objects.get(`${restored.storagePrefix}/index.html`).toString(), oldHtml);
+      assert.equal(objects.get("docs/d/v1/index.html").toString(), oldHtml);
+      assert.equal(objects.get("docs/d/v2/index.html").toString(), newer);
+      assert.equal(store.get("docs/d").draft, undefined);
+    });
+  });
+}
+
 async function world(fn, onSave = async () => {}) {
   const draft = { baseVersion: "v1", entry: "index.html" };
   const { db, store } = fakeFirestore({

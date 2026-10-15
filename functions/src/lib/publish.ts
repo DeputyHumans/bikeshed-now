@@ -483,10 +483,11 @@ export async function commitNewVersion(args: {
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
 
-  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
-  if (!dup.empty) {
+  const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
+  const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
+  if (dup?.exists && dup.data()?.contentHash === contentHash) {
     return {
-      versionId: dup.docs[0].id,
+      versionId: dup.id,
       contentHash,
       fileCount,
       bytes,

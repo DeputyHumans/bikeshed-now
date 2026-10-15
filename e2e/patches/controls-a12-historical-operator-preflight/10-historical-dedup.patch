@@ -1,0 +1,37 @@
+diff --git b/scripts/publish.mjs a/scripts/publish.mjs
+index aa7d545..027f286 100755
+--- b/scripts/publish.mjs
++++ a/scripts/publish.mjs
+@@ -208,7 +208,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
+ 
+   if (dry) {
+     console.log("  --dry-run: no Firestore or Storage writes.");
+-    console.log(`  would compare this contentHash with docs/${docId} current version; NO-OP only if identical.`);
++    console.log(`  would query docs/${docId}/versions for this contentHash; NO-OP if found.`);
+     console.log("  otherwise would upload to a unique immutable bundle, then select version v{maxN+1} transactionally:");
+     for (const f of files) {
+       console.log(
+@@ -224,17 +224,18 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
+   const docRef = db.collection("docs").doc(docId);
+   const versionsRef = docRef.collection("versions");
+ 
++  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
++  if (!dup.empty) {
++    console.log(`  already published as ${dup.docs[0].id} (contentHash match) — NO-OP.`);
++    return;
++  }
++
+   // An operator publishes past pending suggestions: Admin credentials bypass
+   // every endpoint and rule anyway, so a refusal here would be advice, not a
+   // boundary. It is said out loud instead, because each one stays behind,
+   // undecided, on a version nobody will read again (SPEC §6a, §9).
+   const before = await docRef.get();
+   const behind = before.exists ? before.data()?.currentVersion : null;
+-  const dup = typeof behind === "string" && behind ? await versionsRef.doc(behind).get() : null;
+-  if (dup?.exists && dup.data()?.contentHash === contentHash) {
+-    console.log(`  already published as ${dup.id} (current contentHash match) — NO-OP.`);
+-    return;
+-  }
+   if (typeof behind === "string" && behind) {
+     const pending = await versionsRef
+       .doc(behind)
