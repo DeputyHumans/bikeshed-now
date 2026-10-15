@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve a notification’s winning cooldown claim across a native commit retry, with a unique claim id alongside compatible numeric timestamps. Recheck current opt-out, read authority and expiry before delivering; prune expired claim ids with their cooldown entries.
+
 - Preserve the built-in CLI’s first OAuth exchange when the native SDK retries a committed token after acknowledgement loss. Keep its plaintext only in that request, verify the committed token identity and revocation state, and retain independent replay revocation.
 
 - Exercise native commit acknowledgement loss through MCP comment creation and overlapping document fetches. Bind each fault to its real commit and retry, with four directional controls for the comment receipt, both read counters and independent receipt cleanup.

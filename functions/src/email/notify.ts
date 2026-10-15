@@ -2,6 +2,7 @@
 // Who gets told what, and how often (SPEC §14).
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 import * as React from "react";
 import { COMMENT_EMAIL_COOLDOWN_MS, publicOrigin } from "../config";
 import type { Role } from "../lib/access";
@@ -50,6 +51,7 @@ export async function claimCommentCooldown(
 ): Promise<boolean> {
   const ref = db.collection("users").doc(uid);
   const own = cooldownKey(docId, kind);
+  const claimId = randomUUID();
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return false;
@@ -70,22 +72,29 @@ export async function claimCommentCooldown(
       ? await tx.get(linkGrantRef(docRef, uid))
       : null;
     if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) })) return false;
-    if (isExpired(doc, now) && !canManageSharing(doc, emailLower)) return false;
+    if (isExpired(doc, Date.now()) && !canManageSharing(doc, emailLower)) return false;
 
     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+    const claims = (data.emailCooldownClaims as Record<string, string>) || {};
+    // A numeric timestamp alone is not a receipt: two different trigger calls
+    // may start in the same millisecond. Keep each winning claim unique while
+    // retaining the existing numeric cooldown format and current read checks.
+    if (claims[own] === claimId && cooldowns[own] === now) return true;
     const last = Number(cooldowns[own] ?? 0);
     if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
 
     const pruned: Record<string, number> = { [own]: now };
+    const retainedClaims: Record<string, string> = { [own]: claimId };
     for (const [key, at] of Object.entries(cooldowns)) {
       if (key !== own && now - Number(at) < COMMENT_EMAIL_COOLDOWN_MS) {
         pruned[key] = Number(at);
+        if (typeof claims[key] === "string") retainedClaims[key] = claims[key];
       }
     }
     // `update`, not a merging `set`: a merge combines maps key by key, so the
     // expired keys this just dropped would survive the write, and the map would
     // only ever grow. The record exists; `snap.exists` was checked above.
-    tx.update(ref, { emailCooldowns: pruned });
+    tx.update(ref, { emailCooldowns: pruned, emailCooldownClaims: retainedClaims });
     return true;
   });
 }
