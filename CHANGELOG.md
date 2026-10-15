@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Concurrent suggestion requests share the twenty-pending limit atomically;
+  only one request can take the final slot, with no orphan opening comment.
 - Editing restores the document's original body attributes before saving and
   on exit. Editor-only `spellcheck` no longer leaks into published bytes, while
   authored editing attributes survive. Empty generated-container hints are
@@ -31,6 +33,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Tests
 
+- Endpoint test transactions retry conflicting document and query reads, and
+  failed batches and transactions roll back every write.
 - E2E self-tests and stacks select Node 24 and the same explicit Firebase
   executable, reporting both versions. Installed-tool probes check environment
   precedence and watcher behavior without depending on source formatting.

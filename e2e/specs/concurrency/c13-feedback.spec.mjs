@@ -14,12 +14,11 @@
  *             pending by this author". Variants: SYNC-T (N worker threads fire
  *             within 15 ms and every call is on the wire before any answer
  *             begins) and GATED (amplify-c13-feedback holds each create at
- *             `suggest-after-count`, past its count and before its
+ *             `suggest-after-count`, past its observational count and before its
  *             transaction, until all N are held; then all go). WORK: every
  *             answer is a suggestion made on v1 or the twenty-pending refusal,
  *             at least one is made, each made one is stored pending. JUDGE
- *             (S7, the count is read outside the transaction,
- *             functions/src/lib/suggestions.ts:196-208): at most twenty
+ *             (S7 regression, admission is counted inside the transaction): at most twenty
  *             pending. C13-serial: the same calls one after another, the
  *             first made and every other refused, twenty pending.
  *   C14       a publish and feedback on v1. The oracle every variant shares
@@ -551,11 +550,10 @@ scenario("C13 SYNC-T: N agents of one author at nineteen pending suggestions cal
 scenario("C13 judge (SYNC-T): the author holds at most twenty pending suggestions on the version", {
   tiers: BOTH,
   n: N,
-  defect: "S7",
   timeoutMs: JUDGE_MS,
 }, async (ctx) => c13Judge(ctx, "C13"));
 
-scenario("C13 gated: N suggest_edit calls of one author at nineteen pending, each held after its pending count and released together; every answer is a suggestion made on v1 or the twenty-pending refusal, at least one is made, and each made is stored", {
+scenario("C13 gated: N suggest_edit calls of one author at nineteen pending, each held after a pre-admission count and released together; every answer is a suggestion made on v1 or the twenty-pending refusal, at least one is made, and each made is stored", {
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
@@ -567,7 +565,6 @@ scenario("C13 judge (gated): the author holds at most twenty pending suggestions
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
-  defect: "S7",
   timeoutMs: JUDGE_MS,
 }, async (ctx) => c13Judge(ctx, "C13 gated"));
 

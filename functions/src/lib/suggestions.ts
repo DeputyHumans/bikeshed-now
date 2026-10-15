@@ -193,20 +193,6 @@ export async function createSuggestion(args: {
   if (problem) return { status: 400, error: problem };
 
   const anns = annotations(docRef, versionId);
-  const open = await anns
-    .where("authorUid", "==", author.uid)
-    .where("suggestion.state", "==", "pending")
-    .count()
-    .get();
-  if (open.data().count >= SUGGESTION_LIMITS.pendingPerAuthor) {
-    return {
-      status: 409,
-      error:
-        `You already have ${SUGGESTION_LIMITS.pendingPerAuthor} suggestions waiting on this version. ` +
-        "Wait for some to be decided, or withdraw one.",
-    };
-  }
-
   const annRef = anns.doc();
   const commentRef = annRef.collection("comments").doc();
   // In a transaction that reads the document, so this and a publish are
@@ -221,6 +207,20 @@ export async function createSuggestion(args: {
         status: 409,
         error: "This document has a newer version. Reload, then suggest the edit on it.",
         currentVersion: current,
+      };
+    }
+    // Count inside the same transaction as creation. Two requests competing
+    // for the last slot must not both admit themselves from an earlier read.
+    const open = await tx.get(anns
+      .where("authorUid", "==", author.uid)
+      .where("suggestion.state", "==", "pending")
+      .limit(SUGGESTION_LIMITS.pendingPerAuthor));
+    if (open.docs.length >= SUGGESTION_LIMITS.pendingPerAuthor) {
+      return {
+        status: 409,
+        error:
+          `You already have ${SUGGESTION_LIMITS.pendingPerAuthor} suggestions waiting on this version. ` +
+          "Wait for some to be decided, or withdraw one.",
       };
     }
     tx.create(annRef, {

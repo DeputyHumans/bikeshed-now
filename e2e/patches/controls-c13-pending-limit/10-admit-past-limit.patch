@@ -1,0 +1,7 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -217,3 +217,3 @@
+       .limit(SUGGESTION_LIMITS.pendingPerAuthor));
+-    if (open.docs.length >= SUGGESTION_LIMITS.pendingPerAuthor) {
++    if (false && open.docs.length >= SUGGESTION_LIMITS.pendingPerAuthor) {
+       return {

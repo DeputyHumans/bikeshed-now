@@ -1,25 +1,16 @@
-diff --git a/functions/src/lib/suggestions.ts b/functions/src/lib/suggestions.ts
-index b1a9e3b..475773f 100644
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -4,6 +4,7 @@
- import * as admin from "firebase-admin";
- import { FieldValue, Timestamp } from "firebase-admin/firestore";
+@@ -6,2 +6,3 @@
  import type { Actor } from "./actor";
 +import { e2eGate } from "./e2eGate";
  
- /**
-  * A suggestion is an ANNOTATION with one more field, so it inherits anchoring,
-@@ -207,6 +208,9 @@ export async function createSuggestion(args: {
-     };
-   }
- 
-+  // e2e amplify (amplify-c13-feedback): a pause point after the pending count and before the transaction that writes the suggestion.
+@@ -195,2 +196,6 @@
+   const anns = annotations(docRef, versionId);
++  // e2e amplify: all callers observe the same pre-admission count before release.
++  await anns.where("authorUid", "==", author.uid).where("suggestion.state", "==", "pending").count().get();
 +  await e2eGate("suggest-after-count", docRef.id);
 +
    const annRef = anns.doc();
-   const commentRef = annRef.collection("comments").doc();
-   // In a transaction that reads the document, so this and a publish are
 diff --git a/functions/src/mcp/tools.ts b/functions/src/mcp/tools.ts
 index 86cb44c..a34c65b 100644
 --- a/functions/src/mcp/tools.ts
