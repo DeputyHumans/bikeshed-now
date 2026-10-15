@@ -1,37 +1,18 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -52,8 +52,9 @@
-   publicOrigin,
-   signInHint,
- } from "./config";
- import { verifyIdToken, verifySessionCookie } from "./lib/auth";
+@@ -36,2 +36,3 @@
+ import * as cookie from "cookie";
 +import { e2eIdentityGate } from "./lib/e2eIdentityGate";
- import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
- import {
-   canEdit,
-   canManageSharing,
-@@ -2409,8 +2410,12 @@
-       res.status(403).json({ error: "email not permitted by policy" });
-       return;
-     }
+ import * as mime from "mime-types";
+@@ -2469,2 +2470,5 @@
 
-+    // e2e preliminary snapshot only: hold before the authoritative transaction,
-+    // so a request cannot lock the record while other callers reach the gate.
++    // e2e preliminary snapshot only; no transaction lock while waiting.
 +    await ref.get();
 +    await e2eIdentityGate("verify-start-after-read", uid);
      const code = sixDigitCode();
-     const reserved = await db().runTransaction(async (tx) => {
-       const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number } | undefined;
-       const at = Date.now();
-@@ -2444,8 +2449,11 @@
-   }
-
-   const body = jsonBody(req) as { code?: unknown } | null;
+@@ -2507,2 +2511,5 @@
    const code = typeof body?.code === "string" ? body.code.trim() : "";
-+  // e2e preliminary snapshot only; the transaction must re-read on release.
++  // e2e preliminary snapshot only; the transaction re-reads after release.
 +  await ref.get();
 +  await e2eIdentityGate("verify-complete-after-read", uid);
    type VerificationCheck =
-     | { status: 400 | 409 | 429; error: string }
-     | { status: 200; email: string; identity: string };
-   const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");

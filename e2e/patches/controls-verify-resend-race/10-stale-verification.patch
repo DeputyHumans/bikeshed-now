@@ -1,11 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2427,2 +2427,3 @@
+@@ -2451,2 +2451,3 @@
    const ref = db().collection("users").doc(uid);
 +  const e2eStaleVerification = (await ref.get()).data()?.verification;
 
-@@ -2447,3 +2448,3 @@
+@@ -2472,3 +2473,3 @@
      const reserved = await db().runTransaction(async (tx) => {
--      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number } | undefined;
-+      const existing = e2eStaleVerification as { sentAt?: number } | undefined;
-       const at = Date.now();
+-      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
++      const existing = e2eStaleVerification as { sentAt?: number; reservationId?: string } | undefined;
+       if (existing?.reservationId === reservationId) return true;
