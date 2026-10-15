@@ -329,7 +329,7 @@ order of watcher ignore rules.
   emulator (pid …) ran out of memory: java.lang.OutOfMemoryError at its
   -Xmx16m cap"), `run` stops its specs and exits 1, and the watchdog marks a
   ready stack failed with that reason and stops it (tree kept).
-- **Debug logs under a cap** (`lib/debuglogs.mjs`). Two shared stacks wrote
+- **Periodic debug-log size limits** (`lib/debuglogs.mjs`). Two shared stacks wrote
   22 GB of `firebase-debug.log` and 10 GB of `firestore-debug.log` each, and
   firebase-tools has no way to lower them (the Firestore emulator's
   `-Dgoogle.cloud_firestore.debug_log_level=FINE` is a literal in its
@@ -339,7 +339,9 @@ order of watcher ignore rules.
   a hole the size of everything before it) and copies every line into
   `firebase-debug.log` anyway. The watchdog cuts `firebase-debug.log` (written
   O_APPEND) whenever it is over half of `E2E_DEBUG_LOG_MAX_MB` (200): its
-  newest half goes to `firebase-debug.log.1`, the first cut keeps its first
+  newest half goes to `firebase-debug.log.1`. Writes between watchdog polls
+  can temporarily exceed the limit; the next check truncates the live file.
+  The first cut keeps its first
   256 KB (the start-up lines, `database rules config:` among them) as
   `firebase-debug.head.log`. `logs/emulators.log`, which every reader in
   `e2e/` reads by byte offset, is never touched. The Database emulator's own

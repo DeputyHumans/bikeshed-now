@@ -3,7 +3,7 @@
 @@ -154,6 +154,7 @@
    versionEvents,
  } from "./lib/events";
- import { commitDraft, DraftConflict, loadVersionMeta, writeDraft } from "./lib/draft";
+ import { commitDraft, DraftConflict, draftRevision, loadVersionMeta, writeDraft } from "./lib/draft";
 +import { e2eC12Gate } from "./lib/e2eC12Gate";
  import { WriteAuthorityError } from "./lib/writeAuthority";
  import {

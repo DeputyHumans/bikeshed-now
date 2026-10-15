@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The emulator debug logs a stack writes into its tree, held under a size cap, and the Database emulator's own output kept beside the run's logs (SPEC §12).
+// The emulator debug logs a stack writes into its tree, periodically size-limited, and the Database emulator's own output kept beside the run's logs (SPEC §12).
 
 /**
  * `firebase emulators:start` writes three debug logs into its working
@@ -192,7 +192,7 @@ function keepHead(src, dest, bytes) {
 }
 
 /**
- * Hold every CLI debug log of a tree under `maxBytes`: one over half of it is
+ * Reduce every CLI debug log at each check: one over half `maxBytes` is
  * cut (see the header). Returns what it found and did, per file.
  * @returns {{file:string, size:number, rotated:boolean, keptBytes?:number, head?:boolean}[]}
  */

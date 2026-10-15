@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Self-test: a stack's emulator debug logs stay under their cap while being written, and the logs specs read are never touched (SPEC §12).
+// Self-test: a stack's emulator debug logs are bounded after each watchdog check, and the logs specs read are never touched (SPEC §12).
 
 /**
  * A real writer process (helpers/log-writer.mjs) writes a debug log as
@@ -31,23 +31,25 @@ function startWriter(file, flags) {
   });
 }
 
-/** Write for `ms` while capping every 100 ms (or not, with cap null): the largest size seen. */
+/** Write for `ms` while capping every 100 ms (or not, with cap null): the largest sizes before and after each cap check. */
 async function writeWhileCapping(dir, { ms = 2500, maxBytes = MB, cap = true } = {}) {
   const file = join(dir, "firebase-debug.log");
   const w = await startWriter(file, "a");
   let largest = 0;
   let rotations = 0;
+  let largestAfter = 0;
   try {
     const end = Date.now() + ms;
     while (Date.now() < end) {
       await sleep(100);
       largest = Math.max(largest, statSync(file).size);
       if (cap) rotations += capDebugLogs(dir, { maxBytes }).filter((r) => r.rotated).length;
+      largestAfter = Math.max(largestAfter, statSync(file).size);
     }
   } finally {
     w.kill("SIGKILL");
   }
-  return { file, largest, rotations };
+  return { file, largest, largestAfter, rotations };
 }
 
 test("the cap: 200 MB by default, lowerable, never raised", () => {
@@ -70,7 +72,7 @@ test("firestore-debug.log and database-debug.log are /dev/null: what the emulato
   assert.deepEqual(listed.map((r) => r.link), ["/dev/null", "/dev/null"]);
 });
 
-test("firebase-debug.log, written without pause, never passes its cap: cut at half, the newest half kept in .1, the head kept once", async () => {
+test("firebase-debug.log, written without pause, is reduced at each cap check: newest half kept in .1, head kept once", async () => {
   const dir = tempDir("e2e-debuglogs-cap-");
   // The log specs read sits beside it, over the cap: never touched.
   const emulators = join(dir, "emulators.log");
@@ -78,7 +80,7 @@ test("firebase-debug.log, written without pause, never passes its cap: cut at ha
   const before = statSync(emulators).size;
   const r = await writeWhileCapping(dir);
   assert.ok(r.rotations >= 2, `cut ${r.rotations} times while being written`);
-  assert.ok(r.largest <= MB, `the largest size seen was ${r.largest}, within the ${MB}-byte cap`);
+  assert.ok(r.largestAfter <= MB, `after each cap check the largest size was ${r.largestAfter}, within ${MB} bytes (before checks: ${r.largest})`);
   assert.ok(statSync(`${r.file}.1`).size <= MB / 2, "the kept tail is half the cap at most");
   const head = readFileSync(join(dir, "firebase-debug.head.log"), "utf8");
   assert.ok(head.startsWith("line 0 "), "the head holds the first lines (the start-up config)");
@@ -86,6 +88,17 @@ test("firebase-debug.log, written without pause, never passes its cap: cut at ha
   const live = readFileSync(r.file, "utf8");
   assert.match(live.slice(0, 20), /^line \d+ x/, "the live file starts with a whole line after the cut, not a hole of NULs");
   assert.equal(statSync(emulators).size, before, "emulators.log is not touched");
+});
+
+test("a delayed watchdog may see an overshoot, but its next check truncates and retains only the bounded tail", () => {
+  const dir = tempDir("e2e-debuglogs-late-");
+  const file = join(dir, "firebase-debug.log");
+  writeFileSync(file, "x".repeat(2 * MB));
+  const [result] = capDebugLogs(dir, { maxBytes: MB });
+  assert.equal(result.size, 2 * MB, "record the actual pre-check overshoot");
+  assert.equal(result.rotated, true);
+  assert.equal(statSync(file).size, 0, "a delayed cap check still truncates the live log");
+  assert.equal(statSync(`${file}.1`).size, MB / 2, "overshoot does not increase retained tail bytes");
 });
 
 test("a line written after a mark is found in emulators.log while firebase-debug.log is being cut beside it", async () => {

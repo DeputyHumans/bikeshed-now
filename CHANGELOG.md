@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Test debug-log limits at watchdog checks, including delayed-poll overshoot and bounded recovery, instead of assuming the scheduler guarantees a hard continuous size cap. Refresh the update-race amplifier for snapshot-bound draft loading.
+
 - Publish restored historical content as a new current version across draft, upload, MCP and operator paths; only content matching the current version is a no-op, so reverting an edit cannot silently discard the draft.
 
 - Keep an active editor and its unsaved changes when entering a review pass; only explicit Reload or Take theirs prepares a new draft snapshot. Verify editor frame parameters against that prepared snapshot.
