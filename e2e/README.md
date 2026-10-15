@@ -83,6 +83,8 @@ memory readings: pressure level, swap-outs since the last line, free share,
 available bytes, swap used; and a browser pool's memory waits),
 `evidence/<case>/`, and any `<name>.jsonl` of measurement rows a spec
 appended (`measure`, under For spec authors: kept whatever the outcome).
+For verified derived-runtime stacks, `rtdb-runtime.json` binds the invocation
+to before/after JVM and rules receipts; `invocation.json` references its digest.
 The memory gate's waits and refusals for a stack go to
 `e2e/.out/<runId>/load.jsonl`.
 Parallel `--attach` runs on one stack never delete, overwrite or merge each
@@ -218,8 +220,8 @@ the product's ten-second provider deadline.
 
 | | |
 |---|---|
-| Node | 24 under `~/.nvm/versions/node/v24.*` (the functions runtime is `nodejs24`), or `E2E_NODE_BIN` |
-| firebase-tools | on `PATH` (`E2E_FIREBASE_BIN`), with the emulator jars already cached in `~/.cache/firebase/emulators` |
+| Node | 24 under `~/.nvm/versions/node/v24.*`, or `E2E_NODE_BIN`; the pinned runtime is verified with 24.21.0 |
+| firebase-tools | 15.25.1 on `PATH` (`E2E_FIREBASE_BIN`), with Database 4.11.2 and the other emulator jars already cached in `~/.cache/firebase/emulators` |
 | Java | on `PATH` (`E2E_JAVA_BIN`) |
 | Mailpit | on `PATH` (`E2E_MAILPIT_BIN`) |
 | Chrome | system Chrome for the browser specs; `playwright-core` never downloads one |
@@ -240,6 +242,25 @@ particular `node` does not select a Firebase executable elsewhere on PATH.
 The installed-tool probes exercise env precedence and watcher behavior;
 they do not require one transpiler's object-spread spelling or a particular
 order of watcher ignore rules.
+
+New local stacks use a verified **unofficial copy of Database 4.11.2**. Its
+concurrent prefetch diagnostics append to an unsynchronized mutable list;
+the stock runtime has lost diagnostic entries and crashed its namespace in
+this suite. The copy changes only the synchronization flag on
+`RequestContext.addRuleResult`. Rule evaluation and prefetch scheduling stay
+outside that lock, while diagnostic append timing changes. The installed JAR
+is untouched. Unknown toolchain versions, archive bytes or derived output
+are refused; the exact source-owned pins are in `lib/rtdb-runtime.mjs`.
+
+Every stack records the original and derived identities, a byte-level
+attestation and its actual JVM launch. Every invocation records the JVM,
+arguments and exact rules before and after its cases. The retained archives
+under `.out/runtime-artifacts/rtdb/` let campaign checks verify the transform
+after stack teardown. The runtime capability is advertised only after live
+verification. Missing or mismatched runtime evidence cannot qualify for
+final campaign acceptance. `npm run test:rules:emulated` remains a separate
+check against the stock runtime; its result does not establish derived-runtime
+parity or production behavior.
 
 ## Tiers
 

@@ -53,6 +53,7 @@
 
 import { randomBytes } from "node:crypto";
 import { isAmplifySet } from "./gates.mjs";
+import { hasVerifiedRtdbRuntime, RTDB_RUNTIME_CAPABILITY } from "./rtdb-runtime.mjs";
 
 /** What every local stack can do (target.mjs re-exports this; capabilitiesFor() adjusts it per stack). */
 export const LOCAL_CAPABILITIES = Object.freeze([
@@ -257,6 +258,7 @@ export function viteEnvFor(example, { databasePort, projectId, origin, appEnv = 
 export function capabilitiesFor(rec) {
   const caps = new Set(LOCAL_CAPABILITIES);
   const opts = rec?.options ?? {};
+  if (hasVerifiedRtdbRuntime(rec?.rtdbEngine)) caps.add(RTDB_RUNTIME_CAPABILITY);
   if (opts.emailOff) {
     caps.delete("email");
     caps.add("email-off");

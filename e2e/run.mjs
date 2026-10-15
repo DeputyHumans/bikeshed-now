@@ -95,6 +95,7 @@ import { DEFAULT_MAX_LOAD, GIB, startLoadSampler, waitForLoad } from "./lib/load
 import { listStacks, readRecord, reap, saveRecord, stackFailures, startStack, stopStack } from "./lib/stack.mjs";
 import { ADMISSION_CODE } from "./lib/admission.mjs";
 import { coverageMaintenanceEligible } from "./lib/rtdb-coverage.mjs";
+import { beginRtdbInvocationChild, captureRtdbRuntime, writeRtdbInvocationEvidence } from "./lib/rtdb-runtime.mjs";
 import { jvmHeapConfig } from "./lib/jvm.mjs";
 import { extendLease, readLease } from "./lib/lifetime.mjs";
 import { RUN_OWNER_ENV, reapBrowsers, runOwnerValue } from "./lib/browsers.mjs";
@@ -348,6 +349,7 @@ async function cmdRun(argv) {
   let lock = null; // the held tier lock
   let stopSampler = null;
   let inv = null;
+  let rtdbBefore = null;
   let interrupted = null;
   let finishing = null;
   let stopWatch = null;
@@ -497,6 +499,7 @@ async function cmdRun(argv) {
       attach: values.attach ?? null,
       stackOptions: values.attach ? null : { emailOff: values["email-off"], appEnv: Object.keys(appEnv), rtdbProxy: values["rtdb-proxy"], gates: values.gates, storageShim: values["storage-shim"] },
       capabilities: [...target.capabilities].sort(),
+      rtdbEngine: target.rtdbEngine ?? null,
       parallelism: Object.fromEntries(plan.map(({ tier }) => [tier, Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier])])),
       timeouts: Object.fromEntries(
         plan.map(({ tier, budget: b }) => [
@@ -544,6 +547,10 @@ async function cmdRun(argv) {
             ? `${tier}: --timeout ${budget.fileTimeoutMs} ms for each file and each case without its own`
             : `${tier}: file timeout ${budget.fileTimeoutMs} ms (${budget.driver ? `${relFile(budget.driver)}'s budget` : "the tier default"}); a case without its own timeoutMs gets ${budget.caseTimeoutMs} ms`,
         );
+        if (target.rtdbEngine) {
+          const rec = readRecord(target.runId);
+          rtdbBefore = await beginRtdbInvocationChild({ rec, invocationId: inv.id, invocationDir: inv.dir, before: rtdbBefore, parallelism: inv.meta.parallelism, locks }, { record: reference => updateInvocationMeta(inv.dir, { rtdbRuntime: reference }) });
+        }
         const code = await nodeTest(files, {
           concurrency: Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier]),
           timeout: budget.fileTimeoutMs,
@@ -552,6 +559,11 @@ async function cmdRun(argv) {
           resultsFile: join(inv.dir, `results-${tier}.jsonl`),
           onChild: (c) => (child = c),
         });
+        if (target.rtdbEngine) {
+          const rec = readRecord(target.runId), after = await captureRtdbRuntime(rec);
+          const reference = writeRtdbInvocationEvidence({ rec, invocationId: inv.id, invocationDir: inv.dir, before: rtdbBefore, after, parallelism: inv.meta.parallelism, locks });
+          updateInvocationMeta(inv.dir, { rtdbRuntime: reference });
+        }
         log(`${tier}: node --test exited ${code}`);
         if (code !== 0) exit = exit || code;
         if (stackDown) return finishing;

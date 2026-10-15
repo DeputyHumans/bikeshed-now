@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Run local E2E stacks with an explicitly labeled, exact-byte derived Database emulator that synchronizes only diagnostic appends. Keep the installed emulator untouched, preserve ordinary JVM limits and workflow concurrency, and bind each invocation to retained archive attestations plus before/after JVM and rules receipts. Refuse unreviewed toolchains and derived bytes; the standalone rules command remains stock.
+
 - Share immutable campaign evidence reads within each check/import, preserving every proof’s identity checks and detecting changed artifacts without retaining a full report per case.
 
 - Add separate E2E fault controls for duplicated committed suggestion text, missing co-editor delivery and omitted embedded Markdown styling. Keep the existing cases and exact assertions, and include every new control in the complete catalog obligation.

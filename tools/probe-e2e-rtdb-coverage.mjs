@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { firebaseTools } from "../e2e/lib/prerequisites.mjs";
 import { requireTool } from "../e2e/lib/proc.mjs";
 import { RTDB_COVERAGE_PIN } from "../e2e/lib/rtdb-coverage.mjs";
+import { verifyRtdbEngine, verifiedRtdbArchive } from "../e2e/lib/rtdb-runtime.mjs";
 
 export const TRACKER_PROBE = String.raw`
 import java.lang.reflect.Field;
@@ -61,7 +62,7 @@ export function assertRetentionBehavior(actual) {
   assert.deepEqual(actual, { distinctValues: 1000, retainedCharacters: 4096000, repeatedValues: 1, replacementTrackerValues: 0 }, "the installed tracker retains every distinct string and a replacement retains none");
 }
 
-export async function probeRtdbCoverage({ env = process.env } = {}) {
+export async function probeRtdbCoverage({ env = process.env, engine = null } = {}) {
   const firebase = firebaseTools({ env });
   const require = createRequire(join(firebase.root, "package.json"));
   const info = require(join(firebase.root, "lib/emulator/downloadableEmulators.js")).getDownloadDetails("database");
@@ -69,8 +70,10 @@ export async function probeRtdbCoverage({ env = process.env } = {}) {
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(info.downloadPath)) hash.update(chunk);
   assert.deepEqual({ firebase: firebase.version, database: info.version, sha256: hash.digest("hex") }, RTDB_COVERAGE_PIN, "retention proof requires the audited installation");
+  const runtime = engine ? verifyRtdbEngine(engine) : null;
+  const jar = engine ? verifiedRtdbArchive(engine) : info.downloadPath;
   const java = requireTool("java", "E2E_JAVA_BIN", env), javap = join(dirname(realpathSync(java)), "javap");
-  const dump = name => command(javap, ["-J-Xmx128m", "-classpath", info.downloadPath, "-c", "-p", name]);
+  const dump = name => command(javap, ["-J-Xmx128m", "-classpath", jar, "-c", "-p", name]);
   assert.match(dump("com.firebase.server.forge.App$"), /getstatic[^\n]+LiveRuleTrackerFactory/, "the emulator installs the live value tracker");
   const manager = dump("com.firebase.core.namespace.NamespaceManager");
   const replacement = manager.split(" setStableRules(")[1]?.split(/\n  (?:private|public)/)[0] ?? "";
@@ -82,9 +85,9 @@ export async function probeRtdbCoverage({ env = process.env } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "e2e-rtdb-tracker-"));
   try {
     const file = join(dir, "TrackerRetention.java"); writeFileSync(file, TRACKER_PROBE);
-    const behavior = JSON.parse(command(java, ["-Xmx128m", "--class-path", info.downloadPath, file]));
+    const behavior = JSON.parse(command(java, ["-Xmx128m", "--class-path", jar, file]));
     assertRetentionBehavior(behavior);
-    return { schemaVersion: 1, kind: "rtdb-rule-coverage-retention", toolchain: RTDB_COVERAGE_PIN, behavior, structure: { liveTracker: true, changedRuleStringReplacesTracker: true, identicalRuleStringSkipsReplacement: true }, observedAt: new Date().toISOString() };
+    return { schemaVersion: 1, kind: "rtdb-rule-coverage-retention", toolchain: engine ? { firebase: engine.firebaseVersion, database: engine.databaseVersion, sha256: engine.actualSha256, kind: engine.kind, profileSha256: runtime.profileSha256 } : RTDB_COVERAGE_PIN, behavior, structure: { liveTracker: true, changedRuleStringReplacesTracker: true, identicalRuleStringSkipsReplacement: true }, observedAt: new Date().toISOString() };
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 

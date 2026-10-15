@@ -19,7 +19,8 @@ import { rtdbNamespace } from "./rtdb.mjs";
 import { rtdbRulesFile } from "./patch.mjs";
 import { within } from "./paths.mjs";
 
-export const RTDB_COVERAGE_PIN = Object.freeze({ firebase: "15.25.1", database: "4.11.2", sha256: "b70d99344caf17c98b6f910fa8f6edf32a7c016cb1035e8915f70d38901eb97f" });
+import { RTDB_RUNTIME_CAPABILITY, RTDB_STOCK_PIN, inspectRtdbLaunch } from "./rtdb-runtime.mjs";
+export const RTDB_COVERAGE_PIN = RTDB_STOCK_PIN;
 const hash = b => createHash("sha256").update(b).digest("hex");
 const need = (ok, reason) => { if (!ok) throw Object.assign(new Error(`RTDB coverage maintenance refused: ${reason}`), { code: "E2E_RTDB_MAINTENANCE" }); };
 
@@ -56,9 +57,19 @@ const pinned = new Map();
 export async function pinnedDatabase(target, { env = process.env } = {}) {
   const database = jvmEvents(target.stack.stackDir).started.filter(j => j.role === "database" && j.alive);
   need(database.length === 1, "exactly one live Database JVM is required");
-  const key = `${target.stack.stackDir}:${database[0].pid}`;
+  const key = `${target.stack.stackDir}:${database[0].pid}:${target.rtdbEngine?.profileSha256 ?? "stock"}:${target.rtdbEngine?.attestation?.sha256 ?? ""}`;
+  if (target.capabilities?.has(RTDB_RUNTIME_CAPABILITY)) need(target.rtdbEngine, "claimed derived capability has no runtime identity");
   if (pinned.has(key)) return pinned.get(key);
   const firebase = firebaseTools({ env });
+  if (target.rtdbEngine) {
+    const rec = JSON.parse(readFileSync(join(target.stack.stackDir, "stack.json"), "utf8"));
+    need(rec.runId === target.runId && JSON.stringify(rec.rtdbEngine) === JSON.stringify(target.rtdbEngine), "target and stack derived identities differ");
+    need(firebase.version === rec.rtdbEngine.firebaseVersion, "selected Firebase CLI changed");
+    const live = inspectRtdbLaunch(rec);
+    const actual = { firebase: rec.rtdbEngine.firebaseVersion, database: rec.rtdbEngine.databaseVersion, sha256: live.actualSha256, kind: rec.rtdbEngine.kind, originalSha256: rec.rtdbEngine.originalSha256, profileSha256: live.profileSha256, attestation: rec.rtdbEngine.attestation };
+    pinned.set(key, actual);
+    return actual;
+  }
   const require = createRequire(join(firebase.root, "package.json"));
   const info = require(join(firebase.root, "lib/emulator/downloadableEmulators.js")).getDownloadDetails("database");
   need(commandLine(database[0].pid)?.includes(` -jar ${info.downloadPath} `), "the live JVM is not running the selected Database JAR");
