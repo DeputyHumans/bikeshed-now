@@ -177,7 +177,8 @@ second comment's notice is sent, and A23.4 goes red. A control may be built
 on an amplify set: its `stack` names `--patches amplify-<name>`, which both
 sides get, before the control's own set. The same setup field accepts the
 explicit capability-only sets `a19-analytics-live` and
-`a20-cli-bad-skill-name`; arbitrary product-fix or other control sets are
+`a20-cli-bad-skill-name`, `a20-cli-uppercase-skill`, `a20-cli-underscore-skill`,
+and `a20-cli-no-retry-delay`; arbitrary product-fix or other control sets are
 refused there, so the green side cannot silently inherit the mutant. A control may target one case of
 a scenario with `n`, as `"<scenario> [N=<k>]"`: both sides then run with
 `--n <k> --trials 1` (see Adding a negative control), so no fixed-N copy of
@@ -5669,6 +5670,9 @@ them, with the capability named in the reason:
 | A19.2, analytics live (the consent sequence) | `measurement-id`, `patch:a19-analytics-live` | the same, plus `--patches a19-analytics-live` |
 | A19.3, the deployment's default marking | `export-mark-default` | `stack up --app-env VITE_EXPORT_MARK_ENABLED` (and the label and footer, as the case's comment shows) |
 | A20.7m, a skill name the CLI must refuse | `patch:a20-cli-bad-skill-name` | `stack up --patches a20-cli-bad-skill-name` |
+| A20.7m2, an uppercase first skill name | `patch:a20-cli-uppercase-skill` | `stack up --patches a20-cli-uppercase-skill` |
+| A20.7m3, an underscore first skill name | `patch:a20-cli-underscore-skill` | `stack up --patches a20-cli-underscore-skill` |
+| A20.7y, the CLI polling floor independently of the server retry delay | `patch:a20-cli-no-retry-delay` | `stack up --patches a20-cli-no-retry-delay` |
 | A23.7, email off | `email-off` | `stack up --email-off` |
 
 The `storage-preconditions` cases (Capabilities) likewise need

@@ -54,7 +54,7 @@ import { dirname, join } from "node:path";
 import { answered, currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { bearerHttp, listTokens, mintToken, openSession } from "../../lib/session.mjs";
-import { absentDocId, docIdFor, ledgerDoc as ledgerDocLib, ledgerFolder as ledgerFolderLib, ledgerToken, publish, readFixture, zipBundle } from "../../lib/seed.mjs";
+import { absentDocId, docIdFor, ledgerDoc as ledgerDocLib, ledgerFolder as ledgerFolderLib, ledgerToken, publish, readFixture, seedThreads, zipBundle } from "../../lib/seed.mjs";
 import { cliEntry, cliHome, runCli, spawnCli } from "../../lib/cli.mjs";
 import { patchCapability } from "../../lib/options.mjs";
 import { agentName, createHttp } from "../../lib/http.mjs";
@@ -65,6 +65,7 @@ import { tinyPng } from "../../lib/thumbs.mjs";
 import { egressMark, readEgress } from "../../lib/egress.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { mcpClient } from "../../lib/mcp.mjs";
+import { eventAt, settleLog } from "../../lib/changes.mjs";
 
 const target = currentTarget();
 after(async () => {
@@ -80,7 +81,7 @@ const LOCAL = ["local"];
 /** The patch set the skills-name case needs: a stack whose /skills/index.json names an unusable skill first. */
 const BAD_SKILL_SET = "a20-cli-bad-skill-name";
 const BAD_SKILL = patchCapability(BAD_SKILL_SET);
-const BAD_SKILL_NAME = "../a20-escape";
+const BAD_SKILL_NAME = "..";
 
 /** Where the egress log stood when this spec file started: CLI refusals after it are this file's to explain. */
 const EGRESS_SINCE = target?.kind === "local" && target.stack?.logs?.egress ? egressMark(target) : 0;
@@ -154,7 +155,7 @@ async function ready(key, { who = "owner", tokens = 1, fresh = false, docs = [] 
 const NAMES = {
   a: "A20.7a --version --json prints {version} from the CLI's own package.json, and --version alone prints `bikeshed <version>`",
   b: "A20.7b publish --json stores the file's bytes at the requested --id as v1 (url, cursor, filedIn, access) with provenance channel cli via upload and the CLI's own client header; a taken --id still publishes, under another id, said on stderr only",
-  c: "A20.7c list --json pages newest first with --limit and --cursor, and --all reads every page",
+  c: "A20.7c list --json pages newest first with --limit and --cursor, and --all returns all three documents",
   d: "A20.7d get and get --json return the whole source of a document over get_document's 200,000-character cap (truncated false, the uploaded bytes); a pasted ?k= link reads an unlisted document for a non-member, and the bare id answers as an absent one",
   e: "A20.7e update --json sends an .html through update_document (publishedVia mcp), the same bytes again is deduped, and a stale --base is refused naming the current version, minting nothing",
   f: "A20.7f update of a .zip, by name or by its magic bytes, goes up as bytes to /publish?update= (publishedVia cli): every entry, a binary image included, is stored byte for byte, and --base is honoured there too",
@@ -164,7 +165,9 @@ const NAMES = {
   j: "A20.7j changes --json: --since is required; `all` reads what another credential caused, with quote and body; a quiet cursor comes back unchanged; another document's cursor is refused; --wait --timeout on a quiet cursor exits 3 with the cursor; --wait returns 0 with what arrived after its first check, at least --interval 30 s in",
   k: "A20.7k mkdir, folders, folder, publish --folder, mv and rename --json file and retitle documents; mv needs its destination and spells the root `root`; rename keeps the address",
   l: "A20.7l skills --json lists the deployment's skills, and skills install <dir> --json writes each one's SKILL.md as served, without a token",
-  m: "A20.7m skills install refuses a skill whose name could leave the directory, and writes nothing",
+  m: "A20.7m skills install refuses a bare parent-directory name first in the index and writes nothing",
+  z: "A20.7m2 skills install refuses an uppercase name first in the index and writes nothing",
+  aa: "A20.7m3 skills install refuses an underscore name first in the index and writes nothing",
   n: "A20.7n open prints the document's address, keeping a pasted link's key, and hands exactly that address to the system opener",
   o: "A20.7o open --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
   p: "A20.7p login --json signs in through the browser flow and saves a cli token marked via browser; logout --json revokes it on the deployment (401 after) and keeps the origin; a token revoking another token's id is refused 403",
@@ -172,6 +175,9 @@ const NAMES = {
   r: "A20.7r login --paste --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
   s: "A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each",
   t: "A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC §19 says every command takes --json",
+  w: "A20.7w list --all reads both default-sized pages: all 51 documents exactly once in newest-first order",
+  x: "A20.7x changes reads both default-sized pages: all 103 recorded events exactly once in stored order",
+  y: "A20.7y changes --interval 1 respects the 30-second floor when the server requests no additional delay",
   v: "A20.7v login in CI refuses before opening a browser or saving a credential",
   u: "A20.7u no CLI process this spec started reached for anything outside the stack (zero egress refusals with this spec as parent), and the commands it runs here reach the stack itself",
 };
@@ -329,7 +335,7 @@ async function cli(ctx, who, args, o = {}) {
   const token = "token" in o ? o.token : who?.token;
   const home = o.home ?? who?.home ?? cliHome(target);
   ctx.step(`bikeshed ${args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ")}${token ? "" : "   (no token)"}`);
-  const r = await runCli(target, args, { token, home, input: o.input, env: o.env, timeoutMs: o.timeoutMs ?? CLI_MS });
+  const r = await runCli(target, args, { token, home, input: o.input, env: o.env, traceCalls: o.traceCalls, timeoutMs: o.timeoutMs ?? CLI_MS });
   ctx.step(`  → ${args[0]} exit ${r.code}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms${r.stderr ? `; stderr ${JSON.stringify(r.stderr.slice(0, 200))}` : ""}`);
   // A case's own run that the stack did not answer (runCli's `cut`) ends
   // INCONCLUSIVE here; a background phase (a stepLog, no ctx.inconclusive)
@@ -475,25 +481,24 @@ scenario(NAMES.l, {
   refused(badR, "an unknown skills subcommand", /^error: usage: bikeshed skills \[install <dir>\]/);
 });
 
-scenario(NAMES.m, {
-  tiers: LOCAL,
-  // stack up --patches a20-cli-bad-skill-name
-  needs: [BAD_SKILL],
-  timeoutMs: 120_000,
-  inconclusiveOnStackTimeout: true,
-}, async (ctx) => {
+/** Only the first entry is invalid: this makes no atomic-install promise for later entries. */
+async function refuseFirstSkill(ctx, badName) {
   const http = ctx.http({ actor: "anonymous", timeoutMs: REQUEST_MS });
   const index = (await http.get("/skills/index.json", { expect: 200 })).json;
-  precondition(index?.skills?.[0]?.name === BAD_SKILL_NAME, `the patched index names ${BAD_SKILL_NAME} first`);
+  precondition(index?.skills?.[0]?.name === badName, `the patched index names ${badName} first`);
   const home = cliHome(target);
   const parent = join(home.home, "skills-parent");
   const dir = join(parent, "agent-skills");
   mkdirSync(dir, { recursive: true });
   const r = await cli(ctx, null, ["skills", "install", dir, "--json"], { home, token: null });
-  refused(r, "skills install with an unusable name", new RegExp(`^error: refusing a skill with an unusable name: ${BAD_SKILL_NAME.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\n$`));
+  refused(r, "skills install with an unusable name", new RegExp(`^error: refusing a skill with an unusable name: ${badName.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\n$`));
   assert.deepEqual(readdirSync(dir), [], "nothing was written into the directory");
   assert.deepEqual(readdirSync(parent), ["agent-skills"], "nothing escaped it");
-});
+}
+
+scenario(NAMES.m, { tiers: LOCAL, needs: [BAD_SKILL], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, BAD_SKILL_NAME));
+scenario(NAMES.z, { tiers: LOCAL, needs: [patchCapability("a20-cli-uppercase-skill")], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, "Bikeshed"));
+scenario(NAMES.aa, { tiers: LOCAL, needs: [patchCapability("a20-cli-underscore-skill")], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, "bikeshed_skill"));
 
 // --- A20.7n / A20.7o open -------------------------------------------------------------
 
@@ -588,7 +593,7 @@ scenario(NAMES.c, { tiers: BOTH, timeoutMs: 420_000, inconclusiveOnStackTimeout:
   assert.deepEqual(p2.documents.map((d) => d.id), newestFirst.slice(2), "page 2: the oldest");
   assert.equal(p2.nextCursor, null, "page 2 is the last");
   const all = okJson(allR, "list --all");
-  assert.deepEqual(all.documents.map((d) => d.id), newestFirst, "--all: every page, in order");
+  assert.deepEqual(all.documents.map((d) => d.id), newestFirst, "--all: all three documents, in order");
   assert.equal(all.nextCursor, null);
   assert.deepEqual(
     all.documents.map((d) => ({ version: d.version, visibility: d.visibility, owner: d.owner })),
@@ -848,7 +853,7 @@ async function changesWaiter(o) {
   const savedBefore = await readDoc(target, saved);
   const waiter = { ...o, token: o.tokens[2].token, home: cliHome(target) };
   const t0 = Date.now();
-  const waiting = cli(log, waiter, ["changes", up.docId, "--since", head, "--wait", "--interval", "30", "--timeout", "420", "--json"], { timeoutMs: 480_000 });
+  const waiting = cli(log, waiter, ["changes", up.docId, "--since", head, "--wait", "--interval", "1", "--timeout", "420", "--json"], { timeoutMs: 480_000, traceCalls: target.kind === "local" });
   waiting.catch(() => {});
   await eventually(async () => (await readDoc(target, saved)) !== null, { timeout: 240_000, interval: 250, message: "the waiting CLI's first check" });
   const firstCheckMs = Date.now() - t0;
@@ -893,7 +898,7 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
     "another credential's thread and comment, each with its quote (SPEC §19)",
   );
   assert.equal(all.events.find((e) => e.type === "comment.added" && e.threadId === made.threadId)?.body, body, "the comment carries its body");
-  assert.deepEqual({ cursor: typeof all.cursor, more: all.more }, { cursor: "string", more: false }, "every page read, and the cursor to pass next");
+  assert.deepEqual({ cursor: typeof all.cursor, more: all.more }, { cursor: "string", more: false }, "the small feed is complete, with the cursor to pass next");
   assert.deepEqual(okJson(mineR, "the writer's own changes").events.filter((e) => e.threadId === made.threadId), [], "what the caller caused is left out (SPEC §19)");
 
   const [quietR, staleR, waitedR] = await Promise.all([
@@ -914,7 +919,17 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   const j = okJson(r, "changes --wait");
   assert.deepEqual(j.events.map((e) => [e.type, e.threadId]), [["thread.opened", made.threadId], ["comment.added", made.threadId]], "the wait returned with what happened");
   assert.equal(j.timedOut, undefined, "it did not time out");
-  assert.ok(r.ms >= 30_000, `the comment came after the first check, so a later check saw it, at least --interval 30 s in (took ${r.ms} ms)`);
+  if (target.kind === "local") {
+    const firstBody = r.calls.find((e) => e.phase === "body" && e.tool === "get_changes");
+    const nextCall = r.calls.find((e) => e.phase === "start" && e.tool === "get_changes" && e.id > firstBody?.id);
+    precondition(firstBody && nextCall, "the wait contains a completed first response and a later check");
+    assert.ok(nextCall.ms - firstBody.ms >= 29_900, "the next check follows the completed first response by at least the interval floor");
+    ctx.ev.json("cli-wait-calls.json", r.calls);
+  } else {
+    assert.ok(r.ms >= 30_000, "the supported deployment wait includes its interval");
+  }
+  // The default server retryAfter is 60 seconds, so this case alone cannot
+  // distinguish its delay from the CLI floor. A20.7y isolates the latter.
 });
 
 // --- A20.7k folders and rename --------------------------------------------------------
@@ -1253,4 +1268,63 @@ scenario(NAMES.v, { tiers: BOTH, timeoutMs: 30_000 }, async (ctx) => {
   refused(result, "login in CI", /error: In CI, set BIKESHED_TOKEN and BIKESHED_ORIGIN\./);
   assert.deepEqual(openedIn(home), [], "CI login opens no browser");
   assert.equal(existsSync(join(home.config, "bikeshed", "config.json")), false, "CI login saves no credential");
+});
+
+
+scenario(NAMES.w, { tiers: LOCAL, timeoutMs: 1_200_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  // A fresh account makes the list exact. Publish real documents rather than
+  // changing the server/CLI page size: --all asks for 50, so 51 needs two calls.
+  const o = await ready("w", { fresh: true });
+  o.home = cliHome(target);
+  const docs = [];
+  for (let n = 1; n <= 51; n++) {
+    const d = await publish(o.session.http, { filename: "index.html", body: page(`Page boundary ${n}`, [`Document ${n}.`]), ownerEmail: o.email, title: `CLI page ${n} ${tag()}`, name: `cli-page-${n}` });
+    docs.push({ id: d.docId, at: (await readDoc(target, `docs/${d.docId}`)).createdAt });
+  }
+  precondition(new Set(docs.map((d) => `${d.at.seconds}:${d.at.nanoseconds}`)).size === 51, "51 distinct server creation times");
+  const wanted = docs.sort((a, b) => b.at.seconds - a.at.seconds || b.at.nanoseconds - a.at.nanoseconds).map((d) => d.id);
+  const r = await cli(ctx, o, ["list", "--all", "--json"], { timeoutMs: 360_000 });
+  const all = okJson(r, "list --all across its 50-document boundary");
+  assert.deepEqual(all.documents.map((d) => d.id), wanted, "--all returns all 51 documents in order across the default page boundary");
+  assert.equal(new Set(all.documents.map((d) => d.id)).size, 51, "each document is returned once");
+  assert.equal(all.nextCursor, null, "the combined list ends at a null cursor");
+});
+
+scenario(NAMES.x, { tiers: LOCAL, timeoutMs: 900_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  const o = await ready("x", { tokens: 2, docs: [{ body: page("Changes boundary", [Q.j]), title: `CLI changes pages ${tag()}`, name: "cli-change-pages" }] });
+  const id = o.docs[0].docId;
+  const writer = ctx.mcp({ token: o.tokens[0].token, actor: "page-writer", timeoutMs: REQUEST_MS });
+  await writer.initialize();
+  // The established local seed copies the first real tool-written thread;
+  // all 102 thread/comment events are recorded by the product's own triggers.
+  await seedThreads(writer, { docId: id, n: 51, exact: Q.j, body: (i) => `CLI paging comment ${i}` });
+  const log = await settleLog(target, id, { "version.published": 1, "thread.opened": 51, "comment.added": 51 }, { timeout: 600_000, message: "all 103 source events before the CLI reads" });
+  const watcher = withToken(o, 1);
+  const all = okJson(await cli(ctx, watcher, ["changes", id, "--since", "all", "--json"], { timeoutMs: 360_000 }), "changes across its 100-event boundary");
+  const event = (e) => [e.type, e.threadId ?? null, e.commentId ?? null, e.at];
+  assert.deepEqual(all.events.map(event), log.map((row) => event({ ...row.data, at: eventAt(row) })), "changes returns all 103 events in stored order across the default page boundary");
+  assert.equal(new Set(all.events.map((e) => JSON.stringify(event(e)))).size, 103, "each event is returned once");
+  assert.equal(all.more, false, "the combined feed has consumed its final page");
+  const quiet = okJson(await cli(ctx, watcher, ["changes", id, "--since", all.cursor, "--json"]), "changes after its final combined cursor");
+  assert.deepEqual({ events: quiet.events, cursor: quiet.cursor, more: quiet.more }, { events: [], cursor: all.cursor, more: false }, "the printed cursor resumes after every combined event");
+});
+
+scenario(NAMES.y, { tiers: LOCAL, needs: [patchCapability("a20-cli-no-retry-delay")], timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  const o = await ready("y", { docs: [{ body: page("Interval floor", ["A quiet document."]), title: `CLI floor ${tag()}`, name: "cli-floor" }] });
+  o.home = cliHome(target);
+  const id = o.docs[0].docId;
+  await settleLog(target, id, { "version.published": 1 });
+  const probe = ctx.mcp({ token: o.token, actor: "floor-setup", timeoutMs: REQUEST_MS });
+  await probe.initialize();
+  const head = await probe.ok("get_changes", { id, since: "all" });
+  precondition(head.retryAfter === 0, "the local amplifier removes only the server retry delay");
+  const r = await cli(ctx, o, ["changes", id, "--since", head.cursor, "--wait", "--interval", "1", "--timeout", "29", "--json"], { traceCalls: true, timeoutMs: 150_000 });
+  const starts = r.calls.filter((e) => e.phase === "start" && e.tool === "get_changes");
+  const end = r.calls.find((e) => e.phase === "body" && e.id === starts[0]?.id);
+  precondition(starts.length > 0 && end, "the CLI's first get_changes has a complete transport trace");
+  if (end.ms - starts[0].ms >= 27_000) ctx.inconclusive("the first response left too little of the 29-second deadline to distinguish a one-second regression");
+  assert.equal(r.code, 3, "the 30-second floor exceeds this wait's remaining deadline");
+  assert.equal(starts.length, 1, "--interval 1 never starts a second check when the 30-second floor cannot fit");
+  assert.deepEqual({ events: r.json?.events, cursor: r.json?.cursor, timedOut: r.json?.timedOut }, { events: [], cursor: head.cursor, timedOut: true }, "the immediate timeout preserves its quiet cursor");
+  ctx.ev.json("cli-interval-calls.json", r.calls);
 });

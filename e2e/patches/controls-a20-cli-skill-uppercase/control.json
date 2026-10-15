@@ -1,0 +1,16 @@
+{
+  "oracle": "A20.7m2 skills install refuses an uppercase name first in the index and writes nothing",
+  "what": "controls-a20-cli-skill-uppercase",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7m2 skills install refuses an uppercase name first in the index and writes nothing",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "a20-cli-uppercase-skill"
+  ],
+  "expect": {
+    "message": "skills install with an unusable name"
+  }
+}

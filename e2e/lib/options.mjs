@@ -203,7 +203,7 @@ export function stackOptionArgs({ emailOff = false, appEnv = {}, rtdbProxy = fal
  * `gates: true`, `storageShim: true` and `patches: [sets]` only when given
  * (so a list without them parses as it always did).
  */
-export const CONTROL_CAPABILITY_PATCHES = Object.freeze(["a19-analytics-live", "a20-cli-bad-skill-name"]);
+export const CONTROL_CAPABILITY_PATCHES = Object.freeze(["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"]);
 
 export function parseStackOptionArgs(args = []) {
   const out = { emailOff: false, appEnv: [], rtdbProxy: false, gates: false, storageShim: false, patches: [] };

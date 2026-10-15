@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -427,5 +427,5 @@
+       documents.push(...next.documents);
+       cursor = next.nextCursor;
+-    } while (cursor);
++    } while (false && cursor);
+     result = { documents, nextCursor: null };
+   } else {
