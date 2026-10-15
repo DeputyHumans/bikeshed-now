@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { verifyCompletedRun } from "./e2e-run-completion.mjs";
+import { verifyCompletedRun, verifyFinishedRun } from "./e2e-run-completion.mjs";
 
 const base = () => {
   const file = "e2e/specs/concurrency/example.spec.mjs", name = "actual assertion [N=20] #3";
@@ -64,4 +64,22 @@ test("completion refuses missing and malformed final reporter records", t => {
 test("a later explicit re-merge remains bound to the completed final records", t => {
   const f = fixture(t, f => { f.report.mergedAt = "2026-10-15T02:00:00Z"; });
   assert.deepEqual(verifyCompletedRun(f.report, f.path), f.done);
+});
+
+
+test("exit three requires explicit qualified-incomplete binding and still rejects interruption", t => {
+  const f = fixture(t, f => { f.done.exit = 3; });
+  assert.throws(() => verifyCompletedRun(f.report, f.path), /did not finish successfully/);
+  assert.deepEqual(verifyFinishedRun(f.report, f.path, { expectedExit: 3 }), f.done);
+  assert.throws(() => verifyFinishedRun(f.report, f.path, { expectedExit: 1 }), /only successful or explicitly incomplete/);
+  f.done.interrupted = "SIGINT"; writeFileSync(join(dirname(f.path), "invocation.json"), JSON.stringify(f.done));
+  assert.throws(() => verifyFinishedRun(f.report, f.path, { expectedExit: 3 }), /did not finish successfully/);
+});
+
+test("final reporter duplicates cannot disappear through the merge's id deduplication", t => {
+  const f = fixture(t), raw = join(dirname(f.path), "results-concurrency.jsonl");
+  for (const duplicate of [f.report.cases[0], { ...f.report.cases[0], n: 2 }, { ...f.report.cases[0], status: "fail", error: "earlier failure" }]) {
+    writeFileSync(raw, [duplicate, f.report.cases[0]].map(row => JSON.stringify(row)).join("\n") + "\n");
+    assert.throws(() => verifyCompletedRun(f.report, f.path), /duplicate case identities/);
+  }
 });

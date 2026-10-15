@@ -36,7 +36,7 @@ export function localLimitReference(root, artifact, reportPath) {
   const invocation = `${dirname(reportPath)}/invocation.json`;
   const report = JSON.parse(readFileSync(file(root, reportPath), "utf8"));
   return { id: LIMIT_ID, artifact, sha256: sha(readFileSync(file(root, artifact))),
-    observations: report.cases.filter(c => c.status === "inconclusive").map(key),
+    observations: report.cases.filter(c => c.status === "inconclusive" && scenario(c, C15_JUDGE)).map(key),
     invocation: { artifact: invocation, sha256: sha(readFileSync(file(root, invocation))) },
     measurements: { artifact: measurements, sha256: sha(readFileSync(file(root, measurements))) } };
 }
@@ -44,7 +44,7 @@ export function localLimitReference(root, artifact, reportPath) {
 /** A limitation is not a case proof: its raw case remains INCONCLUSIVE in the immutable report. */
 export function verifyLocalLimit(campaign, proof, loaded, { root }) {
   const ref = proof.localLimit, { report, stack } = loaded, a = campaign.acceptance;
-  need(proof.kind === "e2e-run" && proof.outcome === "LOCAL-LIMIT" && ref?.id === LIMIT_ID, "only a named run-level LOCAL-LIMIT is supported");
+  need(proof.kind === "e2e-run" && ["LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(proof.outcome) && ref?.id === LIMIT_ID, "only a named run-level LOCAL-LIMIT is supported");
   const probe = JSON.parse(readBound(root, ref));
   need(probe.schemaVersion === 1 && probe.kind === "unsupported-local-trigger-overlap", "wrong probe kind");
   assert.deepEqual(probe.toolchain, PIN, "local limit: unpinned CLI, emulator or JAR hash");

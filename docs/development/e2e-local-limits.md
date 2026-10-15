@@ -111,3 +111,50 @@ Full original completion remains false while natural publication-first is
 unobserved; local acceptance reports the composite safety evidence and that
 remaining observation separately. Adding assertions or a proposed artifact does
 not itself supply acceptance evidence or close the campaign finding.
+
+
+### Capture and import the separate C14 assessment
+
+After the frozen campaign's runs and control pairs finish, prepare a JSON
+manifest under `e2e/.out/` with three arrays of repository-relative paths:
+
+| Field | Required artifacts |
+|---|---|
+| `natural` | Four final `results.json` files: the unfiltered natural concurrency cells at N=2,5,10,20 |
+| `forced` | Four final `results.json` files: the C13 cells at N=2,5,10,20, with the original ordered `amplify-c08-mint-races` and `amplify-c13-feedback` patches |
+| `controlLedgers` | Finished actual runner `ledger.json` files establishing each of the ten C14 directional pairs exactly once |
+
+Import those control ledgers into the prepared campaign candidate first. The
+original `W2-C14-SYNC-T-judges` item must remain `in-progress`, with its claim,
+baseline and every original required case intact. The capture command reads
+completed artifacts only; it does not run tests, change outcomes or close items:
+
+```bash
+node tools/e2e-campaign-evidence.mjs capture-composite \
+  --campaign e2e/.out/prepared-campaign.json \
+  --manifest e2e/.out/c14-manifest.json \
+  --out e2e/.out/c14-composite.json
+
+node tools/e2e-campaign-evidence.mjs import-run \
+  --campaign e2e/.out/prepared-campaign.json \
+  --artifact e2e/.out/<run>/invocations/<invocation>/results.json \
+  --cell concurrency-natural-n2 \
+  --composite e2e/.out/c14-composite.json \
+  --out e2e/.out/proposed-campaign.json
+```
+
+Repeat import for every corresponding natural and C13 cell, using the previous
+candidate as the next input. If the same run also has the precisely qualified
+C15 trigger-overlap outcome, supply `--local-limit e2e/.out/local-limit.json`
+as well. Neither assessment can exempt the other's raw observations. Every
+other failed, TODO or inconclusive case still blocks import and local acceptance.
+
+Capture binds final reporter records, completed invocation metadata, measurements,
+stack fingerprints, control definitions and actual control ledgers by digest.
+It verifies every cumulative attempt diagnostic and requires capture after all
+referenced runs and control ledgers ended. All evidence must use the same frozen
+revision, version and source fingerprint; a source change during capture refuses
+the proposal. Control tree selectors may be `HEAD`, a revision or `worktree`;
+the immutable commit and both actual stack fingerprints establish their source.
+The default checker still exits unsuccessfully while the original observation
+remains incomplete. Only `--local-only` can report the separate local acceptance.

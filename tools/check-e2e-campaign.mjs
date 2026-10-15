@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseExpandedCase } from "../e2e/lib/controls.mjs";
 import { commandCounts } from "./e2e-campaign-evidence.mjs";
 import { verifyLocalLimit } from "./e2e-local-limit.mjs";
+import { verifyComposite, COMPOSITE_ITEM } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -35,6 +36,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   const errors = [];
   const pending = [];
   const unresolvedDeploymentWitnesses = [];
+  const unresolvedNaturalWitnesses = [];
+  const localAdjudications = new Set();
   const need = (ok, why) => { if (!ok) errors.push(why); return ok; };
   const index = (rows, label) => {
     const map = new Map();
@@ -112,7 +115,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const id of array(r?.controls)) need(controls.has(id), `${item.id}: unknown control ${id}`);
   }
   for (const p of proofs.values()) {
-    need(["e2e-case", "e2e-run", "command"].includes(p.kind) && (["PASS", "FAIL"].includes(p.outcome) || p.kind === "e2e-run" && p.outcome === "LOCAL-LIMIT"), `${p.id}: unsupported proof kind/outcome`);
+    need(["e2e-case", "e2e-run", "command"].includes(p.kind) && (["PASS", "FAIL"].includes(p.outcome) || p.kind === "e2e-run" && ["LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)), `${p.id}: unsupported proof kind/outcome`);
     need(SHA.test(p.revision) && text(p.version) && text(p.artifact), `${p.id}: revision, version and artifact required`);
     if (p.kind.startsWith("e2e")) need(text(p.runId) && text(p.invocation), `${p.id}: run and invocation required`);
     if (p.kind === "e2e-case") need(text(p.caseId), `${p.id}: exact case id required`);
@@ -127,7 +130,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   for (const r of requirements.values()) {
     need(["e2e-run", "command"].includes(r.kind) && text(r.command), `${r.id}: matrix kind and executable command required`);
     if (array(r.proofs).length === 0) pending.push(`matrix:${r.id}: no evidence`);
-    for (const id of array(r.proofs)) need(proofs.get(id)?.kind === r.kind && (proofs.get(id)?.outcome === "PASS" || r.kind === "e2e-run" && proofs.get(id)?.outcome === "LOCAL-LIMIT"), `matrix:${r.id}: ${id} is not a matching PASS or qualified LOCAL-LIMIT proof`);
+    for (const id of array(r.proofs)) need(proofs.get(id)?.kind === r.kind && (proofs.get(id)?.outcome === "PASS" || r.kind === "e2e-run" && ["LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(proofs.get(id)?.outcome)), `matrix:${r.id}: ${id} is not a matching PASS or qualified local assessment`);
   }
   if (!validateOnly) {
     if (!SHA.test(acceptance.revision) || !text(acceptance.version)) pending.push("acceptance: pin the exact tested revision and version");
@@ -177,17 +180,22 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(!stack.fingerprint?.dirty || (HASH.test(p.fingerprint) && p.fingerprint === stack.fingerprint.sha256), `${p.id}: dirty stack needs its exact fingerprint`);
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
-        if (["PASS", "LOCAL-LIMIT"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
+        if (["PASS", "LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
         const cases = array(report.cases);
         need(cases.length > 0, `${p.id}: report contains no cases`);
         if (p.kind === "e2e-case") {
           const found = cases.filter((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1));
           need(found.length === 1 && (p.outcome === "PASS" ? purePass(found[0]) : pureFail(found[0])), `${p.id}: selected case is not an unqualified ${p.outcome}`);
         }
-        const limit = p.outcome === "LOCAL-LIMIT" ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
+        const limit = p.outcome === "LOCAL-LIMIT" || p.localLimit ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
         if (p.kind === "e2e-run" && p.outcome === "PASS") verifyCompletedRun(report, path);
+        const composite = p.outcome === "COMPOSITE-SAFETY" ? verifyComposite(campaign, p, { report, stack }, { root }) : null;
+        if (composite) {
+          if (!localAdjudications.has(COMPOSITE_ITEM)) unresolvedNaturalWitnesses.push({ proof: p.id, ...composite.unresolvedNaturalWitness, axes: composite.axes });
+          localAdjudications.add(COMPOSITE_ITEM);
+        }
         if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
-        loaded.set(p.id, { report, stack, limit, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
+        loaded.set(p.id, { report, stack, limit, composite, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
@@ -238,7 +246,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       for (const [k, v] of Object.entries(r.options?.appEnv ?? {})) need(stack.options?.appEnv?.[k] === v, `matrix:${r.id}: ${k} differs`);
       for (const c of array(report.cases)) {
         if (purePass(c)) continue;
-        if (got.limit?.observations.includes(key(c))) continue;
+        if (got.limit?.observations.includes(key(c)) || got.composite?.observations.includes(key(c))) continue;
         const skipped = c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced;
         const exclusion = exclusions.find((e) => e.caseId === c.id && text(e.reason) && all.some((i) => i.id === e.item && i.state === "resolved" && i.resolution?.kind === "local-limit"));
         need(skipped && (passedKeys.has(key(c)) || exclusion), `matrix:${r.id}: ${c.id} [N=${c.n ?? "-"}, trial=${c.trial ?? 1}] is incomplete (${c.status}${c.todo ? ", TODO" : ""})`);
@@ -251,8 +259,9 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       need(JSON.stringify([...recorded].sort()) === JSON.stringify([...controlCell.controlSets].sort()), "matrix:controls: completed sets differ from the frozen control inventory");
     }
   }
-  const localComplete = !validateOnly && errors.length === 0 && pending.length === 0;
-  return { valid: errors.length === 0, complete: localComplete && unresolvedDeploymentWitnesses.length === 0, localComplete, unresolvedDeploymentWitnesses, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
+  const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`));
+  const localComplete = !validateOnly && errors.length === 0 && localPending.length === 0;
+  return { valid: errors.length === 0, complete: localComplete && pending.length === 0 && unresolvedDeploymentWitnesses.length === 0 && unresolvedNaturalWitnesses.length === 0, localComplete, unresolvedDeploymentWitnesses, unresolvedNaturalWitnesses, localAdjudications: [...localAdjudications], localPending, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -271,6 +280,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         console.log(JSON.stringify(result.counts));
         console.log(`${result.errors.length} evidence/schema errors; ${result.pending.length} unresolved obligations`);
         if (result.unresolvedDeploymentWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; ${result.unresolvedDeploymentWitnesses.length} deployment-bound concurrency witness(es) remain unresolved. No case outcome was changed.`);
+        if (result.unresolvedNaturalWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; C14 composite safety leaves the original natural publication-first observation unresolved. Raw INCONCLUSIVE outcomes and the original item remain unchanged.`);
         for (const error of result.errors) console.error(`- ${error}`);
         if (args.includes("--validate")) console.log("Structural validation only; this does not establish completion.");
       }

@@ -11,6 +11,7 @@ import { worktreeFiles } from "../e2e/lib/tree.mjs";
 import { listControlSets, readControl, assertTargetDeclared, greenGroups, findTarget, declaresName } from "../e2e/lib/controls.mjs";
 import { probeInstalledTriggerQueue } from "./probe-e2e-trigger-queue.mjs";
 import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
+import { captureComposite, compositeReference, verifyComposite } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -89,7 +90,7 @@ function caseProof(campaign, loaded, c, outcome) {
   if (outcome === "PASS") need((stack.patches ?? []).every((p) => positivePatch(p.set ?? p)), "a product mutant cannot provide positive evidence");
   return { id: `case-${hash(`${rel}\0${key(c)}\0${outcome}`).slice(0, 24)}`, kind: "e2e-case", revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: stack.fingerprint.sha256, artifact: rel, runId: report.runId, invocation: report.invocation.id, caseId: c.id, n: c.n ?? null, trial: c.trial ?? 1, outcome };
 }
-export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null } = {}) {
+export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null, compositeArtifact = null } = {}) {
   const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root);
   for (const c of loaded.report.cases) if (pass(c) || fail(c)) upsert(candidate.proofs, caseProof(candidate, loaded, c, pass(c) ? "PASS" : "FAIL"));
   const unfinished = loaded.report.cases.filter((c) => !pass(c) && !(c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced));
@@ -108,11 +109,17 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
     for (const k of cell.options?.appEnvPresent ?? []) need(loaded.stack.options?.appEnv?.[k], `matrix ${k} absent`);
     const p = { id: `run-${loaded.report.runId}-${loaded.report.invocation.id}`, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version, fingerprint: loaded.stack.fingerprint.sha256, artifact: loaded.rel, runId: loaded.report.runId, invocation: loaded.report.invocation.id, outcome: "PASS" };
     let limited = [];
+    if (compositeArtifact) {
+      p.outcome = "COMPOSITE-SAFETY";
+      p.composite = compositeReference(root, localPath(root, compositeArtifact), loaded.rel);
+      limited.push(...verifyComposite(candidate, p, loaded, { root }).observations);
+    }
     if (unfinished.length && localLimitArtifact) {
-      p.outcome = "LOCAL-LIMIT";
+      if (!compositeArtifact) p.outcome = "LOCAL-LIMIT";
       p.localLimit = localLimitReference(root, localPath(root, localLimitArtifact), loaded.rel);
-      limited = verifyLocalLimit(candidate, p, loaded, { root }).observations;
-      p.localLimit.observations = limited;
+      const localObservations = verifyLocalLimit(candidate, p, loaded, { root }).observations;
+      limited.push(...localObservations);
+      p.localLimit.observations = localObservations;
     }
     need(unfinished.every(c => limited.includes(key(c))) && loaded.report.cases.some(pass), "matrix run has failed or unjudged cases");
     if (p.outcome === "PASS") verifyCompletedRun(loaded.report, resolve(root, loaded.rel));
@@ -131,6 +138,15 @@ export async function captureLocalLimit(campaign, out, { root = ROOT, probe = pr
   writeProposal(root, out, report);
   return report;
 }
+/** Bind completed C14 axes and existing control ledgers; no stack is started. */
+export function captureCompositeEvidence(campaign, manifest, out, { root = ROOT, snapshot = snapshotWorktree } = {}) {
+  const before = snapshot(root);
+  const artifact = captureComposite(campaign, manifest, { root, source: before });
+  need(JSON.stringify(snapshot(root)) === JSON.stringify(before), "source changed while binding composite evidence");
+  writeProposal(root, out, artifact);
+  return artifact;
+}
+
 export function importControls(campaign, ledgerPath, { root = ROOT, readDefinition = readControl } = {}) {
   const candidate = structuredClone(campaign), ledger = json(resolve(root, localPath(root, ledgerPath))), imported = [], refused = [];
   const seen = new Set();
@@ -229,7 +245,7 @@ export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) 
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { positionals, values } = parseArgs({ allowPositionals: true, options: { campaign: { type: "string", default: "e2e/campaign.json" }, out: { type: "string" }, tree: { type: "string", default: "worktree" }, cell: { type: "string" }, artifact: { type: "string" }, "local-limit": { type: "string" }, sets: { type: "string" }, report: { type: "string", multiple: true, default: [] } } });
+  const { positionals, values } = parseArgs({ allowPositionals: true, options: { campaign: { type: "string", default: "e2e/campaign.json" }, out: { type: "string" }, tree: { type: "string", default: "worktree" }, cell: { type: "string" }, artifact: { type: "string" }, "local-limit": { type: "string" }, composite: { type: "string" }, manifest: { type: "string" }, sets: { type: "string" }, report: { type: "string", multiple: true, default: [] } } });
   const [command] = positionals, c = json(resolve(ROOT, values.campaign)); need(values.out, "--out under e2e/.out is required");
   if (command === "plan") {
     const controls = listControlSets().map((set) => { const c = readControl(set); c.selection = assertTargetDeclared(c); return c; });
@@ -238,10 +254,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     writeProposal(ROOT, values.out, prepared.plan); writeProposal(ROOT, values.out.replace(/\.json$/, "") + "-campaign.json", prepared.candidate);
   } else if (command === "capture") await captureCommand(c, values.cell, values.out, { sets: values.sets?.split(",").filter(Boolean) ?? [] });
   else if (command === "capture-local-limit") await captureLocalLimit(c, values.out);
+  else if (command === "capture-composite") { need(values.manifest, "--manifest is required"); captureCompositeEvidence(c, json(resolve(ROOT, localPath(ROOT, values.manifest))), values.out); }
   else {
     need(values.artifact, "--artifact is required");
-    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell, localLimitArtifact: values["local-limit"] }) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
-    need(result, "expected plan, capture, capture-local-limit, import-run, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
+    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell, localLimitArtifact: values["local-limit"], compositeArtifact: values.composite }) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
+    need(result, "expected plan, capture, capture-local-limit, capture-composite, import-run, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
     process.stdout.write(JSON.stringify({ imported: result.imported ?? result.importedCases ?? null, refused: result.refused ?? [], unfinished: result.unfinished ?? [] }) + "\n");
   }
 }
