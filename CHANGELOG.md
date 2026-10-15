@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep normal losing-transaction cleanup while protecting acknowledged-lost uploads: a known refusal may remove a staged candidate only after a fresh read finds its unique prefix in neither the current draft nor any historical version. Failed reference reads and unknown transport outcomes retain bytes.
+
 - Retain the thumbnail upload gate and existing timestamp, authority and nontransactional-write controls after acknowledgement reconciliation, with their original assertions unchanged.
 
 - Refresh publication race and cleanup control patches after acknowledgement recovery changes, preserving their mutations and amplifier composition.

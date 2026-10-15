@@ -120,6 +120,25 @@ export async function removeDraftSnapshot(docId: string, draft: unknown): Promis
   catch { console.error("could not remove a replaced draft snapshot"); }
 }
 
+/** After a known refusal, prove an attempted upload is absent from every durable pointer. */
+export async function removeUnreferencedCandidate(db: Db, docRef: DocRef, storagePrefix: string): Promise<void> {
+  try {
+    const unreferenced = await db.runTransaction(async (tx) => {
+      const current = await tx.get(docRef);
+      const versions = await tx.get(docRef.collection("versions"));
+      return current.data()?.draft?.storagePrefix !== storagePrefix
+        && !versions.docs.some((version) => version.data().storagePrefix === storagePrefix);
+    });
+    // This request alone allocated the unpredictable prefix. Once its write
+    // attempt has terminally refused, no other operation can introduce it as
+    // a new pointer; later edits and publications allocate their own prefixes.
+    if (unreferenced) await removeDraftSnapshot(docRef.id, { storagePrefix });
+  } catch {
+    // Failed reference reads are not proof that possibly committed bytes are unused.
+    console.error("could not prove an unused upload candidate");
+  }
+}
+
 /** Publish the new access fence before deleting only the retired session's log. */
 export async function retireLiveSession(db: Db, docId: string, retiredEpoch: string): Promise<void> {
   await syncPresenceAccess(docId, [], []);
@@ -184,6 +203,7 @@ export async function writeDraft(args: {
   let retiredEpoch: string | undefined;
   let reused = false;
   let candidateMayHaveCommitted = false;
+  let transactionCandidateStaged = false;
   let savedEpoch = "initial";
   let draft: Record<string, unknown> = {};
   const caller = { uid: args.actor.uid ?? "", emailLower: args.emailLower };
@@ -274,6 +294,7 @@ export async function writeDraft(args: {
             // The SDK can retry this callback after a committed transaction
             // loses its acknowledgement. A later refusal cannot disprove it.
             candidateMayHaveCommitted = true;
+            transactionCandidateStaged = true;
           }
         });
         break;
@@ -308,10 +329,11 @@ export async function writeDraft(args: {
       }
     }
   } catch (error) {
-    // A retry callback may refuse after an earlier commit lost its ACK. Only
-    // a refusal before any candidate was staged proves these bytes unused.
-    if (!candidateMayHaveCommitted && (error instanceof DraftConflict || error instanceof WriteAuthorityError)) {
-      await removeDraftSnapshot(docRef.id, { storagePrefix });
+    // A retry callback may refuse after an earlier commit lost its ACK. A
+    // staged transaction candidate needs a fresh proof of no durable pointer.
+    if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
+      if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+      else if (transactionCandidateStaged) await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
     }
     throw error;
   }
@@ -568,9 +590,10 @@ export async function commitDraft(args: {
     });
   } catch (e) {
     // These refusals precede this callback's writes, but an earlier callback
-    // may already have committed. Only an unstaged candidate is safe to delete.
-    if (!candidateMayHaveCommitted && (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message))) {
-      await removeDraftSnapshot(docId, { storagePrefix });
+    // may already have committed. Prove staged candidates are unreferenced.
+    if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
+      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
+      else await removeDraftSnapshot(docId, { storagePrefix });
     }
     if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
     if (e instanceof DraftConflict) return { status: 409, body: e.detail };

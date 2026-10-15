@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
 const { loseFirstTransactionAcknowledgement } = require("./transaction-ack.js");
-const { writeDraft, commitDraft, draftRevision } = require("../lib/lib/draft.js");
+const { writeDraft, commitDraft, draftRevision, removeUnreferencedCandidate } = require("../lib/lib/draft.js");
 const { commitNewVersion } = require("../lib/lib/publish.js");
 const { hashBundleFiles } = require("../lib/lib/hash.js");
 
@@ -88,18 +88,54 @@ test("a deduplicated draft commit recognizes its own retirement epoch after SDK 
   }, { dedup: true });
 });
 
-for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} refusal retains a draft candidate superseded after its uncertain commit`, async () => {
+for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} refusal retains a candidate still referenced by a historical version`, async () => {
   await world(async ({ db, store, objects, save }) => {
     let candidate;
     loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
       candidate = store.get("docs/d").draft.storagePrefix;
+      await db.doc("docs/d/versions/v0").set({ entry: "index.html", storagePrefix: candidate });
       await db.doc("docs/d").update({ liveEpoch: "later", draft: { baseVersion: "v1", entry: "index.html", storagePrefix: "docs/d/bundles/later" } });
       objects.set("docs/d/bundles/later/index.html", Buffer.from("later draft"));
       if (reason === "revoked") await db.doc("docs/d/linkGrants/link-editor").delete();
     } });
     await assert.rejects(save(), e => reason === "revoked" ? e.status === 403 : e.detail?.reloadRequired === true);
-    assert.equal(objects.get(`${candidate}/index.html`)?.toString(), newHtml, "a later refusal cannot prove the earlier attempt never committed");
+    assert.equal(objects.get(`${candidate}/index.html`)?.toString(), newHtml, "a later refusal cannot delete bytes still selected by a historical version");
     assert.equal(objects.get("docs/d/bundles/later/index.html")?.toString(), "later draft");
     assert.equal(store.get("docs/d").draft.storagePrefix, "docs/d/bundles/later");
+  });
+});
+
+for (const channel of ["save", "commit", "update"]) test(`${channel} removes a candidate after a definite competing transaction wins`, async () => {
+  await world(async ({ db, objects, save, commit, update }) => {
+    const transact = db.runTransaction.bind(db);
+    let raced = false;
+    db.runTransaction = work => transact(async tx => {
+      const result = await work(tx);
+      if (!raced) {
+        raced = true;
+        await db.doc("docs/d/versions/v2").set({ entry: "index.html", storagePrefix: "docs/d/bundles/winner" });
+        await db.doc("docs/d").update({ currentVersion: "v2" });
+        objects.set("docs/d/bundles/winner/index.html", Buffer.from("winner"));
+      }
+      return result;
+    });
+    if (channel === "save") await assert.rejects(save(), e => e.detail?.currentVersion === "v2");
+    else {
+      const result = await (channel === "commit" ? commit() : update());
+      assert.equal(result.status, 409);
+    }
+    assert.deepEqual([...objects.keys()].sort(), ["docs/d/bundles/draft/index.html", "docs/d/bundles/winner/index.html", "docs/d/v1/index.html"], "a normal losing transaction removes its unreferenced candidate");
+  });
+});
+
+for (const reference of ["draft", "historical", "read failure"]) test(`candidate cleanup retains bytes on ${reference} evidence`, async () => {
+  await world(async ({ db, objects }) => {
+    const prefix = "docs/d/bundles/candidate";
+    objects.set(`${prefix}/index.html`, Buffer.from(newHtml));
+    if (reference === "draft") await db.doc("docs/d").update({ draft: { storagePrefix: prefix } });
+    if (reference === "historical") await db.doc("docs/d/versions/v0").set({ storagePrefix: prefix });
+    if (reference === "read failure") db.runTransaction = async () => { throw new Error("reference lookup unavailable"); };
+    await removeUnreferencedCandidate(db, db.doc("docs/d"), prefix);
+    assert.equal(objects.get(`${prefix}/index.html`)?.toString(), newHtml, "unreadable or existing durable references cannot authorize deletion");
   });
 });

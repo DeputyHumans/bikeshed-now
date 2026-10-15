@@ -22,7 +22,7 @@ import * as admin from "firebase-admin";
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
-import { removeDraftSnapshot, retireLiveSession } from "./draft";
+import { removeDraftSnapshot, removeUnreferencedCandidate, retireLiveSession } from "./draft";
 import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
@@ -539,9 +539,10 @@ export async function commitNewVersion(args: {
     });
   } catch (e) {
     // A retry-only refusal cannot disprove an earlier acknowledged-lost commit.
-    // Delete only candidates never staged by any callback attempt.
-    if (!candidateMayHaveCommitted && (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message))) {
-      await removeDraftSnapshot(docRef.id, { storagePrefix });
+    // Staged candidates need a fresh proof that no durable pointer selects them.
+    if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
+      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
+      else await removeDraftSnapshot(docRef.id, { storagePrefix });
     }
     if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };
     const reason = (e as Error).message;

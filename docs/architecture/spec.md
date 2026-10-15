@@ -634,6 +634,10 @@ that attempt's unique version prefix before applying new-write guards. It
 acknowledges the already-published version without repointing a later head.
 A refusal on a retry cannot prove an earlier attempt did not commit, so bytes
 from an attempted transaction are retained when its outcome remains uncertain.
+After a known terminal refusal, a fresh transactional read of the document's
+draft and every retained version may prove its unique candidate unreferenced;
+only that proof permits cleanup. A failed lookup or an unknown transport error
+retains the bytes, and a later head never hides a historical version's pointer.
 
 `createdAt` is set once. `updatedAt` is bumped on every publish.
 
