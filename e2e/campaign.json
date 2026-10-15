@@ -13994,6 +13994,17 @@
       ],
       "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T061955Z-p64380-hobs/summary.md; e2e/.out/a22-controls-proof/{proof,app-proof,static-proof,setup-proof}.json",
       "note": "Fresh patched-stack red/restored pairs remain required for all new controls. Historical A22 flakiness classifications are retained for separate evidence review; a current pass does not rewrite them."
+    },
+    {
+      "scope": "A18 six deep coverage obligations; source reconciliation and local browser proof",
+      "checks": [
+        "Restored B10 full A18 suite passes 8/8 with zero TODO/failure/inconclusive results",
+        "Ten scratch oracle controls fail the intended assertions; independent People-filter control also fails as intended",
+        "Twelve observer selftests pass; nine source mutants fail, then restored source passes",
+        "Ten directional product controls apply and typecheck; patched-stack execution pending"
+      ],
+      "evidence": "e2e/.out/a18-controls-proof/oracle-proof.json; e2e/.out/a18-controls-proof/reading-proof.json; e2e/.out/a18-controls-proof/compile-proof.json; e2e/.out/2610142309-3nfp/invocations/20261015T062444Z-p75711-t6i1/results.json",
+      "note": "Final-reading evidence now matches the exact native page-exit payload against both stored records and a later server timestamp. Chromium navigation beacons do not appear in Playwright request events; the initial capture-only attempt failed and remains recorded. Native transport/Blob behavior is preserved. Added MCP-specific metrics, both activity filters, API tile, malformed absolute beats and editor/open-editor gates. All six map rows are implemented-source; canonical obligations remain open until exact current control pairs and matrix proof."
     }
   ]
 }

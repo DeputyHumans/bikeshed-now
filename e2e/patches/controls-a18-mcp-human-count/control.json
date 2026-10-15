@@ -1,0 +1,13 @@
+{
+  "oracle": "get_document #1 moved no human number",
+  "what": "Regress A18 mcp human count",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.3 automated reads count only into stats.apiReads with ms 0: MCP get_document and a cli token's POST /view leave views, totalMs and viewers alone, while a person's beat on the same document counts",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "get_document #1 moved no human number"
+  }
+}

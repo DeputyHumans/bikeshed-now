@@ -1,0 +1,9 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -832,5 +832,5 @@
+       onSelect: fork,
+     });
+-    if (doc.meta) {
++    if (doc.meta || doc.publicEdit) {
+       entries.push({ id: "stats", label: "Activity", onSelect: () => setDialog("stats") });
+       if (offersUpload) {

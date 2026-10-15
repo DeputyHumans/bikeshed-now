@@ -1,0 +1,9 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -1203,5 +1203,5 @@
+         <StatsPanel
+           meta={doc.meta}
+-          canSeeDetail={isDocEditor}
++          canSeeDetail={isOwner}
+           onClose={() => setDialog(null)}
+         />

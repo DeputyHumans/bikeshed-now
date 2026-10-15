@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2258,5 +2258,5 @@
+     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
+     const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
+-    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS);
++    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS) + (!isNewSession && claimedMs > 0 && claimedMs === storedMs ? 1 : 0);
+     const sessionMs = storedMs + delta;
+ 

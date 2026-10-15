@@ -29,8 +29,8 @@
  *         editor has no Activity entry at all
  *   A18.4 (who read it last): shared stats never reveal a reader's identity;
  *         the protected per-person history still records it for editors
- *   A18.4 (automation filter), known defect X-a18-stats-3: the panel's
- *         Automation filter never lists an MCP read (no startedAt)
+ *   A18.4 (automation filter): human and automated sessions are separated,
+ *         the API read tile is exact, and MCP reads have their startedAt
  *   A18.5 POST /view on an unlisted document without its key (anonymous or
  *         signed in, no key or a wrong one) is byte for byte the absent id's
  *         404 and counts nothing; a beat adds at most 5 min, and a lower,
@@ -64,6 +64,7 @@ import { setVisibility, share, withVisibility } from "../../lib/grant.mjs";
 import { adminFor, closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
+import { finalBeatSettled, observeFinalBeacon } from "../../lib/reading-observation.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -214,12 +215,31 @@ async function readInBrowser(ctx, u, docId, { k = null } = {}) {
   ctx.step(`${u.name}: the clock registers the session ${OPEN_DELAY_MS} ms after the open (app/src/stats.ts); wait for stats.views to move`);
   const registered = await statsWhen(docId, (s) => (s.views ?? 0) > 0, `${u.name}'s reading session registered (stats.views moved)`);
   const sessions = await readCollection(target, `docs/${docId}/views`);
-  ctx.step(`${u.name} leaves with a full navigation to /: pagehide sends the final beat with the session's active time`);
+  const previousBeatMs = sessions[0]?.data?.lastBeatAt?.toMillis?.();
+  precondition(sessions.length === 1 && Number.isFinite(previousBeatMs), "the single browser session is registered before leaving");
+  const key = `e2e-final-beacon-${sessions[0].id}`;
+  await u.page.evaluate(observeFinalBeacon, { docId, sessionId: sessions[0].id, key });
+  ctx.step(`${u.name} leaves with a full navigation to /: observe its native final beacon, then wait for both stored records to agree`);
   await u.goto("/", { timeout: PAGE_MS });
   const leftAt = Date.now();
-  const final = await statsWhen(docId, (s) => (s.totalMs ?? 0) > 0, `${u.name}'s final beat moved stats.totalMs`);
-  const session = sessions.length === 1 ? await readDoc(target, `docs/${docId}/views/${sessions[0].id}`) : null;
-  return { registered, sessions, session, sessionId: sessions[0]?.id ?? null, final, openFor: leftAt - openedAt };
+  const beacons = await u.page.evaluate((storageKey) => {
+    const rows = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]");
+    sessionStorage.removeItem(storageKey);
+    return rows;
+  }, key);
+  ctx.ev.json(`${u.name}-final-beacons`, beacons);
+  assert.ok(beacons.length > 0, "page exit sends a final reading beacon");
+  assert.ok(beacons.every((b) => b.queued === true), "the native browser accepts each final reading beacon");
+  const expectedMs = beacons.at(-1).payload.ms;
+  precondition(expectedMs > 0 && expectedMs <= MAX_BEAT_MS, "this short visit's final beat is positive and inside the per-beat clamp");
+  const observed = await eventually(async () => {
+    const [final, session] = await Promise.all([
+      statsOf(docId), readDoc(target, `docs/${docId}/views/${sessions[0].id}`),
+    ]);
+    return finalBeatSettled(final, session, { expectedMs, previousBeatMs })
+      ? { final, session } : false;
+  }, { timeout: SETTLE_MS, interval: 250, stableSamples: 3, message: `${u.name}'s captured final beat agrees with the session and aggregate` });
+  return { registered, sessions, ...observed, sessionId: sessions[0].id, openFor: leftAt - openedAt };
 }
 
 // --- A18.1 --------------------------------------------------------------------
@@ -400,12 +420,12 @@ scenario("A18.3 automated reads count only into stats.apiReads with ms 0: MCP ge
 // --- A18.4 --------------------------------------------------------------------
 
 /** More actions → its labels; with Activity among them, open it and read the panel once it settles. */
-async function openActivity(u) {
+async function openActivity(u, { labelsOnly = false } = {}) {
   await u.page.locator('.viewer-toolbar [aria-label="More actions"]').first().click();
   const menu = u.page.getByRole("menu", { name: "More actions" });
   await menu.waitFor({ state: "visible", timeout: 15_000 });
   const labels = (await menu.getByRole("menuitem").allTextContents()).map((s) => s.trim());
-  if (!labels.includes("Activity")) {
+  if (labelsOnly || !labels.includes("Activity")) {
     await u.page.keyboard.press("Escape");
     return { labels, panel: null, dialog: null };
   }
@@ -527,7 +547,7 @@ scenario("A18.4 the Activity panel's per-person detail is for the owner and edit
     const ux = await ctx.users.user({ name: "stranger" });
     await ux.signInUi(stranger.account.email, stranger.account.password, { timeout: PAGE_MS });
     await ux.open(D.docId, { timeout: PAGE_MS });
-    const xp = await openActivity(ux);
+    const xp = await openActivity(ux, { labelsOnly: true });
     assert.ok(xp.labels.length > 0 && !xp.labels.includes("Activity"), `an open editor's More actions: ${xp.labels.join(" | ")}`);
   });
 });
@@ -624,6 +644,10 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   precondition(rows.some((r) => r.badge === "via cli" && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
   assert.ok(rows.some((r) => r.badge === "via mcp" && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
   assert.ok(rows.every((r) => r.badge === "via mcp" || r.badge === "via cli"), "Automation excludes human activity");
+  const apiReads = (await statsOf(D.docId)).apiReads;
+  precondition(apiReads === 2, "the two automated reads are recorded before inspecting their tile");
+  const automationTile = dialog.locator(".stat-tile").filter({ hasText: "automated reads" });
+  assert.equal((await automationTile.locator(".stat-value").textContent())?.trim(), String(apiReads), "the automated reads tile equals stats.apiReads");
   const people = await activityRows(dialog, "People");
   assert.ok(people.length > 0 && people.every((r) => !r.badge), "People excludes automated activity and includes the human session");
 });
