@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Make the large-document transport regression deterministic by fixing its Yjs client ID width. Preserve the existing payload floor and transport limit; retain observed failures for a short-ID fixture, the old limit and a disabled oversized-compaction guard.
+
 - Retain all original E2E acceptance obligations and add nine complete native-retry area runs, bringing the local matrix to 64 cells. Bind the retry discovery to 34 exact cases and 55 directional controls; keep every finding open until fresh integrated evidence satisfies it.
 
 - Refresh six retained fault patches after transaction receipts changed source context. Keep their projection, minting, deduplication, rename and thumbnail mutations unchanged; verify the complete patch catalog reverses exactly and the affected directional unit checks still detect their faults.

@@ -324,6 +324,8 @@ it("retains the complete log when compaction receives no append acknowledgement"
 it("the large-document regression seed and a 20-editor compaction fit the bounded transport", () => {
   const html = readFileSync(join(__dirname, "../../../e2e/fixtures/large-doc.html"), "utf8");
   const dom = new DOMParser().parseFromString(html, "text/html"), doc = new Y.Doc();
+  // Use a five-byte Yjs client ID so the regression payload has a stable size.
+  doc.clientID = 0xffff_ffff;
   seedFragment(doc.getXmlFragment("body"), dom.body);
   const seed = toBase64(Y.encodeStateAsUpdate(doc));
   expect(seed.length).toBeGreaterThan(470_000);
