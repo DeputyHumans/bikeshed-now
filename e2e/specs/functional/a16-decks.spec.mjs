@@ -870,8 +870,11 @@ scenario("A16.4 the owner's browser posts Q's cover, then its slides, once each;
   await focusParent(v);
   await v.page.keyboard.press("o");
   const overview = await eventually(() => v.page.evaluate(() => {
+    // Opening is independent of the image renderer: a live-preview regression
+    // must reach the stored-image assertion rather than masquerade as no modal.
+    if (!document.querySelector(".slide-overview")) return false;
     const imgs = Array.from(document.querySelectorAll(".slide-overview .slide-overview-item img.slide-thumb-image")).map((i) => i.getAttribute("src"));
-    return imgs.length ? { imgs, frames: document.querySelectorAll(".slide-overview iframe.slide-thumb-frame").length } : false;
+    return { imgs, frames: document.querySelectorAll(".slide-overview iframe.slide-thumb-frame").length };
   }), { timeout: 5_000, message: "the overview opened" });
   assert.deepEqual(overview, { imgs: want, frames: 0 }, "the overview shows the same stored images");
   assert.deepEqual(thumbPosts(vWatch), [], "the viewer still posted nothing");

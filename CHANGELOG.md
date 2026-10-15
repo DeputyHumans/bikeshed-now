@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Observe the deck overview opening independently of its image renderer, so a stored-thumbnail regression reaches the exact image assertion rather than a setup timeout.
+
 - Keep the delayed live-editing race and its convergence/token checks, then continue acknowledged typing until a real log compaction occurs; batched transport updates no longer leave those cases permanently inconclusive.
 
 - Retain bounded fresh-document attempts for natural review, publish and feedback-trigger races; assert every attempt, and distinguish refused local review commands from legitimate remote-merge autosaves.
