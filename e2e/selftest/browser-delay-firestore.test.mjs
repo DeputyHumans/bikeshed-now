@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { BrowserPool, FIRESTORE_LISTEN_PATH } from "../lib/browser.mjs";
 
-/** Every request each stand-in received: {label, method, path, at (Date.now())}. */
+/** Every request each stand-in received, on both the wall and monotonic clocks. */
 const arrivals = { hosting: [], firestore: [], other: [] };
 const servers = {};
 const ports = {};
@@ -40,7 +40,7 @@ function standIn(name) {
         return res.end("<!doctype html><title>stand-in</title><p>stand-in</p>");
       }
       const label = new URLSearchParams(body).get("label") ?? url.searchParams.get("label");
-      arrivals[name].push({ label, method: req.method, path: url.pathname, at: Date.now() });
+      arrivals[name].push({ label, method: req.method, path: url.pathname, at: Date.now(), monotonicAt: performance.now() });
       res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
       res.end(JSON.stringify({ ok: true, from: name, label }));
     });
@@ -110,43 +110,68 @@ const post = (u, label, to = "firestore", { path = FIRESTORE_LISTEN_PATH, method
 
 const answer = (u, label, timeout = 10_000) => u.poll(() => u.page.evaluate((l) => window.__e2eSent?.[l] ?? null, label), { timeout, what: `the page's answer to ${label}` });
 const arrived = (name, label) => arrivals[name].filter((a) => a.label === label);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("delayRequests at firestore: holds the page's POST to the stack's Firestore origin, then lets it go on to Firestore; the same path on the app's origin is not taken", { timeout: 60_000 }, async () => {
   const u = await user("listen");
-  const d = await u.delayRequests(FIRESTORE_LISTEN_PATH, { at: "firestore", rules: [800] });
+  const gate = Promise.withResolvers();
+  const routeStarts = new Map();
+  const d = await u.delayRequests(FIRESTORE_LISTEN_PATH, {
+    at: "firestore", rules: [() => gate.promise, 800],
+    match: (request) => {
+      const label = new URLSearchParams(request.postData ?? "").get("label") ?? new URL(request.url).searchParams.get("label");
+      routeStarts.set(label, performance.now());
+      return true;
+    },
+  });
+  // Observing either side makes a broken origin/method selector reach an
+  // assertion, rather than waiting forever for a request it wrongly held.
+  const observed = (name, label) => arrived(name, label).length || routeStarts.has(label);
   try {
     await post(u, "fs-1", "firestore");
-    await sleep(50);
     await post(u, "h-1", "hosting");
     await post(u, "fs-get", "firestore", { method: "GET" });
-    const h1 = await answer(u, "h-1");
-    assert.deepEqual([h1.status, h1.json?.from], [200, "hosting"], "the app's origin, same path: went at once");
-    assert.equal((await answer(u, "fs-get")).status, 200, "a GET (the back channel) is not a POST rule's");
+    await u.poll(() => observed("firestore", "fs-1") && observed("hosting", "h-1") && observed("firestore", "fs-get"), { what: "all three requests reached a server or their delay rule" });
+    assert.equal(arrived("hosting", "h-1").length, 1, "the app's origin, same path: bypassed the held Firestore POST");
+    assert.equal(arrived("firestore", "fs-get").length, 1, "a GET (the back channel) is not a POST rule's");
     assert.deepEqual(arrived("firestore", "fs-1"), [], "the Firestore POST is still held: Firestore has not seen it");
+    const h1 = await answer(u, "h-1");
+    assert.deepEqual([h1.status, h1.json?.from], [200, "hosting"], "the app's origin answered independently of the held POST");
+    assert.equal((await answer(u, "fs-get")).status, 200);
+    gate.resolve();
     const f1 = await answer(u, "fs-1");
     assert.deepEqual([f1.status, f1.json?.from], [200, "firestore"], "then it went on, to Firestore");
-    const [a1] = arrived("firestore", "fs-1");
-    const [h] = arrived("hosting", "h-1");
-    assert.ok(a1.at - h.at >= 650, `the held one reached Firestore ${a1.at - h.at} ms after the one sent 50 ms later (held 800)`);
+
+    // Numeric delay is measured from this request's own route entry, never
+    // from an unrelated request whose browser/server scheduling may be slow.
+    await post(u, "fs-numeric", "firestore");
+    const numeric = await answer(u, "fs-numeric");
+    assert.deepEqual([numeric.status, numeric.json?.from], [200, "firestore"], "the numeric rule also forwards to Firestore");
+    const [arrival] = arrived("firestore", "fs-numeric");
+    const serverDelay = arrival.monotonicAt - routeStarts.get("fs-numeric");
+    assert.ok(serverDelay >= 790, `the server received the numeric POST ${serverDelay} ms after its own route entry (held 800)`);
+    const held = d.rows[1].releasedAt - d.rows[1].heldAt;
+    assert.ok(held >= 790, `the numeric route held its own POST for ${held} ms (held 800)`);
     assert.deepEqual(
       d.rows.map(({ seq, method, url, path, postJson, rule, ms, released }) => ({ seq, method, origin: new URL(url).origin, path, postJson, rule, ms, released })),
-      [{ seq: 0, method: "POST", origin: target.firestoreUrl, path: FIRESTORE_LISTEN_PATH, postJson: null, rule: "ms", ms: 800, released: "rule" }],
-      "one row, the Firestore origin's POST; a form-encoded body has no postJson",
+      [
+        { seq: 0, method: "POST", origin: target.firestoreUrl, path: FIRESTORE_LISTEN_PATH, postJson: null, rule: "until", ms: null, released: "rule" },
+        { seq: 1, method: "POST", origin: target.firestoreUrl, path: FIRESTORE_LISTEN_PATH, postJson: null, rule: "ms", ms: 800, released: "rule" },
+      ],
+      "only the Firestore origin's POSTs; a form-encoded body has no postJson",
     );
   } finally {
+    gate.resolve();
     await d.restore();
   }
   await post(u, "fs-after", "firestore");
   assert.equal((await answer(u, "fs-after")).status, 200);
-  assert.equal(d.seen(), 1, "after restore() nothing more is taken");
+  assert.equal(d.seen(), 2, "after restore() nothing more is taken");
 });
 
 test("delayRequests at firestore: one window for every POST (a gate made at the first, shared by every rule), and match reads the raw form body", { timeout: 60_000 }, async () => {
   const u = await user("window");
   let gate = null;
-  let firstAt = null;
-  const late = () => (gate ??= ((firstAt = Date.now()), sleep(1_200)));
+  const late = () => (gate ??= Promise.withResolvers()).promise;
   const seenBodies = [];
   const d = await u.delayRequests(FIRESTORE_LISTEN_PATH, {
     at: "firestore",
@@ -158,19 +183,26 @@ test("delayRequests at firestore: one window for every POST (a gate made at the 
   });
   try {
     await post(u, "w-1");
-    await sleep(400);
+    await u.poll(() => gate && d.seen() === 1, { what: "the first POST created the shared window" });
     await post(u, "w-2");
     await post(u, "w-skip");
+    await u.poll(() => d.seen() >= 2, { what: "both POSTs enrolled in the same unreleased window" });
+    await u.poll(() => arrived("firestore", "w-skip").length || d.seen() >= 3, { what: "the declined request reached the server or was wrongly held" });
+    assert.equal(arrived("firestore", "w-skip").length, 1, "the match-declined request bypassed the shared window");
     assert.equal((await answer(u, "w-skip")).status, 200, "a request match turns down goes at once");
-    await answer(u, "w-1");
-    await answer(u, "w-2");
-    const [a1] = arrived("firestore", "w-1");
-    const [a2] = arrived("firestore", "w-2");
-    assert.ok(a1.at - firstAt >= 1_100 && a2.at - firstAt >= 1_100, `both held to the window's end: ${a1.at - firstAt} and ${a2.at - firstAt} ms after the first arrived`);
-    assert.ok(Math.abs(a2.at - a1.at) < 300, `released together, ${Math.abs(a2.at - a1.at)} ms apart, though sent 400 ms apart`);
+    assert.deepEqual([arrived("firestore", "w-1"), arrived("firestore", "w-2")], [[], []], "neither enrolled POST reached Firestore before the shared release");
+    assert.deepEqual(d.rows.map((r) => r.released), [null, null], "both rules still await the same release");
+    const releasedAt = performance.now();
+    gate.resolve();
+    for (const label of ["w-1", "w-2"]) {
+      assert.deepEqual((await answer(u, label)).json?.from, "firestore", `${label} forwards to Firestore after release`);
+      const [arrival] = arrived("firestore", label);
+      assert.ok(arrival.monotonicAt >= releasedAt, `${label} reached Firestore only after the shared release`);
+    }
     assert.deepEqual(d.rows.map((r) => [r.rule, r.released]), [["until", "rule"], ["until", "rule"]]);
     assert.ok(seenBodies.some((b) => /(^|&)label=w-1(&|$)/.test(b ?? "")), "match saw the raw form body");
   } finally {
+    gate?.resolve();
     await d.restore();
   }
   await post(u, "w-after");

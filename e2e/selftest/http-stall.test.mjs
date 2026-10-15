@@ -210,15 +210,24 @@ import { caseBudget, httpStall, onAnsweringStack, scenario } from ${JSON.stringi
 // The fixture's clock: a stand-in fetch moves it as a slow stack would.
 const realNow = Date.now;
 let skew = 0;
-Date.now = () => realNow() + skew;
+let requestNow = null;
+Date.now = () => requestNow ?? realNow() + skew;
 const allow = { check: () => ({ allow: true }) };
-const slowOk = async () => { skew += 35000; return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } }); };
+const slowOk = async () => { requestNow += 35000; return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } }); };
 const held = (url, init) => new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
 const hung = (url, init) => { skew += 31000; return held(url, init); };
 const never = () => new Promise(() => {});
 async function slow(ctx) {
-  const r = await ctx.http({ actor: "owner", fetch: slowOk, guard: allow }).post("/visibility", { json: { expiresAt: 1 } });
-  assert.equal(r.status, 200);
+  // Freeze only this artificial request; budget timers and later waits still
+  // see the ordinary clock after its exact interval has been recorded.
+  requestNow = realNow() + skew;
+  try {
+    const r = await ctx.http({ actor: "owner", fetch: slowOk, guard: allow }).post("/visibility", { json: { expiresAt: 1 } });
+    assert.equal(r.status, 200);
+  } finally {
+    skew = requestNow - realNow();
+    requestNow = null;
+  }
 }
 scenario("budget, its own request answered after 35 s, inconclusiveOnHttpStall", { timeoutMs: ${T}, inconclusiveOnHttpStall: true }, async (ctx) => { await slow(ctx); await never(); });
 scenario("budget, its own request in flight for 31 s, inconclusiveOnHttpStall", { timeoutMs: ${T}, inconclusiveOnHttpStall: true }, async (ctx) => { await ctx.http({ actor: "harness", fetch: hung, guard: allow, timeoutMs: 5000 }).post("/publish"); });
@@ -291,7 +300,7 @@ test("through node --test and the reporter: opted in, a case whose budget ran ou
   const answered = "budget, its own request answered after 35 s, inconclusiveOnHttpStall";
   const [s1, r1] = outcome(answered);
   assert.equal(s1, "inconclusive", String(r1));
-  assert.match(r1, new RegExp(`^${esc(LEAD)}the case's budget ran out while the stack answered its own requests slowly: 1 of its 1 request\\(s\\) took 30 s or more \\(owner: POST /visibility answered 200 after 350\\d\\d ms\\), so the time it ran out of went to the stack — the failure, at fixture\\.spec\\.mjs:${scenarioLine(answered)} ${viaScenario}: ${esc(budgetMessage)}$`));
+  assert.match(r1, new RegExp(`^${esc(LEAD)}the case's budget ran out while the stack answered its own requests slowly: 1 of its 1 request\\(s\\) took 30 s or more \\(owner: POST /visibility answered 200 after 35000 ms\\), so the time it ran out of went to the stack — the failure, at fixture\\.spec\\.mjs:${scenarioLine(answered)} ${viaScenario}: ${esc(budgetMessage)}$`));
   assert.match(readFileSync(join(REPO_ROOT, by[answered].evidenceDir, "stack-did-not-answer.txt"), "utf8"), /the case's budget ran out/, "the failure itself is kept");
 
   const inFlight = "budget, its own request in flight for 31 s, inconclusiveOnHttpStall";
@@ -307,7 +316,7 @@ test("through node --test and the reporter: opted in, a case whose budget ran ou
   const byHand = "by hand, onAnsweringStack(caseBudget(fn), {also: httpStall})";
   const [s7, r7] = outcome(byHand);
   assert.equal(s7, "inconclusive", String(r7));
-  assert.match(r7, new RegExp(`\\(owner: POST /visibility answered 200 after 350\\d\\d ms\\), so the time it ran out of went to the stack — the failure, at fixture\\.spec\\.mjs:${scenarioLine(byHand)} \\(via caseBudget, test\\.mjs:\\d+\\): ${esc(budgetMessage)}$`));
+  assert.match(r7, new RegExp(`\\(owner: POST /visibility answered 200 after 35000 ms\\), so the time it ran out of went to the stack — the failure, at fixture\\.spec\\.mjs:${scenarioLine(byHand)} \\(via caseBudget, test\\.mjs:\\d+\\): ${esc(budgetMessage)}$`));
 
   assert.deepEqual(outcome("ctx.requests({pending: true}) adds the case's requests still in flight"), ["pass", null]);
   const { during, after: later, ends } = JSON.parse(readFileSync(marker, "utf8"));
