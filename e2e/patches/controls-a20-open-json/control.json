@@ -1,0 +1,13 @@
+{
+  "oracle": "open machine-readable output",
+  "what": "controls-a20-open-json",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7o open --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "open --json"
+  }
+}

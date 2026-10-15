@@ -24,6 +24,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Make CLI `open --json` and `login --paste --json` return structured results,
+  keeping paste instructions and prompts on stderr.
+
 - Refresh a stacked deck’s position when motion completes or is cancelled,
   and leave overview keys to documents that do not measure as pages.
 

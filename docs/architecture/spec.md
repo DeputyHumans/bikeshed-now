@@ -2465,7 +2465,11 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file> [--base <v>
 [--reason <text>]`, `commit <slug>`, `open <slug>`,
 `folders`, `folder <id>`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
-Every command takes `--json`. `--version` on its own prints the CLI's version,
+Every command takes `--json`. Successful commands print one JSON result per
+operation; watch mode prints one per publication. Prompts and human notices go
+to stderr. `open --json` returns `{url}` including a supplied link key, while
+both login flows return `{origin, saved, via}` without the token (`via` is
+`browser` or `paste`). `--version` on its own prints the CLI's version,
 read from its own `package.json`, which is also the version its
 `X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and
 state under its quote. `suggest` demands exactly one of `--with` and `--delete`:

@@ -13565,6 +13565,26 @@
         "controls-a16-unpaged-keys"
       ],
       "note": "Position re-reads computed visibility on transition/animation completion and cancellation; listeners clean up on unmount. A16.2b promoted. A16.1 now checks actual defaultPrevented values for unpaged keyboard input. SPEC §6d names completion signals. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a20-cli-1",
+        "X-a20-cli-2"
+      ],
+      "scope": "CLI machine-readable output; local E2E pending",
+      "tests": [
+        "Original CLI: both new process regressions fail assertions",
+        "Fixed full CLI suite107 pass,0 fail",
+        "Three exact control patches cause assertion failures after clean copies: open text, paste result text and paste prompt on stdout"
+      ],
+      "evidence": "e2e/.out/functional-todo-controls-QNahMF/proof.json",
+      "controls": [
+        "controls-a20-open-json",
+        "controls-a20-paste-json",
+        "controls-a20-paste-prompt"
+      ],
+      "note": "SPEC §19 now defines successful --json result streams. Open returns the complete keyed URL and invokes the opener; paste login returns origin/saved/via without the token and saves the matching config. Both former spec-question cases are normal assertions. CLI patch release remains parent-owned. No campaign item closed."
     }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "oracle": "paste-login machine-readable result",
+  "what": "controls-a20-paste-json",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7r login --paste --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "login --paste --json"
+  }
+}

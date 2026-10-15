@@ -323,10 +323,11 @@ async function browserLogin(flags) {
  */
 async function pasteLogin(flags) {
   const { origin: where } = resolveAuth(flags);
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const rl = createInterface({ input: process.stdin, output: flags.json ? process.stderr : process.stdout });
+  const notice = flags.json ? console.error : console.log;
   try {
-    console.log(`Create a token at ${where}/account — choose "Command line".`);
-    console.log("It is shown once, so copy it now.\n");
+    notice(`Create a token at ${where}/account — choose "Command line".`);
+    notice("It is shown once, so copy it now.\n");
     const token = (await rl.question("Token: ")).trim();
     if (!token) fail("no token given");
 
@@ -334,7 +335,9 @@ async function pasteLogin(flags) {
     // next command with a confusing message.
     await whoami(where, token);
     writeConfig({ ...readConfig(), origin: where, token, via: "paste" });
-    console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`);
+    out(flags.json, { origin: where, saved: CONFIG_PATH, via: "paste" }, () =>
+      console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`),
+    );
   } finally {
     rl.close();
   }
@@ -1015,7 +1018,7 @@ async function open(flags, [ref]) {
   // `start`, which is a cmd.exe builtin rather than a program, so on Windows
   // the spawn failed and, with nothing listening for the error, crashed.
   openBrowser(url);
-  console.log(url);
+  out(flags.json, { url }, () => console.log(url));
 }
 
 /**

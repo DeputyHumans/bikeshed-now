@@ -27,13 +27,9 @@
  * are known, so a later act on them passes the production guard and
  * quarantine finds them.
  *
- * The watch-output regression is asserted as a normal case. Two remaining
- * cases retain their SPEC-question tags for human text on stdout under --json:
- *   - X-a20-cli-1, `open --json`, and X-a20-cli-2, `login --paste --json`
- *     (class Q, a SPEC QUESTION): SPEC §19 spec.md:2231 says only "Every
- *     command takes `--json`." It never says what either prints under it, and
- *     both accept the flag and exit 0. Each case keeps its defect tag so the
- *     observation stays pinned, and its comment names the harm.
+ * Every --json command keeps human prompts and notices on stderr. Open
+ * returns its complete URL; both login flows identify the saved deployment
+ * and credential source without returning the token.
  *
  * Load. On the long-lived shared stack one function call has taken 15 to 60
  * seconds (measured 2026-10-11, its Firestore emulator at 100% CPU: mkdir
@@ -357,16 +353,6 @@ function refused(r, what, re) {
   assert.equal(r.stdout, "", `${what}: nothing on stdout`);
 }
 
-/** True when `text` parses as exactly one JSON value. */
-function isOneJson(text) {
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Split stdout into the top-level JSON values `out()` printed (pretty, one
  * after another) and whatever else is on it, outside any value.
@@ -527,37 +513,14 @@ scenario(NAMES.n, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout:
   assert.deepEqual([openedIn(h1), openedIn(h2)], [[want1], [want2]], "the opener got exactly the printed address");
 });
 
-/**
- * X-a20-cli-1 is a SPEC QUESTION (class Q), not a SPEC violation. The defect
- * tag stays so the observation is pinned: this case is TODO while `open
- * --json` prints the bare address, and "passed unexpectedly" once it prints
- * one JSON value.
- *
- * The nearest SPEC sentence is §19 spec.md:2231, "Every command takes
- * `--json`." `open <slug>` is one of those commands (spec.md:2228). Read
- * literally, "takes" holds already: the flag is accepted and the command
- * exits 0. The SPEC never says what `open` prints under it. The CLI's own
- * usage describes --json as "machine-readable output" (cli/src/index.mjs:110),
- * and open() never consults the flag (cli/src/index.mjs:1007-1019 prints
- * `console.log(url)` whatever it is given). The question for the owner: does
- * "takes `--json`" mean that every command prints one JSON value under it?
- *
- * The harm: a caller that appends --json to every command, as spec.md:2231
- * and the agent guide's "Every command takes `--json`."
- * (docs/agents/agent-guide.md:207, served as /llms.txt) invite, and parses
- * stdout, fails on `open` alone: `bikeshed open <id> --json | jq` is a parse
- * error.
- */
-scenario(NAMES.o, { tiers: BOTH, defect: "X-a20-cli-1", timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.o, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const id = docIdFor(target, "cli-open-json");
-  const r = await cli(ctx, null, ["open", id, "--json"], { home: cliHome(target), token: null });
-  precondition(r.code === 0, `open --json ran (exit ${r.code})`);
-  assert.ok(
-    isOneJson(r.stdout),
-    `SPEC QUESTION (class Q), X-a20-cli-1: open --json printed ${JSON.stringify(r.stdout)}, which is not a JSON value. ` +
-      'SPEC §19 spec.md:2231 says only "Every command takes `--json`." and never what open prints under it; the CLI\'s usage describes --json as "machine-readable output" (cli/src/index.mjs:110). ' +
-      "Harm: a caller that parses --json output fails on open alone",
-  );
+  const home = cliHome(target);
+  const url = `${target.origin}/d/${id}?k=e2e-json-key`;
+  const r = await cli(ctx, null, ["open", `${target.origin}/d/${id}/v1?k=e2e-json-key`, "--json"], { home, token: null });
+  assert.deepEqual(okJson(r, "open --json"), { url }, "open --json reports the complete document URL");
+  await eventually(() => openedIn(home).length > 0, { timeout: 15_000, interval: 100, message: "the JSON open invoked the opener" });
+  assert.deepEqual(openedIn(home), [url], "open --json opens exactly the returned URL");
 });
 
 // --- A20.7b publish ---------------------------------------------------------------
@@ -1108,40 +1071,16 @@ scenario(NAMES.q, { tiers: BOTH, timeoutMs: 300_000, inconclusiveOnStackTimeout:
   await still.ok("list_documents", { limit: 1 });
 });
 
-/**
- * X-a20-cli-2 is a SPEC QUESTION (class Q), not a SPEC violation. The defect
- * tag stays so the observation is pinned: this case is TODO while `login
- * --paste --json` prints its prompts on stdout, and "passed unexpectedly"
- * once it prints one JSON value. The sign-in itself is a precondition, so
- * only stdout can make this case a TODO.
- *
- * The nearest SPEC sentences are §19 spec.md:2231, "Every command takes
- * `--json`.", with `login` among the commands (spec.md:2222), and §23
- * spec.md:2801-2802, "`--paste` is the old flow. … The saved config records
- * which of the two produced the token." Neither says what the paste flow
- * prints under --json, and it accepts the flag and exits 0. The question for
- * the owner: does "takes `--json`" hold for both flows of `login`?
- *
- * The harm: the same command answers --json two ways. The browser flow prints
- * `{origin, saved, via: "browser"}` (cli/src/index.mjs:313), and its own
- * comment says "stdout stays parseable for --json" (cli/src/index.mjs:197).
- * pasteLogin (cli/src/index.mjs:324-341) never reads the flag. It prints the
- * /account instructions, readline's "Token: " prompt (its output is stdout,
- * :326) and "Saved to …" there. A script that pipes a token in and parses
- * stdout gets a parse error, so it cannot read which deployment it was
- * saved for.
- */
-scenario(NAMES.r, { tiers: BOTH, defect: "X-a20-cli-2", timeoutMs: 180_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.r, { tiers: BOTH, timeoutMs: 180_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const o = await setup(ctx, "r");
   const home = cliHome(target);
   const r = await cli(ctx, null, ["login", "--paste", "--json"], { home, token: null, input: `${o.token}\n` });
-  precondition(r.code === 0 && existsSync(join(home.config, "bikeshed", "config.json")), `login --paste --json signed in (exit ${r.code})`);
-  assert.ok(
-    isOneJson(r.stdout),
-    `SPEC QUESTION (class Q), X-a20-cli-2: login --paste --json printed ${JSON.stringify(r.stdout.slice(0, 300))}, which is not a JSON value. ` +
-      'SPEC §19 spec.md:2231 says only "Every command takes `--json`.", and §23 spec.md:2801 "`--paste` is the old flow." never says what it prints; the browser flow prints {origin, saved, via} (cli/src/index.mjs:313). ' +
-      "Harm: a script that pipes a token in cannot parse the result",
-  );
+  const saved = join(home.config, "bikeshed", "config.json");
+  assert.deepEqual(okJson(r, "login --paste --json"), { origin: target.origin, saved, via: "paste" }, "paste login --json reports the saved credential source");
+  assert.deepEqual(JSON.parse(readFileSync(saved, "utf8")), { origin: target.origin, token: o.token, via: "paste" });
+  assert.match(r.stderr, /Create a token at .*\/account/);
+  assert.match(r.stderr, /Token: /, "the paste prompt stays on stderr");
+  assert.equal((r.stdout + r.stderr).includes(o.token), false, "paste login does not echo the token");
 });
 
 // --- A20.7s / A20.7t publish --watch ---------------------------------------------------

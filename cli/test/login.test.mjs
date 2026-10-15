@@ -653,6 +653,22 @@ test("--paste reads a token from stdin and checks it, in CI too", LONG, async ()
   });
 });
 
+test("--paste --json prints only the saved-result object and prompts on stderr", LONG, async () => {
+  await withDeployment({}, async ({ origin }) => {
+    const run = runLogin(["--paste", "--json", "--origin", origin], { stdin: `${TOKEN}\n` });
+    try {
+      const { code, stdout, stderr } = await run.exited;
+      assert.equal(code, 0, stderr);
+      assert.doesNotThrow(() => JSON.parse(stdout), "--json emits one JSON value");
+      assert.deepEqual(JSON.parse(stdout), { origin, saved: run.configPath, via: "paste" });
+      assert.match(stderr, /Create a token at .*\/account/);
+      assert.match(stderr, /Token: /);
+      assert.equal((stdout + stderr).includes(TOKEN), false);
+      assert.deepEqual(JSON.parse(readFileSync(run.configPath, "utf8")), { origin, token: TOKEN, via: "paste" });
+    } finally { run.cleanup(); }
+  });
+});
+
 test("--paste without --origin asks only for the token, and uses the default deployment", LONG, async () => {
   // The deployment has a default and a flag; asking for it as well meant the
   // first line on stdin, which is the token, was read as an address.
@@ -1064,6 +1080,21 @@ test("`bikeshed open` keeps an unlisted link's key", { skip: process.platform ==
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
+});
+
+test("`bikeshed open --json` returns its complete keyed URL when no opener exists", { skip: process.platform === "win32" }, async () => {
+  const empty = mkdtempSync(join(tmpdir(), "bikeshed-path-"));
+  try {
+    const child = spawn(process.execPath, [join(SRC, "index.mjs"), "open", "https://example.test/d/plan/v2?k=test-key", "--json"], {
+      env: { PATH: empty, BIKESHED_ORIGIN: "http://127.0.0.1:9", XDG_CONFIG_HOME: empty }, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (part) => { stdout += part; }); child.stderr.on("data", (part) => { stderr += part; });
+    const code = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(code, 0, stderr);
+    assert.doesNotThrow(() => JSON.parse(stdout), "--json emits one JSON value");
+    assert.deepEqual(JSON.parse(stdout), { url: "http://127.0.0.1:9/d/plan?k=test-key" });
+  } finally { rmSync(empty, { recursive: true, force: true }); }
 });
 
 test("a browser is opened only where the person can see it", () => {
