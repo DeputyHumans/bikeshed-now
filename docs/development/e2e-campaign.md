@@ -54,9 +54,14 @@ each of N=2,5,10,20. Print the executable matrix without starting anything:
 node --input-type=module -e 'import fs from "node:fs"; const c=JSON.parse(fs.readFileSync("e2e/campaign.json")); for(const r of c.acceptance.requirements) console.log(r.id+"\n"+r.command+"\n")'
 ```
 
-The commands default to immutable HEAD snapshots. Commit an integrated change
-before final evidence, or use `--tree worktree` while developing and record the
-exact fingerprint. Recreate a stack after source changes; attaching to a kept
+The checked-in commands default to immutable HEAD snapshots. For final local
+acceptance, commit the integrated source first, prepare the release version
+changes, then freeze that worktree. The evidence helper rewrites only tree
+selection to `--tree worktree`, preserving all 51 cell IDs and axes, and records
+the base SHA, version, source digest and complete control inventory. Evidence
+imports are proposals under `e2e/.out/`; they never resolve findings. Keep the
+source frozen until the acceptance evidence is complete, then make the release
+commit with the reviewed ledger. Recreate a stack after source changes; attaching to a kept
 stack never refreshes its code. An efficient area loop is:
 
 ```sh
@@ -86,19 +91,56 @@ applicable `controls` IDs. Kinds are `fixed`, `coverage-repair`, `intentional`,
 `refuted`, and `local-limit`. A decision requires a stated rationale; a TODO or
 failure reclassified as intended behavior is not itself positive evidence.
 
-Pin `acceptance.revision` and `acceptance.version` to the tested source.
+Prepare the final snapshot without executing any tests:
+
+```sh
+node tools/e2e-campaign-evidence.mjs plan --out e2e/.out/final/plan.json
+```
+
+This writes the commands and `plan-campaign.json`. The plan also inventories
+required case names; a possible rename is reported for review, never silently
+aliased. The controls command can run through the bounded parallel wrapper,
+which executes ordinary harness workers without changing their stack limits or
+admission gates. Finish all control workers before exclusive concurrency cells.
+Capture repository checks and import completed evidence explicitly:
+
+```sh
+node tools/e2e-campaign-evidence.mjs capture --campaign e2e/.out/final/plan-campaign.json --cell verify --out e2e/.out/final/verify
+node tools/e2e-campaign-evidence.mjs import-command --campaign e2e/.out/final/plan-campaign.json --cell verify --artifact e2e/.out/final/verify/command.json --out e2e/.out/final/with-verify.json
+node tools/e2e-controls-parallel.mjs --campaign e2e/.out/final/with-verify.json --workers 3 --out e2e/.out/final/controls
+node tools/e2e-campaign-evidence.mjs import-command --campaign e2e/.out/final/with-verify.json --cell controls --artifact e2e/.out/final/controls/command.json --out e2e/.out/final/with-controls.json
+```
+
+`capture` executes the named command; `plan` and every `import-*` command do
+not. Use `import-run --artifact <invocation/results.json> --cell <cell-id>`
+for a complete E2E matrix run and `import-controls --artifact <ledger.json>`
+for individual control pairs. Continue from the latest proposal each time.
+A refused pair stays refused; review the emitted reasons before using the
+proposal. Failed, TODO, inconclusive and not-reproduced runs cannot complete a
+matrix cell. Imports preserve every finding's state and original observation.
+
+Pin `acceptance.revision`, `acceptance.version` and `acceptance.fingerprint`
+to the tested frozen source.
 An E2E proof names its `kind` (`e2e-case` or `e2e-run`), `revision`, `version`,
 repository-relative `artifact` (the invocation's `results.json`), `runId`,
 `invocation` and `outcome`. Case proofs also name the exact `caseId`, `n` (or
 null), and `trial` (default one). Dirty stacks additionally need their exact
-`fingerprint`. The checker reads the result and stack records; labels alone do
+`fingerprint`; a frozen campaign requires it for every proof, including clean
+stacks and commands. Stack fingerprints describe the copied source before
+capability or control patches, whose names are checked separately. The checker
+reads the result and stack records; labels alone do
 not prove a pass. A product fix requires case proofs for every baseline case
 and N listed in that item's `requiredCases`. Smoke alone cannot close a defect
 that also has functional or concurrency witnesses.
 
 A control names its `mutation`, `red` proof ID, restored `green` proof ID and
 the expected `assertion` text. Red must be an actual failure at that assertion;
-a timeout, TODO or skipped case is insufficient. New fixes and coverage
+a timeout, TODO or skipped case is insufficient. E2E pairs must select the same
+case ID, N and trial; the assertion must occur in that selected failure's error,
+and the red stack must name the mutation. A case title or another failure cannot
+authenticate it. Command controls instead name actual assertion diagnostic lines
+with `assertionEvidence: {startLine, endLine}` in the red command report; they do
+not invent a patched stack. New fixes and coverage
 repairs require controls. A positive case on a product-fix or control patch
 cannot close the unpatched product. Amplifier and named capability patches are
 allowed because they expose the required interleaving or build variant.
@@ -107,8 +149,11 @@ Repository commands use `kind: "command"`: `command`, `revision`, `version`,
 `artifact`, `outcome` and `logSha256`. The artifact is a JSON record with the
 same metadata plus `exitCode`, `tests`, `fail`, `skip`, `todo`, `inconclusive`
 and a repository-relative `log`. Save the actual combined output in that log;
-the checker verifies its digest and rejects incomplete counts. This is an
-evidence checker, not a scheduler or command runner.
+the checker verifies its digest and derives counters from the final Node/Vitest
+summary. Control aggregates additionally name `controlLedgers` and `controlSets`;
+the checker reads the finished runner ledgers, matches each red/green pair and
+requires every frozen set exactly once. A subset, duplicate, wrong revision or
+unfinished worker cannot satisfy the controls matrix cell.
 
 Assign complete run proofs to each matrix cell's `proofs`. A capability skip
 is covered only when the same case, N and trial actually passes on another

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Bind local E2E acceptance to a frozen source fingerprint, exact assertion failures and complete control ledgers; prepare commands and import actual run evidence into reviewable proposals.
+
 - Offer explicit draft reload when another editor publishes, retaining the stale editor's unsaved local text until that choice. Add a controlled co-editor publication case at every concurrency size and inverse controls for recovery and automatic remounting.
 
 - Freeze direct annotation and comment creates, changes and deletes when a document expires, including owner writes, while preserving existing feedback reads and restoring the same permissions when expiry is cleared.

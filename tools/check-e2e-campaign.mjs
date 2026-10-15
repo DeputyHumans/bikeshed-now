@@ -3,8 +3,9 @@
 
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve, relative, isAbsolute, basename } from "node:path";
+import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { commandCounts } from "./e2e-campaign-evidence.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STATES = new Set(["open", "in-progress", "resolved", "historical-closed"]);
@@ -122,12 +123,35 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const p of proofs.values()) {
       try {
         need(p.revision === acceptance.revision && p.version === acceptance.version, `${p.id}: evidence differs from the acceptance revision/version`);
+        if (acceptance.fingerprint) need(p.fingerprint === acceptance.fingerprint, `${p.id}: evidence differs from the frozen source fingerprint`);
         const path = artifact(p.artifact);
         if (p.kind === "command") {
           const report = readJson(path);
           need(report.command === p.command && report.revision === p.revision && report.version === p.version && report.outcome === p.outcome, `${p.id}: command report metadata differs`);
           const log = readFileSync(artifact(report.log));
           need(createHash("sha256").update(log).digest("hex") === p.logSha256, `${p.id}: command log digest differs`);
+          if (acceptance.fingerprint) need(report.fingerprint === acceptance.fingerprint, `${p.id}: command source fingerprint differs`);
+          if (Array.isArray(report.controlSets)) {
+            need(new Set(report.controlSets).size === report.controlSets.length && report.tests === report.controlSets.length, `${p.id}: control command counts differ from distinct completed sets`);
+            const ledgerPaths = report.controlLedgers ?? (report.controlLedger ? [report.controlLedger] : []), recorded = [];
+            need(Array.isArray(ledgerPaths) && ledgerPaths.length > 0, `${p.id}: control command requires its actual runner ledgers`);
+            for (const path of array(ledgerPaths)) {
+              const ledger = readJson(artifact(path));
+              need(ledger.ok === true && text(ledger.endedAt) && !ledger.interrupted && ledger.commit === acceptance.revision && ledger.tree === acceptance.tree, `${p.id}: control runner ledger is incomplete or uses another snapshot`);
+              for (const row of array(ledger.controls)) {
+                recorded.push(row.set);
+                const control = [...controls.values()].find((c) => c.set === row.set), red = proofs.get(control?.red), green = proofs.get(control?.green);
+                const greens = array(ledger.green).filter((g) => array(g.sets).includes(row.set));
+                const invocationDir = (path) => artifact(isAbsolute(path) ? relative(root, path) : path);
+                need(row.ok === true && control && red?.kind === "e2e-case" && green?.kind === "e2e-case" && greens.length === 1 && invocationDir(row.red?.invocationDir) === dirname(artifact(red.artifact)) && invocationDir(greens[0].invocationDir) === dirname(artifact(green.artifact)), `${p.id}: runner ledger does not establish the recorded pair for ${row.set}`);
+              }
+            }
+            need(recorded.length === new Set(recorded).size && JSON.stringify(recorded.sort()) === JSON.stringify([...report.controlSets].sort()), `${p.id}: control sets differ from actual runner ledgers`);
+            for (const set of report.controlSets) need([...controls.values()].some((c) => c.set === set), `${p.id}: control command names an unproved set ${set}`);
+          } else {
+            const counts = commandCounts(log.toString("utf8"));
+            for (const k of ["tests", "fail", "skip", "todo", "inconclusive"]) need(counts[k] === report[k], `${p.id}: ${k} count differs from the captured log`);
+          }
           need(report.tests > 0 && report.skip === 0 && report.todo === 0 && report.inconclusive === 0, `${p.id}: command report has no tests or incomplete outcomes`);
           need(p.outcome === "PASS" ? report.exitCode === 0 && report.fail === 0 : report.exitCode !== 0 && report.fail > 0, `${p.id}: command exit/counts do not establish ${p.outcome}`);
           loaded.set(p.id, { report, text: log.toString("utf8") });
@@ -137,6 +161,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         const stack = readJson(artifact(`e2e/.out/${p.runId}/stack.json`));
         need(report.runId === p.runId && report.invocation?.id === p.invocation, `${p.id}: run/invocation differs from report`);
         need(stack.fingerprint?.baseSha === p.revision && stack.expectVersion === p.version, `${p.id}: stack revision/version differs`);
+        if (acceptance.fingerprint) need(stack.fingerprint?.sha256 === acceptance.fingerprint, `${p.id}: stack differs from the frozen source fingerprint`);
         need(!stack.fingerprint?.dirty || (HASH.test(p.fingerprint) && p.fingerprint === stack.fingerprint.sha256), `${p.id}: dirty stack needs its exact fingerprint`);
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
@@ -147,12 +172,26 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           const found = cases.filter((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1));
           need(found.length === 1 && (p.outcome === "PASS" ? purePass(found[0]) : pureFail(found[0])), `${p.id}: selected case is not an unqualified ${p.outcome}`);
         }
-        loaded.set(p.id, { report, stack, text: JSON.stringify(report) });
+        loaded.set(p.id, { report, stack, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
       const red = loaded.get(c.red);
-      need(red?.text.includes(c.assertion), `${c.id}: red artifact does not name the intended assertion`);
+      const rp = proofs.get(c.red), gp = proofs.get(c.green);
+      if (rp?.kind === "command" && gp?.kind === "command") {
+        // Command controls carry the actual diagnostic and its log location;
+        // no stack or product mutation is invented for a local harness test.
+        const at = red?.report?.assertionEvidence;
+        const lines = red?.text?.split("\n") ?? [];
+        need(Number.isInteger(at?.startLine) && Number.isInteger(at?.endLine) && at.startLine > 0 && at.endLine >= at.startLine && at.endLine <= lines.length, `${c.id}: command control needs exact diagnostic line bounds`);
+        const diagnostic = lines.slice((at?.startLine ?? 1) - 1, at?.endLine ?? 0).filter((line) => !/^\s*(?:# Subtest:|(?:not )?ok \d+|[✖✔])/.test(line)).join("\n");
+        need(diagnostic.includes(c.assertion) && /(?:ERR_ASSERTION|AssertionError|failureType: 'testCodeFailure')/.test(diagnostic), `${c.id}: command diagnostic does not name the intended assertion`);
+      } else {
+        need(rp?.kind === "e2e-case" && gp?.kind === "e2e-case" && rp.caseId === gp.caseId && (rp.n ?? null) === (gp.n ?? null) && (rp.trial ?? 1) === (gp.trial ?? 1), `${c.id}: red and green must select the same exact case`);
+        const message = typeof red?.selected?.error === "string" ? red.selected.error : red?.selected?.error?.message;
+        need(typeof message === "string" && message.includes(c.assertion), `${c.id}: selected red case does not name the intended assertion`);
+        need(text(c.set) && array(red?.stack?.patches).some((p) => (p.set ?? p) === c.set), `${c.id}: named mutation is missing from the red stack`);
+      }
     }
     for (const item of items.values()) if (item.state === "resolved" && item.resolution?.kind === "fixed") {
       const witnessed = array(item.resolution.proofs).flatMap((id) => {
@@ -166,7 +205,10 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const r of requirements.values()) for (const id of array(r.proofs)) {
       const got = loaded.get(id);
       if (!got) continue;
-      if (r.kind === "command") { need(got.report.command === r.command, `matrix:${r.id}: wrong command`); continue; }
+      if (r.kind === "command") {
+        need(got.report.command === r.command || r.id === "controls" && got.report.controlSets?.length > 0, `matrix:${r.id}: wrong command`);
+        continue;
+      }
       const { report, stack } = got;
       need(report.invocation?.suite === r.suite, `matrix:${r.id}: wrong suite`);
       need(!report.invocation?.grep, `matrix:${r.id}: a full matrix cell may not use --grep`);
@@ -185,6 +227,12 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         const exclusion = exclusions.find((e) => e.caseId === c.id && text(e.reason) && all.some((i) => i.id === e.item && i.state === "resolved" && i.resolution?.kind === "local-limit"));
         need(skipped && (passedKeys.has(key(c)) || exclusion), `matrix:${r.id}: ${c.id} [N=${c.n ?? "-"}, trial=${c.trial ?? 1}] is incomplete (${c.status}${c.todo ? ", TODO" : ""})`);
       }
+    }
+    const controlCell = requirements.get("controls");
+    if (array(controlCell?.controlSets).length) {
+      const recorded = array(controlCell.proofs).flatMap((id) => array(loaded.get(id)?.report?.controlSets));
+      need(recorded.length === new Set(recorded).size, "matrix:controls: duplicate control sets across command reports");
+      need(JSON.stringify([...recorded].sort()) === JSON.stringify([...controlCell.controlSets].sort()), "matrix:controls: completed sets differ from the frozen control inventory");
     }
   }
   return { valid: errors.length === 0, complete: !validateOnly && errors.length === 0 && pending.length === 0, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };

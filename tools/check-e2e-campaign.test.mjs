@@ -12,6 +12,7 @@ import { checkCampaign } from "./check-e2e-campaign.mjs";
 const imported = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url), "utf8"));
 const sha = "a".repeat(40);
 const version = "0.1.0";
+const fingerprint = "f".repeat(64);
 const hash = (s) => createHash("sha256").update(s).digest("hex");
 const write = (root, file, value) => { const p = join(root, file); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, JSON.stringify(value)); };
 
@@ -21,16 +22,16 @@ function fixture(t) {
   const c = structuredClone(imported);
   c.proofs = [];
   c.controls = [];
-  Object.assign(c.acceptance, { revision: sha, version });
+  Object.assign(c.acceptance, { revision: sha, version, fingerprint });
   let seq = 0;
   for (const r of c.acceptance.requirements) {
     const id = `proof-${seq++}`;
     const artifact = `e2e/.out/${id}/report.json`;
-    const p = { id, kind: r.kind, revision: sha, version, artifact, outcome: "PASS" };
+    const p = { id, kind: r.kind, revision: sha, version, fingerprint, artifact, outcome: "PASS" };
     if (r.kind === "command") {
       const log = `${artifact}.log`;
-      const logText = `command passed: ${r.command}`;
-      write(root, artifact, { command: r.command, revision: sha, version, outcome: "PASS", exitCode: 0, tests: 1, fail: 0, skip: 0, todo: 0, inconclusive: 0, log });
+      const logText = `command passed: ${r.command}\n# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# todo 0\n# cancelled 0\n`;
+      write(root, artifact, { command: r.command, revision: sha, version, fingerprint, outcome: "PASS", exitCode: 0, tests: 1, fail: 0, skip: 0, todo: 0, inconclusive: 0, log });
       writeFileSync(join(root, log), logText);
       Object.assign(p, { command: r.command, logSha256: hash(logText) });
     } else {
@@ -38,7 +39,7 @@ function fixture(t) {
       const file = `e2e/specs/${r.suite}/${r.spec ?? "synthetic.spec.mjs"}`;
       const cases = [{ id: `${file}::synthetic assertion`, file, status: "pass", n: r.n ?? null, trial: 1, todo: null, error: null }];
       write(root, artifact, { runId: id, invocation: { id: p.invocation, suite: r.suite, spec: r.spec ? [r.spec] : [], grep: null, trials: null, capabilities: r.capabilities ?? [] }, malformed: [], cases });
-      write(root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: sha, dirty: false }, expectVersion: version, patches: (r.options?.patches ?? []).map((set) => ({ set })), options: { emailOff: r.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((r.options?.appEnvPresent ?? []).map((k) => [k, "synthetic"])), ...(r.options?.appEnv ?? {}) } } });
+      write(root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: (r.options?.patches ?? []).map((set) => ({ set })), options: { emailOff: r.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((r.options?.appEnvPresent ?? []).map((k) => [k, "synthetic"])), ...(r.options?.appEnv ?? {}) } } });
     }
     c.proofs.push(p);
     r.proofs = [id];
@@ -47,10 +48,11 @@ function fixture(t) {
   const report = JSON.parse(readFileSync(join(root, source.artifact), "utf8"));
   const positive = { ...source, id: "positive-case", kind: "e2e-case", caseId: report.cases[0].id };
   c.proofs.push(positive);
-  const negative = { ...positive, id: "negative-case", artifact: "e2e/.out/negative/report.json", outcome: "FAIL" };
-  write(root, negative.artifact, { ...report, cases: [{ ...report.cases[0], status: "fail", error: "intended synthetic assertion" }] });
+  const negative = { ...positive, id: "negative-case", runId: "negative-stack", artifact: "e2e/.out/negative/report.json", outcome: "FAIL" };
+  write(root, negative.artifact, { ...report, runId: negative.runId, cases: [{ ...report.cases[0], status: "fail", error: "intended synthetic assertion" }] });
+  write(root, `e2e/.out/${negative.runId}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: [{ set: "controls-synthetic" }] });
   c.proofs.push(negative);
-  c.controls.push({ id: "control", mutation: "plant the synthetic bug", red: negative.id, green: positive.id, assertion: "intended synthetic assertion" });
+  c.controls.push({ id: "control", set: "controls-synthetic", mutation: "plant the synthetic bug", red: negative.id, green: positive.id, assertion: "intended synthetic assertion" });
   for (const item of [...c.coverage.items, ...c.items, ...c.discoveries]) {
     if (item.state === "historical-closed") continue;
     item.state = "resolved";
@@ -164,4 +166,100 @@ test("all three additional CLI capability cells are mandatory and remain unprove
     c.acceptance.requirements = c.acceptance.requirements.filter((r) => r.id !== id);
     assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `removing ${id} invalidates the matrix`);
   }
+});
+
+test("control assertion text in a title or a different case cannot authenticate the selected failure", (t) => {
+  const { c, root, negative, report } = fixture(t);
+  const selected = { ...report.cases[0], status: "fail", error: "unrelated assertion", name: "intended synthetic assertion" };
+  write(root, negative.artifact, { ...report, runId: negative.runId, cases: [selected, { ...selected, id: "other-case", error: "intended synthetic assertion" }] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /selected red case.*intended assertion/);
+});
+
+test("an E2E control needs the same exact case and its named patch on the red stack", (t) => {
+  const { c, root, positive } = fixture(t);
+  c.controls[0].set = "controls-absent-mutation";
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /named mutation.*red stack/);
+  c.controls[0].set = "controls-synthetic";
+  positive.caseId = "unrelated-case";
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /same exact case/);
+});
+
+test("the default-marking matrix command uses exactly the option its proof must contain", () => {
+  const cell = imported.acceptance.requirements.find((r) => r.id === "account-default-mark");
+  assert.ok(cell.command.includes(`VITE_EXPORT_MARK_ENABLED=${cell.options.appEnv.VITE_EXPORT_MARK_ENABLED}`), "the executable default-marking cell agrees with its recorded option");
+});
+
+test("command controls retain real diagnostics without inventing a mutated stack", (t) => {
+  const { c, root } = fixture(t);
+  const command = "node synthetic-harness-test.mjs";
+  for (const [id, outcome, logText, exitCode, fail] of [
+    ["command-red", "FAIL", "# Subtest: named command case\n  error: intended command assertion\n  code: 'ERR_ASSERTION'\n# tests 1\n# pass 0\n# fail 1\n# skipped 0\n# todo 0\n# cancelled 0\n", 1, 1],
+    ["command-green", "PASS", "ok 1 - named command case\n# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# todo 0\n# cancelled 0\n", 0, 0],
+  ]) {
+    const artifact = `e2e/.out/${id}/report.json`, log = `${artifact}.log`;
+    write(root, artifact, { command, revision: sha, version, fingerprint, outcome, exitCode, tests: 1, fail, skip: 0, todo: 0, inconclusive: 0, log, ...(fail ? { assertionEvidence: { startLine: 2, endLine: 3 } } : {}) });
+    writeFileSync(join(root, log), logText);
+    c.proofs.push({ id, kind: "command", revision: sha, version, fingerprint, outcome, command, artifact, logSha256: hash(logText) });
+  }
+  c.controls.push({ id: "command-control", mutation: "restore a harness defect in the isolated source", red: "command-red", green: "command-green", assertion: "intended command assertion" });
+  assert.deepEqual(checkCampaign(c, { root }).errors, []);
+  const p = c.proofs.find((p) => p.id === "command-red"), report = JSON.parse(readFileSync(join(root, p.artifact)));
+  write(root, p.artifact, { ...report, assertionEvidence: undefined });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /exact diagnostic line bounds/);
+  write(root, p.artifact, { ...report, assertionEvidence: { startLine: 1, endLine: 3 } });
+  const titleOnly = "# Subtest: intended command assertion\n  error: unrelated failure\n  code: 'ERR_ASSERTION'\n# tests 1\n# pass 0\n# fail 1\n# skipped 0\n# todo 0\n# cancelled 0\n";
+  writeFileSync(join(root, report.log), titleOnly); p.logSha256 = hash(titleOnly);
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /command diagnostic does not name the intended assertion/);
+});
+
+
+test("frozen source fingerprints bind clean stacks, proofs and captured command metadata", (t) => {
+  const { c, root, positive } = fixture(t);
+  assert.equal(checkCampaign(c, { root }).complete, true);
+  const stackPath = `e2e/.out/${positive.runId}/stack.json`, stack = JSON.parse(readFileSync(join(root, stackPath)));
+  write(root, stackPath, { ...stack, fingerprint: { ...stack.fingerprint, sha256: "e".repeat(64), dirty: false } });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /stack differs from the frozen source fingerprint/);
+  write(root, stackPath, stack);
+  positive.fingerprint = "e".repeat(64);
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /evidence differs from the frozen source fingerprint/);
+  positive.fingerprint = fingerprint;
+  const command = c.proofs.find((p) => p.kind === "command"), report = JSON.parse(readFileSync(join(root, command.artifact)));
+  write(root, command.artifact, { ...report, fingerprint: "e".repeat(64) });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /command source fingerprint differs/);
+});
+
+test("command metadata cannot replace the final captured test counters", (t) => {
+  const { c, root } = fixture(t), p = c.proofs.find((p) => p.kind === "command");
+  const report = JSON.parse(readFileSync(join(root, p.artifact)));
+  write(root, p.artifact, { ...report, tests: 99 });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /tests count differs from the captured log/);
+});
+
+test("control matrix accepts genuine aggregate commands but refuses missing, duplicate and unproved sets", (t) => {
+  const { c, root } = fixture(t), cell = c.acceptance.requirements.find((r) => r.id === "controls"), p = c.proofs.find((p) => p.id === cell.proofs[0]);
+  const report = JSON.parse(readFileSync(join(root, p.artifact)));
+  cell.controlSets = ["controls-synthetic"];
+  p.command = "node tools/e2e-controls-parallel.mjs --campaign e2e/.out/prepared.json --out e2e/.out/aggregate";
+  const ledgerPath = "e2e/.out/aggregate/ledger.json", control = c.controls[0], red = c.proofs.find((p) => p.id === control.red), green = c.proofs.find((p) => p.id === control.green);
+  c.acceptance.tree = "worktree";
+  const ledger = { ok: true, endedAt: "2026-10-15T00:00:00Z", commit: sha, tree: "worktree", controls: [{ set: control.set, ok: true, red: { invocationDir: dirname(red.artifact) } }], green: [{ sets: [control.set], invocationDir: dirname(green.artifact) }] };
+  write(root, ledgerPath, ledger);
+  const aggregate = { ...report, command: p.command, controlSets: ["controls-synthetic"], controlLedgers: [ledgerPath] };
+  write(root, p.artifact, aggregate);
+  assert.equal(checkCampaign(c, { root }).complete, true);
+  write(root, p.artifact, { ...aggregate, controlLedgers: [] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /requires its actual runner ledgers/);
+  write(root, p.artifact, aggregate);
+  write(root, ledgerPath, { ...ledger, ok: false });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /runner ledger is incomplete/);
+  write(root, ledgerPath, { ...ledger, controls: [{ ...ledger.controls[0], red: { invocationDir: "e2e/.out/wrong" } }] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /does not establish the recorded pair/);
+  write(root, ledgerPath, ledger);
+  cell.controlSets.push("controls-missing");
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /completed sets differ from the frozen control inventory/);
+  cell.controlSets.pop();
+  write(root, p.artifact, { ...aggregate, tests: 2, controlSets: ["controls-synthetic", "controls-synthetic"] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /duplicate control sets/);
+  write(root, p.artifact, { ...aggregate, controlSets: ["controls-unproved"] });
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /control command names an unproved set/);
 });
