@@ -263,12 +263,15 @@ export async function rtdbGetPatient(target, path, { retryMs = RTDB_RETRY.retryM
  * `minLength` (default 1) is the shortest body that counts: equal EMPTY bodies
  * are not convergence. `requireShared` (default true) asks every peer that
  * entered edit to show "Shared". `readY` (async () => the value of
- * status/{d}/y) and `now` are for self-tests and a spec's own reader; by
- * default y is read as the emulator's admin on the users' target, again on a
+ * status/{d}/y) and `now` are for self-tests and a spec's own reader.
+ * `readBodies(users)` may provide authored-body samples for idle readers whose
+ * presence overlays differ. Only the sampling changes; every deadline and
+ * quiet/save/log condition still applies. By default the full live body is read.
+ * By default y is read as the emulator's admin on the users' target, again on a
  * 503 (rtdbGetPatient: `yRetries` counts those; 503s past RTDB_RETRY.retryMs
  * throw E2E_RTDB_UNAVAILABLE, the stack not answering, never an I1 failure).
  */
-export async function settleLive(users, { docId, n = users?.length, deadlineMs = null, readY = null, now = Date.now, intervalMs = SETTLE.intervalMs, minLength = 1, requireShared = true } = {}) {
+export async function settleLive(users, { docId, n = users?.length, deadlineMs = null, readY = null, now = Date.now, intervalMs = SETTLE.intervalMs, minLength = 1, requireShared = true, readBodies = readI1 } = {}) {
   if (!Array.isArray(users) || users.length < 1) throw new TypeError("settleLive: give at least one user (two or more are judged on I1; one on its body's stability)");
   if (typeof docId !== "string" || !docId) throw new TypeError("settleLive: docId is required");
   if (!Number.isInteger(minLength) || minLength < 0) throw new TypeError(`settleLive: minLength is a whole number of characters, got ${JSON.stringify(minLength)}`);
@@ -284,7 +287,7 @@ export async function settleLive(users, { docId, n = users?.length, deadlineMs =
   let yChangedAt = t0;
   let last = null;
   for (;;) {
-    const samples = await readI1(users);
+    const samples = await readBodies(users);
     series.push(samples);
     if (series.length > SETTLE.i1Samples) series.shift();
     const i1 = alone ? loneBodySteady(series, SETTLE.i1Samples) : checkI1Stable(series, { samples: SETTLE.i1Samples });

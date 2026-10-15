@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Compare authored reader bodies after Done without per-person presence paint, while retaining the original convergence deadline, save/log stability checks, and independent persisted-byte decoration checks.
+
 - Retarget historical-comment, annotation-access and generated-note controls around the new expiry gates, preserving the specific regressions each control reintroduces.
 
 - Run a frozen complete control inventory through at most three ordinary harness workers, preserving admission gates and importing exact pair artifacts into one command report; reject partial, duplicated, stale or changed-source evidence.

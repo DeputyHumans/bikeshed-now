@@ -158,6 +158,24 @@ test("a peer that never entered edit is judged on its body only: no save state a
   assert.deepEqual(r.saveStates, { p1: null, p2: null });
 });
 
+test("reader sampling changes only the compared bodies, retaining the 15 s deadline and quiet gates", async () => {
+  const c = clock();
+  const state = { html: { p1: "authored plus peer A", p2: "authored plus peer B" }, save: { p1: null, p2: null }, inEdit: { p1: false, p2: false }, drafts: {} };
+  const users = [fakeUser("p1", state), fakeUser("p2", state)];
+  const readBodies = async (given) => {
+    assert.deepEqual(given, users);
+    return given.map((u) => ({ name: u.name, hash: "same-authored-body", length: 7 }));
+  };
+  const r = await settleLive(users, { docId: "d", readBodies, readY: async () => null, now: c.now, intervalMs: 0 });
+  assert.equal(r.hash, "same-authored-body");
+  assert.equal(r.samples, 3);
+  assert.ok(r.ms >= SETTLE.yStableMs);
+  let revision = 0;
+  await assert.rejects(settleLive(users, { docId: "d", readBodies, readY: async () => ({ [revision++]: "changed" }), now: clock().now, intervalMs: 0 }), /within 15000 ms .*status\/d\/y changed/);
+  const posting = clock();
+  await assert.rejects(settleLive(users, { docId: "d", readBodies, readY: async () => { state.drafts.p1 = [{ t: posting.peek(), at: posting.peek() }]; return null; }, now: posting.now, intervalMs: 0 }), /within 15000 ms .*a POST \/draft/);
+});
+
 // --- the join gate's precondition --------------------------------------------------------
 
 test("requireJoinersHeld waits for the run that binds: a joiner's effect runs again when its draft frame loads, and only that run counts", { timeout: 20_000 }, async () => {

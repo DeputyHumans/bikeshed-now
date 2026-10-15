@@ -177,7 +177,7 @@ import { readFixture } from "../../lib/seed.mjs";
 import { operatorSetAccess, unshare } from "../../lib/grant.mjs";
 import { mintToken } from "../../lib/session.mjs";
 import { bodyAttrDiff, diffFingerprint, fingerprint, KNOWN_OWN_VALUES, parseAndRun } from "../../lib/bytes.mjs";
-import { idSelector } from "../../lib/frame.mjs";
+import { idSelector, readerBodyHash, readerBodyInPage } from "../../lib/frame.mjs";
 import { holdRequests, overlapProof, syncPages } from "../../lib/sync.mjs";
 import { rtdbLatency } from "../../lib/proxy.mjs";
 import { assertInvariant, checkI2, checkI5, checkI8, segmentsOfHtml, waitI12 } from "../../lib/invariants.mjs";
@@ -661,28 +661,12 @@ async function parsedBodyHash(parser, html) {
   return { hash: sha(inner), length: inner.length };
 }
 
-/** In a frame: the body's innerHTML without the app's own nodes (by data-bshd VALUE: the reading overlay), as a reader's document is. */
-function readerBodyInPage(own) {
-  const body = document.body;
-  if (!body) return "";
-  const clone = body.cloneNode(true);
-  const values = new Set(own);
-  for (const el of [...clone.querySelectorAll("[data-bshd]")]) if (values.has(el.getAttribute("data-bshd"))) el.remove();
-  return clone.innerHTML;
-}
-
-/** Reader overlays differ per person. Compare authored DOM after Done, while
- * persisted bytes still go through readVersion/assertCleanVersion unchanged. */
-async function settleReaders(users) {
-  let last = null;
-  let stable = 0;
-  await eventually(async () => {
-    const bodies = await Promise.all(users.map(async (u) => (await u.frame()).evaluate(readerBodyInPage, [...KNOWN_OWN_VALUES])));
-    if (bodies.some((body) => !body) || new Set(bodies).size !== 1) { stable = 0; return false; }
-    stable = bodies[0] === last ? stable + 1 : 1;
-    last = bodies[0];
-    return stable >= 3;
-  }, { timeout: 20_000, interval: 200, message: "readers show the same nonempty authored body on three consecutive samples" });
+/** Authored reader DOM after Done, with the same I1 deadline and quiet gates. */
+function settleReaders(users, docId, n = users.length) {
+  return settleLive(users, {
+    docId, n,
+    readBodies: (peers) => Promise.all(peers.map(async (u) => ({ name: u.name, ...await readerBodyHash(await u.frame()) }))),
+  });
 }
 
 /** Each user's frame body (the app's own nodes aside), parsed again by the version's parser: {name: hash}. */
@@ -851,7 +835,7 @@ scenario(C6_NAME, { tiers: BOTH, n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ct
       );
 
       obs.stage = "settling";
-      const settled = await settle(users, docId, n);
+      const settled = await settleReaders(users, docId, n);
       ctx.step(`the readers settled in ${settled.ms} ms on ${settled.hash.slice(0, 16)} (I1)`);
       const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
       ctx.step(`presence after Done: ${JSON.stringify(nobody.modes)}`);
@@ -939,7 +923,7 @@ async function c6Serial(ctx, n, { latencyMs = 0 } = {}) {
     };
     if (lat) await underLatency(ctx, lat, latencyMs, turns);
     else await turns();
-    const settled = await settle(users, docId, n);
+    const settled = await settleReaders(users, docId, n);
     ctx.step(`the readers settled in ${settled.ms} ms (I1)`);
     const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
     assert.deepEqual(editorsIn(nobody.modes), [], `C6: within ${PRESENCE_MS} ms of Done nobody is "edit" in status/${docId}/peers`);
@@ -1028,7 +1012,7 @@ async function c6Latency(ctx) {
     }
     await editorClosed(u);
   }
-  await settleReaders(users);
+  await settleReaders(users, docId);
   const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
   if (!nobody.ok) ctx.inconclusive(`the sync precondition did not hold: somebody is still "edit" in status/${docId}/peers ${PRESENCE_MS} ms after every Done and the delay drained: ${JSON.stringify(nobody.modes)}`);
   const out = await agentCall(agent, "commit_draft", { id: docId });
@@ -1122,7 +1106,7 @@ async function c6LateSave(ctx, { hold }) {
       await editorClosed(p1);
     }
     p1.inEdit = false;
-    await settleReaders(users);
+    await settleReaders(users, docId);
     const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
     if (!nobody.ok) ctx.inconclusive(`the sync precondition did not hold: somebody is still "edit" in status/${docId}/peers ${PRESENCE_MS} ms after everyone pressed Done: ${JSON.stringify(nobody.modes)}`);
     const out = await agentCall(agent, "commit_draft", { id: docId });

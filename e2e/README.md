@@ -4524,7 +4524,7 @@ grantVia, granted, signIn, opened}` (`lib/live.mjs`):
   (`selftest/live-add-member.test.mjs`).
 
 **Settling** — `settleLive(users, {docId, n = users.length, deadlineMs,
-minLength = 1, requireShared = true})` → `{ms, hash, samples, saveStates,
+minLength = 1, requireShared = true, readBodies})` → `{ms, hash, samples, saveStates,
 shareStates, lastDraftAt, yEntries}` waits for the plan's settle conditions
 at once: I1 on 3 consecutive samples, on bodies of at least `minLength`
 characters (equal EMPTY bodies are not convergence; give a baseline's length
@@ -4543,6 +4543,15 @@ result's `yRetries` counts the 503s it read through, and a failure message
 names them. When 503s last past 5 s, settleLive throws
 `E2E_RTDB_UNAVAILABLE`, not an I1 failure. A `readY` of your own is used as
 given.
+
+For idle readers after Done, `readBodies(users)` may sample authored DOM with
+`readerBodyHash(frame)`: each reader's known presence decoration is different
+by design. The sampler removes only the independently pinned `data-bshd` values;
+unknown values and all authored content remain. C6 uses this sampler while
+retaining every deadline and save/log condition above. Live editors still use
+raw `bodyHash`, and persisted draft/version bytes still face DECOR unchanged.
+`selftest/reader-body.test.mjs` demonstrates both raw-overlay false divergence
+and an overbroad marker strip concealing real authored differences.
 
 **One editor settles too** (C9b: one editor beside N−1 agents). `settleLive([u],
 {docId})` judges every condition above except I1's convergence, which needs

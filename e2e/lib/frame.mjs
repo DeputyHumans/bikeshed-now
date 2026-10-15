@@ -187,6 +187,22 @@ export async function bodyHash(frame) {
   return { hash: sha256(html), length: html.length };
 }
 
+/** Authored reader DOM: remove only independently pinned owned marker values. */
+export function readerBodyInPage(own) {
+  const body = document.body;
+  if (!body) return "";
+  const clone = body.cloneNode(true);
+  const values = new Set(own);
+  for (const el of [...clone.querySelectorAll("[data-bshd]")]) if (values.has(el.getAttribute("data-bshd"))) el.remove();
+  return clone.innerHTML;
+}
+
+/** Idle readers differ in presence paint; compare their authored body only. */
+export async function readerBodyHash(frame) {
+  const html = await frame.evaluate(readerBodyInPage, [...KNOWN_OWN_VALUES]);
+  return { hash: sha256(html), length: html.length };
+}
+
 /** Attributes on the frame's <body>, as {name: value}. */
 export async function bodyAttributes(frame) {
   return frame.evaluate(() => {
