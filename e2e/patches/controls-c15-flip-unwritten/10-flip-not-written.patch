@@ -1,14 +1,9 @@
-diff --git a/functions/src/lib/threads.ts b/functions/src/lib/threads.ts
-index 7ff5b1a..6561d00 100644
 --- a/functions/src/lib/threads.ts
 +++ b/functions/src/lib/threads.ts
-@@ -43,18 +43,12 @@ export async function setThreadResolved(args: {
-     // Already so: nothing written and no second note, so a retry is harmless.
-     if ((ann.resolved === true) === resolved) return { resolved, changed: false };
+@@ -51,14 +51,6 @@
  
 -    // `resolvedBy` is who the change log says resolved or reopened it.
 -    tx.update(annRef, { resolved, resolvedBy: actor });
--    const noteRef = annRef.collection("comments").doc();
 -    tx.create(noteRef, {
 -      commentId: noteRef.id,
 -      body: resolved ? "Resolved." : "Reopened.",
@@ -18,12 +13,9 @@ index 7ff5b1a..6561d00 100644
 -      createdAt: FieldValue.serverTimestamp(),
 -      generated: true,
 -    });
-+    // e2e negative control (controls-c15-flip-unwritten): the flip is reported as made, but
-+    // neither the thread's new state nor its note is written, so the answer echoes the
-+    // state asked for over a thread that never changed.
+-    attempted = true;
++    // e2e negative control: report the flip without writing state or its note.
 +    void actor;
 +    void caller;
 +    void FieldValue;
      return { resolved, changed: true };
-   });
- }

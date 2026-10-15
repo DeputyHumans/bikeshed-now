@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the retired-head suggestion and unwritten thread-flip controls effective after native acknowledgement recovery, preserving their original faults and E2E targets.
+
 - Retain the existing verification race gates and reading-statistics regression controls after native retry recovery, preserving their original faults and assertions in either capability order.
 
 - Exercise native acknowledgement loss through the CLI OAuth exchange and comment/suggestion cooldown triggers, including a document expiring while its reader’s claim is held. Four directional controls bind actual commits and native retries to token validity, exact notice counts and expiry privacy; mailbox transport errors remain separate from measured count failures. Align deterministic cooldown fixtures with the fresh authority clock.
