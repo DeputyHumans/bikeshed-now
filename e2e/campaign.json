@@ -13677,13 +13677,14 @@
       "evidence": [
         "e2e/.out/c06-delivery-proof/proof.json",
         "e2e/.out/2610150056-njpa/invocations/20261015T083719Z-p41094-0ho5/results.json",
-        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json"
+        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json",
+        "e2e/.out/controls-20261015-084928z/ledger.json"
       ],
       "remaining": [
         "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
       ],
       "distinction": "This is transport acknowledgement/teardown loss, distinct from the original missing remote-autosave scheduler and the reader-overlay equality oracle.",
-      "fixedBrowserStatus": "Inspected B15 report: four recovery/serial checks PASS, zero failures/inconclusive/TODO, three explicit unselected-N skips. Seven new plus one refreshed actual control pairs still running at audit."
+      "fixedBrowserStatus": "B15 recovery/serial checks pass; all seven new recovery controls have valid actual pairs. The refreshed Done-flush control has a valid pair in controls-20261015-092545z. Final frozen acceptance remains open."
     },
     {
       "id": "live-forced-close-partial-history-adoption",
@@ -13764,13 +13765,14 @@
       "evidence": [
         "e2e/.out/campaign-discovery-evidence/soapbox-c06-done-bound-red.log",
         "e2e/.out/campaign-discovery-evidence/soapbox-c06-done-bound-green.log",
-        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json"
+        "e2e/.out/2610150146-d4pm/invocations/20261015T084907Z-p75395-p24f/results.json",
+        "e2e/.out/controls-20261015-084928z/ledger.json"
       ],
       "remaining": [
         "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
       ],
       "observedUnitTest": "Done must finish with a retryable refusal despite continuous remote input",
-      "fixedBrowserStatus": "Inspected B15 report: four recovery/serial checks PASS, zero failures/inconclusive/TODO, three explicit unselected-N skips. Seven new plus one refreshed actual control pairs still running at audit."
+      "fixedBrowserStatus": "B15 recovery/serial checks pass; all seven new recovery controls have valid actual pairs. The refreshed Done-flush control has a valid pair in controls-20261015-092545z. Final frozen acceptance remains open."
     },
     {
       "id": "operator-realtime-client-lifecycle",
@@ -14105,16 +14107,18 @@
       "claim": "An old Done deadline can set error state in a replacement editing session, and an unmounted viewer can show its old global failure toast after navigation. Bind pending completion to its originating session and viewer lifetime.",
       "implementation": {
         "remaining": [
-          "Fresh actual controls for timer state, same-viewer identity and unmounted-viewer lifetime are running.",
           "Final frozen-source acceptance and matching controls remain required."
         ],
         "evidence": [
-          "e2e/.out/2610150215-ja2o/invocations/20261015T091904Z-p78403-gghr/results.json"
+          "e2e/.out/2610150215-ja2o/invocations/20261015T091904Z-p78403-gghr/results.json",
+          "e2e/.out/c06-session-proof/proof.json",
+          "e2e/.out/controls-20261015-092545z/ledger.json"
         ],
         "sourceCommits": [
           "7a41bbf",
           "58ebb16"
-        ]
+        ],
+        "actualControlStatus": "All four selected C6 controls have valid clean-PASS/intended-FAIL pairs at58ebb16; three clean browser cases pass. This authoring proof does not close frozen-source acceptance."
       },
       "controls": [
         {
@@ -14134,7 +14138,46 @@
             "suite": "concurrency"
           },
           "intendedFailure": "^C6 stale Done: an old completion must not report its error in the replacement document"
+        },
+        {
+          "set": "controls-c06-stale-frame-toast",
+          "target": {
+            "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+            "case": "C6 a timed-out Done from a replaced frame cannot change its new editing session [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "^C6 stale Done: a replaced frame's completion must not report its old error"
         }
+      ]
+    },
+    {
+      "id": "rtdb-rule-coverage-retains-live-payloads",
+      "state": "in-progress",
+      "classification": "local-harness-runtime",
+      "claim": "The pinned RTDB emulator retains every distinct evaluated rule value, including large live payloads, until its rule tracker is replaced. Accumulated diagnostics exhausted its heap during N20. Archive and recycle coverage only at verified quiescent exclusive boundaries while restoring exact rules.",
+      "sourceCommit": "2f007b4",
+      "evidence": [
+        "e2e/.out/rtdb-heap-diagnosis/proof.json",
+        "e2e/.out/rtdb-heap-diagnosis/actual-recycle-proof.json"
+      ],
+      "remaining": [
+        "Fresh complete N20 and final frozen matrix remain required."
+      ],
+      "mustNotDo": [
+        "Do not change rule semantics, reset product data, raise resource caps, or recycle during a measured body."
+      ]
+    },
+    {
+      "id": "early-e2e-report-accepted-as-completed-run",
+      "state": "in-progress",
+      "classification": "campaign-evidence-integrity",
+      "claim": "An early merged all-pass report could qualify as a complete matrix cell despite an interrupted invocation or missing later cases. Whole-run proofs now require successful completion metadata and exact final reporter records.",
+      "sourceCommit": "2aff605",
+      "evidence": [
+        "e2e/.out/run-completion-proof/proof.json"
+      ],
+      "remaining": [
+        "Full frozen verification and actual final campaign imports remain required."
       ]
     }
   ],
@@ -15953,6 +15996,29 @@
       "remaining": [
         "Reproduce and repair the transaction failure path; validate exact-rule coverage recycling without changing permissions or data.",
         "Fresh complete N20, every other original N/trial, controls and final acceptance remain required."
+      ]
+    },
+    {
+      "kind": "authoring-runtime-and-evidence-repairs",
+      "scope": "Source and targeted proof only; no original finding or final matrix closure",
+      "checks": [
+        "RTDB exact-rule archive/recycle retains data and permission behavior;36 focused tests,23 inverse controls and a normal-runner lifecycle pair pass.",
+        "Whole-run proof validation passes60 focused tests with10 intended inverse failures and validates an actual completed three-case C6 report.",
+        "C6 session/deadline/unmounted-viewer fixes have all four actual targeted control pairs."
+      ],
+      "sourceCommits": [
+        "2f007b4",
+        "2aff605",
+        "58ebb16"
+      ],
+      "evidence": [
+        "e2e/.out/rtdb-heap-diagnosis/proof.json",
+        "e2e/.out/run-completion-proof/proof.json",
+        "e2e/.out/controls-20261015-092545z/ledger.json"
+      ],
+      "remaining": [
+        "Draft-contention repair and unchanged N20 browser validation.",
+        "Final frozen full checks, original matrix, complete control catalog and local releases."
       ]
     }
   ]

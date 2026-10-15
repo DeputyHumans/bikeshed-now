@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve the RTDB coverage-retention and incomplete-report discoveries in the campaign ledger, and record completed C6 authoring controls without closing final acceptance.
+
 - Archive and recycle the pinned local RTDB emulator’s unbounded rule-value coverage at verified quiescent boundaries, preserving exact rules, data and diagnostics without raising resource caps.
 
 - Require successful invocation completion and the final reporter case records before a passing E2E report can close a full campaign matrix cell; interrupted or early merged subsets remain incomplete.
