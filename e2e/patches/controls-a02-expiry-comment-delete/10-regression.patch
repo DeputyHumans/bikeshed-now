@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -266,5 +266,4 @@
+               && request.resource.data.body is string;
+             allow delete: if isVerifiedUser()
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+               && !('generated' in resource.data)
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -269,5 +269,4 @@
+               && request.resource.data.body is string;
+             allow delete: if isVerifiedUser()
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+               && !('generated' in resource.data)

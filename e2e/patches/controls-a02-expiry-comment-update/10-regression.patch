@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -259,5 +259,4 @@
+             // and by whom, stay as they were.
+             allow update: if canRead(docId, docData(docId))
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+               && !('generated' in resource.data)
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -262,5 +262,4 @@
+             // and by whom, stay as they were.
+             allow update: if canRead(docId, docData(docId))
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+               && !('generated' in resource.data)

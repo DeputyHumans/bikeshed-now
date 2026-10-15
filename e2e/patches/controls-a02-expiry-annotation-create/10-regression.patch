@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -219,5 +219,4 @@
+           // The key list keeps `suggestion` out as well.
+           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+-            && feedbackWritable(docData(docId))
+             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
+             && request.resource.data.anchor is map
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -222,5 +222,4 @@
+           // The key list keeps `suggestion` out as well.
+           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+-            && feedbackWritable(docData(docId))
+             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
+             && request.resource.data.anchor is map

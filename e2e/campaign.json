@@ -11433,7 +11433,7 @@
     },
     {
       "id": "X-a02-matrix-data-3",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "Ledger marks it \"I/Q, untagged\": annotation create on an expired document goes through Firestore directly, because firestore.rules:216 has no expiry predicate. This is a tension inside SPEC §17 (\"Writing is refused for everyone\" against \"Expiry is not in the security rules\"). Settling it also settles X-a02-matrix-data-2 in G08.",
@@ -11442,7 +11442,25 @@
       },
       "proofs": [],
       "controls": [],
-      "requiredCases": []
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a02-matrix-data.spec.mjs::A2.c6.Exp-O the owner may not create, change or delete annotations and comments after expiry: DENY",
+          "n": null
+        },
+        {
+          "caseId": "e2e/specs/functional/a02-matrix-data.spec.mjs::A2.c6.Exp-E an editor may not create, change or delete annotations and comments after expiry: DENY",
+          "n": null
+        },
+        {
+          "caseId": "e2e/specs/functional/a02-matrix-data.spec.mjs::A2.c6.Exp-V a viewer may not create, change or delete annotations and comments after expiry: DENY",
+          "n": null
+        }
+      ],
+      "implementation": {
+        "status": "source fixed; old-product E2E harm and rule red/restored proof observed; fixed-stack E2E pending",
+        "spec": "SPEC §17",
+        "reason": "The authorized freeze includes feedback writes. The read/list exception preserves existing workspace and comment visibility; it does not permit mutation after expiry. All six direct feedback mutation rules now compare the current deadline with request.time, including owner writes. Original Q classification and baseline claims are retained."
+      }
     },
     {
       "id": "X-a03-visibility-1",
@@ -14207,6 +14225,20 @@
       ],
       "evidence": "e2e/.out/a21-scope-controls/proof.json; /tmp/a21-scope-{before,green}.log; e2e/.out/2610150009-srus/invocations/20261015T073300Z-p17302-xmmi/results.json",
       "note": "A21.3 uses share() on both tiers; expected access.changed count is2*SHARE_EVENTS and only its payload check is conditional. All other audience/cursor/draft assertions execute on both tiers. Original wrong-tier criticism retained; no production verification or canonical closure."
+    },
+    {
+      "kind": "feedback-expiry-repair",
+      "items": [
+        "X-a02-matrix-data-3"
+      ],
+      "scope": "local source and rules verification; canonical closure pending current product controls and matrix",
+      "checks": [
+        "Old B13 product permits all six direct feedback mutations for owner/editor/viewer; three new E2E assertions fail as intended",
+        "Twelve focused rules failures observed before the fix; full restored rules suite passes106/106",
+        "Six isolated directional gate mutants each fail both owner and viewer tests; read-preservation and expiry-clear mutants each fail their focused test; eight corresponding E2E product controls stored"
+      ],
+      "evidence": "e2e/.out/2610150009-srus/invocations/20261015T074712Z-p77088-4l5c/results.json; e2e/.out/feedback-expiry-controls/{proof,extra-proof}.json; /tmp/soapbox-feedback-expiry-rules-{red,green}.log",
+      "note": "Existing feedback remains readable and unchanged while frozen. Absent/null/future expiry controls pass; clearing the deadline restores existing permissions without widening authorship. Fixed-stack E2E proof remains pending."
     }
   ]
 }

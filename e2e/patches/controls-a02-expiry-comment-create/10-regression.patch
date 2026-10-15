@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -252,5 +252,4 @@
+             // The key list is what keeps `generated` and `opensSuggestion` out.
+             allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+-              && feedbackWritable(docData(docId))
+               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
+               && request.resource.data.body is string
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -255,5 +255,4 @@
+             // The key list is what keeps `generated` and `opensSuggestion` out.
+             allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+-              && feedbackWritable(docData(docId))
+               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
+               && request.resource.data.body is string

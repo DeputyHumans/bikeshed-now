@@ -1904,12 +1904,18 @@ only one: the owner's browser may still store the document's thumbnails (§2
 and the owner is the one reader an expired document has left — so the owner's
 workspace keeps recognisable cards, and nobody else is ever shown them.
 
-**Expiry is not in the Firestore rules.** The workspace `list` rule has to be
-statically provable from the query's constraints (§5), and a query cannot filter
+**Expiry is not a Firestore read or list filter.** The workspace `list` rule has
+to be statically provable from the query's constraints (§5), and a query cannot filter
 on a field most documents do not have without dropping every document that does
 not have it. A member still sees the row, its title and its comments; what they
-cannot get is the document. Realtime rules separately compare the mirrored
-expiry to the database server's `now`: after that moment only the owner reads
+cannot get is the document. Direct Firestore annotation and comment creates,
+updates (including resolve/reopen), and deletes compare the current document's
+expiry against `request.time` and are refused after it, including the owner's
+writes. An absent or null deadline permits the existing role and author checks;
+clearing expiry restores those permissions without giving an owner the right to
+rewrite or delete someone else's feedback. This is the same freeze as the HTTP
+and MCP write paths, not an exception for browser feedback. Realtime rules
+separately compare the mirrored expiry to the database server's `now`: after that moment only the owner reads
 peer presence and the shared draft, and no account can write the shared draft.
 Clearing or changing expiry refreshes these maps; no timer or cron is needed.
 

@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -238,5 +238,4 @@
+             && request.resource.data.resolvedBy.channel == 'web';
+           allow delete: if isVerifiedUser()
+-            && feedbackWritable(docData(docId))
+             && resource.data.authorUid == request.auth.uid
+             && !('suggestion' in resource.data);
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -241,5 +241,4 @@
+             && request.resource.data.resolvedBy.channel == 'web';
+           allow delete: if isVerifiedUser()
+-            && feedbackWritable(docData(docId))
+             && resource.data.authorUid == request.auth.uid
+             && !('suggestion' in resource.data);

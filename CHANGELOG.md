@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Freeze direct annotation and comment creates, changes and deletes when a document expires, including owner writes, while preserving existing feedback reads and restoring the same permissions when expiry is cleared.
+
 - Keep one quote context intact in repeated-replacement review tests, and assert failed-save error text after observing any error toast; real patched-stack controls now reach both intended assertions.
 
 - Wait for analytics route events with the harness's explicit pending sentinel, and make the repeated-script control insert a fresh executable script so it proves the later fetch-count assertion.

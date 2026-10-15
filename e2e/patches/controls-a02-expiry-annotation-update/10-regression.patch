@@ -1,0 +1,16 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -229,5 +229,4 @@
+           // createdAt, and no field added on the side.
+           allow update: if canRead(docId, docData(docId))
+-            && feedbackWritable(docData(docId))
+             && !('suggestion' in resource.data)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -232,5 +232,4 @@
+           // createdAt, and no field added on the side.
+           allow update: if canRead(docId, docData(docId))
+-            && feedbackWritable(docData(docId))
+             && !('suggestion' in resource.data)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])

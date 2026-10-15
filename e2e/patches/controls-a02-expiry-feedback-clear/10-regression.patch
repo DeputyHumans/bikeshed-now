@@ -1,0 +1,18 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -94,5 +94,5 @@
+     // remain readable under their normal membership policy (SPEC §17).
+     function feedbackWritable(d) {
+-      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
++      return !('expiresAt' in d) || (d.expiresAt != null && d.expiresAt > request.time);
+     }
+ 
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -97,5 +97,5 @@
+     // remain readable under their normal membership policy (SPEC §17).
+     function feedbackWritable(d) {
+-      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
++      return !('expiresAt' in d) || (d.expiresAt != null && d.expiresAt > request.time);
+     }
+ 

@@ -428,6 +428,7 @@ const verb = { ALLOW: "may", DENY: "may not" };
  * the load if one drifts.
  */
 const CONTROL_TARGETS = Object.freeze([
+  "A2.c6.Exp-V a viewer may not create, change or delete annotations and comments after expiry: DENY",
   "A2.c18.V a viewer may not read the live log status/{doc}/y with their own ID token: DENY",
   "A2.c18.PE a non-member on a public open-editing document may read the live log status/{doc}/y with their own ID token: ALLOW",
   "A2.c6.X a signed-in stranger may not create an annotation on v1 through the Firestore rules with their own credential: DENY",
@@ -683,8 +684,8 @@ for (const [kind, [want, why, defect]] of Object.entries(C18)) {
  * the wait is the product's own semantics, not a settle. The product itself
  * must then call it expired: the owner's POST /draft answers 409.
  */
-async function expiredWorld(ctx, before) {
-  const w = await world(ctx, "E", { rtdb: true });
+async function expiredWorld(ctx, before, kind = "E") {
+  const w = await world(ctx, kind, { rtdb: true });
   const pre = before ? await before(w) : null;
   // The expiry must still be in the future when the function reads its clock;
   // on a queued stack the request can arrive late, so a refused lead is retried longer.
@@ -745,27 +746,61 @@ for (const who of ["O", "E"]) {
   });
 }
 
-/**
- * c6 on an expired document. SPEC §17: "Expiry is not in the Firestore rules,
- * and cannot be … a member still sees the row, its title and its comments";
- * annotation writes remain deliberately independent of content expiry. So
- * the rules still commit a direct annotation, for the editor and the owner
- * alike. That this sits uneasily with "Writing is refused for everyone" is
- * reported for a decision (I), not tagged as a defect.
- */
-for (const who of ["E", "O"]) {
-  cell(`A2.c6.Exp-${who} ${who === "O" ? "the owner" : "an editor"} may create an annotation on an expired document through the Firestore rules, which do not see expiry: ALLOW`, { timeoutMs: CASE_MS }, async (ctx) => {
-    ctx.step("expected ALLOW: SPEC §17 \"Expiry is not in the Firestore rules\"; the enforcement list (isExpired in lib/acl.ts) names functions only");
-    const as = (w) => (who === "O" ? { uid: w.owner.uid, email: w.ownerAcct.email.toLowerCase(), idToken: w.owner.idToken } : { uid: w.actor.uid, email: w.actor.email, idToken: w.actor.idToken });
-    const w = await expiredWorld(ctx);
-    const me = as(w);
-    const annId = newAnnId();
-    const r = await createAnnotation(ctx, who.toLowerCase(), { docId: w.docId, annId, who: { uid: me.uid, email: me.email }, idToken: me.idToken });
-    const verdict = verdictOf(r, "after the expiry");
-    const stored = await readDoc(target, annPath(w.docId, annId));
-    ctx.step(`${who}'s create after the expiry: ${r.status} → ${verdict}; stored: ${stored ? "yes" : "no"}`);
-    assert.equal(verdict, "ALLOW", `c6 Exp-${who}: expected ALLOW (the rules do not see expiry), the rules refused: ${r.message}`);
-    assert.equal(stored?.authorUid, me.uid, `c6 Exp-${who}: the annotation is stored as ${who}'s`);
+/** Six independent feedback writes, each with its own surviving fixture. */
+async function feedbackWrites(ctx, w) {
+  const me = w.actor;
+  const fs = clientFirestore(target, { idToken: me.idToken, http: ctx.http({ actor: `${me.kind.toLowerCase()}-feedback` }) });
+  const changeId = newAnnId();
+  const removeId = newAnnId();
+  const newId = newAnnId();
+  const at = annPath(w.docId, changeId);
+  for (const annId of [changeId, removeId]) {
+    const r = await createAnnotation(ctx, me.kind.toLowerCase(), { docId: w.docId, annId, who: me, idToken: me.idToken });
+    precondition(verdictOf(r, "feedback fixture") === "ALLOW", "the actor creates feedback before expiry");
+  }
+  const comment = (commentId) => ({ commentId, body: "original reply", authorUid: me.uid, authorEmail: me.email, actor: { uid: me.uid, email: me.email, channel: "web" } });
+  for (const key of ["change", "remove"]) {
+    const r = await fs.create(`${at}/comments/${key}`, comment(key));
+    precondition(verdictOf(r, "comment fixture") === "ALLOW", "the actor comments before expiry");
+  }
+  const paths = [at, annPath(w.docId, removeId), annPath(w.docId, newId), ...["change", "remove", "new"].map((key) => `${at}/comments/${key}`)];
+  return {
+    fs, at, paths,
+    writes: {
+      "annotation create": () => createAnnotation(ctx, me.kind.toLowerCase(), { docId: w.docId, annId: newId, who: me, idToken: me.idToken }),
+      "annotation update": () => fs.update(at, { resolved: true, resolvedBy: { uid: me.uid, email: me.email, channel: "web" } }),
+      "annotation delete": () => fs.remove(annPath(w.docId, removeId)),
+      "comment create": () => fs.create(`${at}/comments/new`, comment("new")),
+      "comment update": () => fs.update(`${at}/comments/change`, { body: "edited reply" }),
+      "comment delete": () => fs.remove(`${at}/comments/remove`),
+    },
+  };
+}
+
+/** Expiry freezes feedback for every role; existing metadata stays readable. */
+for (const who of ["E", "O", "V"]) {
+  cell(`A2.c6.Exp-${who} ${ACTORS[who].label} may not create, change or delete annotations and comments after expiry: DENY`, { timeoutMs: CASE_MS }, async (ctx) => {
+    const w = await expiredWorld(ctx, async (live) => {
+      const control = await feedbackWrites(ctx, live);
+      for (const [op, write] of Object.entries(control.writes)) {
+        precondition(verdictOf(await write(), `before expiry ${op}`) === "ALLOW", `control: ${op} succeeds before expiry`);
+      }
+      const fixture = await feedbackWrites(ctx, live);
+      return { ...fixture, before: await Promise.all(fixture.paths.map((path) => readDoc(target, path))) };
+    }, who);
+    const verdicts = {};
+    for (const [op, write] of Object.entries(w.pre.writes)) verdicts[op] = verdictOf(await write(), `expired ${op}`);
+    const expected = Object.fromEntries(Object.keys(w.pre.writes).map((op) => [op, "DENY"]));
+    assert.deepEqual(verdicts, expected, `c6 Exp-${who}: expiry must freeze every feedback mutation`);
+    assert.deepEqual(await Promise.all(w.pre.paths.map((path) => readDoc(target, path))), w.pre.before, `c6 Exp-${who}: denied feedback writes preserve every existing field and create nothing`);
+    const read = await w.pre.fs.get(`${w.pre.at}/comments/change`);
+    assert.equal(verdictOf(read, "existing comment after expiry"), "ALLOW", `c6 Exp-${who}: existing feedback remains readable under the member policy`);
+    assert.equal(read.doc?.data?.body, "original reply", `c6 Exp-${who}: expiry preserves the original comment`);
+    const clear = await setVisibility(target, { owner: w.owner, doc: w.docId, visibility: "private", expiresAt: null, timeoutMs: REQ_MS });
+    precondition(clear.status === 200, "the owner clears expiry");
+    const restored = {};
+    for (const [op, write] of Object.entries(w.pre.writes)) restored[op] = verdictOf(await write(), `cleared expiry ${op}`);
+    assert.deepEqual(restored, Object.fromEntries(Object.keys(w.pre.writes).map((op) => [op, "ALLOW"])), `c6 Exp-${who}: clearing expiry restores only the actor's existing permissions`);
   });
 }
 
