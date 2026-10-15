@@ -1,0 +1,11 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -3,2 +3,3 @@
+ 
++import { e2eAckTransaction } from "../lib/e2eAckTransaction";
+ import { createHash, randomBytes, timingSafeEqual } from "crypto";
+@@ -131,3 +132,3 @@
+   let cliReceipt: ReturnType<typeof prepareToken> | null = null;
+-  return db.runTransaction(async (tx): Promise<Exchange> => {
++  return e2eAckTransaction(db, ref.id, "oauth-code", async (tx): Promise<Exchange> => {
+     const snap = await tx.get(ref);

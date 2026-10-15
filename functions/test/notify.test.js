@@ -73,7 +73,7 @@ test("expired limits are pruned, of both kinds", async () => {
 for (const kind of ["comment", "suggestion"]) {
   for (const [state, doc, user, grant] of [
     ["rotated link", { visibility: "unlisted", linkToken: "new" }, { email: "reader@example.com" }, { token: "old" }],
-    ["expired public document", { visibility: "public", expiresAt: T0 - 1 }, { email: "reader@example.com" }],
+    ["expired public document", { visibility: "public", expiresAt: Date.now() - 1 }, { email: "reader@example.com" }],
     ["missing document", null, { email: "reader@example.com" }],
     ["missing recipient address", { visibility: "public" }, {}],
   ]) {
@@ -108,7 +108,13 @@ for (const kind of ["comment", "suggestion"]) {
     store.set("docs/doc", { visibility: "public", members: [] });
     assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 64 * MIN), true, "a public reader keeps its notices");
     store.get("docs/doc").expiresAt = T0 + 65 * MIN;
-    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 95 * MIN), false, "expiry ends content notices");
+    // Cooldown identity uses the captured trigger timestamp; authority uses
+    // the fresh retry clock, which this deterministic fixture must advance too.
+    const realNow = Date.now;
+    try {
+      Date.now = () => T0 + 95 * MIN;
+      assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 95 * MIN), false, "expiry ends content notices");
+    } finally { Date.now = realNow; }
     store.delete("docs/doc");
     assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 96 * MIN), false, "a missing document sends nothing");
   });

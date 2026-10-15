@@ -1,0 +1,7 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -81,3 +81,3 @@
+     // retaining the existing numeric cooldown format and current read checks.
+-    if (claims[own] === claimId && cooldowns[own] === now) return true;
++    if (claims[own] === claimId && cooldowns[own] === now) return false;
+     const last = Number(cooldowns[own] ?? 0);

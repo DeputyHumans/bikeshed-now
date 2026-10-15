@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -147,3 +147,3 @@
+       const receipt = cliReceipt;
+-      if (receipt && stored.tokenId === receipt.tokenId && stored.registration === "builtin" && stored.clientId === CLI_CLIENT_ID) {
++      if (receipt && stored.tokenId !== receipt.tokenId && stored.registration === "builtin" && stored.clientId === CLI_CLIENT_ID) {
+         const committed = (await tx.get(db.collection("tokens").doc(receipt.tokenId))).data();
