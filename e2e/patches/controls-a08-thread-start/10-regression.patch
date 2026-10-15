@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -674,3 +674,3 @@
+       acceptedInPass.current = false;
+-      setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
++      void annId; setReview({ currentId: pendingSuggestions[0]?.annId ?? null });
+       setWantsEdit(true);

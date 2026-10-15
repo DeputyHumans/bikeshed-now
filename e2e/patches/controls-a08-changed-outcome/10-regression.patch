@@ -1,6 +1,6 @@
 --- a/app/src/viewer/useSuggestionReview.ts
 +++ b/app/src/viewer/useSuggestionReview.ts
-@@ -190,3 +190,3 @@
+@@ -192,3 +192,3 @@
      // cannot record that edit and may be stale; do not promise a retry will work.
 -    if (error instanceof ConflictError && error.detail.changed === true) return "changed-after-apply";
 +    if (false && error instanceof ConflictError) return "changed-after-apply";

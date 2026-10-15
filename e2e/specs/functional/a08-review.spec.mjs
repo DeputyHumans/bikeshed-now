@@ -45,10 +45,10 @@
  *         the same approver's web session may claim; the author's tokens may
  *         revise and withdraw (200)
  *   A8.9  the version committed after an in-app accept holds the replacement
- *         once and passes REHASH, DECOR and BODYATTR beyond the known S3; the
+ *         once and passes REHASH, DECOR and BODYATTR; the
  *         accept reached a co-editor once through the shared document
  *   A8.9 (BODYATTR) the same version's <html>/<body> attributes equal v1's
- *         exactly — known defect S3 (`spellcheck` on <body>)
+ *         exactly, including authored spellcheck
  *
  * EMAIL. Creating a suggestion and every decision note write a comment, which
  * notifies the deciders and the thread's participants unless they opted out.
@@ -112,7 +112,7 @@ const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
 
 /**
- * The file's budget (lib/budget.mjs): its eleven cases run one after another,
+ * The file's budget (lib/budget.mjs): its cases run one after another,
  * and their own timeouts sum past the 60 minutes the scan caps a computed
  * budget at; a slow case late in the file must end itself, not cancel the
  * cases after it.
@@ -190,8 +190,8 @@ ${Object.entries(text).map(([id, t]) => `<p id="${id}">${t}</p>`).join("\n")}
  * An anchor as `describeAnchorFromRange` makes one: the nearest id element as
  * root, the quote, 32 characters of context either side and the text offsets.
  */
-function anchorFor(n) {
-  const { id, exact } = Q[n];
+function anchorFor(n, exact = Q[n].exact) {
+  const { id } = Q[n];
   const text = TEXT[id];
   const at = text.indexOf(exact);
   precondition(at >= 0 && text.indexOf(exact, at + 1) < 0, `"${exact}" is not unique in #${id}`);
@@ -219,6 +219,7 @@ const APP = Object.freeze({
   saveTitleCan: (n) => `${n === 1 ? "1 suggested edit is" : `${n} suggested edits are`} waiting. Accept or reject ${n === 1 ? "it" : "each one"} before you publish.`,
   stale: "The text has changed since this was suggested, so it can’t be applied.",
   changedAfterApply: "The suggestion changed after its previous text was saved in the draft. Nothing was accepted. Review that change and undo it if needed before deciding the revised suggestion.",
+  unsaved: "The change is made, but the draft didn’t save, so it isn’t accepted yet. Accept it again once it saves.",
   unrecorded: "The change is in the draft, but accepting it wasn’t recorded. Accept it again to record it.",
   endPublish: "That was the last suggestion. Publish the result with Save as new version.",
   endResolve: "That was the last suggestion. Resolve the open comments, then publish the result with Save as new version.",
@@ -333,8 +334,8 @@ async function postSuggestion(http, body) {
  * Its effect is the annotation carrying this replacement, which every caller
  * makes unique with tag().
  */
-async function suggest(ctx, session, docId, n, replacement) {
-  const body = { op: "create", docId, versionId: "v1", anchor: anchorFor(n), replacement };
+async function suggest(ctx, session, docId, n, replacement, exact = Q[n].exact) {
+  const body = { op: "create", docId, versionId: "v1", anchor: anchorFor(n, exact), replacement };
   const r = await untilLanded(ctx, `POST /suggestion create (${session.account.role})`, () => postSuggestion(session.http, body), async () => {
     const rows = await readCollection(target, `docs/${docId}/versions/v1/annotations`);
     const hit = rows.find((row) => row.data?.suggestion?.replacement === replacement);
@@ -460,6 +461,7 @@ function reviewMark(u) {
     const hl = d?.defaultView?.CSS?.highlights;
     const h = hl?.get("bshd-review");
     return {
+      paintRules: [...(d?.adoptedStyleSheets ?? [])].flatMap(sheet => [...sheet.cssRules]).filter(rule => rule.selectorText === "::highlight(bshd-review)").map(rule => ({ background: rule.style.backgroundColor, decoration: rule.style.textDecoration })),
       supported: Boolean(hl),
       size: hl?.size ?? null,
       ranges: h ? Array.from(h).map((r) => r.toString()) : [],
@@ -561,6 +563,11 @@ scenario("A8.1 an editor who may not decide sees the idle notice naming who can,
   assert.equal(recorded?.draft?.baseVersion, "v1", `the draft is recorded on v1: ${JSON.stringify(recorded?.draft ?? null)}`);
   precondition((await draftHtml(by.owner, docId)).includes(token.trim()), "the saved draft holds the editor's words");
 
+  const savedIdle = await idleNotice(e, APP.idleCannot(1), "the saved editor still cannot decide");
+  assert.deepEqual(savedIdle.buttons, [], "saving a draft never gives an editor review controls");
+  assert.equal(await saveButton(e).isDisabled(), true, "the pending suggestion disables publishing even after the draft saves");
+  assert.equal(await saveButton(e).getAttribute("title"), APP.saveTitleCannot(1), "the saved draft still explains who can clear the suggestion");
+
   ctx.step("POST /commit over that draft is refused for the pending suggestion");
   const r = await by.editor.http.postJson("/commit", { docId, baseVersion: "v1" });
   ctx.ev.json("commit-409", { status: r.status, json: r.json });
@@ -601,6 +608,8 @@ scenario("A8.2 the pass marks the quote with the CSS highlight API and zero muta
     return m;
   }, { timeout: CLIENT_MS, message: "the review highlight is set" });
   assert.deepEqual({ supported: mark.supported, ranges: mark.ranges, sameDoc: mark.sameDoc }, { supported: true, ranges: [Q[1].exact], sameDoc: true }, "one highlight range, over the quote, in the watched document");
+  assert.equal(mark.paintRules.length, 1, "exactly one adopted stylesheet paints the review highlight");
+  assert.ok(mark.paintRules[0].background && mark.paintRules[0].decoration.includes("underline"), "the review paint has a background and underline");
   assert.ok(mark.size >= 1, `CSS.highlights.size is ${mark.size}`);
   const quiet = await mutationsSoFar(a);
   ctx.ev.json("mutations-while-marked", quiet);
@@ -650,6 +659,7 @@ scenario("A8.2 the pass marks the quote with the CSS highlight API and zero muta
   const draft = await draftHtml(by.owner, docId);
   assert.deepEqual({ r: occurrences(draft, R), quote: occurrences(draft, Q[1].exact) }, { r: 1, quote: 0 }, "the stored draft holds the replacement once and the quote no more");
   await eventually(async () => (await reviewMark(a)).ranges.length === 0, { timeout: CLIENT_MS, message: "the highlight is gone once the pass ends" });
+  assert.deepEqual((await reviewMark(a)).paintRules, [], "no review paint stylesheet remains after acceptance");
   const afterAccept = await mutationsSoFar(a);
   assert.ok(afterAccept.sameDoc && afterAccept.count > 0, `the observer is live: the accepted edit itself was seen (${afterAccept.count} mutations)`);
   noPageErrors([a]);
@@ -663,34 +673,34 @@ scenario("A8.3 Reject with a reason leaves the note Rejected: <reason>, without 
   const second = await suggest(ctx, by.suggester, docId, 3, `rather important ${tag()}`);
   const reason = `Not the register we use ${tag()}`;
 
-  ctx.step("the approver opens the panel and presses Review on the first suggestion's thread: the editor opens on it");
+  ctx.step("the approver opens the panel and presses Review on the second suggestion's thread: the editor opens on it");
   const a = await browserFor(ctx, by.approver, "approver");
   const posts = capturePosts(a);
   await a.open(docId, { timeout: OPEN_MS });
   await a.openComments({ timeout: PAGE_MS });
-  await a.thread(Q[1].exact, { kind: "suggestion" }).getByRole("button", { name: "Review", exact: true }).click({ timeout: PAGE_MS });
+  await a.thread(Q[3].exact, { kind: "suggestion" }).getByRole("button", { name: "Review", exact: true }).click({ timeout: PAGE_MS });
   await a.page.getByRole("toolbar", { name: "Formatting" }).waitFor({ state: "visible", timeout: OPEN_MS });
-  await passOn(a, { count: "1 of 2", exact: Q[1].exact, timeout: OPEN_MS });
+  await passOn(a, { count: "2 of 2", exact: Q[3].exact, timeout: OPEN_MS });
 
   ctx.step(`Reject… with the reason "${reason}", sent with Enter`);
-  await rejectInPass(a, posts, first, reason);
-  await assertDecided(docId, first, { state: "rejected", by: by.approver });
-
-  ctx.step("the pass moves on to the second; Reject… with no reason");
-  await passOn(a, { count: "1 of 1", exact: Q[3].exact, timeout: PAGE_MS });
-  const since = a.toastMark();
-  await rejectInPass(a, posts, second);
-  await a.waitForToast((t) => t.text === APP.endNothing, { since, timeout: PAGE_MS });
+  await rejectInPass(a, posts, second, reason);
   await assertDecided(docId, second, { state: "rejected", by: by.approver });
+
+  ctx.step("the pass moves on to the first; Reject… with no reason");
+  await passOn(a, { count: "1 of 1", exact: Q[1].exact, timeout: PAGE_MS });
+  const since = a.toastMark();
+  await rejectInPass(a, posts, first);
+  await a.waitForToast((t) => t.text === APP.endNothing, { since, timeout: PAGE_MS });
+  await assertDecided(docId, first, { state: "rejected", by: by.approver });
 
   ctx.step("each thread's note is the server's, in the approver's name, from the app");
   const me = by.approver.account.email.toLowerCase();
-  for (const [annId, body] of [[first, `Rejected: ${reason}`], [second, "Rejected."]]) {
+  for (const [annId, body] of [[second, `Rejected: ${reason}`], [first, "Rejected."]]) {
     const notes = (await commentsOf(docId, annId)).filter((c) => !c.opensSuggestion);
     assert.deepEqual(notes.map((c) => ({ body: c.body, authorEmail: c.authorEmail, generated: c.generated, channel: c.actor?.channel })), [{ body, authorEmail: me, generated: true, channel: "web" }], `the note on ${annId}`);
   }
   const rejects = opRows(posts, "reject");
-  assert.deepEqual(rejects.map((p) => ({ annId: sent(p, "annId"), status: p.status })), [{ annId: first, status: 200 }, { annId: second, status: 200 }], "two rejects were sent, one per suggestion");
+  assert.deepEqual(rejects.map((p) => ({ annId: sent(p, "annId"), status: p.status })), [{ annId: second, status: 200 }, { annId: first, status: 200 }], "two rejects were sent, one per suggestion");
   assert.deepEqual(posts.filter((p) => p.path === "/draft" || (p.path === "/suggestion" && p.op !== "reject")).map(label), [], "rejecting claimed nothing and saved no draft");
   assert.equal((await readDoc(target, `docs/${docId}`))?.draft ?? null, null, "the document has no draft");
 
@@ -700,7 +710,7 @@ scenario("A8.3 Reject with a reason leaves the note Rejected: <reason>, without 
   await s.openComments({ timeout: PAGE_MS });
   const toggle = s.page.locator(".comments-panel button", { hasText: "Show resolved" });
   await toggle.click({ timeout: PAGE_MS });
-  for (const [exact, body] of [[Q[1].exact, `Rejected: ${reason}`], [Q[3].exact, "Rejected."]]) {
+  for (const [exact, body] of [[Q[3].exact, `Rejected: ${reason}`], [Q[1].exact, "Rejected."]]) {
     const t = s.thread(exact, { kind: "suggestion" }).first();
     await t.locator(".comment-body", { hasText: body }).first().waitFor({ state: "visible", timeout: PAGE_MS });
     assert.equal((await t.locator(".suggestion-status").textContent()).trim(), `Rejected by ${me}`, `the status of "${exact}"`);
@@ -724,6 +734,11 @@ scenario("A8.4 a suggestion the draft has already rewritten is stale in the pass
   const a = await browserFor(ctx, by.approver, "approver");
   const posts = capturePosts(a);
   await openEditor(a, docId);
+  await a.openComments({ timeout: PAGE_MS });
+  await eventually(async () => (await a.thread(Q[1].exact, { kind: "suggestion" }).locator(".suggestion").getAttribute("data-stale")) === "true", { timeout: CLIENT_MS, message: "the sidebar marks the rewritten quote stale" });
+  assert.equal(await a.thread(Q[1].exact, { kind: "suggestion" }).getByRole("button", { name: "Review", exact: true }).count(), 0, "the stale thread offers no Review");
+  assert.equal(await a.thread(Q[2].exact, { kind: "suggestion" }).locator(".suggestion").getAttribute("data-stale"), null, "the unchanged thread is not stale");
+  assert.equal(await a.thread(Q[2].exact, { kind: "suggestion" }).getByRole("button", { name: "Review", exact: true }).isVisible(), true, "the unchanged thread offers Review");
   precondition((await paragraphText(a, Q[1].id)) === rewritten[Q[1].id], "the editor holds the draft's rewritten paragraph");
   await idleNotice(a, APP.idleCan(2), "the idle notice counts two");
   await barButton(a, "Review them").click({ timeout: CLIENT_MS });
@@ -771,6 +786,8 @@ scenario("A8.4 a suggestion the draft has already rewritten is stale in the pass
   // oracle below, not this wait, is what it fails.
   await a.waitForToast((t) => t.kind === "error" && t.text === APP.stale, { since, timeout: FN_MS });
   await eventually(async () => (await barState(a))?.stale === APP.stale, { timeout: CLIENT_MS, message: "the bar re-judges the second as stale" });
+  await eventually(async () => (await a.thread(Q[2].exact, { kind: "suggestion" }).locator(".suggestion").getAttribute("data-stale")) === "true", { timeout: CLIENT_MS, message: "the sidebar rejudges the quote when the draft changes" });
+  assert.equal(await a.thread(Q[2].exact, { kind: "suggestion" }).getByRole("button", { name: "Review", exact: true }).count(), 0, "the newly stale thread offers no Review");
   ctx.ev.json("requests", forEvidence(posts));
   assert.deepEqual(opRows(posts, "claim").map((p) => sent(p, "annId")), [], "no claim was sent for a stale suggestion");
   assert.deepEqual(posts.filter((p) => p.path === "/draft").length, 0, "nothing was saved for it either");
@@ -809,11 +826,13 @@ scenario("A8.5 Previous and Next walk the pass and wrap, Done leaves it, a decis
 
   const a = await browserFor(ctx, by.approver, "approver");
   const posts = capturePosts(a);
-  await openEditor(a, docId);
-  await idleNotice(a, APP.idleCan(3), "the idle notice counts three");
+  await a.open(docId, { timeout: OPEN_MS });
+  await a.openComments({ timeout: PAGE_MS });
+  assert.equal(await a.page.getByRole("toolbar", { name: "Formatting" }).count(), 0, "Review all begins in reading mode");
 
   ctx.step("Review them: 1 of 3; Next, Next, Next wraps; Previous, Previous");
-  await barButton(a, "Review them").click({ timeout: CLIENT_MS });
+  await a.page.getByRole("button", { name: "Review all", exact: true }).click({ timeout: CLIENT_MS });
+  await a.page.getByRole("toolbar", { name: "Formatting" }).waitFor({ state: "visible", timeout: OPEN_MS });
   await passOn(a, { count: "1 of 3", exact: Q[1].exact });
   for (const [press, count, n] of [["Next", "2 of 3", 2], ["Next", "3 of 3", 3], ["Next", "1 of 3", 1], ["Previous", "3 of 3", 3], ["Previous", "2 of 3", 2]]) {
     await barButton(a, press).click({ timeout: CLIENT_MS });
@@ -829,6 +848,7 @@ scenario("A8.5 Previous and Next walk the pass and wrap, Done leaves it, a decis
   await barButton(a, "Done").click({ timeout: CLIENT_MS });
   await eventually(async () => (await barState(a))?.notice === APP.idleCan(3), { timeout: CLIENT_MS, message: "the bar is idle after Done" });
   await eventually(async () => (await reviewMark(a)).ranges.length === 0, { timeout: CLIENT_MS, message: "no highlight after Done" });
+  assert.deepEqual((await reviewMark(a)).paintRules, [], "no review paint stylesheet remains after Done");
   assert.equal(await a.page.getByRole("toolbar", { name: "Formatting" }).isVisible(), true, "the editor is still open");
 
   ctx.step("Review them again; Accept the first: the pass moves on to the one after it, now 1 of 2");
@@ -936,7 +956,7 @@ scenario("A8.6 an accept request that never reaches the server leaves the change
 // --- A8.7 ---------------------------------------------------------------------
 
 scenario("A8.7 the author revises while the approver's claim is on its way: the claim is refused 409 changed and nothing is applied; accepting again applies and records the new text; a revise during the live claim is refused 409 claimedBy", { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
-  const { docId, by } = await stage(ctx, { name: "a87", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }] });
+  const { docId, by } = await stage(ctx, { name: "a87", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }, { as: "other", role: "approver" }] });
   const R1 = `sleepy cat ${tag()}`;
   const R2 = `drowsy hound ${tag()}`;
   const R3 = `weary fox ${tag()}`;
@@ -989,6 +1009,12 @@ scenario("A8.7 the author revises while the approver's claim is on its way: the 
   const blocked = await postSuggestion(by.suggester.http, { op: "revise", ...where, replacement: R3 });
   const me = by.approver.account.email.toLowerCase();
   assert.deepEqual({ status: blocked.status, json: blocked.json }, { status: 409, json: { error: SERVER.applying(me), claimedBy: me } }, "the author may not change it while the approver applies it");
+  for (const [actor, op] of [[by.suggester, "withdraw"], [by.other, "reject"]]) {
+    const refusal = await postSuggestion(actor.http, { op, ...where });
+    assert.deepEqual(refusal, { status: 409, json: { error: SERVER.applying(me), claimedBy: me }, cacheControl: refusal.cacheControl }, `a live claim refuses ${op} by another person`);
+  }
+  const held = await annotationOf(docId, annId);
+  assert.deepEqual({ state: held.suggestion.state, claim: held.suggestion.claim.email }, { state: "pending", claim: me }, "refused decisions preserve the active claim and pending suggestion");
   await holdAccept.release();
   const acc = await posts.waitInTurn((r) => isOp(r, "accept"), { since: mark2, what: "the released accept" });
   const t2 = await a.waitForToast((t) => t.kind === "error" || t.text === APP.endPublish, { since: since2, timeout: PAGE_MS });
@@ -1143,16 +1169,140 @@ scenario("A8.8 with a personal token an approver's claim, release, accept and re
   assert.deepEqual(notes.map((c) => ({ body: c.body, channel: c.actor?.channel })), [{ body: "Withdrawn.", channel: "cli" }], "the note says so");
 });
 
+// Distinct replacements exercise deletion joins and the larger replacement that still contains its quote.
+function replacementFixture(kind) {
+  if (kind === "deletion") return { n: 3, exact: "really", replacement: "", expected: "This sentence is quite important to the argument." };
+  if (kind === "whitespace") return { n: 1, exact: Q[1].exact, replacement: " ", expected: "The quick brown fox jumps over the   near the riverbank." };
+  const replacement = `very lazy dog ${tag()}`;
+  return { n: 1, exact: Q[1].exact, replacement, expected: TEXT[Q[1].id].replace(Q[1].exact, replacement) };
+}
+
+async function assertReplacement(ctx, user, owner, docId, fixture) {
+  const { n, expected } = fixture;
+  // Native insertText uses NBSP to retain adjacent visible spaces. Compare the
+  // exact count without treating that harmless browser representation as loss.
+  const visibleSpaces = text => fixture.replacement === " " ? text.replaceAll("\u00a0", " ") : text;
+  assert.equal(visibleSpaces(await paragraphText(user, Q[n].id)), expected, "the frame has exactly the intended replacement, with no duplicate insertion or deletion gap");
+  const parser = await ctx.users.parser();
+  const text = await parser.evaluate(({ html, id }) => new DOMParser().parseFromString(html, "text/html").getElementById(id)?.textContent, { html: await draftHtml(owner, docId), id: Q[n].id });
+  assert.equal(visibleSpaces(text), expected, "the durable draft has exactly the intended replacement");
+}
+
+async function specialAcceptance(ctx, kind, interrupted) {
+  const fixture = replacementFixture(kind);
+  const { n, exact, replacement } = fixture;
+  const { docId, by } = await stage(ctx, { name: `special-${kind}-${interrupted}`, roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }] });
+  const annId = await suggest(ctx, by.suggester, docId, n, replacement, exact);
+  const a = await browserFor(ctx, by.approver, "approver"), posts = capturePosts(a);
+  await openEditor(a, docId);
+  await idleNotice(a, APP.idleCan(1), "the special suggestion is pending");
+  await barButton(a, "Review it").click();
+  await passOn(a, { count: "1 of 1", exact });
+  const fail = interrupted ? await a.failRequests("/suggestion", { status: "abort", count: 1, match: (request) => request.postJson?.op === "accept" }) : null;
+  // The helper match sees request metadata; capture the failure itself so an unmatched route cannot count as a retry.
+  try {
+    let mark = posts.mark(), since = a.toastMark();
+    await barButton(a, "Accept").click();
+    const first = await posts.waitInTurn((row) => isOp(row, "accept"), { since: mark, what: "the special replacement's acceptance" });
+    if (interrupted) {
+      assert.equal(Boolean(first.failure), true, "the first special acceptance was interrupted before recording");
+      assert.equal((await a.waitForToast(t => t.kind === "error", { since, timeout: CLIENT_MS })).text, APP.unrecorded, "an interrupted special replacement explains how to retry");
+      await assertReplacement(ctx, a, by.owner, docId, fixture);
+      assert.equal((await annotationOf(docId, annId)).suggestion.state, "pending", "interruption leaves the special suggestion pending");
+      await fail.restore();
+      mark = posts.mark(); since = a.toastMark();
+      assert.equal(await barButton(a, "Accept").isDisabled(), false, "an already-applied special replacement still offers retry");
+      await barButton(a, "Accept").click();
+      const retried = await posts.waitInTurn(row => isOp(row, "accept"), { since: mark, what: "the special replacement retry" });
+      assert.equal(retried.status, 200, "the special replacement retry is recorded");
+    } else assert.equal(first.status, 200, "the special replacement is accepted");
+    await a.waitForToast(t => t.text === APP.endPublish, { since, timeout: PAGE_MS });
+    await assertReplacement(ctx, a, by.owner, docId, fixture);
+    await assertDecided(docId, annId, { state: "accepted", by: by.approver, replacement });
+    assert.deepEqual((await commentsOf(docId, annId)).filter(c => !c.opensSuggestion).map(c => c.body), ["Accepted."], "special replacements record exactly one decision note");
+  } finally { await fail?.restore(); }
+  noPageErrors([a]);
+}
+
+scenario("A8.2b accepting a deletion removes its doubled space from the frame and saved draft", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "deletion", false));
+scenario("A8.2c accepting a whitespace replacement preserves the intended text in the frame and saved draft", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "whitespace", false));
+scenario("A8.2d accepting a replacement containing its quote applies it exactly once", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "contains-quote", false));
+scenario("A8.6b retrying an interrupted deletion records it without removing any further text", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "deletion", true));
+scenario("A8.6c retrying an interrupted whitespace replacement records it without changing its spaces", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "whitespace", true));
+scenario("A8.6d retrying an interrupted replacement containing its quote never inserts it twice", { tiers: BOTH, timeoutMs: 300_000 }, ctx => specialAcceptance(ctx, "contains-quote", true));
+
+scenario("A8.3b rejecting from the reading panel preserves the supplied reason and web actor without entering the editor", { tiers: BOTH, timeoutMs: 300_000 }, async ctx => {
+  const { docId, by } = await stage(ctx, { name: "panel-reject", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }] });
+  const annId = await suggest(ctx, by.suggester, docId, 1, `sleepy cat ${tag()}`), reason = `Panel reason ${tag()}`;
+  const a = await browserFor(ctx, by.approver, "approver"), posts = capturePosts(a);
+  await a.open(docId, { timeout: OPEN_MS }); await a.openComments({ timeout: PAGE_MS });
+  const thread = a.thread(Q[1].exact, { kind: "suggestion" });
+  assert.equal(await a.page.getByRole("toolbar", { name: "Formatting" }).count(), 0, "panel rejection begins in reading mode");
+  await thread.getByRole("button", { name: "Reject…", exact: true }).click();
+  await thread.getByRole("textbox", { name: "Why reject it? (optional)" }).fill(reason);
+  await thread.getByRole("button", { name: "Reject", exact: true }).click();
+  await posts.waitInTurn(row => isOp(row, "reject"), { what: "reading panel rejection" });
+  await assertDecided(docId, annId, { state: "rejected", by: by.approver });
+  assert.deepEqual((await commentsOf(docId, annId)).filter(c => !c.opensSuggestion).map(c => ({ body: c.body, author: c.authorEmail, channel: c.actor?.channel })), [{ body: `Rejected: ${reason}`, author: by.approver.account.email.toLowerCase(), channel: "web" }], "the reading panel records the supplied reason and web actor");
+  assert.deepEqual(posts.filter(row => row.path === "/draft" || isOp(row, "claim") || isOp(row, "accept")).map(label), [], "panel rejection neither claims nor edits");
+  assert.equal(await a.page.getByRole("toolbar", { name: "Formatting" }).count(), 0, "panel rejection stays in reading mode");
+});
+
+scenario("A8.6e a failed draft save records no acceptance and retrying after recovery applies the change once", { tiers: BOTH, timeoutMs: 300_000 }, async ctx => {
+  const { docId, by } = await stage(ctx, { name: "save-fails", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }] });
+  const fixture = replacementFixture("contains-quote"), annId = await suggest(ctx, by.suggester, docId, 1, fixture.replacement);
+  const a = await browserFor(ctx, by.approver, "approver"), posts = capturePosts(a);
+  await openEditor(a, docId); await idleNotice(a, APP.idleCan(1), "pending before save failure");
+  await barButton(a, "Review it").click(); await passOn(a, { count: "1 of 1", exact: Q[1].exact });
+  const failure = await a.failRequests("/draft", { status: 500 });
+  try {
+    const since = a.toastMark(), mark = posts.mark();
+    await barButton(a, "Accept").click();
+    const failedSaveToast = await a.waitForToast(t => t.text === APP.unsaved || t.text === APP.endPublish, { since, timeout: CLIENT_MS });
+    assert.equal(failedSaveToast.text, APP.unsaved, "failed saving is reported before any acceptance");
+    assert.ok(failure.failed.length > 0, "the draft save was actually failed");
+    assert.deepEqual(posts.filter(r => r.seq >= mark && isOp(r, "accept")), [], "no acceptance is sent after the failed draft save");
+    const pending = await annotationOf(docId, annId);
+    assert.deepEqual({ state: pending.suggestion.state, claim: pending.suggestion.claim?.email }, { state: "pending", claim: by.approver.account.email.toLowerCase() }, "failed save keeps the suggestion pending under this approver's claim");
+    assert.deepEqual((await commentsOf(docId, annId)).filter(c => !c.opensSuggestion), [], "a failed save writes no decision note");
+  } finally { await failure.restore(); }
+  const mark = posts.mark(), since = a.toastMark();
+  await barButton(a, "Accept").click();
+  const accepted = await posts.waitInTurn(r => isOp(r, "accept"), { since: mark, what: "accept after save recovery" });
+  assert.equal(accepted.status, 200, "accept succeeds after the draft saves");
+  await a.waitForToast(t => t.text === APP.endPublish, { since, timeout: PAGE_MS });
+  await assertReplacement(ctx, a, by.owner, docId, fixture);
+  await assertDecided(docId, annId, { state: "accepted", by: by.approver, replacement: fixture.replacement });
+  assert.deepEqual((await commentsOf(docId, annId)).filter(c => !c.opensSuggestion).map(c => c.body), ["Accepted."], "save recovery records exactly once");
+});
+
+scenario("A8.7c a quote changed while claiming releases the successful claim without a draft save or acceptance", { tiers: BOTH, timeoutMs: 300_000 }, async ctx => {
+  const { docId, by } = await stage(ctx, { name: "claim-stale", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }] });
+  const annId = await suggest(ctx, by.suggester, docId, 1, `sleepy cat ${tag()}`);
+  const a = await browserFor(ctx, by.approver, "approver"), posts = capturePosts(a);
+  await openEditor(a, docId); await idleNotice(a, APP.idleCan(1), "pending before the claim");
+  await barButton(a, "Review it").click(); await passOn(a, { count: "1 of 1", exact: Q[1].exact });
+  const hold = holdRequests(a.page, url => url.pathname === "/suggestion", 1, { method: "POST", predicate: req => /"op":"claim"/.test(req.postData() ?? ""), timeoutMs: CLIENT_MS });
+  await hold.installed;
+  const mark = posts.mark(), since = a.toastMark();
+  await barButton(a, "Accept").click(); await hold.held;
+  await (await a.frame()).evaluate(({id, exact}) => {
+    const p = document.getElementById(id), walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.data.includes(exact)) { node.data = node.data.replace(exact, "different animal"); return; }
+    throw new Error("quote missing before held-claim mutation");
+  }, { id: Q[1].id, exact: Q[1].exact });
+  await hold.release();
+  const staleToast = await a.waitForToast(t => t.kind === "error", { since, timeout: CLIENT_MS });
+  assert.equal(staleToast.text, APP.stale, "the stale-after-claim error explains that nothing can be applied");
+  assert.deepEqual(posts.filter(r => r.seq >= mark).map(r => [label(r), r.status]), [["/suggestion:claim", 200], ["/suggestion:release", 200]], "stale-after-claim sends only claim then release, with no save or acceptance");
+  assert.equal((await annotationOf(docId, annId)).suggestion.claim ?? null, null, "nothing applied means no claim remains");
+
+});
+
 // --- A8.9 ---------------------------------------------------------------------
 
 /** What A8.9 leaves for its BODYATTR case: the comparison, or why there is none. */
 const committed = { bodyAttr: null, versionId: null, stopped: "A8.9 did not run" };
-
-/** BODYATTR with one attribute name taken out of both sides. */
-function withoutAttr(fp, name) {
-  const drop = (x) => (x ? Object.fromEntries(Object.entries(x).filter(([k]) => k !== name)) : x);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
 
 async function storedVersion(http, docId, versionId) {
   const r = await http.get(`/download/${encodeURIComponent(docId)}/${encodeURIComponent(versionId)}`, { expect: 200 });
@@ -1228,12 +1378,11 @@ async function acceptAndCommit(ctx) {
   committed.versionId = commit.versionId;
   committed.stopped = null;
   ctx.ev.json("bodyattr", committed.bodyAttr);
-  const beyondS3 = bodyAttrDiff(withoutAttr(fp1, "spellcheck"), withoutAttr(fp2, "spellcheck"));
-  assert.equal(beyondS3.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyondS3)}`);
+  assert.equal(committed.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify(committed.bodyAttr)}`);
   noPageErrors([a, e]);
 }
 
-scenario("A8.9 the version committed after an in-app accept holds the replacement once and passes REHASH, DECOR and BODYATTR beyond the known S3; the accept reached a co-editor once", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, acceptAndCommit);
+scenario("A8.9 the version committed after an in-app accept holds the replacement once and passes REHASH, DECOR and BODYATTR; the accept reached a co-editor once", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, acceptAndCommit);
 
 scenario("A8.9 (BODYATTR) the version committed after the accept has <html> and <body> attributes equal to v1's", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
   // A selected control must create its own accepted, committed version.

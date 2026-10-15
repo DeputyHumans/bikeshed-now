@@ -1,0 +1,8 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -355,4 +355,4 @@
+     const other = claimedByOther(s, caller.uid, nowMs);
+-    if (other) return { status: 409, error: `${other} is applying it right now`, claimedBy: other };
++    if (other && op !== "reject") return { status: 409, error: `${other} is applying it right now`, claimedBy: other };
+
+     switch (op) {

@@ -1,0 +1,13 @@
+{
+  "oracle": "a live claim refuses withdraw",
+  "what": "Regress claim withdraw",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.7 the author revises while the approver's claim is on its way: the claim is refused 409 changed and nothing is applied; accepting again applies and records the new text; a revise during the live claim is refused 409 claimedBy",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a live claim refuses withdraw"
+  }
+}

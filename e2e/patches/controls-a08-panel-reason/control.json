@@ -1,0 +1,13 @@
+{
+  "oracle": "the reading panel records the supplied reason and web actor",
+  "what": "Regress panel reason",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.3b rejecting from the reading panel preserves the supplied reason and web actor without entering the editor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the reading panel records the supplied reason and web actor"
+  }
+}

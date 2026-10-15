@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise specific-thread and panel review entry points, deletion and repeated-quote retries, failed draft saves, claim release and protection, adopted highlight paint, stale panel state and full committed attributes; add independent controls without treating scratch negatives as product control proof.
+
 - Wait for separately written smoke comments, allow slow completed saves without weakening convergence checks, and let the saved-attribute smoke case prepare its own version. Keep the autosave race open by holding a real response without imposing a cold-server speed requirement, and assert both peers retain generated-container hints.
 
 - Reconcile original comments, review, change-feed and OAuth failures from their saved artifacts, preserving uncertain attempts and historical outcomes instead of treating current passing runs as retroactive proof.

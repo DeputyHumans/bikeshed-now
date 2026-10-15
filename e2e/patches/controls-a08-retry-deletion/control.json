@@ -1,0 +1,13 @@
+{
+  "oracle": "an already-applied special replacement still offers retry",
+  "what": "Regress retry deletion",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.6b retrying an interrupted deletion records it without removing any further text",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "an already-applied special replacement still offers retry"
+  }
+}

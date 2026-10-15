@@ -1,0 +1,8 @@
+--- a/app/src/annotation/exact.ts
++++ b/app/src/annotation/exact.ts
+@@ -332,4 +332,4 @@
+   if (found.state === "stale") return "stale";
+-  const range = replacement === "" ? widenDeletion(found.range) : found.range;
++  const range = (void widenDeletion, found.range);
+
+   const textNow = () => rootOf(doc, anchor)?.textContent ?? "";

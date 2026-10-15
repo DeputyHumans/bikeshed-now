@@ -11987,7 +11987,7 @@
           "app/src/pages/DocViewer.tsx"
         ],
         "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T070056Z-p92639-iw3o/results.json",
-        "note": "Explicit changed:true conflict now has actionable saved-edit advice; no canonical closure."
+        "note": "Changed-after-apply advice now passes actual real-expiry case on B13 product96f5e18;19test baseline1fail,30focusedreviewgreen. Current control pairs/full matrix pending, canonical state remains open."
       }
     },
     {
@@ -14182,6 +14182,17 @@
         "e2e/.out/a11-joiner-control/proof.json"
       ],
       "note": "The controlled save delay changes response delivery only, preserving requests. Early scratch timing copies used an after-hook after user cleanup and are invalid setup evidence; repaired finally cleanup produced the intended timeout and restored pass. A19 combined lifecycle retains the explicit local guard with a documented catalogue correction; no production verification claimed."
+    },
+    {
+      "scope": "A08 twelve source coverage obligations; actual browser paths and narrow controls",
+      "checks": [
+        "Current immutable B13 product96f5e18 full A08:20 pass, zero fail/TODO/inconclusive/skip",
+        "Twenty-four scratch observation/setup controls fail intended assertions; original nine expanded cases and nine added cases have separate passing observations",
+        "Nineteen new directional product controls and refreshed controls-review-order apply/typecheck;12 control-selection selftests pass",
+        "Thirty review unit tests pass after the changed-after-apply baseline test fails; actual old-product message fails and fixed-product message passes"
+      ],
+      "evidence": "e2e/.out/a08-controls-proof/{oracle-proof,compile-proof,changed-proof}.json; e2e/.out/2610150009-srus/invocations/20261015T071055Z-p26482-a655/results.json",
+      "note": "All12 source rows implemented-source; historical deep:13/r1:13 classification retained. Exact current patched-stack pairs and repeated full runs/matrix remain required. Initial whitespace-only failures were native NBSP representation; normalization preserves exact space count. No canonical closure."
     }
   ]
 }
