@@ -1160,7 +1160,7 @@ async function storedVersion(http, docId, versionId) {
   return { html, rehash: rehash.contentHash, record };
 }
 
-scenario("A8.9 the version committed after an in-app accept holds the replacement once and passes REHASH, DECOR and BODYATTR beyond the known S3; the accept reached a co-editor once", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+async function acceptAndCommit(ctx) {
   committed.stopped = "A8.9 stopped before it committed a version";
   const { docId, by } = await stage(ctx, { name: "a89", roles: [{ as: "suggester", role: "suggester" }, { as: "approver", role: "approver" }, { as: "editor", role: "editor" }] });
   const R = `sleepy cat ${tag()}`;
@@ -1229,11 +1229,14 @@ scenario("A8.9 the version committed after an in-app accept holds the replacemen
   const beyondS3 = bodyAttrDiff(withoutAttr(fp1, "spellcheck"), withoutAttr(fp2, "spellcheck"));
   assert.equal(beyondS3.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyondS3)}`);
   noPageErrors([a, e]);
-});
+}
 
-scenario("A8.9 (BODYATTR) the version committed after the accept has <html> and <body> attributes equal to v1's", { tiers: BOTH, defect: "S3", timeoutMs: 30_000 }, async (ctx) => {
-  // Nothing to compare when A8.9 stopped first (its own outcome says why):
-  // nothing was measured here, so this is no verdict on S3 either way.
+scenario("A8.9 the version committed after an in-app accept holds the replacement once and passes REHASH, DECOR and BODYATTR beyond the known S3; the accept reached a co-editor once", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, acceptAndCommit);
+
+scenario("A8.9 (BODYATTR) the version committed after the accept has <html> and <body> attributes equal to v1's", { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnCaseTimeout: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+  // A selected control must create its own accepted, committed version.
+  if (committed.stopped === "A8.9 did not run") await acceptAndCommit(ctx);
+  // If the earlier scenario failed, preserve its verdict instead of retrying it.
   if (!committed.bodyAttr) ctx.inconclusive(`${committed.stopped}, so there is no committed version to compare with v1`);
   ctx.step(`BODYATTR v1→${committed.versionId}: ${JSON.stringify(committed.bodyAttr)}`);
   assert.equal(committed.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify({ body: committed.bodyAttr.body, html: committed.bodyAttr.html })}`);

@@ -24,6 +24,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Enforce saved root-attribute preservation after an in-app acceptance, with
+  independent setup when the regression case is selected on its own.
+
 - Initialize operator Realtime Database handles with an explicit emulator URL
   and demo namespace, so publish and access changes install their mirrors.
 

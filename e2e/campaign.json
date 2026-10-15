@@ -13531,6 +13531,22 @@
         "controls-smoke-operator-mirror"
       ],
       "note": "B6 smoke on86f4188 printed both operator mirrors false while reporting PASS. The emulator branch returned undefined databaseURL; Admin DatabaseService.ensureUrl requires an explicit URL before emulator rewriting. The fix pins the local host and demo namespace and ignores ambient deployment URLs. The smoke diagnostic is now an assertion. No campaign item closed."
+    },
+    {
+      "kind": "coverage-promotion-observation",
+      "items": [
+        "S3"
+      ],
+      "scope": "A08 accepted-version root attributes; local E2E pending",
+      "tests": [
+        "Targeted authored-body-attribute tests pass in the isolated clean copy",
+        "Exact serializer-restoration control produces assertion failures"
+      ],
+      "evidence": "e2e/.out/functional-todo-controls-QNahMF/proof.json",
+      "controls": [
+        "controls-a08-bodyattr"
+      ],
+      "note": "A8.9 BODYATTR is a normal assertion and prepares its own accepted and published document when selected alone. An earlier failed prerequisite retains its inconclusive boundary instead of being retried. No campaign item closed."
     }
   ]
 }
