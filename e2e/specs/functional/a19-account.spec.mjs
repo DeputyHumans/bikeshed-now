@@ -34,15 +34,8 @@
  *          production and adding sends email)
  *   A19.5  personal tokens: a name is required; bsk_ shown once, stored only
  *          as a hash the client cannot read; lastUsedAt; revoke → /mcp 401
- *          with error="invalid_token". And S15, CLASS I (documented but
- *          arguably harmful: a question for G1, not a SPEC violation): after
- *          the Auth user is disabled, a session is refused but a personal
- *          token still works. verifyToken (functions/src/lib/tokens.ts:214-257)
- *          never consults the Auth user, as ADR 0014:25-27 says: the identity
- *          gate "is re-checked at each refresh, which a personal token never
- *          gets". SPEC §23's "not disabled" re-check (spec.md:2777-2778) and
- *          ADR 0014's hour (:52-53) are an OAuth grant's. The case asserts the
- *          401 it proposes as the answer
+ *          with error="invalid_token". Disabled and deleted Auth owners lose
+ *          session and personal-token access alike (the S15 regressions)
  *   A19.6  skill zips: application/zip, attachment, exactly the folder <n>/
  *          and <n>/SKILL.md, stored, byte-equal to the served SKILL.md; the
  *          account screen offers each and the download is those bytes
@@ -832,44 +825,11 @@ scenario("A19.5 personal tokens: a name is required; bsk_ is shown once and stor
   noPageErrors([u]);
 });
 
-/**
- * S15 is CLASS I: the product does what ADR 0014 documents, and that is
- * arguably harmful. It is a question for G1, not a SPEC violation.
- *
- * Observed: once the Auth user is disabled, their session cookie is refused
- * at once (verifySessionCookie with checkRevoked, functions/src/lib/auth.ts:97),
- * but a personal token they minted still works. verifyToken
- * (functions/src/lib/tokens.ts:214-257) reads only the token record, never the
- * Auth user, and resolveCaller (functions/src/lib/actor.ts:111-134) accepts it
- * on every endpoint that takes a bearer, /mcp included.
- *
- * Documented: ADR 0014 Decision 3 (docs/architecture/adr/0014-oauth-for-the-
- * agent-surface.md:25-27): "The identity gate is re-checked at each refresh,
- * which a personal token never gets." SPEC §23 spec.md:2777-2778, "The gate is
- * re-checked at every refresh: - not disabled", and ADR 0014:52-53, "A
- * disabled account keeps up to an hour of access, until its access token
- * expires" (also threat-model.md:382-383), are about an OAuth grant: a bsa_
- * token lasts an hour, and a bsk_ token never expires. The nearest SPEC
- * sentence for a personal token, §19 spec.md:1983-1984, "A token carries the
- * same identity, and therefore the same ACL, as the person who minted it", is
- * about the ACL, not about the account's state.
- *
- * Harm: disabling an account is how an operator cuts a person off. It stops
- * their browser at once, but every bsk_ token they minted keeps their whole
- * ACL, with no expiry, until each one is revoked. Revoke is on the person's
- * own account screen, which the disable has just closed, and no operator
- * script revokes one person's tokens.
- *
- * The question for G1: should a personal token be refused once its owner's
- * Auth user is disabled? This case asserts the answer it proposes, a 401, so
- * it is TODO while the documented behaviour stands. Every step before that
- * assertion is a precondition (FAIL) or the stack not answering
- * (INCONCLUSIVE), so only the token's own answer can be booked as S15.
- */
-scenario("A19.5 S15: once the Auth user is disabled, their session is refused, and so is their personal token", {
+/** Personal tokens follow the current Auth identity on every request (SPEC §19). */
+for (const state of ["disabled", "deleted"]) {
+scenario(`A19.5 S15: once the Auth user is ${state}, their session is refused, and so is their personal token`, {
   tiers: LOCAL,
   needs: ["admin-emulator"],
-  defect: "S15",
   timeoutMs: 180_000,
   ...ON_STALL,
 }, async (ctx) => {
@@ -882,31 +842,32 @@ scenario("A19.5 S15: once the Auth user is disabled, their session is refused, a
   precondition(answered(await listTokens(session), "POST /tokens list").status === 200, "the session works");
   precondition((await mcpProbe(ctx, token, "token")).status === 200, "the token works");
 
-  ctx.step("the operator disables the Auth user");
+  ctx.step(`the operator makes the Auth user ${state}`);
   const auth = adminFor(target).auth;
-  await auth.updateUser(acct.uid, { disabled: true });
-  precondition((await auth.getUser(acct.uid)).disabled === true, "the user is disabled");
+  if (state === "disabled") {
+    await auth.updateUser(acct.uid, { disabled: true });
+    precondition((await auth.getUser(acct.uid)).disabled === true, "the user is disabled");
+  } else {
+    await auth.deleteUser(acct.uid);
+    const absent = await auth.getUser(acct.uid).then(() => false, (err) => err.code === "auth/user-not-found");
+    precondition(absent, "the user is deleted");
+  }
 
   ctx.step("control: the session cookie is now refused (POST /tokens list 401)");
   const sessionAfter = await eventually(async () => {
-    const r = answered(await listTokens(session), "the disabled user's POST /tokens list");
+    const r = answered(await listTokens(session), `${state} user's POST /tokens list`);
     return r.status === 401 ? r : false;
-  }, { timeout: 10_000, message: "the disabled user's session is refused" }).catch((err) => {
-    // The stack not answering (a cut-off, the client's deadline) is not the
-    // session staying valid: let inconclusiveOnStackTimeout judge it.
+  }, { timeout: 10_000, message: `${state} user's session is refused` }).catch((err) => {
     if (stackDidNotAnswer(err.cause)) throw err.cause;
     return null;
   });
-  precondition(sessionAfter, "disabling the user cut off their session — the comparison below means something only then");
+  precondition(sessionAfter, `${state}: the session is refused before comparing the token`);
 
-  ctx.step("S15's oracle (class I, a question for G1): is the personal token refused too? The proposed answer is 401");
-  const after = await mcpProbe(ctx, token, "token-after-disable");
-  assert.equal(
-    after.status,
-    401,
-    `S15, CLASS I (as documented, arguably harmful; not a SPEC violation): a disabled user's personal token still initializes MCP (status ${after.status}), as ADR 0014:25-27 documents ("re-checked at each refresh, which a personal token never gets"); the proposed answer is 401`,
-  );
+  ctx.step("the personal token is refused through the same current-identity boundary");
+  const after = await mcpProbe(ctx, token, `token-after-${state}`);
+  assert.equal(after.status, 401, `a ${state} user's personal token is refused`);
 });
+}
 
 // --- A19.6 -------------------------------------------------------------------
 

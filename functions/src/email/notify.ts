@@ -5,6 +5,8 @@ import * as admin from "firebase-admin";
 import * as React from "react";
 import { COMMENT_EMAIL_COOLDOWN_MS, publicOrigin } from "../config";
 import type { Role } from "../lib/access";
+import { canRead, canManageSharing, isExpired, isMember, visibilityOf } from "../lib/acl";
+import { grantTokenOf, linkGrantRef } from "../lib/linkgrant";
 import { documentUrl, sendEmail } from "./send";
 import { Invite, inviteText, type InviteProps } from "./templates/Invite";
 import { Verify, verifyText } from "./templates/Verify";
@@ -53,6 +55,22 @@ export async function claimCommentCooldown(
     if (!snap.exists) return false;
     const data = snap.data() || {};
     if (data.emailNotifications === false) return false;
+
+    // A comment contains document bytes and reviewer identities. Check the
+    // current read boundary with the cooldown, not the trigger's earlier
+    // recipient snapshot: revocation or link rotation must also stop email.
+    const emailLower = typeof data.email === "string" ? data.email.toLowerCase() : "";
+    if (!emailLower) return false;
+    const docRef = db.collection("docs").doc(docId);
+    const docSnap = await tx.get(docRef);
+    if (!docSnap.exists) return false;
+    const doc = docSnap.data() || {};
+    const caller = { uid, emailLower };
+    const grant = visibilityOf(doc) === "unlisted" && !isMember(doc, uid, emailLower)
+      ? await tx.get(linkGrantRef(docRef, uid))
+      : null;
+    if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) })) return false;
+    if (isExpired(doc, now) && !canManageSharing(doc, emailLower)) return false;
 
     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
     const last = Number(cooldowns[own] ?? 0);

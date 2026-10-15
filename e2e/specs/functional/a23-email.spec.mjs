@@ -19,8 +19,7 @@
  *          agent's says "via MCP"
  *   A23.2b a participant whose access was REMOVED is told nothing of later
  *          comments (the notice carries the passage and the comment): the
- *          known defect X-a23-email-1, class I (it matches SPEC §14's
- *          recipient rule and is harmful; the case says why)
+ *          X-a23-email-1 regression
  *   A23.3  a suggestion notice: the owner and every approver, less the author
  *   A23.4  cooldowns: per recipient and document, comments and suggestions
  *          apart; a second of either inside 30 min sends nothing
@@ -70,8 +69,7 @@
  * red), controls-a23-recipients (a participant with no users/{uid} mailed:
  * A23.2 red), controls-a23-plaintext (the body rendered as markup: A23.2 red).
  * A23.7 turns red on a --email-off stack built with controls-email-off.
- * A23.2b's oracle passes on a stack built with a23-fix-removed-participant
- * (the fix direction: mail only current members), so its red is the product.
+ * A23.2b catches a recipient path that omits the current read-access check.
  * A23.6's judgement of an unanswered request was checked by mutating a copy:
  * a refusal recorded before the cut-off FAILS, a cut-off before the send is
  * INCONCLUSIVE; and a notice that never comes on a quiet stack FAILS.
@@ -472,43 +470,11 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
 
 // --- A23.2b ---------------------------------------------------------------------
 
-/**
- * X-a23-email-1 is CLASS I: the product matches the SPEC, and the result is
- * harmful. It is not a P, because no SPEC sentence excludes a participant
- * who was removed:
- *   SPEC §14 spec.md:1372-1373 "recipients = owner + prior thread participants −
- *     the author" names prior participants without exception, and spec.md:1381-1382
- *     has a withdrawal reach "the owner and everybody who has written in the
- *     thread". onCommentCreated does exactly that: functions/src/index.ts:2972-2975
- *     adds every sibling comment's author and never reads doc.members for them.
- *   The only thing the SPEC lets a removed member keep is in §17 (Caching), not §6:
- *     spec.md:1763-1764 "what the window concedes is that someone removed from a
- *     document keeps, for up to a day, the images their own browser already
- *     held" (the same point in §2 GET /thumb, spec.md:265-266). Those are images
- *     the browser already held. New content is not among them.
- * The harm is concrete, and it crosses the read boundary the SPEC draws
- * elsewhere: SPEC §4 spec.md:539 "`members` is the EFFECTIVE read set", and
- * SPEC §17 spec.md:1599-1601, where who can read a private document's bytes is
- * "owner + members". The threat model's asset table states the protection
- * (it is not normative): threat-model.md:9 "Document bytes … owner + `members`"
- * and :11 "Reviewer identities (annotations, comments) … anyone with an account
- * who can read the document". After POST /access removes R, GET /content
- * answers R 404. Yet every later reply's notice mails R up to 300 characters
- * of the anchored passage (index.ts:2979), up to 2000 characters of the new
- * comment (index.ts:2982-2983) and, in its subject, the commenter's address.
- * Making it a P needs §14 to add "− anyone who can no longer read the
- * document", which changes normative behaviour: that is the ask. The
- * oracle is the last assertion alone. Everything before it is setup: a
- * precondition, a wait or an answered() response, so a broken step FAILS
- * or ends INCONCLUSIVE, and none of it can be booked as this defect. With
- * e2e/patches/a23-fix-removed-participant (mail sibling authors only while
- * they are in doc.members), it reports "passed unexpectedly".
- */
+/** Notices carry private content, so a former participant must still be able to read it (SPEC §14, §17). */
 scenario("A23.2b a participant whose access to the document was removed is told nothing of later comments in their thread (a notice carries the passage and the comment)", {
   tiers: LOCAL,
   effects: ["email:POST /access", "email:comment"],
   needs: ["email", "mailpit"],
-  defect: "X-a23-email-1",
   timeoutMs: 600_000,
   inconclusiveOnFunctionKill: true,
 }, async (ctx) => {
@@ -550,7 +516,7 @@ scenario("A23.2b a participant whose access to the document was removed is told 
     leaked.push({ subject: m.Subject, quotesThePassage: text.includes(QUOTE), carriesALaterComment: later.some((b) => text.includes(b)) });
   }
   ctx.ev.json("removed-participant-mail", leaked);
-  assert.deepEqual(leaked, [], "X-a23-email-1, class I (matches the SPEC, harmful): a reader removed from the document, to whom GET /content now answers 404, was mailed the thread's later comments, with the passage and the commenter's address. It matches SPEC §14 spec.md:1372-1373 \"recipients = owner + prior thread participants − the author\", which excludes no one who was removed. It crosses SPEC §4 spec.md:539 \"`members` is the EFFECTIVE read set\" and §17 spec.md:1599-1601 (a private document's bytes: \"owner + members\"). The only thing the SPEC lets a removed member keep is §17 spec.md:1763-1764: the images their browser already held, for up to a day");
+  assert.deepEqual(leaked, [], "a removed reader receives no later comments or quoted document bytes");
 });
 
 // --- A23.3 ----------------------------------------------------------------------

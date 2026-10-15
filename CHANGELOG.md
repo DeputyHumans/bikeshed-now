@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Personal tokens stop working when their owner is disabled, deleted, loses
+  email verification or changes identity. Every use re-checks Auth and the
+  identity gate; an unavailable identity service fails closed.
+- Comment and suggestion notices require current read access when their
+  cooldown is claimed. Prior participation no longer mails new content to a
+  removed reader; expiry and rotated link grants are checked too.
+
 ## 0.16.1 — 2026-10-13
 
 Tests and documentation only, so a patch release. The product is unchanged.

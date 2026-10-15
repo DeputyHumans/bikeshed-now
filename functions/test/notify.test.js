@@ -13,6 +13,9 @@ const people = () =>
   fakeFirestore({
     "users/u1": { uid: "u1", email: "owner@example.com" },
     "users/quiet": { uid: "quiet", email: "quiet@example.com", emailNotifications: false },
+    ...Object.fromEntries(["doc", "a", "b", "old", "new"].map((id) => [
+      `docs/${id}`, { ownerUid: "u1", ownerEmail: "owner@example.com", members: ["owner@example.com"] },
+    ])),
   });
 
 test("a comment email does not hold back the notice of a suggestion on the same document", async () => {
@@ -66,6 +69,50 @@ test("expired limits are pruned, of both kinds", async () => {
   await claimCommentCooldown(db, "u1", "new", "comment", T0 + 31 * MIN);
   assert.deepEqual(Object.keys(store.get("users/u1").emailCooldowns), ["new"]);
 });
+
+for (const kind of ["comment", "suggestion"]) {
+  for (const [state, doc, user, grant] of [
+    ["rotated link", { visibility: "unlisted", linkToken: "new" }, { email: "reader@example.com" }, { token: "old" }],
+    ["expired public document", { visibility: "public", expiresAt: T0 - 1 }, { email: "reader@example.com" }],
+    ["missing document", null, { email: "reader@example.com" }],
+    ["missing recipient address", { visibility: "public" }, {}],
+  ]) {
+    test(`${kind} notices refuse ${state} without claiming the recipient's cooldown`, async () => {
+      const { db, store } = fakeFirestore({
+        "users/reader": user,
+        ...(doc ? { "docs/doc": doc } : {}),
+        ...(grant ? { "docs/doc/linkGrants/reader": grant } : {}),
+      });
+      assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0), false);
+      assert.equal(store.get("users/reader").emailCooldowns, undefined);
+    });
+  }
+
+  test(`${kind} notices recheck access before claiming a cooldown, including link rotation and expiry`, async () => {
+    const { db, store } = fakeFirestore({
+      "users/reader": { email: "reader@example.com" },
+      "docs/doc": { ownerUid: "owner", ownerEmail: "owner@example.com", members: ["reader@example.com"] },
+    });
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0), true);
+    const key = kind === "comment" ? "doc" : "doc:suggestions";
+    store.get("docs/doc").members = [];
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 31 * MIN), false, "removal ends notices");
+    assert.equal(store.get("users/reader").emailCooldowns[key], T0, "a refused notice consumes no cooldown");
+
+    store.set("docs/doc", { visibility: "unlisted", linkToken: "current-link", members: [] });
+    store.set("docs/doc/linkGrants/reader", { token: "old-link" });
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 32 * MIN), false, "a rotated grant cannot read");
+    store.set("docs/doc/linkGrants/reader", { token: "current-link" });
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 33 * MIN), true, "a valid link grant keeps its notices");
+
+    store.set("docs/doc", { visibility: "public", members: [] });
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 64 * MIN), true, "a public reader keeps its notices");
+    store.get("docs/doc").expiresAt = T0 + 65 * MIN;
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 95 * MIN), false, "expiry ends content notices");
+    store.delete("docs/doc");
+    assert.equal(await claimCommentCooldown(db, "reader", "doc", kind, T0 + 96 * MIN), false, "a missing document sends nothing");
+  });
+}
 
 // --- The trigger, end to end ------------------------------------------------
 
@@ -128,4 +175,19 @@ test("the trigger tells the owner about a new suggestion a minute after telling 
   // the comment limit was set a minute ago and is untouched by the suggestion.
   const reply = { authorEmail: "sug@example.com", actor: opener.actor, body: "Also this." };
   assert.deepEqual(await notifyFor(db, reply), []);
+});
+
+test("the trigger excludes a removed participant while still notifying a current participant", async () => {
+  const { db, store } = fakeFirestore({
+    "users/owner": { email: "owner@example.com", emailNotifications: false },
+    "users/removed": { email: "removed@example.com" },
+    "users/reader": { email: "reader@example.com" },
+    "docs/doc": { ownerEmail: "owner@example.com", members: ["owner@example.com", "reader@example.com"] },
+    "docs/doc/versions/v1/annotations/s1": { anchor: { exact: "Private passage" } },
+    "docs/doc/versions/v1/annotations/s1/comments/old": { authorEmail: "removed@example.com" },
+    "docs/doc/versions/v1/annotations/s1/comments/reader": { authorEmail: "reader@example.com" },
+  });
+  const sent = await notifyFor(db, { authorEmail: "writer@example.com", body: "Private reply" });
+  assert.deepEqual(sent.map((s) => s.to), ["reader@example.com"]);
+  assert.equal(store.get("users/removed").emailCooldowns, undefined);
 });

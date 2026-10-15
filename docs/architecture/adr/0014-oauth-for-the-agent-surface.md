@@ -24,7 +24,8 @@ The tools people now want to publish from cannot be pointed at a pasted token:
    app do" is still one query.
 3. **Short-lived and re-checked.** An access token lasts an hour and works on
    `/mcp` only. The refresh token rotates on every use. The identity gate is
-   re-checked at each refresh, which a personal token never gets.
+   re-checked at each refresh. Personal tokens have no refresh step and
+   re-check their owner's current Auth identity on each use (SPEC §19).
 4. **No scopes.** A grant is its owner, with exactly their access, as a token
    is. Scopes would be the second permission model §19 rules out.
 5. **Any app may ask, and the person decides.** Clients identify themselves by

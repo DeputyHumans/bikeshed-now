@@ -1375,11 +1375,16 @@ anyway, and read only by whoever asks.
 
 The comment email is bounded **by construction rather than by infrastructure**:
 one `onDocumentCreated` trigger; recipients = owner + prior thread participants −
-the author; a per-(recipient, doc) cooldown on the user record. No queue, no
+the author, restricted to people who still have read access when the notice is
+claimed. The transaction that claims the cooldown re-reads the document and
+the recipient's current link grant, including expiry and key rotation. A removed
+reader is not entitled to later passages or comments by having participated
+before. A per-(recipient, doc) cooldown lives on the user record. No queue, no
 scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`.
 
 A suggested edit is a branch of the comment email, not a fourth message. Its
 opening comment is addressed to the owner and every approver − the author,
+subject to the same current-read-access check,
 because only they can decide it; the notice shows the quote and the proposed
 replacement, and the author's note if there was one. A decision is a short
 comment in the thread ("Accepted." / "Rejected: …"), which reaches the
@@ -1989,6 +1994,13 @@ A token carries the **same identity, and therefore the same ACL, as the person
 who minted it.** No service accounts, no impersonation, no second permission
 model.
 
+Each use re-checks that the Auth user still exists, is enabled, has a verified
+email matching the token's identity, and still passes the identity gate. An
+Auth lookup failure refuses the credential. Disabling or deleting the user,
+changing their email or withdrawing verification therefore also cuts off
+personal tokens; a browser session is not the only credential revoked by
+those account changes.
+
 *Why not OAuth 2.1, which the MCP spec prefers:* it needs an authorization
 server, a consent screen and token/refresh endpoints — a real subsystem, for a
 self-hosted tool whose users are largely the people who own the deployment. A
@@ -1997,7 +2009,7 @@ by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
 *That upgrade has been taken* (ADR 0014): apps now connect by signing in, as
-§23 specifies. Personal tokens are unchanged and remain the credential for CI,
+§23 specifies. Personal tokens remain the credential for CI,
 scripts and anything that cannot open a browser.
 
 ### MCP — twenty-three tools

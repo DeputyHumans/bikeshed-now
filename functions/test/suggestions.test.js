@@ -53,9 +53,12 @@ function world(overrides = {}) {
   const sessions = Object.fromEntries(
     PEOPLE.map((p) => [`s-${p.uid}`, { uid: p.uid, email: p.email, email_verified: true }]),
   );
+  const users = Object.fromEntries(
+    PEOPLE.map((p) => [p.uid, { ...p, emailVerified: true, disabled: false }]),
+  );
   const as = (p) => ({ cookie: `__session=s-${p.uid}` });
   const call = (headers, body) =>
-    withFakeAdmin({ db, sessions }, () =>
+    withFakeAdmin({ db, sessions, users }, () =>
       invoke(manageSuggestion, { headers, body: { docId: "d1", versionId: "v1", ...body } }),
     );
   const ann = (annId) => store.get(`docs/d1/versions/v1/annotations/${annId}`);
