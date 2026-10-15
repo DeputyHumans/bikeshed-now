@@ -141,7 +141,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const FIXTURE = "crdt-paragraphs.html";
 const BOTH = ["local", "prod"];
 const LOCAL = ["local"];
-/** Tokens each editor types per session: 5 × 16 keystrokes, so even one typist passes the 64-entry compaction. */
+/** Tokens per typing wave; held append acknowledgements can merge many keystrokes into one stored update. */
 const TOKENS = 5;
 /** Milliseconds between keystrokes: a fast typist. */
 const KEY_DELAY_MS = 25;
@@ -324,6 +324,7 @@ function watchLog(t, docId, { everyMs = 400 } = {}) {
     }
   })();
   return {
+    snapshot: () => ({ samples, max, seen: everSeen.size, gone: gone.size, errors, retries }),
     async stop() {
       stopped = true;
       await loop;
@@ -1143,6 +1144,8 @@ scenario("C2 window: N editors type tokens at the end of one paragraph inside th
       });
       obs.stage = "settling";
       await settle(ctx, users, docId, n);
+      assertInvariant(checkI2({ peers: await segmentsOf(users, [...new Set(plan.map((p) => p.id ?? "e2e-1"))]), typed: log.typed }));
+      await finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch });
       requireCompaction(ctx, obs, await logWatch.stop());
       logWatch = null;
       obs.stage = "reading";
@@ -1157,6 +1160,25 @@ scenario("C2 window: N editors type tokens at the end of one paragraph inside th
     }
   }));
 });
+
+/**
+ * The transport merges queued updates while the proxy withholds append acks.
+ * A whole typing window can therefore make only a few stored entries. Keep
+ * the original race and its 15 s convergence judgement, then type ordinary
+ * acknowledged waves until those raced edits have crossed a real compaction.
+ * All additional tokens remain part of I2; failure to compact is never a pass.
+ */
+async function finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch }) {
+  const before = logWatch.snapshot();
+  let rounds = 0;
+  while (logWatch.snapshot().gone === 0 && rounds < 8) {
+    rounds += 1;
+    await Promise.all(plan.map(({ u, id = "e2e-1" }) => typeTokens(u, id, Array.from({ length: TOKENS }, () => log.next(u.name, id)))));
+    await settle(ctx, users, docId, ctx.n, `post-window compaction wave ${rounds} settled`);
+  }
+  ctx.ev.json("window-compaction", { before, after: logWatch.snapshot(), rounds });
+  ctx.step(`after the measured race, ${rounds} acknowledged typing wave(s) exercised compaction without the proxy delay`);
+}
 
 // --- C3 ------------------------------------------------------------------------------------
 
@@ -1283,6 +1305,8 @@ scenario("C3 window: one editor presses Enter at the end of the document again a
       });
       obs.stage = "settling";
       await settle(ctx, users, docId, n);
+      assertInvariant(checkI2({ peers: await segmentsOf(users, [...new Set(plan.map((p) => p.id ?? "e2e-1"))]), typed: log.typed }));
+      await finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch });
       requireCompaction(ctx, obs, await logWatch.stop());
       logWatch = null;
       obs.stage = "reading";

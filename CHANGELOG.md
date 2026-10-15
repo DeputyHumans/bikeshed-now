@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the delayed live-editing race and its convergence/token checks, then continue acknowledged typing until a real log compaction occurs; batched transport updates no longer leave those cases permanently inconclusive.
+
 - Retain bounded fresh-document attempts for natural review, publish and feedback-trigger races; assert every attempt, and distinguish refused local review commands from legitimate remote-merge autosaves.
 
 - Validate the live epoch as reserved access-mirror metadata in sharing concurrency snapshots, while continuing to reject malformed grants and retain unknown keys for membership comparison.
