@@ -35,7 +35,9 @@ test("A19 live controls put identical capability setup on green and red, adding 
 });
 test("negative controls reject both a missing setup allowance and an unrestricted patch allowance", async () => {
   const url = new URL("../lib/options.mjs", import.meta.url);
-  const source = readFileSync(url, "utf8").replace('"./gates.mjs"', JSON.stringify(new URL("./gates.mjs", url).href));
+  const source = readFileSync(url, "utf8")
+    .replace('"./gates.mjs"', JSON.stringify(new URL("./gates.mjs", url).href))
+    .replace('"./rtdb-runtime.mjs"', JSON.stringify(new URL("./rtdb-runtime.mjs", url).href));
   const before = "CONTROL_CAPABILITY_PATCHES.includes(args[i + 1])";
   assert.ok(source.includes(before));
   for (const replacement of ["false", "true"]) {

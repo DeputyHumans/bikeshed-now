@@ -1,13 +1,9 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -20,6 +20,7 @@
- import { syncPublicProjection } from "./publicdoc";
- import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
+@@ -22,2 +22,3 @@
  import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
 +import { e2eC12Gate } from "./e2eC12Gate";
 
- /**
-  * The browser's editor and the agent surface both change a document through
 @@ -306,6 +307,7 @@
        if (!update) break;
        if (!snap.updateTime) throw new Error("Draft snapshot has no update time.");

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the CAS pause patch composable with the existing feedback and minting pauses without changing its resulting code. Load the runtime dependency in isolated capability-parser controls so both admission faults reach their intended assertions.
+
 - Exercise both conditional-draft candidate disposal paths with captured CAS pauses, exact byte preservation and separate product controls. Bind every discovered product defect to its current affected cases while preserving original claims, native ACK obligations and unresolved evidence; extend the existing cleanup finding with the observed CAS draft failures.
 
 - Run local E2E stacks with an explicitly labeled, exact-byte derived Database emulator that synchronizes only diagnostic appends. Keep the installed emulator untouched, preserve ordinary JVM limits and workflow concurrency, and bind each invocation to retained archive attestations plus before/after JVM and rules receipts. Refuse unreviewed toolchains and derived bytes; the standalone rules command remains stock.
