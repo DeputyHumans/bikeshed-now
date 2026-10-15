@@ -149,12 +149,9 @@ describe("decoration never reaches the shared document", () => {
     expect(roundTrip(html)).toBe(html);
   });
 
-  it("removes contenteditable but keeps the node, exactly as the serializer does", () => {
-    // The attribute is ours; the element is the author's. Dropping the element
-    // would delete their content because we borrowed it as an editing host.
-    expect(roundTrip(`<div contenteditable="true"><p>x</p></div>`)).toBe(
-      `<div><p>x</p></div>`,
-    );
+  it("preserves authored descendant editing attributes through the wire", () => {
+    const html = `<div contenteditable="false" spellcheck="false"><p contenteditable="plaintext-only">x</p></div>`;
+    expect(roundTrip(html)).toBe(html);
   });
 
   it("removes the generated-container marker, which is an attribute not a node", () => {

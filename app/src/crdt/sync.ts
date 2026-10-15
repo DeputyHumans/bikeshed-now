@@ -40,7 +40,9 @@ function isDecoration(el: Element): boolean {
   return isOwnMarker(el) || isHighlightWrapper(el);
 }
 
-const INJECTED_ATTRS = new Set(["contenteditable", EMPTY_ATTR]);
+// Only the host's attributes are editor overrides, and the host is outside
+// the fragment. A descendant's contenteditable belongs to the author.
+const INJECTED_ATTRS = new Set([EMPTY_ATTR]);
 
 export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
   const doc = host.ownerDocument;

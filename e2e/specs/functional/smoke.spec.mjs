@@ -12,8 +12,8 @@
  *   2  owner and editor edit live, each typing a token into a different
  *      paragraph; both frames converge; the owner saves a new version, whose
  *      stored bytes pass DECOR and REHASH
- *   2b BODYATTR on that version: known defect S3 (`spellcheck` on <body>).
- *      Only the BODYATTR assertion failing is "S3 as expected"; if scenario
+ *   2b BODYATTR on that version: neither editor override reaches the bytes.
+ *      The attributes must exactly match the authored version; if scenario
  *      2 saved no version, 2b FAILS on its precondition instead
  *   3  MCP with a minted token: 23 tools, get_document returns the bytes
  *   4  `bikeshed list --json` lists the owner's document
@@ -124,12 +124,6 @@ scenario("smoke: owner and viewer sign in through the UI, the viewer comments on
 /** What scenario 2 leaves for 2b: the BODYATTR comparison of v1 and the saved version. */
 const live = { bodyAttr: null, versionId: null };
 
-/** BODYATTR with one attribute name taken out of both sides. */
-function withoutAttr(fp, name) {
-  const drop = (a) => (a ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== name)) : a);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
-
 scenario("smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)", { timeoutMs: 240_000 }, async (ctx) => {
   ctx.step("cast an owner and an editor; the owner publishes the paragraphs fixture and shares it for editing");
   const { owner, accounts } = await castWithOwner(["editor"]);
@@ -214,12 +208,11 @@ scenario("smoke: owner and editor live-edit different paragraphs, converge, and 
   live.versionId = commit.versionId;
   ctx.ev.json("bodyattr", live.bodyAttr);
   ctx.t.diagnostic(`BODYATTR v1→v2: ${JSON.stringify({ body: live.bodyAttr.body, html: live.bodyAttr.html })}`);
-  const beyondS3 = bodyAttrDiff(withoutAttr(fp1, "spellcheck"), withoutAttr(fp2, "spellcheck"));
-  assert.equal(beyondS3.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyondS3)}`);
+  assert.equal(live.bodyAttr.equal, true, `BODYATTR: saved root attributes differ from the author: ${JSON.stringify(live.bodyAttr)}`);
   noPageErrors([o, e]);
 });
 
-scenario("smoke: the saved version's <html> and <body> attributes equal v1's (BODYATTR)", { defect: "S3", timeoutMs: 30_000 }, async (ctx) => {
+scenario("smoke: the saved version's <html> and <body> attributes equal v1's (BODYATTR)", { timeoutMs: 30_000 }, async (ctx) => {
   precondition(live.bodyAttr, "the live-edit scenario did not save a version, so there is nothing to compare");
   ctx.step(`BODYATTR v1→${live.versionId}: ${JSON.stringify(live.bodyAttr)}`);
   assert.equal(live.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify({ body: live.bodyAttr.body, html: live.bodyAttr.html })}`);

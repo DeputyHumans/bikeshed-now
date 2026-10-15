@@ -3,6 +3,9 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
+import { bindSync } from "../crdt/sync";
+import { EMPTY_ATTR } from "../brand/dom";
 import type { FrameMode } from "./frameMode";
 import { useInlineEditor } from "./useInlineEditor";
 
@@ -17,9 +20,9 @@ vi.mock("../edit", async () => {
 
 const EDITING: FrameMode = { kind: "editing", baseVersion: "v1" };
 
-function setup() {
+function setup(html = "<!DOCTYPE html><html><body><p>The text.</p></body></html>") {
   const doc = new DOMParser().parseFromString(
-    "<!DOCTYPE html><html><body><p>The text.</p></body></html>",
+    html,
     "text/html",
   );
   const view = renderHook(() =>
@@ -33,7 +36,7 @@ function setup() {
     }),
   );
   const type = () => doc.dispatchEvent(new Event("input", { bubbles: true }));
-  return { view, type };
+  return { view, type, doc };
 }
 
 describe("saving on the way out of the editor", () => {
@@ -115,5 +118,66 @@ describe("saving on the way out of the editor", () => {
     const { view } = setup();
     await act(() => view.result.current.flushNow());
     expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("authored attributes and editor decoration", () => {
+  beforeEach(() => {
+    saveDraft.mockReset();
+    saveDraft.mockResolvedValue({});
+  });
+
+  it.each([
+    [null, null],
+    ["false", "false"],
+    ["plaintext-only", ""],
+    ["true", "true"],
+  ])("restores authored body attributes %s / %s on save and exit", async (contenteditable, spellcheck) => {
+    const attrs = Object.entries({ contenteditable, spellcheck })
+      .filter(([, value]) => value !== null)
+      .map(([name, value]) => ` ${name}="${value}"`).join("");
+    const { view, doc } = setup(`<!DOCTYPE html><html spellcheck="false"><body${attrs}><p contenteditable="false" spellcheck="false">The text.</p></body></html>`);
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    expect(doc.body.getAttribute("spellcheck")).toBe("true");
+    doc.querySelector("p")!.firstChild!.nodeValue = "The edited text.";
+    await act(() => view.result.current.flushNow());
+    const saved = new DOMParser().parseFromString(saveDraft.mock.calls[0][2], "text/html");
+    expect(saved.body.getAttribute("contenteditable")).toBe(contenteditable);
+    expect(saved.body.getAttribute("spellcheck")).toBe(spellcheck);
+    expect(saved.documentElement.getAttribute("spellcheck")).toBe("false");
+    expect(saved.querySelector("p")!.outerHTML).toBe('<p contenteditable="false" spellcheck="false">The edited text.</p>');
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    expect(doc.body.getAttribute("spellcheck")).toBe("true");
+    view.unmount();
+    expect(doc.body.getAttribute("contenteditable")).toBe(contenteditable);
+    expect(doc.body.getAttribute("spellcheck")).toBe(spellcheck);
+  });
+
+  it("re-marks a shared body adopted after edit entry without putting markers on the wire or in a save", async () => {
+    const html = '<div id="chart"></div><script>document.getElementById("chart").textContent = "drawn";</script>';
+    const shared = new Y.Doc();
+    const source = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+    const seed = bindSync(shared.getXmlFragment("body"), source.body);
+    const { view, doc } = setup(`<body>${html}</body>`);
+    expect(doc.querySelector("#chart")?.getAttribute(EMPTY_ATTR)).toBe("#chart");
+    const adopted = bindSync(shared.getXmlFragment("body"), doc.body);
+    // The remote wire is clean; a later join replaces the locally marked nodes.
+    expect(doc.querySelector("#chart")?.hasAttribute(EMPTY_ATTR)).toBe(false);
+    await act(async () => { await Promise.resolve(); });
+    expect(doc.querySelector("#chart")?.getAttribute(EMPTY_ATTR)).toBe("#chart");
+    expect(adopted.html()).not.toContain(EMPTY_ATTR);
+    await act(() => view.result.current.flushNow());
+    expect(saveDraft.mock.calls[0][2]).not.toContain(EMPTY_ATTR);
+    // Editing a generated container removes the now-misleading empty hint too.
+    doc.querySelector("#chart")!.textContent = "Authored text";
+    await act(async () => { await Promise.resolve(); });
+    expect(doc.querySelector("#chart")?.hasAttribute(EMPTY_ATTR)).toBe(false);
+    expect(adopted.html()).toContain("Authored text");
+    expect(adopted.html()).not.toContain(EMPTY_ATTR);
+    adopted.destroy();
+    seed.destroy();
+    shared.destroy();
+    view.unmount();
   });
 });

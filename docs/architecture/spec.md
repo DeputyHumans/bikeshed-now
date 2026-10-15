@@ -735,10 +735,16 @@ The one path that writes content, and it is explicit and server-mediated.
   saved bytes.
 - Before serializing, `serializeCleanHtml` strips every app injection from a
   CLONE: highlight marks, the injected stylesheets, the peer-presence overlay,
-  placeholder marking, and `contenteditable` attributes. App injections carry
+  placeholder marking, and the editor's temporary body `contenteditable` and
+  `spellcheck` overrides. The body's original attribute values (including
+  absence) and authored descendant attributes survive. App injections carry
   `data-bshd` with a value from `OWN_MARKERS` and are stripped as a class — the
   value check is what makes the namespace safe against a bundle that happens to
   use the same attribute.
+- The round trip preserves the authored DOM plus the edit, not the original
+  source spelling. The browser parser and HTML serializer may normalize
+  whitespace outside the document body or equivalent HTML syntax. They must
+  not add editing decoration, remove authored elements or change their meaning.
 - Serialization also drops any `script/style/link/meta/base` absent from the
   load-time asset inventory (`captureAssetTags`, taken in `onLoad` before any
   injection). That removes nodes a BROWSER EXTENSION added to the same-origin

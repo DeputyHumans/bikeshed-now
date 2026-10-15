@@ -41,7 +41,7 @@
  *         base is superseded by a commit of the draft made while the editor
  *         edits, since an update is refused under somebody's editor (0.16.0)
  *   A9.11 docs/development/verification.md §7 on the scripted sample
- *   A9.11 (S3) BODYATTR on that commit
+ *   A9.11 BODYATTR on that commit
  *   A9.12 the scripted sample's script runs when trusted and reading, and not
  *         in the edit frame
  *   A9.13 a <style> put into <head> after load (an extension's) is not in
@@ -116,7 +116,7 @@
  *     case's own requests, or from its own requests answered 30 s or more
  *     late. An answer, however slow, is still judged, and an assertion
  *     still FAILS.
- * The two cases that judge what another case measured (S8, S3) end
+ * The two cases that judge what another case measured (S8, BODYATTR) end
  * INCONCLUSIVE when that case never got to measure it: nothing was measured.
  */
 
@@ -171,7 +171,7 @@ const COMMIT_MS = 150_000;
 const ENV_BUDGET_MS = 300_000;
 /** A case's bound: a dozen sequential writes at the latencies above take minutes. */
 const CASE_MS = 600_000;
-/** The S8 and S3 cases only read what another case measured. */
+/** The S8 and BODYATTR cases only read what another case measured. */
 const JUDGE_MS = 30_000;
 /** The file's budget (lib/budget.mjs, which takes a product only): its 17 cases at CASE_MS one after another, and the two judges' 30 s each, rounded up to one more. */
 export const E2E_FILE_TIMEOUT_MS = 18 * CASE_MS;
@@ -387,17 +387,6 @@ async function storedVersion(http, docId, versionId) {
 function plusToken(token) {
   const norm = (x) => String(x).replace(/\s+/g, " ").trim();
   return (v1Text, vNText) => vNText.split(token).length === 2 && norm(vNText.replace(token, "")) === norm(v1Text);
-}
-
-/** <html> and <body> attributes with one name taken out of both sides. */
-function withoutAttr(fp, name) {
-  const drop = (a) => (a ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== name)) : a);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
-
-/** BODYATTR beyond the known S3 attribute (spellcheck on <body>), which has its own case. */
-function bodyAttrBeyondS3(v1, vN) {
-  return bodyAttrDiff(withoutAttr(v1, "spellcheck"), withoutAttr(vN, "spellcheck"));
 }
 
 /** The comment tools, as the owner's agent: an mcp-channel token minted with the owner's session. */
@@ -1208,12 +1197,11 @@ scenario("A9.11 verification §7: resolve the thread, edit a heading, commit; v1
   assert.deepEqual(diff.lost, [], "DECOR: lost author markers");
   assert.deepEqual(diff.structure, [], "DECOR: structure changed");
   assert.equal(diff.text.allowed, true, "the text change is exactly the heading edit");
-  const beyond = bodyAttrBeyondS3(fp1, fp2);
-  assert.equal(beyond.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyond)}`);
+  assert.equal(walkthrough.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify(walkthrough.bodyAttr)}`);
   noPageErrors([o]);
 });
 
-scenario("A9.11 BODYATTR: the committed v2's <html> and <body> attributes equal v1's", { tiers: ["local", "prod"], defect: "S3", timeoutMs: JUDGE_MS }, async (ctx) => {
+scenario("A9.11 BODYATTR: the committed v2's <html> and <body> attributes equal v1's", { tiers: ["local", "prod"], timeoutMs: JUDGE_MS }, async (ctx) => {
   if (!walkthrough.bodyAttr) ctx.inconclusive("the A9.11 walkthrough case did not get to compare a committed v2 (see its outcome), so nothing was measured");
   ctx.step(`BODYATTR v1→v2: ${JSON.stringify(walkthrough.bodyAttr)}`);
   assert.equal(walkthrough.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify({ body: walkthrough.bodyAttr.body, html: walkthrough.bodyAttr.html })}`);
@@ -1407,7 +1395,7 @@ scenario("A9.15 a deck that sizes its slides by script is fitted in edit mode by
   const fpD = await fingerprint(parser, draft);
   const diff = diffFingerprint(fp1, fpD, { contains: [t] }, { ignoreBodyAttr: true });
   assert.deepEqual({ decoration: diff.decoration, structure: diff.structure, textAllowed: diff.text.allowed }, { decoration: [], structure: [], textAllowed: true }, "the draft is v1 plus the token");
-  assert.equal(bodyAttrBeyondS3(fp1, fpD).equal, true, `<html>/<body> attributes beyond S3: ${JSON.stringify(bodyAttrBeyondS3(fp1, fpD))}`);
+  assert.equal(bodyAttrDiff(fp1, fpD).equal, true, `<html>/<body> authored attributes: ${JSON.stringify(bodyAttrDiff(fp1, fpD))}`);
   const styles = await parseAndRun(ctx.users, draft, (doc) => Array.from(doc.querySelectorAll("[style]")).map((el) => el.localName));
   assert.deepEqual(styles, [], "no element in the draft carries a style attribute");
   noPageErrors([o]);

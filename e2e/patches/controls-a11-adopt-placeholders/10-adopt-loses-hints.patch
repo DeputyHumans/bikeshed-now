@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -148,3 +148,3 @@
+     const MO = doc.defaultView?.MutationObserver ?? MutationObserver;
+-    const placeholders = new MO(() => markGeneratedContainers(doc));
++    const placeholders = new MO(() => {});
+     placeholders.observe(body, { subtree: true, childList: true, characterData: true });

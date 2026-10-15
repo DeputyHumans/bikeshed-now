@@ -7,6 +7,8 @@ import {
   clearHighlights,
   removeHighlightStyles,
   serializeCleanHtml,
+  restoreEditingBodyAttributes,
+  type EditingBodyAttributes,
 } from "../annotation/highlighter";
 import {
   clearGeneratedContainers,
@@ -64,6 +66,7 @@ export function useInlineEditor(options: {
    */
   const unsaved = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyAttributes = useRef<EditingBodyAttributes | undefined>(undefined);
 
   /**
    * `onStale` is held in a ref so it cannot destabilise `flush`.
@@ -93,6 +96,7 @@ export function useInlineEditor(options: {
     try {
       const html = serializeCleanHtml(doc, {
         authoredAssets: authoredAssets.current ?? undefined,
+        authoredBodyAttributes: bodyAttributes.current,
       });
       await saveDraft(docId, mode.baseVersion, html);
       lastSaveFailed.current = false;
@@ -128,12 +132,22 @@ export function useInlineEditor(options: {
 
     const body = doc.body;
     if (!body) return;
-    // setAttribute rather than the property: the ATTRIBUTE is what the
-    // serializer strips and what a test can observe, and jsdom does not reflect
-    // the property onto it.
+    // Retain both absence and authored values outside the DOM: the editor's
+    // temporary overrides must not become content or erase author intent.
+    const authored: EditingBodyAttributes = {
+      contenteditable: body.getAttribute("contenteditable"),
+      spellcheck: body.getAttribute("spellcheck"),
+    };
+    bodyAttributes.current = authored;
     body.setAttribute("contenteditable", "true");
     body.setAttribute("spellcheck", "true");
     markGeneratedContainers(doc);
+    // A shared-document join can adopt the body after this effect ran. Keep
+    // local hints in step with those children; attribute-only decoration never
+    // triggers this observer or enters the CRDT's wire representation.
+    const MO = doc.defaultView?.MutationObserver ?? MutationObserver;
+    const placeholders = new MO(() => markGeneratedContainers(doc));
+    placeholders.observe(body, { subtree: true, childList: true, characterData: true });
 
     const onInput = () => {
       // execCommand still emits <font size> in every engine. Normalizing on
@@ -150,9 +164,10 @@ export function useInlineEditor(options: {
     return () => {
       doc.removeEventListener("input", onInput);
       if (timer.current) clearTimeout(timer.current);
+      placeholders.disconnect();
       clearGeneratedContainers(doc);
-      body.removeAttribute("contenteditable");
-      body.removeAttribute("spellcheck");
+      restoreEditingBodyAttributes(body, authored);
+      bodyAttributes.current = undefined;
     };
     // NOT `flush`. Depending on it would reintroduce exactly the tear-down
     // described above the ref declaration, one indirection further away.

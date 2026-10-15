@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Editing restores the document's original body attributes before saving and
+  on exit. Editor-only `spellcheck` no longer leaks into published bytes, while
+  authored editing attributes survive. Empty generated-container hints are
+  restored after a shared document adopts remote content.
 - Personal tokens stop working when their owner is disabled, deleted, loses
   email verification or changes identity. Every use re-checks Auth and the
   identity gate; an unavailable identity service fails closed.

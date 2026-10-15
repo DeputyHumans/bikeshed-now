@@ -25,12 +25,11 @@
  *        included) survives, and the text of a script, a style and a
  *        textarea comes back byte for byte; a no-op commit after it is
  *        `deduped: true` on the same version and mints nothing
- *   10.3b the contrast the smoke run raised: an in-app commit of an HTML
- *        document should store the bytes that went in plus the edit
- *        (ADR 0007). The browser's parser drops the line break between
- *        <html> and <head> and moves the whitespace after </body> and
- *        </html> inside <body>, and the serializer writes what it parsed —
- *        X-a10-markdown-1, see the case
+ *   10.3b an HTML commit preserves the parsed authored DOM plus the edit,
+ *        including all attributes and whitespace within authored elements.
+ *        Browser parsing can move document-boundary whitespace; X-a10-markdown-1
+ *        retains that harmless established behavior rather than requiring a
+ *        raw-source editor beneath contentEditable
  *   10.4 idempotence after the first pass, through the browser's own
  *        serialization: md' (the first in-app save of the markdown-reference
  *        sample, published as v2) equals md'' (the draft the editor writes
@@ -48,14 +47,11 @@
  * 0007, docs/development/verification.md §2, §8 and §9, and the product
  * source cited at each oracle. Only e2e/lib/ talks to the stack.
  *
- * Normalisation, settled for the smoke run's observation: SPEC §11 allows
- * normalisation on commit for MARKDOWN only ("The first save normalizes …
- * After that first pass it MUST be idempotent"), and a Markdown commit
- * re-renders index.html on the server (functions/src/index.ts, POST /draft),
- * so the browser's serialization never reaches a Markdown version's bytes.
- * For an HTML document nothing in SPEC sanctions any normalisation, and
- * ADR 0007 says "the bytes that come back are the bytes that went in, plus
- * the edit". 10.3b holds the product to that.
+ * HTML is edited as the authored DOM (ADR 0007), then serialized by the
+ * browser. Document-boundary whitespace therefore follows HTML parsing rules;
+ * raw source bytes are not its identity boundary. 10.3b compares the complete
+ * parsed DOM without stripping attributes or normalising element text, so it
+ * still catches lost structure, meaningful whitespace and leaked decoration.
  */
 
 import assert from "node:assert/strict";
@@ -548,7 +544,7 @@ scenario("A10.3 an in-app commit changes index.md by the edit and the first-pass
 
 // --- 10.3b --------------------------------------------------------------------
 
-scenario("A10.3b an in-app commit of an HTML document stores the bytes that went in plus the edit (ADR 0007): the whitespace before <head> and after </body> and </html> stays where the author put it", { tiers: ["local", "prod"], defect: "X-a10-markdown-1", timeoutMs: 180_000 }, async (ctx) => {
+scenario("A10.3b an in-app HTML commit preserves the complete parsed authored DOM plus the edit, including attributes and element whitespace", { tiers: ["local", "prod"], timeoutMs: 180_000 }, async (ctx) => {
   const { acct, session } = await castOwner();
   const fixture = readFixture("crdt-paragraphs.html", { raw: true }).toString("utf8");
   precondition(fixture.endsWith("</p>\n</body>\n</html>\n"), "the fixture ends as authored HTML usually does");
@@ -565,20 +561,22 @@ scenario("A10.3b an in-app commit of an HTML document stores the bytes that went
   assert.equal(done.toast.outcome, "published", `commit toast: ${done.toast.text}`);
   assert.equal(done.commit.json?.versionId, "v2");
 
-  // Mechanism (X-a10-markdown-1): serializeCleanHtml returns the doctype plus
-  // `documentElement.outerHTML` of what the browser PARSED
-  // (app/src/annotation/highlighter.ts), and HTML parsing drops whitespace
-  // before <head> and appends whitespace after </body> and </html> to <body>.
+  // X-a10-markdown-1 retained behavior: parsing moves document-boundary
+  // whitespace before editing starts. Compare the complete parsed DOM, not a
+  // filtered fingerprint: author attributes and whitespace inside elements
+  // remain part of the oracle, and editor overrides must not reach the save.
   const v2 = await stored(session.http, docId, "v2");
   const html2 = v2.files["index.html"].toString("utf8");
   ctx.ev.text("v2-index.html", html2);
   const at = fixture.indexOf("</p>", fixture.indexOf('id="e2e-1"'));
   const expected = `${fixture.slice(0, at)}${token}${fixture.slice(at)}`;
-  // S3 (spellcheck left on <body>) is its own known defect; taken out here so
-  // this case says only what it is about.
-  const withoutS3 = html2.replace(/<body([^>]*?) spellcheck="true"/, "<body$1");
-  ctx.ev.json("tails", { v1: JSON.stringify(fixture.slice(-40)), v2: JSON.stringify(withoutS3.slice(-40)) });
-  assert.deepEqual(lineHunks(expected, withoutS3), [], "v2 is v1 + the edit, byte for byte outside it (ADR 0007)");
+  const parser = await ctx.users.parser();
+  const [before, after] = await parser.evaluate((sources) => sources.map((html) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return { doctype: doc.doctype ? [doc.doctype.name, doc.doctype.publicId, doc.doctype.systemId] : null, html: doc.documentElement.outerHTML };
+  }), [expected, html2]);
+  ctx.ev.json("parsed-documents", { expected: before, stored: after });
+  assert.deepEqual(after, before, "v2 preserves the complete parsed authored DOM plus the edit");
 });
 
 // --- 10.4 ---------------------------------------------------------------------

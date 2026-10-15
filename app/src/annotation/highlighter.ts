@@ -267,7 +267,20 @@ export function captureAssetTags(doc: Document): Map<string, number> {
   return seen;
 }
 
+/** The two body attributes the editor temporarily overrides, including absence. */
+export type EditingBodyAttributes = Record<"contenteditable" | "spellcheck", string | null>;
+
+/** Restore the authored values on a clone, or when the editing host is released. */
+export function restoreEditingBodyAttributes(body: Element, authored: EditingBodyAttributes): void {
+  for (const [name, value] of Object.entries(authored)) {
+    if (value === null) body.removeAttribute(name);
+    else body.setAttribute(name, value);
+  }
+}
+
 export interface SerializeOptions {
+  /** Captured immediately before the editor overrides the body's own values. */
+  authoredBodyAttributes?: EditingBodyAttributes;
   /**
    * The load-time inventory from captureAssetTags. Supplied on the EDIT path.
    * Omitted on the export path, which snapshots a post-script DOM where a
@@ -290,7 +303,8 @@ export interface SerializeOptions {
  *     own purposes survives; only values we write are ours to delete. Matching
  *     on presence alone would be silent data loss.
  *   - Highlight <mark>s, unwrapped so their text survives.
- *   - `contenteditable`, which is an editing affordance and not content.
+ *   - The editor's body `contenteditable` and `spellcheck` overrides, restored
+ *     to their authored values. Attributes on other elements are authored.
  *   - Placeholder marking, which is an ATTRIBUTE and not a node, so the
  *     authored element survives untouched once it is gone.
  *   - Asset tags absent from the authored inventory (see above).
@@ -305,6 +319,10 @@ export function serializeCleanHtml(
   const root = doc.documentElement.cloneNode(true) as HTMLElement;
 
   stripDecoration(root);
+  const body = root.querySelector("body");
+  if (body && opts.authoredBodyAttributes) {
+    restoreEditingBodyAttributes(body, opts.authoredBodyAttributes);
+  }
 
   if (opts.authoredAssets) {
     // A BUDGET rather than a set: a document that legitimately contains two
@@ -347,9 +365,6 @@ export function stripDecoration(root: Element): void {
   }
   root.normalize();
 
-  for (const el of Array.from(root.querySelectorAll("[contenteditable]"))) {
-    el.removeAttribute("contenteditable");
-  }
   for (const el of Array.from(root.querySelectorAll(`[${EMPTY_ATTR}]`))) {
     el.removeAttribute(EMPTY_ATTR);
   }

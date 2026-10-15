@@ -81,7 +81,9 @@ function unwrapOnly(el: Element): boolean {
  * data loss in a document we do not own. A node whose value IS ours never gets
  * this far — `skipEntirely` has already dropped it whole.
  */
-const INJECTED_ATTRS = new Set(["contenteditable", EMPTY_ATTR]);
+// Only the host's attributes are editor overrides, and the host is outside
+// the fragment. A descendant's contenteditable belongs to the author.
+const INJECTED_ATTRS = new Set([EMPTY_ATTR]);
 
 // --- DOM -> CRDT -------------------------------------------------------------
 

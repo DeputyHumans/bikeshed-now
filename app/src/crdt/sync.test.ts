@@ -68,9 +68,21 @@ describe("local edits reach the CRDT", () => {
   it("ignores the editing host's own attributes", async () => {
     const a = peer(`<p>t</p>`);
     a.body.setAttribute("contenteditable", "true");
-    a.body.querySelector("p")!.setAttribute("contenteditable", "true");
+    a.body.setAttribute("spellcheck", "true");
     await flush();
     expect(a.sync.html()).toBe(`<p>t</p>`);
+  });
+
+  it("replicates authored descendant editing attributes on existing and inserted elements", async () => {
+    const a = peer(`<p>t</p>`);
+    a.body.querySelector("p")!.setAttribute("contenteditable", "false");
+    a.body.querySelector("p")!.setAttribute("spellcheck", "false");
+    const inserted = a.doc.createElement("div");
+    inserted.setAttribute("contenteditable", "plaintext-only");
+    inserted.textContent = "new";
+    a.body.appendChild(inserted);
+    await flush();
+    expect(a.sync.html()).toBe(`<p contenteditable="false" spellcheck="false">t</p><div contenteditable="plaintext-only">new</div>`);
   });
 
   it("never lets a highlight into the shared document", async () => {

@@ -62,7 +62,7 @@
  *           re-marks after the adopt. useInlineEditor.ts:136 marks the loaded
  *           body once; sync.ts:272-281 then replaces it from the wire, which
  *           rightly never carries data-bshd-empty (binding.ts:108, ADR 0010),
- *           so the joiner's outlines are gone (X-a11-live-2).
+ *           and local marking must be restored after the adopt (regression X-a11-live-2).
  *
  * Harness facts this spec relies on:
  *  - The RTDB emulator treats ANY `Authorization: Bearer …` as the admin, so a
@@ -1259,8 +1259,8 @@ const OUTLINE_DOC = `<!DOCTYPE html>
  * rebuilt containers. The fix re-marks the joiner's body after the adopt; it
  * must never put the attribute on the wire.
  */
-scenario("A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-2", ...ON_STACK }, async (ctx) => {
-  ctx.step("SPEC §6a spec.md:732-733: \"Containers the author left empty for their script to fill are outlined in edit mode.\" The joiner never re-marks after the adopt: useInlineEditor.ts:136 marks the loaded body once, then sync.ts:272-281 replaces it from the wire, which never carries data-bshd-empty (binding.ts:108)");
+scenario("A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  ctx.step("SPEC §6a: generated containers remain outlined after shared-body adoption; the wire carries no placeholder marker");
   const accounts = await cast(target, ["owner", "editor"], { notifications: false });
   const owner = await openSession(target, accounts[0]);
   const [o, e, docId] = await Promise.all([

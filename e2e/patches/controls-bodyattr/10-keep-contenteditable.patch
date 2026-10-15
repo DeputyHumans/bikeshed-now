@@ -1,11 +1,7 @@
 --- a/app/src/annotation/highlighter.ts
 +++ b/app/src/annotation/highlighter.ts
-@@ -348,7 +348,7 @@
-   root.normalize();
- 
-   for (const el of Array.from(root.querySelectorAll("[contenteditable]"))) {
--    el.removeAttribute("contenteditable");
-+    void el;
+@@ -323,3 +323,3 @@
+   if (body && opts.authoredBodyAttributes) {
+-    restoreEditingBodyAttributes(body, opts.authoredBodyAttributes);
++    // control: keep the temporary editing attributes.
    }
-   for (const el of Array.from(root.querySelectorAll(`[${EMPTY_ATTR}]`))) {
-     el.removeAttribute(EMPTY_ATTR);
