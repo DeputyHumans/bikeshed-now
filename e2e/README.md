@@ -174,7 +174,11 @@ menu and document-frame drops, including format refusal, retry, deduplication,
 confirmation and stale-dialog prevention. The `controls-a14-*` sets also target
 A17.5c's late account-default and explicit-choice sequence. Their presence is
 not execution evidence: the campaign ledger retains pending controls and the
-remaining revision-refusal coverage.
+fresh refusal/control proof. A14.7b/A14.8b open each revision dialog before
+changing a grant or expiry, and also exercise pending suggestions, accepted
+draft changes and a live editor. Refusals retain the selected file, release
+progress, and leave version records and stored bytes unchanged; the frame-drop
+dialog blocks Publish when it sees the active peer.
 
 A23 also exercises cooldown expiry by aging only its own account's cooldown
 keys on a local `admin-emulator` stack, then sending fresh comments and

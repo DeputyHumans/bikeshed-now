@@ -198,6 +198,19 @@ test("a refused update leaves the draft, its files and its log to the people edi
   assert.ok(live.status.d1.y);
 });
 
+test("a browser upload refused by pending or accepted suggestions changes no record or stored bytes", async () => {
+  for (const state of ["pending", "accepted"]) {
+    const w = world({ anns: { s1: { ...PENDING, suggestion: { ...PENDING.suggestion, state } } } });
+    const beforeRecords = structuredClone([...w.store]);
+    const beforeBytes = [...w.objects].map(([key, value]) => [key, value.toString("utf8")]);
+    const res = await w.upload(NEXT);
+    assert.equal(res.status, 409, `${state}: the browser upload is refused`);
+    assert.equal(res.body[state === "pending" ? "pendingSuggestions" : "acceptedInDraft"], 1);
+    assert.deepEqual([...w.store], beforeRecords, `${state}: no head, version or draft record changes on refusal`);
+    assert.deepEqual([...w.objects].map(([key, value]) => [key, value.toString("utf8")]), beforeBytes, `${state}: stored bytes are unchanged`);
+  }
+});
+
 test("a deployment without a Realtime Database still updates, and still drops the draft's files", async () => {
   const w = world({ rtdb: false });
   const result = await w.update(NEXT);

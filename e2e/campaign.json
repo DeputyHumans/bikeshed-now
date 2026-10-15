@@ -12196,13 +12196,26 @@
           "successful revision at the same address with stored bytes",
           "format refusal message and retry without losing the dialog",
           "cancel or deduplication behavior",
-          "stale open-dialog prevention"
+          "stale open-dialog prevention",
+          "pending suggestion, accepted draft, expired document and downgraded editor refusal messages after opening the dialog",
+          "active editor server refusal from the workspace and disabled Publish with an explanation for a document-frame drop",
+          "refusals preserve version records, draft metadata and all version/draft object generations and bytes"
         ],
         "remaining": [
-          "remaining server refusals and messages: revoked permission, expired document, pending suggestions, accepted draft and active editors",
           "fresh E2E and red/restored control evidence"
         ],
-        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
+        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json",
+        "refusalCase": "A14.7b workspace revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors",
+        "refusalControls": [
+          "controls-a14-refusal-copy",
+          "controls-a14-refusal-file",
+          "controls-a14-refusal-progress",
+          "controls-a14-refusal-close",
+          "controls-a14-refusal-orphan",
+          "controls-a14-refusal-status",
+          "controls-a14-drop-editor-block"
+        ],
+        "refusalEvidence": "e2e/.out/harness-review-controls/a14-refusals/negative-controls.json"
       }
     },
     {
@@ -12216,13 +12229,26 @@
           "successful revision at the same address with stored bytes",
           "format refusal message and retry without losing the dialog",
           "cancel or deduplication behavior",
-          "actual document-frame file drop and explicit confirmation"
+          "actual document-frame file drop and explicit confirmation",
+          "pending suggestion, accepted draft, expired document and downgraded editor refusal messages after opening the dialog",
+          "active editor server refusal from the workspace and disabled Publish with an explanation for a document-frame drop",
+          "refusals preserve version records, draft metadata and all version/draft object generations and bytes"
         ],
         "remaining": [
-          "remaining server refusals and messages: revoked permission, expired document, pending suggestions, accepted draft and active editors",
           "fresh E2E and red/restored control evidence"
         ],
-        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
+        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json",
+        "refusalCase": "A14.8b dropped revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors",
+        "refusalControls": [
+          "controls-a14-refusal-copy",
+          "controls-a14-refusal-file",
+          "controls-a14-refusal-progress",
+          "controls-a14-refusal-close",
+          "controls-a14-refusal-orphan",
+          "controls-a14-refusal-status",
+          "controls-a14-drop-editor-block"
+        ],
+        "refusalEvidence": "e2e/.out/harness-review-controls/a14-refusals/negative-controls.json"
       }
     },
     {

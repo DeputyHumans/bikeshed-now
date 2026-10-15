@@ -35,6 +35,10 @@
  *          reload; an expired document gets its cover from its owner's
  *          workspace only, and stays a placeholder for its editor
  *
+ *   A14.7/8 new versions from card actions and document-frame drops; 7b/8b
+ *          exercise pending, accepted, expired, revoked and active-editor
+ *          refusals, preserving the selected file, draft and published bytes
+ *
  * The only waits on time are the product's own clocks: an expiry instant, and
  * the backfill's idle loop (startAfterMs 1.5 s, idleMs 2 s in
  * app/src/hooks/useCoverBackfill.ts), which is what "nothing more is sent"
@@ -60,7 +64,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, docIdFor, ledgerDoc, ledgerFolder, publish, readSample, updateUpload, zipBundle } from "../../lib/seed.mjs";
 import { share, shareFolder } from "../../lib/grant.mjs";
-import { adminFor, closeAdmin, listObjects, readDoc, readObject, writeUser } from "../../lib/admin.mjs";
+import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, writeUser } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
@@ -1395,3 +1399,134 @@ scenario("A14.8 dropping a file onto an open document offers a confirmed revisio
   watch.stop();
   noPageErrors([u]);
 });
+
+// --- A14.7b / A14.8b -------------------------------------------------------------
+
+const REVISION_REFUSALS = Object.freeze({
+  pending: "1 suggested edit is waiting for a decision. Only the owner or an approver can accept or reject it, and no new version can be published until then. If it is yours, you may withdraw it.",
+  accepted: 'This document\'s unpublished draft holds 1 accepted suggestion, and publishing this would replace the draft and lose it. Publish the draft first, with commit_draft or "Save as new version" in the app, then read the document again and update it.',
+  expired: "This document has expired — change or clear its expiry to edit it.",
+  revoked: "You can no longer publish to this document.",
+  editing: "Somebody has this document open in the editor, where this would be lost, so it was not published. Try again once they have left it, or ask them to do it there.",
+});
+
+/** The refusal fixtures use real product requests; no fabricated document state. */
+async function stageRevisionSuggestion(owner, docId, body, accepted) {
+  const exact = "Original refusal text";
+  const replacement = "Accepted replacement text";
+  const created = answered(await owner.http.postJson("/suggestion", {
+    op: "create", docId, versionId: "v1",
+    anchor: { elementId: "revision-text", exact, prefix: "", suffix: "", start: 0, end: exact.length },
+    replacement,
+  }), "create revision refusal suggestion");
+  precondition(created.status === 200 && created.json?.annId, "the suggestion fixture was created through the product");
+  if (!accepted) return;
+  for (const op of ["claim", "accept"]) {
+    if (op === "accept") {
+      const saved = answered(await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: body.replace(exact, replacement) }), "save accepted revision fixture");
+      precondition(saved.status === 200, "the proposed text is actually saved in the draft");
+    }
+    const decided = answered(await owner.http.postJson("/suggestion", { op, docId, versionId: "v1", annId: created.json.annId, replacement }), `revision fixture ${op}`);
+    precondition(decided.status === 200, `the fixture suggestion was ${op === "claim" ? "claimed" : "accepted"}`);
+  }
+}
+
+async function revisionRefusalState(docId) {
+  const doc = await readDoc(target, `docs/${docId}`);
+  return {
+    currentVersion: doc?.currentVersion,
+    draft: doc?.draft ?? null,
+    versions: (await readCollection(target, `docs/${docId}/versions`)).map(({ id, data }) => ({ id, data })).sort((a, b) => a.id.localeCompare(b.id)),
+    bytes: (await publishedEntry(docId, "v1"))?.toString("utf8"),
+    // The unrelated cover backfill may finish while a workspace dialog is
+    // open. Version and draft objects, including generations, must not move.
+    objects: (await listObjects(target, `docs/${docId}/`, { meta: true })).filter((object) => !object.name.startsWith(`docs/${docId}/thumbs/`)),
+  };
+}
+
+/** Each entrance uses the same refusal dialog but different surrounding state. */
+async function revisionRefusals(ctx, entrance) {
+  const { owner: O, editor: E } = await sessions(["owner", "editor"]);
+  const u = await ctx.users.user({ name: `revision-${entrance}-owner` });
+  const e = await ctx.users.user({ name: `revision-${entrance}-editor` });
+  await u.signInUi(O.account.email, O.account.password);
+  await e.signInUi(E.account.email, E.account.password);
+  const next = file("replacement.html", pageHtml({ heading: "Replacement that must not publish" }), "text/html");
+
+  for (const reason of ["pending", "accepted", "expired", "revoked", "editing"]) {
+    ctx.step(`${entrance}: ${reason} keeps its published version and draft; the person sees the specific refusal`);
+    const title = `${entrance} ${reason} ${tagFor()}`;
+    const body = pageHtml({ title, heading: "Original refusal text" }).replace("<h1 ", '<h1 id="revision-text" ');
+    const doc = await publish(O.http, { body, filename: "index.html", title, name: `a14-${entrance}-${reason}` });
+    if (["revoked", "editing"].includes(reason)) await share(target, { owner: O, doc: doc.docId, account: E.account, role: "editor" });
+    if (["pending", "accepted"].includes(reason)) await stageRevisionSuggestion(O, doc.docId, body, reason === "accepted");
+    const actor = reason === "revoked" ? e : u;
+    let dlg;
+    if (entrance === "workspace") {
+      await gotoWorkspace(actor);
+      await docCard(actor.page, doc.docId).waitFor({ state: "visible", timeout: PAGE_LOAD_MS });
+      dlg = await openVersionDialog(actor, doc.docId, title);
+      await chooseVersionFile(dlg, next);
+    } else {
+      await actor.open(doc.docId, { timeout: PAGE_LOAD_MS });
+      const frame = await actor.frame();
+      await frame.locator("#revision-text").waitFor({ timeout: PAGE_LOAD_MS });
+      await dropFiles(frame, "body", [next]);
+      dlg = actor.page.getByRole("dialog", { name: "Upload a new version", exact: true });
+      await dlg.waitFor({ state: "visible" });
+    }
+    // Change authority after the dialog has opened: the request, rather than
+    // the initial menu's visibility, must enforce the current grant and expiry.
+    if (reason === "revoked") await share(target, { owner: O, doc: doc.docId, account: E.account, role: "viewer" });
+    if (reason === "expired") {
+      const at = Date.now() + 15_000;
+      await expireAt(O, doc.docId, at);
+      await sleep(Math.max(0, at - Date.now()) + 100);
+    }
+    if (reason === "editing") {
+      await e.open(doc.docId, { timeout: PAGE_LOAD_MS });
+      await e.enterEdit({ waitShared: true, timeout: PAGE_LOAD_MS });
+      await eventually(async () => {
+        const status = await rtdbGet(target, `status/${doc.docId}/peers`);
+        return Object.values(status ?? {}).some((p) => p.email === E.account.email && p.mode === "edit");
+      }, { timeout: PAGE_LOAD_MS, message: "the live editor's presence actually reached the server" });
+    }
+    const before = await revisionRefusalState(doc.docId);
+    if (reason === "editing" && entrance === "drop") {
+      const watch = watchRequests(actor.page);
+      try {
+        await eventually(async () => {
+          const status = dlg.getByRole("status");
+          assert.ok(await status.count() && (await status.textContent()).includes("has it open in the editor"), "the dropped revision explains the active editor");
+          return true;
+        }, { timeout: PAGE_LOAD_MS, message: "the dropped revision explains the active editor" });
+        assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "the dropped revision cannot publish over a visible active editor");
+        await sleep(ABSENCE_SETTLE_MS);
+        assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "the blocked dropped revision sends no publish request");
+      } finally { watch.stop(); }
+    } else {
+      const mark = actor.toastMark();
+      const refused = await submitVersion(actor, dlg);
+      assert.equal(refused.status, reason === "revoked" ? 403 : 409, `${entrance} ${reason}: the server refuses this revision`);
+      const toast = await actor.waitForToast((t) => t.kind === "error", { since: mark, timeout: 10_000 });
+      assert.equal(toast.text, REVISION_REFUSALS[reason], `${entrance} ${reason}: the revision refusal explains the current obstacle`);
+      assert.equal(await dlg.isVisible(), true, `${entrance} ${reason}: a refusal keeps the selected file and dialog available`);
+      assert.equal(await dlg.locator(".upload-dropzone strong").textContent(), next.name, `${entrance} ${reason}: the refused file remains selected`);
+      assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).getAttribute("aria-busy"), "false", `${entrance} ${reason}: a refusal releases progress`);
+      await dismissToasts(actor);
+    }
+    assert.deepEqual(await revisionRefusalState(doc.docId), before, `${entrance} ${reason}: a refused revision changes no head, version, draft or stored bytes`);
+    await dlg.getByRole("button", { name: "Cancel", exact: true }).click();
+    await dlg.waitFor({ state: "detached" });
+    if (reason === "editing") await e.goto("/");
+  }
+  noPageErrors([u, e]);
+}
+
+scenario("A14.7b workspace revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors", {
+  tiers: ["local"], effects: ["email:POST /access", "email:POST /suggestion"], needs: ["rtdb-rules"], timeoutMs: 720_000, inconclusiveOnCaseTimeout: true,
+}, async (ctx) => revisionRefusals(ctx, "workspace"));
+
+scenario("A14.8b dropped revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors", {
+  tiers: ["local"], effects: ["email:POST /access", "email:POST /suggestion"], needs: ["rtdb-rules"], timeoutMs: 720_000, inconclusiveOnCaseTimeout: true,
+}, async (ctx) => revisionRefusals(ctx, "drop"));

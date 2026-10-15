@@ -52,7 +52,7 @@ function dialog(props: Partial<Props> = {}) {
         <UploadVersionDialog {...base} {...next} />
       </ToastProvider>,
     );
-  return { onPublished, rerender };
+  return { onPublished, onClose: base.onClose, rerender };
 }
 
 const publish = () => screen.getByRole("button", { name: /^(Publish|Publishing…)$/ }) as HTMLButtonElement;
@@ -119,6 +119,25 @@ describe("UploadVersionDialog", () => {
     await waitFor(() => expect(screen.getByText("Somebody has this document open in the editor.")).toBeTruthy());
     expect(onPublished).not.toHaveBeenCalled();
     expect(publish().getAttribute("aria-busy")).toBe("false");
+  });
+
+  it.each([
+    "1 suggested edit is waiting for a decision.",
+    "This document's unpublished draft holds 1 accepted suggestion.",
+    "This document has expired — change or clear its expiry to edit it.",
+    "You can no longer publish to this document.",
+    "Somebody has this document open in the editor.",
+  ])("keeps the file and enables retry after this specific refusal: %s", async (message) => {
+    uploadVersion.mockRejectedValueOnce(new Error(message));
+    const { onPublished, onClose } = dialog({ initialFile: FILE });
+    await act(async () => fireEvent.click(publish()));
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Upload a new version" })).toBeTruthy();
+    expect(screen.getByText("deck.html")).toBeTruthy();
+    expect(publish().disabled).toBe(false);
+    expect(publish().getAttribute("aria-busy")).toBe("false");
+    expect(onPublished).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

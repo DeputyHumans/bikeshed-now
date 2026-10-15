@@ -1,0 +1,9 @@
+--- a/app/src/components/UploadVersionDialog.tsx
++++ b/app/src/components/UploadVersionDialog.tsx
+@@ -58,5 +58,5 @@
+   const [base] = useState(headVersion);
+   const moved = Boolean(headVersion && base && headVersion !== base);
+-  const blocked = moved || editing.length > 0;
++  const blocked = moved;
+
+   const upload = async () => {

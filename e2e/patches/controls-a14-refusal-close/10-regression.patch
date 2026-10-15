@@ -1,0 +1,9 @@
+--- a/app/src/components/UploadVersionDialog.tsx
++++ b/app/src/components/UploadVersionDialog.tsx
+@@ -67,5 +67,5 @@
+     } catch (e) {
+       toast.error((e as Error).message);
+-      setProgress(null);
++      setProgress(null); onClose();
+     }
+   };
