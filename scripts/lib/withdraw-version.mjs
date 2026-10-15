@@ -4,6 +4,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from './firebase.mjs';
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from './transaction-receipts.mjs';
 
 export function withdrawalPrefix(docId, versionId, record) {
   if (!/^[a-zA-Z0-9_-]+$/.test(docId) || !/^(v[0-9]+|draft)$/.test(versionId)) throw new Error('invalid withdrawal prefix');
@@ -18,14 +19,15 @@ export function withdrawalPrefix(docId, versionId, record) {
 
 export async function repointWithdrawal(db, docRef, plan, deleteField = () => FieldValue.delete()) {
   const liveEpoch = randomUUID();
-  let attempted;
-  return db.runTransaction(async (tx) => {
+  const receipt = freshReceiptId();
+  const result = await db.runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     if (!fresh.exists) throw new Error('the document disappeared mid-run');
     const data = fresh.data();
-    // The unique retirement epoch proves this invocation already repointed
-    // the document. A lost ACK must not abort the remaining withdrawal work.
-    if (attempted && data.liveEpoch === liveEpoch) return attempted;
+    // A later publication may replace the head and epoch before native retry.
+    // The bounded operation receipt still proves this retirement completed.
+    const committed = readReceipt(fresh, receipt);
+    if (committed.found) return committed.result;
     const retiredEpoch = data.liveEpoch ?? 'initial';
     if (typeof retiredEpoch !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(retiredEpoch)) throw new Error('invalid live editing epoch');
     if (data.currentVersion !== plan.currentVersion) throw new Error('currentVersion changed mid-run; aborted without deleting anything');
@@ -56,6 +58,8 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
         update['stats.lastEditedByEmail'] = deleteField();
       }
     }
+    const result = { retiredEpoch, draftPrefix };
+    recordReceipt(tx, docRef, fresh, receipt, result);
     tx.update(docRef, update);
     if (data.visibility === 'public') {
       tx.update(publicRef, {
@@ -65,7 +69,8 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
         publishedAt: version.publishedAt ?? null,
       });
     } else if (projection.exists) tx.delete(publicRef);
-    attempted = { retiredEpoch, draftPrefix };
-    return attempted;
+    return result;
   });
+  await clearReceipt(docRef, receipt);
+  return result;
 }

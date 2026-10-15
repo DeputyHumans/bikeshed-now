@@ -106,10 +106,10 @@ rules-tests/     the rules suite, against the emulator
 
 **The ESM/CommonJS split is deliberate.** Functions are CommonJS because that is
 what the Cloud Functions Node runtime wants; scripts are ESM because
-`node:util parseArgs` and top-level await make small CLIs pleasant. Three pairs
+`node:util parseArgs` and top-level await make small CLIs pleasant. Four pairs
 of modules are duplicated across the boundary on purpose — `hash`, `membership`,
-`policy` — and each pair is held in agreement by a parity test that
-dynamic-imports the ESM side from the CommonJS one.
+`policy`, `transaction-receipts` — with parity tests and shared expected results.
+The receipt pair bounds native retry bookkeeping consistently in both runtimes.
 
 ## What this is not
 

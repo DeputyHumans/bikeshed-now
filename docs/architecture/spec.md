@@ -1205,7 +1205,8 @@ command alive. A dry run initializes no client and its cleanup is a no-op.
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
 and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
-`firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`, `endpoints`.
+`firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`,
+`transaction-receipts`, `endpoints`.
 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
 They authenticate with the Admin SDK and require `--account` explicitly on every
@@ -1217,7 +1218,11 @@ membership are written. `set-access` awaits the presence and editing mirror
 refresh attempt before completing, for both grants and removals; the delivery
 limitation in §16 still applies. Local verification on a healthy configured
 transport exercises the actual operator command and the grantee's content,
-presence and live-log access after each transition.
+presence and live-log access after each transition. A mutation keeps a bounded
+operation receipt (§17) on the document until its native transaction resolves,
+so an acknowledgement retry cannot replay an old grant over a later revocation.
+Read-only listing creates no receipt or other write. The operator and Functions
+receipt helpers share golden behavior for deadlines, pruning and independent cleanup.
 
 Operator publishing uploads to a unique immutable
 bundle with create-only Storage writes, then selects and creates a version in
@@ -1229,8 +1234,10 @@ attempt bundles can remain unreferenced; they never overwrite selected bytes.
 A transaction retry after a lost acknowledgement recognizes the operator's
 own immutable version prefix and retains the successful replacement receipt;
 it does not turn that replacement into a duplicate that skips cleanup. A
-withdrawal similarly recognizes its own unique retirement epoch. Acknowledging
-either completed operation does not repeat its writes or erase a later draft.
+withdrawal records its captured retirement result in a bounded operation receipt
+on the document, so a later publication changing the head and epoch cannot erase
+that proof. Acknowledging either completed operation does not repeat its writes,
+repoint a later head or erase a later draft.
 
 An operator replacement also advances `liveEpoch` and clears the current draft
 in that transaction. Its return value captures the retired epoch and exact

@@ -4,8 +4,8 @@
  import { randomUUID } from 'node:crypto';
 +import { e2eAckTransaction } from './e2e-ack-transaction.mjs';
  import { FieldValue } from './firebase.mjs';
-@@ -21,3 +22,3 @@
-   let attempted;
--  return db.runTransaction(async (tx) => {
-+  return e2eAckTransaction(db, docRef.id, "operator-withdraw", async (tx) => {
+@@ -22,3 +23,3 @@
+   const receipt = freshReceiptId();
+-  const result = await db.runTransaction(async (tx) => {
++  const result = await e2eAckTransaction(db, docRef.id, "operator-withdraw", async (tx) => {
      const fresh = await tx.get(docRef);

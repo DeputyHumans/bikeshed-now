@@ -7,6 +7,7 @@ import { GRANT_LIST, computeMembership, grantLists, grantsOf, loadFolderMembersh
 import { FieldValue, getRtdb } from './firebase.mjs';
 import { syncPresenceAccess } from './presence.mjs';
 import { withdrawalPrefix } from './withdraw-version.mjs';
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from './transaction-receipts.mjs';
 
 /** Adapt the existing read-only membership loaders to this transaction. */
 function reader(db, tx) {
@@ -22,9 +23,12 @@ async function effective(db, tx, current, grants, ownerEmail) {
 
 /** Apply one CLI delta to the current record; a read-only --list writes nothing. */
 export async function persistOperatorAccess(db, docRef, { add, remove, role }, timestamp) {
-  return db.runTransaction(async (tx) => {
+  const receipt = add.length || remove.length ? freshReceiptId() : null;
+  const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     if (!snap.exists) throw new Error(`document not found: ${docRef.path}`);
+    const committed = receipt ? readReceipt(snap, receipt) : null;
+    if (committed?.found) return committed.result;
     const current = snap.data() || {};
     const ownerEmail = String(current.ownerEmail || '').toLowerCase();
     const sets = new Map(Object.entries(grantsOf(current)).map(([list, principals]) => [list, new Set(principals)]));
@@ -37,9 +41,15 @@ export async function persistOperatorAccess(db, docRef, { add, remove, role }, t
     }
     const grants = Object.fromEntries([...sets].map(([list, principals]) => [list, [...principals].sort()]));
     const membership = await effective(db, tx, current, grants, ownerEmail);
-    if (add.length || remove.length) tx.set(docRef, { ...grants, ...membership, updatedAt: timestamp }, { merge: true });
-    return { ownerEmail, folderId: current.folderId ?? null, grants, membership };
+    const result = { ownerEmail, folderId: current.folderId ?? null, grants, membership };
+    if (receipt) {
+      recordReceipt(tx, docRef, snap, receipt, result);
+      tx.set(docRef, { ...grants, ...membership, updatedAt: timestamp }, { merge: true });
+    }
+    return result;
   });
+  if (receipt) await clearReceipt(docRef, receipt);
+  return result;
 }
 
 /** Select a version only after upload; losing attempts never modify another version. */

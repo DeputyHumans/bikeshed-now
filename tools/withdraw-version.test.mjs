@@ -6,9 +6,10 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { withdrawalPrefix, repointWithdrawal as runRepoint } from '../scripts/lib/withdraw-version.mjs';
 const require = createRequire(import.meta.url);
-const { fakeFirestore } = require('../functions/test/fakes.js');
-// The fake and operator use separate SDK installations; give the fake its own sentinels.
-const { FieldValue } = createRequire(new URL('../functions/package.json', import.meta.url))('firebase-admin/firestore');
+const { fakeFirestore: createFakeFirestore } = require('../functions/test/fakes.js');
+// Drive the fake with the same SDK sentinels as the actual operator helper.
+import { FieldValue } from '../scripts/lib/firebase.mjs';
+const fakeFirestore = data => createFakeFirestore(data, { FieldValue });
 const repointWithdrawal = (db, ref, value) => runRepoint(db, ref, value, () => FieldValue.delete());
 const oldPrefix = 'docs/d/bundles/old-version';
 const draft = { baseVersion: 'v2', entry: 'index.html', storagePrefix: 'docs/d/bundles/old-draft' };

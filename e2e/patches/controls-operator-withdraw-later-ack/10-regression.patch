@@ -1,0 +1,7 @@
+--- a/scripts/lib/withdraw-version.mjs
++++ b/scripts/lib/withdraw-version.mjs
+@@ -29,3 +29,3 @@
+     const committed = readReceipt(fresh, receipt);
+-    if (committed.found) return committed.result;
++    if (committed.found && data.liveEpoch === liveEpoch) return committed.result;
+     const retiredEpoch = data.liveEpoch ?? 'initial';

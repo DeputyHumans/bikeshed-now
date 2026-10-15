@@ -3,7 +3,7 @@
 
 const { createHash, randomBytes } = require("node:crypto");
 const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
+const { FieldValue: DefaultFieldValue } = require("firebase-admin/firestore");
 
 /**
  * Enough of Firestore to run an endpoint end to end: document refs, dotted
@@ -16,7 +16,7 @@ const { FieldValue } = require("firebase-admin/firestore");
  * reads after it has written throws, as the real one does. A fake looser than
  * the real thing is how a test passes while the bug is live.
  */
-function fakeFirestore(initial = {}) {
+function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
   const store = new Map();
   for (const [path, data] of Object.entries(initial)) store.set(path, clone(data));
   const revisions = new Map();

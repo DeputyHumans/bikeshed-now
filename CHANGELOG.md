@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep operator sharing and withdrawal results across native commit retries even after a later revocation or publication. Share bounded receipt semantics with Functions through an ESM helper and golden tests; add two real operator fault schedules with directional controls.
+
 - Require every declared affected E2E case and concurrency axis when resolving product, discovery or coverage repairs. Command-only harness repairs remain valid when they declare no affected E2E cases.
 
 - Keep membership race gates, PKCE spending, email cooldown and retired-head comment controls applicable after native acknowledgement recovery; preserve each fault and validate the capability combinations.
