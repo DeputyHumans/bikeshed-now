@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve later suggestion lease operations when a completed claim or release loses its transaction acknowledgement. Bounded request receipts prevent an older claim from resurrecting a released lease or an older release from clearing a newer claim; cover both same-account races with native retry regressions and keyed endpoint controls.
+
 - Preserve a completed rename across native transaction retries without replaying it over a later name or duplicating its change event. Reject a missing document instead of recreating a partial record; retain regression tests and a keyed endpoint control.
 
 - Preserve an accepted thumbnail upload after a later publication and thumbnail replace its current key. A bounded receipt retains the original success and obsolete-image cleanup without repointing the newer head, epoch or JPEGs; retain native retry regressions and four directional E2E controls.

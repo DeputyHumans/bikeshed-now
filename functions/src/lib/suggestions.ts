@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
 
 /**
  * A suggestion is an ANNOTATION with one more field, so it inherits anchoring,
@@ -339,11 +340,17 @@ export async function changeSuggestion(args: {
   const annRef = annotations(docRef, versionId).doc(annId);
   const revisionOperationId = randomUUID();
   let revisionAttempted = false;
+  const leaseReceipt = op === "claim" || op === "release" ? freshReceiptId() : null;
+  let leaseRecorded = false;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
     // Every read before any write, as a transaction requires: the record, and
     // for a revision the opening comment whose words may have to follow it.
     const snap = await tx.get(annRef);
+    if (leaseReceipt) {
+      const committed = readReceipt<{ state: SuggestionState }>(snap, leaseReceipt);
+      if (committed.found) return committed.result;
+    }
     const opener =
       op === "revise"
         ? await tx.get(annRef.collection("comments").where("opensSuggestion", "==", true).limit(1))
@@ -450,11 +457,17 @@ export async function changeSuggestion(args: {
             until: Timestamp.fromMillis(nowMs + SUGGESTION_LIMITS.claimMs),
           },
         });
+        recordReceipt(tx, annRef, snap, leaseReceipt!, { state: "pending" });
+        leaseRecorded = true;
         return { state: "pending" };
       }
       case "release": {
         // `claimedByOther` above has refused anybody else's live claim.
-        if (s.suggestion.claim) tx.update(annRef, { "suggestion.claim": FieldValue.delete() });
+        if (s.suggestion.claim) {
+          tx.update(annRef, { "suggestion.claim": FieldValue.delete() });
+          recordReceipt(tx, annRef, snap, leaseReceipt!, { state: "pending" });
+          leaseRecorded = true;
+        }
         return { state: "pending" };
       }
       case "accept":
@@ -485,4 +498,6 @@ export async function changeSuggestion(args: {
         return { status: 400, error: "unknown op" };
     }
   });
+  if (leaseReceipt && leaseRecorded && "state" in result && result.state === "pending") await clearReceipt(annRef, leaseReceipt);
+  return result;
 }

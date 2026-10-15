@@ -10,6 +10,6 @@
 +  return e2eAckTransaction(db, docRef.id, "suggestion-create", async (tx): Promise<{ annId: string } | Refusal> => {
      const doc = await tx.get(docRef);
 @@ -343,2 +344,2 @@
--  return db.runTransaction(async (tx) => {
-+  return e2eAckTransaction(db, docRef.id, `suggestion-${op}`, async (tx) => {
+-  const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
++  const result = await e2eAckTransaction(db, docRef.id, `suggestion-${op}`, async (tx): Promise<{ state: SuggestionState } | Refusal> => {
      // Every read before any write, as a transaction requires: the record, and
