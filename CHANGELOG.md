@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Share immutable campaign evidence reads within each check/import, preserving every proof’s identity checks and detecting changed artifacts without retaining a full report per case.
+
 - Add separate E2E fault controls for duplicated committed suggestion text, missing co-editor delivery and omitted embedded Markdown styling. Keep the existing cases and exact assertions, and include every new control in the complete catalog obligation.
 
 - Remove discarded autosave uploads after conditional-write contention only when a fresh transaction proves neither the draft nor any published version references them. Cover terminal refusals, newer causal drafts, lost acknowledgements and failed reference reads; keep uncertain transport results intact.

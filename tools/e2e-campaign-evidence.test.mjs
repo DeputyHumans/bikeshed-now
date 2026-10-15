@@ -109,3 +109,29 @@ test("snapshot and explicit command capture bind the same files as a worktree st
   const result = importCommand(f.c, "e2e/.out/capture/command.json", { root: f.root, cellId: "verify" }); assert.equal(result.candidate.proofs.length, 1);
   write(f.root, report.log, "tampered"); assert.throws(() => importCommand(f.c, "e2e/.out/capture/command.json", { root: f.root, cellId: "verify" }), /digest/);
 });
+
+test("control import shares green artifacts without sharing target or mutation decisions", t => {
+  const f = fixture(t), second = { ...f.def, set: "controls-second", expect: { message: "another intended assertion" } };
+  f.ledger.green[0].sets.push(second.set);
+  f.ledger.controls.push({ ...f.ledger.controls[0], set: second.set });
+  write(f.root, f.controls, f.ledger);
+  const before = structuredClone(f.c);
+  const result = importControls(f.c, f.controls, { root: f.root, readDefinition: set => set === f.def.set ? f.def : second });
+  assert.deepEqual(result.imported, [f.def.set]);
+  assert.match(result.refused[0].reason, /named mutation|intended assertion/);
+  assert.deepEqual(f.c, before, "the public importer does not mutate its caller's campaign");
+});
+
+test("control import refuses a shared artifact changed by a later definition read", t => {
+  const f = fixture(t), second = { ...f.def, set: "controls-second" };
+  f.ledger.green[0].sets.push(second.set);
+  f.ledger.controls.push({ ...f.ledger.controls[0], set: second.set });
+  write(f.root, f.controls, f.ledger);
+  assert.throws(() => importControls(f.c, f.controls, { root: f.root, readDefinition: set => {
+    if (set === second.set) {
+      const report = JSON.parse(readFileSync(join(f.root, f.report), "utf8"));
+      report.cases[0].status = "fail"; write(f.root, f.report, report);
+    }
+    return set === f.def.set ? f.def : second;
+  } }), /evidence changed during verification/, "no partly cached control import escapes the final byte check");
+});

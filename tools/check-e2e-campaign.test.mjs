@@ -2,6 +2,7 @@
 // Campaign completion controls: missing work, disguised outcomes, stale evidence and ineffective controls never become a pass (SPEC §12).
 
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -534,4 +535,68 @@ test("command-only harness repairs remain valid when no affected E2E witness is 
   item.resolution = { kind: "coverage-repair", reason: "Synthetic command-only harness repair", spec: "SPEC §12", proofs: [c.proofs.find(p => p.kind === "command").id], controls: ["control"] };
   assert.deepEqual(checkCampaign(c, { root }).errors, []);
   assert.equal(checkCampaign(c, { root }).complete, true);
+});
+
+test("shared report parsing does not memoize a later proof's identity or outcome", t => {
+  for (const change of [
+    proof => { proof.invocation = "wrong-invocation"; },
+    proof => { proof.caseId = "missing-case"; },
+    proof => { proof.n = 20; },
+    proof => { proof.trial = 99; },
+    proof => { proof.outcome = "FAIL"; },
+    proof => { proof.fingerprint = "e".repeat(64); },
+  ]) {
+    const { c, root, positive } = fixture(t), proof = { ...positive, id: "later-shared-report-proof" };
+    change(proof); c.proofs.push(proof);
+    const result = checkCampaign(c, { root });
+    assert.equal(result.complete, false, "a cached report cannot validate a mismatched later proof");
+    assert.ok(result.errors.some(error => error.startsWith(proof.id + ":")), "the specific later proof is checked independently");
+  }
+});
+
+test("duplicate exact cases cannot disappear inside the shared report index", t => {
+  const { c, root, report, rewrite } = fixture(t);
+  report.cases.push({ ...report.cases[0] }); rewrite(report);
+  const result = checkCampaign(c, { root });
+  assert.match(result.errors.join("\n"), /positive-case: selected case is not an unqualified PASS/, "two exact identities do not become one indexed case");
+});
+
+test("the checker parses each shared report and stack once without storing copies per proof", t => {
+  const { c, root, positive } = fixture(t), sourceText = readFileSync(join(root, positive.artifact), "utf8"), stackText = readFileSync(join(root, `e2e/.out/${positive.runId}/stack.json`), "utf8");
+  for (let i = 0; i < 500; i++) c.proofs.push({ ...positive, id: `shared-${i}` });
+  const originalParse = JSON.parse; let reports = 0, stacks = 0;
+  JSON.parse = function (value, ...args) { if (value === sourceText) reports++; if (value === stackText) stacks++; return originalParse.call(this, value, ...args); };
+  try { assert.deepEqual(checkCampaign(c, { root }).errors, []); }
+  finally { JSON.parse = originalParse; }
+  assert.equal(reports, 1, "a report is parsed once per verification operation");
+  // Fixture stacks can be byte-identical across matrix cells; each distinct path is parsed once.
+  const sameStacks = new Set(c.proofs.filter(p => p.runId).map(p => `e2e/.out/${p.runId}/stack.json`));
+  const matchingStackPaths = [...sameStacks].filter(path => readFileSync(join(root, path), "utf8") === stackText).length;
+  assert.equal(stacks, matchingStackPaths, "a stack is parsed once per distinct evidence path");
+});
+
+test("the final digest check catches a report changed after its last proof read", t => {
+  const { c, root, positive } = fixture(t), last = c.proofs.at(-1), originalArtifact = last.artifact;
+  let mutations = 0;
+  Object.defineProperty(last, "artifact", { get() {
+    const path = join(root, positive.artifact), value = JSON.parse(readFileSync(path, "utf8"));
+    value.changedDuringCheck = ++mutations; writeFileSync(path, JSON.stringify(value));
+    return originalArtifact;
+  } });
+  const result = checkCampaign(c, { root });
+  assert.match(result.errors.join("\n"), /evidence snapshot: evidence changed during verification/, "the completed verdict cannot use stale cached report bytes");
+});
+
+test("a thousand exact case proofs can share one report under a bounded verification heap", t => {
+  const { c, root, positive, report, rewrite } = fixture(t);
+  const extra = Array.from({ length: 999 }, (_, i) => ({ ...report.cases[0], id: `${report.cases[0].file}::memory-${i}`, name: `memory-${i}`, diagnosticPayload: "x".repeat(1024) }));
+  report.cases.push(...extra); rewrite(report);
+  writeFileSync(join(root, dirname(positive.artifact), "results-final.jsonl"), report.cases.map(row => JSON.stringify(row)).join("\n") + "\n");
+  for (const row of extra) c.proofs.push({ ...positive, id: `memory-proof-${row.name}`, caseId: row.id });
+  const campaignPath = join(root, "bounded-campaign.json"); writeFileSync(campaignPath, JSON.stringify(c));
+  const script = `import { readFileSync } from 'node:fs'; import { checkCampaign } from ${JSON.stringify(new URL('./check-e2e-campaign.mjs', import.meta.url).href)}; const c=JSON.parse(readFileSync(process.argv[1], 'utf8')); const result=checkCampaign(c,{root:process.argv[2]}); console.log(JSON.stringify({complete:result.complete,errors:result.errors,proofs:c.proofs.length})); process.exit(result.complete?0:1);`;
+  const child = spawnSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", script, campaignPath, root], { encoding: "utf8", timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+  assert.equal(child.status, 0, `shared report verification must complete at128MiB; signal=${child.signal}; ${child.stderr.slice(-1500)}`);
+  const result = JSON.parse(child.stdout.trim());
+  assert.equal(result.complete, true); assert.deepEqual(result.errors, []); assert.equal(result.proofs, c.proofs.length);
 });

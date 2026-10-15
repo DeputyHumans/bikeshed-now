@@ -13,6 +13,7 @@ import { probeInstalledTriggerQueue } from "./probe-e2e-trigger-queue.mjs";
 import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { captureComposite, compositeReference, verifyComposite } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
+import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const hash = (s) => createHash("sha256").update(s).digest("hex");
@@ -75,10 +76,10 @@ export function prepareCampaign(campaign, snapshot, { tree = "worktree", control
   });
   return { candidate, plan: { snapshot, tree, mode: "prepare-only", policy: "Run cells sequentially; obey the existing stack cap and admission locks. Import candidate evidence outside tracked source until the frozen campaign finishes. No finding is resolved by this helper.", matrix: candidate.acceptance.requirements.map(({ proofs, ...r }) => r), controlBatches: batches, groups: candidate.groups.map((g) => ({ id: g.id, suspects: g.suspects, unresolved: g.suspects.filter((id) => candidate.items.find((i) => i.id === id)?.state !== "resolved") })) } };
 }
-function loadReport(campaign, artifact, root) {
-  const rel = localPath(root, artifact), report = json(resolve(root, rel));
+function loadReport(campaign, artifact, root, artifacts) {
+  const rel = localPath(root, artifact), report = artifacts.json(resolve(root, rel));
   need(report.invocation?.id && report.runId && Array.isArray(report.cases) && report.cases.length && report.malformed?.length === 0, "not a complete single-invocation result artifact");
-  const stack = json(resolve(root, `e2e/.out/${report.runId}/stack.json`));
+  const stack = artifacts.json(resolve(root, `e2e/.out/${report.runId}/stack.json`));
   const a = campaign.acceptance;
   need(stack.fingerprint?.baseSha === a.revision && stack.expectVersion === a.version, "run differs from the acceptance revision/version");
   if (a.fingerprint) need(stack.fingerprint?.sha256 === a.fingerprint, "run differs from the frozen source fingerprint");
@@ -91,7 +92,8 @@ function caseProof(campaign, loaded, c, outcome) {
   return { id: `case-${hash(`${rel}\0${key(c)}\0${outcome}`).slice(0, 24)}`, kind: "e2e-case", revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: stack.fingerprint.sha256, artifact: rel, runId: report.runId, invocation: report.invocation.id, caseId: c.id, n: c.n ?? null, trial: c.trial ?? 1, outcome };
 }
 export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null, compositeArtifact = null } = {}) {
-  const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root);
+  const artifacts = new EvidenceArtifacts();
+  const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root, artifacts);
   for (const c of loaded.report.cases) if (pass(c) || fail(c)) upsert(candidate.proofs, caseProof(candidate, loaded, c, pass(c) ? "PASS" : "FAIL"));
   const unfinished = loaded.report.cases.filter((c) => !pass(c) && !(c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced));
   if (cellId) {
@@ -125,6 +127,7 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
     if (p.outcome === "PASS") verifyCompletedRun(loaded.report, resolve(root, loaded.rel));
     upsert(candidate.proofs, p); cell.proofs = [...new Set([...cell.proofs, p.id])];
   }
+  artifacts.assertUnchanged();
   return { candidate, importedCases: loaded.report.cases.filter((c) => pass(c) || fail(c)).length, unfinished: unfinished.map((c) => ({ id: c.id, status: c.status })) };
 }
 
@@ -147,8 +150,8 @@ export function captureCompositeEvidence(campaign, manifest, out, { root = ROOT,
   return artifact;
 }
 
-export function importControls(campaign, ledgerPath, { root = ROOT, readDefinition = readControl } = {}) {
-  const candidate = structuredClone(campaign), ledger = json(resolve(root, localPath(root, ledgerPath))), imported = [], refused = [];
+function importControlsInto(candidate, ledgerPath, { root, readDefinition, artifacts }) {
+  const ledger = artifacts.json(resolve(root, localPath(root, ledgerPath))), imported = [], refused = [];
   const seen = new Set();
   for (const row of ledger.controls ?? []) {
     try {
@@ -157,7 +160,7 @@ export function importControls(campaign, ledgerPath, { root = ROOT, readDefiniti
       const def = readDefinition(row.set); def.selection ??= assertTargetDeclared(def);
       const greenRows = (ledger.green ?? []).filter((g) => g.sets?.includes(row.set));
       need(greenRows.length === 1, "ambiguous or missing green invocation");
-      const red = loadReport(candidate, resolve(root, row.red.invocationDir, "results.json"), root), green = loadReport(candidate, resolve(root, greenRows[0].invocationDir, "results.json"), root);
+      const red = loadReport(candidate, resolve(root, row.red.invocationDir, "results.json"), root, artifacts), green = loadReport(candidate, resolve(root, greenRows[0].invocationDir, "results.json"), root, artifacts);
       const rc = findTarget(red.report.cases, def), gc = findTarget(green.report.cases, def);
       need(fail(rc) && pass(gc) && key(rc) === key(gc), "the exact target must fail red and pass green");
       need((red.stack.patches ?? []).some((p) => (p.set ?? p) === row.set), "red stack lacks the named mutation");
@@ -170,6 +173,13 @@ export function importControls(campaign, ledgerPath, { root = ROOT, readDefiniti
     } catch (error) { refused.push({ set: row.set, reason: error.message }); }
   }
   return { candidate, imported, refused };
+}
+
+export function importControls(campaign, ledgerPath, { root = ROOT, readDefinition = readControl } = {}) {
+  const artifacts = new EvidenceArtifacts();
+  const result = importControlsInto(structuredClone(campaign), ledgerPath, { root, readDefinition, artifacts });
+  artifacts.assertUnchanged();
+  return result;
 }
 
 /** Read the test runners' final counters, never case-title substrings. */
@@ -225,23 +235,26 @@ export async function captureCommand(campaign, cellId, directory, { root = ROOT,
   writeProposal(root, `${dir}/command.json`, report); return report;
 }
 export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) {
-  let candidate = structuredClone(campaign); const rel = localPath(root, artifact), report = json(resolve(root, rel)), a = candidate.acceptance;
+  const artifacts = new EvidenceArtifacts(), candidate = structuredClone(campaign);
+  const rel = localPath(root, artifact), report = artifacts.json(resolve(root, rel)), a = candidate.acceptance;
   need(report.revision === a.revision && report.version === a.version && report.fingerprint === a.fingerprint, "command differs from the frozen acceptance source");
-  need(hash(readFileSync(resolve(root, localPath(root, report.log)))) === report.logSha256, "command log digest differs");
+  need(artifacts.digest(resolve(root, localPath(root, report.log))) === report.logSha256, "command log digest differs");
   const cell = candidate.acceptance.requirements.find((r) => r.id === cellId);
   need(cell?.kind === "command" && (report.command === cell.command || cellId === "controls" && (report.command.startsWith("node e2e/run.mjs controls ") || report.controlLedgers?.length > 0)), "command does not match this matrix cell");
   need(report.outcome === "PASS" && report.exitCode === 0 && report.tests > 0 && report.fail === 0 && report.skip === 0 && report.todo === 0 && report.inconclusive === 0, "command is not a complete pass");
   const ledgers = report.controlLedgers ?? (report.controlLedger ? [report.controlLedger] : []);
   if (ledgers.length) {
     const imported = [];
-    for (const ledger of ledgers) { const result = importControls(candidate, ledger, { root }); need(!result.refused.length, "control command ledger contains an invalid pair"); candidate = result.candidate; imported.push(...result.imported); }
+    for (const ledger of ledgers) { const result = importControlsInto(candidate, ledger, { root, readDefinition: readControl, artifacts }); need(!result.refused.length, "control command ledger contains an invalid pair"); imported.push(...result.imported); }
     need(new Set(imported).size === imported.length && JSON.stringify(imported.sort()) === JSON.stringify(report.controlSets.toSorted()) && report.tests === imported.length, "control command ledger differs");
   } else {
-    const counts = commandCounts(readFileSync(resolve(root, report.log), "utf8"));
+    const counts = commandCounts(artifacts.text(resolve(root, report.log)));
     for (const k of ["tests", "fail", "skip", "todo", "inconclusive"]) need(counts[k] === report[k], `command ${k} count differs from its captured log`);
   }
   const p = { id: `command-${hash(rel).slice(0, 24)}`, kind: "command", revision: report.revision, version: report.version, fingerprint: report.fingerprint, artifact: rel, outcome: "PASS", command: report.command, logSha256: report.logSha256 };
-  upsert(candidate.proofs, p); const target = candidate.acceptance.requirements.find((r) => r.id === cellId); target.proofs = [...new Set([...target.proofs, p.id])]; return { candidate };
+  upsert(candidate.proofs, p); const target = candidate.acceptance.requirements.find((r) => r.id === cellId); target.proofs = [...new Set([...target.proofs, p.id])];
+  artifacts.assertUnchanged();
+  return { candidate };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

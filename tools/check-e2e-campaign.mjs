@@ -2,7 +2,6 @@
 // Validate the local E2E campaign ledger and refuse completion without current cases and negative controls (SPEC §12).
 
 import { readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseExpandedCase } from "../e2e/lib/controls.mjs";
@@ -10,6 +9,7 @@ import { commandCounts } from "./e2e-campaign-evidence.mjs";
 import { verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { verifyComposite, COMPOSITE_ITEM } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
+import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STATES = new Set(["open", "in-progress", "resolved", "historical-closed"]);
@@ -134,24 +134,24 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   }
   if (!validateOnly) {
     if (!SHA.test(acceptance.revision) || !text(acceptance.version)) pending.push("acceptance: pin the exact tested revision and version");
-    const loaded = new Map();
+    const loaded = new Map(), artifacts = new EvidenceArtifacts();
     for (const p of proofs.values()) {
       try {
         need(p.revision === acceptance.revision && p.version === acceptance.version, `${p.id}: evidence differs from the acceptance revision/version`);
         if (acceptance.fingerprint) need(p.fingerprint === acceptance.fingerprint, `${p.id}: evidence differs from the frozen source fingerprint`);
         const path = artifact(p.artifact);
         if (p.kind === "command") {
-          const report = readJson(path);
+          const report = artifacts.json(path);
           need(report.command === p.command && report.revision === p.revision && report.version === p.version && report.outcome === p.outcome, `${p.id}: command report metadata differs`);
-          const log = readFileSync(artifact(report.log));
-          need(createHash("sha256").update(log).digest("hex") === p.logSha256, `${p.id}: command log digest differs`);
+          const logPath = artifact(report.log), log = artifacts.text(logPath);
+          need(artifacts.digest(logPath) === p.logSha256, `${p.id}: command log digest differs`);
           if (acceptance.fingerprint) need(report.fingerprint === acceptance.fingerprint, `${p.id}: command source fingerprint differs`);
           if (Array.isArray(report.controlSets)) {
             need(new Set(report.controlSets).size === report.controlSets.length && report.tests === report.controlSets.length, `${p.id}: control command counts differ from distinct completed sets`);
             const ledgerPaths = report.controlLedgers ?? (report.controlLedger ? [report.controlLedger] : []), recorded = [];
             need(Array.isArray(ledgerPaths) && ledgerPaths.length > 0, `${p.id}: control command requires its actual runner ledgers`);
             for (const path of array(ledgerPaths)) {
-              const ledger = readJson(artifact(path));
+              const ledger = artifacts.json(artifact(path));
               need(ledger.ok === true && text(ledger.endedAt) && !ledger.interrupted && ledger.commit === acceptance.revision && ledger.tree === acceptance.tree, `${p.id}: control runner ledger is incomplete or uses another snapshot`);
               for (const row of array(ledger.controls)) {
                 recorded.push(row.set);
@@ -172,8 +172,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           loaded.set(p.id, { report, text: log.toString("utf8") });
           continue;
         }
-        const report = readJson(path);
-        const stack = readJson(artifact(`e2e/.out/${p.runId}/stack.json`));
+        const report = artifacts.json(path);
+        const stack = artifacts.json(artifact(`e2e/.out/${p.runId}/stack.json`));
         need(report.runId === p.runId && report.invocation?.id === p.invocation, `${p.id}: run/invocation differs from report`);
         need(stack.fingerprint?.baseSha === p.revision && stack.expectVersion === p.version, `${p.id}: stack revision/version differs`);
         if (acceptance.fingerprint) need(stack.fingerprint?.sha256 === acceptance.fingerprint, `${p.id}: stack differs from the frozen source fingerprint`);
@@ -183,8 +183,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         if (["PASS", "LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a12-projection-unavailable", "a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
         const cases = array(report.cases);
         need(cases.length > 0, `${p.id}: report contains no cases`);
+        const found = p.kind === "e2e-case" ? artifacts.cases(report, { id: p.caseId, n: p.n, trial: p.trial }) : [];
         if (p.kind === "e2e-case") {
-          const found = cases.filter((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1));
           need(found.length === 1 && (p.outcome === "PASS" ? purePass(found[0]) : pureFail(found[0])), `${p.id}: selected case is not an unqualified ${p.outcome}`);
         }
         const limit = p.outcome === "LOCAL-LIMIT" || p.localLimit ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
@@ -195,7 +195,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           localAdjudications.add(COMPOSITE_ITEM);
         }
         if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
-        loaded.set(p.id, { report, stack, limit, composite, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
+        loaded.set(p.id, { report, stack, limit, composite, selected: found[0] ?? null });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
@@ -223,7 +223,12 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       });
       for (const c of array(item.requiredCases)) need(witnessed.some((w) => affectedCaseMatches(w, c)), `${item.id}: missing affected case ${c.caseId} [N=${c.n ?? "-"}]`);
     }
-    const passedKeys = new Set([...loaded.values()].flatMap((x) => array(x.report?.cases).filter(purePass).map(key)));
+    const passedKeys = new Set(), visitedReports = new Set();
+    for (const { report } of loaded.values()) {
+      if (visitedReports.has(report)) continue;
+      visitedReports.add(report);
+      for (const row of array(report?.cases)) if (purePass(row)) passedKeys.add(key(row));
+    }
     const exclusions = array(acceptance.exclusions);
     for (const r of requirements.values()) for (const id of array(r.proofs)) {
       const got = loaded.get(id);
@@ -258,6 +263,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       need(recorded.length === new Set(recorded).size, "matrix:controls: duplicate control sets across command reports");
       need(JSON.stringify([...recorded].sort()) === JSON.stringify([...controlCell.controlSets].sort()), "matrix:controls: completed sets differ from the frozen control inventory");
     }
+    try { artifacts.assertUnchanged(); } catch (error) { errors.push(`evidence snapshot: ${error.message}`); }
   }
   const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`));
   const localComplete = !validateOnly && errors.length === 0 && localPending.length === 0;
