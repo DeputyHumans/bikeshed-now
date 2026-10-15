@@ -914,8 +914,12 @@ scenario("A19.5 personal tokens: a name is required; bsk_ is shown once and stor
 });
 
 /** Personal tokens follow the current Auth identity on every request (SPEC §19). */
+const currentIdentityCases = {
+  disabled: "A19.5 S15: once the Auth user is disabled, their session is refused, and so is their personal token",
+  deleted: "A19.5 S15: once the Auth user is deleted, their session is refused, and so is their personal token",
+};
 for (const state of ["disabled", "deleted"]) {
-scenario(`A19.5 S15: once the Auth user is ${state}, their session is refused, and so is their personal token`, {
+scenario(currentIdentityCases[state], {
   tiers: LOCAL,
   needs: ["admin-emulator"],
   timeoutMs: 180_000,

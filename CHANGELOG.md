@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Challenge the personal-token current-identity gate independently for disabled and deleted accounts, keeping both existing session-versus-token witnesses selectable and requiring exact patched-stack refusals.
+
 - Follow explicit stale-base reload in the natural co-editor observation, and recognize per-tab peer records in the leave-presence canary precondition.
 
 - Reject control definitions whose suite cannot select their spec before allocating a stack; explicitly select concurrency for twelve affected controls.
