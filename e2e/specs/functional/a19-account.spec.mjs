@@ -472,11 +472,13 @@ scenario("A19.2 account analytics opt-out survives reload and another browser, a
   await eventually(() => other.page.locator("#analytics").isChecked(), { timeout: RECORD_WAIT_MS, message: "another device reads the account opt-out" });
   await sleep(ANALYTICS_SETTLE_MS);
   assert.deepEqual(otherSeen.map((r) => r.host), [], "the account opt-out travels to another browser");
-  await box.uncheck();
+  await box.click();
   await userRecord(account.uid, (r) => r.analyticsOptOut === false, "unchecking stores the account opt-in");
+  await eventually(async () => !(await box.isChecked()), { timeout: RECORD_WAIT_MS, message: "the checkbox reflects the saved account opt-in" });
   await eventually(() => gtagRequests(seen).length === 1, { timeout: RECORD_WAIT_MS, message: "unchecking enables analytics in the same page" });
-  await box.check();
+  await box.click();
   await userRecord(account.uid, (r) => r.analyticsOptOut === true, "checking stores the account opt-out");
+  await eventually(() => box.isChecked(), { timeout: RECORD_WAIT_MS, message: "the checkbox reflects the saved account opt-out" });
   await eventually(() => u.page.evaluate((id) => window[`ga-disable-${id}`] === true, seen.measurementId), { timeout: RECORD_WAIT_MS, message: "checking disables the initialized analytics instance" });
   noPageErrors([u, other]);
 });

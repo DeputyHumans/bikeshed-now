@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Wait for the saved account preference and checkbox state in the analytics E2E flow, so asynchronous record delivery cannot turn a successful toggle into a false failure.
+
 - Bind the exhausted-budget selftest to an exact observed send interval, so timer rounding cannot invalidate its retry estimate while the no-send and no-look checks remain strict.
 
 - Judge delayed requests against their own route and server clocks, and prove shared delay windows through enrolled requests and an explicit release. Keep synthetic HTTP and MCP cutoff intervals exact so scheduling load cannot change their diagnostics; retain routing, numeric-delay and stall-classification controls.
