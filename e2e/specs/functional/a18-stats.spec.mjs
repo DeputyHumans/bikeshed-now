@@ -651,7 +651,7 @@ async function activityRows(dialog, filter) {
  * recordView does (functions/src/index.ts:2225). So the owner's Automation
  * filter shows a token's POST /view and never an agent's MCP read.
  */
-scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view", { tiers: ["local", "prod"], defect: "X-a18-stats-3", timeoutMs: 360_000, inconclusiveOnPageStall: true }, async (ctx) => {
+scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view", { tiers: ["local", "prod"], timeoutMs: 360_000, inconclusiveOnPageStall: true }, async (ctx) => {
   const [owner] = await castSessions(["owner"]);
   const email = owner.account.email.toLowerCase();
   const D = await publishPage(owner, "automation-feed");
@@ -670,6 +670,10 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   const mcpSession = stored.find((x) => x.data.actor?.channel === "mcp");
   ctx.step(`the MCP session's fields: ${Object.keys(mcpSession.data).sort().join(", ")}`);
 
+  ctx.step("a human reading session is also present, so both filters must exclude the other kind");
+  const humanSession = sid();
+  precondition((await view(owner.http, beatBody(D.docId, humanSession, 0))).status === 200, "the person's POST /view");
+
   ctx.step("the owner signs in, opens the document, chooses More actions → Activity, then Automation");
   const u = await ctx.users.user({ name: "owner" });
   await u.signInUi(owner.account.email, owner.account.password, { timeout: PAGE_MS });
@@ -680,6 +684,9 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   ctx.step(`Automation rows: ${JSON.stringify(rows)}`);
   precondition(rows.some((r) => r.badge === "via cli" && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
   assert.ok(rows.some((r) => r.badge === "via mcp" && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
+  assert.ok(rows.every((r) => r.badge === "via mcp" || r.badge === "via cli"), "Automation excludes human activity");
+  const people = await activityRows(dialog, "People");
+  assert.ok(people.length > 0 && people.every((r) => !r.badge), "People excludes automated activity and includes the human session");
 });
 
 // --- A18.5 --------------------------------------------------------------------

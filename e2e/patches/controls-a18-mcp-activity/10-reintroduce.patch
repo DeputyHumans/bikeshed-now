@@ -1,0 +1,10 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -409,7 +409,6 @@
+         sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
+         ms: 0, via: "app", automated: true, actor: ctx.actor,
+         reads: FieldValue.increment(1),
+-        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
+         lastBeatAt: FieldValue.serverTimestamp(),
+       }, { merge: true });
+       tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) });

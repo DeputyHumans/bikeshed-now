@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- MCP reads appear in Activity with a stable session start. Malformed change-feed
+  cursors with partial positions, empty event ids or invalid timestamp ranges
+  are refused without replaying the log or advancing the saved cursor.
+
 - CLI publish/update watch status goes to stderr, keeping `--json` stdout a
   stream of parseable results while the watcher remains active.
 

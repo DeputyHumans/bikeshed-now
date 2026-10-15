@@ -379,3 +379,30 @@ test("every way to change a document records an event, or says why it need not",
     }
   });
 });
+
+for (const [label, fields] of [
+  ['empty event id', { s: 1, n: 0, e: '' }],
+  ['missing seconds', { n: 0, e: 'event' }],
+  ['missing nanoseconds', { s: 1, e: 'event' }],
+  ['missing event id', { s: 1, n: 0 }],
+  ['negative nanoseconds', { s: 1, n: -1, e: 'event' }],
+  ['nanoseconds overflow', { s: 1, n: 1e9, e: 'event' }],
+  ['seconds overflow', { s: 253402300800, n: 0, e: 'event' }],
+  ['event path', { s: 1, n: 0, e: 'nested/event' }],
+]) test(`a malformed cursor with ${label} is rejected without throwing or replaying`, () => {
+  const raw = Buffer.from(JSON.stringify({ v: 1, d: 'd1', ...fields })).toString('base64url');
+  assert.deepEqual(decodeCursor(raw, 'd1'), { error: 'that is not a cursor this server gave out' });
+});
+
+test('MCP reads have a stable startedAt for the Activity query while counts and lastBeatAt advance', async () => {
+  const w = world();
+  await w.call('get_document', OWNER, {});
+  const path = 'docs/d1/views/api-t1-v1';
+  const first = w.store.get(path);
+  assert.ok(first.startedAt instanceof Timestamp, 'MCP activity has the timestamp required by the ordered query');
+  await w.call('get_document', OWNER, {});
+  const second = w.store.get(path);
+  assert.ok(second.startedAt.isEqual(first.startedAt), 'repeated reads retain the session start');
+  assert.ok(second.lastBeatAt.toMillis() >= first.lastBeatAt.toMillis());
+  assert.deepEqual({ reads: second.reads, ms: second.ms, automated: second.automated, apiReads: w.store.get('docs/d1').stats.apiReads }, { reads: 2, ms: 0, automated: true, apiReads: 2 });
+});

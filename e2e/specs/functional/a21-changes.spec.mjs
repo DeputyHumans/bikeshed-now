@@ -412,9 +412,6 @@ scenario("A21.4 \"last\" with nothing saved answers from the start with resumedF
 
 // --- A21.5 and A21.5b --------------------------------------------------------------
 
-/** What A21.5 leaves for A21.5b: its document A, whose log is its publish, and the agent's token. */
-const refused = { docId: null, token: null };
-
 scenario("A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor", { timeoutMs: 420_000 }, async (ctx) => {
   const { agent, docId: A, cursor: cA } = await stage(ctx, [], "a215-a", "A21.5 cursor A");
   const pubB = await publishMcp(agent.mcp, { title: "A21.5 cursor B", content: FIXTURE_HTML, format: "html", id: docIdFor(target, "a215-b") });
@@ -441,6 +438,11 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
     ['"start" is refused, never read as the start', "start", MALFORMED],
     ["a cursor of an unknown version is refused", b64({ v: 2, d: A }), MALFORMED],
     ["a cursor whose position is not numbers is refused", b64({ v: 1, d: A, s: "1", n: 0, e: "x" }), MALFORMED],
+    ["a partial position is refused", b64({ v: 1, d: A, n: 0, e: "x" }), MALFORMED],
+    ["negative nanoseconds are refused", b64({ v: 1, d: A, s: 1, n: -1, e: "x" }), MALFORMED],
+    ["overflowing nanoseconds are refused", b64({ v: 1, d: A, s: 1, n: 1e9, e: "x" }), MALFORMED],
+    ["overflowing seconds are refused", b64({ v: 1, d: A, s: 253402300800, n: 0, e: "x" }), MALFORMED],
+    ["an event path is refused", b64({ v: 1, d: A, s: 1, n: 0, e: "a/b" }), MALFORMED],
   ];
   for (const [what, since, re] of refusals) {
     ctx.step(what);
@@ -449,8 +451,6 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
     assert.match(out.text, re, `${what}: the reason`);
     if (re === FOREIGN) assert.ok(out.text.includes(`not "${A}"`), `${what}: it names the document asked about`);
   }
-  refused.docId = A;
-  refused.token = agent.token;
   ctx.step("since left out: the schema's required argument");
   const missing = await agent.mcp.call("get_changes", { id: A });
   assert.equal(missing.isError, true, "a get_changes without since is refused");
@@ -460,14 +460,12 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
   assert.ok(after?.cursor === savedA.cursor && after.updatedAt.isEqual(savedA.updatedAt), "no refusal moved or rewrote the saved cursor");
 });
 
-scenario("A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start", { defect: "X-a21-changes-1", timeoutMs: 180_000 }, async (ctx) => {
-  precondition(refused.docId && refused.token, "A21.5 did not stage its document, so there is nothing to probe");
-  const docId = refused.docId;
-  const mcp = ctx.mcp({ token: refused.token, actor: "owner-a", timeoutMs: REQUEST_MS });
-  await mcp.initialize();
-  const agent = { mcp, label: "a" };
+scenario("A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start", { timeoutMs: 180_000 }, async (ctx) => {
+  const { agent, docId } = await stage(ctx, [], "a215b-empty", "A21.5b malformed cursor");
+  const mcp = agent.mcp;
+  await settle(docId, { "version.published": 1 }, "the publish is recorded");
   const head = await changes(agent, docId, "all", { includeMine: true });
-  precondition(head.events.length === 1 && head.events[0].type === "version.published" && head.more === false, "A21.5's document A: the whole log is its publish");
+  precondition(head.events.length === 1 && head.events[0].type === "version.published" && head.more === false, "the whole log is this document's publish");
   const real = unb64(head.cursor);
   precondition(typeof real.s === "number" && typeof real.n === "number" && typeof real.e === "string" && real.e.length > 0, `a server cursor is {v, d, s, n, e}: ${JSON.stringify(Object.keys(real))}`);
 

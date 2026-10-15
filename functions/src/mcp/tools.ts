@@ -37,7 +37,7 @@
 
 import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { bucketName, publicOrigin } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
@@ -401,25 +401,19 @@ async function recordApiRead(
 ): Promise<void> {
   const sessionId = `api-${ctx.actor.tokenId ?? ctx.caller.uid}-${versionId}`;
   try {
-    await docRef.collection("views").doc(sessionId).set(
-      {
-        sessionId,
-        uid: ctx.caller.uid,
-        email: ctx.caller.emailLower,
-        versionId,
-        ms: 0,
-        via: "app",
-        automated: true,
-        actor: ctx.actor,
+    await ctx.db.runTransaction(async (tx) => {
+      const viewRef = docRef.collection("views").doc(sessionId);
+      const before = await tx.get(viewRef);
+      const startedAt = before.data()?.startedAt;
+      tx.set(viewRef, {
+        sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
+        ms: 0, via: "app", automated: true, actor: ctx.actor,
         reads: FieldValue.increment(1),
+        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
         lastBeatAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    await docRef.set(
-      { stats: { apiReads: FieldValue.increment(1) } },
-      { merge: true },
-    );
+      }, { merge: true });
+      tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) });
+    });
   } catch {
     /* statistics are best-effort and never fail the read */
   }

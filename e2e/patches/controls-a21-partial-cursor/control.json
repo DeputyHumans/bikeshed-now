@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor",
+  "what": "controls-a21-partial-cursor",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a partial position is refused"
+  }
+}

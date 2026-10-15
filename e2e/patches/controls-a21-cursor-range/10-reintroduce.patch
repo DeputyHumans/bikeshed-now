@@ -1,0 +1,12 @@
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -305,8 +305,7 @@
+     !safeSegment(parsed.e) ||
+     !Number.isInteger(parsed.s) ||
+     !Number.isInteger(parsed.n) ||
+-    parsed.s < -62135596800 || parsed.s > 253402300799 ||
+-    parsed.n < 0 || parsed.n >= 1_000_000_000
++    false
+   ) {
+     return { error: "that is not a cursor this server gave out" };
+   }

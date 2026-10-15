@@ -10825,7 +10825,7 @@
     },
     {
       "id": "X-a20-cli-3",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G18-cli-json",
       "classification": "P",
@@ -10847,7 +10847,11 @@
           "caseId": "e2e/specs/functional/a20-cli.spec.mjs::A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC §19 says every command takes --json",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g18/ledger.json",
+        "status": "source repaired; real spawned publish/update watch unit tests and source negative control observed; E2E pending"
+      }
     },
     {
       "id": "X-a24-responsive-a11y-4",
@@ -13185,6 +13189,46 @@
         "controls-a14-version-retry"
       ],
       "note": "Four product regressions and six revision UI regressions observed with isolated source mutants: green, intended red and restored green. Workspace title/address defaults, explicit stamp off and late defaults are fixed. A14 fixtures distinguish all sort orders with real non-owner reads, verify deeper folder reparenting, check move/delete mail silence and anchor backfill absence windows. A14.7/A14.8 cover browser revision entry points. Other revision refusal messages remain explicitly open. No E2E claim or campaign closure is made."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a20-cli-3"
+      ],
+      "scope": "local CLI source; separate CLI release and E2E pending",
+      "tests": [
+        "CLI suite: 105 pass, 0 fail",
+        "publish/update --watch --json: original source 2 fail at JSON parsing, repaired source 2 pass, isolated stdout-notice mutant 2 fail, restored source 2 pass"
+      ],
+      "evidence": "e2e/.out/harness-review-controls/g18/ledger.json",
+      "controls": [
+        "controls-a20-watch-json",
+        "controls-a20-cli-watch-debounce (refreshed patch)"
+      ],
+      "note": "Both spawned watchers publish initial and changed-file results while remaining alive; the human notice is emitted to stderr after watcher registration. A20.7t is a normal assertion again. Both control patches apply and declare valid targets. Fresh E2E proof remains required; no campaign item is closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a18-stats-3",
+        "X-a21-changes-1"
+      ],
+      "scope": "local working tree; E2E pending",
+      "tests": [
+        "events+mcp focused tests:59 pass,0 fail"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/g16-green.log",
+      "controls": [
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g16-original.log",
+          "result": "Original source fails7 new cursor/activity assertions (19 pass): empty id, partial position, invalid timestamp bounds, unsafe event path, and missing Activity timestamp."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g16-controls.json",
+          "result": "Removing startedAt or resetting it on each read each fails its targeted unit assertion."
+        }
+      ],
+      "note": "A21.5b now stages its own document, so it runs independently under grep and controls. A21.5 tests malformed positions; A18 Automation and People filters have positive human and automated sessions. Five new E2E controls cover empty/partial/range cursors, missing MCP activity and ignored filters. No campaign item closed."
     }
   ]
 }

@@ -2005,7 +2005,10 @@ owner's other clients.
 
 Automated reads record a view session with `ms: 0` and count into
 `stats.apiReads` — never `stats.views` or `stats.totalMs`. The stats panel shows
-both and filters to human-only or automation-only. Comments and highlights
+both and filters to human-only or automation-only. Each automated session has a
+server `startedAt` retained across repeated reads and a refreshed `lastBeatAt`,
+so the Activity query includes it; session and aggregate counters update together.
+Comments and highlights
 created through an automation channel carry a visible "via MCP" marker.
 
 ### Version, edit and view provenance
@@ -2186,6 +2189,9 @@ starting point. It is one of:
 
 A cursor is bound to its document. One from another document, a malformed one,
 or one of an unknown version is refused, never read as "start over" or "now".
+A positioned cursor requires all of seconds, nanoseconds and a nonempty event
+id that is one safe path segment, within Firestore timestamp bounds. A start
+cursor omits all three position fields.
 It grants nothing, so it is not signed.
 
 **Where a cursor comes from, and only a poll moves one:**
