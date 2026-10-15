@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Refresh publication race and cleanup control patches after acknowledgement recovery changes, preserving their mutations and amplifier composition.
+
 - Give the projection-failure E2E case the same bounded setup budget as the rest of its area, so its session setup reaches the product before the response and storage assertions run.
 
 - Preserve saved and published bytes when Firestore retries a transaction after losing its commit acknowledgement. Recognize each request's committed immutable prefix or retirement epoch before retry-only refusals, keep later heads intact, and retain potentially committed bytes when the result remains uncertain.

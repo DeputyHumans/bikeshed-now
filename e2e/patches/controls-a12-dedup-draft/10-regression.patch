@@ -1,11 +1,7 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -387,7 +387,7 @@
-         checkDraftSnapshot(current, draft);
-         if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
+@@ -467,3 +467,3 @@
          retiredEpoch = String(current?.liveEpoch ?? "initial");
--        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: randomUUID(), updatedAt: now() });
-+        tx.update(docRef, { liveEpoch: randomUUID(), updatedAt: now() });
-       });
-     } catch (error) {
-       if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
+-        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: retirementEpoch, updatedAt: now() });
++        tx.update(docRef, { liveEpoch: retirementEpoch, updatedAt: now() });
+         retirementMayHaveCommitted = true;

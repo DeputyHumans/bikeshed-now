@@ -1,38 +1,26 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -15,6 +15,7 @@
- import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
- import { syncPublicProjection } from "./publicdoc";
+@@ -21,2 +21,3 @@
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
 
- /**
-  * The browser's editor and the agent surface both change a document through
-@@ -335,6 +336,8 @@
-     };
-   }
+@@ -486,2 +487,4 @@
 
 +  await e2eGate("mint-before-id", docId);
 +
    // Version ids mint as max(N)+1 over EXISTING version documents, so a
-   // withdrawn id is re-used by the next commit. That is deliberate; the view
-   // tombstone in delete-version.mjs is what keeps the two from being conflated.
-@@ -354,6 +357,8 @@
-       preconditionOpts: { ifGenerationMatch: 0 },
-     });
+@@ -505,2 +508,4 @@
    }
 +
 +  await e2eGate("mint-after-upload", docId);
 
-   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
-
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -9,2 +9,3 @@
+@@ -10,2 +10,3 @@
  import { bindSync, type Sync } from "../crdt/sync";
 +import { e2eGate } from "../e2eGate";
  import type { FrameMode } from "./frameMode";
-@@ -69,2 +70,4 @@
+@@ -82,2 +83,4 @@
            await log.ready();
 +          // Hold simultaneous empty reads before the seed is elected.
 +          await e2eGate("join-before-bind", docId);
