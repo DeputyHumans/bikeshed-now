@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -656,7 +656,7 @@
+   });
+
+   if (!outcome.stored) {
+-    await bucket()
++    if (!outcome.denied) await bucket()
+       .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
+       .catch(() => undefined);
+     if (outcome.denied) {

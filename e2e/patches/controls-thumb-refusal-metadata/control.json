@@ -1,0 +1,17 @@
+{
+  "oracle": "thumbnail refusal discloses no metadata",
+  "what": "Return metadata in an otherwise correct refusal.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-thumb-authority"
+  ],
+  "expect": {
+    "message": "thumbnail refusal discloses no metadata"
+  }
+}

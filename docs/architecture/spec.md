@@ -258,7 +258,11 @@ every member sees them without anybody rendering them again.
   JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
   image, slides at most 100. The objects go in under a key minted per upload,
   and a transaction makes that key the record's only if this kind is not yet
-  stored for `v` by this revision; a loser deletes what it wrote. A newer
+  stored for `v` by this revision and the uploader is still an editor in its
+  fresh document snapshot. A downgrade or removal during upload is refused
+  with the same reader-aware `403`/`404` as an initial refusal; it changes no
+  thumbnail metadata and deletes only this upload's candidate key. A loser
+  deletes what it wrote. A newer
   revision replaces an older one's images for the same version and deletes
   their keys, so a capture that got an image wrong is not stuck with it until
   the next version. Moving the record to a new version deletes the old

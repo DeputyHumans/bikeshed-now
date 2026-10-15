@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Recheck thumbnail editor authority after JPEG upload, so a concurrent downgrade or removal cannot publish a shared image. Refuse with the existing reader-aware status and remove only the rejected candidate's objects; preserve owner uploads and existing thumbnails.
+
 - Save document-authorized drafts with an exact snapshot precondition instead of retaining a read transaction through the write. Recheck base, expiry, current role, live epoch, and causal order on every conflict; keep remembered-link authorization transactional and retain candidate bytes when a lost acknowledgement leaves the commit uncertain.
 
 - Keep the tier-lock recording regression valid when invocation metadata also records guarded RTDB maintenance.

@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -643,7 +643,7 @@
+     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+     // Uploading bytes does not reserve authority: a sharing change may have
+     // removed this editor while Storage was accepting the candidate images.
+-    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
++    if (d && ((caller.uid === d.ownerUid && Array.isArray(d.members) && d.members.length === 1) || !isDocEditor(d, caller.uid, caller.emailLower))) {
+       return { stored: false, moved: false, stale: [], denied: d };
+     }
+     if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {

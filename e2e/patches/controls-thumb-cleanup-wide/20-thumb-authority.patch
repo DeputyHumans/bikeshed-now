@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -657,7 +657,7 @@
+
+   if (!outcome.stored) {
+     await bucket()
+-      .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
++      .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}`, force: true })
+       .catch(() => undefined);
+     if (outcome.denied) {
+       res.status(refusal(outcome.denied, caller, await linkProofFor(docRef, outcome.denied, caller, null))).end();

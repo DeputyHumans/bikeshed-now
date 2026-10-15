@@ -945,6 +945,82 @@ scenario("C17c thumbnails (SYNC-T): the owner and N−1 editors store v1's cover
   await judgeC17c(ctx, s, cover.rows, slides.rows, label);
 });
 
+/** A real access change lands after the candidate JPEGs, before their metadata transaction. */
+async function thumbnailAuthority(ctx, mode) {
+  await handBack(ctx);
+  const [owner, editor] = await people(ctx, ["owner", "editor"]);
+  const g = gates(target), gate = "thumb-after-upload";
+  const checks = oracleSet();
+  for (const kind of ["cover", "slides"]) {
+    const doc = await newDoc(owner, `C17c thumbnail ${mode} ${kind}`);
+    await grantEditors(target, { owner, doc: doc.docId, accounts: [editor.account], role: "editor", timeoutMs: HTTP_MS });
+    const images = kind === "cover" ? [jpegSkeleton({ pad: 37 })] : [jpegSkeleton({ pad: 41 }), jpegSkeleton({ pad: 43 })];
+    const otherKind = kind === "cover" ? "slides" : "cover";
+    const previous = jpegSkeleton({ pad: 53 });
+    const request = (s, name, which, bytes) => racer(name, { s, path: "/thumb", query: { doc: doc.docId, v: "v1", kind: which, sizes: bytes.map((b) => b.length).join(","), r: thumbRevision(target) }, contentType: "application/octet-stream", body: Buffer.concat(bytes) });
+    const seeded = answered(await request(owner, "existing other kind", otherKind, [previous]).send(), "existing thumbnail");
+    precondition(seeded.status === 200 && seeded.json?.stored === true, "owner seeded the other thumbnail kind");
+    const prefix = `docs/${doc.docId}/thumbs/v1/`;
+    const beforeObjects = await listObjects(target, prefix);
+    const initial = await readDoc(target, `docs/${doc.docId}`);
+    let pending = [], afterAccess, candidates;
+    await roomFor(ctx, 2, "one held thumbnail and the owner's access change");
+    try {
+      await g.hold(gate, { key: doc.docId });
+      pending = sendAll([request(mode === "owner" ? owner : editor, `${mode} ${kind}`, kind, images)]);
+      await held(ctx, g, gate, 1, doc.docId, pending);
+      candidates = (await listObjects(target, prefix)).filter((name) => !beforeObjects.includes(name));
+      precondition(candidates.length === images.length, `${kind}: every candidate JPEG exists before the sharing change`);
+      const access = answered(await owner.http.request("POST", "/access", {
+        json: mode === "viewer" ? { docId: doc.docId, add: [{ email: emailOf(editor), role: "viewer" }] } : { docId: doc.docId, remove: [emailOf(editor)] }, timeoutMs: HTTP_MS,
+      }), "change editor access while thumbnail upload is held");
+      precondition(access.status === 200, `access change answered ${access.status}`);
+      afterAccess = await readDoc(target, `docs/${doc.docId}`);
+      precondition(!afterAccess.editorMembers.includes(emailOf(editor)), "the uploader's editor authority is gone before the thumbnail transaction");
+      precondition(afterAccess.members.includes(emailOf(editor)) === (mode === "viewer"), "the member's read access matches the chosen downgrade/removal");
+      precondition(!pending[0].answered, "thumbnail request is still held after the access change");
+      await g.release(gate, { key: doc.docId });
+    } finally {
+      await g.release(gate, { key: doc.docId }).catch(() => undefined);
+    }
+    const [answer] = await rowsOf(ctx, pending, `thumbnail ${mode} ${kind}`);
+    const record = await readDoc(target, `docs/${doc.docId}`);
+    const objects = await listObjects(target, prefix);
+    const expectedStatus = mode === "owner" ? 200 : mode === "viewer" ? 403 : 404;
+    await checks.check(() => assert.equal(answer.status, expectedStatus, `thumbnail ${mode}: fresh authority answers ${expectedStatus}`));
+    await checks.check(() => assert.equal(stamp(record.updatedAt), stamp(afterAccess.updatedAt), "thumbnail authority: capture does not alter the access change's updatedAt"));
+    if (mode === "owner") {
+      const key = candidates[0].split("/").at(-2);
+      const expectedThumb = { ...initial.thumb, [kind]: kind === "cover" ? key : { key, count: images.length } };
+      await checks.check(() => assert.deepEqual(answer.json, { stored: true }, "thumbnail owner: successful capture is acknowledged"));
+      await checks.check(() => assert.deepEqual(record.thumb, expectedThumb, "thumbnail owner: candidate key is recorded and the other kind is retained"));
+      await checks.check(() => assert.deepEqual(sorted(objects), sorted([...beforeObjects, ...candidates]), "thumbnail owner: accepted JPEGs and previous sibling remain stored"));
+      for (let i = 0; i < images.length; i++) await checks.check(async () => {
+        const response = await served(owner, doc.docId, key, kind === "cover" ? "cover" : `s${i}`);
+        assert.equal(response.status, 200, "thumbnail owner: recorded image is served");
+        assert.deepEqual(response.buffer, images[i], "thumbnail owner: served bytes are the accepted JPEG");
+      });
+    } else {
+      await checks.check(() => assert.equal(answer.json, undefined, "thumbnail refusal discloses no metadata"));
+      await checks.check(() => assert.deepEqual(record.thumb, initial.thumb, "thumbnail revocation: refused capture cannot alter the thumbnail record"));
+      await checks.check(() => assert.deepEqual(sorted(objects), sorted(beforeObjects), "thumbnail revocation: only candidate JPEGs are deleted; the previous sibling remains"));
+    }
+    await checks.check(async () => {
+      const oldKey = otherKind === "cover" ? initial.thumb.cover : initial.thumb.slides.key;
+      const response = await served(owner, doc.docId, oldKey, otherKind === "cover" ? "cover" : "s0");
+      assert.equal(response.status, 200, "thumbnail authority: previous sibling is still served");
+      assert.deepEqual(response.buffer, previous, "thumbnail authority: previous sibling bytes remain unchanged");
+    });
+    ctx.ev.json(`thumbnail-authority-${mode}-${kind}`, { docId: doc.docId, answer, beforeObjects, candidates, objects, before: initial.thumb, after: record.thumb });
+  }
+  verdict({ others: checks });
+}
+
+const THUMB_AUTHORITY = { tiers: LOCAL, n: [2], needs: ["admin-emulator", "gates", "patch:amplify-thumb-authority"], timeoutMs: CASE_MS };
+scenario("C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "viewer"));
+scenario("C17c thumbnail authority: an editor removed after JPEG upload receives 404, changes no thumbnail, and deletes only its candidate (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "removed"));
+scenario("C17c thumbnail authority: the owner still stores and serves its exact JPEGs after removing another editor during upload (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "owner"));
+
 // =====================================================================================
 // C17d — N anonymous readers open a session at once
 // =====================================================================================

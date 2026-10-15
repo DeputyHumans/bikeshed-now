@@ -641,6 +641,11 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
   const outcome = await db().runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+    // Uploading bytes does not reserve authority: a sharing change may have
+    // removed this editor while Storage was accepting the candidate images.
+    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
+      return { stored: false, moved: false, stale: [], denied: d };
+    }
     if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
       return { stored: false, moved: true, stale: [] };
     }
@@ -654,7 +659,9 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     await bucket()
       .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
       .catch(() => undefined);
-    if (outcome.moved) {
+    if (outcome.denied) {
+      res.status(refusal(outcome.denied, caller, await linkProofFor(docRef, outcome.denied, caller, null))).end();
+    } else if (outcome.moved) {
       res.status(409).json({ error: "not the current version" });
     } else {
       res.status(200).json({ stored: false });

@@ -1,12 +1,17 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -632,17 +632,12 @@
+@@ -638,22 +638,12 @@
      ),
    );
  
 -  const outcome = await db().runTransaction(async (tx) => {
 -    const fresh = await tx.get(docRef);
 -    const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+-    // Uploading bytes does not reserve authority: a sharing change may have
+-    // removed this editor while Storage was accepting the candidate images.
+-    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
+-      return { stored: false, moved: false, stale: [], denied: d };
+-    }
 -    if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
 -      return { stored: false, moved: true, stale: [] };
 -    }
@@ -15,12 +20,12 @@
 -    tx.update(docRef, { thumb: decision.thumb });
 -    return { stored: true, moved: false, stale: decision.stale };
 -  });
-+  // e2e negative control (controls-c17-thumb-record-outside): the record is decided from the read made before the upload and written outside any transaction, so every capture that read it empty answers {stored: true}, keeps its images, and the last write wins.
++  // e2e control: decide from the pre-upload snapshot and write outside the transaction.
 +  const decided = nextThumb(readThumb(data.thumb), versionId, kind, key, count, THUMB_REVISION);
 +  if (decided.write) await docRef.update({ thumb: decided.thumb });
 +  const outcome = decided.write
-+    ? { stored: true, moved: false, stale: decided.stale }
-+    : { stored: false, moved: false, stale: [] as { versionId: string; key?: string }[] };
++    ? { stored: true, moved: false, stale: decided.stale, denied: undefined as DocAclData | undefined }
++    : { stored: false, moved: false, stale: [] as { versionId: string; key?: string }[], denied: undefined as DocAclData | undefined };
  
    if (!outcome.stored) {
      await bucket()
