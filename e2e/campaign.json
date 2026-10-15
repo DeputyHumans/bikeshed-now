@@ -11975,8 +11975,20 @@
         "report": "Self-classified I in the ledger and never tagged: after a lapsed claim and an author revision, the accept is correctly 409, but useSuggestionReview.ts:184-191 reports \"unrecorded\" and DocViewer advises an accept that cannot be made. SPEC §22 :2592-2594 is not broken outright. Harm: false advice, and text in the draft that nobody recorded as accepted."
       },
       "proofs": [],
-      "controls": [],
-      "requiredCases": []
+      "controls": [
+        "controls-a08-changed-outcome",
+        "controls-a08-changed-notice"
+      ],
+      "requiredCases": [],
+      "implementation": {
+        "status": "in-progress",
+        "files": [
+          "app/src/viewer/useSuggestionReview.ts",
+          "app/src/pages/DocViewer.tsx"
+        ],
+        "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T070056Z-p92639-iw3o/results.json",
+        "note": "Explicit changed:true conflict now has actionable saved-edit advice; no canonical closure."
+      }
     },
     {
       "id": "X-a01-identity-1",
@@ -14119,6 +14131,16 @@
       ],
       "evidence": "e2e/.out/2610142309-3nfp/invocations/20261015T065146Z-p50852-02bt/summary.md; e2e/.out/2610142309-3nfp/invocations/20261015T065427Z-p66010-bbii/summary.md; e2e/.out/a15-controls-proof/{proof,app-proof,judge-proof}.json",
       "note": "The initial expanded run had one fixture precondition failure from reading feedback outside its version collection; it remains recorded. New actual patched-stack red/restored pairs remain required; no product defect or production verification claimed."
+    },
+    {
+      "scope": "X-a08-review-1 changed-after-apply recovery advice; local product fix",
+      "checks": [
+        "New review unit assertion fails old catch-all outcome; 30 focused review tests pass after the distinct changed conflict outcome",
+        "B10 actual late-revision case observes the old misleading message; corrected expectation fails exactly at the recovery advice assertion",
+        "Product controls separately restore catch-all classification and old UI notice; immutable fixed-stack proof pending"
+      ],
+      "evidence": "/tmp/soapbox-a08-changed-unit-{red,green}.log; e2e/.out/2610142309-3nfp/invocations/20261015T070056Z-p92639-iw3o/results.json",
+      "note": "User-authorized misleading-state harm repair. Original classification and evidence retained, canonical item remains open pending current control pair and full matrix."
     }
   ]
 }

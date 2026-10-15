@@ -218,6 +218,7 @@ const APP = Object.freeze({
   saveTitleCannot: (n) => `${n === 1 ? "1 suggested edit is" : `${n} suggested edits are`} waiting. Only the owner or an approver can accept or reject ${n === 1 ? "it" : "them"}.`,
   saveTitleCan: (n) => `${n === 1 ? "1 suggested edit is" : `${n} suggested edits are`} waiting. Accept or reject ${n === 1 ? "it" : "each one"} before you publish.`,
   stale: "The text has changed since this was suggested, so it can’t be applied.",
+  changedAfterApply: "The suggestion changed after its previous text was saved in the draft. Nothing was accepted. Review that change and undo it if needed before deciding the revised suggestion.",
   unrecorded: "The change is in the draft, but accepting it wasn’t recorded. Accept it again to record it.",
   endPublish: "That was the last suggestion. Publish the result with Save as new version.",
   endResolve: "That was the last suggestion. Resolve the open comments, then publish the result with Save as new version.",
@@ -1064,6 +1065,7 @@ scenario("A8.7b once the approver's claim has lapsed, an author's revise is take
   const acc = await posts.waitInTurn((r) => isOp(r, "accept"), { since: mark, what: "the released accept" });
   assert.deepEqual({ status: acc.status, replacement: sent(acc, "replacement"), json: acc.json }, { status: 409, replacement: R1, json: { error: SERVER.changed, changed: true, replacement: R2 } }, "the accept is refused: its author has changed it");
   const toast = await a.waitForToast((t) => t.kind === "error", { since, timeout: CLIENT_MS });
+  assert.equal(toast.text, APP.changedAfterApply, "a changed accept explains the previous saved edit and revised suggestion without promising an impossible retry");
   const after = await annotationOf(docId, annId);
   assert.deepEqual(
     { state: after.suggestion.state, resolved: after.resolved, replacement: after.suggestion.replacement, decidedBy: after.suggestion.decidedBy ?? null, revisions: (after.suggestion.revisions ?? []).map((r) => r.replacement) },

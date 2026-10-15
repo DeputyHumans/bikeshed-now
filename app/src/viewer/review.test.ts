@@ -8,6 +8,7 @@ import { serializeCleanHtml } from "../annotation/highlighter";
 import { bindSync } from "../crdt/sync";
 import type { Anchor } from "../types";
 import { acceptInSession } from "./useSuggestionReview";
+import { ConflictError } from "../api";
 
 /** How the stand-in editor misbehaves, when a test wants it to. */
 interface Quirks {
@@ -281,6 +282,23 @@ describe("acceptInSession: claim, apply, save, and only then record", () => {
     });
     expect(outcome).toBe("unrecorded");
     expect(order).toEqual(["claim", "apply", "save", "record"]);
+  });
+
+  it("distinguishes a changed suggestion after saving from a retryable recording interruption", async () => {
+    for (const [detail, expected] of [[{ changed: true }, "changed-after-apply"], [{ changed: false }, "unrecorded"], [{}, "unrecorded"]] as const) {
+      const order: string[] = [];
+      const outcome = await acceptInSession({
+        check: () => "pending",
+        claim: async () => void order.push("claim"),
+        release: async () => void order.push("release"),
+        apply: () => (order.push("apply"), "applied"),
+        flush: async () => void order.push("save"),
+        saveFailed: () => false,
+        record: async () => { order.push("record"); throw new ConflictError("The author revised it", detail); },
+      });
+      expect(outcome).toBe(expected);
+      expect(order).toEqual(["claim", "apply", "save", "record"]);
+    }
   });
 
   it("takes no claim on a suggestion that is already stale", async () => {

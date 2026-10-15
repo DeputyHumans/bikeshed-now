@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Explain when a suggestion changed after its previous replacement reached the draft, so an approver can review or undo that edit instead of being told to retry a now-stale acceptance.
+
 - Add directional account controls for populated-team deletion, consent and script loading, token revocation, hashing, read privacy and names; judge delayed token-use records with an explicit final assertion.
 
 - Exercise fork privacy and expiry across ancestors, descendants and public projections; prove that copied versions exclude feedback and unrelated files, refused destinations leave no bytes, and sign-in intents wait for the authenticated unlock answer.

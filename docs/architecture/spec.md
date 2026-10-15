@@ -2934,7 +2934,11 @@ one contains the other ("X" becomes "Y, X"), the longer is what stands there.
 The edit is checked by what the text must read afterwards, and one that came
 out otherwise is undone. A failure at any step says which and records nothing,
 and accepting again after an interruption finds the change already made and
-only records it. The bar, and the comments panel in the editor, call stale
+only records it. If the author revised the suggestion before recording,
+the previous edit stays in the draft but is not accepted. The UI identifies
+that saved edit and tells the approver to review or undo it before deciding
+the revised suggestion; it must not promise that retrying a stale suggestion
+will record the old replacement. The bar, and the comments panel in the editor, call stale
 exactly what Accept would refuse, judged again as the draft changes. In the
 editor, the same bar tells anyone who cannot decide that suggestions are
 waiting and who can clear them, which is also why "Save as new version" is
