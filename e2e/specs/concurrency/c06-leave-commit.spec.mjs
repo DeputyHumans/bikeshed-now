@@ -26,8 +26,8 @@
  *        Done, 200, holding all its tokens); the session settles (I1, the
  *        plan's conditions); nobody is left "edit" in status/{d}/peers; the
  *        agent's commit_draft publishes v2; status/{d}/y is empty after it;
- *        the version carries no decoration (DECOR, BODYATTR apart from S3's
- *        `spellcheck`); everyone leaves at once and status/{d}/peers is
+ *        the version carries no decoration and retains every authored root
+ *        attribute (DECOR, BODYATTR); everyone leaves and status/{d}/peers is
  *        empty within 5 s (I12). It also records, for EVERY save after Done
  *        (Done's own and the autosave timer's second, X-c06-leave-commit-1),
  *        which other editors' tokens it lacks, which was answered last, and
@@ -115,16 +115,13 @@
  * flush a no-op), and "C11c all leave at once in the app … [N=2]" of
  * controls-c06-accept-keeps-log (accept.ts no longer clears the log).
  *
- * KNOWN DEFECTS (each case carries `defect:`, and its one assertion is the
- * defect's oracle; everything before it is a precondition):
- *   S17  "C6 late save", "C6 latency": the draft is one blob; saveDraft
- *        (functions/src/index.ts) checks only the base version and
- *        writeDraft (lib/draft.ts) overwrites, so the save that LANDS last
- *        wins whatever it was made from; commit_draft then publishes it and
- *        drops the live log that still held the lost keys. SPEC §16 lets
- *        the log be dropped ("a log nobody is using") and ADR 0015 names the
- *        race in "What would change this", so it is carried as a G1 ask
- *        (class I), with its harm: tokens saved (200) missing from v2.
+ * HISTORICAL DEFECTS (now ordinary regression assertions; shared causal
+ * snapshots and per-session presence preserve the outcomes below):
+ *   S17  "C6 late save", "C6 latency": last-arriving whole snapshots could
+ *        erase a newer merged draft before commit_draft published it. Saves
+ *        now carry causal stamps: behind snapshots are no-ops, incomparable
+ *        snapshots explicitly refuse with draftChanged, and remote merges
+ *        autosave. A refused Done stays open until a deliberate retry.
  *   S11  "C11a presence", "C11a agent", "C11a closed": a removed editor's
  *        own remove() of its node is refused by the rules (no
  *        presenceAccess), presence has no TTL, and liveEditing counts every
@@ -132,12 +129,11 @@
  *   S21  "C11b", "C11b both open": one node per account
  *        (status/{d}/peers/{uid}); a second tab writes "view" over the first
  *        tab's "edit" and its onDisconnect removes the node both share.
- * Seen, not judged: when Done comes inside the debounce and its save is still
- * in flight at the debounce's deadline, the autosave timer sends the same
- * draft again (useInlineEditor.ts: flushUnsaved does not clear the timer,
- * and only leaving edit mode does), so a Done costs two POST /draft
- * (X-c06-leave-commit-1). C6 judges each editor's FIRST save after Done and
- * records every one.
+ * Historical redundant-save observation: Done inside the debounce left its
+ * timer armed, so the timer sent the same snapshot again while the flush
+ * was still in flight (X-c06-leave-commit-1). The ordered save queue now
+ * coalesces these snapshots. C6 judges each editor's first save after Done
+ * and records every request.
  *
  * A failed sync precondition (a peer never "Shared", a spread over the
  * limit, a Done outside the debounce, a save never held, a latency window
@@ -647,6 +643,8 @@ function saveRows(rows, log) {
         sentAt: r.sentAt,
         respondedAt: r.respondedAt,
         status: r.status ?? r.state,
+        draftChanged: r.json?.draftChanged === true,
+        error: r.json?.error ?? null,
         own: log.typed.filter((t) => t.peer === u.name && html.includes(t.token)).length,
         all: log.typed.filter((t) => html.includes(t.token)).length,
         lacks: log.typed.filter((t) => t.peer !== u.name && !html.includes(t.token)).map((t) => t.token),
@@ -673,6 +671,20 @@ function readerBodyInPage(own) {
   return clone.innerHTML;
 }
 
+/** Reader overlays differ per person. Compare authored DOM after Done, while
+ * persisted bytes still go through readVersion/assertCleanVersion unchanged. */
+async function settleReaders(users) {
+  let last = null;
+  let stable = 0;
+  await eventually(async () => {
+    const bodies = await Promise.all(users.map(async (u) => (await u.frame()).evaluate(readerBodyInPage, [...KNOWN_OWN_VALUES])));
+    if (bodies.some((body) => !body) || new Set(bodies).size !== 1) { stable = 0; return false; }
+    stable = bodies[0] === last ? stable + 1 : 1;
+    last = bodies[0];
+    return stable >= 3;
+  }, { timeout: 20_000, interval: 200, message: "readers show the same nonempty authored body on three consecutive samples" });
+}
+
 /** Each user's frame body (the app's own nodes aside), parsed again by the version's parser: {name: hash}. */
 async function peerBodyHashes(parser, users) {
   const out = {};
@@ -692,17 +704,12 @@ async function readDraft(owner, docId) {
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
 async function versionHtml(t, docId, versionId) {
   const rec = await readDoc(t, `docs/${docId}/versions/${versionId}`);
-  const buf = await readObject(t, `docs/${docId}/${versionId}/${rec?.entry ?? "index.html"}`);
+  const prefix = rec?.storagePrefix ?? `docs/${docId}/${versionId}`;
+  const buf = await readObject(t, `${prefix}/${rec?.entry ?? "index.html"}`);
   return buf ? buf.toString("utf8") : null;
 }
 
-/** A fingerprint with one root attribute taken out of both <html> and <body>. */
-function withoutAttr(fp, name) {
-  const drop = (a) => (a ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== name)) : a);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
-
-/** The version against v1 and the peers: segments (I2), body hash (I5), DECOR, BODYATTR whole and apart from S3, its text. */
+/** The version against v1 and the peers: segments (I2), body hash (I5), DECOR, authored BODYATTR, its text. */
 async function readVersion(ctx, { parser, docId, versionId, ids }) {
   const html = await versionHtml(ctx.target, docId, versionId);
   precondition(typeof html === "string" && html.length > 0, `the stored entry of ${versionId} is readable`);
@@ -719,16 +726,15 @@ async function readVersion(ctx, { parser, docId, versionId, ids }) {
     lost: decor.lost,
     structure: decor.structure,
     bodyAttr: bodyAttrDiff(fp1, fpV),
-    beyondS3: bodyAttrDiff(withoutAttr(fp1, "spellcheck"), withoutAttr(fpV, "spellcheck")),
   };
 }
 
-/** DECOR on the version, and BODYATTR apart from the known S3 attribute: what no suspect here predicts to break. */
+/** Persisted versions preserve every authored root attribute and contain no editor decoration. */
 function assertCleanVersion(v) {
   assert.deepEqual(v.decoration, [], "DECOR: decoration in the version");
   assert.deepEqual(v.lost, [], "DECOR: author markers lost from the version");
   assert.deepEqual(v.structure, [], "DECOR: the version's structure changed");
-  assert.equal(v.beyondS3.equal, true, `BODYATTR: the version's <html>/<body> attributes differ from v1's beyond the known S3 spellcheck: ${JSON.stringify({ body: v.beyondS3.body, html: v.beyondS3.html })}`);
+  assert.equal(v.bodyAttr.equal, true, `BODYATTR: the version's authored <html>/<body> attributes differ from v1's: ${JSON.stringify({ body: v.bodyAttr.body, html: v.bodyAttr.html })}`);
 }
 
 /** I2 in the version, with the failure saying where. */
@@ -890,7 +896,7 @@ scenario("C6 version: the version the agent's commit_draft published after every
   if (w.open) ctx.inconclusive(`S17's window opened under natural timing: a save lacking ${w.lastAnswered.lacks.length} token(s) of other editors (${w.lastAnswered.name}'s) was answered last while the saves were in flight together, so the version's I2 is S17's question here (C6 latency judges it), not this case's`);
   ctx.step(`v2 ${v.hash.slice(0, 12)} against ${Object.keys(v.peerHashes).length} reader(s) and the draft ${v.draftHash.slice(0, 12)}`);
   assertInvariant(i2InVersion(v, v.typed));
-  const r = checkI5({ draftHash: v.hash, peerHashes: v.peerHashes, decoration: v.decoration, bodyAttr: v.beyondS3 });
+  const r = checkI5({ draftHash: v.hash, peerHashes: v.peerHashes, decoration: v.decoration, bodyAttr: v.bodyAttr });
   assert.ok(r.ok, `I5 (in the version, for "draft" read v2): ${r.failures.join("; ")}`);
 });
 
@@ -945,7 +951,7 @@ async function c6Serial(ctx, n, { latencyMs = 0 } = {}) {
     const v = await readVersion(ctx, { parser, docId, versionId: "v2", ids });
     assertCleanVersion(v);
     assertInvariant(i2InVersion(v, log.typed));
-    const r = checkI5({ draftHash: v.hash, peerHashes, decoration: v.decoration, bodyAttr: v.beyondS3 });
+    const r = checkI5({ draftHash: v.hash, peerHashes, decoration: v.decoration, bodyAttr: v.bodyAttr });
     assert.ok(r.ok, `I5 (in the version, for "draft" read v2): ${r.failures.join("; ")}`);
     const left = await leaveAtOnce(users, "app");
     assertInvariant(await waitPeersGone(ctx.target, docId, left.t0));
@@ -964,9 +970,10 @@ scenario("C6-serial positive control: the same typing and Done inside the deboun
  * client→database byte is held latencyFor(N) while the editors type at once
  * and press Done at once inside the debounce, so each save after Done is
  * serialized before any other editor's last keys reach its page. The race
- * proof (else INCONCLUSIVE): every such save answered 200, holding its own
- * editor's tokens and lacking at least one other editor's. Then the delay
- * drains, the session settles, and the agent's commit_draft publishes.
+ * proof (else INCONCLUSIVE): each initial save holds its own editor's
+ * tokens and lacks another editor's. It must be accepted or refused with
+ * retryable draftChanged; after the delay drains, merged autosaves recover,
+ * a second Done closes any refused editor, and commit_draft publishes.
  * Resolves {version, typed} for the oracle.
  */
 async function c6Latency(ctx) {
@@ -989,37 +996,50 @@ async function c6Latency(ctx) {
       await Promise.all(plan.map(({ u, id, tokens }) => typeTokens(u, id, tokens.slice(-1))));
       const fired = await syncPages(users.map((u) => u.page), pressDone, { leadMs: DONE_LEAD_MS });
       judgeDoneTiming(ctx, null, users, fired, await inputWindows(armed));
-      await Promise.all(users.map((u) => editorClosed(u)));
-      // The timer's second save (X-c06-leave-commit-1) is sent as Done's own
-      // is answered: give its request a moment to be captured.
-      await sleep(300);
-      const saves = saveRows(await savesSince(armed, fired.t0 - 50), log);
+      // An incomparable snapshot is refused safely with draftChanged. Done
+      // then leaves that editor open; do not wait for it to close before the
+      // delayed remote history can arrive and produce a dominating save.
+      await eventually(() => armed.every(({ cap }) => [...cap].find((r) => r.t >= fired.t0 - 50)?.settled),
+        { timeout: 30_000, interval: 100, message: "each initial Done save is answered" });
+      const first = armed.map(({ u, cap }) => ({ u, r: [...cap].find((r) => r.t >= fired.t0 - 50) }));
+      const saves = saveRows(first, log);
       ctx.ev.json("latency-saves", { latencyMs: ms, saves });
       measure(ctx, MEASURE, { scenario: "C6 latency window", latencyMs: ms, typed: log.typed.length, open: saves.length > 0 && saves.every((s) => s.lacks.length > 0), saves: saves.map(saveSummary) });
       ctx.step(`saves after Done: ${saves.map((s) => `${s.name} ${s.status}, own ${s.own}/${TOKENS + 1}, lacking ${s.lacks.length} of the others'`).join("; ")}`);
-      precondition(saves.length > 0 && saves.every((s) => s.status === 200), `every save after Done is answered 200 (${saves.map((s) => `${s.name} ${s.status}`).join(", ") || "none"})`);
+      assert.ok(saves.length === users.length && saves.every((s) => s.status === 200 || (s.status === 409 && s.draftChanged)),
+        `every initial Done save is accepted or explicitly retryable: ${JSON.stringify(saves)}`);
       for (const u of users) {
         const first = saves.find((s) => s.name === u.name);
         precondition(first && first.own === TOKENS + 1, `${u.name}'s Done save holds every token it typed (${first ? `${first.own}/${TOKENS + 1}` : "no save"}): C6's own oracle, not S17`);
       }
       const whole = saves.filter((s) => s.lacks.length === 0);
       if (whole.length) ctx.inconclusive(`the latency window did not open: ${whole.map((s) => s.name).join(", ")} sent a save after Done holding every editor's token, so the order the saves land in cannot lose one`);
-      ctx.step(`race: each of ${saves.length} save(s) after Done was serialized before another editor's last keys reached it (every one lacks at least one), and each was answered 200`);
+      ctx.step(`race: each of ${saves.length} initial Done saves lacks another editor's last keys; answers ${saves.map((s) => `${s.name} ${s.status}${s.draftChanged ? " draftChanged" : ""}`).join(", ")}`);
     });
   } finally {
     stopCaptures(armed);
   }
-  await settleFirst(users, docId, n);
+  // The rejected editor's remote-merge autosave must recover before its
+  // explicit second Done; a failed save must never masquerade as leaving.
+  for (const u of users) {
+    if (await u.page.getByRole("toolbar", { name: "Formatting" }).count()) {
+      await eventually(async () => (await u.saveState()) === "saved", { timeout: 30_000, interval: 100, message: `${u.name}'s merged snapshot saves before retrying Done` });
+      await clickDone(u);
+    }
+    await editorClosed(u);
+  }
+  await settleReaders(users);
   const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
   if (!nobody.ok) ctx.inconclusive(`the sync precondition did not hold: somebody is still "edit" in status/${docId}/peers ${PRESENCE_MS} ms after every Done and the delay drained: ${JSON.stringify(nobody.modes)}`);
   const out = await agentCall(agent, "commit_draft", { id: docId });
   ctx.step(`the agent's commit_draft: ${out.isError ? `refused: ${out.text}` : JSON.stringify(out.json)}`);
   precondition(!out.isError && out.json?.versionId === "v2", `the agent's commit_draft publishes v2 (${out.text.slice(0, 300)})`);
   const version = await readVersion(ctx, { parser, docId, versionId: "v2", ids: users.map((_, i) => paragraph(i)) });
+  assertCleanVersion(version);
   return { version, typed: log.typed };
 }
 
-scenario("C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so every save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)", { tiers: LOCAL, needs: ["rtdb-proxy"], n: NS, timeoutMs: CASE_MS, defect: "S17", ...LIVE }, async (ctx) => {
+scenario("C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so each initial save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)", { tiers: LOCAL, needs: ["rtdb-proxy"], n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const { version, typed } = await withRss(ctx, ctx.n, () => c6Latency(ctx));
   assertInvariant(i2InVersion(version, typed));
 });
@@ -1102,13 +1122,14 @@ async function c6LateSave(ctx, { hold }) {
       await editorClosed(p1);
     }
     p1.inEdit = false;
-    await settleFirst(users, docId, n);
+    await settleReaders(users);
     const nobody = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0);
     if (!nobody.ok) ctx.inconclusive(`the sync precondition did not hold: somebody is still "edit" in status/${docId}/peers ${PRESENCE_MS} ms after everyone pressed Done: ${JSON.stringify(nobody.modes)}`);
     const out = await agentCall(agent, "commit_draft", { id: docId });
     ctx.step(`the agent's commit_draft: ${out.isError ? `refused: ${out.text}` : JSON.stringify(out.json)}`);
     precondition(!out.isError && out.json?.versionId === "v2", `the agent's commit_draft publishes v2 (${out.text.slice(0, 300)})`);
     const v = await readVersion(ctx, { parser, docId, versionId: "v2", ids: users.map((_, i) => paragraph(i)) });
+    assertCleanVersion(v);
     return { version: v, typed: log.typed, typedLater };
   } finally {
     cap.stop();
@@ -1116,7 +1137,7 @@ async function c6LateSave(ctx, { hold }) {
   }
 }
 
-scenario("C6 late save: one editor's Done save is delayed in flight while the others type, autosave and leave; once it lands last, the version the agent's commit_draft publishes still holds every token anybody saved (I2)", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, defect: "S17", ...LIVE }, async (ctx) => {
+scenario("C6 late save: one editor's Done save is delayed in flight while the others type, autosave and leave; once it lands last, the version the agent's commit_draft publishes still holds every token anybody saved (I2)", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const { version, typed } = await c6LateSave(ctx, { hold: true });
   assertInvariant(i2InVersion(version, typed));
 });

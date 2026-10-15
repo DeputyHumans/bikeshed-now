@@ -13919,6 +13919,26 @@
       ],
       "evidence": "e2e/.out/2610142252-mia9/invocations/20261015T060216Z-p93683-kjcf/results.json",
       "note": "Added exact withdrawal/remint events and viewer feed assertions, plus directional dedup/trust/menu/event controls. Removed an unmeasured operation-order claim from the case title; report interpretation now distinguishes DOM insertion from paint and the backend draft race from the client debounce trigger. Source work is not campaign closure."
+    },
+    {
+      "kind": "e2e-promotion-and-size-controls",
+      "items": [
+        "S10",
+        "S17",
+        "S27",
+        "X-c05-structure-1",
+        "X-c12-agent-vs-editors-1"
+      ],
+      "scope": "Local B7 immutable 152a84e; N2/trials1 and focused functional only",
+      "checks": [
+        "Nine selected work/judge cases pass with no TODOs; seven former defect declarations promoted",
+        "Seven scratch oracle mutations fail the intended content, conflict, pending-state and error assertions; restored C6 and C10 cases pass 4/4",
+        "All seven S10 C7 browser probes have passing observations, including 300KB peers, oversized seed fail-closed, and over-limit compaction retaining live and saved content",
+        "A11.11 above-2MiB rule assertion passes, fails its scratch verdict control, then passes restored; stored rules mutant added for later patched-stack proof",
+        "Twelve control directory/selection selftests pass"
+      ],
+      "evidence": "e2e/.out/promotion-oracle-controls/proof.json",
+      "note": "S10 elected seed is 189060 encoded characters; oversized compaction probe longest entry 1912120, zero refused writes, 92 retained entries, and filler exactly once for late join and save. A first compaction fixture failed below its threshold; a background-frame animation wait retry was cancelled. Both remain historical evidence. No campaign closure: broad matrix and current-revision product control pairs are pending."
     }
   ]
 }

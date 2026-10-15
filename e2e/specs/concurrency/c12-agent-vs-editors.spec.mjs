@@ -1526,12 +1526,11 @@ scenario("C12c race (SYNC-P, amplify-c08-mint-races): the agent's update passes 
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c08-mint-races"],
   n: [2, 5, 10, 20],
-  defect: "X-c12-agent-vs-editors-1",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
   const own = await c12cRace(ctx, { gated: true });
-  verdict({ defect: "X-c12-agent-vs-editors-1", others: oracleSet(), own });
+  verdict({ others: oracleSet(), own });
 }));
 
 scenario("C12c race serial positive control: the same update first, then the same editors opening the editor, typing, saving and leaving; the next editor to open the editor sees the agent's version", {

@@ -34,10 +34,10 @@
  *                   using"). The same I4 over GET /draft, over what each
  *                   editor then reads (an editor reads the draft, SPEC §6a)
  *                   and over the version commit_draft mints: the durable
- *                   copies. Known defect X-c05-structure-1: nothing saves a
- *                   remote merge, so the draft is the last save to land,
- *                   made before the merge, and commit_draft publishes it and
- *                   drops the log that held the deletion.
+ *                   copies. Regression X-c05-structure-1: previously nothing saved a
+ *                   remote merge. The last pre-merge save could be published
+ *                   while retiring the only log that held the deletion.
+ *                   Remote-merge autosave now preserves the durable result.
  *       C5 serial control   the same edits one after another: the typing
  *                   first, the deletion once every token has reached p1, so
  *                   p1's paragraph holds them all. I4 must hold on every peer,
@@ -448,7 +448,8 @@ async function peerModes(t, docId) {
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
 async function versionHtml(t, docId, versionId) {
   const rec = await readDoc(t, `docs/${docId}/versions/${versionId}`);
-  const buf = await readObject(t, `docs/${docId}/${versionId}/${rec?.entry ?? "index.html"}`);
+  const prefix = rec?.storagePrefix ?? `docs/${docId}/${versionId}`;
+  const buf = await readObject(t, `${prefix}/${rec?.entry ?? "index.html"}`);
   return buf ? buf.toString("utf8") : null;
 }
 
@@ -500,19 +501,13 @@ scenario("C5 delete a paragraph while N−1 type into it: deletion wins, so the 
   await c5JudgeLive(ctx, s);
 });
 
-// X-c05-structure-1: the autosave runs only on a local `input` event
-// (useInlineEditor.ts onInput), and a remote merge (sync.ts applyRemote) fires
-// none, so nobody saves the merged document. The draft keeps the last save
-// to land, made before the merge: the deleted paragraph with its tokens, and
-// without the deleter's own later edit. Done saves only an unsaved local
-// edit (useInlineEditor.ts flushUnsaved; SPEC §6a: "Leaving edit mode saves
-// only an edit the autosave has not yet taken"), so leaving does not fix it,
-// each editor then reads that draft, and the agent's commit_draft publishes
-// it and drops the live log, the one place the merged document was left.
+// X-c05-structure-1 regression: only local input previously scheduled a save,
+// so the last pre-merge snapshot survived Done and could be published after
+// the sole log containing the deletion was retired. Remote merges now
+// schedule a causal save; the persisted and reread bytes must keep the deletion.
 scenario("C5 delete a paragraph while N−1 type into it: once everyone has left the editor, the saved draft, what each of them then reads, and the version an agent's commit_draft then publishes have lost the paragraph and every token typed into it too (I4)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-1",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -1322,10 +1317,10 @@ const COMPACTION_SECTIONS = 16;
 const FILLER_PARAGRAPH = `large-${COMPACTION_SECTIONS}-15`;
 /** Bytes pasted beyond what takes the merged state to the rule's limit. */
 const FILLER_MARGIN_BYTES = 3_000;
-/** Tokens the early editors type in turn: about 17 keystrokes, so 17 log entries, each. */
-const COMPACTION_TOKENS = 6;
-/** log.ts COMPACT_AFTER: past this many entries every local append is followed by a compaction. */
+/** log.ts COMPACT_AFTER: past this many entries every local append attempts compaction. */
 const COMPACT_AFTER = 64;
+/** Separate edits, not keystrokes: DOM mutation batching may coalesce a whole token. */
+const COMPACTION_TOKENS = COMPACT_AFTER + 2;
 
 /** `fill0 fill1 …`, at least `chars` long: plain words a paste can carry, none of them in the fixture. */
 function fillerText(chars) {
@@ -1404,7 +1399,7 @@ scenario("C7 compaction over the 2MiB bound: a seed under the bound whose merged
     }
     const bytesBefore = lat ? (await lat.stats()).stats.bytesUp : null;
 
-    ctx.step(`${early.map((u) => u.name).join(" and ")} type ${COMPACTION_TOKENS} tokens in turn into their own paragraphs (about ${COMPACTION_TOKENS * 17} keystrokes, one log entry each): past ${COMPACT_AFTER} entries every compaction is the whole document, over the rule`);
+    ctx.step(`${early.map((u) => u.name).join(" and ")} type ${COMPACTION_TOKENS} tokens in separate input tasks into their own paragraphs: enough distinct edits to pass ${COMPACT_AFTER} entries despite key batching; each compaction is the whole document, over the rule`);
     for (let k = 0; k < COMPACTION_TOKENS; k += 1) {
       const u = early[k % early.length];
       const i = users.indexOf(u);

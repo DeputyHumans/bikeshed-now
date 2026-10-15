@@ -33,14 +33,12 @@
  *   log empty and seeds too: Yjs merges both inserts, and every copy
  *   converges on the body twice (N joiners: N times).
  *
- * S27 (C4b). A non-member on a PUBLIC open-editing document is let into the
- *   live log (DocViewer.tsx:305-315 shareLive; useSharedDocument.ts:77 shows
- *   "Shared" whenever there is a log). Its WRITES pass (database.rules.json:100,
- *   editAccess/{d}/* from presence.ts:101-110), its READ of status/{d} does
- *   not (database.rules.json:56 needs presenceAccess, which mirrors members
- *   only), and a denied read resolves ready() as if the log were empty
- *   (crdt/rtdb.ts:33-38). So it seeds a second body into every member's copy
- *   and never receives a member's keystroke.
+ * S27 regression (C4b). Public open-edit non-members previously passed
+ *   the log's write gate while its read gate required membership. A denied
+ *   read looked like an empty log, so the joiner seeded a duplicate body
+ *   and never received members' keystrokes. Both epoch-scoped gates now
+ *   honor the public edit grant, and an initialization failure keeps the
+ *   editor disabled. This case proves shared log identity and both directions.
  *
  * THE SCENARIOS (each with n: [2, 5, 10, 20]; K trials per N by the plan)
  *   C4 client gate        SYNC-G, deterministic: amplify-mint-join's
@@ -184,7 +182,7 @@
  */
 
 import { liveLogPath, readLiveLogs } from "../../lib/live-log.mjs";
-import { AssertionError } from "node:assert";
+import assert, { AssertionError } from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, escapeRe, precondition, scenario } from "../../lib/test.mjs";
 import { cast } from "../../lib/accounts.mjs";
@@ -1131,7 +1129,7 @@ async function openEditJoin(ctx, { member }) {
       const message = `C4b: ${failures.join("; ")}`;
       throw new AssertionError({ message: message.length > 4000 ? `${message.slice(0, 4000)}…` : message, actual: failures, expected: [], operator: "C4b" });
     }
-    throwSettle(settle.error, { defect: !member });
+    throwSettle(settle.error);
   } finally {
     if (lat) row.proxy = await proxyNow(lat).then((now) => proxyDelta(proxyBefore, now), (err) => ({ error: firstLine(err) }));
     record(ctx, row);
@@ -1144,7 +1142,6 @@ scenario("C4b an open-edit non-member joins N−1 members editing a public docum
   effects: EFFECTS,
   needs: ["rtdb-rules"],
   n: N_ALL,
-  defect: "S27",
   timeoutMs: 600_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {

@@ -1102,7 +1102,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
     ["another account's peer key", `status/${w.docId}/peers/${ownerNode.key}`, { ...peer, uid: ed.session.uid }],
     ["a viewport outside 0..1", mine, { ...peer, viewport: 1.5 }],
     ["a log entry that is not a string", `${await liveLogPath(target, w.docId)}/${newEntry("n")}`, 12345],
-    ["a log entry over 200 000 characters", `${await liveLogPath(target, w.docId)}/${newEntry("big")}`, "A".repeat(200_004)],
+    ["a log entry above the 2 MiB encoded limit", `${await liveLogPath(target, w.docId)}/${newEntry("big")}`, "A".repeat(2 * 1024 * 1024 + 4)],
   ];
   const got = [];
   for (const [what, path, value] of cells) {
@@ -1122,6 +1122,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
 
   assert.equal(okPeer, "ALLOW", "control: a well-formed peer node is allowed");
   assert.equal(okLog, "ALLOW", "control: a string log entry is allowed");
+  assert.equal(got.find((g) => g.what === "a log entry above the 2 MiB encoded limit")?.verdict, "DENY", "a live log entry above 2 MiB must be refused");
   assert.deepEqual(got.filter((g) => g.verdict !== "DENY").map((g) => g.what), [], "every malformed write is rejected");
   assert.deepEqual(Object.keys(stored).sort(), ["peers", "y"], "nothing but peers and y exists under status/{doc}");
   assert.deepEqual(Object.keys(stored.peers).sort(), [ownerNode.key, ed.session.uid].sort(), "only the two callers' own peer nodes exist");

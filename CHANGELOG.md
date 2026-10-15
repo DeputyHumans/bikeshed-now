@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Promote seven repaired concurrency regressions after local browser proof, make causal-save retries preserve pending suggestions and authored document checks, and cover the 2 MiB live-log boundary and compaction fallback with explicit negative controls.
+
 - Keep print markings visible above authored ancestor transforms, filters and containment, and lock independent rotation. Expand export coverage for page geometry, both print shortcuts, decoration, browser print cleanup, pagination and every chrome surface, with directional regression controls.
 
 - Cover withdrawal and remint change-feed events, current-content deduplication and trust, and pinned version menus with directional E2E controls; limit report claims to the DOM and final-state evidence actually observed.
