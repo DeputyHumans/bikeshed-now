@@ -93,8 +93,8 @@
  *        frame still holds the selection and the toolbar still shows:
  *        suspect S28's selection half. Every reload remounts the frame
  *        (frameMode.ts:60-67 puts the reload epoch in the iframe's key,
- *        useDocFrame.ts:148-151 drops the document), and nothing restores a
- *        selection, so one save is enough: no overlap is needed.
+ *        useDocFrame drops the document). The frame must restore the same
+ *        selected passage after each reload; no overlap is needed.
  *   C23  an unlisted open-editing link holder among N−1 co-editors. The
  *        members edit live ("Shared"); the link holder opens the link with
  *        its key and presses Edit. Work: it is NOT shown "Shared", or it is
@@ -451,6 +451,7 @@ function barInPage() {
   for (const b of document.querySelectorAll(".viewer-toolbar-actions .pane-toggle button")) primary.push(place(b, `pane toggle "${b.textContent.trim()}"`));
   for (const b of document.querySelectorAll('.viewer-toolbar-actions button[aria-label="Stop editing"], .viewer-toolbar-actions button[aria-label="Edit"]')) primary.push(place(b, `button "${b.getAttribute("aria-label")}"`));
   const presence = document.querySelector(".presence-bar");
+  const presenceScrollLeft = presence?.scrollLeft ?? 0;
   const actions = document.querySelector(".viewer-toolbar-actions");
   const nameOf = (c) => (c.querySelector(".presence-name")?.textContent ?? "").trim();
   const chipEls = [...document.querySelectorAll(".presence-bar .presence-chip")];
@@ -473,6 +474,7 @@ function barInPage() {
   };
   const reachRows = chipEls.map((c) => reach(c, nameOf(c)));
   const summaries = summaryEls.map((s) => ({ ...reach(s.el, s.text), count: s.count }));
+  if (presence) presence.scrollLeft = presenceScrollLeft;
   bar.scrollLeft = 0;
   window.scrollTo(beforeX, beforeY);
   return {
@@ -595,6 +597,7 @@ scenario("C18 presence at scale: N people in one document, about half of them ed
     assertChips(chips.readings, { n, who: "C18" });
     const hidden = chipRenderProblems(m);
     assert.deepEqual(hidden, [], `C18 chips: every one of the phone's N−1 = ${n - 1} chip(s) is rendered and can be brought on screen (or an overflow summary counts it): ${hidden.join("; ")}`);
+    assert.deepEqual(barProblems(m), [], `S29: the phone toolbar keeps its actions on screen with ${n - 1} chips: ${barProblems(m).join("; ")}`);
   } finally {
     const rss = await sampler.stop();
     const p = rss.peak;
@@ -630,7 +633,7 @@ async function judgeToolbar(ctx) {
   assert.deepEqual(barProblems(m), [], `S29: with ${m.chips.total} presence chip(s) the phone's toolbar does not fit at ${m.vw} px: ${barProblems(m).join("; ")}`);
 }
 scenario(C18_TOOLBAR, { tiers: BOTH, n: [2], timeoutMs: JUDGE_MS }, judgeToolbar);
-scenario(C18_TOOLBAR, { tiers: BOTH, n: [5, 10, 20], timeoutMs: JUDGE_MS, defect: "S29" }, judgeToolbar);
+scenario(C18_TOOLBAR, { tiers: BOTH, n: [5, 10, 20], timeoutMs: JUDGE_MS }, judgeToolbar);
 
 scenario("C18-serial positive control: the phone opens the document alone and its toolbar fits at 400 px with no chip; then the others open it one after another, the editors among them entering edit, and after each every reader present shows one chip per other person, in that person's mode", {
   tiers: BOTH,
@@ -988,7 +991,8 @@ scenario("C22 held loads: the same storm with each of the reader's frame loads h
   ...LIVE,
 }, (ctx) => c22Work(ctx, { held: true }));
 
-scenario("C22 held loads place: the reader's frame keeps its place though reloads overlapped", { tiers: BOTH, n: N_ALL, timeoutMs: JUDGE_MS, defect: "S28" }, async (ctx) => {
+scenario("C22 held loads place: the reader's frame keeps its place though reloads overlapped", { tiers: BOTH, n: N_ALL, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  if (!observed.has(keyOf("C22 held", ctx))) await c22Work(ctx, { held: true });
   const p = observation(ctx, "C22 held", "place");
   const moved = placeProblems(p);
   assert.deepEqual(moved, [], `S28: a reload that began while the previous one was loading lost the reader's place (${moved.join(", ")}); ${placeCause(p.storm)}`);
@@ -1146,7 +1150,9 @@ scenario("C22 selection: N−1 editors type and autosave in staggered rounds whi
   n: N_ALL,
   timeoutMs: CASE_MS,
   ...LIVE,
-}, async (ctx) => {
+}, c22SelectionWork);
+
+async function c22SelectionWork(ctx) {
   const obs = record(ctx, "C22 selection");
   const w = await selectionWorld(ctx, { title: `C22 selection N=${ctx.n}`, form: false });
   const { docId, typists, reader, log } = w;
@@ -1170,14 +1176,15 @@ scenario("C22 selection: N−1 editors type and autosave in staggered rounds whi
   if (reloads.length < 1) inconclusive(ctx, obs, `the storm never reloaded the reader's frame while it held its selection (${rows.length} load(s), none committed after the storm began)`);
   obs.selection = { want: QUOTE, ...now, reloads: reloads.length };
   obs.stage = "measured";
-});
+}
 
-scenario("C22 selection kept: through the storm the reader's frame keeps its selection of the passage, and the selection toolbar (Comment, Suggest edit) still shows", { tiers: BOTH, n: N_ALL, timeoutMs: JUDGE_MS, defect: "S28" }, async (ctx) => {
+scenario("C22 selection kept: through the storm the reader's frame keeps its selection of the passage, and the selection toolbar (Comment, Suggest edit) still shows", { tiers: BOTH, n: N_ALL, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  if (!observed.has(keyOf("C22 selection", ctx))) await c22SelectionWork(ctx);
   const s = observation(ctx, "C22 selection", "selection");
   const lost = [];
   if (s.text !== s.want) lost.push(`the frame's selection is ${JSON.stringify(s.text)} (${s.ranges} range(s)), want ${JSON.stringify(s.want)}`);
   if (!s.toolbar) lost.push("the selection toolbar is gone");
-  assert.deepEqual(lost, [], `S28: a peer's save reloaded the reader's frame and threw its selection away (${s.reloads} reload(s); one is enough: frameMode.ts:60-67 remounts the frame, nothing restores a selection): ${lost.join("; ")}`);
+  assert.deepEqual(lost, [], `S28: a peer's save reloaded the reader's frame and threw its selection away (${s.reloads} reload(s); the replacement frame must restore the unchanged selected passage): ${lost.join("; ")}`);
 });
 
 scenario("C22 selection-serial positive control: the same typists save one at a time, each once the reader's previous reload shows the last token; the reader selects the passage after the last one and holds it through a quiet spell: the selection and the selection toolbar are kept", {

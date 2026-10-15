@@ -107,3 +107,31 @@ test('the phone slide drawer stays below the viewer toolbar; the previous viewpo
   await u.page.addStyleTag({ content: '@media(max-width:860px){.slide-rail{position:fixed;inset:var(--header-h) auto 0 0}}' });
   assert.equal(await reachable(), false, 'negative: the old drawer overlaps the toolbar');
 });
+
+test('the phone toolbar keeps its actions visible and every presence chip reachable at 2, 5, 10 and 20 people', async () => {
+  const css = await productCss();
+  for (const peers of [1, 4, 9, 19]) {
+    const chips = Array.from({ length: peers }, (_, i) => `<button class="presence-chip"><span class="presence-dot" data-mode="view"></span><span class="presence-name">person-${i}@example.test</span></button>`).join('');
+    await u.page.setContent(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div class="viewer-toolbar"><span class="chip mono">v1</span><div class="presence-bar" role="group" aria-label="People here now">${chips}</div><div class="viewer-toolbar-actions"><div class="pane-toggle"><button>Document</button><button>Comments</button></div><button class="btn" aria-label="Edit">Edit</button></div></div>`);
+    const layout = await u.page.evaluate(() => {
+      const bar = document.querySelector('.viewer-toolbar');
+      const presence = document.querySelector('.presence-bar');
+      const width = document.documentElement.clientWidth;
+      const reachable = (el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return r.width > 0 && r.left >= 0 && r.right <= width && r.top >= 0 && r.bottom <= innerHeight && !!hit && (hit === el || el.contains(hit));
+      };
+      const actions = [...bar.querySelectorAll('.viewer-toolbar-actions button')].map(reachable);
+      const chips = [...presence.querySelectorAll('.presence-chip')].map((el) => {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+        return reachable(el);
+      });
+      presence.scrollLeft = 0;
+      return { page: document.documentElement.scrollWidth, width, bar: bar.scrollWidth, barWidth: bar.clientWidth, actions, chips };
+    });
+    assert.ok(layout.page <= layout.width && layout.bar <= layout.barWidth, `${peers} peers: toolbar and page fit the phone: ${JSON.stringify(layout)}`);
+    assert.deepEqual(layout.actions, [true, true, true], `${peers} peers: primary actions remain on screen at rest`);
+    assert.deepEqual(layout.chips, Array(peers).fill(true), `${peers} peers: every named person is reachable, not hidden`);
+  }
+});

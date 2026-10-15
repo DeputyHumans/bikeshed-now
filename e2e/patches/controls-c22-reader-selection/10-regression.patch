@@ -1,0 +1,8 @@
+--- a/app/src/viewer/useDocFrame.ts
++++ b/app/src/viewer/useDocFrame.ts
+@@ -117,4 +117,4 @@
+     const view = ref.current?.contentWindow;
+     const frameDoc = ref.current?.contentDocument;
+-    if (view && frameDoc) restore.current = { docId, scrollY: view.scrollY, selection: describeAnchorFromSelection(frameDoc) };
++    if (view && frameDoc) restore.current = { docId, scrollY: view.scrollY, selection: (void describeAnchorFromSelection(frameDoc), null) };
+   }, [docId]);

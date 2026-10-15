@@ -30,6 +30,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Preserve reader scroll and unchanged selections across overlapping draft reloads,
+  and keep mobile toolbar actions visible while every presence chip remains reachable.
+
 - Enforce the email verification guess budget and resend interval across concurrent requests; preserve newer challenges when an older completion returns late.
 
 - Make CLI `open --json` and `login --paste --json` return structured results,

@@ -11950,7 +11950,7 @@
     },
     {
       "id": "S28",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "I",
       "claim": "Scroll half: a reader of the draft is thrown to the top when a peer save reloads its frame while the previous reload is still loading. Selection half (NEW): any peer save throws away a reader's selection, and the Comment/Suggest edit toolbar with it, with no overlap needed. Only an open suggestion form, or a comment being written, is spared.",
@@ -12001,11 +12001,26 @@
           "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C22 selection kept: through the storm the reader's frame keeps its selection of the passage, and the selection toolbar (Comment, Suggest edit) still shows",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "covered": [
+          "keep visible scroll and selection through overlapping loads and delayed restoration",
+          "ignore stale frame load and paint callbacks",
+          "restore only exact selected quote and notify the selection toolbar"
+        ],
+        "controls": [
+          "controls-c22-reader-place",
+          "controls-c22-reader-selection"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/reader-state/negative-controls.json",
+        "remaining": [
+          "fresh E2E and red/restored control evidence across required N values"
+        ]
+      }
     },
     {
       "id": "S29",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "I",
       "claim": "With two or more other people in a document, a 400 px phone's viewer toolbar runs off the screen. The presence chips push Document/Comments and Edit past the right edge, behind a sideways-scrolling bar with no visible scrollbar. The chips themselves stay reachable by swiping the bar, and the page never scrolls sideways.",
@@ -12036,7 +12051,20 @@
           "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C18 toolbar at 400 px: with N−1 presence chips the phone's viewer toolbar fits the screen, and at rest its pane toggle and Edit lie wholly inside the viewport and the bar",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "covered": [
+          "at 400 px all primary actions remain visible with 1, 4, 9 and 19 peers",
+          "all presence chips remain rendered and reachable through their own scroll row"
+        ],
+        "controls": [
+          "controls-c18-toolbar-overflow"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/reader-state/negative-controls.json",
+        "remaining": [
+          "fresh E2E and red/restored control evidence across required N values"
+        ]
+      }
     },
     {
       "id": "S24",

@@ -948,8 +948,7 @@ scenario("A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagr
   const t = tag();
   const title = `Image probe ${t}`;
   const html = probeDoc({ title })
-    .replace('<p id="p-box">A passage in the box, exported as an image.</p>', '<p id="p-box">A passage in the box, exported as an image.</p><canvas id="authored-chart" width="20" height="20"></canvas>')
-    .replace('console.log("tail script")', 'const chart = document.getElementById("authored-chart").getContext("2d"); chart.fillStyle = "#00ff00"; chart.fillRect(0, 0, 20, 20)');
+    .replace('<p id="p-box">A passage in the box, exported as an image.</p>', '<p id="p-box">A passage in the box, exported as an image.</p><canvas id="authored-chart" width="20" height="20"></canvas>');
   const up = await publishDoc(ctx, owner.http, { body: html, filename: "index.html", title, name: "a173-image" });
   await coverStored(ctx, owner, up.docId);
   const label = `IMG ${t}`.slice(0, MAX_LABEL);
@@ -957,6 +956,16 @@ scenario("A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagr
 
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, up.docId);
+  // An upload is untrusted, so its scripts intentionally cannot draw. Seed the
+  // authored runtime canvas from the parent driver, then prove that the source
+  // pixels exist before asking the product to export them.
+  const sourcePixel = await (await u.frame()).locator("#authored-chart").evaluate((canvas) => {
+    const chart = canvas.getContext("2d");
+    chart.fillStyle = "#00ff00";
+    chart.fillRect(0, 0, canvas.width, canvas.height);
+    return Array.from(chart.getImageData(0, 0, 1, 1).data);
+  });
+  precondition(JSON.stringify(sourcePixel) === "[0,255,0,255]", "the authored source canvas is drawn before export");
   const box = await borderBox(u, "#s-box");
   const fig = await borderBox(u, "#fig");
   ctx.step(`border boxes in the frame: #s-box ${JSON.stringify(box)}, #fig ${JSON.stringify(fig)}`);

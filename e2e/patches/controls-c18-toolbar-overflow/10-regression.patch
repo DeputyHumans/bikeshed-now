@@ -1,0 +1,20 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -211,11 +211,7 @@
+   align-items: center;
+   gap: var(--s-1);
+-  min-width: 0;
+-  max-width: 100%;
+-  overflow-x: auto;
+ }
+ .presence-chip {
+   display: inline-flex;
+-  flex: none;
+   align-items: center;
+   gap: 6px;
+@@ -453,5 +449,4 @@
+ @media (max-width: 860px) {
+   .viewer-toolbar { flex-wrap: wrap; overflow-x: visible; }
+-  .viewer-toolbar .presence-bar { flex-basis: 100%; order: 1; }
+   .viewer-toolbar-actions { flex-wrap: wrap; max-width: 100%; }
+   .viewer-body { grid-template-columns: minmax(0, 1fr); }

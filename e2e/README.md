@@ -36,6 +36,14 @@ spec processes and the stack the run started before it exits, and `run` and
 `stack up` first reap the orphans of crashed runs, expired stacks and
 orphaned Chrome processes.
 
+Reader reload controls `controls-c22-reader-place` and
+`controls-c22-reader-selection` run their complete C22 work when selected alone.
+`controls-c18-toolbar-overflow` targets C18 work at N=5; that work checks both
+reachable presence chips and visible phone actions. These cases enforce S28/S29
+as ordinary assertions; fresh campaign runs and red controls remain required.
+A17.3 seeds and checks canvas runtime pixels through the parent driver before
+export because the untrusted upload correctly cannot run its drawing script.
+
 ## Outcomes
 
 | | |

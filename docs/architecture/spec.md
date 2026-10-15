@@ -912,6 +912,11 @@ load therefore waits for that answer, within three limits:
 A frame that has loaded is never taken away to wait. A reader who signs in to
 comment keeps the document and their selection.
 
+A peer draft save preserves the reader's scroll checkpoint across overlapping
+reloads. When the selected passage still exists unchanged, the replacement
+frame restores that passage and its Comment/Suggest edit toolbar. A removed
+passage must not turn into a selection of different words.
+
 **Trust carries into a new version only when the owner wrote it in the app**
 (`keepsTrust`). Any other new version withdraws both scopes, the global flag and
 every personal grant, in the same transaction that makes it current: an edit by

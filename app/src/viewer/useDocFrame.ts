@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observeFrameFocus } from "./frameFocus";
 import { captureAssetTags } from "../annotation/highlighter";
+import { describeAnchorFromSelection, rangeFromAnchor } from "../annotation/anchor";
+import type { Anchor } from "../types";
 import {
   frameKey,
   frameSandbox,
@@ -92,9 +94,10 @@ export function useDocFrame(options: {
   const identityRef = useRef(identity);
   identityRef.current = identity;
   const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+  const loadedIdentityRef = useRef<string | null>(null);
 
-  /** Scroll position to restore after the next load, if any. */
-  const restoreScroll = useRef<number | null>(null);
+  /** Keep the last visible reading state until a replacement has restored it. */
+  const restore = useRef<{ docId: string; scrollY: number; selection: Anchor | null } | null>(null);
 
   /**
    * The author's own asset tags, captured in onLoad BEFORE anything is injected.
@@ -108,9 +111,13 @@ export function useDocFrame(options: {
   const authoredAssets = useRef<Map<string, number> | null>(null);
 
   const captureScroll = useCallback(() => {
+    // A second save can replace a frame that is still loading (or waiting for
+    // layout). Its blank position must not overwrite the reader's checkpoint.
+    if (restore.current || loadedIdentityRef.current !== identityRef.current) return;
     const view = ref.current?.contentWindow;
-    if (view) restoreScroll.current = view.scrollY;
-  }, []);
+    const frameDoc = ref.current?.contentDocument;
+    if (view && frameDoc) restore.current = { docId, scrollY: view.scrollY, selection: describeAnchorFromSelection(frameDoc) };
+  }, [docId]);
 
   const reload = useCallback(() => {
     captureScroll();
@@ -118,9 +125,11 @@ export function useDocFrame(options: {
   }, [captureScroll]);
 
   const onLoad = useCallback(() => {
+    if (identityRef.current !== identity) return;
     // Before anything that can return early: a load that yields no readable
     // document is still the end of the wait, and must not leave it showing.
-    setLoadedIdentity(identityRef.current);
+    loadedIdentityRef.current = identity;
+    setLoadedIdentity(identity);
 
     const frameDoc = ref.current?.contentDocument ?? null;
     if (!frameDoc) return;
@@ -131,18 +140,31 @@ export function useDocFrame(options: {
     // treat them as authored.
     authoredAssets.current = captureAssetTags(frameDoc);
 
-    if (restoreScroll.current != null) {
-      const target = restoreScroll.current;
-      restoreScroll.current = null;
+    if (restore.current?.docId !== docId) restore.current = null;
+    const checkpoint = restore.current;
+    if (checkpoint) {
       // After layout, or the document is not yet tall enough to scroll to it.
       frameDoc.defaultView?.requestAnimationFrame(() => {
-        frameDoc.defaultView?.scrollTo({ top: target, behavior: "auto" });
+        if (identityRef.current !== identity || ref.current?.contentDocument !== frameDoc) return;
+        if (checkpoint.selection) {
+          const range = rangeFromAnchor(frameDoc, checkpoint.selection);
+          // A positional fallback may name different words after an edit.
+          // Restore only the same passage; never silently select its neighbour.
+          if (range?.toString() === checkpoint.selection.exact) {
+            const selection = frameDoc.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+          }
+        }
+        frameDoc.defaultView?.scrollTo({ top: checkpoint.scrollY, behavior: "auto" });
+        if (restore.current === checkpoint) restore.current = null;
+        frameDoc.dispatchEvent(new Event("selectionchange"));
       });
     }
 
     setDoc(frameDoc);
     setEpoch((n) => n + 1);
-  }, []);
+  }, [identity, docId]);
 
   // A mode change means a different document. Dropping the stale reference
   // immediately keeps a consumer from decorating a document that is unloading.

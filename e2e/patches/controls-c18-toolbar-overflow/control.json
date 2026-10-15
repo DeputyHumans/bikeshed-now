@@ -1,0 +1,11 @@
+{
+  "oracle": "C18 presence at scale: N people in one document, about half of them editing, the rest reading, the last on a 400 px phone; every reader shows N−1 presence chips, one per other person, each in that person's mode (editing: the square dot and the Editing icon; reading: the round dot), and the editors settle (I1) [N=5]",
+  "what": "restore an unconstrained presence row that pushes primary actions off the phone",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C18 presence at scale: N people in one document, about half of them editing, the rest reading, the last on a 400 px phone; every reader shows N−1 presence chips, one per other person, each in that person's mode (editing: the square dot and the Editing icon; reading: the round dot), and the editors settle (I1) [N=5]"
+  },
+  "expect": {
+    "message": "S29: the phone toolbar keeps its actions on screen"
+  }
+}
