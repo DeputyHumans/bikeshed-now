@@ -19,6 +19,7 @@ import { renderMarkdown } from "./markdown/render";
 import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
 import { syncPublicProjection } from "./publicdoc";
 import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
+import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
 
 /**
  * The browser's editor and the agent surface both change a document through
@@ -204,6 +205,7 @@ export async function writeDraft(args: {
   let reused = false;
   let candidateMayHaveCommitted = false;
   let transactionCandidateStaged = false;
+  const linkSave = freshReceiptId();
   let savedEpoch = "initial";
   let draft: Record<string, unknown> = {};
   const caller = { uid: args.actor.uid ?? "", emailLower: args.emailLower };
@@ -284,13 +286,14 @@ export async function writeDraft(args: {
         // Its existing SDK retry duration is separate from the CAS deadline.
         await args.db.runTransaction(async (tx) => {
           const fresh = await tx.get(docRef);
+          if (readReceipt<boolean>(fresh, linkSave).found) return;
           const data = fresh.data();
-          if (acknowledgeOwnCandidate(data)) return;
           checkDraftBase(data, baseVersion);
           await assertWriteAuthority(tx, docRef, data as DocAclData, caller);
           const update = prepare(data);
           if (update) {
             tx.update(docRef, update);
+            recordReceipt(tx, docRef, fresh, linkSave, true);
             // The SDK can retry this callback after a committed transaction
             // loses its acknowledgement. A later refusal cannot disprove it.
             candidateMayHaveCommitted = true;
@@ -337,6 +340,7 @@ export async function writeDraft(args: {
     }
     throw error;
   }
+  if (transactionCandidateStaged) await clearReceipt(docRef, linkSave);
   if (reused) {
     if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
     return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
@@ -477,18 +481,22 @@ export async function commitDraft(args: {
   const dup = await versionsRef.doc(baseVersion).get();
   if (dup.exists && dup.data()?.contentHash === contentHash) {
     const retirementEpoch = randomUUID();
-    let retirementMayHaveCommitted = false;
+    const retirement = freshReceiptId();
     try {
       await db.runTransaction(async (tx) => {
-        const current = (await tx.get(docRef)).data();
-        if (retirementMayHaveCommitted && current?.liveEpoch === retirementEpoch) return;
+        const snapshot = await tx.get(docRef);
+        const own = readReceipt<string>(snapshot, retirement);
+        if (own.found) { retiredEpoch = own.result; return; }
+        const current = snapshot.data();
         checkDraftBase(current, baseVersion);
         await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
         checkDraftSnapshot(current, draft);
         if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
         retiredEpoch = String(current?.liveEpoch ?? "initial");
         tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: retirementEpoch, updatedAt: now() });
-        retirementMayHaveCommitted = true;
+        // Later publications replace liveEpoch. Keep this invocation's own
+        // result until the SDK confirms it, independent of the current head.
+        recordReceipt(tx, docRef, snapshot, retirement, retiredEpoch);
       });
     } catch (error) {
       if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
@@ -498,6 +506,7 @@ export async function commitDraft(args: {
       }
       throw error;
     }
+    await clearReceipt(docRef, retirement);
     await removeDraftSnapshot(docId, draft);
     await retireLiveSession(db, docId, retiredEpoch);
     return {

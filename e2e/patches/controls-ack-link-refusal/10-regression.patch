@@ -1,7 +1,7 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -287,3 +287,3 @@
+@@ -288,3 +288,3 @@
+           const fresh = await tx.get(docRef);
+-          if (readReceipt<boolean>(fresh, linkSave).found) return;
++          // control: retry does not recognize its own committed link save.
            const data = fresh.data();
--          if (acknowledgeOwnCandidate(data)) return;
-+          // control: retry refuses its own committed draft.
-           checkDraftBase(data, baseVersion);

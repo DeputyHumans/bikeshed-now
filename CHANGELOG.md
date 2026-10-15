@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Acknowledge remembered-link saves and no-change publications after a later edit replaces their current pointer or epoch. Bounded operation receipts preserve the original result and captured cleanup without overwriting later drafts; add native retry regressions and combined endpoint schedules for draft and thumbnail supersession.
+
 - Bind the native-retry email privacy check to completion of the actual cooldown decision before counting absent mail. A keyed fault-capability marker distinguishes a finished denial from a callback still waiting in Firestore.
 
 - Preserve later suggestion lease operations when a completed claim or release loses its transaction acknowledgement. Bounded request receipts prevent an older claim from resurrecting a released lease or an older release from clearing a newer claim; cover both same-account races with native retry regressions and keyed endpoint controls.

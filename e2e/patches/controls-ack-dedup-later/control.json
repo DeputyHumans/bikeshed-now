@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK later dedup: the original committed retirement is acknowledged",
+  "what": "Recognize a committed deduplication only while its retirement epoch is still current.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9f deduplicated publication acknowledges its retirement after a later publication and draft save",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK later dedup: the original committed retirement is acknowledged"
+  }
+}

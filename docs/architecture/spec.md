@@ -841,12 +841,13 @@ The one path that writes content, and it is explicit and server-mediated.
   the solo writer's next save revision and epoch without remounting the frame.
   Legacy API callers without a revision still compare the snapshot read by
   their request, while browser editors always supply their loaded revision.
-- A remembered-link draft save recognizes its own committed immutable prefix
-  when the SDK retries after losing the commit acknowledgement. It acknowledges
-  that saved snapshot even if its own revision or epoch change, or a subsequent
-  access change, would refuse a new write. An unconfirmed earlier attempt keeps
-  its bytes; a later refusal cannot justify deleting them. A no-change draft
-  publication similarly recognizes its own unique retirement epoch.
+- A remembered-link draft save and a no-change draft publication keep a bounded
+  operation receipt (§17) when the SDK retries after losing the commit
+  acknowledgement. Their original successful result and captured retirement
+  survive a later save, publication, or access change. A retry acknowledges the
+  earlier write and cleans only its replaced snapshot; it never restores an
+  earlier head, draft, or editing session. An unconfirmed earlier attempt keeps
+  its bytes until their absence from every durable pointer is established.
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
   `lib/draft.ts`), allowed only when every comment on the current version is

@@ -88,7 +88,44 @@ test("a deduplicated draft commit recognizes its own retirement epoch after SDK 
   }, { dedup: true });
 });
 
-for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} refusal retains a candidate still referenced by a historical version`, async () => {
+test("a deduplicated commit acknowledges its own retirement after a later publication and draft save", async () => {
+  await world(async ({ db, store, objects, commit, update }) => {
+    let laterDraft, laterEpoch;
+    const count = loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
+      const publication = await update();
+      assert.equal(publication.versionId, "v2", "the later real publication advanced the head before retry");
+      laterDraft = await writeDraft({ db, docRef: db.doc("docs/d"), baseVersion: "v2", version: { entry: "index.html", format: "html" }, content: { html: "<p>a newer saved draft</p>" }, emailLower: actor.email, actor });
+      laterEpoch = store.get("docs/d").liveEpoch;
+    } });
+    const result = await commit();
+    assert.equal(result.status, 200, "the superseded deduplication still acknowledges its own committed retirement");
+    assert.equal(result.body.versionId, "v1", "the acknowledgement retains the original deduplicated version");
+    assert.equal(result.body.deduped, true);
+    assert.ok(count().callbackCalls >= 2, "the installed SDK retried after a completed commit lost its acknowledgement");
+    assert.equal(objects.has("docs/d/bundles/draft/index.html"), false, "the original retirement cleans its captured old draft");
+    assert.equal(store.get("docs/d").currentVersion, "v2", "acknowledgement does not repoint the later publication");
+    assert.equal(store.get("docs/d").liveEpoch, laterEpoch, "acknowledgement does not retire the later editing session");
+    assert.equal(store.get("docs/d").draft.storagePrefix, laterDraft.storagePrefix, "acknowledgement retains the later draft pointer");
+    assert.equal(objects.get(`${laterDraft.storagePrefix}/index.html`)?.toString(), "<p>a newer saved draft</p>", "retirement preserves the later draft bytes");
+    assert.deepEqual(store.get("docs/d").transactionReceipts ?? {}, {}, "a confirmed deduplication clears only its receipt");
+  }, { dedup: true });
+});
+
+test("a remembered-link save acknowledges its commit after another editor saves a later draft", async () => {
+  await world(async ({ db, store, objects, save }) => {
+    let later;
+    loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
+      later = await writeDraft({ db, docRef: db.doc("docs/d"), baseVersion: "v1", version: { entry: "index.html", format: "html" }, content: { html: "<p>later editor's draft</p>" }, emailLower: "owner@example.com", actor: { uid: "owner", email: "owner@example.com", channel: "web" } });
+    } });
+    await assert.doesNotReject(save(), "a superseded remembered-link save acknowledges its completed write");
+    assert.equal(objects.has("docs/d/bundles/draft/index.html"), false, "the superseded save cleans its originally replaced snapshot");
+    assert.equal(store.get("docs/d").draft.storagePrefix, later.storagePrefix, "the later editor keeps their draft pointer");
+    assert.equal(objects.get(`${later.storagePrefix}/index.html`)?.toString(), "<p>later editor's draft</p>", "the later editor keeps their saved bytes");
+    assert.deepEqual(store.get("docs/d").transactionReceipts ?? {}, {}, "a confirmed link save clears its receipt");
+  });
+});
+
+for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} change acknowledges a saved candidate still referenced by a historical version`, async () => {
   await world(async ({ db, store, objects, save }) => {
     let candidate;
     loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
@@ -98,7 +135,7 @@ for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} refus
       objects.set("docs/d/bundles/later/index.html", Buffer.from("later draft"));
       if (reason === "revoked") await db.doc("docs/d/linkGrants/link-editor").delete();
     } });
-    await assert.rejects(save(), e => reason === "revoked" ? e.status === 403 : e.detail?.reloadRequired === true);
+    await assert.doesNotReject(save(), "a later change does not refuse an already committed save");
     assert.equal(objects.get(`${candidate}/index.html`)?.toString(), newHtml, "a later refusal cannot delete bytes still selected by a historical version");
     assert.equal(objects.get("docs/d/bundles/later/index.html")?.toString(), "later draft");
     assert.equal(store.get("docs/d").draft.storagePrefix, "docs/d/bundles/later");

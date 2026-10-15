@@ -13,7 +13,7 @@
      try {
 -      await db.runTransaction(async (tx) => {
 +      await e2eAckTransaction(db, docId, "draft-dedup", async (tx) => {
-         const current = (await tx.get(docRef)).data();
+         const snapshot = await tx.get(docRef);
 @@ -532,3 +533,3 @@
    try {
 -    await db.runTransaction(async (tx) => {

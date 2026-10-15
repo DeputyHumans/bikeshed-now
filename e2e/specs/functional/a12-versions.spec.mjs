@@ -242,6 +242,7 @@ async function loseCommitAck(ctx, docId, operation, send, inspectCommitted) {
     await g.release(name, { key });
   } finally {
     await g.release(name, { key }).catch(() => undefined);
+    if (pending) await pending;
   }
   const response = await pending;
   const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`), { file: log, since });
@@ -312,6 +313,55 @@ async function publishWithLostAck(ctx, mode) {
 scenario("A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "draft"));
 scenario("A12.9c external publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "external"));
 scenario("A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement", ACK_CASE, (ctx) => publishWithLostAck(ctx, "dedup"));
+scenario("A12.9f deduplicated publication acknowledges its retirement after a later publication and draft save", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Later dedup ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-dedup-later" });
+  precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 1) }, { timeoutMs: HTTP_MS })).status === 200, "an identical draft exists before deduplication");
+  const retiring = (await docRecord(docId)).draft.storagePrefix;
+  precondition((await listObjects(target, `${retiring}/`)).length > 0, "retirement has actual old draft objects to clean");
+  const laterHtml = docHtml(title, 3, " A later editor saved these bytes.");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-dedup", () => owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: HTTP_MS }), async () => {
+    precondition(!(await docRecord(docId)).draft, "the original deduplication committed before the later user actions");
+    const published = await updateUpload(owner.http, docId, { body: docHtml(title, 2), baseVersion: "v1", timeoutMs: HTTP_MS });
+    precondition(published.status === 200 && published.json?.versionId === "v2", "a separate publication advances the head before the original retry");
+    precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v2", html: laterHtml }, { timeoutMs: HTTP_MS })).status === 200, "a separate later editor saves a draft before the original retry");
+    const latest = await docRecord(docId);
+    return { liveEpoch: latest.liveEpoch, draftPrefix: latest.draft.storagePrefix };
+  });
+  assert.equal(response.status, 200, "ACK later dedup: the original committed retirement is acknowledged");
+  assert.equal(response.json?.versionId, "v1", "ACK later dedup: the response keeps its original version");
+  assert.equal(response.json?.deduped, true, "ACK later dedup: the response keeps its original deduplication result");
+  assert.deepEqual(await listObjects(target, `${retiring}/`), [], "ACK later dedup: the original retired draft bytes are removed");
+  const latest = await docRecord(docId);
+  assert.equal(latest.currentVersion, "v2", "ACK later dedup: the later publication remains current");
+  assert.equal(latest.liveEpoch, committed.liveEpoch, "ACK later dedup: the later editing session remains current");
+  assert.equal(latest.draft?.storagePrefix, committed.draftPrefix, "ACK later dedup: the later draft remains current");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), laterHtml, "ACK later dedup: the later draft bytes remain exact");
+  assert.deepEqual(latest.transactionReceipts ?? {}, {}, "ACK later dedup: the confirmed operation clears its receipt");
+});
+scenario("A12.9h a remembered-link save acknowledges its commit after a later editor saves another draft", ACK_CASE, async (ctx) => {
+  const { owner, accounts } = await castWithOwner(ctx, ["holder"]), holder = await sessionFor(ctx, accounts[1]);
+  const title = `Later link ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-link-later" });
+  const sharing = await setVisibility(target, { owner, doc: docId, visibility: "unlisted", publicEdit: true, timeoutMs: HTTP_MS });
+  precondition(sharing.status === 200 && sharing.linkToken, "the current document allows remembered-link editing");
+  precondition((await holder.http.postJson("/unlock", { docId, k: sharing.linkToken }, { timeoutMs: HTTP_MS })).status === 200, "the editor remembers the current link grant");
+  precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 2) }, { timeoutMs: HTTP_MS })).status === 200, "an old draft exists before the held save");
+  const before = await docRecord(docId), retiring = before.draft.storagePrefix, laterHtml = docHtml(title, 4);
+  precondition(!before.members.includes(accounts[1].email) && (await listObjects(target, `${retiring}/`)).length > 0, "the held writer needs the link grant and the old draft has concrete bytes");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-link", () => holder.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 3) }, { timeoutMs: HTTP_MS }), async () => {
+    const original = await docRecord(docId);
+    precondition(original.draft?.storagePrefix !== retiring, "the original save really replaced the draft before ACK loss");
+    precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: laterHtml }, { timeoutMs: HTTP_MS })).status === 200, "a later editor saves through the ordinary API before the original retry");
+    return { originalPrefix: original.draft.storagePrefix, laterPrefix: (await docRecord(docId)).draft.storagePrefix };
+  });
+  assert.equal(response.status, 200, "ACK later link: the original committed save is acknowledged");
+  assert.equal(response.json?.draft?.storagePrefix, committed.originalPrefix, "ACK later link: the response identifies the original saved draft");
+  assert.deepEqual(await listObjects(target, `${retiring}/`), [], "ACK later link: the originally replaced draft is cleaned");
+  const latest = await docRecord(docId);
+  assert.equal(latest.draft?.storagePrefix, committed.laterPrefix, "ACK later link: the later editor keeps the current draft");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), laterHtml, "ACK later link: the later draft bytes stay exact");
+  assert.deepEqual(latest.transactionReceipts ?? {}, {}, "ACK later link: the confirmed operation clears its receipt");
+});
 scenario("A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs", ACK_CASE, async (ctx) => {
   const { owner } = await castWithOwner(ctx, []);
   const docId = await publishDoc(ctx, owner, { title: `Thumb ACK ${tag()}`, name: "a12-ack-thumb" });
@@ -337,6 +387,40 @@ scenario("A12.9e thumbnail cover and slides survive native commit acknowledgemen
       assert.deepEqual(sibling.buffer, jpegSkeleton({ pad: 73 }), "ACK thumb slides: previously committed cover remains exact");
     }
   }
+});
+
+scenario("A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Later thumb ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-later-thumb" });
+  const initial = await postThumb(owner.http, { docId, versionId: "v1", images: [jpegSkeleton({ pad: 61 })], timeoutMs: HTTP_MS });
+  precondition(initial.status === 200 && initial.json?.stored === true, "the original version has a real stored thumbnail");
+  await updateTo(ctx, owner.http, docId, { body: docHtml(title, 2), baseVersion: "v1", want: "v2" });
+  const olderPrefix = `docs/${docId}/thumbs/v1/`, laterImage = jpegSkeleton({ pad: 97 });
+  precondition((await listObjects(target, olderPrefix)).length > 0, "the first pending upload has obsolete JPEGs to retire");
+  const { response, committed } = await loseCommitAck(ctx, docId, "thumb-cover", () => postThumb(owner.http, { docId, versionId: "v2", images: [jpegSkeleton({ pad: 89 })], timeoutMs: HTTP_MS }), async () => {
+    const first = await docRecord(docId);
+    precondition(first.thumb?.versionId === "v2" && first.thumb.cover, "the first upload's new key is durable while its response is held");
+    precondition((await listObjects(target, olderPrefix)).length > 0, "the first upload has not yet performed its captured cleanup");
+    await updateTo(ctx, owner.http, docId, { body: docHtml(title, 3), baseVersion: "v2", want: "v3" });
+    // A different kind has its own ACK gate, so the later operation completes
+    // before the first cover is released; both replace the current thumb row.
+    const later = await postThumb(owner.http, { docId, versionId: "v3", kind: "slides", images: [laterImage], timeoutMs: HTTP_MS });
+    precondition(later.status === 200 && later.json?.stored === true, "the later publication receives its own completed thumbnail upload");
+    const d = await docRecord(docId);
+    precondition(d.currentVersion === "v3" && d.thumb?.versionId === "v3" && d.thumb.slides?.key, "the later real upload replaces the first thumbnail key before retry");
+    return { firstKey: first.thumb.cover, thumb: d.thumb, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, "ACK thumb later: the first committed upload still answers 200");
+  assert.deepEqual(response.json, { stored: true }, "ACK thumb later: the first committed upload retains its success result");
+  assert.deepEqual(await listObjects(target, olderPrefix), [], "ACK thumb later: the first upload finishes its original obsolete-version cleanup");
+  const after = await docRecord(docId);
+  assert.equal(after.currentVersion, "v3", "ACK thumb later: the newer publication remains current");
+  assert.equal(after.liveEpoch, committed.liveEpoch, "ACK thumb later: thumbnail reconciliation leaves the later session epoch unchanged");
+  assert.deepEqual(after.thumb, committed.thumb, "ACK thumb later: retry never repoints the newer thumbnail");
+  assert.deepEqual(Object.keys(after.transactionReceipts ?? {}), [], "ACK thumb later: completed uploads remove only their own bounded receipts");
+  const served = await owner.http.get(thumbPath(docId, "v3", committed.thumb.slides.key, 0), { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "ACK thumb later: the newer thumbnail JPEG remains readable");
+  assert.deepEqual(served.buffer, laterImage, "ACK thumb later: the newer thumbnail JPEG remains exact");
 });
 
 /**
