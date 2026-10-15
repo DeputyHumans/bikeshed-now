@@ -189,6 +189,7 @@
  * the defect's TODO. Everything that is setup is a precondition().
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import { AssertionError } from "node:assert";
 import { after } from "node:test";
 import { currentTarget, escapeRe, precondition, scenario } from "../../lib/test.mjs";
@@ -465,7 +466,7 @@ async function allShared(ctx, users, wait, what) {
 /** status/{d}/y holds an entry (the first seed), or INCONCLUSIVE. Resolves its keys. */
 async function waitLogged(ctx, docId, { timeout = 60_000 } = {}) {
   return eventually(async () => {
-    const y = await rtdbGet(ctx.target, `status/${docId}/y`);
+    const y = await readLiveLogs(ctx.target, docId);
     return y && typeof y === "object" && Object.keys(y).length > 0 ? Object.keys(y) : false;
   }, { timeout, interval: 100, message: `a seed in status/${docId}/y` }).catch(() => ctx.inconclusive(`the sync precondition did not hold: no seed reached status/${docId}/y within ${timeout} ms`));
 }

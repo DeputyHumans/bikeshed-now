@@ -22,7 +22,7 @@ import { useDocFrame } from "../viewer/useDocFrame";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
-import { clearLog } from "../crdt/rtdb";
+import { useEditSession } from "../viewer/useEditSession";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
@@ -145,7 +145,9 @@ export function DocViewer() {
   const [dialog, setDialog] = useState<Dialog>(null);
   // A file dropped onto the document, waiting in the upload dialog.
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
-  const [wantsEdit, setWantsEdit] = useState(false);
+  const currentLiveEpoch = doc.meta?.liveEpoch ?? doc.publicDoc?.liveEpoch ?? "initial";
+  const { origin: editingOrigin, setEditing: setWantsEdit } = useEditSession(docId, doc.currentVersion, currentLiveEpoch);
+  const wantsEdit = editingOrigin !== null;
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
   const [commenting, setCommenting] = useState(false);
@@ -207,8 +209,8 @@ export function DocViewer() {
 
   const mode: FrameMode = useMemo(
     () =>
-      wantsEdit
-        ? { kind: "editing", baseVersion: doc.currentVersion }
+      editingOrigin
+        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch }
         : {
             kind: "reading",
             versionId: doc.currentVersion,
@@ -220,7 +222,7 @@ export function DocViewer() {
             }),
             sandboxed: !trust.trusted,
           },
-    [wantsEdit, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
+    [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
   );
 
   const frame = useDocFrame({
@@ -298,6 +300,7 @@ export function DocViewer() {
     doc: frame.doc,
     epoch: frame.epoch,
     mode: mode.kind === "editing" ? "edit" : "view",
+    liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
     enabled: signedIn,
   });
 
@@ -310,12 +313,16 @@ export function DocViewer() {
   // An unlisted document's link holder cannot — the realtime rules cannot see
   // a key — so they edit alone and publish through /draft (SPEC §16).
   const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
+  const remoteChanged = useRef<(() => void) | null>(null);
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
     epoch: frame.epoch,
     docId,
     enabled: shareLive,
+    liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
+    expectedGeneration: mode.kind === "editing" && mode.liveEpoch === currentLiveEpoch ? doc.meta?.draft?.causal?.generation : undefined,
+    onRemote: () => remoteChanged.current?.(),
   });
 
   const editor = useInlineEditor({
@@ -325,8 +332,11 @@ export function DocViewer() {
     docId,
     authoredAssets: frame.authoredAssets,
     ready: !shareLive || shared.bound,
+    causalStamp: shared.causalStamp,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
+
+  remoteChanged.current = editor.markChanged;
 
   // AFTER the editor, deliberately, and unlike every hook above it: this one
   // edits rather than decorates, in the session the editor owns, and marks its
@@ -573,18 +583,14 @@ export function DocViewer() {
     try {
       // Saved first, every time, and published only if that save went
       // through: never the previous draft's bytes reported as published.
-      const consumedLog = shared.snapshot();
-      const result = await publishSaved(editor.flushNow, () => commitVersion(docId, doc.currentVersion));
+      if (mode.kind !== "editing") return;
+      const result = await publishSaved(editor.flushNow, () => commitVersion(docId, mode.baseVersion));
       if (!result) {
         toast.error("The draft didn’t save, so nothing was published. Try again.");
         return;
       }
       logEvent({ name: "version_commit", params: { format: doc.format } });
-      // The shared document described the DRAFT, which the commit has just
-      // consumed. Leaving it behind means the next person to open the editor
-      // syncs the old draft from the log and it reappears on top of the version
-      // that replaced it — published work silently reverted by a stale cache.
-      await clearLog(docId, consumedLog);
+      // The server has retired the exact live session consumed by this commit.
       setWantsEdit(false);
       toast.show(
         result.deduped
@@ -599,7 +605,7 @@ export function DocViewer() {
     } finally {
       setCommitting(false);
     }
-  }, [editor, shared, docId, doc.currentVersion, doc.format, navigate, toast]);
+  }, [editor, mode, docId, doc.format, navigate, toast, setWantsEdit]);
 
   /**
    * Leave the editor without publishing.
@@ -652,7 +658,7 @@ export function DocViewer() {
       return;
     }
     setWantsEdit(false);
-  }, [editor, toast]);
+  }, [editor, toast, setWantsEdit]);
 
   // Leaving the editor ends the review pass; it lives in the editing session.
   useEffect(() => {
@@ -669,7 +675,7 @@ export function DocViewer() {
       setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
       setWantsEdit(true);
     },
-    [pendingSuggestions],
+    [pendingSuggestions, setWantsEdit],
   );
 
   // Somebody decided the one on screen — this browser, another approver, or
@@ -986,6 +992,9 @@ export function DocViewer() {
         />
       )}
 
+      {mode.kind === "editing" && shared.error ? (
+        <div className="banner banner-warn" role="alert">{shared.error}</div>
+      ) : null}
       <ViewerBanners
         draft={draftOnScreen}
         onEdit={() => setWantsEdit(true)}
@@ -995,6 +1004,7 @@ export function DocViewer() {
         conflict={live.conflict}
         onTakeTheirs={() => {
           live.dismissConflict();
+          setWantsEdit(true);
           frame.reload();
         }}
         onKeepMine={live.dismissConflict}

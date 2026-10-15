@@ -9649,7 +9649,7 @@
     },
     {
       "id": "S17",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G05-draft-last-writer-wins",
       "classification": "P",
@@ -9748,7 +9748,11 @@
           "caseId": "e2e/specs/concurrency/c10-accepts.spec.mjs::C10b judge (slow link): with two accept saves each made without the other's change (or INCONCLUSIVE: race not achieved), I8, the draft holds every replacement accepted in the app exactly once, in place",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/g05-causal-controls/ledger.json",
+        "status": "causal save ordering and epoch retirement implemented; fresh E2E and control pairs pending"
+      }
     },
     {
       "id": "S5",
@@ -13355,6 +13359,23 @@
         "controls-a12-withdraw-log"
       ],
       "note": "A12.7 seeds an owner-authorized log entry and checks all raw logs, retired epoch, access mirror and public projection after withdrawal. Existing projection/version-byte/draft-byte controls are refreshed and all6 patch targets apply (.out/operator-epoch-controls-M1cT3y/proof.json). Transaction retries capture the winning epoch and draft; cleanup never selects a later snapshot. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "S17"
+      ],
+      "scope": "local working tree; fresh E2E pending",
+      "tests": [
+        "24 focused backend tests pass; seven original stale-save/epoch/uncertain-outcome cases fail before repair; projection failure separately reproduces",
+        "19 focused editor tests pass; original remote autosave and causal capture cases fail; navigation regression separately reproduces",
+        "10 isolated causal/editor regressions fail assertions and restored suites pass"
+      ],
+      "evidence": "e2e/.out/g05-causal-controls/ledger.json",
+      "controls": [
+        "controls-c01-late-autosave"
+      ],
+      "note": "Shared draft stamps include insertion clocks and deletion intervals; older or identical snapshots retain current bytes, concurrent or foreign-generation histories refuse. An editor latches its version and epoch and saves remote merges. Draft retirement advances an opaque epoch before exact scoped cleanup, including deduplicated commits and external suggestion accepts. Uncertain commit responses preserve candidate bytes; failed mirror projection refresh never reports a durable content write as refused. C01 delayed request is replayed after corrective autosaves finish so they cannot mask the regression. No item closed."
     }
   ]
 }

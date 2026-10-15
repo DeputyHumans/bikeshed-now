@@ -172,6 +172,7 @@
  * unwritten), so no case declares an email effect.
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
@@ -533,7 +534,7 @@ async function c5Commit(ctx, s) {
   ctx.step(`nobody in the editor (${JSON.stringify(modes)}); the owner's agent calls commit_draft: ${out.isError ? `refused: ${String(out.text).slice(0, 300)}` : JSON.stringify(out.json)}`);
   if (out.isError && /open in the editor/i.test(String(out.text))) ctx.inconclusive(`the sync precondition did not hold: commit_draft was refused because somebody is in the editor: ${String(out.text).slice(0, 300)}`);
   precondition(!out.isError && out.json?.versionId === "v2" && out.json?.deduped === false, `the agent's commit_draft publishes v2 from the draft (it answered ${JSON.stringify(out.isError ? out.text : out.json).slice(0, 300)})`);
-  const y = await rtdbGetPatient(ctx.target, `status/${s.docId}/y`);
+  const y = await readLiveLogsPatient(ctx.target, s.docId);
   const yAfter = y && typeof y === "object" ? Object.keys(y).length : 0;
   const html = await versionHtml(ctx.target, s.docId, "v2");
   precondition(typeof html === "string" && html.length > 0, "v2's stored entry is readable");
@@ -1094,7 +1095,7 @@ async function enterShared(ctx, u, { timeout = 90_000 } = {}) {
 
 /** What the live log holds: entries, the longest, and how many are over the rule's limit. */
 async function liveLog(ctx, docId) {
-  const y = (await rtdbGetPatient(ctx.target, `status/${docId}/y`)) ?? {};
+  const y = (await readLiveLogsPatient(ctx.target, docId)) ?? {};
   const lengths = Object.values(y).map((v) => (typeof v === "string" ? v.length : 0));
   return { entries: lengths.length, longest: lengths.length ? Math.max(...lengths) : 0, total: lengths.reduce((a, b) => a + b, 0), overLimit: lengths.filter((l) => l > LOG_ENTRY_MAX).length };
 }

@@ -339,10 +339,17 @@ Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
 caller's link grant), Admin-SDK only, versions immutable — a commit always
 mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
-- **`POST /draft`** — `{ docId, baseVersion, entry?, html }`. `409 { currentVersion }`
+- **`POST /draft`** — `{ docId, baseVersion, entry?, html, liveEpoch?, causal? }`. `409 { currentVersion }`
   when `baseVersion !== currentVersion`. Uploads an isolated immutable snapshot
   and transactionally selects it in `docs/{docId}.draft.storagePrefix`, checking
-  the current base, edit authority and expiry again after the upload. For a
+  the current base, edit authority and expiry again after the upload. A browser
+  captures `liveEpoch` at edit entry; a retired epoch returns `409 { liveReset }`.
+  Shared saves carry a bounded `causal` history: the elected seed's SHA-256,
+  Yjs insertion vector and deletion intervals. An older or equal history is an
+  idempotent `200` retaining the current draft; concurrent histories return
+  `409 { draftChanged }` until merged, and different seed generations refuse
+  with `liveReset`. The server stores deletion intervals as JSON to avoid
+  Firestore's nested-array restriction. For a
   Markdown-sourced document the edited HTML is
   converted to Markdown server-side and `index.md` is what is stored (§11).
 - **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
@@ -360,6 +367,11 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   clears `draft`. Both the mint and dedup transactions require the exact
   snapshot originally read; a newer save returns `409 { draftChanged }` and
   stays intact. Cleanup deletes only the replaced snapshot's own files.
+  Every retirement, including an identical-byte draft commit, advances the
+  document's opaque `liveEpoch` atomically. Access mirrors and public reader
+  metadata refresh before cleanup removes only that retired epoch's live log.
+  Unknown transaction errors retain uploaded candidates: a lost response may
+  hide a successful commit, whose referenced bytes must survive.
 
 ### `POST /suggestion`
 Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and
@@ -787,6 +799,10 @@ The one path that writes content, and it is explicit and server-mediated.
   version label that reads `vN · draft`. The banner is the only signal: the
   frame cannot carry one. An editor who opens an older version reads that
   version; the draft is built on the head (`readsDraft`).
+- An open editor retains the version and live epoch it entered, even when
+  another publisher changes the document record. Local and remotely merged
+  edits both schedule autosave. Queued DOM mutations are flushed before the
+  history stamp and matching HTML are captured in one synchronous turn.
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
   `lib/draft.ts`), allowed only when every comment on the current version is
@@ -1081,7 +1097,7 @@ functions/src/
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
-  lib/{publish,draft,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
@@ -1519,7 +1535,10 @@ in via a **dynamic `import()` inside the send helper** so React never loads in
 secret via `defineSecret`, never an env file. If unset, every send is a logged
 no-op and the app behaves exactly as it does with it — the quickstart must not
 require a Resend account. Sends are try/catch and never fail the request that
-triggered them.
+triggered them. Each provider send has one ten-second deadline covering both
+response headers and the complete response body. On expiry the request is
+cancelled and the delivery failure is logged; persisted access remains granted,
+and later recipients can still receive their invitations.
 
 Comment bodies are rendered as **plain text with a link back**, never as HTML.
 
@@ -1672,7 +1691,8 @@ reread the latest document snapshot before writing the two server-only maps.
 Each map reserves `__revision`, a string containing Firestore `updateTime` as
 12 decimal second digits, a colon, and 9 nanosecond digits, plus `__expiresAt`
 (the expiry in epoch milliseconds, or zero for no expiry) and `__owner`
-(the normalized owner email). A whole-node RTDB
+(the normalized owner email) and `__liveEpoch` (the current live-session namespace,
+`initial` for a legacy document). A whole-node RTDB
 transaction replaces the grants only if its revision is at least the current
 validated revision. An older writer cannot restore access after a newer writer
 has completed. `editAccess` is updated before `presenceAccess`, withdrawing
@@ -1695,17 +1715,29 @@ It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
 
 The peer list is readable at `status/{docId}/peers` by members. Shared draft
-reads at `status/{docId}/y` require the editor mirror, just like writes: viewers
+reads at `status/{docId}/y/{liveEpoch}` require the editor mirror and its
+current epoch, just like writes: viewers
 and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
 not client-readable. A public open editor with `editAccess/*` may read and write
 `y`, but gains no access to members' peer presence. These rules apply independently
 of any UI affordance or the HTTP draft endpoint.
 
-The `y` parent accepts an editor's delete-only transaction while the document
-is unexpired. The browser retires a log only if its complete contents still
-match the snapshot captured before publishing. If any entry changed, it keeps
-the whole log, including the seed required to interpret later incremental
-updates. Replacing the whole log with arbitrary content is not permitted.
+Each epoch's parent accepts an editor's delete-only transaction while that
+session is current and the document unexpired. Its immutable `_seed` identifies
+the shared history; compaction preserves it. Publication and external draft
+replacement advance `liveEpoch` inside their Firestore transaction, refresh the
+access mirror, then remove only the captured old epoch. They never delete the
+`y` root or a newly joined session. Old sessions cannot write the new epoch.
+A legacy flat log blocks new editing until its existing editor saves and
+publishes; cleanup removes captured legacy strings while preserving epoch maps.
+A missing or different seed in a populated/stamped session also blocks editing
+with recovery instructions, instead of adopting stale HTML as a new history.
+
+Failed append bytes stay queued, merge with subsequent local deltas, and retry
+with bounded backoff. The toolbar says Off while delivery is unacknowledged and
+Shared only once that queue drains. Destroying the session cancels its retries.
+A configured transport that refuses initialization never enables the editor or
+falls back to a solo autosave.
 
 ### Concurrent editing
 

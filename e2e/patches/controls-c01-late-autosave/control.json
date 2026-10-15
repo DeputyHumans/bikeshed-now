@@ -1,0 +1,13 @@
+{
+  "oracle": "I5: a deliberately delayed older autosave cannot replace merged bytes",
+  "what": "Treat every causal snapshot as newer so an old request arriving last overwrites the merged draft",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C1 late save: one editor's autosave is held in its browser while the others type and save in turn, then lands last; the live copies still converge (I1) and hold every token (I2), and the draft carries no decoration (DECOR, BODYATTR apart from S3) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I5:"
+  }
+}

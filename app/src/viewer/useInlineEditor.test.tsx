@@ -10,7 +10,7 @@ import type { FrameMode } from "./frameMode";
 import { useInlineEditor } from "./useInlineEditor";
 
 const { saveDraft } = vi.hoisted(() => ({
-  saveDraft: vi.fn(async (_docId: string, _baseVersion: string, _html: string) => ({})),
+  saveDraft: vi.fn(async (_docId: string, _baseVersion: string, _html: string, _options?: unknown) => ({})),
 }));
 
 vi.mock("../edit", async () => {
@@ -20,7 +20,7 @@ vi.mock("../edit", async () => {
 
 const EDITING: FrameMode = { kind: "editing", baseVersion: "v1" };
 
-function setup(html = "<!DOCTYPE html><html><body><p>The text.</p></body></html>") {
+function setup(html = "<!DOCTYPE html><html><body><p>The text.</p></body></html>", options: Partial<Parameters<typeof useInlineEditor>[0]> = {}) {
   const doc = new DOMParser().parseFromString(
     html,
     "text/html",
@@ -33,6 +33,7 @@ function setup(html = "<!DOCTYPE html><html><body><p>The text.</p></body></html>
       docId: "d1",
       authoredAssets: { current: null },
       onStale: () => {},
+      ...options,
     }),
   );
   const type = () => doc.dispatchEvent(new Event("input", { bubbles: true }));
@@ -256,4 +257,40 @@ it("blocks input and saving until the initial shared document has been adopted, 
     expect(input.defaultPrevented).toBe(false);
   } finally { view.unmount(); }
   expect(doc.body.getAttribute("contenteditable")).toBe("plaintext-only");
+});
+
+
+it("autosaves remote merged edits without a local input event, but not initial adoption", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockResolvedValue({});
+  const shared = new Y.Doc();
+  const source = new DOMParser().parseFromString("<body><p>Seed</p></body>", "text/html");
+  const seed = bindSync(shared.getXmlFragment("body"), source.body);
+  const { view, doc } = setup();
+  const binding = bindSync(shared.getXmlFragment("body"), doc.body, () => view.result.current.markChanged());
+  try {
+    await act(() => view.result.current.flushUnsaved());
+    expect(saveDraft).not.toHaveBeenCalled();
+    act(() => { ((shared.getXmlFragment("body").get(0) as Y.XmlElement).get(0) as Y.XmlText).insert(4, " merged remotely"); });
+    await act(() => view.result.current.flushUnsaved());
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(saveDraft.mock.calls[0][2]).toContain("Seed merged remotely");
+  } finally { binding.destroy(); seed.destroy(); view.unmount(); shared.destroy(); }
+});
+
+it("flushes the shared history before serializing matching bytes and sends the captured live epoch", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockResolvedValue({});
+  const stamp = { generation: "a".repeat(64), vector: { 1: 3 }, deletes: {} };
+  let target: Document;
+  const { view, doc } = setup(undefined, {
+    mode: { kind: "editing", baseVersion: "v1", liveEpoch: "session-1" },
+    causalStamp: () => { target.querySelector("p")!.textContent = "Flushed shared bytes"; return stamp; },
+  });
+  target = doc;
+  try {
+    await act(() => view.result.current.flushNow());
+    expect(saveDraft.mock.calls[0][2]).toContain("Flushed shared bytes");
+    expect(saveDraft.mock.calls[0][3]).toEqual({ liveEpoch: "session-1", causal: stamp });
+  } finally { view.unmount(); }
 });

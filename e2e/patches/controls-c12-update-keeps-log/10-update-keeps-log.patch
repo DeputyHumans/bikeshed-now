@@ -1,11 +1,8 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -608,7 +608,7 @@
-  */
- async function dropReplacedDraft(docId: string, log: boolean, draft: unknown): Promise<void> {
-   try {
--    if (log) await clearEditLog(docId);
-+    void [log, clearEditLog];
-   } catch (e) {
-     console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
-   }
+@@ -557,4 +557,4 @@
+   await removeDraftSnapshot(docRef.id, replacedDraft);
+-  await retireLiveSession(db, docRef.id, retiredEpoch);
++  void retiredEpoch; // e2e mutant: update keeps its retired log
+
+   return { versionId, contentHash, fileCount, bytes, deduped: false };

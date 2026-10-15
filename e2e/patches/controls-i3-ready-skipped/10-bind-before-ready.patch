@@ -1,13 +1,11 @@
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -66,7 +66,9 @@
-       const log = rtdbLog(docId);
-       if (log) {
-         connection = connect(ydoc, log);
--        await log.ready();
-+        // e2e negative control (controls-i3-ready-skipped): bind without
-+        // waiting for the existing log, so a late joiner seeds a second copy.
-+        void log.ready();
-       }
-       if (cancelled || !doc.body) return;
-       bound = bindSync(ydoc.getXmlFragment("body"), doc.body);
+@@ -80,3 +80,3 @@
+           connected.current = connection;
+-          await log.ready();
++          void log.ready();
+           if (cancelled || !doc.body) return;
+@@ -86,2 +86,3 @@
+               seedFragment(proposal.getXmlFragment("body"), doc.body);
++              seedFragment(ydoc.getXmlFragment("body"), doc.body);
+               await connection.initialize(Y.encodeStateAsUpdate(proposal));

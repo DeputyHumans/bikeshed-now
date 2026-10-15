@@ -16,6 +16,7 @@ import {
 } from "../wysiwyg/placeholders";
 import { rewriteLegacyFontTags } from "../wysiwyg/EditToolbar";
 import { StaleVersionError, saveDraft } from "../edit";
+import type { CausalStamp } from "../crdt/causal";
 import type { FrameMode } from "./frameMode";
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -42,6 +43,7 @@ export function useInlineEditor(options: {
   epoch: number;
   docId: string;
   ready?: boolean;
+  causalStamp?: () => CausalStamp | null;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
 }) {
@@ -50,6 +52,9 @@ export function useInlineEditor(options: {
   // type in it: edits merge (SPEC §6b), so the mode is the whole condition.
   const readyRef = useRef(ready);
   readyRef.current = ready;
+  const causalStampRef = useRef(options.causalStamp);
+  causalStampRef.current = options.causalStamp;
+  const changedRef = useRef<(() => void) | null>(null);
   const editing = mode.kind === "editing";
   const baseVersion = mode.kind === "editing" ? mode.baseVersion : null;
 
@@ -114,11 +119,14 @@ export function useInlineEditor(options: {
         setSaveState("saving");
         unsaved.current = false;
         try {
+          // Flush queued DOM mutations before taking both history and HTML in
+          // the same synchronous turn: the stamp must describe these bytes.
+          const causal = causalStampRef.current?.() ?? undefined;
           const html = serializeCleanHtml(doc, {
             authoredAssets: authoredAssets.current ?? undefined,
             authoredBodyAttributes: bodyAttributes.current,
           });
-          await saveDraft(docId, mode.baseVersion, html);
+          await saveDraft(docId, mode.baseVersion, html, { liveEpoch: mode.liveEpoch ?? "initial", ...(causal ? { causal } : {}) });
           if (session.current !== currentSession) return false;
           lastSaveFailed.current = false;
           setSaveError(null);
@@ -196,10 +204,12 @@ export function useInlineEditor(options: {
     const beforeInput = (event: Event) => { if (!readyRef.current) event.preventDefault(); };
     doc.addEventListener("beforeinput", beforeInput, true);
     doc.addEventListener("input", onInput);
+    changedRef.current = onInput;
 
     return () => {
       session.current += 1;
       doc.removeEventListener("input", onInput);
+      changedRef.current = null;
       doc.removeEventListener("beforeinput", beforeInput, true);
       if (timer.current) clearTimeout(timer.current);
       placeholders.disconnect();
@@ -218,6 +228,7 @@ export function useInlineEditor(options: {
   return {
     saveState,
     saveError,
+    markChanged: useCallback(() => changedRef.current?.(), []),
     /**
      * Save now, changed or not: before a commit, which publishes the draft's
      * bytes. Resolves false when the save failed, which a commit must heed:

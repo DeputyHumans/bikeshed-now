@@ -160,7 +160,7 @@ test("writeMirror uses guarded GET/conditional PUT for edit then presence and re
     assert.equal(db.seen[1].headers['if-match'], '"0"');
     for (const request of db.seen) { assert.equal(request.headers.authorization, 'Bearer owner'); assert.equal(request.headers.cookie, undefined); }
     const update = mirrorUpdate(DOC, record());
-    for (const node of Object.values(update)) Object.assign(node, { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL });
+    for (const node of Object.values(update)) Object.assign(node, { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL, __liveEpoch: "initial" });
     assert.deepEqual(db.nodes.get(`/editAccess/${DOC}.json`), update[`editAccess/${DOC}`]);
     assert.deepEqual(db.nodes.get(`/presenceAccess/${DOC}.json`), update[`presenceAccess/${DOC}`]);
     assert.deepEqual(result, { docId: DOC, members: [OWNER_EMAIL, P2, P3], editorMembers: [OWNER_EMAIL, P2], update, status: 200 });

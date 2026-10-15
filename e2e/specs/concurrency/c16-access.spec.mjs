@@ -16,6 +16,7 @@
  * so every case is local and declares its email effects.
  */
 
+import { liveLogPath } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
 import { after } from "node:test";
@@ -461,8 +462,8 @@ function revokedDenied(writes) {
 async function yWrite(ctx, s, docId) {
   const db = rtdbAs(target, { idToken: s.idToken, http: ctx.http({ actor: `${s.account.role}-rtdb` }) });
   const entry = `c16-${rand4()}-${Date.now().toString(36)}`;
-  const r = await db.put(`status/${docId}/y/${entry}`, `e2e c16 probe by ${s.account.role}`);
-  if (r.verdict === "ALLOW") await db.delete(`status/${docId}/y/${entry}`).catch(() => undefined);
+  const r = await db.put(`${await liveLogPath(target, docId)}/${entry}`, `e2e c16 probe by ${s.account.role}`);
+  if (r.verdict === "ALLOW") await db.delete(`${await liveLogPath(target, docId)}/${entry}`).catch(() => undefined);
   return { email: emailOf(s), verdict: r.verdict, status: r.status };
 }
 

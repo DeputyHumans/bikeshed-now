@@ -37,7 +37,7 @@ export async function syncPresenceAccess(
     const value = typeof data.expiresAt === "number" ? data.expiresAt : data.expiresAt?.toMillis?.();
     const expiresAt = Number.isFinite(value) ? value : 0;
     const keyed = (list) => {
-      const out = { __revision: revision, __expiresAt: expiresAt, __owner: String(data.ownerEmail ?? "").toLowerCase() };
+      const out = { __revision: revision, __expiresAt: expiresAt, __owner: String(data.ownerEmail ?? "").toLowerCase(), __liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial" };
       for (const member of Array.isArray(list) ? list : []) {
         if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
       }

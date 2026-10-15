@@ -2,6 +2,9 @@
 // The shared draft: writing it, reading it back, and publishing it as a version (SPEC §6a).
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
+import { causalOrder, readStoredCausalStamp, storedCausalStamp, type CausalStamp } from "./causal";
+import { clearEditLog, syncPresenceAccess } from "./presence";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
 import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
@@ -111,6 +114,20 @@ export async function removeDraftSnapshot(docId: string, draft: unknown): Promis
   catch { console.error("could not remove a replaced draft snapshot"); }
 }
 
+/** Publish the new access fence before deleting only the retired session's log. */
+export async function retireLiveSession(db: Db, docId: string, retiredEpoch: string): Promise<void> {
+  await syncPresenceAccess(docId, [], []);
+  try { await syncPublicProjection(db, docId); }
+  catch {
+    // The content write is already committed. Its Firestore trigger retries
+    // projection repair; retain the old log until that metadata is current.
+    console.error("could not refresh the retired live session projection");
+    return;
+  }
+  try { await clearEditLog(docId, retiredEpoch); }
+  catch { console.error("could not remove a retired live session"); }
+}
+
 /**
  * Store `content` as the draft of `baseVersion`, which the caller has checked
  * is current, and record who wrote it. For Markdown both files are written:
@@ -124,6 +141,9 @@ export async function writeDraft(args: {
   version: VersionMeta;
   content: DraftContent;
   expectedDraft?: unknown;
+  liveEpoch?: string;
+  causal?: CausalStamp;
+  retireLive?: boolean;
   emailLower: string;
   actor: Actor;
 }): Promise<Record<string, unknown>> {
@@ -154,6 +174,8 @@ export async function writeDraft(args: {
   }
 
   let previous: unknown;
+  let retiredEpoch: string | undefined;
+  let reused = false;
   let draft: Record<string, unknown> = {};
   try {
     await args.db.runTransaction(async (tx) => {
@@ -162,23 +184,56 @@ export async function writeDraft(args: {
       checkDraftBase(current, baseVersion);
       await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: args.actor.uid ?? "", emailLower: args.emailLower });
       if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+      const epoch = String(current?.liveEpoch ?? "initial");
+      if (args.liveEpoch !== undefined && args.liveEpoch !== epoch) throw new DraftConflict({
+        error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+      });
+      reused = false;
+      retiredEpoch = undefined;
+      const currentCausal = readStoredCausalStamp(current?.draft?.causal);
+      if (args.causal && currentCausal) {
+        const order = causalOrder(args.causal, currentCausal);
+        if (order === "generation") throw new DraftConflict({
+          error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+        });
+        if (order === "concurrent") throw new DraftConflict({
+          error: "Other edits are still arriving. Keep this editor open and retry saving after they merge.", draftChanged: true,
+        });
+        if (order === "behind" || order === "same") {
+          draft = current!.draft;
+          reused = true;
+          return;
+        }
+      }
       previous = current?.draft;
+      if (args.retireLive) retiredEpoch = epoch;
       draft = {
         baseVersion, storagePrefix, entry: version.entry,
+        ...(args.causal ? { causal: storedCausalStamp(args.causal) } : {}),
         ...(sourceEntry ? { sourceEntry } : {}), bytes,
         updatedByEmail: args.emailLower,
         editSessions: appendEditSession(current?.draft?.editSessions, args.actor),
       };
       tx.update(docRef, {
         draft: { ...draft, updatedAt: now() }, updatedAt: now(),
+        ...(args.retireLive ? { liveEpoch: randomUUID() } : {}),
         "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
       });
     });
   } catch (error) {
-    await removeDraftSnapshot(docRef.id, { storagePrefix });
+    // A transport error can follow a committed transaction: retain its bytes
+    // unless a known refusal proves the transaction never referenced them.
+    if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
+      await removeDraftSnapshot(docRef.id, { storagePrefix });
+    }
     throw error;
   }
+  if (reused) {
+    await removeDraftSnapshot(docRef.id, { storagePrefix });
+    return draft;
+  }
   await removeDraftSnapshot(docRef.id, previous);
+  if (retiredEpoch !== undefined) await retireLiveSession(args.db, docRef.id, retiredEpoch);
   return draft;
 }
 
@@ -309,6 +364,7 @@ export async function commitDraft(args: {
   const { contentHash, fileCount, bytes } = hashBundleFiles(files);
   const versionsRef = docRef.collection("versions");
 
+  let retiredEpoch = "initial";
   const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
   if (!dup.empty) {
     try {
@@ -318,7 +374,8 @@ export async function commitDraft(args: {
         await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
         checkDraftSnapshot(current, draft);
         if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-        tx.update(docRef, { draft: FieldValue.delete(), updatedAt: now() });
+        retiredEpoch = String(current?.liveEpoch ?? "initial");
+        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: randomUUID(), updatedAt: now() });
       });
     } catch (error) {
       if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
@@ -329,6 +386,7 @@ export async function commitDraft(args: {
       throw error;
     }
     await removeDraftSnapshot(docId, draft);
+    await retireLiveSession(db, docId, retiredEpoch);
     return {
       status: 200,
       body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
@@ -363,6 +421,7 @@ export async function commitDraft(args: {
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
       checkDraftSnapshot(cur.data(), draft);
+      retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       const vRef = versionsRef.doc(versionId);
       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
@@ -397,6 +456,7 @@ export async function commitDraft(args: {
         docRef,
         {
           currentVersion: versionId,
+          liveEpoch: randomUUID(),
           draft: FieldValue.delete(),
           updatedAt: now(),
           stats: {
@@ -437,7 +497,7 @@ export async function commitDraft(args: {
   }
 
   await removeDraftSnapshot(docId, draft);
-  await syncPublicProjection(db, docId);
+  await retireLiveSession(db, docId, retiredEpoch);
 
   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
 }

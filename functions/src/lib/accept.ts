@@ -7,7 +7,7 @@ import { applyToHtml, applyToMarkdown, type ApplyRefusal } from "./apply";
 import { DraftConflict, readWorkingCopy, writeDraft } from "./draft";
 import { WriteAuthorityError } from "./writeAuthority";
 import { renderMarkdown } from "./markdown/render";
-import { clearEditLog, editorsRefusal } from "./presence";
+import { editorsRefusal } from "./presence";
 import { changeSuggestion, type Author, type Refusal } from "./suggestions";
 
 /**
@@ -97,11 +97,10 @@ export async function acceptSuggestion(args: {
     // Each attempt owns its uploaded bytes; a conflict never records acceptance.
     for (let attempt = 0; made.state === "applied"; attempt++) {
       try {
-        if (editors.log) await clearEditLog(docRef.id);
         await writeDraft({
           db, docRef, baseVersion: working.baseVersion, version: working.version,
           content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
-          expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
+          retireLive: true, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
         });
         break;
       } catch (error) {

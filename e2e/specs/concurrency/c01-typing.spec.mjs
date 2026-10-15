@@ -116,6 +116,7 @@
  * strips every app injection".
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import assert, { AssertionError } from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after } from "node:test";
@@ -309,7 +310,7 @@ function watchLog(t, docId, { everyMs = 400 } = {}) {
   const loop = (async () => {
     while (!stopped) {
       try {
-        const y = await rtdbGetPatient(t, `status/${docId}/y`, { onRetry: () => (retries += 1) });
+        const y = await readLiveLogsPatient(t, docId, { onRetry: () => (retries += 1) });
         const keys = y && typeof y === "object" ? Object.keys(y) : [];
         const now = new Set(keys);
         for (const k of keys) everSeen.add(k);
@@ -753,8 +754,7 @@ function lateSaveProof(rows, early, plan) {
   if (others.length === 0) why.push("no later peer saved");
   if (held && others.length) {
     if (held.status !== 200) why.push(`${early.name}'s held save was answered ${held.status ?? held.state}`);
-    const sentBefore = others.filter((r) => !(r.sentAt > held.sentAt));
-    if (sentBefore.length) why.push(`${sentBefore.map((r) => r.name).join(", ")} saved before ${early.name}'s held save was sent`);
+    if (lastOther && !(lastOther.sentAt > held.sentAt)) why.push("the merged save was not sent after the held snapshot");
     const answeredAfter = others.filter((r) => !(r.respondedAt < held.respondedAt));
     if (answeredAfter.length) why.push(`${answeredAfter.map((r) => r.name).join(", ")}'s save was answered after ${early.name}'s held save`);
     const reached = theirTokens.filter((t) => held.tokens.includes(t));
@@ -815,6 +815,7 @@ async function lateSave(ctx, { hold }) {
       ctx.step(`then ${rest.map((p) => p.u.name).join(", ")}, one after another, type ${TOKENS} tokens into their own paragraph; each autosave answered 200, each last token at every peer${hold ? `, ${early.name} included` : ""}`);
       for (const p of rest) await typeAndArrive(users, p.u, p.id, p.tokens, deadline);
       if (hold) {
+        await savesQuiet(rest.map((p) => p.u), armed.filter(({ u }) => u !== early), n);
         ctx.step(`every later save answered: ${early.name}'s held save goes now`);
         release();
       }
@@ -838,13 +839,24 @@ async function lateSave(ctx, { hold }) {
       obs.stage = "reading";
       const ids = plan.map((p) => p.id);
       const peers = await segmentsOf(users, ids);
+      if (hold) {
+        // Remote updates also autosave now: the held editor may drain a merged
+        // snapshot after its old request finishes. Replay the exact older wire
+        // request after that drain, so a corrective save cannot hide data loss.
+        const oldRequest = delay.rows[0]?.postJson;
+        precondition(Boolean(oldRequest?.causal && oldRequest?.liveEpoch), "the delayed request captured its causal history and live epoch");
+        const replay = await early.http.postJson("/draft", oldRequest);
+        assert.equal(replay.status, 200, "C1 late replay: an already superseded save is idempotent");
+        ctx.ev.json("late-replay", { request: oldRequest, response: replay.json });
+        ctx.step("replayed the exact older autosave after all corrective saves finished; read the durable draft before any further input");
+      }
       obs.draft = await readDraftAgainstPeers(ctx, { parser, owner, docId, users, ids, typed: log.typed });
       ctx.ev.json("peers", peers);
       ctx.step(`the draft: ${obs.draft.draftHash.slice(0, 12)}; the peers: ${JSON.stringify(obs.draft.peerHashes).slice(0, 300)}`);
       obs.stage = "measured";
       assertInvariant(checkI2({ peers, typed: log.typed }));
       assertCleanDraft(obs.draft);
-      if (!hold) assertDraftEqualsPeers(obs.draft);
+      assertDraftEqualsPeers(obs.draft);
     } finally {
       release();
       if (delay) await delay.restore().catch(() => undefined);
@@ -858,7 +870,7 @@ scenario("C1 late save: one editor's autosave is held in its browser while the o
   await lateSave(ctx, { hold: true });
 });
 
-scenario("C1 late save draft: after a save sent first lands last, GET /draft's body still equals every peer's and holds every typed token once and whole (I5 apart from S3's spellcheck, I2 in the draft)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S17" }, async (ctx) => {
+scenario("C1 late save draft: after a save sent first lands last, GET /draft's body still equals every peer's and holds every typed token once and whole (I5 apart from S3's spellcheck, I2 in the draft)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const d = observation(ctx, "C1-late", "draft");
   ctx.step(`the draft ${d.draftHash.slice(0, 12)} against ${Object.keys(d.peerHashes).length} peer(s), after ${observed.get(keyOf("C1-late", ctx))?.race?.held?.name ?? "p1"}'s save sent first landed last`);
   assertDraftEqualsPeers(d);
@@ -931,7 +943,7 @@ async function refusedAppend(ctx, { refuse }) {
         settleError = firstLine(err);
         ctx.step(`did not settle: ${settleError}`);
       }
-      const y = await rtdbGetPatient(ctx.target, `status/${docId}/y`);
+      const y = await readLiveLogsPatient(ctx.target, docId);
       obs.stage = "reading";
       const samples = await readI1(users);
       const peers = await segmentsOf(users, [id]);
@@ -940,10 +952,8 @@ async function refusedAppend(ctx, { refuse }) {
       ctx.ev.json("live", obs.live);
       ctx.step(`each peer's body: ${samples.map((s) => `${s.name} ${String(s.hash).slice(0, 12)} (${s.length})`).join(", ")}; the token on ${Object.entries(holds).filter(([, t]) => t.includes(tokens[0])).map(([name]) => name).join(", ") || "nobody"}; status/{d}/y holds ${obs.live.yEntries} entr(ies)`);
       obs.stage = "measured";
-      if (!refuse) {
-        assertInvariant(checkI1(samples));
-        assertInvariant(checkI2({ peers, typed: log.typed }));
-      }
+      assertInvariant(checkI1(samples));
+      assertInvariant(checkI2({ peers, typed: log.typed }));
     } finally {
       if (g) await g.release(REFUSE_GATE, { key: docId, disarm: true }).catch(() => undefined);
     }
@@ -954,13 +964,8 @@ scenario("C1 refused append: one editor's live-log append is refused as the Data
   await refusedAppend(ctx, { refuse: true });
 });
 
-// X-c01-typing-2: app/src/crdt/log.ts:108-113 sends each update once
-// (`void log.append(...).then(...)`, no catch), so a refused append is
-// neither sent again nor reported; every later update of that editor depends
-// on it and waits in each peer's Y.Doc, unapplied, until the editor's next
-// compaction (seen.size >= COMPACT_AFTER, log.ts:74, 125) appends its whole
-// state.
-scenario("C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)", { tiers: LOCAL, needs: [REFUSE_PATCH], n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "X-c01-typing-2" }, async (ctx) => {
+// Refused updates and dependent deltas are retried together before Shared returns.
+scenario("C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)", { tiers: LOCAL, needs: [REFUSE_PATCH], n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const live = observation(ctx, "C1-refused", "live");
   ctx.step(`settle: ${live.settleError ?? "settled"}; status/{d}/y ${live.yEntries} entr(ies), under the 64-entry compaction`);
   const i1 = checkI1(live.samples);

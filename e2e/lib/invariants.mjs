@@ -768,7 +768,7 @@ export function checkI14({ members, editorMembers, presenceAccess, editAccess, r
   needArray(members, "members", "checkI14");
   needArray(editorMembers, "editorMembers", "checkI14");
   needArray(revokedWrites, "revokedWrites", "checkI14");
-  const metadata = ["__revision", "__expiresAt", "__owner"];
+  const metadata = ["__revision", "__expiresAt", "__owner", "__liveEpoch"];
   const keys = (o) => new Set(Object.keys(o ?? {}).filter((k) => !metadata.includes(k) && !ignore.includes(k)));
   const diff = (want, got) => ({ missing: [...want].filter((k) => !got.has(k)).sort(), extra: [...got].filter((k) => !want.has(k)).sort() });
   const failures = [];
@@ -776,6 +776,7 @@ export function checkI14({ members, editorMembers, presenceAccess, editAccess, r
     if (map?.__revision !== undefined && (typeof map.__revision !== "string" || !/^\d{12}:\d{9}$/.test(map.__revision))) failures.push(`${name} has an invalid revision fence`);
     if (map?.__expiresAt !== undefined && (!Number.isFinite(map.__expiresAt) || map.__expiresAt < 0)) failures.push(`${name} has an invalid expiry deadline`);
     if (map?.__owner !== undefined && (typeof map.__owner !== "string" || map.__owner !== map.__owner.toLowerCase() || !/^[^@\s]+@[^@\s]+$/.test(map.__owner))) failures.push(`${name} has an invalid owner`);
+    if (map?.__liveEpoch !== undefined && (typeof map.__liveEpoch !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(map.__liveEpoch))) failures.push(`${name} has an invalid live epoch`);
     for (const [key, value] of Object.entries(map ?? {})) if (!metadata.includes(key) && value !== true) failures.push(`${name}/${key} is not a true access grant`);
   }
   for (const [name, want, got] of [["presenceAccess", new Set(members.map(emailKey)), keys(presenceAccess)], ["editAccess", new Set(editorMembers.map(emailKey)), keys(editAccess)]]) {

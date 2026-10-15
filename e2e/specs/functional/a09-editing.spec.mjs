@@ -120,6 +120,7 @@
  * INCONCLUSIVE when that case never got to measure it: nothing was measured.
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
@@ -873,7 +874,7 @@ async function commitAndMeasureLog(ctx) {
   // The page appends its edit to the live log as it types; under load the append may land late, and S8 is blind without entries to clear.
   let yBefore = null;
   await eventually(async () => {
-    yBefore = await rtdbGet(target, `status/${docId}/y`);
+    yBefore = await readLiveLogs(target, docId);
     return yBefore !== null && Object.keys(yBefore).length > 0;
   }, { timeout: LATENCY_MS, interval: 250, message: "the live log holds the edit" }).catch(() => undefined);
   const before = yBefore ? Object.keys(yBefore).length : 0;
@@ -888,7 +889,7 @@ async function commitAndMeasureLog(ctx) {
   // measured here, where the commit happened, and judged there.
   let left = yBefore;
   await eventually(async () => {
-    left = await rtdbGet(target, `status/${docId}/y`);
+    left = await readLiveLogs(target, docId);
     return left === null;
   }, { timeout: 2_000, interval: 100, message: "the live log is cleared" }).catch(() => undefined);
   Object.assign(liveLog, { measured: true, rules, before, left: left ? Object.keys(left).length : null, leftAfterMs: Date.now() - at, docId });

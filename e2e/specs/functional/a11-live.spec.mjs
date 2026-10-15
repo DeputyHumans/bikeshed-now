@@ -79,6 +79,7 @@
  * Only e2e/lib/ talks to the stack.
  */
 
+import { flattenLiveLogs, liveLogPath, readLiveLogs } from "../../lib/live-log.mjs";
 import { presenceModes, presenceFor } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
@@ -276,7 +277,7 @@ async function rulesEnforced(ctx) {
 
 /** The live log's entries as the admin sees them: {key: base64}. */
 async function logEntries(docId) {
-  return (await rtdbGet(target, `status/${docId}/y`)) ?? {};
+  return (await readLiveLogs(target, docId)) ?? {};
 }
 
 /** Wait until the live log has at least `min` entries and holds still for 2 s (the plan's `y` settle). */
@@ -759,11 +760,11 @@ scenario("A11.5 a suggester gets no Edit button, never touches the live log from
 
   ctx.step("the suggester's own ID token writes an entry to status/{doc}/y (REST, ?auth=); the owner's identical write is the control");
   const entry = newEntry("s");
-  const r = await rtdbFor(ctx, "suggester", sug.session.idToken).put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await rtdbFor(ctx, "suggester", sug.session.idToken).put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = rtdbVerdict(r, "the suggester's write");
-  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`status/${w.docId}/y/${newEntry("o")}`, EMPTY_UPDATE);
+  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`${await liveLogPath(target, w.docId)}/${newEntry("o")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(ctl, "the owner's control") === "ALLOW", "control: the owner's identical write is allowed");
-  const stored = await rtdbGet(target, `status/${w.docId}/y/${entry}`);
+  const stored = await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`);
 
   // User.log.wsFrames: every frame each context sent, from its creation (lib/browser.mjs).
   const sFrames = s.log.wsFrames;
@@ -804,14 +805,14 @@ scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds a
 
   ctx.step("controls: the owner reads the log and sees the secret; a signed-in stranger is refused");
   const own = await rtdbFor(ctx, "owner", w.owner.idToken).get(`status/${w.docId}/y`);
-  precondition(rtdbVerdict(own, "the owner's read") === "ALLOW" && logContains(own.json ?? {}, secret), "control: the owner's read returns the secret");
+  precondition(rtdbVerdict(own, "the owner's read") === "ALLOW" && logContains(flattenLiveLogs(own.json), secret), "control: the owner's read returns the secret");
   const str = await rtdbFor(ctx, "stranger", w.people.stranger.session.idToken).get(`status/${w.docId}/y`);
   precondition(rtdbVerdict(str, "the stranger's read") === "DENY", "control: the rules are enforced (a stranger's read is refused)");
 
   ctx.step("the viewer reads status/{doc}/y with their own ID token");
   const r = await rtdbFor(ctx, "viewer", viewer.session.idToken).get(`status/${w.docId}/y`);
   const verdict = rtdbVerdict(r, "the viewer's read");
-  const sees = verdict === "ALLOW" && logContains(r.json ?? {}, secret);
+  const sees = verdict === "ALLOW" && logContains(flattenLiveLogs(r.json), secret);
   const draft = await viewer.session.http.get(`/draft/${encodeURIComponent(w.docId)}/index.html`);
   ctx.step(`viewer: ${r.status} → ${verdict}; decodes the editor's secret from it: ${sees}. For contrast GET /draft as the viewer: ${draft.status} (SPEC §2 spec.md:329-332: editor-gated, a refused reader gets 404)`);
   ctx.ev.json("viewer-read", { verdict, entries: Object.keys(r.json ?? {}).length, seesSecret: sees, draftStatus: draft.status });
@@ -895,7 +896,7 @@ scenario("A11.7b sharing a public open-editing document with someone keeps editA
   const db = rtdbFor(ctx, "openeditor", pe.session.idToken);
   const star = async () => ((await rtdbGet(target, `editAccess/${w.docId}`)) ?? {})["*"] === true;
   precondition(await star(), "before the share, editAccess/* is set (POST /visibility wrote it)");
-  const before = rtdbVerdict(await db.put(`status/${w.docId}/y/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write before the share");
+  const before = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write before the share");
   precondition(before === "ALLOW", "control: before the share, the open editor's own ID token writes the live log");
 
   ctx.step("the owner shares the document with a colleague as a viewer (a membership change, nothing about visibility)");
@@ -905,7 +906,7 @@ scenario("A11.7b sharing a public open-editing document with someone keeps editA
   precondition(rec?.visibility === "public" && rec?.publicEdit === true, `the document is still public with open editing (${rec?.visibility}, publicEdit ${rec?.publicEdit})`);
 
   const after = await star();
-  const write = rtdbVerdict(await db.put(`status/${w.docId}/y/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write after the share");
+  const write = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write after the share");
   ctx.step(`after the share: editAccess/* ${after}; the open editor's log write ${write}; editAccess = ${JSON.stringify(Object.keys((await rtdbGet(target, `editAccess/${w.docId}`)) ?? {}))}`);
   assert.deepEqual({ star: after, write }, { star: true, write: "ALLOW" }, "a share leaves a public open-editing document open to every verified account in the live log");
 });
@@ -980,7 +981,7 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
 
   ctx.step("control: before the revocation the editor's own ID token may write a log entry (the same request as after it)");
   const db = rtdbFor(ctx, "revoked", ed.session.idToken);
-  const pre = await db.put(`status/${w.docId}/y/${newEntry("e")}`, EMPTY_UPDATE);
+  const pre = await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("e")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(pre, "the editor's write before the revocation") === "ALLOW", "control: the editor's token writes the log before the revocation");
 
   ctx.step("the owner removes the editor (POST /access remove); both mirrors drop them");
@@ -995,9 +996,9 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
 
   ctx.step("REST: the revoked editor's own ID token writes a log entry; the owner's identical write is the control");
   const entry = newEntry("e");
-  const r = await db.put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await db.put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = rtdbVerdict(r, "the revoked editor's write");
-  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`status/${w.docId}/y/${newEntry("o")}`, EMPTY_UPDATE);
+  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`${await liveLogPath(target, w.docId)}/${newEntry("o")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(ctl, "the owner's control") === "ALLOW", "control: the owner's identical write is allowed");
 
   ctx.step("HTTP: the revoked editor's session posts /draft; the owner's identical post is the control");
@@ -1018,7 +1019,7 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
   ctx.step(`REST write ${verdict}; POST /draft ${d.status}; browser autosave ${save.status}; log entries added while the revoked editor typed: ${grew.length}; the owner sees the token: ${ownerSees}`);
 
   assert.equal(verdict, "DENY", "the revoked editor's log write is refused");
-  assert.equal(await rtdbGet(target, `status/${w.docId}/y/${entry}`), null, "nothing was written");
+  assert.equal(await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`), null, "nothing was written");
   assert.equal(d.status, 404, "POST /draft refuses the revoked editor with 404");
   assert.equal(save.status, 404, "the revoked editor's own browser autosave gets 404");
   assert.deepEqual(grew, [], "none of the revoked editor's keystrokes entered the live log");
@@ -1093,8 +1094,8 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
     ["an email that is not the caller's", mine, { ...peer, email: w.ownerAcct.email.toLowerCase() }],
     ["another account's peer key", `status/${w.docId}/peers/${ownerNode.key}`, { ...peer, uid: ed.session.uid }],
     ["a viewport outside 0..1", mine, { ...peer, viewport: 1.5 }],
-    ["a log entry that is not a string", `status/${w.docId}/y/${newEntry("n")}`, 12345],
-    ["a log entry over 200 000 characters", `status/${w.docId}/y/${newEntry("big")}`, "A".repeat(200_004)],
+    ["a log entry that is not a string", `${await liveLogPath(target, w.docId)}/${newEntry("n")}`, 12345],
+    ["a log entry over 200 000 characters", `${await liveLogPath(target, w.docId)}/${newEntry("big")}`, "A".repeat(200_004)],
   ];
   const got = [];
   for (const [what, path, value] of cells) {
@@ -1105,9 +1106,9 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
   ctx.step("controls: a well-formed peer node with the server's timestamp, and a string log entry, both allowed");
   const okPeer = rtdbVerdict(await db.put(mine, peer), "the well-formed peer");
   const okEntry = newEntry("ok");
-  const okLog = rtdbVerdict(await db.put(`status/${w.docId}/y/${okEntry}`, EMPTY_UPDATE), "the well-formed entry");
+  const okLog = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${okEntry}`, EMPTY_UPDATE), "the well-formed entry");
   const stored = (await rtdbGet(target, `status/${w.docId}`)) ?? {};
-  const logAfter = Object.keys(stored.y ?? {}).sort();
+  const logAfter = Object.keys(flattenLiveLogs(stored.y)).sort();
   const badge = await shareBadge(o);
   ctx.ev.json("verdicts", { got, okPeer, okLog });
   ctx.step(`well-formed peer ${okPeer}, entry ${okLog}; status keys ${JSON.stringify(Object.keys(stored).sort())}; owner badge ${JSON.stringify(badge)}`);
@@ -1123,7 +1124,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
     "nobody overwrote the owner's live node",
   );
   assert.deepEqual(Object.keys(stored.peers[ed.session.uid]).sort(), ["email", "lastChanged", "mode"], "the editor's node holds exactly the fields written");
-  assert.deepEqual(logAfter.filter((k) => !logBefore.includes(k)), [okEntry], "the only entry added to the log is the well-formed one");
+  assert.deepEqual(logAfter.filter((k) => !logBefore.includes(k)), [`${(await liveLogPath(target, w.docId)).split("/").at(-1)}/${okEntry}`], "the only entry added to the log is the well-formed one");
   assert.deepEqual(badge, { state: "shared", text: "Shared" }, "the live session is still Shared");
 });
 

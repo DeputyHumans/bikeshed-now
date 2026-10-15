@@ -1,6 +1,6 @@
 {
-  "oracle": "An in-app commit retires its unchanged live log through the realtime rules",
-  "what": "Remove the delete-only parent y grant, so a browser transaction cannot retire a completed log",
+  "oracle": "A published draft retires the captured epoch log without deleting another session",
+  "what": "Skip the server removal of the captured retired epoch, retaining live bytes after a successful browser commit",
   "target": {
     "spec": "e2e/specs/functional/a09-editing.spec.mjs",
     "case": "A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s",

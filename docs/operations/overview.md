@@ -92,6 +92,13 @@ functions, allow unauthenticated invocation, then build and deploy hosting.
 instance step 4 skips its rules rather than failing, and the email secret is
 created holding a single space, which the runtime reads as "off".
 
+Operator scripts resolve the optional Realtime Database URL from
+`BIKESHED_DATABASE_URL`, then `databaseURL` in the ignored `config/deploy.json`.
+Set it to the database's HTTPS origin; credentials, paths, queries and fragments
+are rejected. There is no guessed deployment hostname. Without a configured URL,
+operator presence mirrors are unavailable. With `FIREBASE_DATABASE_EMULATOR_HOST`,
+operator scripts require a `demo-` project and ignore deployment database URLs.
+
 ### 3b. What setup does that is not obvious
 
 Two of its ten steps exist only because a **fresh** Google Cloud project is far

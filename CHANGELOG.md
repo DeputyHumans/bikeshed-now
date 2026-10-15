@@ -20,6 +20,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Keep delayed autosaves from overwriting merged work using insertion and deletion
+  histories. Capture each editor's version and live epoch, autosave remote merges,
+  and retire only the session consumed by a publish or accepted suggestion.
+  Preserve candidate bytes when a transaction response is uncertain.
+
 - Operator publishing and withdrawal atomically advance the live editing epoch,
   refresh public version metadata, and retire only the captured log and draft
   bytes after updating the access mirror.

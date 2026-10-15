@@ -472,11 +472,12 @@ export function mirrorWriteVerdict(req, { target, docs, accounts, docId = null, 
   const body = mirrorBodyOf(req.body);
   if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.__revision !== "string" || !/^\d{12}:\d{9}$/.test(body.__revision)) return refuse("mirror-body", "a map with a valid revision fence is required");
   if (!Number.isFinite(body.__expiresAt) || body.__expiresAt < 0 || typeof body.__owner !== "string" || body.__owner !== body.__owner.toLowerCase() || !/^[^@\s]+@[^@\s]+$/.test(body.__owner)) return refuse("mirror-body", "a valid deadline and normalized owner are required");
+  if (body.__liveEpoch !== undefined && (typeof body.__liveEpoch !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(body.__liveEpoch))) return refuse("mirror-body", "a valid live epoch is required");
   const runKeys = new Set([...(accounts instanceof Map ? accounts.keys() : accounts)].map(mirrorKey));
   if (!runKeys.has(mirrorKey(body.__owner))) return refuse("mirror-account", "the owner is not a run account");
   let others = 0;
   for (const [key, value] of Object.entries(body)) {
-    if (["__revision", "__expiresAt", "__owner"].includes(key)) continue;
+    if (["__revision", "__expiresAt", "__owner", "__liveEpoch"].includes(key)) continue;
     if (value !== true) return refuse("mirror-body", "access grants must be true");
     if (key === "*" && root === "editAccess" && publicEdit) continue;
     if (!runKeys.has(key)) others += 1;
@@ -524,6 +525,7 @@ export async function writeMirror(target, { doc, actor = "operator-mirror", evid
     node.__revision = revision;
     node.__expiresAt = Number.isFinite(rawExpiry) ? rawExpiry : 0;
     node.__owner = String(record.ownerEmail ?? "").toLowerCase();
+    node.__liveEpoch = typeof record.liveEpoch === "string" ? record.liveEpoch : "initial";
   }
   const publicEdit = record.visibility === "public" && record.publicEdit === true;
   if (publicEdit) update[`editAccess/${docId}`]["*"] = true;

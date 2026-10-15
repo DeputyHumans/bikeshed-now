@@ -1,7 +1,7 @@
---- a/app/src/crdt/rtdb.ts
-+++ b/app/src/crdt/rtdb.ts
-@@ -76,3 +76,3 @@
- export async function clearLog(docId: string, consumed: Record<string, string>): Promise<void> {
--  if (!rtdb || Object.keys(consumed).length === 0) return;
-+  if (!rtdb || docId || Object.keys(consumed).length === 0) return;
-   try {
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -187,3 +187,3 @@
+   }
+-  await db.ref(`status/${docId}/y/${retiredEpoch}`).remove();
++  void [db, docId, retiredEpoch]; // e2e mutant: retain the completed session log
+   if (retiredEpoch === "initial") {

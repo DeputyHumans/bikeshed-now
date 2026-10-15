@@ -153,7 +153,7 @@ test("joinShared decides the path before making anything, grants through grantEd
   assert.match(fn.slice(s16, s16 + 600), /ctx\.inconclusive\(`the sync precondition did not hold: after scripts\/set-access\.mjs granted \$\{docId\}, the RTDB mirror .*suspect S16/);
   assert.ok(s16 < fn.indexOf("await ctx.users.many("), "INCONCLUSIVE before any browser is made");
   assert.doesNotMatch(fn, /shareMany\(/, "NEGATIVE CONTROL: the old joinShared called shareMany itself, local only");
-  assert.match(fn, /await rtdbGetPatient\(ctx\.target, `status\/\$\{docId\}\/y`\)/, "the seed wait reads y through a 503");
+  assert.match(fn, /await readLiveLogsPatient\(ctx\.target, docId\)/, "the seed wait reads y through a 503");
   assert.doesNotMatch(fn, /\brtdbGet\(/);
   assert.match(fn, /return \{ docId, owner, accounts, users, names, joinMs: Date\.now\(\) - t0, grantVia: via(?:, role, extra: extras, staged(?:, \.\.\.\(mirror === "stop" \? \{\} : \{ mirrored \}\))?)? \};/, "the old keys, and `mirrored` only beside a mirror mode that writes");
 });

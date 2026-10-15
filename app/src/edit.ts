@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client for the draft and commit endpoints (SPEC §2, §6a).
 
+import type { CausalStamp } from "./crdt/causal";
 import { ConflictError, post } from "./api";
 
 /**
@@ -74,11 +75,12 @@ export async function saveDraft(
   docId: string,
   baseVersion: string,
   html: string,
+  session?: { liveEpoch: string; causal?: CausalStamp },
 ): Promise<DraftResult> {
   try {
     const result = await post<{ draft: DraftResult }>(
       "/draft",
-      { docId, baseVersion, html },
+      { docId, baseVersion, html, ...session },
       { forbidden: "You do not have edit access to this document." },
     );
     return result.draft;

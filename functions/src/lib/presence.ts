@@ -101,7 +101,7 @@ export async function syncPresenceAccess(
     const data = snap.data() || {};
     const revision = `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`;
     const keyed = (list: unknown): Record<string, true | string | number> => {
-      const out: Record<string, true | string | number> = { __revision: revision, __expiresAt: expiryMs(data) ?? 0, __owner: String(data.ownerEmail ?? "").toLowerCase() };
+      const out: Record<string, true | string | number> = { __revision: revision, __expiresAt: expiryMs(data) ?? 0, __owner: String(data.ownerEmail ?? "").toLowerCase(), __liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial" };
       for (const member of Array.isArray(list) ? list : []) {
         if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
       }
@@ -156,35 +156,44 @@ export async function clearPresence(docId: string): Promise<void> {
  * why a draft written under a log nobody is using must clear the log too. It
  * carries live collaboration and nothing durable, so it may be dropped.
  */
-export async function liveEditing(docId: string): Promise<{ editors: number; log: boolean } | null> {
+export async function liveEditing(docId: string): Promise<{ editors: number; log: boolean; liveEpoch: string } | null> {
   let db: admin.database.Database;
   try {
     db = admin.database();
   } catch {
     return null;
   }
-  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { uid?: unknown; email?: unknown; mode?: unknown }> | null;
+  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { uid?: unknown; email?: unknown; mode?: unknown; liveEpoch?: unknown }> | null;
   const access = (await db.ref(`editAccess/${docId}`).once("value")).val() as Record<string, unknown> | null;
+  const liveEpoch = typeof access?.__liveEpoch === "string" ? access.__liveEpoch : "initial";
   // A completed downgrade/revocation must withdraw the veto of older records.
   // Failure to read this mirror throws, as does failure to read the peers.
   const mayEdit = (email: unknown) => typeof email === "string" &&
     (access?.[emailKey(email)] === true || access?.[OPEN_EDIT_KEY] === true);
   // Count people, not tabs; any editing session keeps the refusal active.
-  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "edit" && mayEdit(p.email))
+  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "edit" && (p.liveEpoch ?? "initial") === liveEpoch && mayEdit(p.email))
     .map(([session, p]) => typeof p.uid === "string" ? p.uid : session)).size;
-  const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
-  return { editors, log };
+  const log = (await db.ref(`status/${docId}/y/${liveEpoch}`).limitToFirst(1).once("value")).exists();
+  return { editors, log, liveEpoch };
 }
 
 /** Drop a document's live editing log, as the app does when a draft is published. */
-export async function clearEditLog(docId: string): Promise<void> {
+export async function clearEditLog(docId: string, retiredEpoch: string): Promise<void> {
   let db: admin.database.Database;
   try {
     db = admin.database();
   } catch {
     return;
   }
-  await db.ref(`status/${docId}/y`).remove();
+  await db.ref(`status/${docId}/y/${retiredEpoch}`).remove();
+  if (retiredEpoch === "initial") {
+    const root = db.ref(`status/${docId}/y`);
+    const legacy = (await root.once("value")).val() as Record<string, unknown> | null;
+    const remove = Object.fromEntries(Object.entries(legacy ?? {}).filter(([, value]) => typeof value === "string").map(([key]) => [key, null]));
+    // Flat writes are no longer authorized. Capture only legacy strings;
+    // never delete a nested epoch that was opened after the transaction.
+    if (Object.keys(remove).length) await root.update(remove);
+  }
 }
 
 /** A write refused because somebody is in the editor, or might be. */
@@ -201,7 +210,7 @@ export type EditingRefusal = { status: 409; error: string; editors?: number };
 export async function editorsRefusal(
   docId: string,
   doing: string,
-): Promise<{ refusal: EditingRefusal } | { log: boolean }> {
+): Promise<{ refusal: EditingRefusal } | { log: boolean; liveEpoch: string }> {
   let live: Awaited<ReturnType<typeof liveEditing>>;
   try {
     live = await liveEditing(docId);
@@ -220,5 +229,5 @@ export async function editorsRefusal(
       },
     };
   }
-  return { log: Boolean(live?.log) };
+  return { log: Boolean(live?.log), liveEpoch: live?.liveEpoch ?? "initial" };
 }

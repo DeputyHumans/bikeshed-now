@@ -208,7 +208,7 @@ describe("realtime database rules", () => {
 
   it("an editor may append to the shared document", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(set(ref(db, "status/doc1/y/e1"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e1"), "AQIDBA=="));
   });
 
   it("a READ-ONLY member may not, which is the escalation this gate exists for", async () => {
@@ -217,7 +217,7 @@ describe("realtime database rules", () => {
     // push content into an editor's browser, which that editor then autosaves
     // and publishes: read escalated to write through a channel nobody audits.
     const db = verified(env, OTHER).database();
-    await assertFails(set(ref(db, "status/doc1/y/e2"), "AQIDBA=="));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e2"), "AQIDBA=="));
   });
 
   it("an open-editing document admits any verified account", async () => {
@@ -231,20 +231,20 @@ describe("realtime database rules", () => {
       await set(ref(db, "editAccess/doc2/*"), true);
     });
     const db = verified(env, OTHER).database();
-    await assertSucceeds(set(ref(db, "status/doc2/y/e1"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc2/y/initial/e1"), "AQIDBA=="));
   });
 
   it("a viewer reads presence but cannot read the unpublished shared document", async () => {
     const db = verified(env, OTHER).database();
     await assertSucceeds(get(ref(db, "status/doc1/peers")));
-    await assertFails(get(ref(db, "status/doc1/y")));
+    await assertFails(get(ref(db, "status/doc1/y/initial")));
     await assertFails(get(ref(db, "status/doc1")), "a parent read cannot bypass the draft boundary");
   });
 
   it("a public open editor reads the shared log without learning peer presence", async () => {
     const db = verified(env, STRANGER).database();
-    await assertSucceeds(set(ref(db, "status/doc2/y/stranger"), "AQIDBA=="));
-    await assertSucceeds(get(ref(db, "status/doc2/y")));
+    await assertSucceeds(set(ref(db, "status/doc2/y/initial/stranger"), "AQIDBA=="));
+    await assertSucceeds(get(ref(db, "status/doc2/y/initial")));
     await assertFails(get(ref(db, "status/doc2/peers")));
     await assertFails(get(ref(db, "status/doc2")));
   });
@@ -260,52 +260,79 @@ describe("realtime database rules", () => {
     const ownerDb = verified(env, MEMBER).database();
     const editorDb = verified(env, OTHER).database();
     const publicDb = verified(env, STRANGER).database();
-    await assertSucceeds(set(ref(editorDb, "status/expiring/y/before"), "AQIDBA=="));
-    await assertSucceeds(get(ref(editorDb, "status/expiring/y")));
-    await assertSucceeds(get(ref(publicDb, "status/expiring/y")));
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/initial/before"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y/initial")));
+    await assertSucceeds(get(ref(publicDb, "status/expiring/y/initial")));
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, expiry + 100 - Date.now())));
-    await assertFails(set(ref(editorDb, "status/expiring/y/after"), "AQIDBA=="));
-    await assertFails(set(ref(ownerDb, "status/expiring/y/after"), "AQIDBA=="));
-    await assertFails(set(ref(ownerDb, "status/expiring/y"), null));
-    await assertFails(set(ref(publicDb, "status/expiring/y/after"), "AQIDBA=="));
-    await assertFails(get(ref(editorDb, "status/expiring/y")));
+    await assertFails(set(ref(editorDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y/initial"), null));
+    await assertFails(set(ref(publicDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(get(ref(editorDb, "status/expiring/y/initial")));
     await assertFails(get(ref(editorDb, "status/expiring/peers")));
-    await assertFails(get(ref(publicDb, "status/expiring/y")));
-    await assertSucceeds(get(ref(ownerDb, "status/expiring/y")));
+    await assertFails(get(ref(publicDb, "status/expiring/y/initial")));
+    await assertSucceeds(get(ref(ownerDb, "status/expiring/y/initial")));
     await env.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.database();
       await set(ref(db, "presenceAccess/expiring/__expiresAt"), 0);
       await set(ref(db, "editAccess/expiring/__expiresAt"), 0);
     });
-    await assertSucceeds(set(ref(editorDb, "status/expiring/y/restored"), "AQIDBA=="));
-    await assertSucceeds(get(ref(editorDb, "status/expiring/y")));
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/initial/restored"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y/initial")));
   });
 
   it("a stranger may neither read nor write the shared document", async () => {
     const db = verified(env, STRANGER).database();
-    await assertFails(get(ref(db, "status/doc1/y")));
-    await assertFails(set(ref(db, "status/doc1/y/e3"), "AQIDBA=="));
+    await assertFails(get(ref(db, "status/doc1/y/initial")));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e3"), "AQIDBA=="));
   });
 
   it("an editor may remove entries, because compaction has to", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), "AQIDBA=="));
-    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), null));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e4"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e4"), null));
   });
 
   it("an editor can retire the entire log but cannot replace it; a viewer cannot retire it", async () => {
     const editorDb = verified(env, MEMBER).database();
     const viewerDb = verified(env, OTHER).database();
-    await assertSucceeds(set(ref(editorDb, "status/doc1/y/retire"), "AQIDBA=="));
-    await assertFails(set(ref(viewerDb, "status/doc1/y"), null));
-    await assertFails(set(ref(editorDb, "status/doc1/y"), { replacement: "AQIDBA==" }));
-    await assertSucceeds(set(ref(editorDb, "status/doc1/y"), null));
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y/initial/retire"), "AQIDBA=="));
+    await assertFails(set(ref(viewerDb, "status/doc1/y/initial"), null));
+    await assertFails(set(ref(editorDb, "status/doc1/y/initial"), { replacement: "AQIDBA==" }));
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y/initial"), null));
+  });
+
+  it("epoch rotation rejects delayed writes and editor claims while retirement preserves the new log", async () => {
+    const doc = "epoch-fence";
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, `editAccess/${doc}`), { [key(MEMBER.email)]: true, __liveEpoch: "initial" });
+      await set(ref(db, `presenceAccess/${doc}`), { [key(MEMBER.email)]: true });
+    });
+    const db = verified(env, MEMBER).database();
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial/_seed`), "seed"));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial/delta`), "delta"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/_seed`), "different"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/_seed`), null));
+    const peer = (liveEpoch) => ({ uid: MEMBER.uid, email: MEMBER.email, mode: "edit", liveEpoch, lastChanged: serverTimestamp() });
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/tab`), peer("initial")));
+    await env.withSecurityRulesDisabled(async (ctx) => set(ref(ctx.database(), `editAccess/${doc}/__liveEpoch`), "next"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/late`), "late"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/delta`), null));
+    await assertFails(set(ref(db, `status/${doc}/y/flat`), "legacy"));
+    await assertFails(set(ref(db, `status/${doc}/peers/tab`), peer("initial")));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/tab`), peer("next")));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/next/_seed`), "current"));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial`), null));
+    const current = await assertSucceeds(get(ref(db, `status/${doc}/y/next/_seed`)));
+    if (current.val() !== "current") throw new Error("old epoch retirement changed the new seed");
+    await assertFails(set(ref(db, `status/${doc}/y`), null));
   });
 
   it("rejects an entry that is not a bounded string", async () => {
     const db = verified(env, MEMBER).database();
-    await assertFails(set(ref(db, "status/doc1/y/e5"), { not: "a string" }));
-    await assertFails(set(ref(db, "status/doc1/y/e6"), "x".repeat(200_001)));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e5"), { not: "a string" }));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e6"), "x".repeat(200_001)));
   });
 
   it("the withdrawn lock node is rejected outright", async () => {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The update log, carried on the presence database (SPEC §6b, §16).
 
-import { onChildAdded, onValue, push, ref, runTransaction, update } from "firebase/database";
+import { get, onChildAdded, onValue, push, ref, runTransaction, update } from "firebase/database";
 import { rtdb } from "../firebase";
 import { SEED_KEY, type UpdateLog } from "./log";
 
@@ -17,9 +17,9 @@ import { SEED_KEY, type UpdateLog } from "./log";
  * falls back to editing alone — the same way peer cursors already degrade.
  * Collaboration is optional; editing is not.
  */
-export function rtdbLog(docId: string): UpdateLog | null {
+export function rtdbLog(docId: string, liveEpoch = "initial"): UpdateLog | null {
   if (!rtdb) return null;
-  const logRef = ref(rtdb, `status/${docId}/y`);
+  const logRef = ref(rtdb, `status/${docId}/y/${liveEpoch}`);
   // RTDB delivers child_added for every existing child BEFORE the first value
   // event, so a value event is a reliable "you have seen everything that was
   // already here". That is the only ordering guarantee this needs.
@@ -37,24 +37,32 @@ export function rtdbLog(docId: string): UpdateLog | null {
     );
   });
   return {
-    ready: () => ready,
+    ready: async () => {
+      await ready;
+      if (liveEpoch === "initial") {
+        const previous = (await get(ref(rtdb!, `status/${docId}/y`))).val();
+        if (previous && Object.values(previous).some((value) => typeof value === "string")) {
+          throw new Error("A legacy live editing log must be recovered before joining");
+        }
+      }
+    },
     async initialize(payload) {
       // Every simultaneous empty-log join proposes a different Yjs identity.
       // Elect one atomically so all peers adopt the same authored structure.
-      const result = await runTransaction(ref(rtdb!, `status/${docId}/y/${SEED_KEY}`),
+      const result = await runTransaction(ref(rtdb!, `status/${docId}/y/${liveEpoch}/${SEED_KEY}`),
         (current) => current ?? payload, { applyLocally: false });
       const elected = result.snapshot.val();
       if (typeof elected !== "string") throw new Error("The shared document could not be initialized");
       return elected;
     },
-    subscribe(onEntry) {
+    subscribe(onEntry, onError) {
       // `onChildAdded` replays the children that already exist before it
       // reports new ones, so a late joiner catches up and then keeps up
       // through the same callback. That is the whole sync protocol.
       return onChildAdded(logRef, (snap) => {
         const value = snap.val();
         if (typeof value === "string" && snap.key) onEntry(snap.key, value);
-      });
+      }, onError);
     },
     async append(payload) {
       const entry = await push(logRef, payload);
@@ -73,10 +81,10 @@ export function rtdbLog(docId: string): UpdateLog | null {
 }
 
 /** Retire only the exact applied log captured before the publish snapshot. */
-export async function clearLog(docId: string, consumed: Record<string, string>): Promise<void> {
+export async function clearLog(docId: string, consumed: Record<string, string>, liveEpoch: string): Promise<void> {
   if (!rtdb || Object.keys(consumed).length === 0) return;
   try {
-    const logRef = ref(rtdb, `status/${docId}/y`);
+    const logRef = ref(rtdb, `status/${docId}/y/${liveEpoch}`);
     await runTransaction(logRef, (current) => {
       // The SDK may start from an empty local cache after the editor unbinds.
       // Propose an empty-value CAS so it fetches/retries against the server;

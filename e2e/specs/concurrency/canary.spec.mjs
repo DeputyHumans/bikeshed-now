@@ -28,6 +28,7 @@
  * its callers, a presence that never showed) is INCONCLUSIVE, never FAIL.
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
@@ -291,7 +292,7 @@ scenario("canary I3: an editor who joins after another has seeded adopts the liv
   ctx.step("p1 enters edit alone and seeds the live log");
   await users[0].enterEdit({ waitShared: true, timeout: 90_000 });
   const entries = await eventually(async () => {
-    const y = await rtdbGet(ctx.target, `status/${docId}/y`);
+    const y = await readLiveLogs(ctx.target, docId);
     return y && Object.keys(y).length > 0 ? Object.keys(y).length : false;
   }, { timeout: 30_000, message: "p1's seed in the live log" }).catch(() => ctx.inconclusive("the sync precondition did not hold: p1's seed never reached the live log"));
   ctx.step(`the live log holds ${entries} entr(ies); p2 joins it`);

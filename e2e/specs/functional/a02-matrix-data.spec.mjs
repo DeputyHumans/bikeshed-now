@@ -51,6 +51,7 @@
  * act under test is never sent again.
  */
 
+import { flattenLiveLogs, liveLogPath } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
@@ -604,9 +605,9 @@ for (const [kind, [want, why]] of Object.entries(C17)) {
     ctx.step(`expected ${want}: ${why}`);
     const db = rtdbFor(ctx, kind.toLowerCase(), actor.idToken);
     const entry = newEntry(kind);
-    const r = await db.put(`status/${docId}/y/${entry}`, EMPTY_UPDATE);
+    const r = await db.put(`${await liveLogPath(target, docId)}/${entry}`, EMPTY_UPDATE);
     const verdict = verdictOf(r, `${kind}'s write`);
-    const stored = await rtdbGet(target, `status/${docId}/y/${entry}`);
+    const stored = await rtdbGet(target, `${await liveLogPath(target, docId)}/${entry}`);
     ctx.step(`${kind}'s write: ${r.status} → ${verdict}; stored: ${JSON.stringify(stored)}`);
     if (want === "ALLOW") {
       assert.equal(verdict, "ALLOW", `c17 ${kind}: expected ALLOW, the rules refused`);
@@ -618,11 +619,11 @@ for (const [kind, [want, why]] of Object.entries(C17)) {
       assert.equal(stored, null, "c17 X: nothing was written");
       const g = await grantRole(ctx, owner, docId, actor.account, "editor");
       precondition(g.mirror?.ok, `X's editor mirror: ${JSON.stringify(g.mirror)}`);
-      const again = await db.put(`status/${docId}/y/${entry}`, EMPTY_UPDATE);
+      const again = await db.put(`${await liveLogPath(target, docId)}/${entry}`, EMPTY_UPDATE);
       assert.equal(verdictOf(again, "X once an editor"), "ALLOW", "control: the same write is allowed once X is an editor");
       return;
     }
-    const ctl = await rtdbFor(ctx, "owner", owner.idToken).put(`status/${docId}/y/${newEntry("O")}`, EMPTY_UPDATE);
+    const ctl = await rtdbFor(ctx, "owner", owner.idToken).put(`${await liveLogPath(target, docId)}/${newEntry("O")}`, EMPTY_UPDATE);
     precondition(verdictOf(ctl, "the owner's control") === "ALLOW", "control: the owner's identical write is allowed");
     assert.equal(verdict, "DENY", `c17 ${kind}: expected DENY, the entry was written`);
     assert.equal(stored, null, `c17 ${kind}: nothing was written`);
@@ -641,11 +642,11 @@ for (const [kind, [want, why, defect]] of Object.entries(C18)) {
     const asOwner = rtdbFor(ctx, "owner", owner.idToken);
     // An unsaved entry by the owner, so a read that is allowed shows real content.
     const entry = newEntry("O");
-    const seed = await asOwner.put(`status/${docId}/y/${entry}`, EMPTY_UPDATE);
+    const seed = await asOwner.put(`${await liveLogPath(target, docId)}/${entry}`, EMPTY_UPDATE);
     precondition(verdictOf(seed, "the owner's entry") === "ALLOW", "the owner wrote an entry to the live log");
     const r = await db.get(`status/${docId}/y`);
     const verdict = verdictOf(r, `${kind}'s read`);
-    const sees = verdict === "ALLOW" && r.json?.[entry] === EMPTY_UPDATE;
+    const sees = verdict === "ALLOW" && flattenLiveLogs(r.json)[`${(await liveLogPath(target, docId)).split("/").at(-1)}/${entry}`] === EMPTY_UPDATE;
     ctx.step(`${kind}'s read: ${r.status} → ${verdict}; sees the owner's unsaved entry: ${sees}`);
     if (defect === "S26") {
       // The contrast S26 is about: the endpoint that serves the draft refuses this reader (SPEC §2).
@@ -772,13 +773,13 @@ cell("A2.c17.Exp-E an editor may not write to the live log of an expired documen
   await rulesEnforced(ctx);
   ctx.step("expected DENY: SPEC §17 \"An expired document is read-only\" and \"Writing is refused for everyone\"; the log replays into the draft on the next open (SPEC §6b)");
   const w = await expiredWorld(ctx, async ({ docId, actor }) => {
-    const r = await rtdbFor(ctx, "e", actor.idToken).put(`status/${docId}/y/${newEntry("E")}`, EMPTY_UPDATE);
+    const r = await rtdbFor(ctx, "e", actor.idToken).put(`${await liveLogPath(target, docId)}/${newEntry("E")}`, EMPTY_UPDATE);
     precondition(verdictOf(r, "before the expiry") === "ALLOW", "control: before the expiry the editor writes to the log");
   });
   const entry = newEntry("E");
-  const r = await rtdbFor(ctx, "e", w.actor.idToken).put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await rtdbFor(ctx, "e", w.actor.idToken).put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = verdictOf(r, "after the expiry");
-  const stored = await rtdbGet(target, `status/${w.docId}/y/${entry}`);
+  const stored = await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`);
   ctx.step(`the editor's write after the expiry: ${r.status} → ${verdict}; stored: ${JSON.stringify(stored)}`);
   assert.equal(verdict, "DENY", "c17 Exp-E: expected DENY, the editor wrote to the live log of an expired (frozen) document");
   assert.equal(stored, null, "c17 Exp-E: nothing was written");
@@ -788,13 +789,13 @@ cell("A2.c17.Exp-O the owner may not write to the live log of an expired documen
   await rulesEnforced(ctx);
   ctx.step("expected DENY: SPEC §17 \"Writing is refused for everyone, the owner included — an expired document is frozen\"");
   const w = await expiredWorld(ctx, async ({ owner, docId }) => {
-    const r = await rtdbFor(ctx, "owner", owner.idToken).put(`status/${docId}/y/${newEntry("O")}`, EMPTY_UPDATE);
+    const r = await rtdbFor(ctx, "owner", owner.idToken).put(`${await liveLogPath(target, docId)}/${newEntry("O")}`, EMPTY_UPDATE);
     precondition(verdictOf(r, "before the expiry") === "ALLOW", "control: before the expiry the owner writes to the log");
   });
   const entry = newEntry("O");
-  const r = await rtdbFor(ctx, "owner", w.owner.idToken).put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await rtdbFor(ctx, "owner", w.owner.idToken).put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = verdictOf(r, "after the expiry");
-  const stored = await rtdbGet(target, `status/${w.docId}/y/${entry}`);
+  const stored = await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`);
   ctx.step(`the owner's write after the expiry: ${r.status} → ${verdict}; stored: ${JSON.stringify(stored)}`);
   assert.equal(verdict, "DENY", "c17 Exp-O: expected DENY, the owner wrote to the live log of an expired (frozen) document");
   assert.equal(stored, null, "c17 Exp-O: nothing was written");
@@ -803,11 +804,11 @@ cell("A2.c17.Exp-O the owner may not write to the live log of an expired documen
 /** Seed one owner entry before the expiry and check `reader` saw it then; returns the entry's key. */
 async function seedLogBeforeExpiry(ctx, { owner, docId, actor }, reader) {
   const entry = newEntry("O");
-  const seed = await rtdbFor(ctx, "owner", owner.idToken).put(`status/${docId}/y/${entry}`, EMPTY_UPDATE);
+  const seed = await rtdbFor(ctx, "owner", owner.idToken).put(`${await liveLogPath(target, docId)}/${entry}`, EMPTY_UPDATE);
   precondition(verdictOf(seed, "the owner's entry") === "ALLOW", "the owner wrote an entry to the live log");
   const token = reader === "O" ? owner.idToken : actor.idToken;
   const r = await rtdbFor(ctx, reader.toLowerCase(), token).get(`status/${docId}/y`);
-  precondition(verdictOf(r, "before the expiry") === "ALLOW" && r.json?.[entry] === EMPTY_UPDATE, `control: before the expiry ${reader} reads the log`);
+  precondition(verdictOf(r, "before the expiry") === "ALLOW" && flattenLiveLogs(r.json)[`${(await liveLogPath(target, docId)).split("/").at(-1)}/${entry}`] === EMPTY_UPDATE, `control: before the expiry ${reader} reads the log`);
   return entry;
 }
 
@@ -817,7 +818,7 @@ cell("A2.c18.Exp-E an editor may not read the live log of an expired document: D
   const w = await expiredWorld(ctx, (w0) => seedLogBeforeExpiry(ctx, w0, "E"));
   const r = await rtdbFor(ctx, "e", w.actor.idToken).get(`status/${w.docId}/y`);
   const verdict = verdictOf(r, "after the expiry");
-  const sees = verdict === "ALLOW" && r.json?.[w.pre] === EMPTY_UPDATE;
+  const sees = verdict === "ALLOW" && flattenLiveLogs(r.json)[`${(await liveLogPath(target, w.docId)).split("/").at(-1)}/${w.pre}`] === EMPTY_UPDATE;
   ctx.step(`the editor's read after the expiry: ${r.status} → ${verdict}; sees the owner's entry: ${sees}`);
   const entryFile = (await readDoc(target, `docs/${w.docId}/versions/v1`))?.entry ?? "index.html";
   await contrast(ctx, "GET /content as the editor after the expiry (SPEC §17: the same 404 as a document they may not read)", () => w.actor.http.get(`/content/${encodeURIComponent(w.docId)}/v1/${entryFile.split("/").map(encodeURIComponent).join("/")}`, slow));
@@ -832,7 +833,7 @@ cell("A2.c18.Exp-O the owner may read the live log of an expired document: ALLOW
   const verdict = verdictOf(r, "after the expiry");
   ctx.step(`the owner's read after the expiry: ${r.status} → ${verdict}`);
   assert.equal(verdict, "ALLOW", "c18 Exp-O: expected ALLOW, the rules refused the owner's read");
-  assert.equal(r.json?.[w.pre], EMPTY_UPDATE, "c18 Exp-O: the read returns the entry from before the expiry");
+  assert.equal(flattenLiveLogs(r.json)[`${(await liveLogPath(target, w.docId)).split("/").at(-1)}/${w.pre}`], EMPTY_UPDATE, "c18 Exp-O: the read returns the entry from before the expiry");
 });
 
 // --- A11.11 --------------------------------------------------------------------------

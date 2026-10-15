@@ -199,6 +199,7 @@
  * gated cases are LOCAL: an amplify set is applied to a local stack copy.
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
 import { createHash } from "node:crypto";
@@ -1310,14 +1311,14 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
     await requireHeld(ctx, g, "mint-before-id", m, { key, timeoutMs: HELD_MS });
     draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while the commits are held");
-    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await rtdbGet(target, `status/${s.docId}/y`)) ?? {}).sort() };
+    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort() };
     ctx.step(`while they are held, ${k} agent(s) update on v1 at once`);
     ({ rows } = await fireUpdates(ctx, agents, s.docId, "C9b updates"));
     const obj = await readDraftObject(target, s.docId, s.entry);
     during = {
       snap: await serverSnapshot(s.docId),
       draftSha: obj ? sha(obj) : "absent",
-      y: Object.keys((await rtdbGet(target, `status/${s.docId}/y`)) ?? {}).sort(),
+      y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort(),
       next: await listObjects(target, `docs/${s.docId}/v2/`),
       held: (await g.counts({ key }))["mint-before-id"]?.held ?? null,
     };

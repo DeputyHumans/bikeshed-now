@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Two peers on one log converge, and the log does not grow forever (SPEC §6b).
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createHash, webcrypto } from "node:crypto";
 import * as Y from "yjs";
 import { bindSync } from "./sync";
 import { COMPACT_AFTER, connect, fromBase64, toBase64, type UpdateLog } from "./log";
+
+beforeAll(() => vi.stubGlobal("crypto", webcrypto));
+afterAll(() => vi.unstubAllGlobals());
 
 /**
  * An in-memory log shared by every peer in a test, standing in for the RTDB
@@ -214,4 +218,102 @@ it("retains the elected seed through compaction so another empty snapshot cannot
   await second.initialize(Y.encodeStateAsUpdate(proposal));
   expect(text(b)).toBe(text(a));
   connection.destroy(); second.destroy(); a.destroy(); b.destroy(); proposal.destroy();
+});
+
+
+it("causal stamps use the elected seed identity for first and already-populated joins", async () => {
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "authored");
+  const seed = Y.encodeStateAsUpdate(proposal);
+  const ca = connect(a, log);
+  await ca.initialize(seed);
+  const cb = connect(b, log);
+  await cb.initialize();
+  expect(ca.causalStamp().generation).toBe(createHash("sha256").update(seed).digest("hex"));
+  expect(cb.causalStamp()).toEqual(ca.causalStamp());
+  ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); proposal.destroy();
+});
+
+it("causal stamps include deletion ranges even when the insertion vector did not advance", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "abc");
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(proposal));
+  const before = conn.causalStamp();
+  doc.getText("t").delete(1, 1);
+  const after = conn.causalStamp();
+  expect(after.vector).toEqual(before.vector);
+  expect(after.deletes).toEqual({ [proposal.clientID]: [[1, 1]] });
+  expect(before.deletes).toEqual({});
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("causal stamps are synchronous snapshots and later insertions cannot mutate a prior stamp", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "a");
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(proposal));
+  const before = conn.causalStamp();
+  doc.getText("t").insert(1, "b");
+  const after = conn.causalStamp();
+  expect(after).not.toBeInstanceOf(Promise);
+  expect(after.vector[doc.clientID]).toBe(1);
+  expect(before.vector[doc.clientID]).toBeUndefined();
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("a populated log whose seed was lost cannot elect a fresh identity over orphaned deltas", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "old identity");
+  await log.append(toBase64(Y.encodeStateAsUpdate(proposal)));
+  const conn = connect(doc, log);
+  await expect(conn.initialize(Y.encodeStateAsUpdate(proposal))).rejects.toThrow(/seed/);
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("retries a refused update with its dependents, reports interruption, then restores delivery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc(), status = vi.fn();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockRejectedValueOnce(new Error("permission_denied")).mockImplementation(append);
+  const ca = connect(a, log, () => {}, status), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status).toHaveBeenLastCalledWith(false);
+    a.getText("t").insert(5, " second");
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(text(b)).toBe("first second");
+    expect(status).toHaveBeenLastCalledWith(true);
+    expect(log.append).toHaveBeenCalledTimes(2);
+  } finally { ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+it("leaving cancels a refused append retry and never claims recovery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), doc = new Y.Doc(), status = vi.fn();
+  const append = vi.spyOn(log, "append").mockRejectedValue(new Error("permission_denied"));
+  const conn = connect(doc, log, () => {}, status);
+  try {
+    doc.getText("t").insert(0, "not delivered");
+    await vi.advanceTimersByTimeAsync(0);
+    conn.destroy();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(status).toHaveBeenLastCalledWith(false);
+  } finally { conn.destroy(); doc.destroy(); vi.useRealTimers(); }
+});
+
+it("retains the complete log when compaction receives no append acknowledgement", async () => {
+  const log = makeLog(), doc = new Y.Doc();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockImplementation((payload) => log.entries.size >= COMPACT_AFTER ? Promise.resolve(null) : append(payload));
+  const remove = vi.spyOn(log, "remove");
+  const conn = connect(doc, log);
+  try {
+    for (let i = 0; i < COMPACT_AFTER; i++) { doc.getText("t").insert(i, "x"); await settle(); }
+    expect(remove).not.toHaveBeenCalled();
+    expect(log.entries.size).toBe(COMPACT_AFTER);
+    const late = new Y.Doc(), joined = connect(late, log);
+    expect(text(late)).toBe(text(doc));
+    joined.destroy(); late.destroy();
+  } finally { conn.destroy(); doc.destroy(); }
 });

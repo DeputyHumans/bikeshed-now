@@ -26,7 +26,7 @@ const rtdb = { ref: (path) => ({
 // One stable handle, as the runtime caches the SDK handle. Each case resets its data.
 Object.defineProperty(admin, 'database', { configurable: true, value: () => rtdb });
 const doc = { ownerEmail: owner, members: [owner, revoked], editorMembers: [owner, revoked], viewers: [], editors: [revoked], suggesters: [], approvers: [], visibility: 'private' };
-const keys = (path) => Object.keys(maps.get(path) ?? {}).filter((k) => !['__revision', '__expiresAt', '__owner'].includes(k)).sort();
+const keys = (path) => Object.keys(maps.get(path) ?? {}).filter((k) => !['__revision', '__expiresAt', '__owner', '__liveEpoch'].includes(k)).sort();
 
 test('mirror reads current membership rather than a stale visibility request snapshot', async () => {
   maps.clear(); beforeWrite = async () => {};
@@ -192,5 +192,21 @@ for (const runtime of ['functions', 'operator']) test(`${runtime} mirror carries
     await db.doc('docs/d').update({ expiresAt: null });
     await sync();
     assert.equal(maps.get('editAccess/d').__expiresAt, 0, 'clearing expiry restores a deadline-free mirror');
+  });
+});
+
+for (const runtime of ['functions', 'operator']) test(`${runtime} mirror carries the current live epoch through retirement`, async () => {
+  maps.clear(); beforeWrite = async () => {};
+  const { db } = fakeFirestore({ 'docs/d': doc });
+  let sync = () => syncPresenceAccess('d', [], []);
+  if (runtime === 'operator') {
+    const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../scripts/lib/presence.mjs'), 'utf8').replace(/import \{[^}]+\} from "\.\/firebase\.mjs";/, '').replaceAll('export ', '');
+    sync = new Function('getDb', 'getRtdb', `${source}\nreturn () => syncPresenceAccess('d', [], []);`)(() => db, () => rtdb);
+  }
+  await withFakeAdmin({ db }, async () => {
+    await sync(); assert.equal(maps.get('editAccess/d').__liveEpoch, 'initial');
+    await db.doc('docs/d').update({ liveEpoch: 'next-epoch' });
+    await sync(); assert.equal(maps.get('editAccess/d').__liveEpoch, 'next-epoch');
+    assert.equal(maps.get('presenceAccess/d').__liveEpoch, 'next-epoch');
   });
 });

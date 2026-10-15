@@ -110,6 +110,7 @@ export function joinPresence(
   email: string,
   name: string,
   initialMode: PresenceMode,
+  liveEpoch = "initial",
 ): PresenceHandle {
   if (!rtdb) return INERT;
 
@@ -131,6 +132,7 @@ export function joinPresence(
     if (left || !connected) return;
     const payload: Record<string, unknown> = {
       uid,
+      liveEpoch,
       email: emailLower,
       name: name.slice(0, 120),
       mode,

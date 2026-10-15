@@ -27,8 +27,9 @@ export function usePeerPresence(options: {
   epoch: number;
   mode: PresenceMode;
   enabled: boolean;
+  liveEpoch?: string;
 }) {
-  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled } = options;
+  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled, liveEpoch = "initial" } = options;
 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [following, setFollowing] = useState<string | null>(null);
@@ -37,12 +38,12 @@ export function usePeerPresence(options: {
 
   useEffect(() => {
     if (!enabled || !uid) return;
-    handle.current = joinPresence(docId, uid, emailLower, displayName, mode);
+    handle.current = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
     return () => {
       handle.current?.leave();
       handle.current = null;
     };
-  }, [enabled, docId, uid, emailLower, displayName]);
+  }, [enabled, docId, uid, emailLower, displayName, liveEpoch]);
 
   useEffect(() => {
     handle.current?.setMode(mode);

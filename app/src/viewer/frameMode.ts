@@ -21,7 +21,7 @@
  */
 export type FrameMode =
   | { kind: "reading"; versionId: string; draft: boolean; sandboxed: boolean }
-  | { kind: "editing"; baseVersion: string };
+  | { kind: "editing"; baseVersion: string; liveEpoch?: string };
 
 /**
  * Whether reading shows the draft rather than the version asked for.

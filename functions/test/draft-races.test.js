@@ -137,3 +137,86 @@ for (const [reason, change, status, detail] of [
     });
   });
 }
+
+const causal = (vector, deletes = {}, generation = "a".repeat(64)) => ({ generation, vector, deletes });
+
+test("a late older autosave preserves the newer merged draft and removes only its own candidate", async () => {
+  await world(async ({ save, store, objects }) => {
+    const latest = await save("<p>merged edits</p>", { liveEpoch: "initial", causal: causal({ 1: 5, 2: 4 }) });
+    const before = JSON.stringify(store.get("docs/d"));
+    const result = await save("<p>older edit</p>", { liveEpoch: "initial", causal: causal({ 1: 5, 2: 2 }) });
+    assert.equal(result.storagePrefix, latest.storagePrefix);
+    assert.equal(JSON.stringify(store.get("docs/d")), before);
+    assert.equal(objects.get(`${latest.storagePrefix}/index.html`).toString(), "<p>merged edits</p>");
+    assert.equal([...objects.keys()].filter((key) => key.startsWith("docs/d/bundles/")).length, 1);
+  });
+});
+
+test("deletion-only autosaves supersede equal vectors and identical histories do not replace bytes", async () => {
+  await world(async ({ save, store, objects }) => {
+    await save("<p>abc</p>", { liveEpoch: "initial", causal: causal({ 1: 5 }) });
+    const deleted = await save("<p>ac</p>", { liveEpoch: "initial", causal: causal({ 1: 5 }, { 1: [[2, 1]] }) });
+    await save("<p>abc</p>", { liveEpoch: "initial", causal: causal({ 1: 5 }) });
+    await save("<p>different serialization</p>", { liveEpoch: "initial", causal: causal({ 1: 5 }, { 1: [[2, 1]] }) });
+    assert.equal(store.get("docs/d").draft.storagePrefix, deleted.storagePrefix);
+    assert.equal(objects.get(`${deleted.storagePrefix}/index.html`).toString(), "<p>ac</p>");
+  });
+});
+
+for (const [label, stamp, detail] of [
+  ["concurrent", causal({ 1: 6, 2: 1 }), "draftChanged"],
+  ["different seed", causal({ 1: 6, 2: 5 }, {}, "b".repeat(64)), "liveReset"],
+]) test(`a ${label} autosave cannot replace the durable draft`, async () => {
+  await world(async ({ save, store, objects }) => {
+    const latest = await save("<p>durable</p>", { liveEpoch: "initial", causal: causal({ 1: 5, 2: 4 }) });
+    await assert.rejects(save("<p>unsafe replacement</p>", { liveEpoch: "initial", causal: stamp }), (error) => error.detail?.[detail] === true);
+    assert.equal(store.get("docs/d").draft.storagePrefix, latest.storagePrefix);
+    assert.equal(objects.get(`${latest.storagePrefix}/index.html`).toString(), "<p>durable</p>");
+  });
+});
+
+test("retiring an identical draft changes the live epoch and refuses a delayed save on the same version", async () => {
+  await world(async ({ save, commit, store }) => {
+    const result = await commit();
+    assert.equal(result.status, 200);
+    assert.equal(result.body.deduped, true);
+    assert.match(store.get("docs/d").liveEpoch, /^[a-zA-Z0-9_-]+$/);
+    assert.notEqual(store.get("docs/d").liveEpoch, "initial");
+    await assert.rejects(save("<p>old session</p>", { liveEpoch: "initial" }), (error) => error.detail?.liveReset === true);
+    assert.equal(store.get("docs/d").draft, undefined);
+  });
+});
+
+test("an external draft replacement retires its live epoch only after winning its draft CAS", async () => {
+  await world(async ({ save, store, draft }) => {
+    await save("<p>accepted suggestion</p>", { expectedDraft: draft, retireLive: true });
+    const epoch = store.get("docs/d").liveEpoch;
+    assert.match(epoch, /^[a-zA-Z0-9_-]+$/);
+    assert.notEqual(epoch, "initial");
+    await assert.rejects(save("<p>losing acceptance</p>", { expectedDraft: draft, retireLive: true }), (error) => error.detail?.draftChanged === true);
+    assert.equal(store.get("docs/d").liveEpoch, epoch);
+    await assert.rejects(save("<p>old editor</p>", { liveEpoch: "initial" }), (error) => error.detail?.liveReset === true);
+  });
+});
+
+test("an uncertain transaction outcome retains the candidate bytes that may already be referenced", async () => {
+  await world(async ({ save, db, store, objects }) => {
+    const transact = db.runTransaction.bind(db);
+    db.runTransaction = async (work) => { await transact(work); throw new Error("commit response lost"); };
+    await assert.rejects(save("<p>committed before timeout</p>"), /commit response lost/);
+    const draft = store.get("docs/d").draft;
+    assert.equal(objects.get(`${draft.storagePrefix}/index.html`)?.toString(), "<p>committed before timeout</p>");
+  });
+});
+
+test("projection refresh failure cannot turn a committed external draft change into a refused write", async () => {
+  await world(async ({ save, db, store, objects, draft }) => {
+    const transact = db.runTransaction.bind(db);
+    let calls = 0;
+    db.runTransaction = (work) => ++calls === 1 ? transact(work) : Promise.reject(new Error("projection unavailable"));
+    const result = await save("<p>accepted and durable</p>", { expectedDraft: draft, retireLive: true });
+    assert.equal(store.get("docs/d").draft.storagePrefix, result.storagePrefix);
+    assert.equal(objects.get(`${result.storagePrefix}/index.html`).toString(), "<p>accepted and durable</p>");
+    assert.notEqual(store.get("docs/d").liveEpoch, "initial");
+  });
+});

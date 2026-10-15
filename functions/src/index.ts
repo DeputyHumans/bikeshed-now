@@ -18,6 +18,7 @@ import { versionStoragePrefix } from "./lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import { parseCausalStamp } from "./lib/causal";
 /**
  * FieldValue and Timestamp come from the MODULAR entry point, never through
  * `admin.firestore.*`.
@@ -1135,6 +1136,8 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     docId?: unknown;
     baseVersion?: unknown;
     html?: unknown;
+    liveEpoch?: unknown;
+    causal?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
   if (!docId || !safeSegment(docId)) {
@@ -1145,6 +1148,14 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   if (!baseVersion || !safeSegment(baseVersion)) {
     badRequest(res, "invalid or missing baseVersion");
     return;
+  }
+  const liveEpoch = body?.liveEpoch;
+  if (liveEpoch !== undefined && (typeof liveEpoch !== "string" || !safeSegment(liveEpoch))) {
+    badRequest(res, "invalid liveEpoch"); return;
+  }
+  const causal = body?.causal === undefined ? undefined : parseCausalStamp(body.causal);
+  if (causal === null || (causal !== undefined && liveEpoch === undefined)) {
+    badRequest(res, "invalid causal history or missing liveEpoch"); return;
   }
   const html = typeof body?.html === "string" ? body.html : "";
   if (html.trim().length === 0) {
@@ -1201,6 +1212,8 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
       db: db(),
       docRef: ref,
       baseVersion,
+      liveEpoch,
+      causal,
       version,
       content:
         markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },

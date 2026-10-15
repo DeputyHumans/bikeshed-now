@@ -100,7 +100,7 @@ async function withFakes(objects, rtdb, fn) {
     configurable: true,
     value: () => {
       if (rtdb === false) throw new Error("no Realtime Database configured");
-      const at = (path) => path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
+      const at = (path) => !path ? rtdb : path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
       const ref = (path) => ({
         once: async () => {
           if (rtdb === "broken") throw new Error("permission denied");
@@ -111,6 +111,11 @@ async function withFakes(objects, rtdb, fn) {
           const parts = path.split("/");
           const parent = at(parts.slice(0, -1).join("/"));
           if (parent) delete parent[parts[parts.length - 1]];
+          // RTDB removes empty ancestors as well as the requested subtree.
+          for (let i = parts.length - 1; i > 0; i--) {
+            const node = at(parts.slice(0, i).join("/"));
+            if (node && Object.keys(node).length === 0) delete at(parts.slice(0, i - 1).join("/"))[parts[i - 1]];
+          }
         },
       });
       return { ref };
@@ -125,8 +130,8 @@ async function withFakes(objects, rtdb, fn) {
   }
 }
 
-const editing = () => ({ status: { d1: { peers: { "u-ed": { mode: "edit" }, "u-x": { mode: "view" } }, y: { e1: "AAEC" } } } });
-const leftBehind = () => ({ status: { d1: { peers: { "u-x": { mode: "view" } }, y: { e1: "AAEC" } } } });
+const editing = () => ({ editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-ed": { mode: "edit", email: "ed@example.com", liveEpoch: "initial" }, "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } } });
+const leftBehind = () => ({ editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } } });
 
 test("an update is refused while somebody has the editor open, through the tool and the upload alike", async () => {
   const live = editing();
@@ -157,8 +162,10 @@ test("identical bytes are still a no-op while somebody is editing", async () => 
   const first = await w.update(NEXT);
   assert.equal(first.versionId, "v2");
 
-  live.status.d1.peers["u-ed"] = { mode: "edit" };
-  live.status.d1.y = { e9: "AAEC" };
+  live.status.d1.peers["u-ed"] = { mode: "edit", email: "ed@example.com", liveEpoch: "initial" };
+  live.status.d1.peers["u-ed"].liveEpoch = w.doc().liveEpoch;
+  live.editAccess.d1.__liveEpoch = w.doc().liveEpoch;
+  live.status.d1.y = { [w.doc().liveEpoch]: { e9: "AAEC" } };
   const again = await w.update(NEXT);
   assert.equal(again.deduped, true, "the same content changes nothing, so there is nothing to refuse");
   assert.equal(again.versionId, "v2");

@@ -19,9 +19,10 @@
  */
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
-import { removeDraftSnapshot } from "./draft";
+import { removeDraftSnapshot, retireLiveSession } from "./draft";
 import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
@@ -37,7 +38,7 @@ import {
   uniqueDocId,
   type Membership,
 } from "./folders";
-import { clearEditLog, editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
+import { editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
 import {
   anyAcceptedInDraft,
   anyOpenThread,
@@ -56,7 +57,6 @@ export interface StaleRefusal {
   status: 409;
   currentVersion: string;
 }
-import { syncPublicProjection } from "./publicdoc";
 import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
@@ -512,6 +512,7 @@ export async function commitNewVersion(args: {
 
   const base = args.baseVersion ?? "";
   let replacedDraft: unknown;
+  let retiredEpoch = "initial";
   try {
     await db.runTransaction(async (tx) => {
       // Both asked again here, where the version becomes current: the checks
@@ -522,6 +523,7 @@ export async function commitNewVersion(args: {
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
       replacedDraft = cur.data()?.draft;
+      retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       await mintVersion(tx);
     });
   } catch (e) {
@@ -552,8 +554,8 @@ export async function commitNewVersion(args: {
 
   // Only once the version is current, so a refused or stale update leaves the
   // draft and its log to the people editing them.
-  await dropReplacedDraft(docRef.id, editing.log, replacedDraft);
-  await syncPublicProjection(db, docRef.id);
+  await removeDraftSnapshot(docRef.id, replacedDraft);
+  await retireLiveSession(db, docRef.id, retiredEpoch);
 
   return { versionId, contentHash, fileCount, bytes, deduped: false };
 
@@ -585,6 +587,7 @@ export async function commitNewVersion(args: {
       docRef,
       {
         currentVersion: versionId,
+        liveEpoch: randomUUID(),
         draft: FieldValue.delete(),
         updatedAt: now(),
         stats: {
@@ -597,24 +600,4 @@ export async function commitNewVersion(args: {
     );
     withdrawTrust(tx, docRef, grants);
   }
-}
-
-/**
- * What a draft leaves behind once a version has replaced it (SPEC §6b).
- *
- * The transaction deleted the `draft` field; its files and its live log are
- * outside Firestore. Both would bring it back: the next editor to open the
- * document joins the log, which wins over the bytes it loaded, and autosaves
- * the old draft over the new version; the files are what `/draft` serves.
- *
- * Best effort, because the version is already current: failing the request now
- * would report as unpublished a version everybody can already see.
- */
-async function dropReplacedDraft(docId: string, log: boolean, draft: unknown): Promise<void> {
-  try {
-    if (log) await clearEditLog(docId);
-  } catch (e) {
-    console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
-  }
-  await removeDraftSnapshot(docId, draft);
 }

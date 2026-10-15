@@ -1,11 +1,9 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -95,7 +95,7 @@
-     // A different suggestion can replace the shared draft after this request
+@@ -96,5 +96,5 @@
      // reads it. Keep our claim, reread and reapply on that newer snapshot.
      // Each attempt owns its uploaded bytes; a conflict never records acceptance.
 -    for (let attempt = 0; made.state === "applied"; attempt++) {
 +    for (let attempt = 0; made.state === "applied" && made.html === ""; attempt++) {
        try {
-         if (editors.log) await clearEditLog(docRef.id);
          await writeDraft({

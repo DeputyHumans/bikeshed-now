@@ -1,27 +1,21 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -9,6 +9,7 @@
- import { renderMarkdown } from "./markdown/render";
- import { clearEditLog, editorsRefusal } from "./presence";
+@@ -10,4 +10,5 @@
+ import { editorsRefusal } from "./presence";
  import { changeSuggestion, type Author, type Refusal } from "./suggestions";
 +import { e2eGate } from "./e2eGate";
 
  /**
-  * The app accepts in four steps: claim, so no other approver applies it too;
-@@ -75,6 +76,8 @@
-       : applyToMarkdown(working.markdown, anchor, replacement, (md) => renderMarkdown(md, { title }).html);
+@@ -76,4 +77,6 @@
    if (made.state === "refused") return { status: 409, error: REFUSALS[made.reason], refused: made.reason };
 
 +  await e2eGate("accept-after-read", docRef.id);
 +
    const change = (op: "claim" | "release" | "accept") =>
      changeSuggestion({
-       db,
-@@ -91,6 +94,7 @@
-
+@@ -92,4 +95,5 @@
    const claimed = await change("claim");
    if ("status" in claimed) return claimed;
 +  await e2eGate("accept-after-claim", docRef.id);
    try {
      // A different suggestion can replace the shared draft after this request
-     // reads it. Keep our claim, reread and reapply on that newer snapshot.

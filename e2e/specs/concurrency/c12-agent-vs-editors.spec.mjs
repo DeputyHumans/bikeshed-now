@@ -183,6 +183,7 @@
  * mirror is missing (S16) is INCONCLUSIVE.
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
@@ -570,7 +571,7 @@ async function fireTogether(ctx, requests, label) {
 // --- the server's state -----------------------------------------------------------------------
 
 /** status/{d}/y read as the emulator's admin, read again through the Database's 503 for 5 s (past that, the stack did not answer: INCONCLUSIVE). */
-const readLog = (docId) => rtdbGetPatient(target, `status/${docId}/y`);
+const readLog = (docId) => readLiveLogsPatient(target, docId);
 
 const entriesOf = (y) => (y && typeof y === "object" ? Object.keys(y).length : 0);
 

@@ -1,11 +1,7 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -97,7 +97,7 @@
-     // Each attempt owns its uploaded bytes; a conflict never records acceptance.
-     for (let attempt = 0; made.state === "applied"; attempt++) {
-       try {
--        if (editors.log) await clearEditLog(docRef.id);
-+        if (editors.log) void clearEditLog;
-         await writeDraft({
-           db, docRef, baseVersion: working.baseVersion, version: working.version,
+@@ -102,3 +102,3 @@
            content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
+-          retireLive: true, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
++          retireLive: false, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
+         });

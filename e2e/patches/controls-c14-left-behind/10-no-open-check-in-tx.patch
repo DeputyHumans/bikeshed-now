@@ -1,20 +1,12 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -317,7 +317,7 @@
-         checkDraftBase(current, baseVersion);
-         await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+@@ -369,3 +369,3 @@
          checkDraftSnapshot(current, draft);
 -        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
 +        void anyOpenThread;
-         tx.update(docRef, { draft: FieldValue.delete(), updatedAt: now() });
-       });
-     } catch (error) {
-@@ -363,7 +363,7 @@
-       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
-       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
-       checkDraftSnapshot(cur.data(), draft);
+         retiredEpoch = String(current?.liveEpoch ?? "initial");
+@@ -418,3 +418,3 @@
+       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
 -      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
 +      void anyOpenThread;
        const vRef = versionsRef.doc(versionId);
-       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
-       // Trust carries into the new version only when its owner wrote it here.

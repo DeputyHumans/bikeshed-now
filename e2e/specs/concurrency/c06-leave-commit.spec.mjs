@@ -167,6 +167,7 @@
  * and a log nobody is using is dropped with the write".
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -439,7 +440,7 @@ async function waitPeersGone(t, docId, since) {
 
 /** How many entries status/{d}/y holds now. */
 async function logEntriesNow(t, docId) {
-  const y = await rtdbGetPatient(t, `status/${docId}/y`);
+  const y = await readLiveLogsPatient(t, docId);
   return y && typeof y === "object" ? Object.keys(y).length : 0;
 }
 

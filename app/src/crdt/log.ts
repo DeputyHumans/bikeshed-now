@@ -2,6 +2,7 @@
 // Shared document state as an append-only update log (SPEC §6b, §16).
 
 import * as Y from "yjs";
+import type { CausalStamp } from "./causal";
 
 /**
  * Why a log of updates rather than a shared snapshot
@@ -15,9 +16,10 @@ import * as Y from "yjs";
  *
  * The log is NOT the durable artifact. The draft and the published versions
  * are, in Firestore and Storage, exactly as before. This carries live
- * collaboration and nothing else, so it can be trimmed aggressively and lost
- * entirely without losing a document — whoever opens the editor next seeds a
- * fresh one from the saved bytes.
+ * collaboration and nothing else. Compaction preserves the elected seed; a
+ * successful publication retires its epoch so the next session can seed from
+ * the saved bytes. Unexpected loss within a stamped epoch fails closed instead
+ * of inventing a new identity over still-active peers.
  *
  * Transport is injected rather than imported so the merge behaviour can be
  * tested without a network, a Firebase app, or an emulator. The RTDB binding is
@@ -27,7 +29,7 @@ import * as Y from "yjs";
 /** What the provider needs from a transport. Deliberately tiny. */
 export interface UpdateLog {
   /** Calls back for every entry already present and every one appended after. */
-  subscribe(onEntry: (key: string, payload: string) => void): () => void;
+  subscribe(onEntry: (key: string, payload: string) => void, onError?: (error: Error) => void): () => void;
   append(payload: string): Promise<string | null>;
   remove(keys: readonly string[]): Promise<void>;
   /** Atomically retain one initial update; return the winner to every joiner. */
@@ -71,7 +73,8 @@ export const COMPACT_AFTER = 64;
 export const SEED_KEY = "_seed";
 
 export interface Connection {
-  initialize(seed: Uint8Array): Promise<void>;
+  initialize(seed?: Uint8Array): Promise<void>;
+  causalStamp(): CausalStamp;
   destroy(): void;
   /** Entry keys currently believed to be in the log. Exposed for tests. */
   size(): number;
@@ -86,12 +89,18 @@ export interface Connection {
  * Without it every remote update is immediately re-appended by every peer that
  * receives it, and the log grows without bound while the document does nothing.
  */
-export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = () => {}): Connection {
+export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = () => {}, onDelivery: (available: boolean) => void = () => {}): Connection {
   const REMOTE = Symbol("remote");
   const seen = new Set<string>();
   const payloads = new Map<string, string>();
   let destroyed = false;
   let compacting = false;
+  let generation: string | null = null;
+  let pending: Uint8Array | null = null;
+  let sending = false;
+  let readFailed = false;
+  let failures = 0;
+  let retry: ReturnType<typeof setTimeout> | null = null;
 
   const unsubscribe = log.subscribe((key, payload) => {
     if (destroyed || seen.has(key)) return;
@@ -105,15 +114,42 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
       // A malformed entry is one peer's problem, not everybody's. Applying the
       // rest still converges every client that can read them.
     }
-  });
+  }, () => { readFailed = true; if (!destroyed) onDelivery(false); });
 
   const onUpdate = (update: Uint8Array, origin: unknown) => {
     if (destroyed || origin === REMOTE) return;
-    void log.append(toBase64(update)).then((key) => {
-      if (key) { seen.add(key); payloads.set(key, toBase64(update)); }
-      void compact();
-    });
+    pending = pending ? Y.mergeUpdates([pending, update]) : update;
+    void drain();
   };
+
+  async function drain(): Promise<void> {
+    if (destroyed || sending || retry || !pending) return;
+    sending = true;
+    try {
+      while (pending && !destroyed) {
+        const update = pending;
+        pending = null;
+        const payload = toBase64(update);
+        try {
+          const key = await log.append(payload);
+          if (!key) throw new Error("The shared update was not acknowledged");
+          if (destroyed) return;
+          seen.add(key); payloads.set(key, payload);
+          failures = 0;
+          void compact();
+        } catch {
+          if (destroyed) return;
+          // Keep both the refused bytes and changes made while they were in
+          // flight. Later Yjs deltas may depend on those earlier item ids.
+          pending = pending ? Y.mergeUpdates([update, pending]) : update;
+          onDelivery(false);
+          retry = setTimeout(() => { retry = null; void drain(); }, Math.min(2_000, 200 * 2 ** Math.min(failures++, 4)));
+          return;
+        }
+      }
+      if (!destroyed && !readFailed) onDelivery(true);
+    } finally { sending = false; }
+  }
   doc.on("update", onUpdate);
 
   /**
@@ -131,7 +167,8 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
     try {
       const payload = toBase64(Y.encodeStateAsUpdate(doc));
       const merged = await log.append(payload);
-      if (merged) { seen.add(merged); payloads.set(merged, payload); }
+      if (!merged) return;
+      seen.add(merged); payloads.set(merged, payload);
       await log.remove(consumed);
       for (const key of consumed) { seen.delete(key); payloads.delete(key); }
     } catch {
@@ -143,14 +180,34 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
 
   return {
     async initialize(seed) {
-      const elected = await log.initialize(toBase64(seed));
+      let elected = payloads.get(SEED_KEY);
+      if (!elected) {
+        if (payloads.size > 0) throw new Error("The shared document seed is missing");
+        if (!seed) throw new Error("The shared document needs an initial seed");
+        elected = await log.initialize(toBase64(seed));
+      }
+      const bytes = fromBase64(elected);
+      const hash = await crypto.subtle.digest("SHA-256", bytes.buffer as ArrayBuffer);
       if (!destroyed) {
         Y.applyUpdate(doc, fromBase64(elected), REMOTE);
         seen.add(SEED_KEY); payloads.set(SEED_KEY, elected);
+        generation = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
       }
+    },
+    causalStamp() {
+      if (!generation) throw new Error("The shared document seed is not ready");
+      const deletes = Y.decodeUpdate(Y.encodeStateAsUpdate(doc)).ds.clients;
+      return {
+        generation,
+        vector: Object.fromEntries(Y.decodeStateVector(Y.encodeStateVector(doc))),
+        deletes: Object.fromEntries([...deletes].map(([client, ranges]) =>
+          [client, ranges.map(({ clock, len }) => [clock, len] as [number, number])])),
+      };
     },
     destroy() {
       destroyed = true;
+      if (retry) clearTimeout(retry);
+      pending = null;
       doc.off("update", onUpdate);
       unsubscribe();
     },

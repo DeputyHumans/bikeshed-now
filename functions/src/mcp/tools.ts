@@ -85,7 +85,7 @@ import { renameDocument } from "../lib/rename";
 import { setThreadResolved } from "../lib/threads";
 import { acceptSuggestion } from "../lib/accept";
 import { commitDraft } from "../lib/draft";
-import { clearEditLog, editorsRefusal } from "../lib/presence";
+import { editorsRefusal } from "../lib/presence";
 import {
   ANNOTATION_COLOR,
   SUGGESTION_COLOR,
@@ -888,7 +888,6 @@ export const TOOLS: ToolDefinition[] = [
       if (outcome.status !== 200) throw new Error(String(outcome.body.error));
       // As the app does once it has published: the log was the draft's, and
       // the next editor seeds from the new version.
-      if (editors.log) await clearEditLog(ref.id);
       return withReaderAddress(outcome.body, ref.id);
     },
   },

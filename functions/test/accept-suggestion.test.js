@@ -124,7 +124,7 @@ async function withFakes(objects, rtdb, fn) {
     configurable: true,
     value: () => {
       if (rtdb === false) throw new Error("no Realtime Database configured");
-      const at = (path) => path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
+      const at = (path) => !path ? rtdb : path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
       const ref = (path) => ({
         once: async () => ({ val: () => at(path) ?? null, exists: () => at(path) != null }),
         limitToFirst: () => ref(path),
@@ -132,6 +132,11 @@ async function withFakes(objects, rtdb, fn) {
           const parts = path.split("/");
           const parent = at(parts.slice(0, -1).join("/"));
           if (parent) delete parent[parts[parts.length - 1]];
+          // RTDB removes empty ancestors as well as the requested subtree.
+          for (let i = parts.length - 1; i > 0; i--) {
+            const node = at(parts.slice(0, i).join("/"));
+            if (node && Object.keys(node).length === 0) delete at(parts.slice(0, i - 1).join("/"))[parts[i - 1]];
+          }
         },
       });
       return { ref };
@@ -253,7 +258,7 @@ test("an accept lands on top of what a person already has in the draft", async (
 
 test("nothing is written while somebody has the editor open, and a log nobody is using is dropped", async () => {
   const live = {
-    status: { d1: { peers: { "u-ed": { mode: "edit" }, "u-x": { mode: "view" } }, y: { e1: "AAEC" } } },
+    editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-ed": { mode: "edit", email: "ed@example.com", liveEpoch: "initial" }, "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } },
   };
   const busy = world({ anns: { s1: S1 }, rtdb: live });
   await assert.rejects(busy.call("accept_suggestion", APPROVER, { threadId: "s1" }), /Somebody has this document open in the editor/);
@@ -262,7 +267,7 @@ test("nothing is written while somebody has the editor open, and a log nobody is
   assert.equal(busy.ann("s1").suggestion.state, "pending");
   assert.equal(busy.ann("s1").suggestion.claim, undefined, "and nobody is kept off it");
 
-  const idle = { status: { d1: { peers: { "u-x": { mode: "view" } }, y: { e1: "AAEC" } } } };
+  const idle = { editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } } };
   const quiet = world({ anns: { s1: S1 }, rtdb: idle });
   await quiet.call("accept_suggestion", APPROVER, { threadId: "s1" });
   assert.equal(idle.status.d1.y, undefined, "the log would have won over the draft, so it goes");

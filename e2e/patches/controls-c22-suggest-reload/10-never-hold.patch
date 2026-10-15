@@ -1,13 +1,10 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -354,7 +354,9 @@
-     emailLower,
-     isEditing: mode.kind === "editing",
+@@ -371,5 +371,6 @@
+     liveEditorEmails: shared.state === "shared" ? presence.peers.filter((peer) => peer.mode === "edit").map((peer) => peer.email) : [],
      showsDraft: mode.kind === "reading" && mode.draft,
 -    hold: suggesting !== null || commenting,
-+    // e2e negative control (controls-c22-suggest-reload): never hold, so a peer's
-+    // save reloads the frame under an open suggestion form and throws it away.
++    // e2e negative control: reload even under an open suggestion form.
 +    hold: false,
      onPeerSavedDraft: frame.reload,
    });
- 

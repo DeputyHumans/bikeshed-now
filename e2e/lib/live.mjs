@@ -118,6 +118,7 @@
  * may be doubled (S1, S27), where the token can land in a second #id.
  */
 
+import { readLiveLogsPatient } from "./live-log.mjs";
 import { AssertionError } from "node:assert";
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -274,7 +275,7 @@ export async function settleLive(users, { docId, n = users?.length, deadlineMs =
   const limit = deadlineMs ?? settleDeadlineMs(n);
   const target = users[0]?.pool?.target ?? null;
   let yRetries = 0;
-  const getY = readY ?? (() => rtdbGetPatient(target, `status/${docId}/y`, { onRetry: () => (yRetries += 1) }));
+  const getY = readY ?? (() => readLiveLogsPatient(target, docId, { onRetry: () => (yRetries += 1) }));
   const alone = users.length === 1;
   const t0 = now();
   const series = [];
@@ -644,7 +645,7 @@ export async function joinShared(ctx, { n, fixture = "crdt-paragraphs.html", bod
       await enterOne(users[0]);
       const deadline = Date.now() + sharedMs;
       for (;;) {
-        const y = await rtdbGetPatient(ctx.target, `status/${docId}/y`);
+        const y = await readLiveLogsPatient(ctx.target, docId);
         if (y && typeof y === "object" && Object.keys(y).length > 0) break;
         if (Date.now() >= deadline) ctx.inconclusive(`the sync precondition did not hold: ${users[0].name}'s seed never reached status/${docId}/y within ${sharedMs} ms`);
         await sleep(200);

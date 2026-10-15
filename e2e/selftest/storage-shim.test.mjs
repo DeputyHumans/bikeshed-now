@@ -101,7 +101,7 @@ async function standInStorage() {
   const objects = new Map();
   const requests = [];
   let gen = 1760000000000000;
-  const s = { objects, requests, writeDelayMs: 0, failMeta: false };
+  const s = { objects, requests, writeDelayMs: 0, beforeWrite: null, failMeta: false };
   const meta = (bucket, name, o) => ({ kind: "storage#object", bucket, name, generation: o.generation, metageneration: "1", size: String(o.data.length), md5Hash: createHash("md5").update(o.data).digest("base64"), crc32c: crc32c(o.data), contentType: o.contentType });
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -133,6 +133,7 @@ async function standInStorage() {
             contentType = mp.contentType;
             name ??= mp.meta.name;
           }
+          if (s.beforeWrite) await s.beforeWrite(name);
           if (s.writeDelayMs) await sleep(s.writeDelayMs);
           const o = { data, generation: String((gen += 1)), contentType };
           objects.set(`${bucket}/${name}`, o);
@@ -357,16 +358,27 @@ test("locks are per object: a slow write of one name does not hold back a write 
   try {
     const a = unique("slow");
     const b = unique("other");
-    const t0 = Date.now();
+    let release, entered;
+    const held = new Promise((resolve) => { release = resolve; });
+    const reached = new Promise((resolve) => { entered = resolve; });
+    store.beforeWrite = async (name) => { if (name === a) { entered(); await held; } };
+    const waitedBefore = shim.stats.waited;
     const pa = upload(shim.url, a, "a", "&ifGenerationMatch=0");
-    await sleep(20);
-    const rb = await upload(shim.url, b, "b", "&ifGenerationMatch=0");
-    const msB = Date.now() - t0;
-    assert.equal(rb.status, 200);
-    assert.equal((await pa).status, 200);
-    assert.ok(msB < 300 + 150, `the other name finished ${msB} ms in: only its own 150 ms write, not the first one's too`);
-    const last = shim.decisions().filter((d) => d.name === b).at(-1);
-    assert.equal(last.waitedMs, 0, "the other name never waited");
+    await reached;
+    let timer;
+    const pb = upload(shim.url, b, "b", "&ifGenerationMatch=0");
+    try {
+      const rb = await Promise.race([pb, new Promise((resolve) => { timer = setTimeout(() => resolve(null), 3_000); })]);
+      assert.ok(rb, "another object completes while the first object's write is explicitly held");
+      assert.equal(rb.status, 200);
+      assert.equal(objectOf(a), null, "the first write is still held, proving overlap");
+      assert.equal(shim.stats.waited, waitedBefore, "different objects did not contend for a lock");
+    } finally {
+      clearTimeout(timer);
+      release();
+      store.beforeWrite = null;
+      await Promise.all([pa, pb]);
+    }
     // One name: three plain writes in flight land in the order they came.
     const c = unique("order");
     const order = [];

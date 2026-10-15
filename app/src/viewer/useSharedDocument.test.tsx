@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Simultaneous first join elects one seed instead of replicating the authored document twice (SPEC §6b, §16).
 
-import { act, renderHook } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { webcrypto } from "node:crypto";
 import type { UpdateLog } from "../crdt/log";
 import { useSharedDocument } from "./useSharedDocument";
+
+beforeAll(() => vi.stubGlobal("crypto", webcrypto));
+afterAll(() => vi.unstubAllGlobals());
 
 const transport = vi.hoisted(() => ({ current: null as unknown as UpdateLog }));
 vi.mock("../crdt/rtdb", () => ({ rtdbLog: () => transport.current }));
@@ -30,6 +34,7 @@ it("elects one seed when two empty-log joins bind before either peer receives a 
     await act(async () => { await Promise.resolve(); });
     // Both joins ran against empty snapshots; only now does the wire deliver.
     await act(async () => { while (pending.length) { const [key, payload] = pending.shift()!; for (const receive of listeners) receive(key, payload); } });
+    await waitFor(() => expect(views.every((v) => v.result.current.state === "shared")).toBe(true));
     for (let i = 0; i < docs.length; i += 1) {
       expect(views[i].result.current.state).toBe("shared");
       expect(docs[i].querySelectorAll("#sentinel")).toHaveLength(1);
@@ -38,7 +43,7 @@ it("elects one seed when two empty-log joins bind before either peer receives a 
   } finally { for (const view of views) view.unmount(); }
 });
 
-it("falls back to local editing without claiming Shared when the transport refuses the initial read", async () => {
+it("keeps editing unbound when the configured shared transport refuses the initial read", async () => {
   const append = vi.fn();
   const stop = vi.fn();
   transport.current = { ready: async () => { throw new Error("PERMISSION_DENIED"); }, subscribe: () => stop, append, remove: vi.fn(), initialize: vi.fn() };
@@ -46,9 +51,71 @@ it("falls back to local editing without claiming Shared when the transport refus
   const view = renderHook(() => useSharedDocument({ mode: { kind: "editing", baseVersion: "v1" }, doc, epoch: 1, docId: "d1", enabled: true }));
   try {
     await act(async () => { await Promise.resolve(); });
-    expect(view.result.current).toMatchObject({ state: "off", bound: true });
+    expect(view.result.current).toMatchObject({ state: "off", bound: false });
     expect(doc.body.textContent).toBe("Local draft");
     expect(stop).toHaveBeenCalled();
     expect(append).not.toHaveBeenCalled();
+  } finally { view.unmount(); }
+});
+
+function memoryLog(): UpdateLog {
+  return { ready: async () => {}, subscribe: () => () => {}, append: async () => "entry", remove: async () => {}, initialize: async (payload) => payload };
+}
+function sharedOptions(doc: Document, liveEpoch = "initial") {
+  return { mode: { kind: "editing" as const, baseVersion: "v1" }, doc, epoch: 1, docId: "d1", enabled: true, liveEpoch };
+}
+it("does not bind a fresh seed over saved causal history after the shared log is lost", async () => {
+  transport.current = memoryLog();
+  const doc = new DOMParser().parseFromString("<p>Saved text</p>", "text/html");
+  const view = renderHook(() => useSharedDocument({ ...sharedOptions(doc), expectedGeneration: "0".repeat(64) }));
+  try {
+    await waitFor(() => expect(view.result.current.error).toMatch(/could not start/));
+    expect(view.result.current.bound).toBe(false);
+    expect(view.result.current.causalStamp()).toBeNull();
+    expect(doc.body.textContent).toBe("Saved text");
+  } finally { view.unmount(); }
+});
+it("flushes pending DOM mutations into a synchronous causal stamp", async () => {
+  const updates: string[] = [];
+  transport.current = { ...memoryLog(), append: async (payload) => { updates.push(payload); return `entry-${updates.length}`; } };
+  const doc = new DOMParser().parseFromString("<p>Before</p>", "text/html");
+  const view = renderHook(() => useSharedDocument(sharedOptions(doc)));
+  try {
+    await waitFor(() => expect(view.result.current.bound).toBe(true));
+    const before = view.result.current.causalStamp()!;
+    doc.querySelector("p")!.firstChild!.textContent = "Before after";
+    const after = view.result.current.causalStamp()!;
+    expect(after).not.toEqual(before);
+    expect(updates.length).toBeGreaterThan(0);
+    expect(after.generation).toBe(before.generation);
+  } finally { view.unmount(); }
+});
+it("keeps the replacement epoch bound when a cancelled old join rejects later", async () => {
+  let rejectOld!: (reason: Error) => void;
+  transport.current = { ...memoryLog(), ready: () => new Promise<void>((_resolve, reject) => { rejectOld = reject; }) };
+  const doc = new DOMParser().parseFromString("<p>Current</p>", "text/html");
+  const view = renderHook(({ liveEpoch }) => useSharedDocument(sharedOptions(doc, liveEpoch)), { initialProps: { liveEpoch: "old" } });
+  try {
+    transport.current = memoryLog();
+    view.rerender({ liveEpoch: "new" });
+    await waitFor(() => expect(view.result.current.state).toBe("shared"));
+    const stamp = view.result.current.causalStamp();
+    await act(async () => rejectOld(new Error("old read refused")));
+    expect(view.result.current).toMatchObject({ state: "shared", bound: true, error: null });
+    expect(view.result.current.causalStamp()).toEqual(stamp);
+  } finally { view.unmount(); }
+});
+it("explains legacy recovery and permits solo binding only without a configured transport", async () => {
+  const doc = new DOMParser().parseFromString("<p>Local</p>", "text/html");
+  transport.current = { ...memoryLog(), ready: async () => { throw new Error("legacy log needs recovery"); } };
+  const view = renderHook(({ liveEpoch }) => useSharedDocument(sharedOptions(doc, liveEpoch)), { initialProps: { liveEpoch: "initial" } });
+  try {
+    await waitFor(() => expect(view.result.current.error).toMatch(/original tab/));
+    expect(view.result.current.bound).toBe(false);
+    transport.current = null as unknown as UpdateLog;
+    view.rerender({ liveEpoch: "next" });
+    await waitFor(() => expect(view.result.current.bound).toBe(true));
+    expect(view.result.current).toMatchObject({ state: "off", error: null });
+    expect(view.result.current.causalStamp()).toBeNull();
   } finally { view.unmount(); }
 });

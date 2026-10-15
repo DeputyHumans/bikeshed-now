@@ -118,6 +118,7 @@ export interface DocMeta {
   /** Bumped on every publish. Deliberately NOT touched by a read. */
   updatedAt: Timestamp;
 
+  liveEpoch?: string;
   draft?: DraftMeta | null;
   stats?: ViewStats;
   /** Which version's thumbnails are stored. Admin SDK only; never moves `updatedAt`. */
@@ -349,6 +350,7 @@ export interface EditSession {
 
 /** Firestore: docs/{docId}.draft — the shared, in-progress edit. */
 export interface DraftMeta {
+  causal?: { generation: string; vector: Record<string, number>; deletesJson: string };
   baseVersion: string;
   entry: string;
   /** Present for a Markdown-authored document: the canonical source file. */

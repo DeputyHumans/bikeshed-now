@@ -198,6 +198,7 @@
  * Only e2e/lib/ talks to the stack.
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
@@ -329,7 +330,7 @@ async function enterShared(ctx, obs, u, { timeout = 90_000 } = {}) {
 async function waitSeed(ctx, obs, docId, who, { timeout = 90_000 } = {}) {
   const deadline = Date.now() + timeout;
   for (;;) {
-    const y = await rtdbGetPatient(ctx.target, `status/${docId}/y`);
+    const y = await readLiveLogsPatient(ctx.target, docId);
     if (y && typeof y === "object" && Object.keys(y).length > 0) return Object.keys(y).length;
     if (Date.now() >= deadline) inconclusive(ctx, obs, `the sync precondition did not hold: ${who}'s seed never reached status/${docId}/y within ${timeout} ms`);
     await sleep(200);
