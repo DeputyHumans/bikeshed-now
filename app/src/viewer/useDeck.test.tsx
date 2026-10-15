@@ -177,13 +177,13 @@ describe("useDeck", () => {
     expect(sections[2].scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("still opens the overview on a document it will not page", () => {
+  it("leaves overview keys alone on a document it will not page", () => {
     const { doc } = mountDeck(DECK, 4000, 700);
     const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
 
-    press(doc, "o");
-    expect(result.current.overviewOpen).toBe(true);
-    press(doc, "o");
+    expect(press(doc, "o").defaultPrevented).toBe(false);
+    expect(result.current.overviewOpen).toBe(false);
+    expect(press(doc, "O").defaultPrevented).toBe(false);
     expect(result.current.overviewOpen).toBe(false);
   });
 
@@ -290,6 +290,27 @@ describe("what counts as a deck", () => {
  * so the rail, the overview and the parent's arrow keys were all dead on it.
  */
 describe("a deck that drives itself", () => {
+  for (const event of ["transitionend", "transitioncancel", "animationend", "animationcancel"]) {
+    it(`tracks the final shown slide on ${event} without another attribute change`, async () => {
+      const { doc, sections, show } = mountStackedDeck();
+      let painted = 0;
+      const computed = vi.spyOn(doc.defaultView!, "getComputedStyle").mockImplementation((el) => ({
+        display: "block", visibility: "visible", opacity: sections.indexOf(el as HTMLElement) === painted ? "1" : "0", transform: "none",
+      }) as CSSStyleDeclaration);
+      const { result, unmount } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+      show(1);
+      await act(async () => {});
+      expect(result.current.current).toBe(0); // the outgoing slide still paints
+      painted = 1; // computed style changes at completion, without DOM mutation
+      act(() => sections[1].dispatchEvent(new doc.defaultView!.Event(event, { bubbles: true })));
+      expect(result.current.current).toBe(1);
+      unmount();
+      computed.mockClear();
+      sections[1].dispatchEvent(new doc.defaultView!.Event(event, { bubbles: true }));
+      expect(computed).not.toHaveBeenCalled();
+    });
+  }
+
   it("is recognised as stacked, and still paged", () => {
     const { doc } = mountStackedDeck();
     const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));

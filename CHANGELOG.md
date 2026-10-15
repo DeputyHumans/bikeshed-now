@@ -24,6 +24,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Refresh a stacked deck’s position when motion completes or is cancelled,
+  and leave overview keys to documents that do not measure as pages.
+
 - Enforce saved root-attribute preservation after an in-app acceptance, with
   independent setup when the regression case is selected on its own.
 

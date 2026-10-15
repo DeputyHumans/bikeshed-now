@@ -1,0 +1,13 @@
+{
+  "oracle": "unpaged documents retain keyboard defaults",
+  "what": "controls-a16-unpaged-keys",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.1 the rail and the slide buttons appear for viewport-tall decks of three and eight slides and never for tall or short sections; o and O toggle the overview from the parent and from inside the frame; Escape closes only the overview, even while presenting, and is left untouched once it is shut",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "unpaged sections keep their overview and paging keys"
+  }
+}

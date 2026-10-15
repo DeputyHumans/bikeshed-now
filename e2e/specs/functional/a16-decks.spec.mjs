@@ -389,10 +389,22 @@ scenario("A16.1 the rail and the slide buttons appear for viewport-tall decks of
     const s = await openDeck(o, docs[key], { expectRail: false });
     assert.deepEqual({ rail: s.rail, slidesButton: s.slidesButton, allSlidesButton: s.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, `${why}: no navigator`);
     await focusParent(o);
+    await o.page.evaluate(() => {
+      window.__e2eUnpagedKeys = [];
+      const heard = (event) => {
+        if (!["o", "ArrowDown"].includes(event.key)) return;
+        queueMicrotask(() => {
+          window.__e2eUnpagedKeys.push({ key: event.key, prevented: event.defaultPrevented });
+          if (window.__e2eUnpagedKeys.length === 2) window.removeEventListener("keydown", heard);
+        });
+      };
+      window.addEventListener("keydown", heard);
+    });
     await o.page.keyboard.press("o");
     await o.page.keyboard.press("ArrowDown");
     const after = await eventually(async () => ({ v: await viewerState(o), f: await frameState(o) }), { timeout: 3_000, interval: 150, stableSamples: 5, message: `${why}: steady after o and ArrowDown` });
     assert.deepEqual({ overview: after.v.overview, y: after.f.y }, { overview: 0, y: 0 }, `${why}: o drew no overview and ArrowDown did not page the frame`);
+    assert.deepEqual(await o.page.evaluate(() => window.__e2eUnpagedKeys), [{ key: "o", prevented: false }, { key: "ArrowDown", prevented: false }], "unpaged sections keep their overview and paging keys");
   }
 
   ctx.step("Q again: o on the parent opens the overview (eight cards, focus on the current one); O closes it");
@@ -601,40 +613,9 @@ scenario("A16.2 keys scroll a flat deck and the rail follows; on a stacked trust
   noPageErrors([o]);
 });
 
-/**
- * X-a16-decks-1, CLASS I: the product does what SPEC §6d says, and the harm is
- * concrete. Ask at G1: any fix (re-reading once the deck's transitions end, or
- * not letting the observer overwrite goTo's position) changes normative text.
- *
- * SPEC §6d spec.md:891-895: "When every slide's rect shares a top, navigation
- * instead presses the arrow keys the deck already answers to, dispatched into
- * the frame, and reads position from which slide is *shown* (`display`,
- * `visibility`, `opacity`, a translating `transform` — the same four the
- * preview undoes) with the deck's own attribute changes as the signal, since
- * nothing scrolls." useDeck does exactly that: a MutationObserver on class and
- * style (useDeck.ts:184-189) runs measure() (:174-180), which reads shownSlide
- * (:67-69; deck.ts isShown :318-326, shownIndex :333-336). At that mutation
- * D's incoming slide is at opacity 0 and the outgoing one stays visible for
- * 0.35 s (content/deck-animated/bundle/index.html:113, :118), so by the SPEC's
- * own four properties the outgoing slide IS the one shown, and that read
- * overwrites goTo's setCurrent (useDeck.ts:237-238). The SPEC names no later
- * signal, and the transition's end changes no attribute. No SPEC sentence
- * says one press moves one slide.
- *
- * The harm, on the repo's own animated sample: every other parent ArrowRight
- * presses nothing (next() aims at current + 1, which is the slide already
- * shown), and in between the rail marks the previous slide; the overview and
- * the presentation counter read the same `current` (DocViewer.tsx:1012,
- * :1087-1088, :1094).
- *
- * The oracle is the last assertion alone. The no-transitions twin is a
- * precondition, and every wait is setup: a deck that never settles FAILS (or
- * is INCONCLUSIVE on a stalled stack), so only [shown, marked] after the four
- * presses can make this case a TODO.
- */
+/** Computed visibility can finish moving after the deck's last attribute change. */
 scenario("A16.2b on the animated deck, trusted (stacked), four ArrowRight presses on the parent show slides 2 to 5 and the rail marks each", {
   tiers: ["local", "prod"],
-  defect: "X-a16-decks-1",
   timeoutMs: 300_000,
   ...STALLS,
 }, async (ctx) => {
@@ -683,7 +664,7 @@ scenario("A16.2b on the animated deck, trusted (stacked), four ArrowRight presse
   precondition(JSON.stringify(control) === JSON.stringify(want), `control: the stacked deck without transitions is driven one slide per press and the rail follows (got ${JSON.stringify(control)})`);
   const animated = await presses(docs.d, "D");
   ctx.ev.json("presses", { control, animated });
-  assert.deepEqual(animated, want, "X-a16-decks-1, CLASS I (the product does what SPEC §6d says; ask at G1): [slide shown, slide the rail marks] after each parent ArrowRight on the animated deck. SPEC §6d spec.md:891-895 reads position \"from which slide is *shown* … with the deck's own attribute changes as the signal\", and at that change D's outgoing slide is still the one shown (its 0.35 s opacity transition), so the read overwrites goTo's position (useDeck.ts:184-189, :237-238). Harm: every other press moves nothing, and the rail marks the previous slide on the repo's own animated sample. No SPEC sentence says one press moves one slide");
+  assert.deepEqual(animated, want, "the settled animated deck and its navigator advance once per ArrowRight");
 });
 
 // --- A16.3 ----------------------------------------------------------------------

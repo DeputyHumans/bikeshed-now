@@ -956,7 +956,10 @@ When every slide's rect shares a top, navigation instead presses the arrow keys
 the deck already answers to, dispatched into the frame, and reads position from
 which slide is *shown* (`display`, `visibility`, `opacity`, a translating
 `transform` — the same four the preview undoes) with the deck's own attribute
-changes as the signal, since nothing scrolls. That is the deck's own contract;
+changes and transition/animation completion or cancellation as signals, since
+nothing scrolls. Completion re-reads computed visibility after the outgoing
+slide stops painting, so each settled keypress advances the navigator with the
+deck. That is the deck's own contract;
 the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the
 wild), and toggling the deck's class would style a document this app does not
 own. The one input a deck's script is denied is the click that carries a

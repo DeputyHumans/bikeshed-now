@@ -13547,6 +13547,24 @@
         "controls-a08-bodyattr"
       ],
       "note": "A8.9 BODYATTR is a normal assertion and prepares its own accepted and published document when selected alone. An earlier failed prerequisite retains its inconclusive boundary instead of being retried. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a16-decks-1"
+      ],
+      "scope": "stacked motion and unpaged keys; local E2E pending",
+      "tests": [
+        "Before fix:5 deck assertions fail,19 pass",
+        "Fixed detection/navigation suites56 pass; app typecheck passes",
+        "Exact missing-motion-listener and misplaced-unpaged-guard controls fail assertions after clean copies"
+      ],
+      "evidence": "e2e/.out/functional-todo-controls-QNahMF/proof.json",
+      "controls": [
+        "controls-a16-motion-completion",
+        "controls-a16-unpaged-keys"
+      ],
+      "note": "Position re-reads computed visibility on transition/animation completion and cancellation; listeners clean up on unmount. A16.2b promoted. A16.1 now checks actual defaultPrevented values for unpaged keyboard input. SPEC §6d names completion signals. No campaign item closed."
     }
   ]
 }
