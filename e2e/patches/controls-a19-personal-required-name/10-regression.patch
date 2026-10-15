@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2579,7 +2579,7 @@
+
+   if (op === "create") {
+     const name = typeof body?.name === "string" ? body.name.trim() : "";
+-    if (!name) {
++    if (false && !name) {
+       badRequest(res, "name is required — an unnamed token cannot be revoked with confidence");
+       return;
+     }

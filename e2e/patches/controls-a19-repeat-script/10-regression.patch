@@ -1,0 +1,12 @@
+--- a/app/src/analytics.ts
++++ b/app/src/analytics.ts
+@@ -188,5 +188,9 @@
+
+ /** Log a route change as a pattern. Never the concrete path. */
+ export function logPageView(pathname: string): void {
++  if (instance && pathname === "/terms") {
++    const script = document.querySelector('script[src*="googletagmanager"]');
++    if (script) document.head.append(script.cloneNode(true));
++  }
+   logEvent({ name: "page_view", params: { page_path: routePattern(pathname) } });
+ }

@@ -891,7 +891,11 @@ scenario("A19.5 personal tokens: a name is required; bsk_ is shown once and stor
   await eventually(async () => {
     const [r, mm] = await Promise.all([readDoc(target, `tokens/${tokenId}`), readDoc(target, `users/${acct.uid}/tokens/${tokenId}`)]);
     return Boolean(r.lastUsedAt && mm.lastUsedAt) || false;
-  }, { timeout: RECORD_WAIT_MS, message: "lastUsedAt is set on tokens/{id} and its mirror" });
+  }, { timeout: RECORD_WAIT_MS, message: "lastUsedAt is set on tokens/{id} and its mirror" }).catch(error => {
+    if (error.code !== "E2E_EVENTUALLY_TIMEOUT") throw error;
+  });
+  const [usedRecord, usedMirror] = await Promise.all([readDoc(target, `tokens/${tokenId}`), readDoc(target, `users/${acct.uid}/tokens/${tokenId}`)]);
+  assert.ok(usedRecord.lastUsedAt && usedMirror.lastUsedAt, "lastUsedAt is set on tokens/{id} and its mirror after use");
   await tokenRow.getByText(/last used/).waitFor({ timeout: RECORD_WAIT_MS });
   assert.equal(await tokenRow.locator(".token-unused").count(), 0, "the row no longer says never used");
 

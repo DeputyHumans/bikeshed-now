@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Add directional account controls for populated-team deletion, consent and script loading, token revocation, hashing, read privacy and names; judge delayed token-use records with an explicit final assertion.
+
 - Exercise fork privacy and expiry across ancestors, descendants and public projections; prove that copied versions exclude feedback and unrelated files, refused destinations leave no bytes, and sign-in intents wait for the authenticated unlock answer.
 
 - Require separate positive campaign runs for the three added CLI capability variants, retaining all 48 original acceptance cells and refusing a ledger that drops any new cell.

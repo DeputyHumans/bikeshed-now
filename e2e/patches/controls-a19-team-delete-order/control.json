@@ -1,0 +1,13 @@
+{
+  "oracle": "deleting a populated team revokes",
+  "what": "team-delete-order",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.4 teams on the account screen: create, rename, add (one invitation, access granted), make and remove an admin (and what that allows), remove, delete; each change reports how many items it touched",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "deleting a populated team revokes"
+  }
+}

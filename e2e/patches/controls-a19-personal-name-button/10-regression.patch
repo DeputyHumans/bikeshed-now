@@ -1,0 +1,11 @@
+--- a/app/src/pages/Account.tsx
++++ b/app/src/pages/Account.tsx
+@@ -416,7 +416,7 @@
+             type="button"
+             className="btn btn-primary"
+             // Disabled while minting, or a double click mints two tokens.
+-            disabled={!tokenName.trim() || minting}
++            disabled={minting}
+             aria-busy={minting}
+             onClick={() => {
+               setMinting(true);
