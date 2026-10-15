@@ -1,14 +1,10 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -54,4 +54,5 @@
- } from "./config";
- import { verifyIdToken, verifySessionCookie } from "./lib/auth";
+@@ -126,2 +126,3 @@
+ import type { Principal } from "./lib/auth";
 +import { e2eThumbGate } from "./lib/e2eThumbGate";
- import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
  import {
-@@ -640,4 +641,5 @@
-   );
+@@ -642,2 +643,3 @@
 
 +  await e2eThumbGate("thumb-after-upload", docId);
-   let candidateStale: StaleThumbs[] = [];
-   const outcome = await db().runTransaction(async (tx) => {
+   const receipt = freshReceiptId();

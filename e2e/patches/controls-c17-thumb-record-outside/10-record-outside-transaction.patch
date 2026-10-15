@@ -1,26 +1,22 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -115,5 +115,4 @@
+@@ -116,5 +116,4 @@
    thumbSlots,
    type ThumbKind,
 -  type StaleThumbs,
  } from "./lib/thumbs";
  import {
-@@ -640,30 +639,10 @@
+@@ -641,28 +640,10 @@
    );
 
--  let candidateStale: StaleThumbs[] = [];
+-  const receipt = freshReceiptId();
 -  const outcome = await db().runTransaction(async (tx) => {
 -    const fresh = await tx.get(docRef);
+-    // A later publication may replace this upload's current key before the
+-    // native SDK retries. Keep its bounded result, including original cleanup.
+-    const committed = readReceipt<{ stored: true; moved: false; stale: StaleThumbs[] }>(fresh, receipt);
+-    if (committed.found) return committed.result;
 -    const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
--    const held = readThumb(d?.thumb);
--    // The SDK retries the callback if a committed response is lost. This
--    // request's unpredictable key proves its earlier write; do not treat it
--    // as a competing winner and delete the JPEGs it now references.
--    if (held?.versionId === versionId && held.rev === THUMB_REVISION &&
--        (kind === "cover" ? held.cover === key : held.slides?.key === key && held.slides.count === count)) {
--      return { stored: true, moved: false, stale: candidateStale };
--    }
 -    // Uploading bytes does not reserve authority: a sharing change may have
 -    // removed this editor while Storage was accepting the candidate images.
 -    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
@@ -31,10 +27,12 @@
 -    }
 -    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
 -    if (!decision.write) return { stored: false, moved: false, stale: [] };
--    candidateStale = decision.stale;
+-    const result = { stored: true as const, moved: false as const, stale: decision.stale };
+-    recordReceipt(tx, docRef, fresh, receipt, result);
 -    tx.update(docRef, { thumb: decision.thumb });
--    return { stored: true, moved: false, stale: decision.stale };
+-    return result;
 -  });
+-  if (outcome.stored) await clearReceipt(docRef, receipt);
 +  // e2e control: decide from the pre-upload snapshot and write outside the transaction.
 +  const decided = nextThumb(readThumb(data.thumb), versionId, kind, key, count, THUMB_REVISION);
 +  if (decided.write) await docRef.update({ thumb: decided.thumb });

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK thumb later: the newer thumbnail JPEG remains readable",
+  "what": "Make obsolete thumbnail cleanup delete the later current version JPEGs.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK thumb later: the newer thumbnail JPEG remains readable"
+  }
+}

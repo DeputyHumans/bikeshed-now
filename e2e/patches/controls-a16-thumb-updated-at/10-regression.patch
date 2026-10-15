@@ -1,9 +1,7 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -663,5 +663,5 @@
-     if (!decision.write) return { stored: false, moved: false, stale: [] };
-     candidateStale = decision.stale;
+@@ -662,3 +662,3 @@
+     recordReceipt(tx, docRef, fresh, receipt, result);
 -    tx.update(docRef, { thumb: decision.thumb });
 +    tx.update(docRef, { thumb: decision.thumb, updatedAt: now() });
-     return { stored: true, moved: false, stale: decision.stale };
-   });
+     return result;
