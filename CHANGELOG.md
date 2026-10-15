@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Retain the thumbnail upload gate and existing timestamp, authority and nontransactional-write controls after acknowledgement reconciliation, with their original assertions unchanged.
+
 - Refresh publication race and cleanup control patches after acknowledgement recovery changes, preserving their mutations and amplifier composition.
 
 - Give the projection-failure E2E case the same bounded setup budget as the rest of its area, so its session setup reaches the product before the response and storage assertions run.

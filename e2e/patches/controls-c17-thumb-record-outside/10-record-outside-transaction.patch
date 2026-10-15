@@ -1,12 +1,26 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -638,22 +638,12 @@
-     ),
+@@ -115,5 +115,4 @@
+   thumbSlots,
+   type ThumbKind,
+-  type StaleThumbs,
+ } from "./lib/thumbs";
+ import {
+@@ -640,30 +639,10 @@
    );
- 
+
+-  let candidateStale: StaleThumbs[] = [];
 -  const outcome = await db().runTransaction(async (tx) => {
 -    const fresh = await tx.get(docRef);
 -    const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+-    const held = readThumb(d?.thumb);
+-    // The SDK retries the callback if a committed response is lost. This
+-    // request's unpredictable key proves its earlier write; do not treat it
+-    // as a competing winner and delete the JPEGs it now references.
+-    if (held?.versionId === versionId && held.rev === THUMB_REVISION &&
+-        (kind === "cover" ? held.cover === key : held.slides?.key === key && held.slides.count === count)) {
+-      return { stored: true, moved: false, stale: candidateStale };
+-    }
 -    // Uploading bytes does not reserve authority: a sharing change may have
 -    // removed this editor while Storage was accepting the candidate images.
 -    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
@@ -17,6 +31,7 @@
 -    }
 -    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
 -    if (!decision.write) return { stored: false, moved: false, stale: [] };
+-    candidateStale = decision.stale;
 -    tx.update(docRef, { thumb: decision.thumb });
 -    return { stored: true, moved: false, stale: decision.stale };
 -  });
@@ -26,6 +41,5 @@
 +  const outcome = decided.write
 +    ? { stored: true, moved: false, stale: decided.stale, denied: undefined as DocAclData | undefined }
 +    : { stored: false, moved: false, stale: [] as { versionId: string; key?: string }[], denied: undefined as DocAclData | undefined };
- 
+
    if (!outcome.stored) {
-     await bucket()

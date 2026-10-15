@@ -1,18 +1,14 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -53,6 +53,7 @@
-   signInHint,
+@@ -54,4 +54,5 @@
  } from "./config";
  import { verifyIdToken, verifySessionCookie } from "./lib/auth";
 +import { e2eThumbGate } from "./lib/e2eThumbGate";
  import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
  import {
-   canEdit,
-@@ -638,6 +639,7 @@
-     ),
+@@ -640,4 +641,5 @@
    );
 
 +  await e2eThumbGate("thumb-after-upload", docId);
+   let candidateStale: StaleThumbs[] = [];
    const outcome = await db().runTransaction(async (tx) => {
-     const fresh = await tx.get(docRef);
-     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
