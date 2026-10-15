@@ -28,7 +28,7 @@ import { assertUsableEmails, normalizeEmail } from "./lib/email.mjs";
 import { ROLES } from "./lib/membership.mjs";
 import { persistOperatorAccess } from "./lib/operator-writes.mjs";
 import { syncPresenceAccess } from "./lib/presence.mjs";
-import { FieldValue, getDb, getProjectId } from "./lib/firebase.mjs";
+import { closeAdmin, FieldValue, getDb, getProjectId } from "./lib/firebase.mjs";
 
 async function main() {
 const USAGE = `set-access.mjs — grant or revoke access to one document
@@ -119,4 +119,4 @@ never removable.`;
   }
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

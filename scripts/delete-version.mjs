@@ -33,6 +33,7 @@ import { finishOperatorReplacement } from "./lib/operator-writes.mjs";
 import {
   getBucket,
   getBucketName,
+  closeAdmin,
   getDb,
   getProjectId,
 } from "./lib/firebase.mjs";
@@ -318,4 +319,4 @@ async function main() {
   console.log(`withdrew ${docId}/${doomed}; currentVersion is now ${repoint}.`);
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

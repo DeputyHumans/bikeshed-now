@@ -13717,6 +13717,23 @@
         "controls-a20-update-link-proof"
       ],
       "note": "B6 A20.6 exposed the supplied MCP key being dropped before the transactional write check. Forward and compare it with the current token without storing a grant; preserve real-editor-only upload authority through revocation. Current-key acceptance, token rotation during upload and retry, and revoked-editor fallback are covered. This records a discovered regression, not a new canonical coverage item or closure."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "operator-realtime-handle-lifecycle"
+      ],
+      "scope": "local operator process completion; fresh E2E pending",
+      "tests": [
+        "29 operator/config/withdrawal tests pass",
+        "Installed Admin SDK child establishes a local TCP connection and exits naturally after awaited cleanup",
+        "Two isolated regressions fail assertions; omitted SDK cleanup reproduces a process timeout"
+      ],
+      "evidence": "e2e/.out/operator-exit-controls-AM7MKs/proof.json; e2e/.out/unit-controls-expiry/operator-exit-red.log",
+      "controls": [
+        "controls-smoke-operator-exit"
+      ],
+      "note": "B7 smoke reproduced a completed publish retaining its live RTDB connection. Commands now close only their owned Admin app in finally after durable work and mirror writes. Error ordering is covered for publish, set-access, delete-version and teardown. No forced harness exit or E2E closure."
     }
   ]
 }

@@ -111,7 +111,7 @@ test("clients: the CLI runs against the stack origin: list --json shows both doc
 
 test("clients: the operator script publishes a sample into this stack", async () => {
   const r = await publishOperator(target, { sample: "bikeshed-tour", owner: ctx.owner.account });
-  assert.equal(r.code, 0, r.stderr || r.stdout);
+  assert.equal(r.code, 0, `operator publish exits after its completed writes: ${r.stderr || r.stdout}`);
   assert.deepEqual(r.mirror, { presence: true, edit: true, expectEdit: true, ok: true }, "operator publish installs the owner's presence and edit mirrors");
   const doc = await readDoc(target, `docs/${r.docId}`);
   assert.equal(doc.ownerEmail, ctx.owner.account.email);

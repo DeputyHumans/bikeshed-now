@@ -1154,6 +1154,9 @@ functions/src/
 `scripts/` is Node ESM using `node:util parseArgs` and `firebase-admin`.
 Admin is initialized **lazily**, so every `--dry-run` path runs without
 credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
+Publishing, access, withdrawal and teardown await their owned Admin app's
+cleanup on success or failure; the realtime connection must not keep a completed
+command alive. A dry run initializes no client and its cleanup is a no-op.
 
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows

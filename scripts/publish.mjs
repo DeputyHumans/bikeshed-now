@@ -36,6 +36,7 @@ import {
   FieldValue,
   getBucket,
   getBucketName,
+  closeAdmin,
   getDb,
   getProjectId,
 } from "./lib/firebase.mjs";
@@ -293,4 +294,4 @@ function guessEntry(files) {
   return "index.html";
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

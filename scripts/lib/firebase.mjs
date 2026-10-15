@@ -144,4 +144,12 @@ export function getRtdb(projectOverride) {
   }
 }
 
+/** Release only this module's app after an operator finishes its awaited work. */
+export async function closeAdmin() {
+  if (!_app) return;
+  const app = _app;
+  _app = null;
+  await app.delete();
+}
+
 export const FieldValue = admin.firestore.FieldValue;
