@@ -1,0 +1,7 @@
+--- a/scripts/set-access.mjs
++++ b/scripts/set-access.mjs
+@@ -107,3 +107,3 @@
+   if (add.length || remove.length) {
+-    await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
++    if (add.length) await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
+     console.log(`  updated docs/${docId} (every grant and membership field + presence mirror).`);

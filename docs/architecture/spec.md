@@ -1194,7 +1194,13 @@ real run; the CLI authenticates with a personal access token over HTTPS.
 
 Operator access deltas use the same transaction boundary as endpoints: the
 current document, parent and team inputs are read together before grants and
-membership are written. Operator publishing uploads to a unique immutable
+membership are written. `set-access` awaits the presence and editing mirror
+refresh attempt before completing, for both grants and removals; the delivery
+limitation in §16 still applies. Local verification on a healthy configured
+transport exercises the actual operator command and the grantee's content,
+presence and live-log access after each transition.
+
+Operator publishing uploads to a unique immutable
 bundle with create-only Storage writes, then selects and creates a version in
 a Firestore transaction. A content hash matching the current version returns that version;
 restoring an older version's bytes creates a new version, preserving history;

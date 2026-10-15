@@ -34,6 +34,8 @@
  *          server stores publicEdit false for a private document
  *          (index.ts setVisibility), so the oracle is: absent while private,
  *          and making a document private withdraws open editing
+ *   A13.9  the local operator grants and removes an editor; Firestore, both
+ *          live mirrors and the grantee's actual content/RTDB gates agree
  *
  * Tiers. Sharing goes through lib/grant.mjs (share/unshare), which on
  * production is the operator's script and sends nothing. A13.1 adds a person
@@ -85,6 +87,8 @@ import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.m
 import { unrecoveredListenerLoss } from "../../lib/listener-loss.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
+import { runOperator } from "../../lib/operator.mjs";
+import { liveLogPath } from "../../lib/live-log.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -892,4 +896,45 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
   const emptied = await posting(o, "/visibility", () => date.fill(""));
   assert.equal(emptied.status, 200);
   assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "an emptied field clears the expiry and nothing else");
+});
+
+// --- A13.9 --------------------------------------------------------------------
+
+scenario("A13.9 local operator set-access grants and revokes an editor in Firestore and both RTDB mirrors, changing their actual reads and writes", {
+  tiers: ["local"], needs: ["operator-scripts", "rtdb-rules"], timeoutMs: 240_000,
+}, async (ctx) => {
+  const { owner, editor } = await people(["owner", "editor"]);
+  const { docId } = await publishDoc(owner, "operator-access");
+  await rulesEnforced(ctx);
+  const key = emailKey(editor.account.email), db = rtdbAs(target, { idToken: editor.idToken, http: ctx.http({ actor: "operator-grantee-rtdb" }) });
+  const logPath = await liveLogPath(target, docId), epoch = logPath.split("/").at(-1);
+  const peerPath = `status/${docId}/peers/operator-${rand4()}`;
+  const peer = { uid: editor.uid, email: editor.account.email.toLowerCase(), mode: "edit", liveEpoch: epoch, lastChanged: { ".sv": "timestamp" } };
+  const mirrors = async () => ({ presence: await rtdbGet(target, `presenceAccess/${docId}/${key}`), edit: await rtdbGet(target, `editAccess/${docId}/${key}`) });
+  const operate = async (action) => {
+    const result = await runOperator(target, "set-access.mjs", ["--doc", docId, action, editor.account.email, "--role", "editor", "--account", owner.account.email, "--project", target.projectId]);
+    assert.equal(result.code, 0, `operator ${action} completes before access is observed`);
+    ctx.ev.json(`operator-${action.slice(2)}`, { code: result.code, signal: result.signal, ms: result.ms });
+  };
+  assert.equal(await contentStatus(editor.http, docId), 404, "the future editor cannot read before the operator grant");
+  assert.equal(verdictOf(await db.put(`${logPath}/before`, "AAA="), "log before grant"), "DENY", "the future editor cannot write before the operator grant");
+  await operate("--add");
+  const granted = await readDoc(target, `docs/${docId}`);
+  assert.ok(granted.members.includes(editor.account.email) && granted.editorMembers.includes(editor.account.email) && granted.editors.includes(editor.account.email), "operator grant stores the editor and effective membership");
+  assert.deepEqual(await mirrors(), { presence: true, edit: true }, "operator grant installs both member mirrors");
+  assert.equal(await contentStatus(editor.http, docId), 200, "operator grant permits the editor's content read");
+  assert.equal(verdictOf(await db.put(peerPath, peer), "peer after grant"), "ALLOW", "operator grant permits the editor's own presence write");
+  assert.equal(verdictOf(await db.put(`${logPath}/granted`, "AAA="), "log after grant"), "ALLOW", "operator grant permits the editor's live append");
+  assert.equal(verdictOf(await db.get(logPath), "log read after grant"), "ALLOW", "operator grant permits shared draft reads");
+  await operate("--remove");
+  const revoked = await readDoc(target, `docs/${docId}`);
+  assert.ok(!revoked.members.includes(editor.account.email) && !revoked.editorMembers.includes(editor.account.email) && !revoked.editors.includes(editor.account.email), "operator revoke removes direct and effective membership");
+  assert.deepEqual(await mirrors(), { presence: null, edit: null }, "operator revoke removes both member mirrors");
+  assert.equal(await contentStatus(editor.http, docId), 404, "operator revoke refuses the former editor's content read");
+  assert.equal(verdictOf(await db.get(logPath), "log read after revoke"), "DENY", "operator revoke refuses shared draft reads");
+  assert.equal(verdictOf(await db.put(`${logPath}/revoked`, "AAA="), "log after revoke"), "DENY", "operator revoke refuses the former editor's live append");
+  assert.equal(verdictOf(await db.put(peerPath, peer), "peer after revoke"), "DENY", "operator revoke refuses new presence updates");
+  assert.equal(verdictOf(await db.delete(peerPath), "departed peer cleanup"), "ALLOW", "the revoked editor can remove only their departed session");
+  const ownerKey = emailKey(owner.account.email);
+  assert.deepEqual({ presence: await rtdbGet(target, `presenceAccess/${docId}/${ownerKey}`), edit: await rtdbGet(target, `editAccess/${docId}/${ownerKey}`) }, { presence: true, edit: true }, "operator grant and revoke retain the owner's mirrors");
 });
