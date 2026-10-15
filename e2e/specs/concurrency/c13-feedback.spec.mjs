@@ -568,6 +568,19 @@ scenario("C13 judge (gated): the author holds at most twenty pending suggestions
   timeoutMs: JUDGE_MS,
 }, async (ctx) => c13Judge(ctx, "C13 gated"));
 
+// A control runs one selected case. Keep its staging and oracle together so
+// filtering out the work case cannot turn this regression into INCONCLUSIVE.
+scenario("C13 regression: gated concurrent requests cannot exceed the pending limit", {
+  tiers: LOCAL,
+  needs: AMPLIFY,
+  n: [2],
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
+}, async (ctx) => {
+  await c13Work(ctx, "C13 isolated regression", "gated");
+  c13Judge(ctx, "C13 isolated regression");
+});
+
 scenario("C13-serial: the same N suggest_edit calls one after another; the first makes the twentieth suggestion, every later one is refused with the twenty-pending message, and the author holds exactly twenty", {
   tiers: BOTH,
   n: N,
