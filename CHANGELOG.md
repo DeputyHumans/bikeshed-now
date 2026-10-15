@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Run a frozen complete control inventory through at most three ordinary harness workers, preserving admission gates and importing exact pair artifacts into one command report; reject partial, duplicated, stale or changed-source evidence.
+
 - Bind local E2E acceptance to a frozen source fingerprint, exact assertion failures and complete control ledgers; prepare commands and import actual run evidence into reviewable proposals.
 
 - Offer explicit draft reload when another editor publishes, retaining the stale editor's unsaved local text until that choice. Add a controlled co-editor publication case at every concurrency size and inverse controls for recovery and automatic remounting.
