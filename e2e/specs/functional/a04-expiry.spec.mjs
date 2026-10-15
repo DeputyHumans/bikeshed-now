@@ -586,11 +586,10 @@ scenario("A4.2 a past date and one beyond a hundred years are each refused with 
 
 scenario("A4.3 POST /visibility with the body SPEC §2 documents (no expiresAt) keeps the expiry the owner set", {
   tiers: ["local", "prod"],
-  defect: "S25",
   timeoutMs: A43_TIMEOUT_MS,
 }, judged(A43_BODY_MS, async (ctx) => {
   // Setup, not the oracle: a failure before the oracle is a precondition (it
-  // FAILS the case), never S25's TODO. The document stays private throughout,
+  // FAILS the case). The document stays private throughout,
   // so the case opens no window and has nothing to close.
   const accounts = await castFor(ctx, ["owner"]);
   const O = await sessionFor(ctx, accounts[0]);

@@ -2,7 +2,7 @@
 // The server-maintained presence access mirror in RTDB (SPEC §1.4a, §16).
 
 import * as admin from "firebase-admin";
-import { opensEditingToAnyAccount } from "./acl";
+import { expiryMs, opensEditingToAnyAccount } from "./acl";
 
 /**
  * Why this exists
@@ -100,8 +100,8 @@ export async function syncPresenceAccess(
     if (!snap.exists || !snap.updateTime) return;
     const data = snap.data() || {};
     const revision = `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`;
-    const keyed = (list: unknown): Record<string, true | string> => {
-      const out: Record<string, true | string> = { __revision: revision };
+    const keyed = (list: unknown): Record<string, true | string | number> => {
+      const out: Record<string, true | string | number> = { __revision: revision, __expiresAt: expiryMs(data) ?? 0, __owner: String(data.ownerEmail ?? "").toLowerCase() };
       for (const member of Array.isArray(list) ? list : []) {
         if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
       }
@@ -109,7 +109,7 @@ export async function syncPresenceAccess(
     };
     const edit = keyed(data.editorMembers);
     if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
-    const replace = async (path: string, next: Record<string, true | string>) => {
+    const replace = async (path: string, next: Record<string, true | string | number>) => {
       await db.ref(path).transaction((current) => {
         const prior = current?.__revision;
         // Legacy nodes have no fence. Reject only a validated newer revision;

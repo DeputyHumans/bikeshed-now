@@ -71,7 +71,7 @@ describe("realtime database rules", () => {
 
   it("a member of the document may read presence", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(get(ref(db, "status/doc1")));
+    await assertSucceeds(get(ref(db, "status/doc1/peers")));
   });
 
   it("a signed-in stranger reads nothing, which is the whole point", async () => {
@@ -176,6 +176,50 @@ describe("realtime database rules", () => {
     });
     const db = verified(env, OTHER).database();
     await assertSucceeds(set(ref(db, "status/doc2/y/e1"), "AQIDBA=="));
+  });
+
+  it("a viewer reads presence but cannot read the unpublished shared document", async () => {
+    const db = verified(env, OTHER).database();
+    await assertSucceeds(get(ref(db, "status/doc1/peers")));
+    await assertFails(get(ref(db, "status/doc1/y")));
+    await assertFails(get(ref(db, "status/doc1")), "a parent read cannot bypass the draft boundary");
+  });
+
+  it("a public open editor reads the shared log without learning peer presence", async () => {
+    const db = verified(env, STRANGER).database();
+    await assertSucceeds(set(ref(db, "status/doc2/y/stranger"), "AQIDBA=="));
+    await assertSucceeds(get(ref(db, "status/doc2/y")));
+    await assertFails(get(ref(db, "status/doc2/peers")));
+    await assertFails(get(ref(db, "status/doc2")));
+  });
+
+  it("the server clock freezes the log at expiry; only its owner still reads, and clearing restores access", async () => {
+    const expiry = Date.now() + 2_000;
+    const maps = { __revision: "000000000001:000000000", __expiresAt: expiry, __owner: MEMBER.email, [key(MEMBER.email)]: true, [key(OTHER.email)]: true };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), "presenceAccess/expiring"), maps);
+      await set(ref(ctx.database(), "editAccess/expiring"), { ...maps, "*": true });
+    });
+    const ownerDb = verified(env, MEMBER).database();
+    const editorDb = verified(env, OTHER).database();
+    const publicDb = verified(env, STRANGER).database();
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/before"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y")));
+    await assertSucceeds(get(ref(publicDb, "status/expiring/y")));
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, expiry + 100 - Date.now())));
+    await assertFails(set(ref(editorDb, "status/expiring/y/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y/after"), "AQIDBA=="));
+    await assertFails(set(ref(publicDb, "status/expiring/y/after"), "AQIDBA=="));
+    await assertFails(get(ref(editorDb, "status/expiring/y")));
+    await assertFails(get(ref(editorDb, "status/expiring/peers")));
+    await assertFails(get(ref(publicDb, "status/expiring/y")));
+    await assertSucceeds(get(ref(ownerDb, "status/expiring/y")));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), "presenceAccess/expiring/__expiresAt"), 0);
+      await set(ref(ctx.database(), "editAccess/expiring/__expiresAt"), 0);
+    });
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/restored"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y")));
   });
 
   it("a stranger may neither read nor write the shared document", async () => {

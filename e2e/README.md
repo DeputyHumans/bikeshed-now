@@ -3383,19 +3383,21 @@ fetchImpl = null})` → `{docId, members, editorMembers, update, status}`
 does it:
 
 - It reads `docs/<id>` and its `updateTime` through Admin. Each node carries
-  `__revision` in the product's timestamp format. It reads `editAccess/<id>`
+  `__revision` in the product's timestamp format, `__expiresAt` as an epoch
+  deadline (zero means no expiry), and `__owner` as a normalized email. It reads `editAccess/<id>`
   with an ETag, then conditionally replaces it; `presenceAccess/<id>` follows.
   A newer revision is retained. An ETag conflict retries up to five times.
 - `mirrorUpdate(docId, {members, editorMembers})` builds the boolean email
-  maps (lower case, dots replaced by commas). `writeMirror` adds the revision
-  and the open-edit `*` key only for a public document with public editing enabled.
+  maps (lower case, dots replaced by commas). `writeMirror` adds the revision,
+  owner, deadline, and the open-edit `*` key only for a public document with public editing enabled.
 - Requests use `createHttp`, the database admin credential, isolation checks
   and a redacted trace row per request. No database-root read or write occurs.
 - `mirrorWriteVerdict(req, {target, docs, accounts, docId = null})` →
   `{allow, rule[, reason]}` guards run-owned document nodes and run-account
   grants. Its internal `publicEdit` option permits the wildcard only when the
   source document enables it. GET and conditional PUT are the only methods;
-  PUT requires a quoted ETag and valid revision. Any refusal is `E2E_GUARD`.
+  PUT requires a quoted ETag, valid revision and deadline, and a normalized
+  owner who belongs to this run. Any refusal is `E2E_GUARD`.
   All intended grants are checked before credentials are obtained.
 - `E2E_MIRROR` covers missing records/revisions, malformed membership, missing
   ETags, unexpected responses or no answer, and exhausted conflict retries.

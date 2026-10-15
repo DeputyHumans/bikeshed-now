@@ -1,0 +1,13 @@
+{
+  "oracle": "Expired rename and move must refuse with 409",
+  "what": "Expired rename and move must refuse with 409",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-http.spec.mjs",
+    "case": "A2.exp-rename-move rename and move of an expired document are refused with 409, as every other write is",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "expired rename/move:[\\s\\S]*want 409, got 200"
+  }
+}

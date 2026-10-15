@@ -49,7 +49,7 @@
  * draft, its read-back, the commit (v2), the upload (v3), rename, move, the
  * owner-only settings, the thumbnail on whatever is current, and /visibility
  * last, because an owner's POST /visibility without `expiresAt` clears an
- * expiry (S25) and the expired rows must stay expired until the end.
+ * expiry in older versions (S25); the expired rows stay expired until the end.
  *
  * Every client here throws E2E_STACK_CUTOFF for Hosting's cut-off 504
  * (`cutoffError`), and every case declares inconclusiveOnStackTimeout: a
@@ -670,7 +670,6 @@ for (const [key, name] of Object.entries(ROW_NAMES)) {
 scenario("A2.exp-rename-move rename and move of an expired document are refused with 409, as every other write is", {
   tiers: ["local", "prod"],
   ...STALLS,
-  defect: "X-a02-matrix-http-1",
   timeoutMs: CASE_MS,
 }, async (ctx) => {
   const bad = [];

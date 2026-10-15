@@ -37,7 +37,11 @@
 // that on `presenceAccess` would let a read-only member push edits into an
 // editor's browser, which that editor then autosaves and publishes: read
 // escalated to write through a channel nobody would think to audit. Presence is
-// gated on "may read"; document state is gated on "may edit".
+// gated on "may read"; document state reads and writes are gated on "may edit".
+// The server mirrors __expiresAt (epoch ms, zero means no expiry) and __owner.
+// At expiry only the owner may read; nobody may change the CRDT. Legacy nodes
+// without metadata keep their previous behavior until their next mirror sync.
+// The public wildcard admits /y only, never another reader's presence.
 //
 // emailKey = the lowercased address with every '.' replaced by ','. Dots are
 // illegal in RTDB keys; the four other illegal characters ($ # [ ] /) are
@@ -50,11 +54,10 @@
 
     "status": {
       "$docId": {
-        ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
-
         "peers": {
+          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true && ((!root.child('presenceAccess').child($docId).child('__expiresAt').exists() || (root.child('presenceAccess').child($docId).child('__expiresAt').isNumber() && (root.child('presenceAccess').child($docId).child('__expiresAt').val() == 0 || root.child('presenceAccess').child($docId).child('__expiresAt').val() > now))) || root.child('presenceAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
           "$uid": {
-            ".write": "auth != null && auth.uid == $uid && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && auth.uid == $uid && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true && ((!root.child('presenceAccess').child($docId).child('__expiresAt').exists() || (root.child('presenceAccess').child($docId).child('__expiresAt').isNumber() && (root.child('presenceAccess').child($docId).child('__expiresAt').val() == 0 || root.child('presenceAccess').child($docId).child('__expiresAt').val() > now))) || root.child('presenceAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
             ".validate": "newData.hasChildren(['email', 'mode', 'lastChanged']) && newData.child('email').val() == auth.token.email.toLowerCase() && newData.child('mode').isString() && (newData.child('mode').val() == 'view' || newData.child('mode').val() == 'edit') && newData.child('lastChanged').val() == now",
 
             // Every child needs its own rule: `$other` below matches ANY key
@@ -93,8 +96,9 @@
         // merged. Deleting a log entry cannot lose a document: every peer has
         // already applied it, and the durable copy is the saved draft.
         "y": {
+          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
           "$entry": {
-            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() || root.child('editAccess').child($docId).child('*').exists())",
+            ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now)))",
             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
           }
         },

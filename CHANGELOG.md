@@ -22,6 +22,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   names free of document identifiers, and apply the saved default marking to
   browser, MCP and CLI publications. Explicit off remains an override.
 
+- Expiry freezes document rename, move and realtime draft writes; only the
+  owner retains realtime reads after expiry. Visibility changes preserve an
+  omitted expiry. Shared draft reads require editor access, while public open
+  editors can join the existing log without seeing members' peer presence.
+
 - Suggestion replacements reject Unicode line and paragraph separators and C1
   controls on both creation and revision, matching the single-line contract.
 - Dialogs keep focus when controls become disabled, the slide overview traps

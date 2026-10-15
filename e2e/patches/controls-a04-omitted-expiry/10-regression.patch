@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -946,7 +946,7 @@
+     badRequest(res, 'visibility must be "private", "unlisted" or "public"');
+     return;
+   }
+-  const changesExpiry = Object.prototype.hasOwnProperty.call(body, "expiresAt");
++  const changesExpiry = true;
+   const expiry = parseExpiry(body?.expiresAt);
+   if ("error" in expiry) {
+     badRequest(res, expiry.error);

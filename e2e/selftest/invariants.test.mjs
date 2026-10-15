@@ -146,6 +146,10 @@ test("I14: the mirror is the membership, and a revoked write is denied", () => {
   fails(checkI14({ members, editorMembers: editors, presenceAccess: presence, editAccess: edit, revokedWrites: [{ email: "r@x.io", verdict: "ALLOW" }] }), /r@x\.io was revoked, and a y write answered ALLOW/);
   holds(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __revision: "000000000001:000000002" }, editAccess: edit }));
   fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __revision: true }, editAccess: edit }), /invalid revision fence/);
+  holds(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __expiresAt: 0, __owner: "o@x.io" }, editAccess: edit }));
+  for (const bad of [-1, "never", true, NaN]) fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __expiresAt: bad }, editAccess: edit }), /invalid expiry deadline/);
+  for (const bad of ["not-an-email", "O@x.io", true]) fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, __owner: bad }, editAccess: edit }), /invalid owner/);
+
   fails(checkI14({ members, editorMembers: editors, presenceAccess: { ...presence, unknown: true }, editAccess: edit }), /extra unknown/);
   fails(checkI14({ members, editorMembers: editors, presenceAccess: presence, editAccess: { ...edit, "o@x,io": false } }), /not a true access grant/);
 });

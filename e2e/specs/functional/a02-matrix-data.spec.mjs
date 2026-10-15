@@ -402,11 +402,11 @@ const C17 = {
   PEU: ["DENY", "SPEC §16: \"An unlisted one never does\" carry *; its link holders edit through /draft"],
 };
 
-/** c18: read status/{d}/y, gated today on presenceAccess (database.rules.json:56). */
+/** c18: shared draft reads require editAccess, independently of peer presence (SPEC §16). */
 const C18 = {
   O: ["ALLOW", "SPEC §16: the owner edits live"],
-  V: ["DENY", "S26: GET /draft is editor-gated (SPEC §2), and the rules say document state is gated on may-edit", "S26"],
-  S: ["DENY", "S26: a suggester \"never joins the shared log\" (SPEC §16); GET /draft is editor-gated (SPEC §2)", "S26"],
+  V: ["DENY", "S26: GET /draft is editor-gated (SPEC §2), and the rules say document state is gated on may-edit"],
+  S: ["DENY", "S26: a suggester \"never joins the shared log\" (SPEC §16); GET /draft is editor-gated (SPEC §2)"],
   E: ["ALLOW", "SPEC §16: an editor edits live"],
   A: ["ALLOW", "SPEC §16: an approver edits live"],
   X: ["DENY", "SPEC §16: presence and document state are for members"],
@@ -414,7 +414,7 @@ const C18 = {
   LK: ["DENY", "SPEC §16 not built: \"live co-editing through an unlisted link\""],
   LKw: ["DENY", "SPEC §16: presence is gated on a verified member"],
   G: ["DENY", "SPEC §16 not built: \"presence for non-members · live co-editing through an unlisted link\""],
-  PE: ["ALLOW", "S27: SPEC §16 lets any verified account write the log of a public open-editing document; a writer that cannot read it seeds a second copy", "S27"],
+  PE: ["ALLOW", "S27: SPEC §16 lets any verified account write the log of a public open-editing document; a writer that cannot read it seeds a second copy"],
   PEU: ["DENY", "SPEC §16: an unlisted document's link holders edit through /draft, not the live log"],
 };
 
@@ -427,6 +427,8 @@ const verb = { ALLOW: "may", DENY: "may not" };
  * the load if one drifts.
  */
 const CONTROL_TARGETS = Object.freeze([
+  "A2.c18.V a viewer may not read the live log status/{doc}/y with their own ID token: DENY",
+  "A2.c18.PE a non-member on a public open-editing document may read the live log status/{doc}/y with their own ID token: ALLOW",
   "A2.c6.X a signed-in stranger may not create an annotation on v1 through the Firestore rules with their own credential: DENY",
   "A2.c7.X a signed-in stranger may not create a suggestion through POST /suggestion: 404",
   "A2.c8.E an editor may not claim, accept and reject a suggestion in the app: 403",
@@ -743,16 +745,16 @@ for (const who of ["O", "E"]) {
 }
 
 /**
- * c6 on an expired document. SPEC §17: "Expiry is not in the security rules,
+ * c6 on an expired document. SPEC §17: "Expiry is not in the Firestore rules,
  * and cannot be … a member still sees the row, its title and its comments";
- * its ten enforcement points are all functions, none of them a rules path. So
+ * annotation writes remain deliberately independent of content expiry. So
  * the rules still commit a direct annotation, for the editor and the owner
  * alike. That this sits uneasily with "Writing is refused for everyone" is
  * reported for a decision (I), not tagged as a defect.
  */
 for (const who of ["E", "O"]) {
   cell(`A2.c6.Exp-${who} ${who === "O" ? "the owner" : "an editor"} may create an annotation on an expired document through the Firestore rules, which do not see expiry: ALLOW`, { timeoutMs: CASE_MS }, async (ctx) => {
-    ctx.step("expected ALLOW: SPEC §17 \"Expiry is not in the security rules, and cannot be\"; the enforcement list (isExpired in lib/acl.ts) names functions only");
+    ctx.step("expected ALLOW: SPEC §17 \"Expiry is not in the Firestore rules\"; the enforcement list (isExpired in lib/acl.ts) names functions only");
     const as = (w) => (who === "O" ? { uid: w.owner.uid, email: w.ownerAcct.email.toLowerCase(), idToken: w.owner.idToken } : { uid: w.actor.uid, email: w.actor.email, idToken: w.actor.idToken });
     const w = await expiredWorld(ctx);
     const me = as(w);
@@ -766,7 +768,7 @@ for (const who of ["E", "O"]) {
   });
 }
 
-cell("A2.c17.Exp-E an editor may not write to the live log of an expired document: DENY", { timeoutMs: CASE_MS, defect: "X-a02-matrix-data-2" }, async (ctx) => {
+cell("A2.c17.Exp-E an editor may not write to the live log of an expired document: DENY", { timeoutMs: CASE_MS }, async (ctx) => {
   await rulesEnforced(ctx);
   ctx.step("expected DENY: SPEC §17 \"An expired document is read-only\" and \"Writing is refused for everyone\"; the log replays into the draft on the next open (SPEC §6b)");
   const w = await expiredWorld(ctx, async ({ docId, actor }) => {
@@ -782,7 +784,7 @@ cell("A2.c17.Exp-E an editor may not write to the live log of an expired documen
   assert.equal(stored, null, "c17 Exp-E: nothing was written");
 });
 
-cell("A2.c17.Exp-O the owner may not write to the live log of an expired document: DENY", { timeoutMs: CASE_MS, defect: "X-a02-matrix-data-2" }, async (ctx) => {
+cell("A2.c17.Exp-O the owner may not write to the live log of an expired document: DENY", { timeoutMs: CASE_MS }, async (ctx) => {
   await rulesEnforced(ctx);
   ctx.step("expected DENY: SPEC §17 \"Writing is refused for everyone, the owner included — an expired document is frozen\"");
   const w = await expiredWorld(ctx, async ({ owner, docId }) => {
@@ -809,7 +811,7 @@ async function seedLogBeforeExpiry(ctx, { owner, docId, actor }, reader) {
   return entry;
 }
 
-cell("A2.c18.Exp-E an editor may not read the live log of an expired document: DENY", { timeoutMs: CASE_MS, defect: "X-a02-matrix-data-2" }, async (ctx) => {
+cell("A2.c18.Exp-E an editor may not read the live log of an expired document: DENY", { timeoutMs: CASE_MS }, async (ctx) => {
   await rulesEnforced(ctx);
   ctx.step("expected DENY: SPEC §17 \"visible only to its owner\" and \"what they cannot get is the document\"; the log is unsaved document content");
   const w = await expiredWorld(ctx, (w0) => seedLogBeforeExpiry(ctx, w0, "E"));

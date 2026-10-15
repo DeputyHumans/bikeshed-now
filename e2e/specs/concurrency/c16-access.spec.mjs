@@ -68,8 +68,11 @@ const sorted = (xs) => [...xs].sort();
 const keysOf = (o) => {
   if (!o || typeof o !== "object") return [];
   if (o.__revision !== undefined) assert.match(o.__revision, /^\d{12}:\d{9}$/, "the reserved mirror revision is a timestamp fence");
-  for (const [key, value] of Object.entries(o)) if (key !== "__revision") assert.equal(value, true, `${key} is an access grant`);
-  return Object.keys(o).filter((key) => key !== "__revision").sort();
+  if (o.__expiresAt !== undefined) assert.ok(Number.isFinite(o.__expiresAt) && o.__expiresAt >= 0, "the reserved expiry is a nonnegative epoch deadline");
+  if (o.__owner !== undefined) assert.ok(typeof o.__owner === "string" && o.__owner === o.__owner.toLowerCase() && /^[^@\s]+@[^@\s]+$/.test(o.__owner), "the reserved owner is a normalized email");
+  const metadata = ["__revision", "__expiresAt", "__owner"];
+  for (const [key, value] of Object.entries(o)) if (!metadata.includes(key)) assert.equal(value, true, `${key} is an access grant`);
+  return Object.keys(o).filter((key) => !metadata.includes(key)).sort();
 };
 const asSet = (keys) => Object.fromEntries(keys.map((k) => [k, true]));
 const slug = (s) => String(s).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();

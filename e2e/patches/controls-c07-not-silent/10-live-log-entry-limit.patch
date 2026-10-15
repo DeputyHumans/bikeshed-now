@@ -1,9 +1,9 @@
 --- a/database.rules.json
 +++ b/database.rules.json
-@@ -98,7 +98,7 @@
-         "y": {
+@@ -102,7 +102,7 @@
+           ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
            "$entry": {
-             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() || root.child('editAccess').child($docId).child('*').exists())",
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now)))",
 -            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
 +            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50000)"
            }
@@ -11,10 +11,10 @@
  
 --- a/config/templates/database.rules.json.tmpl
 +++ b/config/templates/database.rules.json.tmpl
-@@ -95,7 +95,7 @@
-         "y": {
+@@ -99,7 +99,7 @@
+           ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
            "$entry": {
-             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).exists() || root.child('editAccess').child($docId).child('*').exists())",
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now)))",
 -            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
 +            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50000)"
            }

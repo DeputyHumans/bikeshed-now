@@ -114,7 +114,7 @@ test("mirrorUpdate stages a legacy access fixture: both nodes, email keys, no re
 test("mirrorWriteVerdict allows only scoped ETag reads and conditional fenced replacements", () => {
   const target = { kind: 'local', databaseURL: 'http://127.0.0.1:39001?ns=demo-bikeshed' };
   const docs = new Set([DOC]), accounts = [OWNER_EMAIL, P2, P3];
-  const body = { __revision: REVISION, [key(OWNER_EMAIL)]: true };
+  const body = { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL, [key(OWNER_EMAIL)]: true };
   const req = (over = {}) => ({ method: 'PUT', url: `http://127.0.0.1:39001/editAccess/${DOC}.json?ns=demo-bikeshed`, headers: { 'if-match': '"0"' }, body, ...over });
   const judge = (request, over = {}) => mirrorWriteVerdict(request, { target, docs, accounts, ...over });
   assert.equal(judge(req()).allow, true);
@@ -133,6 +133,10 @@ test("mirrorWriteVerdict allows only scoped ETag reads and conditional fenced re
     [req({ url: 'http://127.0.0.1:39001/editAccess/other.json?ns=demo-bikeshed' }), 'mirror-ledger'],
     [req({ body: { [key(OWNER_EMAIL)]: true } }), 'mirror-body'],
     [req({ body: { ...body, __revision: true } }), 'mirror-body'],
+    [req({ body: { ...body, __expiresAt: -1 } }), 'mirror-body'],
+    [req({ body: { ...body, __expiresAt: 'never' } }), 'mirror-body'],
+    [req({ body: { ...body, __owner: 'not an email' } }), 'mirror-body'],
+    [req({ body: { ...body, __owner: 'outsider@example.test' } }), 'mirror-account'],
     [req({ body: { ...body, [key(P2)]: false } }), 'mirror-body'],
     [req({ body: { ...body, '*': true } }), 'mirror-account'],
     [req({ body: { ...body, stranger: true } }), 'mirror-account'],
@@ -156,7 +160,7 @@ test("writeMirror uses guarded GET/conditional PUT for edit then presence and re
     assert.equal(db.seen[1].headers['if-match'], '"0"');
     for (const request of db.seen) { assert.equal(request.headers.authorization, 'Bearer owner'); assert.equal(request.headers.cookie, undefined); }
     const update = mirrorUpdate(DOC, record());
-    for (const node of Object.values(update)) node.__revision = REVISION;
+    for (const node of Object.values(update)) Object.assign(node, { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL });
     assert.deepEqual(db.nodes.get(`/editAccess/${DOC}.json`), update[`editAccess/${DOC}`]);
     assert.deepEqual(db.nodes.get(`/presenceAccess/${DOC}.json`), update[`presenceAccess/${DOC}`]);
     assert.deepEqual(result, { docId: DOC, members: [OWNER_EMAIL, P2, P3], editorMembers: [OWNER_EMAIL, P2], update, status: 200 });

@@ -1,0 +1,22 @@
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -99,7 +99,7 @@
+         // merged. Deleting a log entry cannot lose a document: every peer has
+         // already applied it, and the durable copy is the saved draft.
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true",
+           "$entry": {
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now)))",
+             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"
+--- a/config/templates/database.rules.json.tmpl
++++ b/config/templates/database.rules.json.tmpl
+@@ -96,7 +96,7 @@
+         // merged. Deleting a log entry cannot lose a document: every peer has
+         // already applied it, and the durable copy is the saved draft.
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('presenceAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true",
+           "$entry": {
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now)))",
+             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200000)"

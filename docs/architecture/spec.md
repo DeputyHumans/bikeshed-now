@@ -418,7 +418,7 @@ own pending proposal, and neither destroys anything.
   answer per caller, so the handler sets `noStore` first.
 - **`POST /trust`** — owner-only global trust (§6c).
 - **`POST /marking`** — owner-only export marking (§20).
-- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit? }` (§17).
+- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }` (§17). Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
 - **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
   body for an unlisted document; without a read basis it is the `404` an absent
   id gets, and nothing is counted.
@@ -1052,7 +1052,7 @@ functions/src/
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
-  lib/{publish,draft,storage,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{publish,draft,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
@@ -1068,6 +1068,8 @@ functions/src/
   tested on both sides. `tokenMatches` is the only place a link token is
   compared, and a wiring test holds it there.
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
+- `lib/writeAuthority.ts` — transaction-local expiry and edit permission, including
+  a current link grant read, before uploaded content becomes the selected draft or version (§17).
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
 - `lib/head.ts` — what a document's own `<head>` and first words say about it
   (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
@@ -1585,15 +1587,18 @@ revisions — exactly what quote-plus-position anchoring was built for.
 `functions/src/lib/presence.ts syncPresenceAccess` and its operator-script twin
 reread the latest document snapshot before writing the two server-only maps.
 Each map reserves `__revision`, a string containing Firestore `updateTime` as
-12 decimal second digits, a colon, and 9 nanosecond digits. A whole-node RTDB
+12 decimal second digits, a colon, and 9 nanosecond digits, plus `__expiresAt`
+(the expiry in epoch milliseconds, or zero for no expiry) and `__owner`
+(the normalized owner email). A whole-node RTDB
 transaction replaces the grants only if its revision is at least the current
 validated revision. An older writer cannot restore access after a newer writer
 has completed. `editAccess` is updated before `presenceAccess`, withdrawing
 write access before read access during revocation.
 
-A legacy node without a revision is accepted and gains the fence on its next
-sync. Clients already read individual email keys or `*` as boolean grants;
-the server-only metadata changes neither client reads nor rules. The ordering
+A legacy node without metadata is accepted and gains the fence and expiry on
+its next sync. Until that sync, a legacy node has no realtime expiry deadline.
+Clients read individual email keys or `*` as boolean grants; the reserved
+metadata is server-only and the rules use its deadline and owner. The ordering
 guarantee requires all writers to use the fence: an older deployed writer can
 erase it, so mixed-version writers must drain before relying on the guarantee.
 
@@ -1605,6 +1610,13 @@ and is not a delivery queue.
 
 It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
+
+The peer list is readable at `status/{docId}/peers` by members. Shared draft
+reads at `status/{docId}/y` require the editor mirror, just like writes: viewers
+and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
+not client-readable. A public open editor with `editAccess/*` may read and write
+`y`, but gains no access to members' peer presence. These rules apply independently
+of any UI affordance or the HTTP draft endpoint.
 
 ### Concurrent editing
 
@@ -1704,19 +1716,21 @@ only one: the owner's browser may still store the document's thumbnails (§2
 and the owner is the one reader an expired document has left — so the owner's
 workspace keeps recognisable cards, and nobody else is ever shown them.
 
-**Expiry is not in the security rules, and cannot be.** The workspace `list`
-rule has to be statically provable from the query's constraints (§5), and a
-query cannot filter on a field most documents do not have without dropping every
-document that does not have it. So the record stays readable and the CONTENT
-stops being served — which is sufficient precisely because every byte in this
-system already flows through one function. The consequence, stated rather than
-discovered: a member still sees the row, its title and its comments; what they
-cannot get is the document.
+**Expiry is not in the Firestore rules.** The workspace `list` rule has to be
+statically provable from the query's constraints (§5), and a query cannot filter
+on a field most documents do not have without dropping every document that does
+not have it. A member still sees the row, its title and its comments; what they
+cannot get is the document. Realtime rules separately compare the mirrored
+expiry to the database server's `now`: after that moment only the owner reads
+peer presence and the shared draft, and no account can write the shared draft.
+Clearing or changing expiry refreshes these maps; no timer or cron is needed.
 
-Enforced in ten places from one predicate (`isExpired` in `lib/acl.ts`):
+HTTP and MCP enforce expiry using `isExpired` in `lib/acl.ts`:
 `contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
 `saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
-and `docShell`, plus the MCP tools. A fork
+and `docShell`, document rename/move in `organize`, plus the MCP tools. Content
+write transactions recheck the current deadline and edit authority after upload,
+so expiry or revocation during the upload refuses the metadata commit. A fork
 is a read of every byte, so an expired source cannot be forked out from behind
 its date, and an expired document stops a lineage walk (§21).
 

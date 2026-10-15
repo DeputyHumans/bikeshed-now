@@ -471,10 +471,12 @@ export function mirrorWriteVerdict(req, { target, docs, accounts, docId = null, 
   if (!/^"[^"\r\n]+"$/.test(headers.get("if-match") ?? "")) return refuse("mirror-condition", "PUT requires the ETag returned by a node read");
   const body = mirrorBodyOf(req.body);
   if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.__revision !== "string" || !/^\d{12}:\d{9}$/.test(body.__revision)) return refuse("mirror-body", "a map with a valid revision fence is required");
+  if (!Number.isFinite(body.__expiresAt) || body.__expiresAt < 0 || typeof body.__owner !== "string" || body.__owner !== body.__owner.toLowerCase() || !/^[^@\s]+@[^@\s]+$/.test(body.__owner)) return refuse("mirror-body", "a valid deadline and normalized owner are required");
   const runKeys = new Set([...(accounts instanceof Map ? accounts.keys() : accounts)].map(mirrorKey));
+  if (!runKeys.has(mirrorKey(body.__owner))) return refuse("mirror-account", "the owner is not a run account");
   let others = 0;
   for (const [key, value] of Object.entries(body)) {
-    if (key === "__revision") continue;
+    if (["__revision", "__expiresAt", "__owner"].includes(key)) continue;
     if (value !== true) return refuse("mirror-body", "access grants must be true");
     if (key === "*" && root === "editAccess" && publicEdit) continue;
     if (!runKeys.has(key)) others += 1;
@@ -517,7 +519,12 @@ export async function writeMirror(target, { doc, actor = "operator-mirror", evid
     lists[field] = [...values];
   }
   const update = mirrorUpdate(docId, lists);
-  for (const node of Object.values(update)) node.__revision = revision;
+  const rawExpiry = typeof record.expiresAt === "number" ? record.expiresAt : record.expiresAt?.toMillis?.();
+  for (const node of Object.values(update)) {
+    node.__revision = revision;
+    node.__expiresAt = Number.isFinite(rawExpiry) ? rawExpiry : 0;
+    node.__owner = String(record.ownerEmail ?? "").toLowerCase();
+  }
   const publicEdit = record.visibility === "public" && record.publicEdit === true;
   if (publicEdit) update[`editAccess/${docId}`]["*"] = true;
   const urlFor = (root) => { const url = new URL(mirrorRootUrl(target)); url.pathname = `/${root}/${docId}.json`; return url.toString(); };

@@ -361,7 +361,7 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
 
   ctx.step("before: the viewer reads the content and the live state, and may write their own peer node");
   precondition((await contentStatus(V.http, docId)) === 200, "the viewer reads the content before the removal");
-  assert.equal(verdictOf(await vdb.get(`status/${docId}`), "V's read before"), "ALLOW", "control: the viewer's read of status/{doc} is allowed while a member");
+  assert.equal(verdictOf(await vdb.get(`status/${docId}/peers`), "V's read before"), "ALLOW", "control: the viewer's read of status/{doc}/peers is allowed while a member");
   assert.equal(verdictOf(await vdb.put(`status/${docId}/peers/${V.uid}`, peerNode(V)), "V's peer write before"), "ALLOW", "control: the viewer's peer write is allowed while a member");
   precondition(verdictOf(await vdb.delete(`status/${docId}/peers/${V.uid}`), "V's peer delete") === "ALLOW", "the viewer removed the peer node it wrote");
 
@@ -388,10 +388,10 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
   const absent = answered(await anon.get(`/content/${encodeURIComponent(`${docId}-absent`)}/v1/`), "GET /content of an absent id");
   assert.equal(absent.status, 404, "an absent id is 404 too");
 
-  ctx.step("the RTDB rules refuse the removed viewer's read of status/{doc} and write of their peer node; the other viewer is still allowed");
-  assert.equal(verdictOf(await vdb.get(`status/${docId}`), "V's read after"), "DENY", "the removed viewer's RTDB read is refused");
+  ctx.step("the RTDB rules refuse the removed viewer's read of status/{doc}/peers and write of their peer node; the other viewer is still allowed");
+  assert.equal(verdictOf(await vdb.get(`status/${docId}/peers`), "V's read after"), "DENY", "the removed viewer's RTDB read is refused");
   assert.equal(verdictOf(await vdb.put(`status/${docId}/peers/${V.uid}`, peerNode(V)), "V's peer write after"), "DENY", "the removed viewer's peer write is refused");
-  assert.equal(verdictOf(await wdb.get(`status/${docId}`), "W's read"), "ALLOW", "the other viewer still reads the live state");
+  assert.equal(verdictOf(await wdb.get(`status/${docId}/peers`), "W's read"), "ALLOW", "the other viewer still reads the live state");
   assert.equal(await contentStatus(W.http, docId), 200, "the other viewer still reads the content");
 
   ctx.step("the record and the presence mirror no longer hold the viewer; the other viewer keeps both");

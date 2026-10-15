@@ -20,15 +20,8 @@
  *   A11.4   usePeerPresence.ts follow mode: scroll bound to a peer's
  *           `viewport`, released by any deliberate gesture.
  *   A11.5   SPEC §16 "A suggester is not in it, and never joins the shared log".
- *   A11.6   Suspect S26, CLASS I (the SPEC allows it; the harm is concrete):
- *           no SPEC sentence gates READS of the live log. SPEC §16 spec.md:1565
- *           gates only "Writes to the shared log", and status/{doc} is
- *           presence, which SPEC §1.4a spec.md:95 gates by the mirror of
- *           `members` (§16 spec.md:1529-1533), every reader included. The
- *           harm: a viewer decodes an editor's unsaved keystrokes,
- *           which GET /draft refuses them (SPEC §2 spec.md:329-330) and whose
- *           very existence SPEC §19 spec.md:2076 shows "to editors only". A fix
- *           needs a new SPEC §16 sentence on reads, so it is asked at G1.
+ *   A11.6   SPEC §16 shared draft reads require editAccess. A viewer must
+ *           not decode an editor's unpublished keystrokes (S26 regression).
  *   A11.7   SPEC §16 "A public open-editing document also carries the key `*`";
  *           SPEC §6b joining waits for the log (suspect S27: a `*` editor can
  *           write `y` but not read it, so it seeds a second copy).
@@ -784,31 +777,8 @@ scenario("A11.5 a suggester gets no Edit button, never touches the live log from
 
 // --- A11.6 ---------------------------------------------------------------------
 
-/**
- * Suspect S26, CLASS I: the SPEC allows this, and the harm is concrete. Ask at
- * G1; it is not a restoration of anything the SPEC says.
- *
- * No SPEC sentence gates READS of the live log. SPEC §16 spec.md:1565 gates
- * writes only: "Writes to the shared log are gated by `editAccess/{docId}`, a
- * second mirror, of `editorMembers`". The log lives under status/{docId}, which
- * is presence, and SPEC §1.4a spec.md:95 gates presence by "a server-maintained
- * mirror", the mirror of `members` (§16 spec.md:1529-1533): every reader is in
- * it. SPEC §2 spec.md:329-330 ("Editor-gated (`canEdit`, …)") gates the HTTP
- * draft endpoints, not this path. The nearest statement of the principle is not
- * the SPEC's but the rules file's own (database.rules.json:42-43, from
- * config/templates/database.rules.json.tmpl:39-40): `Presence is gated on "may
- * read"; document state is gated on "may edit".`
- *
- * The harm: the log holds an editor's keystrokes before any autosave, text they
- * may delete unsaved. A viewer decodes it with their own ID token, while GET
- * /draft refuses them the same content (SPEC §2 spec.md:329-332) and SPEC §19
- * spec.md:2076 shows even whether a draft exists "to editors only". SPEC §16
- * spec.md:1556 says "The log belongs to the draft." A fix needs a new SPEC §16
- * sentence gating reads of `y` on `editAccess`.
- *
- * Setup is precondition() throughout; the one assertion is S26's own oracle.
- */
-scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds an editor's unsaved keystrokes: DENY", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "S26", ...ON_STACK }, async (ctx) => {
+/** A viewer may see peers but not an editor's unsaved draft bytes (SPEC §16). */
+scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds an editor's unsaved keystrokes: DENY", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   const w = await world(ctx, { roles: { viewer: "viewer", stranger: null }, sessions: ["viewer", "stranger"], browsers: [["owner", "owner"]], title: "A11.6 viewer" });
   const viewer = w.people.viewer;
@@ -840,7 +810,7 @@ scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds a
   ctx.step(`viewer: ${r.status} → ${verdict}; decodes the editor's secret from it: ${sees}. For contrast GET /draft as the viewer: ${draft.status} (SPEC §2 spec.md:329-332: editor-gated, a refused reader gets 404)`);
   ctx.ev.json("viewer-read", { verdict, entries: Object.keys(r.json ?? {}).length, seesSecret: sees, draftStatus: draft.status });
   precondition(draft.status === 403 || draft.status === 404, `GET /draft refuses the viewer (got ${draft.status})`);
-  assert.equal(verdict, "DENY", `S26, CLASS I (the SPEC allows it; ask at G1): a viewer read the live log${sees ? ", the editor's unsaved typed secret included" : ""}. No SPEC sentence gates reads of y: SPEC §16 spec.md:1565 gates only "Writes to the shared log". The harm: GET /draft refuses this viewer the same content (SPEC §2 spec.md:329-332), and the rules file's own principle is "document state is gated on \"may edit\"" (database.rules.json:42-43)`);
+  assert.equal(verdict, "DENY", `a viewer read the live log${sees ? ", the editor's unsaved typed secret included" : ""}; shared draft reads require editAccess (SPEC §16)`);
 });
 
 // --- A11.7 ---------------------------------------------------------------------
@@ -853,7 +823,7 @@ async function i3(user) {
   }));
 }
 
-scenario("A11.7 a non-member joining a public open-editing document while a member edits leaves one sentinel and receives the member's keys", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "S27", ...ON_STACK }, async (ctx) => {
+scenario("A11.7 a non-member joining a public open-editing document while a member edits leaves one sentinel and receives the member's keys", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   const w = await world(ctx, { roles: { openeditor: null }, browsers: [["owner", "owner"], ["openeditor", "openeditor"]], title: "A11.7 open editing", visibility: "public", publicEdit: true });
   const pe = w.people.openeditor;

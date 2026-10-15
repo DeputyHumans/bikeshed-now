@@ -945,6 +945,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
     badRequest(res, 'visibility must be "private", "unlisted" or "public"');
     return;
   }
+  const changesExpiry = Object.prototype.hasOwnProperty.call(body, "expiresAt");
   const expiry = parseExpiry(body?.expiresAt);
   if ("error" in expiry) {
     badRequest(res, expiry.error);
@@ -966,12 +967,12 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   const update: Record<string, unknown> = {
     visibility,
     publicEdit: body?.publicEdit === true && visibility !== "private",
-    expiresAt:
-      expiry.value === null
-        ? FieldValue.delete()
-        : Timestamp.fromMillis(expiry.value),
     updatedAt: now(),
   };
+  // Omission is not a request to unfreeze the document. Explicit null clears.
+  if (changesExpiry) update.expiresAt = expiry.value === null
+    ? FieldValue.delete()
+    : Timestamp.fromMillis(expiry.value);
   if (visibility === "unlisted") {
     // Reuse an existing token so an already-circulated link keeps working
     // through an unrelated setting change.
@@ -998,7 +999,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
     });
   }
   const wasExpiry = expiryMs(data);
-  if (wasExpiry !== expiry.value) {
+  if (changesExpiry && wasExpiry !== expiry.value) {
     addEvent(batch, ref, { type: "doc.expiry", audience: "readers", actor: who, data: { from: wasExpiry, to: expiry.value } });
   }
   await batch.commit();
@@ -1896,6 +1897,11 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     const proof = await linkProofFor(ref, data, caller, null);
     if (!canEdit(data, caller, proof)) {
       res.status(refusal(data, caller, proof)).end();
+      return;
+    }
+
+    if (isExpired(data, Date.now())) {
+      res.status(409).json({ error: EXPIRED_WRITE });
       return;
     }
 
