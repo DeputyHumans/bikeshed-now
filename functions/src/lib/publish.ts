@@ -520,11 +520,14 @@ export async function commitNewVersion(args: {
   const base = args.baseVersion ?? "";
   let replacedDraft: unknown;
   let retiredEpoch = "initial";
+  let candidateMayHaveCommitted = false;
   try {
     await db.runTransaction(async (tx) => {
       // Both asked again here, where the version becomes current: the checks
       // above ran before the upload, and either may have changed during it.
       const cur = await tx.get(docRef);
+      const candidate = await tx.get(versionsRef.doc(versionId));
+      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
       await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
@@ -532,10 +535,12 @@ export async function commitNewVersion(args: {
       replacedDraft = cur.data()?.draft;
       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       await mintVersion(tx);
+      candidateMayHaveCommitted = true;
     });
   } catch (e) {
-    // Only explicit pre-write refusals prove this candidate is unreferenced.
-    if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
+    // A retry-only refusal cannot disprove an earlier acknowledged-lost commit.
+    // Delete only candidates never staged by any callback attempt.
+    if (!candidateMayHaveCommitted && (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message))) {
       await removeDraftSnapshot(docRef.id, { storagePrefix });
     }
     if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };

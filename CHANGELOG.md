@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve saved and published bytes when Firestore retries a transaction after losing its commit acknowledgement. Recognize each request's committed immutable prefix or retirement epoch before retry-only refusals, keep later heads intact, and retain potentially committed bytes when the result remains uncertain.
+
 - Preserve thumbnails when the database commits an upload but loses its acknowledgement. A transaction retry recognizes that request's recorded key, reports the completed upload, and finishes retiring obsolete images instead of deleting the new JPEGs.
 
 - Verify the original A08 and A11 stability requirements against three distinct completed whole-file runs with every current case passing on the same frozen source; reject filtered, partial, stale or repeated substitutes.

@@ -629,6 +629,11 @@ version record's `storagePrefix` selects those bytes only after the transaction
 commits; a competing or refused upload cannot replace them. All content,
 source, download, fork and subsequent-edit reads follow that pointer. Older
 records without a pointer retain their original version-based path.
+If a transaction commits but loses its acknowledgement, an SDK retry recognizes
+that attempt's unique version prefix before applying new-write guards. It
+acknowledges the already-published version without repointing a later head.
+A refusal on a retry cannot prove an earlier attempt did not commit, so bytes
+from an attempted transaction are retained when its outcome remains uncertain.
 
 `createdAt` is set once. `updatedAt` is bumped on every publish.
 
@@ -832,6 +837,12 @@ The one path that writes content, and it is explicit and server-mediated.
   the solo writer's next save revision and epoch without remounting the frame.
   Legacy API callers without a revision still compare the snapshot read by
   their request, while browser editors always supply their loaded revision.
+- A remembered-link draft save recognizes its own committed immutable prefix
+  when the SDK retries after losing the commit acknowledgement. It acknowledges
+  that saved snapshot even if its own revision or epoch change, or a subsequent
+  access change, would refuse a new write. An unconfirmed earlier attempt keeps
+  its bytes; a later refusal cannot justify deleting them. A no-change draft
+  publication similarly recognizes its own unique retirement epoch.
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
   `lib/draft.ts`), allowed only when every comment on the current version is

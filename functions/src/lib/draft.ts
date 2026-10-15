@@ -183,12 +183,12 @@ export async function writeDraft(args: {
   let previous: unknown;
   let retiredEpoch: string | undefined;
   let reused = false;
-  let conditionalMayHaveCommitted = false;
+  let candidateMayHaveCommitted = false;
   let savedEpoch = "initial";
   let draft: Record<string, unknown> = {};
   const caller = { uid: args.actor.uid ?? "", emailLower: args.emailLower };
   const acknowledgeOwnCandidate = (current: admin.firestore.DocumentData | undefined): boolean => {
-    if (!conditionalMayHaveCommitted || current?.draft?.storagePrefix !== storagePrefix) return false;
+    if (!candidateMayHaveCommitted || current?.draft?.storagePrefix !== storagePrefix) return false;
     draft = current.draft;
     savedEpoch = String(current.liveEpoch ?? "initial");
     reused = false;
@@ -265,10 +265,16 @@ export async function writeDraft(args: {
         await args.db.runTransaction(async (tx) => {
           const fresh = await tx.get(docRef);
           const data = fresh.data();
+          if (acknowledgeOwnCandidate(data)) return;
           checkDraftBase(data, baseVersion);
           await assertWriteAuthority(tx, docRef, data as DocAclData, caller);
           const update = prepare(data);
-          if (update) tx.update(docRef, update);
+          if (update) {
+            tx.update(docRef, update);
+            // The SDK can retry this callback after a committed transaction
+            // loses its acknowledgement. A later refusal cannot disprove it.
+            candidateMayHaveCommitted = true;
+          }
         });
         break;
       }
@@ -284,7 +290,7 @@ export async function writeDraft(args: {
         // was absent. Reconcile our unique prefix and retain unresolved bytes.
         const code = (error as { code?: unknown }).code;
         if (code !== 5 && code !== 9) throw error;
-        conditionalMayHaveCommitted = true;
+        candidateMayHaveCommitted = true;
         const remaining = deadline - Date.now();
         if (remaining <= 0) {
           if (acknowledgeOwnCandidate((await docRef.get()).data())) break;
@@ -302,15 +308,15 @@ export async function writeDraft(args: {
       }
     }
   } catch (error) {
-    // A transport error can follow a committed transaction: retain its bytes
-    // unless a known refusal proves the transaction never referenced them.
-    if (!conditionalMayHaveCommitted && (error instanceof DraftConflict || error instanceof WriteAuthorityError)) {
+    // A retry callback may refuse after an earlier commit lost its ACK. Only
+    // a refusal before any candidate was staged proves these bytes unused.
+    if (!candidateMayHaveCommitted && (error instanceof DraftConflict || error instanceof WriteAuthorityError)) {
       await removeDraftSnapshot(docRef.id, { storagePrefix });
     }
     throw error;
   }
   if (reused) {
-    if (!conditionalMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+    if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
     return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
   }
   await removeDraftSnapshot(docRef.id, previous);
@@ -448,15 +454,19 @@ export async function commitDraft(args: {
   let retiredEpoch = "initial";
   const dup = await versionsRef.doc(baseVersion).get();
   if (dup.exists && dup.data()?.contentHash === contentHash) {
+    const retirementEpoch = randomUUID();
+    let retirementMayHaveCommitted = false;
     try {
       await db.runTransaction(async (tx) => {
         const current = (await tx.get(docRef)).data();
+        if (retirementMayHaveCommitted && current?.liveEpoch === retirementEpoch) return;
         checkDraftBase(current, baseVersion);
         await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
         checkDraftSnapshot(current, draft);
         if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
         retiredEpoch = String(current?.liveEpoch ?? "initial");
-        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: randomUUID(), updatedAt: now() });
+        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: retirementEpoch, updatedAt: now() });
+        retirementMayHaveCommitted = true;
       });
     } catch (error) {
       if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
@@ -495,17 +505,22 @@ export async function commitDraft(args: {
   }
 
   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
+  let candidateMayHaveCommitted = false;
 
   try {
     await db.runTransaction(async (tx) => {
       const cur = await tx.get(docRef);
+      const vRef = versionsRef.doc(versionId);
+      const candidate = await tx.get(vRef);
+      // A unique immutable prefix proves this request already published, even
+      // if another writer has advanced the head since its acknowledgement was lost.
+      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
       checkDraftSnapshot(cur.data(), draft);
       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-      const vRef = versionsRef.doc(versionId);
-      if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
+      if (candidate.exists) throw new Error("CONFLICT");
       // Trust carries into the new version only when its owner wrote it here.
       // The server stores whatever HTML a draft is sent, so "in-app editing
       // cannot add a script" was never true of anybody else's edit (SPEC §6c).
@@ -549,11 +564,12 @@ export async function commitDraft(args: {
         { merge: true },
       );
       if (!keeps) withdrawTrust(tx, docRef, grants);
+      candidateMayHaveCommitted = true;
     });
   } catch (e) {
-    // These refusals happen before any transaction write. An unknown error
-    // may have an uncertain commit outcome, so its uploaded bytes stay intact.
-    if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
+    // These refusals precede this callback's writes, but an earlier callback
+    // may already have committed. Only an unstaged candidate is safe to delete.
+    if (!candidateMayHaveCommitted && (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message))) {
       await removeDraftSnapshot(docId, { storagePrefix });
     }
     if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
