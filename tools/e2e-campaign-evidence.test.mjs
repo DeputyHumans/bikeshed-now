@@ -19,7 +19,10 @@ function fixture(t) {
   const def = { set: "controls-synthetic", what: "restore the bug", target: { spec: file, case: name, suite: "functional" }, selection: { case: name }, expect: { message: "intended assertion" } };
   for (const run of ["green", "red"]) {
     write(root, `e2e/.out/${run}/stack.json`, { fingerprint: { baseSha: snapshot.revision, sha256: snapshot.fingerprint, dirty: true }, expectVersion: snapshot.version, patches: run === "red" ? [{ set: def.set }] : [], options: {} });
-    write(root, `e2e/.out/${run}/invocations/i/results.json`, { runId: run, invocation: { id: "i", suite: "functional", grep: null, spec: [], trials: null, capabilities: [] }, malformed: [], cases: [{ ...base, ...(run === "red" ? { status: "fail", error: { message: "intended assertion: value differs" } } : {}) }] });
+    const invocation = { id: "i", runId: run, suite: "functional", grep: null, spec: [], n: null, trials: null, capabilities: [], plan: [{ tier: "functional", files: [file] }], startedAt: "2026-10-15T01:00:00Z" };
+    write(root, `e2e/.out/${run}/invocations/i/results.json`, { runId: run, invocation, mergedAt: "2026-10-15T01:01:00Z", malformed: [], cases: [{ ...base, ...(run === "red" ? { status: "fail", error: { message: "intended assertion: value differs" } } : {}) }] });
+    write(root, `e2e/.out/${run}/invocations/i/results-functional.jsonl`, JSON.stringify({ ...base, ...(run === "red" ? { status: "fail", error: { message: "intended assertion: value differs" } } : {}) }) + "\n");
+    write(root, `e2e/.out/${run}/invocations/i/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: run === "red" ? 1 : 0, interrupted: null, stackDown: null });
   }
   const ledger = { green: [{ sets: [def.set], invocationDir: "e2e/.out/green/invocations/i" }], controls: [{ set: def.set, ok: true, red: { invocationDir: "e2e/.out/red/invocations/i" } }] };
   write(root, "e2e/.out/controls/ledger.json", ledger);
@@ -56,6 +59,11 @@ test("filtered, TODO and inconclusive matrix results cannot be imported as compl
   }
   write(f.root, f.report, { ...clean, invocation: { ...clean.invocation, grep: "one" } });
   assert.throws(() => importRun(f.c, f.report, { root: f.root, cellId: "functional" }), /cannot use grep/);
+});
+test("a partial all-pass report cannot import a completed matrix cell", (t) => {
+  const f = fixture(t);
+  rmSync(join(f.root, dirname(f.report), "invocation.json"));
+  assert.throws(() => importRun(f.c, f.report, { root: f.root, cellId: "functional" }), /completed invocation/);
 });
 test("control imports read actual errors and mutation records, not summary labels or titles", (t) => {
   const f = fixture(t), options = { root: f.root, readDefinition: () => f.def };

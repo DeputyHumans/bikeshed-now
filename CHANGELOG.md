@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Require successful invocation completion and the final reporter case records before a passing E2E report can close a full campaign matrix cell; interrupted or early merged subsets remain incomplete.
+
 - Register additional E2E campaign mechanisms without closing original findings; keep harness defects, product fixes and unresolved runtime failures distinct.
 
 - Keep long-paragraph input points visible in scaled frames and exercise concurrent typing as an uninterrupted keystroke sequence, so the driver does not move fast writers into a peer’s unfinished word.

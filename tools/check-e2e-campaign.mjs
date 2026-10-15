@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseExpandedCase } from "../e2e/lib/controls.mjs";
 import { commandCounts } from "./e2e-campaign-evidence.mjs";
 import { verifyLocalLimit } from "./e2e-local-limit.mjs";
+import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STATES = new Set(["open", "in-progress", "resolved", "historical-closed"]);
@@ -184,6 +185,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           need(found.length === 1 && (p.outcome === "PASS" ? purePass(found[0]) : pureFail(found[0])), `${p.id}: selected case is not an unqualified ${p.outcome}`);
         }
         const limit = p.outcome === "LOCAL-LIMIT" ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
+        if (p.kind === "e2e-run" && p.outcome === "PASS") verifyCompletedRun(report, path);
         if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
         loaded.set(p.id, { report, stack, limit, selected: p.kind === "e2e-case" ? cases.find((c) => c.id === p.caseId && (c.n ?? null) === (p.n ?? null) && (c.trial ?? 1) === (p.trial ?? 1)) : null, text: JSON.stringify(report) });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }

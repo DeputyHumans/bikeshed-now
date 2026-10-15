@@ -11,6 +11,7 @@ import { worktreeFiles } from "../e2e/lib/tree.mjs";
 import { listControlSets, readControl, assertTargetDeclared, greenGroups, findTarget, declaresName } from "../e2e/lib/controls.mjs";
 import { probeInstalledTriggerQueue } from "./probe-e2e-trigger-queue.mjs";
 import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
+import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const hash = (s) => createHash("sha256").update(s).digest("hex");
@@ -114,6 +115,7 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
       p.localLimit.observations = limited;
     }
     need(unfinished.every(c => limited.includes(key(c))) && loaded.report.cases.some(pass), "matrix run has failed or unjudged cases");
+    if (p.outcome === "PASS") verifyCompletedRun(loaded.report, resolve(root, loaded.rel));
     upsert(candidate.proofs, p); cell.proofs = [...new Set([...cell.proofs, p.id])];
   }
   return { candidate, importedCases: loaded.report.cases.filter((c) => pass(c) || fail(c)).length, unfinished: unfinished.map((c) => ({ id: c.id, status: c.status })) };

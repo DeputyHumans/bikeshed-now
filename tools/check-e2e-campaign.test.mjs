@@ -40,8 +40,11 @@ function fixture(t) {
     } else {
       Object.assign(p, { runId: id, invocation: "invocation-1" });
       const file = `e2e/specs/${r.suite}/${r.spec ?? "synthetic.spec.mjs"}`;
-      const cases = [{ id: `${file}::synthetic assertion`, file, status: "pass", n: r.n ?? null, trial: 1, todo: null, error: null }];
-      write(root, artifact, { runId: id, invocation: { id: p.invocation, suite: r.suite, n: r.n ? [r.n] : null, spec: r.spec ? [r.spec] : [], grep: null, trials: null, capabilities: r.capabilities ?? [] }, malformed: [], cases });
+      const cases = [{ id: `${file}::synthetic assertion`, name: "synthetic assertion", file, status: "pass", n: r.n ?? null, trial: 1, todo: null, error: null }];
+      const invocation = { id: p.invocation, runId: id, suite: r.suite, n: r.n ? [r.n] : null, spec: r.spec ? [r.spec] : [], grep: null, trials: null, capabilities: r.capabilities ?? [], plan: [{ tier: r.suite, files: [file] }], startedAt: "2026-10-15T01:00:00Z" };
+      write(root, artifact, { runId: id, invocation, mergedAt: "2026-10-15T01:01:00Z", malformed: [], cases });
+      writeFileSync(join(root, dirname(artifact), "results-final.jsonl"), cases.map(row => JSON.stringify(row)).join("\n") + "\n");
+      write(root, `${dirname(artifact)}/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: 0, interrupted: null, stackDown: null });
       write(root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: (r.options?.patches ?? []).map((set) => ({ set })), options: { emailOff: r.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((r.options?.appEnvPresent ?? []).map((k) => [k, "synthetic"])), ...(r.options?.appEnv ?? {}) } } });
     }
     c.proofs.push(p);
@@ -78,6 +81,14 @@ test("the real ledger validates but the completion gate refuses open coverage, p
   assert.equal(gate.complete, false);
   assert.ok(gate.pending.some((p) => p.startsWith("matrix:")));
   assert.ok(gate.pending.some((p) => p.startsWith("S3:")));
+});
+test("a partial all-pass report cannot close a full matrix cell", (t) => {
+  const { c, root } = fixture(t);
+  const proof = c.proofs.find(p => p.kind === "e2e-run");
+  rmSync(join(root, dirname(proof.artifact), "invocation.json"));
+  const result = checkCampaign(c, { root });
+  assert.equal(result.complete, false, "matrix completion requires the invocation's recorded successful end");
+  assert.match(result.errors.join("\n"), /completed invocation/);
 });
 
 test("negative controls: removing baseline observations, overlap links, a later discovery or an execution variant invalidates the ledger", () => {
@@ -276,8 +287,12 @@ test("expanded concurrency witnesses satisfy canonical affected cases without ch
   item.requiredCases = [{ caseId: scenario, n: 5 }];
   const setIdentity = (caseId, n, trial) => {
     for (const p of [positive, negative]) Object.assign(p, { caseId, n, trial });
-    const row = { ...report.cases[0], id: caseId, n, trial };
-    rewrite({ ...report, cases: [row] });
+    const [file, name] = caseId.split("::");
+    const row = { ...report.cases[0], id: caseId, file, name, n, trial };
+    const invocation = { ...report.invocation, plan: [{ tier: report.invocation.suite, files: [file] }] };
+    rewrite({ ...report, invocation, cases: [row] });
+    writeFileSync(join(root, dirname(positive.artifact), "results-final.jsonl"), JSON.stringify(row) + "\n");
+    write(root, `${dirname(positive.artifact)}/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: 0, interrupted: null, stackDown: null });
     write(root, negative.artifact, { ...report, runId: negative.runId, cases: [{ ...row, status: "fail", error: "intended synthetic assertion" }] });
   };
   setIdentity(`${scenario} [N=5] #3`, 5, 3);
@@ -436,6 +451,8 @@ test("a matrix cell cannot use unselected N rows as execution proof", t => {
   const f = fixture(t), cell = f.c.acceptance.requirements.find(r => r.id === "concurrency-natural-n20"), proof = f.c.proofs.find(p => p.id === cell.proofs[0]);
   const report = JSON.parse(readFileSync(join(f.root, proof.artifact))); report.invocation.n = [2];
   write(f.root, proof.artifact, report);
+  const completion = JSON.parse(readFileSync(join(f.root, dirname(proof.artifact), "invocation.json")));
+  write(f.root, `${dirname(proof.artifact)}/invocation.json`, { ...completion, n: [2] });
   assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /N=20 was not executed/);
   assert.throws(() => importRun(f.c, proof.artifact, { root: f.root, cellId: cell.id }), /matrix N differs/);
 });
