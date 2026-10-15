@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK suggestion revise: native retry records exactly one history entry",
+  "what": "Remove exact own-commit recognition from suggestion revise so native ACK-loss retry repeats its old behavior.",
+  "target": {
+    "spec": "e2e/specs/functional/a08-suggestion-ack.spec.mjs",
+    "case": "A8.10b suggestion revision records exactly one history entry after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK suggestion revise: native retry records exactly one history entry"
+  }
+}

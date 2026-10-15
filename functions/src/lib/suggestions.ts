@@ -2,6 +2,7 @@
 // Suggested edits: what one is, and every change to its state (SPEC §22).
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
 
@@ -57,6 +58,8 @@ export type SuggestionState = "pending" | "accepted" | "rejected" | "withdrawn";
  * its own.
  */
 export interface SuggestionRevision {
+  /** Internal receipt for one committed revision across native SDK retries. */
+  operationId?: string;
   replacement: string;
   note?: string;
   at: Timestamp;
@@ -195,12 +198,18 @@ export async function createSuggestion(args: {
   const anns = annotations(docRef, versionId);
   const annRef = anns.doc();
   const commentRef = annRef.collection("comments").doc();
+  let attempted = false;
   // In a transaction that reads the document, so this and a publish are
   // ordered: either the publish's own check sees this suggestion and refuses,
   // or this sees the newer version and refuses. Checked only before writing,
   // a publish landing in between left it pending on a version nobody reads.
   return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
     const doc = await tx.get(docRef);
+    // This preallocated random id belongs only to this operation. A native
+    // retry may follow a completed commit whose acknowledgement was lost;
+    // acknowledge that annotation before applying guards for a new write.
+    const own = attempted ? await tx.get(annRef) : null;
+    if (own?.exists && own.data()?.annId === annRef.id && own.data()?.authorUid === author.uid) return { annId: annRef.id };
     const current = String(doc.data()?.currentVersion ?? "");
     if (current !== versionId) {
       return {
@@ -238,6 +247,7 @@ export async function createSuggestion(args: {
       opensSuggestion: true,
       ...(note ? {} : { generated: true }),
     });
+    attempted = true;
     return { annId: annRef.id };
   });
 }
@@ -327,6 +337,8 @@ export async function changeSuggestion(args: {
   const { db, docRef, versionId, annId, op, caller, actor } = args;
   const nowMs = args.nowMs ?? Date.now();
   const annRef = annotations(docRef, versionId).doc(annId);
+  const revisionOperationId = randomUUID();
+  let revisionAttempted = false;
 
   return db.runTransaction(async (tx) => {
     // Every read before any write, as a transaction requires: the record, and
@@ -338,6 +350,9 @@ export async function changeSuggestion(args: {
         : null;
     const s = snap.data() as StoredSuggestion | undefined;
     if (!snap.exists || !s?.suggestion) return { status: 404, error: "no such suggestion" };
+    // Revision receipts stay in history, so a later revision or decision
+    // cannot turn our completed change into another write or a false refusal.
+    if (op === "revise" && revisionAttempted && s.suggestion.revisions?.some(revision => revision.operationId === revisionOperationId)) return { state: "pending" as SuggestionState };
     const state = s.suggestion.state ?? "pending";
 
     // Idempotent outcomes first, so a retried decision is not a conflict.
@@ -380,6 +395,7 @@ export async function changeSuggestion(args: {
         // only restated the old text, which the entry already holds.
         const replacedNote = note && first && first.data().generated !== true ? String(first.data().body ?? "") : "";
         const revision: SuggestionRevision = {
+          operationId: revisionOperationId,
           replacement: String(s.suggestion.replacement ?? ""),
           ...(replacedNote ? { note: replacedNote } : {}),
           // A server timestamp may not sit inside an array.
@@ -399,6 +415,7 @@ export async function changeSuggestion(args: {
             tx.update(first.ref, { body: describeChange(String(s.anchor?.exact ?? ""), replacement) });
           }
         }
+        revisionAttempted = true;
         return { state: "pending" };
       }
       case "withdraw": {

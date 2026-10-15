@@ -523,7 +523,7 @@ public/{docId}                                 PublicDoc        (projection, pub
 "withdrawn", claim?, decidedBy?, decidedAt?, revisions? }`, where `decidedBy`
 and `decidedAt` say who closed it — an approver deciding, or its author
 withdrawing — and when, and `revisions` holds, oldest first, what each change
-its author made replaced: `{ replacement, note?, at, actor }`, the note only
+its author made replaced: `{ replacement, note?, at, actor, operationId? }`, the note only
 when a new one replaced the author's own. Its `resolved` is `false` while pending and `true` once closed, so
 it counts as an open thread everywhere one is counted.
 Only `POST /suggestion` writes the field. A **`Comment`** may carry
@@ -2564,8 +2564,10 @@ may, and never on a suggestion, which is decided rather than resolved. They act
 on the current version only; an earlier version's threads are the record of
 its review. A token cannot write Firestore, so they go through `lib/threads.ts`
 in a transaction, and unlike the app each change leaves a generated note in the
-thread — "Resolved." or "Reopened." — stamped with the caller's actor. Resolving
-hides a point from the person who raised it; the note, and the comment notice
+thread — "Resolved." or "Reopened." — stamped with the caller's actor. The
+generated note is also the operation's durable retry receipt: a lost transaction
+acknowledgement cannot repeat the decision or overwrite a later opposite
+decision. Resolving hides a point from the person who raised it; the note, and the comment notice
 it sends them (§14), are how they hear an agent closed it, and the panel lets
 them reopen it. A retry that changes nothing writes nothing.
 
@@ -2977,7 +2979,12 @@ Escape cancels; a pasted line break becomes a space; empty suggests deleting
 the text. The thread opens on success. Its author may Edit it, in the panel,
 until it is decided — twenty times at most, after which it must be withdrawn
 and suggested afresh. An edit never overwrites: what it replaced is kept in
-`revisions` (§4), so a change of mind is on the record.
+`revisions` (§4), so a change of mind is on the record. A revision's optional
+server-generated `operationId` identifies that single committed change across
+native transaction retries. Lost commit acknowledgements return the original
+creation or revision result without creating another thread, consuming another
+revision slot, overwriting a later revision, or reopening a later decision.
+Legacy history entries without a receipt remain valid.
 
 ### The review pass
 

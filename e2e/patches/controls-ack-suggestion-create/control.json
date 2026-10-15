@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK suggestion create: its own durable annotation is acknowledged with 200",
+  "what": "Remove exact own-commit recognition from suggestion create so native ACK-loss retry repeats its old behavior.",
+  "target": {
+    "spec": "e2e/specs/functional/a08-suggestion-ack.spec.mjs",
+    "case": "A8.10a suggestion creation acknowledges its single committed annotation after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK suggestion create: its own durable annotation is acknowledged with 200"
+  }
+}

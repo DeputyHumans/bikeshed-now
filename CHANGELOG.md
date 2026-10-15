@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Recognize completed suggestion creations, revisions and thread decisions when the native Firestore SDK retries after losing a commit acknowledgement. Unique annotation/history/note receipts prevent false refusals, duplicate revision history and an old resolution overwriting a later reopen; retain focused native-retry regressions and gated E2E controls.
+
 - Register the native acknowledgement-loss pause at its actual helper source and named gate call, allowing the existing amplifier-composition checks to verify that controls preserve it.
 
 - Keep operator historical-deduplication, withdrawal epoch and public-projection controls applicable after acknowledgement recovery, preserving each original mutation.

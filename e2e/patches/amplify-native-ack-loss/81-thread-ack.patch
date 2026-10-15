@@ -1,0 +1,11 @@
+--- a/functions/src/lib/threads.ts
++++ b/functions/src/lib/threads.ts
+@@ -4,2 +4,3 @@
+ import * as admin from "firebase-admin";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { FieldValue } from "firebase-admin/firestore";
+@@ -34,3 +35,3 @@
+   let attempted = false;
+-  return db.runTransaction(async (tx) => {
++  return e2eAckTransaction(db, docRef.id, resolved ? "thread-resolve" : "thread-reopen", async (tx) => {
+     const snap = await tx.get(annRef);

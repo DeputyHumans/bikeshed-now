@@ -1,0 +1,15 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -4,2 +4,3 @@
+ import * as admin from "firebase-admin";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { randomUUID } from "node:crypto";
+@@ -205,3 +206,3 @@
+   // a publish landing in between left it pending on a version nobody reads.
+-  return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
++  return e2eAckTransaction(db, docRef.id, "suggestion-create", async (tx): Promise<{ annId: string } | Refusal> => {
+     const doc = await tx.get(docRef);
+@@ -343,2 +344,2 @@
+-  return db.runTransaction(async (tx) => {
++  return e2eAckTransaction(db, docRef.id, `suggestion-${op}`, async (tx) => {
+     // Every read before any write, as a transaction requires: the record, and

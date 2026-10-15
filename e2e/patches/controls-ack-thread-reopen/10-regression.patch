@@ -1,0 +1,7 @@
+--- a/functions/src/lib/threads.ts
++++ b/functions/src/lib/threads.ts
+@@ -40,3 +40,3 @@
+     const note = attempted ? await tx.get(noteRef) : null;
+-    if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) return { resolved, changed: true };
++    if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) void 0;
+     if (!snap.exists || !ann) return { status: 404, error: "no such thread" };
