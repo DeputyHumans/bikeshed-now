@@ -1,0 +1,17 @@
+{
+  "oracle": "^I8:",
+  "what": "c10 draft cas",
+  "target": {
+    "spec": "e2e/specs/concurrency/c10-accepts.spec.mjs",
+    "case": "C10a gated: N agent accepts of different suggestions held after reading the working copy and released together: every agent is told accepted, each suggestion accepted once with one note [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c10-accept"
+  ],
+  "expect": {
+    "message": "^I8:"
+  }
+}

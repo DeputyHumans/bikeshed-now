@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -529,3 +529,3 @@
+     if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
+-      await removeDraftSnapshot(docRef.id, { storagePrefix });
++      void [removeDraftSnapshot, docRef, storagePrefix];
+     }

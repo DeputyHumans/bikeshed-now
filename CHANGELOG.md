@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Refused draft commits and uploaded updates remove only their unreferenced
+  candidate bundle. Live-log retirement retries an empty browser cache against
+  the server instead of silently leaving the consumed log.
+
 - Owner-only and thumbnail refusals recognize a current stored link grant while
   preserving the refusal and all write gates. Inherited sharing rows show each
   ancestor nearest first even in trees deeper than two folders.
@@ -86,6 +90,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Concurrency cleanup checks follow immutable storage pointers, retain retired
+  paths after metadata deletion, and detect unreachable refused candidates.
+  Snapshot-race and concurrent-accept controls execute their own measurement.
 
 - Email E2E coverage now checks cooldown expiry, rendered notice content,
   removed readers, repeated grants, filing silence and provider failures.

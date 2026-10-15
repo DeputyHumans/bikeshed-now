@@ -78,7 +78,11 @@ export async function clearLog(docId: string, consumed: Record<string, string>):
   try {
     const logRef = ref(rtdb, `status/${docId}/y`);
     await runTransaction(logRef, (current) => {
-      if (!current || typeof current !== "object") return undefined;
+      // The SDK may start from an empty local cache after the editor unbinds.
+      // Propose an empty-value CAS so it fetches/retries against the server;
+      // undefined here would abort without ever inspecting the existing log.
+      if (current === null) return null;
+      if (typeof current !== "object") return undefined;
       const keys = Object.keys(current);
       // A new delta depends on the elected seed's Yjs identities. Retain the
       // WHOLE log if anything raced the save, never strand those dependencies.

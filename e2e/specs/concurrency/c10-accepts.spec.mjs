@@ -598,6 +598,7 @@ async function c10aWork(ctx, ref, how) {
     measure(ctx, MEASURE, { ref, how, race: fired.race, answers: fired.pairs.map((p) => p.answer.isError ? `refused: ${p.answer.text}` : p.answer.json?.state), inDraft });
     assertEveryAgentAccepted(fired);
     assertDecidedOnce(out.anns, Object.fromEntries(pairs.map((p) => [p.annId, p.agent.email])), "mcp");
+    assertInvariant(i8Of({ ...out.draft, accepted }));
   });
 }
 
@@ -1211,9 +1212,8 @@ scenario("C10a agents accept N different suggestions at once (SYNC-T): every age
 scenario("C10a judge (SYNC-T): I8, every replacement an agent's accept recorded is in the draft exactly once, in place", {
   tiers: BOTH,
   n: [2, 5, 10, 20],
-  defect: "S5",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10a", { suspect: "S5" }));
+}, async (ctx) => i8Judge(ctx, "C10a"));
 
 scenario("C10a gated: N agent accepts of different suggestions held after reading the working copy and released together: every agent is told accepted, each suggestion accepted once with one note", {
   tiers: LOCAL,
@@ -1227,9 +1227,8 @@ scenario("C10a judge (gated): I8, every replacement an agent's accept recorded i
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c10-accept"],
   n: [2, 5, 10, 20],
-  defect: "S5",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10a gated", { suspect: "S5" }));
+}, async (ctx) => i8Judge(ctx, "C10a gated"));
 
 scenario("C10a-serial: N agents accept N different suggestions one after another; every replacement is in the draft once (I8), one insertion and one note each (I9)", {
   tiers: BOTH,

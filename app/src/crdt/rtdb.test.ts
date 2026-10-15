@@ -28,7 +28,7 @@ describe("clearLog", () => {
     expect(decisions).toEqual([null]);
   });
 
-  it("keeps the complete seed and update history when a new delta races publication", async () => {
+  it("starts an empty-cache CAS but keeps the complete seed when the server supplies a raced update", async () => {
     const decisions: unknown[] = [];
     calls.transaction.mockImplementationOnce(async (_path, decide) => {
       decisions.push(decide({ _seed: "seed", first: "one", later: "depends on seed" }));
@@ -36,7 +36,7 @@ describe("clearLog", () => {
       decisions.push(decide(null));
     });
     await clearLog("d1", { _seed: "seed", first: "one" });
-    expect(decisions).toEqual([undefined, undefined, undefined]);
+    expect(decisions).toEqual([undefined, undefined, null]);
   });
 
   it("does not attempt retirement when this editor applied no shared updates", async () => {

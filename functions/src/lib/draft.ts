@@ -410,6 +410,11 @@ export async function commitDraft(args: {
       if (!keeps) withdrawTrust(tx, docRef, grants);
     });
   } catch (e) {
+    // These refusals happen before any transaction write. An unknown error
+    // may have an uncertain commit outcome, so its uploaded bytes stay intact.
+    if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
+      await removeDraftSnapshot(docId, { storagePrefix });
+    }
     if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
     if (e instanceof DraftConflict) return { status: 409, body: e.detail };
     const reason = (e as Error).message;

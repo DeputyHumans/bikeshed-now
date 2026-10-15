@@ -107,12 +107,13 @@ for (const [reason, change, status, detail] of [
       assert.equal(result.status, status);
       assert.ok(result.body[detail]);
       assert.equal(store.has("docs/d/versions/v2"), false);
+      assert.equal([...objects.keys()].some((key) => key.startsWith("docs/d/bundles/")), false, "a refused upload retires its unreferenced candidate bundle");
       assert.deepEqual(store.get("docs/d").draft, draft);
     }, async (db) => db.doc("docs/d").update(change));
   });
 
   test(`an uploaded update rechecks ${reason} before minting`, async () => {
-    await world(async ({ db, store, draft }) => {
+    await world(async ({ db, store, draft, objects }) => {
       const result = await commitNewVersion({
         db, docRef: db.doc("docs/d"), actor, authorEmail: actor.email,
         baseVersion: "v1", via: "upload",
@@ -121,6 +122,7 @@ for (const [reason, change, status, detail] of [
       assert.equal(result.status, status);
       assert.ok(result[detail]);
       assert.equal(store.has("docs/d/versions/v2"), false);
+      assert.equal([...objects.keys()].some((key) => key.startsWith("docs/d/bundles/")), false, "a refused upload retires its unreferenced candidate bundle");
       assert.deepEqual(store.get("docs/d").draft, draft);
     }, async (db) => db.doc("docs/d").update(change));
   });

@@ -274,12 +274,12 @@ export function checkI6(versions, { base = null } = {}) {
   return result("I6", failures, { children: Object.fromEntries(children) });
 }
 
-/** Every version record of a document: [{id, parentVersion, contentHash, publishedVia}], by id. */
+/** Every version record of a document, including its immutable storage prefix, by id. */
 export async function readVersions(target, docId) {
   const { readCollection } = await import("./admin.mjs");
   const rows = await readCollection(target, `docs/${docId}/versions`);
   return rows
-    .map((r) => ({ id: r.id, parentVersion: r.data.parentVersion ?? null, contentHash: r.data.contentHash ?? null, publishedVia: r.data.publishedVia ?? null }))
+    .map((r) => ({ id: r.id, parentVersion: r.data.parentVersion ?? null, contentHash: r.data.contentHash ?? null, publishedVia: r.data.publishedVia ?? null, storagePrefix: r.data.storagePrefix ?? null }))
     .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)) || a.id.localeCompare(b.id));
 }
 

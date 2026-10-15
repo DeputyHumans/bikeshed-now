@@ -583,6 +583,32 @@ async function logEntriesAfter(docId, timeoutMs = LOG_EMPTY_MS) {
   }
 }
 
+// Keep concrete snapshot paths after the metadata selecting them is removed.
+// Reading only the current pointer would turn a failed cleanup into an empty,
+// vacuously passing inventory.
+const retiredDraftPrefixes = new Map();
+function rememberDraft(docId, draft) {
+  if (!draft) return;
+  let prefixes = retiredDraftPrefixes.get(docId);
+  if (!prefixes) retiredDraftPrefixes.set(docId, prefixes = new Set());
+  prefixes.add(draftStoragePrefix(docId, draft));
+}
+async function draftObjects(docId, draft, versions) {
+  rememberDraft(docId, draft);
+  const prefixes = retiredDraftPrefixes.get(docId) ?? new Set();
+  const lists = await Promise.all([...prefixes].map((prefix) => listObjects(target, `${prefix}/`)));
+  const referenced = versions.map((version) => `${version.storagePrefix ?? `docs/${docId}/${version.id}`}/`);
+  const bundles = await listObjects(target, `docs/${docId}/bundles/`);
+  // A rejected save may have allocated its immutable snapshot without ever
+  // returning metadata. Inventory those unreferenced objects as well.
+  const unreferenced = bundles.filter((name) => !referenced.some((prefix) => name.startsWith(prefix)));
+  return [...new Set([...lists.flat(), ...unreferenced])].sort();
+}
+async function versionPrefix(docId, versionId) {
+  const meta = await readDoc(target, `docs/${docId}/versions/${versionId}`);
+  return meta ? (meta.storagePrefix ?? `docs/${docId}/${versionId}`) : null;
+}
+
 /** What an update leaves behind: the pointer, the draft record, the version records, the draft's objects, the log's size. */
 async function serverState(docId) {
   const d = await readDoc(target, `docs/${docId}`);
@@ -591,7 +617,7 @@ async function serverState(docId) {
     currentVersion: d?.currentVersion ?? null,
     draft: d?.draft ? { baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null } : null,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${v.publishedVia}`),
-    draftObjects: await listObjects(target, `docs/${docId}/draft/`),
+    draftObjects: await draftObjects(docId, d?.draft, versions),
     yEntries: entriesOf(await readLog(docId)),
   };
 }
@@ -651,11 +677,15 @@ const millis = (ts) => (ts && typeof ts.toMillis === "function" ? ts.toMillis() 
  */
 async function footprint(docId) {
   const from = Date.now();
-  const [d, versions, objects, v2] = await Promise.all([
+  const [d, versions, v2Prefix] = await Promise.all([
     readDoc(target, `docs/${docId}`),
     readVersions(target, docId),
-    listObjects(target, `docs/${docId}/draft/`, { meta: true }),
-    listObjects(target, `docs/${docId}/v2/`),
+    versionPrefix(docId, "v2"),
+  ]);
+  rememberDraft(docId, d?.draft);
+  const [objects, v2] = await Promise.all([
+    d?.draft ? listObjects(target, `${draftStoragePrefix(docId, d.draft)}/`, { meta: true }) : [],
+    v2Prefix ? listObjects(target, `${v2Prefix}/`) : [],
   ]);
   return {
     from,
@@ -663,7 +693,7 @@ async function footprint(docId) {
     currentVersion: d?.currentVersion ?? null,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${v.publishedVia}`),
     v2Objects: v2.length,
-    draft: d?.draft ? { baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null, bytes: d.draft.bytes ?? null, updatedAt: millis(d.draft.updatedAt) } : null,
+    draft: d?.draft ? { storagePrefix: draftStoragePrefix(docId, d.draft), baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null, bytes: d.draft.bytes ?? null, updatedAt: millis(d.draft.updatedAt) } : null,
     objects,
   };
 }
@@ -952,7 +982,8 @@ function judgeAgentView(view, { label, mark, forbidden = [], noTokens = false, w
 
 /** An editor's GET /draft serves `versionId`'s stored entry. */
 async function judgeDraftServed({ label, http, docId, entry, versionId, forbidden = [] }) {
-  const stored = await readObject(target, `docs/${docId}/${versionId}/${entry}`);
+  const prefix = await versionPrefix(docId, versionId);
+  const stored = prefix ? await readObject(target, `${prefix}/${entry}`) : null;
   const got = await draftServed(http, docId, entry);
   const whose = stored && got.sha === sha(stored) ? `${versionId}'s entry` : forbidden.find((m) => got.text.includes(m)) ? `a replaced draft (${forbidden.find((m) => got.text.includes(m))})` : got.text.includes(`>${V1_HEADING}<`) ? "v1's content" : "something else";
   assert.ok(got.status === 200 && stored && got.sha === sha(stored), `${label} GET /draft: an editor's GET /draft serves the agent's version (${versionId}'s stored entry) — it answered ${got.status} with ${whose}`);
@@ -1135,7 +1166,8 @@ scenario("C12a agent update vs editors: while N editors type in the editor, the 
   });
   const mid = await serverState(docId);
   ctx.ev.json("after-refusal", mid);
-  const uploaded = await listObjects(target, `docs/${docId}/v2/`);
+  const v2Prefix = await versionPrefix(docId, "v2");
+  const uploaded = v2Prefix ? await listObjects(target, `${v2Prefix}/`) : [];
   await o.check(() => assert.ok(mid.currentVersion === "v1" && mid.versions.length === 1 && uploaded.length === 0, `C12a nothing minted (after the settle): a refused update mints and uploads nothing — current ${mid.currentVersion}, versions ${JSON.stringify(mid.versions)}, ${uploaded.length} object(s) under docs/{d}/v2/`));
   await o.check(() => assert.ok(mid.draft?.baseVersion === "v1" && mid.draftObjects.length > 0 && mid.yEntries > 0, `C12a left alone (after the settle): the draft and its log are still there (draft ${JSON.stringify(mid.draft)}, ${mid.draftObjects.length} draft object(s), ${mid.yEntries} log entries)`));
   verdict({ others: o });
@@ -1193,6 +1225,7 @@ async function curlSetup(ctx, label) {
 /** A curl editor's POST /draft on `baseVersion` with its own marker → {name, status, json}. */
 async function curlSave(e, docId, baseVersion) {
   const r = await e.http.postJson("/draft", { docId, baseVersion, html: curlDraft(e.mark) }, { timeoutMs: HTTP_MS });
+  if (r.status === 200) rememberDraft(docId, r.json?.draft);
   return { name: e.name, status: r.status, json: r.status === 200 ? { baseVersion: r.json?.draft?.baseVersion ?? null } : r.json ?? null };
 }
 
@@ -1239,6 +1272,7 @@ scenario("C12b curl-only drafts vs the agent's update (SYNC-T): N−1 editors' P
     toolRequest(s.agent.token, "update_document", { id: s.docId, content: agentContent(markA), baseVersion: "v1" }, 1),
   ], "C12b drafts and update");
   const drafts = run.results.slice(0, s.editors.length).map((r, i) => ({ name: s.editors[i].name, ...jsonRow(r) }));
+  for (const draft of drafts) if (draft.status === 200) rememberDraft(s.docId, draft.json?.draft);
   const upd = toolRow(run.results.at(-1), 1);
   ctx.ev.json("answers", { drafts, update: upd });
   ctx.step(`drafts: ${drafts.map((d) => `${d.name} ${d.status}`).join(", ")}; update_document: ${upd.kind}${upd.json?.versionId ? ` ${upd.json.versionId}` : ""}`);
@@ -1298,7 +1332,6 @@ scenario("C12b straddle (SYNC-P, amplify-c12-update): every curl draft is held a
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c12-update"],
   n: [2, 5, 10, 20],
-  defect: "S14",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1307,14 +1340,13 @@ scenario("C12b straddle (SYNC-P, amplify-c12-update): every curl draft is held a
   // What POST /draft left is "C12b straddle draft write"'s oracle (X-a12-versions-2), recorded here and judged there.
   ctx.step(`RECORDED, judged by the draft-write case (X-a12-versions-2): ${dropped.failed.length ? dropped.failed.join(" | ") : "nothing of the drafts was left"}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b straddle", drafts: answers.map((a) => a.status), draftRecord: state.draft, draftObjects: state.draftObjects.length, ownFailed: served.failed.length });
-  verdict({ defect: "S14", others: current, own: served });
+  verdict({ others: current, own: served });
 }));
 
 scenario("C12b straddle draft write (SYNC-P, amplify-c12-update): every curl draft is held after POST /draft's base check while the agent's update publishes v2 and drops the draft, then lets go; once the server holds still nothing of a draft of v1 is left: no docs/{d}.draft on v1 and no object under docs/{d}/draft/", {
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c12-update"],
   n: [2, 5, 10, 20],
-  defect: "X-a12-versions-2",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1323,7 +1355,7 @@ scenario("C12b straddle draft write (SYNC-P, amplify-c12-update): every curl dra
   // What GET /draft serves from it is "C12b straddle"'s oracle (S14), recorded here and judged there.
   ctx.step(`RECORDED, judged by the straddle case (S14): ${served.failed.length ? served.failed.join(" | ") : "GET /draft serves the agent's version"}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b straddle draft write", drafts: answers.map((a) => a.status), draftRecord: state.draft, draftObjects: state.draftObjects.length, ownFailed: dropped.failed.length });
-  verdict({ defect: "X-a12-versions-2", others: current, own: dropped });
+  verdict({ others: current, own: dropped });
 }));
 
 scenario("C12b straddle serial positive control: the same curl drafts and update one after another — each draft saved on v1, then the agent's update, then each draft again on v1, refused as stale — leave no draft of v1, GET /draft serves the agent's version and the next editor sees it", {
@@ -1532,14 +1564,13 @@ function judgeS8(docId, { yBefore, left, refused, label }) {
   assert.equal(
     left.n,
     0,
-    `${label} S8, a SPEC QUESTION (class Q), not a SPEC violation: status/${docId}/y still holds ${left.n} entries ${(left.ms / 1000).toFixed(1)} s after "Published v2." (it held ${yBefore}; the committing page logged ${refused} refused write(s) to it). The app's clearLog (app/src/pages/DocViewer.tsx:580, app/src/crdt/rtdb.ts:69-76) removes the whole node, which the realtime rules refuse (database.rules.json allows writes per entry only), so the published draft's log outlives the commit. The app means to clear it (DocViewer.tsx:576-579); the nearest SPEC sentence is §16 spec.md:1556 "The log belongs to the draft.", and no SPEC sentence requires the in-app commit to drop the log`,
+    `${label} S8: the applied live log is empty within 2 s of publishing after every co-editor left; status/${docId}/y still holds ${left.n} entries after ${left.ms} ms`,
   );
 }
 
 scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, p1 presses Save as new version: \"Published v2.\", the draft's record and objects are gone, v2 holds every token once (I2) and the sentinel once (I3), and the next editor sees v2; then the agent's update publishes v3, the live log is empty within 2 s and the next editor sees the agent's version. Own oracle (S8, class Q, a SPEC question): the live log is empty within 2 s of \"Published v2.\"", {
   tiers: BOTH,
   n: [2, 5, 10, 20],
-  defect: "S8",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1562,7 +1593,11 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   const yBefore = entriesOf(await readLog(docId));
   const consoleMark = p1.log.console.length;
   ctx.step(`${p1.name} presses Save as new version (the live log holds ${yBefore} entries)`);
+  rememberDraft(docId, (await readDoc(target, `docs/${docId}`))?.draft);
+  const commitDrafts = p1.capture({ paths: "/draft" });
   const saved = await p1.saveAsNewVersion({ timeout: HTTP_MS });
+  commitDrafts.stop();
+  for (const row of commitDrafts) if (row.status === 200) rememberDraft(docId, row.json?.draft);
   // S8's own oracle counts from the toast, read while presence catches up.
   const leftP = settled(logLeftWithin(docId, LOG_EMPTY_MS));
   ctx.step(`${p1.name}: ${saved.outcome} "${saved.text}"`);
@@ -1587,7 +1622,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(state.currentVersion === "v2" && state.versions.includes("v2<v1:editor"), `C12d version: v2 is current, minted on v1 by the editor (${JSON.stringify(state.versions)}, current ${state.currentVersion})`));
   await o.check(() => judgeDraftDropped(state, { label: "C12d", versionId: "v2" }));
   const parser = await ctx.users.parser();
-  const v2html = (await readObject(target, `docs/${docId}/v2/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
   await o.check(async () => assertInvariant(checkI2({ peers: { v2: await segmentsOfHtml(parser, v2html, ids) }, typed: log.typed })));
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1598,7 +1633,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(view.i3.sentinels === 1 && view.i3.children === baseline.children && view.heading === V1_HEADING, `C12d next editor: ${p2.name} sees v2 (sentinel ${view.i3.sentinels} time(s), ${view.i3.children} top-level element(s) for v2's ${baseline.children}, heading ${JSON.stringify(view.heading)})`));
   await p2.done({ timeout: 60_000 });
   await nobodyEditing(ctx, docId, `${p2.name} pressed Done`);
-  if (o.failed.length) verdict({ defect: "S8", others: o, own });
+  if (o.failed.length) verdict({ others: o, own });
 
   const markA = marker("A");
   const out = await agentUpdate(agent, docId, agentContent(markA), "v2");
@@ -1608,7 +1643,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o2.check(() => judgeLogDropped(docId, { label: "C12d", what: "the agent's update after the in-app commit" }));
   await o2.check(async () => judgeDraftDropped(await serverState(docId), { label: "C12d", versionId: v }));
   await o2.check(async () => judgeAgentView(await editorView(ctx, p1, docId), { label: "C12d", mark: markA, noTokens: true, who: p1.name }));
-  verdict({ defect: "S8", others: merged(o, o2), own });
+  verdict({ others: merged(o, o2), own });
   // As A9.8: without the tree's rules the remove is allowed and S8's oracle proves nothing (S31).
   if (!rules.ok) precondition(false, `the realtime rules are enforced where the commit cleared the log, or the remove is allowed and S8's oracle proves nothing (S31): ${rules.reason}`);
 }));
@@ -1709,7 +1744,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   await nobodyEditing(ctx, docId, `${p1.name} published and ${p2.name} pressed Done`);
   const yLeft = entriesOf(await readLog(docId));
 
-  const v2html = (await readObject(target, `docs/${docId}/v2/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
   const parser = await ctx.users.parser();
   await parser.setContent(v2html);
   const baseline = await readI3(parser);

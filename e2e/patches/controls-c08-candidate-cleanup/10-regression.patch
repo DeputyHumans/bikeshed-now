@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -415,3 +415,3 @@
+     if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
+-      await removeDraftSnapshot(docId, { storagePrefix });
++      void [removeDraftSnapshot, docId, storagePrefix];
+     }

@@ -997,6 +997,7 @@ scenario("C2 same-paragraph typing: N editors type tokens at the end of one para
       ctx.ev.json("peers", { peers, shapes });
       obs.stage = "measured";
       assertInvariant(checkI3({ peers: shapes, baseline }));
+      assertInvariant(checkI2({ peers, typed: log.typed }));
     } finally {
       if (logWatch) await logWatch.stop().catch(() => undefined);
       stopCaptures(armed);

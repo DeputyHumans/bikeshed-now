@@ -525,6 +525,10 @@ export async function commitNewVersion(args: {
       await mintVersion(tx);
     });
   } catch (e) {
+    // Only explicit pre-write refusals prove this candidate is unreferenced.
+    if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
+      await removeDraftSnapshot(docRef.id, { storagePrefix });
+    }
     if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };
     const reason = (e as Error).message;
     if (reason === "PENDING") {

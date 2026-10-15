@@ -859,7 +859,7 @@ scenario("A9.7 an open comment disables Save as new version with its reason and 
 /** What the A9.8 commit leaves for its live-log case (S8). */
 const liveLog = { measured: false, rules: null, before: 0, left: null, leftAfterMs: null, docId: null };
 
-scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVia editor and parentVersion v1, and removes meta.draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+async function commitAndMeasureLog(ctx) {
   // Recorded for the live-log case, which is blind where the app's realtime
   // namespace runs without the tree's rules; nothing here depends on them.
   const rules = await realtimeRules(ctx);
@@ -904,11 +904,13 @@ scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVi
   assert.equal(v2.rehash, v2.record.contentHash, "REHASH v2");
   assert.ok(v2.html.includes(t), "v2 holds the typed token");
   noPageErrors([o]);
-});
+}
+
+scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVia editor and parentVersion v1, and removes meta.draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, commitAndMeasureLog);
 
 /** S8 regression: the commit atomically retires the unchanged log it applied before saving. */
-scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], timeoutMs: JUDGE_MS }, async (ctx) => {
-  if (!liveLog.measured) ctx.inconclusive("the A9.8 commit case did not reach its commit (see its outcome), so nothing was measured");
+scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  if (!liveLog.measured) await commitAndMeasureLog(ctx);
   precondition(liveLog.rules.ok, `the realtime rules are enforced where the commit cleared the log, or the remove is allowed and nothing is proved: ${liveLog.rules.reason}`);
   precondition(liveLog.before > 0, `the live log held entries before the commit (${liveLog.before})`);
   ctx.step(`status/${liveLog.docId}/y: ${liveLog.before} entries before the commit, ${liveLog.left ?? 0} ${liveLog.leftAfterMs} ms after "Published v2."`);

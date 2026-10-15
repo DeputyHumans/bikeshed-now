@@ -1,0 +1,7 @@
+--- a/functions/src/lib/accept.ts
++++ b/functions/src/lib/accept.ts
+@@ -103,3 +103,3 @@
+           content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
+-          expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
++          emailLower: caller.emailLower, actor,
+         });
