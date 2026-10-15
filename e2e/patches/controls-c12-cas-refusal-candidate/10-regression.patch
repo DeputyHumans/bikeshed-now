@@ -1,0 +1,11 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -337,7 +337,7 @@
+     // before deleting; a refused retry alone is not that proof.
+     if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
+       if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+-      else await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
++      else if (transactionCandidateStaged) await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
+     }
+     throw error;
+   }

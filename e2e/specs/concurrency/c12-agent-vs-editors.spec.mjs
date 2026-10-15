@@ -175,6 +175,8 @@
  */
 
 import { readLiveLogsPatient } from "../../lib/live-log.mjs";
+import { assertCasWinner, assertCasCandidateOutcome } from "../../lib/cas-candidate-oracles.mjs";
+import { publicationSnapshot } from "../../lib/publication-oracles.mjs";
 import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
@@ -1842,3 +1844,76 @@ scenario("C12d co-editor recovery: publishing retires the open editor's base wit
     loads.stop(); saves.stop();
   }
 }));
+
+async function c12CasCandidate(ctx, { reused }) {
+  const label = reused ? "C12e CAS reused candidate" : "C12e CAS refused candidate";
+  const s = await curlSetup(ctx, label), actor = s.editors[0];
+  const meta = await readDoc(target, `docs/${s.docId}`), liveEpoch = String(meta.liveEpoch ?? "initial");
+  const generation = sha(readFixture(FIXTURE)), stamp = clock => ({ generation, vector: { 101: clock }, deletes: {} });
+  const html = clock => curlDraft(`CAS${clock}${marker("candidate")}`);
+  const save = (clock, content) => actor.http.postJson("/draft", { docId: s.docId, baseVersion: "v1", liveEpoch, causal: stamp(clock), html: content }, { timeoutMs: HTTP_MS });
+  const baseline = await save(1, html(1));
+  precondition(baseline.status === 200 && baseline.json?.draft?.causal, `${label}: the real endpoint saved the initial causal snapshot`);
+  const original = await publicationSnapshot(target, s.docId);
+  precondition(original.versions.length === 1 && original.versions[0].objects.length > 0 && original.draftObjects.length > 0, `${label}: baseline current and historical bytes exist`);
+  const beforeKeys = new Set(await listObjects(target, `docs/${s.docId}/bundles/`));
+  const g = gates(ctx.target), pending = [], since = logMark({ target });
+  let losingPrefix, winner, response, final;
+  try {
+    await g.hold("draft-cas-before-write", { key: s.docId, ttlMs: 40_000 });
+    const older = settled(save(2, html(2))); pending.push(older);
+    const held = await requireHeld(ctx, g, "draft-cas-before-write", 1, { key: s.docId, timeoutMs: HELD_MS });
+    // The amplifier supplies only the already allocated prefix as caller identity.
+    losingPrefix = held.callers[0]?.caller;
+    precondition(typeof losingPrefix === "string" && losingPrefix.startsWith(`docs/${s.docId}/bundles/`), `${label}: the actual CAS pause identifies this request's immutable candidate`);
+    const candidateKeys = await listObjects(target, `${losingPrefix}/`);
+    precondition(candidateKeys.length > 0 && candidateKeys.every(key => !beforeKeys.has(key)), `${label}: candidate bytes were uploaded before the captured snapshot pause`);
+    ctx.ev.json("cas-held-candidate", { prefix: losingPrefix, keys: candidateKeys, held });
+    if (reused) {
+      const newer = settled(save(3, html(3))); pending.push(newer);
+      const both = await requireHeld(ctx, g, "draft-cas-before-write", 2, { key: s.docId, timeoutMs: HELD_MS, distinct: "caller" });
+      const later = both.callers.find(c => c.caller !== losingPrefix);
+      precondition(Boolean(later), `${label}: two distinct uploaded CAS callers are held`);
+      await g.releaseCaller("draft-cas-before-write", { key: s.docId, caller: later.caller });
+      const result = await newer; if (!result.ok) throw result.error;
+      winner = await publicationSnapshot(target, s.docId);
+      assertCasWinner({ reused, response: result.value, winner, original, expectedPrefix: later.caller, expectedVector: stamp(3).vector });
+    } else {
+      const markA = marker("CASpublished");
+      const out = await agentUpdate(s.agent, s.docId, agentContent(markA), "v1");
+      winner = await publicationSnapshot(target, s.docId);
+      assertCasWinner({ reused, published: publishedVersion(out, label), winner, original });
+    }
+    ctx.ev.json("cas-winner-before-release", winner);
+    await g.release("draft-cas-before-write", { key: s.docId });
+    const result = await older; if (!result.ok) throw result.error;
+    response = { status: result.value.status, json: result.value.json };
+    const parseCas = line => { try { return JSON.parse(line.slice(line.indexOf("[e2e-c12-cas]") + "[e2e-c12-cas]".length).trim()); } catch { return null; } };
+    const codeRows = await eventually(() => {
+      const found = grepLog("[e2e-c12-cas]", { target, since }).map(parseCas).filter(r => r?.docId === s.docId && r.storagePrefix === losingPrefix && r.code === 9);
+      return found.length ? found : false;
+    }, { timeout: 45_000, interval: 250, message: `${label}: the real SDK reports the losing snapshot's CAS precondition failure` }).catch(error => {
+      if (error.code === "E2E_EVENTUALLY_TIMEOUT") ctx.inconclusive(`${label}: no observed code-9 CAS window; ${error.message}`);
+      throw error;
+    });
+    ctx.ev.json("cas-conditional-write-refusal", codeRows);
+    final = await publicationSnapshot(target, s.docId);
+    const discarded = await listObjects(target, `${losingPrefix}/`);
+    const selectedKeys = new Set([...final.draftObjects, ...final.versions.flatMap(v => v.objects)].map(o => o.key));
+    const unreachable = (await listObjects(target, `docs/${s.docId}/bundles/`)).filter(key => !selectedKeys.has(key));
+    assertCasCandidateOutcome({ reused, response, winner, final, discarded, unreachable });
+    ctx.ev.json("cas-candidate-outcome", { original, winner, losingPrefix, response, final, discarded });
+    measure(ctx, "c12-agent-vs-editors", { scenario: label, branch: reused ? "reuse" : "terminal-refusal", losingPrefix, response, preserved: true, discarded });
+  } finally {
+    await g.release("draft-cas-before-write", { key: s.docId }).catch(() => undefined);
+    await Promise.all(pending);
+  }
+}
+
+scenario("C12e CAS candidate reuse: a held older causal save loses its exact precondition to a newer save, acknowledges the newer draft, and deletes only its unreferenced upload", {
+  tiers: LOCAL, n: [2], needs: ["gates", "patch:amplify-c12-update"], timeoutMs: CASE_MS, ...LIVE,
+}, async ctx => guarded(ctx, () => c12CasCandidate(ctx, { reused: true })));
+
+scenario("C12e CAS candidate refusal: a held draft loses its exact precondition to publication, refuses the old base, and deletes only its unreferenced upload", {
+  tiers: LOCAL, n: [2], needs: ["gates", "patch:amplify-c12-update"], timeoutMs: CASE_MS, ...LIVE,
+}, async ctx => guarded(ctx, () => c12CasCandidate(ctx, { reused: false })));
