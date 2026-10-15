@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the feedback publication pause points applicable after bounded retry receipts changed their imports. Preserve the original gates and directional controls, with exact patch reversal and composed compiler checks.
+
 - Keep a committed MCP comment acknowledged when its author deletes the thread, opening comment or both before a native retry. Store a bounded receipt independently of deletable feedback, preventing false refusals and resurrection, with real author-delete E2E coverage and three directional controls.
 
 - Acknowledge remembered-link saves and no-change publications after a later edit replaces their current pointer or epoch. Bounded operation receipts preserve the original result and captured cleanup without overwriting later drafts; add native retry regressions and combined endpoint schedules for draft and thumbnail supersession.

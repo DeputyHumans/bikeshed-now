@@ -1,11 +1,9 @@
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -5,4 +5,5 @@
- import { FieldValue, Timestamp } from "firebase-admin/firestore";
+@@ -7,2 +7,3 @@
  import type { Actor } from "./actor";
 +import { e2eGate } from "./e2eGate";
-
- /**
+ import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
 @@ -194,4 +195,8 @@
 
    const anns = annotations(docRef, versionId);
@@ -33,12 +31,10 @@
        // reader's authority atomically with both writes, so a racing publish
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -19,4 +19,5 @@
- import { syncPublicProjection } from "./publicdoc";
+@@ -21,2 +21,3 @@
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
-
- /**
+ import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
 @@ -407,4 +408,7 @@
      });
    }
