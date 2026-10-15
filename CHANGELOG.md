@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Refresh regression mutations after presence, activity and write-authority repairs; keep verification race controls applicable alone and after their timing gates.
+
 - Close the operator-owned Admin app after awaited publishing, access, withdrawal or teardown work, so a live realtime mirror connection cannot keep a completed command running.
 
 - Recheck the current version and reader permission atomically when MCP opens a comment, so publication or access revocation during passage lookup cannot leave new feedback behind.

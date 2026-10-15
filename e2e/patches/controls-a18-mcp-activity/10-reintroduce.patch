@@ -7,4 +7,4 @@
 -        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
          lastBeatAt: FieldValue.serverTimestamp(),
        }, { merge: true });
-       tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) });
+       tx.update(docRef, {

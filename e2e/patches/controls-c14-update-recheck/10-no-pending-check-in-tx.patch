@@ -1,7 +1,7 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
 @@ -522,3 +522,3 @@
-       await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail });
+       await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });
 -      if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
 +      void anyOpenThread;
        if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");

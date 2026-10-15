@@ -3,7 +3,7 @@
 @@ -5,2 +5,3 @@
  import { rtdb } from "../firebase";
 +import { e2eLogGate, e2eNoteRefusal, e2eRefuseThisAppend } from "../e2eLogGate";
- import { SEED_KEY, type UpdateLog } from "./log";
+ import { SEED_KEY, LOG_ENTRY_MAX, LiveLogSizeError, type UpdateLog } from "./log";
 @@ -59,2 +60,8 @@
      async append(payload) {
 +      // Refuse one append after the harness has proved the intended window.

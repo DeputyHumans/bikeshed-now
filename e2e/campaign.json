@@ -13751,6 +13751,29 @@
         "controls-c14-comment-head"
       ],
       "note": "Create annotation and first comment in a transaction that rechecks head, current read authority, expiry and any remembered link grant after locating the anchor. The held-head judge can run independently and both S12 judges are now normal assertions. Explicit browser historical commenting is intentional and remains available; its separate X-c13 question is not closed by this source repair. No E2E closure."
+    },
+    {
+      "kind": "e2e-control-observation",
+      "items": [
+        "X-a03-visibility-1",
+        "X-a18-stats-1",
+        "presence-first-session-cleanup"
+      ],
+      "scope": "local authoring controls on c9d6fea; final integrated revision remains pending",
+      "tests": [
+        "Download MIME/disposition, first-session presence, reader privacy and deliberate OAuth return: four clean target cases pass; five isolated mutants fail their intended assertions",
+        "Late-save causal-history control on 580032b: clean target passes and mutant fails the I5 assertion"
+      ],
+      "evidence": "e2e/.out/controls-20261015-050836z/ledger.json; e2e/.out/controls-20261015-045115z/ledger.json",
+      "controls": [
+        "controls-a03-download-type",
+        "controls-a03-download-attachment",
+        "controls-a11-presence-arm",
+        "controls-a18-reader-privacy",
+        "controls-a22-deliberate-return",
+        "controls-c01-late-autosave"
+      ],
+      "note": "Observed red/restored green pairs, not closure on the final acceptance revision. Full B7 self-test had 1220 pass and three patch applicability failures. A sweep enumerated stale mutation contexts so all can be refreshed without weakening assertions. No campaign item closed."
     }
   ]
 }
