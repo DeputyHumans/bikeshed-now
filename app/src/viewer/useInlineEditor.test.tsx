@@ -7,6 +7,7 @@ import * as Y from "yjs";
 import { bindSync } from "../crdt/sync";
 import { EMPTY_ATTR } from "../brand/dom";
 import { ConflictError } from "../api";
+import { StaleVersionError } from "../edit";
 import type { FrameMode } from "./frameMode";
 import { useInlineEditor } from "./useInlineEditor";
 
@@ -332,5 +333,23 @@ it("does not request reload for a causal save waiting for other live edits to me
     await act(() => view.result.current.flushNow());
     expect(view.result.current.reloadRequired).toBe(false);
     expect(view.result.current.saveError).toContain("Keep this editor open");
+  } finally { view.unmount(); }
+});
+
+
+it("keeps local edits and offers explicit reload after another editor publishes", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockRejectedValue(new StaleVersionError("v2"));
+  const onStale = vi.fn();
+  const { view, doc, type } = setup(undefined, { onStale });
+  try {
+    doc.querySelector("p")!.textContent = "My late local change";
+    act(type);
+    await act(() => view.result.current.flushUnsaved());
+    expect(view.result.current.reloadRequired).toBe(true);
+    expect(view.result.current.saveState).toBe("error");
+    expect(doc.querySelector("p")!.textContent).toBe("My late local change");
+    expect(view.result.current.saveFailed()).toBe(true);
+    expect(onStale).toHaveBeenCalledWith("v2");
   } finally { view.unmount(); }
 });

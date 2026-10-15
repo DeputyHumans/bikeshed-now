@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Offer explicit draft reload when another editor publishes, retaining the stale editor's unsaved local text until that choice. Add a controlled co-editor publication case at every concurrency size and inverse controls for recovery and automatic remounting.
+
 - Freeze direct annotation and comment creates, changes and deletes when a document expires, including owner writes, while preserving existing feedback reads and restoring the same permissions when expiry is cleared.
 
 - Keep one quote context intact in repeated-replacement review tests, and assert failed-save error text after observing any error toast; real patched-stack controls now reach both intended assertions.

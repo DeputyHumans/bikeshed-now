@@ -1,0 +1,11 @@
+{
+  "oracle": "C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload [N=2]",
+  "what": "Remove stale published-base recovery from useInlineEditor while leaving draft-revision recovery intact.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
+    "case": "C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload [N=2]"
+  },
+  "expect": {
+    "message": "C12 recovery action: the peer can explicitly reload the new base"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -210,7 +210,7 @@
+   const mode: FrameMode = useMemo(
+     () =>
+       editingOrigin
+-        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
++        ? { kind: "editing", baseVersion: doc.currentVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
+         : {
+             kind: "reading",
+             versionId: doc.currentVersion,

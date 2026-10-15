@@ -143,20 +143,11 @@
  *        allow. It is judged only where the database enforces the tree's
  *        rules (rtdbRulesStatus, live; S31); elsewhere the case FAILS its
  *        precondition, as A9.8 does.
- *   C12d co-editor (S8's other side, class Q, recorded): as C12d, but p2
- *        stays in the editor and types without pause through p1's commit and
- *        3 s past it. Oracles: "Published v2.", and v2 and the next editor
- *        show the sentinel once (I3). Recorded: where p2's keys begun after
- *        p1's pre-commit save end up (v2; p2's page, whose edit frame the app
- *        remounts on v2 because the editing mode follows doc.currentVersion,
- *        DocViewer.tsx:208-211, and the base its own next save goes on; the
- *        live log; what the next editor sees; the draft its first keystroke
- *        saves): the evidence G1 needs to choose between dropping the log on
- *        commit (those keys lost) and keeping it (unpublished keys kept as
- *        the next draft). No SPEC sentence says which base a co-editor's
- *        open editor saves on once a version is published (§16 keeps the
- *        stale 409 for "somebody PUBLISHED a new version while you were
- *        editing"), so that is recorded, never judged.
+ *   C12d co-editor retains the original typing-through-publication measurement.
+ *        The deterministic recovery case separately holds a late save before
+ *        publication and asserts SPEC §16: the old editor keeps its local text
+ *        and base, the server refuses its save, and only explicit Reload draft
+ *        opens the new base. No automatic remount may carry late keys into v2.
  *
  * The three gated cases need both amplify sets (their callers pass the gate
  * service by when unarmed), and C12a's probe needs amplify-c12-update:
@@ -1678,8 +1669,8 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   if (!two.ok) ctx.inconclusive(`the sync precondition did not hold: presence never showed p1 and p2 alone in the editor (${JSON.stringify(two.modes)})`);
   const yBefore = entriesOf(await readLog(docId));
   const p1Drafts = p1.capture({ paths: "/draft" });
-  // p2's edit frame loads: the editing mode follows doc.currentVersion (app/src/pages/DocViewer.tsx:208-211), so a new
-  // version remounts it on that version (frameMode.ts frameKey) — recorded, with the base its next save goes on.
+  // Retain the historical measurement; the separate recovery case asserts
+  // that publication cannot remount this open editor onto a different base.
   const p2Loads = p2.capture({ paths: /^\/draft\//, method: "GET" });
   const consoleMark = p1.log.console.length;
 
@@ -1733,9 +1724,8 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const left = leftR.value;
   const refused = refusedRemoves(p1, docId, consoleMark);
   ctx.step(`${p2.name}'s autosave after its last key (recorded: its status and the base it went on); then its own page's text; then it presses Done`);
-  // Recorded, not judged. No SPEC sentence says which base a co-editor's open editor saves on once a version is published:
-  // SPEC §16 keeps the stale 409 for "somebody PUBLISHED a new version while you were editing", and the app instead
-  // remounts the editor on the new version (DocViewer.tsx:208-211), so the next save goes on it.
+  // Natural-race timing remains diagnostic; the controlled recovery case
+  // below asserts refusal and explicit reload without depending on key timing.
   const p2Save = await p2.waitForAutosave({ after: rows.at(-1).end, timeout: 60_000, expectStatus: null }).catch((err) => ({ status: null, body: null, error: String(err?.message ?? err).slice(0, 300) }));
   const p2Text = await (await p2.frame()).evaluate(bodyText).catch(() => null);
   p2Loads.stop();
@@ -1785,4 +1775,63 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   ctx.t.diagnostic(`C12d co-editor N=${n}: ${late.length} late token(s): v2 ${where.inV2}, next editor ${where.nextEditorSees}, draft of v2 ${where.draftOfV2Holds} (${fate}); y ${yBefore} → ${left.n} → ${yLeft}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12d co-editor", ...where, p2FrameLoadsAfterCommit: remounts.length, p2SaveAfterCommit: `${p2Save.status}@${where.p2SaveAfterCommit.base}`, fate });
   verdict({ others: o });
+}));
+
+scenario("C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload", {
+  tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: CASE_MS, ...LIVE,
+}, async (ctx) => guarded(ctx, async () => {
+  const { docId, users } = await joinShared(ctx, { n: ctx.n, fixture: FIXTURE, title: `C12d explicit recovery N=${ctx.n}` });
+  const log = tokenLog(target.runId);
+  const [publisher, peer] = users;
+  await typeOneEach(users, log);
+  await settleFirst(users, docId);
+  for (const u of users.slice(2)) await u.done({ timeout: 60_000 });
+  const late = log.next(peer.name, paragraph(1));
+  const loads = peer.capture({ paths: /^\/draft\//, method: "GET" });
+  const saves = peer.capture({ paths: "/draft" });
+  // Hold actual outgoing requests, never their answers: the publication uses
+  // the already saved snapshot while the peer owns a newer unsaved local edit.
+  const heldCommit = await publisher.delayRequests("/commit", { rules: [() => new Promise(() => {})], maxMs: 120_000 });
+  const heldDrafts = await Promise.all([publisher, peer].map((u) => u.delayRequests("/draft", {
+    rules: Array.from({ length: 10 }, () => () => new Promise(() => {})),
+    match: ({ postJson }) => String(postJson?.html ?? "").includes(late), maxMs: 120_000,
+  })));
+  const publication = settled(publisher.saveAsNewVersion({ timeout: HTTP_MS }));
+  try {
+    await eventually(() => heldCommit.seen() > 0, { timeout: 60_000, message: "the publisher has saved and is about to commit" });
+    await peer.typeInFrame(idSelector(paragraph(1)), late, { delay: KEY_DELAY_MS, at: "end" });
+    await eventually(() => heldDrafts[1].seen() > 0, { timeout: 60_000, message: "the peer's late snapshot is held before publication" });
+    assert.equal(heldDrafts[1].rows[0].postJson.baseVersion, "v1", "C12 recovery origin: the open editor's late save stays on v1");
+    await heldCommit.restore();
+    const published = await publication;
+    if (!published.ok) throw published.error;
+    assert.deepEqual([published.value.outcome, published.value.versionId], ["published", "v2"], "C12 recovery publication: the saved snapshot publishes v2");
+    await Promise.all(heldDrafts.map((h) => h.restore()));
+    const refused = await saves.waitFor((r) => String(r.postJson?.html ?? "").includes(late), { timeout: 60_000 });
+    assert.equal(refused.status, 409, "C12 recovery fence: a late save on the retired base is refused");
+    assert.equal(refused.json?.currentVersion, "v2", "C12 recovery fence: refusal identifies the newly published base");
+    assert.equal(loads.length, 0, "C12 recovery frame: publication does not automatically reload the peer's editor");
+    assert.ok((await (await peer.frame()).evaluate(bodyText)).includes(late), "C12 recovery local text: a refused late edit remains in the peer's open editor");
+    const entry = await v1Entry(docId);
+    const v2 = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
+    assert.ok(!v2.includes(late), "C12 recovery immutable version: the held late edit is absent from v2");
+    const beforeReload = await readDoc(target, `docs/${docId}`);
+    assert.ok(!beforeReload.draft, "C12 recovery durability: the refused late save cannot silently become a draft of v2");
+    const reload = peer.page.getByRole("button", { name: "Reload draft", exact: true });
+    const offered = await eventually(() => reload.count().then((n) => n > 0), { timeout: 15_000, message: "the stale editor offers recovery" }).catch(() => false);
+    assert.equal(offered && await reload.isVisible(), true, "C12 recovery action: the peer can explicitly reload the new base");
+    await reload.click();
+    await peer.awaitEdit({ waitShared: true, timeout: 90_000 });
+    assert.ok(!(await (await peer.frame()).evaluate(bodyText)).includes(late), "C12 recovery choice: explicit reload replaces the refused local snapshot");
+    const resumed = log.next(peer.name, paragraph(1));
+    const saved = await peer.typeAndAutosave(idSelector(paragraph(1)), resumed, { delay: KEY_DELAY_MS, timeout: 60_000 });
+    assert.equal(saved.body?.draft?.baseVersion, "v2", "C12 recovery resume: an explicitly reloaded editor saves on v2");
+    const draft = (await readDraftObject(target, docId, entry))?.toString("utf8") ?? "";
+    assert.ok(draft.includes(resumed) && !draft.includes(late), "C12 recovery durable resume: only the edit made after reload reaches the new draft");
+    ctx.ev.json("co-editor-explicit-recovery", { late, resumed, refused: { status: refused.status, base: refused.postJson.baseVersion, currentVersion: refused.json?.currentVersion }, loadsBeforeReload: 0, resumedBase: saved.body?.draft?.baseVersion });
+  } finally {
+    await heldCommit.restore();
+    await Promise.all(heldDrafts.map((h) => h.restore()));
+    loads.stop(); saves.stop();
+  }
 }));

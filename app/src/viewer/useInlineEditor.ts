@@ -143,7 +143,7 @@ export function useInlineEditor(options: {
           setSaveState("error");
           if (e instanceof StaleVersionError) onStaleRef.current(e.currentVersion);
           setSaveError((e as Error).message);
-          setReloadRequired(e instanceof ConflictError && (e.detail.reloadRequired === true || e.detail.liveReset === true));
+          setReloadRequired(e instanceof StaleVersionError || (e instanceof ConflictError && (e.detail.reloadRequired === true || e.detail.liveReset === true)));
           return false;
         }
       } while (unsaved.current);
