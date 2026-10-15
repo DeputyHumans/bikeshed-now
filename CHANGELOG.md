@@ -79,6 +79,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Tests
 
+- Regression controls can share the explicit analytics and CLI capability
+  setup with their clean run. Routing fixtures isolate account restoration,
+  and thumbnail checks preserve authored editing attributes.
+
 - Accessibility E2E checks now measure Chrome's computed control names, text
   contrast and focus paint on 11 screens and two dialogs without an extra
   dependency. Nested overflow, all interactive hit areas, all five app scroll

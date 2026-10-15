@@ -16,7 +16,8 @@
  *     "stack":   ["--email-off"],               optional: stack options both
  *                                               sides are built with (lib/options.mjs:
  *                                               --email-off, --app-env K=V, --rtdb-proxy,
- *                                               --gates, --patches amplify-<name>; an
+ *                                               --gates, --patches amplify-<name> or an explicitly
+ *                                               allowlisted capability set; an
  *                                               amplify set goes on before the control's)
  *     "expect":  { "message": "<a RegExp source the failure message must match>" }
  *   }
@@ -116,7 +117,7 @@ export function readControl(set, root = PATCHES_DIR) {
   if (!CONTROL_SUITES.includes(suite)) throw new Error(`${set}: target.suite must be one of ${CONTROL_SUITES.join(", ")}`);
   const stack = c.stack ?? [];
   if (!Array.isArray(stack) || !stack.every((a) => typeof a === "string")) throw new Error(`${set}: control.json "stack" is a list of stack option arguments`);
-  parseStackOptionArgs(stack); // throws on anything but the stack options (and an amplify-* --patches)
+  parseStackOptionArgs(stack); // stack options plus amplify/capability-only setup patches
   const patches = readdirSync(dir).filter((n) => n.endsWith(".patch")).sort();
   if (patches.length === 0) throw new Error(`${set}: no *.patch files`);
   return { set, dir, ...c, target: { ...c.target, suite }, stack, patches };

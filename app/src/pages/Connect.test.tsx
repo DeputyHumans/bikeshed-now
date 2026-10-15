@@ -37,6 +37,9 @@ vi.mock("../auth", () => ({
  * configured measurement id would otherwise make this test log for real.
  */
 const seen = vi.hoisted(() => ({ hrefs: [] as string[] }));
+// Account preference restoration has its own sequence tests; routing stays hermetic.
+vi.mock("../accountPreferences", () => ({ useAccountPreferences: () => true }));
+
 vi.mock("../analytics", () => ({
   initAnalytics: () => seen.hrefs.push(window.location.href),
   logPageView: () => seen.hrefs.push(window.location.href),

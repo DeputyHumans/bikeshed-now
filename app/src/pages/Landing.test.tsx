@@ -31,6 +31,9 @@ vi.mock("../auth", () => ({
  * measurement id happens to be configured and log from a unit test. Stub the
  * module rather than assert around the ambient value.
  */
+// Account preference restoration has its own sequence tests; routing stays hermetic.
+vi.mock("../accountPreferences", () => ({ useAccountPreferences: () => true }));
+
 vi.mock("../analytics", () => ({
   initAnalytics: () => {},
   logPageView: () => {},

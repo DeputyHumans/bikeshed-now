@@ -197,12 +197,14 @@ export function stackOptionArgs({ emailOff = false, appEnv = {}, rtdbProxy = fal
 /**
  * Parse the stack-option arguments that `run`, `stack up` and a control.json
  * accept: --email-off, --app-env KEY=VALUE, --rtdb-proxy, --gates,
- * --storage-shim, and `--patches <amplify-*>` (an amplify set a control's
- * both sides are built with; any other set is refused here: a control's own
- * set is its patch). Returns {emailOff, appEnv}, plus `rtdbProxy: true`,
+ * --storage-shim, and `--patches <set>` for an amplify set or one of the
+ * named capability-only sets below. Both control sides get that setup;
+ * arbitrary product patches and other controls remain refused here. Returns {emailOff, appEnv}, plus `rtdbProxy: true`,
  * `gates: true`, `storageShim: true` and `patches: [sets]` only when given
  * (so a list without them parses as it always did).
  */
+export const CONTROL_CAPABILITY_PATCHES = Object.freeze(["a19-analytics-live", "a20-cli-bad-skill-name"]);
+
 export function parseStackOptionArgs(args = []) {
   const out = { emailOff: false, appEnv: [], rtdbProxy: false, gates: false, storageShim: false, patches: [] };
   for (let i = 0; i < args.length; i += 1) {
@@ -212,8 +214,8 @@ export function parseStackOptionArgs(args = []) {
     else if (args[i] === "--rtdb-proxy") out.rtdbProxy = true;
     else if (args[i] === "--gates") out.gates = true;
     else if (args[i] === "--storage-shim") out.storageShim = true;
-    else if (args[i] === "--patches" && i + 1 < args.length && isAmplifySet(args[i + 1])) out.patches.push(args[++i]);
-    else if (args[i] === "--patches") throw new Error(`not a stack option: --patches ${args[i + 1] ?? ""} (only an amplify-* set may be named here)`);
+    else if (args[i] === "--patches" && i + 1 < args.length && (isAmplifySet(args[i + 1]) || CONTROL_CAPABILITY_PATCHES.includes(args[i + 1]))) out.patches.push(args[++i]);
+    else if (args[i] === "--patches") throw new Error(`not a stack option: --patches ${args[i + 1] ?? ""} (only an amplify-* or allowlisted capability set may be named here)`);
     else throw new Error(`not a stack option: ${args[i]} (allowed: --email-off, --app-env KEY=VALUE, --rtdb-proxy, --gates, --storage-shim, --patches amplify-<name>)`);
   }
   const parsed = { emailOff: out.emailOff, appEnv: parseAppEnvArgs(out.appEnv) };
