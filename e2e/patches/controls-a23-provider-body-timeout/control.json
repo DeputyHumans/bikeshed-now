@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.6d an incomplete provider response body shares the send deadline and cannot hold the grant response",
+  "what": "disconnect the provider fetch from its deadline so an incomplete response body holds the persisted grant response",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.6d an incomplete provider response body shares the send deadline and cannot hold the grant response"
+  },
+  "expect": {
+    "message": "persisted grant answers while the provider is still held"
+  }
+}

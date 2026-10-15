@@ -266,6 +266,7 @@ export function capabilitiesFor(rec) {
   const spares = Object.keys(rec?.ports ?? {}).filter((r) => /^spare\d*$/.test(r)).length;
   if (spares >= 2) caps.add("spare-pool");
   if (rec?.shim?.failRecipient) caps.add("mail-fail-recipient");
+  if (rec?.shim?.features?.includes("hold-recipient")) caps.add("mail-hold-recipient");
   if (rec?.homeDir) caps.add("operator-scripts");
   // Readiness proved ns=<projectId> enforces the tree's RTDB rules (stack.mjs checkRtdbRules).
   if (rec?.rtdbRules?.equal === true && rec.rtdbRules.anonymousStatus === 401) caps.add("rtdb-rules");

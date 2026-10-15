@@ -11,6 +11,7 @@ import { E2E_DIR, E2E_TMP, REPO_ROOT, ensureDir } from "../lib/paths.mjs";
 import { isLoopbackAddress, startShim } from "../lib/mail/shim.mjs";
 import { shimControl } from "../lib/mail/shimctl.mjs";
 import { scrubEnv } from "../lib/proc.mjs";
+import { eventually } from "../lib/assert.mjs";
 
 const KEY = "re_e2e_selftest0123456789abcdef";
 const FUNCTIONS_PKG = join(REPO_ROOT, "functions", "package.json");
@@ -180,4 +181,42 @@ test("shimControl: a spec's client for one recipient, through http.mjs, refusing
   assert.deepEqual(await ctl.requests({ to: "nobody@e2e.invalid" }), []);
   await assert.rejects(() => ctl.failRecipient("a@b.invalid, c@d.invalid"), /not one exact address/);
   assert.throws(() => shimControl({ ...target, capabilities: new Set(["local"]) }), (e) => e.code === "E2E_CAPABILITY");
+});
+
+test("recipient holds stop headers or body until cancellation, isolate other sends, and release without delivery", async () => {
+  const port = Number(new URL(shim.url).port);
+  const target = { kind: "local", runId: "selftest-shim-hold", origin: shim.url, runDir: dir, capabilities: new Set(["local", "mail-fail-recipient", "mail-hold-recipient"]), mail: { shimUrl: shim.url }, stack: { ports: { shim: port } } };
+  const ctl = shimControl(target, { evidence: false });
+  const post = (to, signal) => fetch(`${shim.url}/emails`, { method: "POST", signal, headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` }, body: JSON.stringify({ from: "sender@e2e.invalid", to, subject: "Held", text: "text" }) });
+  const before = received.length;
+  for (const stage of ["headers", "body"]) {
+    const to = `${stage}-hold@e2e.invalid`;
+    await ctl.holdRecipient(to, { stage });
+    const controller = new AbortController();
+    const request = post(to, controller.signal);
+    request.catch(() => undefined);
+    const safety = setTimeout(() => controller.abort(), 5000);
+    try {
+      const pending = stage === "body" ? (await request).text() : request;
+      // Attach rejection handling before aborting so cancellation is always observed.
+      const cancelled = pending.catch((error) => error);
+      await eventually(async () => { const state = await ctl.held(to); assert.equal(state.pending, 1); return state; }, { timeout: 3000, interval: 10 });
+      assert.equal(received.length, before, "held requests never reach Mailpit");
+      controller.abort();
+      assert.equal((await cancelled).name, "AbortError");
+      const state = await eventually(async () => { const state = await ctl.held(to); assert.equal(state.closed, 1); return state; }, { timeout: 3000, interval: 10 });
+      assert.deepEqual(state, { to, armed: true, stage, received: 1, closed: 1, pending: 0 });
+    } finally { clearTimeout(safety); controller.abort(); await ctl.release(to); }
+  }
+  const to = "manual-hold@e2e.invalid";
+  await ctl.holdRecipient(to);
+  const pending = post(to);
+  try {
+    await eventually(async () => { assert.equal((await ctl.held(to)).pending, 1); return true; }, { timeout: 3000, interval: 10 });
+    assert.equal((await post("unheld@e2e.invalid")).status, 200, "another recipient is unaffected");
+    assert.equal((await ctl.release(to)).released, 1);
+    assert.equal((await pending).status, 503);
+    assert.equal(received.length, before + 1, "only the unheld recipient was delivered");
+    assert.equal((await ctl.held(to)).armed, false);
+  } finally { await ctl.release(to); }
 });

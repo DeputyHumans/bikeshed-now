@@ -12207,6 +12207,32 @@
         ],
         "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
       }
+    },
+    {
+      "id": "email-provider-hang",
+      "state": "in-progress",
+      "claim": "A provider that never sends headers or leaves its JSON body incomplete can indefinitely delay a request after its access grant is persisted. Bound each provider send to ten seconds and cancel it without losing the grant or subsequent invitations.",
+      "implementation": {
+        "spec": "e2e/specs/functional/a23-email.spec.mjs",
+        "cases": [
+          "A23.6c an unanswered provider request is cancelled and the grant answers 200 while the provider is still held",
+          "A23.6d an incomplete provider response body shares the send deadline and cannot hold the grant response"
+        ],
+        "controls": [
+          "controls-a23-provider-timeout",
+          "controls-a23-provider-body-timeout"
+        ],
+        "covered": [
+          "real installed provider SDK cancels both held headers and held response bodies",
+          "one ten-second deadline, failed-send diagnostic, fresh controller for a subsequent send",
+          "recipient-scoped shim holds remain armed after client cancellation",
+          "E2E cases require the original access response to be 200 while the provider remains held and the next recipient to receive their invitation"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/a23-timeout/negative-controls.json",
+        "remaining": [
+          "fresh E2E and red/restored control evidence on a stack with mail-hold-recipient"
+        ]
+      }
     }
   ],
   "acceptance": {

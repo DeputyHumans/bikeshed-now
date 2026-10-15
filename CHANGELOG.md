@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Bound email provider requests to ten seconds, including incomplete response bodies, so saved access and later recipients survive a stalled provider; cover both phases with recipient-scoped local holds and regression controls.
+
 - Keep owner export markings and permitted source/bundle downloads available to link readers, refresh legacy public projections, lock five additional print-hiding CSS properties, and strip reader decoration from SVG/PNG exports while preserving authored canvas pixels.
 
 ### Fixed

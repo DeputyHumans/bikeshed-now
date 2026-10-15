@@ -1,7 +1,6 @@
 --- a/functions/src/email/send.ts
 +++ b/functions/src/email/send.ts
-@@ -95,11 +95,11 @@
-     });
+@@ -112,10 +112,10 @@
      if (error) {
        console.warn(`[email] send failed: ${error.message}`);
 -      return { sent: false, reason: "failed" };

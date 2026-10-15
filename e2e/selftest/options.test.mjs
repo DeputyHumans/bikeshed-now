@@ -82,6 +82,8 @@ test("viteEnvFor: .env.example's VITE_ values, the database moved onto the stack
 test("capabilities follow the record: email off swaps email for email-off; options and harness features add theirs; an old record gets only the base", () => {
   const caps = (over) => [...capabilitiesFor(record(over))].sort();
   assert.deepEqual(caps({}), [...LOCAL_CAPABILITIES, "egress-guard", "mail-fail-recipient", "operator-scripts", "spare-pool"].sort());
+  assert.ok(caps({ shim: { failRecipient: true, features: ["hold-recipient"] } }).includes("mail-hold-recipient"));
+  assert.ok(!caps({}).includes("mail-hold-recipient"), "older shims do not claim hold support");
   const off = caps({ options: { emailOff: true, appEnv: {} } });
   assert.ok(off.includes("email-off") && !off.includes("email"));
   assert.ok(caps({ options: { emailOff: false, appEnv: { [M]: dummyMeasurementId() } } }).includes("measurement-id"));

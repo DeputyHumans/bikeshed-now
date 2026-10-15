@@ -2,6 +2,7 @@
 // The one place email leaves this system (SPEC §14).
 
 import type { ReactElement } from "react";
+import type { CreateEmailRequestOptions } from "resend";
 import { RESEND_API_KEY, mailFrom, publicOrigin } from "../config";
 
 /**
@@ -86,13 +87,28 @@ export async function sendEmail(message: Message): Promise<SendResult> {
     ]);
     const html = await render(message.body);
     const resend = new Resend(key);
-    const { error } = await resend.emails.send({
-      from: fromAddress(),
-      to: message.to,
-      subject: message.subject,
-      html,
-      text: message.text,
-    });
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 10_000);
+    // The installed SDK forwards request options to fetch, including its body
+    // read. Its public options type omits signal; the integration test pins it.
+    const options: CreateEmailRequestOptions & { signal: AbortSignal } = { signal: controller.signal };
+    let result;
+    try {
+      result = await resend.emails.send({
+        from: fromAddress(),
+        to: message.to,
+        subject: message.subject,
+        html,
+        text: message.text,
+      }, options);
+    } finally {
+      clearTimeout(deadline);
+    }
+    if (controller.signal.aborted) {
+      console.warn("[email] send failed: provider timed out after 10000 ms");
+      return { sent: false, reason: "failed" };
+    }
+    const { error } = result;
     if (error) {
       console.warn(`[email] send failed: ${error.message}`);
       return { sent: false, reason: "failed" };

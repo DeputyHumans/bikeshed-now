@@ -1,0 +1,9 @@
+--- a/functions/src/email/send.ts
++++ b/functions/src/email/send.ts
+@@ -89,5 +89,5 @@
+     const resend = new Resend(key);
+     const controller = new AbortController();
+-    const deadline = setTimeout(() => controller.abort(), 10_000);
++    const deadline = setTimeout(() => undefined, 10_000);
+     // The installed SDK forwards request options to fetch, including its body
+     // read. Its public options type omits signal; the integration test pins it.

@@ -1,0 +1,9 @@
+--- a/functions/src/email/send.ts
++++ b/functions/src/email/send.ts
+@@ -92,5 +92,5 @@
+     // The installed SDK forwards request options to fetch, including its body
+     // read. Its public options type omits signal; the integration test pins it.
+-    const options: CreateEmailRequestOptions & { signal: AbortSignal } = { signal: controller.signal };
++    const options: CreateEmailRequestOptions & { signal: AbortSignal } = { signal: new AbortController().signal };
+     let result;
+     try {

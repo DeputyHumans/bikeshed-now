@@ -27,6 +27,7 @@
  *   A23.5  a decision (reject, accept, withdraw) is mailed as a comment
  *   A23.6  a send the provider refuses (shim 500) never fails the request
  *   A23.6b verification uses the same failure boundary
+ *   A23.6c/d an unanswered provider and an incomplete body are cancelled at one send deadline
  *   A23.7  email off (its own stack, --email-off): nothing reaches the shim
  *          or Mailpit, each send is the product's logged no-op, and every
  *          operation still answers as it does with email on
@@ -79,6 +80,7 @@
 
 import assert from "node:assert/strict";
 import { after } from "node:test";
+import { eventually } from "../../lib/assert.mjs";
 import { answered, currentTarget, isHostingCutoff, precondition, scenario } from "../../lib/test.mjs";
 import { cast, castUnverified, localEmail, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, mintToken, openSession } from "../../lib/session.mjs";
@@ -895,6 +897,57 @@ scenario("A23.6b a refused verification send still answers 200, stores the verif
     await shim.clear(U.email).catch(() => undefined);
   }
 });
+
+/** A provider that never answers must not hold a persisted grant's response indefinitely. */
+async function heldProvider(ctx, stage) {
+  const { owner: O } = await people(["owner"]);
+  const t = tag();
+  const title = `Held provider ${stage} ${t}`;
+  const docId = await newDoc(O, `a236-${stage}`, title);
+  const held = localEmail(target, `held-${stage}`);
+  const next = localEmail(target, `after-held-${stage}`);
+  const shim = shimControl(target, { http: ctx.http({ actor: "shim" }) });
+  const box = mailbox(target, { http: ctx.http({ actor: "mailpit" }) });
+  const mark = logMark({ target });
+  await shim.holdRecipient(held, { stage });
+  let pending;
+  try {
+    const started = Date.now();
+    pending = access(O, docId, [{ account: held }, { account: next }]);
+    pending.catch(() => undefined);
+    await eventually(async () => (await shim.held(held)).received === 1, { timeout: 90_000, interval: 100, message: "the provider has actually received the held send" });
+    // The product's ten-second provider clock starts before this observation.
+    // A very late cold start leaves no Hosting budget to measure the deadline.
+    if (Date.now() - started > 35_000) ctx.inconclusive("the held send arrived too late to measure its deadline before Hosting's cutoff");
+    let timer;
+    const timedOut = Symbol("provider still held");
+    let result;
+    try {
+      result = await Promise.race([pending, new Promise((resolve) => { timer = setTimeout(() => resolve(timedOut), 25_000); })]);
+    } finally { clearTimeout(timer); }
+    assert.notEqual(result, timedOut, "the persisted grant answers while the provider is still held, within the provider deadline and response allowance");
+    assert.equal(result.status, 200, "a provider timeout does not fail the grant request");
+    assert.ok(result.json.members.includes(held) && result.json.members.includes(next), "both recipients retain the granted access");
+    const state = await eventually(async () => { const state = await shim.held(held); return state.closed === 1 ? state : false; }, { timeout: 5000, message: "the timed-out provider connection was cancelled" });
+    assert.deepEqual({ armed: state.armed, received: state.received, closed: state.closed, pending: state.pending }, { armed: true, received: 1, closed: 1, pending: 0 }, "the request completed by cancelling the still-armed provider, without releasing it");
+    assert.deepEqual((await shim.requests({ to: next })).map((request) => request.status), [200], "the next recipient still receives their invitation after the timeout");
+    await waitForLog(/\[email\] send failed: provider timed out after 10000 ms/, { target, since: mark, timeout: LOG_MS });
+    await settleAll(box, { [held]: [], [next]: [sharedSubject(O.account.email, title)] });
+  } finally {
+    await shim.release(held).catch(() => undefined);
+    await pending?.catch(() => undefined);
+  }
+}
+
+scenario("A23.6c an unanswered provider request is cancelled and the grant answers 200 while the provider is still held", {
+  tiers: LOCAL, effects: ["email:POST /access"], needs: ["email", "mailpit", "mail-fail-recipient", "mail-hold-recipient", "logs"],
+  timeoutMs: 420_000, inconclusiveOnFunctionKill: true,
+}, async (ctx) => heldProvider(ctx, "headers"));
+
+scenario("A23.6d an incomplete provider response body shares the send deadline and cannot hold the grant response", {
+  tiers: LOCAL, effects: ["email:POST /access"], needs: ["email", "mailpit", "mail-fail-recipient", "mail-hold-recipient", "logs"],
+  timeoutMs: 420_000, inconclusiveOnFunctionKill: true,
+}, async (ctx) => heldProvider(ctx, "body"));
 
 // --- A23.7 ----------------------------------------------------------------------
 

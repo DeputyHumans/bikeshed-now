@@ -184,6 +184,13 @@ filing, re-grant and provider-failure controls are listed under
 response. A Hosting or client cutoff remains inconclusive even when the shim
 recorded a refusal: timestamps alone do not establish why the product did
 not answer. No cutoff counts as a successful failure-handling test.
+A23.6c/d hold one recipient's provider response before its headers or midway
+through its body. They require the original access request to answer 200 while
+that hold remains armed, its connection to be cancelled, and the next recipient
+to receive their invitation. These cases require `mail-hold-recipient`; start a
+fresh stack to obtain it. Their negative controls disable the deadline or
+disconnect its cancellation signal, so a Hosting cutoff cannot substitute for
+the product's ten-second provider deadline.
 
 ## Prerequisites
 
@@ -4007,6 +4014,11 @@ await withVisibility(ctx.target, { owner, doc: docId, visibility: "public" }, as
   `health()`. `shimKey(target)` is the dummy key, for a canary that talks to
   the shim directly. The shim's global `/__e2e/fail-next` and `/__e2e/reset`
   affect every spec on the stack: never use them on a shared one.
+  With `mail-hold-recipient`, `holdRecipient(to, {stage: "headers" | "body"})`
+  stalls only that exact recipient, `held(to)` reports received, pending and
+  closed connections, and `release(to)` ends any remaining held response
+  without delivery (call it in `finally`). A client abort leaves the hold armed
+  and increments `closed`, proving cancellation happened without a release.
 - **Password-reset mail** goes through Firebase's own mailer: read the Auth
   emulator's `/emulator/v1/projects/<projectId>/oobCodes` at
   `target.authEmulatorUrl` with `createHttp` (capability `oob-codes`).
@@ -5107,7 +5119,7 @@ Declare what a case needs with `needs`: `local`, `email` or `email-off`,
 `mailpit`, `admin-emulator`, `oob-codes`, `reset`, `logs`, `patches`, and on
 stacks this harness version builds `egress-guard`, `spare-pool`, `gates`
 and `rtdb-proxy` (with those options: the aux process),
-`mail-fail-recipient`, `operator-scripts`, `resource-caps` (JVM heap caps,
+`mail-fail-recipient`, `mail-hold-recipient`, `operator-scripts`, `resource-caps` (JVM heap caps,
 capped debug logs, an owner, a lease and a watchdog), `rtdb-rules` (readiness proved
 `ns=<projectId>` enforces the tree's RTDB rules; an older stack lacks it even
 if someone has since loaded them, which `rtdbRulesStatus` checks live),
