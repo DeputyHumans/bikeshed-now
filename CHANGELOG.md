@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep the tier-lock recording regression valid when invocation metadata also records guarded RTDB maintenance.
+
 - Require the complete documented review refusal and a successful MCP transport before a natural publication race can count as safe refusal; share that predicate with composite evidence validation.
 
 - Preserve exact draft and version bytes when publication loses a feedback race, retain every natural attempt, and add forced-order controls for the separately reported C14 composite safety proof.
