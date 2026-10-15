@@ -92,6 +92,18 @@ describe("the export stamp", () => {
     }
   });
 
+  it("locks independent transforms, masks, blending and motion paths to their visible values", () => {
+    const out = parse(buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING }));
+    const expected = { scale: "1", translate: "none", "offset-path": "none", "mask-image": "none", "mix-blend-mode": "normal" };
+    for (const className of [PRINT_MARK_CLASS, PRINT_FOOTER_CLASS]) {
+      const el = out.querySelector(`.${className}`) as HTMLElement;
+      for (const [property, value] of Object.entries(expected)) {
+        expect(el.style.getPropertyValue(property), `${className}.${property}`).toBe(value);
+        expect(el.style.getPropertyPriority(property), `${className}.${property}`).toBe("important");
+      }
+    }
+  });
+
   it("repeats on every page, and sits above everything", () => {
     const out = parse(buildPrintHtml(makeDoc("<p>x</p>"), { marking: MARKING }));
     const el = out.querySelector(`.${PRINT_MARK_CLASS}`) as HTMLElement;

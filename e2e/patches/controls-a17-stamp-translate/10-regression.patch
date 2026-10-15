@@ -1,0 +1,6 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -45,3 +45,2 @@
+   scale: "1",
+-  translate: "none",
+   "offset-path": "none",

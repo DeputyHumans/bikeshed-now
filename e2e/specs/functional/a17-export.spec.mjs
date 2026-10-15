@@ -183,6 +183,7 @@ const LOCKED = Object.freeze([
   "position", "z-index", "margin", "max-height", "max-width", "height", "width", "overflow", "pointer-events", "zoom",
   "-webkit-text-fill-color", "-webkit-text-stroke", "text-indent", "text-shadow", "letter-spacing", "word-spacing",
   "white-space", "text-transform",
+  "scale", "translate", "mask-image", "mix-blend-mode", "offset-path",
 ]);
 
 /** The hiding vectors SPEC §20 names, box then text: each must be among the locked ones. */
@@ -191,6 +192,7 @@ const SPEC_VECTORS = Object.freeze([
   "max-height", "max-width", "overflow", "zoom",
   "-webkit-text-fill-color", "-webkit-text-stroke", "text-indent", "text-shadow", "letter-spacing", "word-spacing",
   "white-space", "text-transform",
+  "scale", "translate", "mask-image", "mix-blend-mode", "offset-path",
 ]);
 
 /** The stamp colours pdf.ts writes: the label's red and the footer's grey (the glyphs the oracle looks for). */
@@ -710,7 +712,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
  * holder's print frame being sandboxed and scrubbed, which SPEC §20 holds for
  * every print (spec.md:2346-2347, :2377-2379) and which is not this defect.
  */
-scenario("A17.1b an anonymous holder of an unlisted document's link who prints it gets the owner's marking stamped, as a member does", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-4", timeoutMs: 480_000 }, async (ctx) => {
+scenario("A17.1b an anonymous holder of an unlisted document's link who prints it gets the owner's marking stamped, as a member does", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const title = `Link print ${t}`;
@@ -744,7 +746,33 @@ scenario("A17.1b an anonymous holder of an unlisted document's link who prints i
 
   ctx.step("X-a17-export-4's oracle: the owner's marking is authoritative at export, so the link holder's print carries the label and footer the owner's did");
   assert.deepEqual(theirs.snap.stamps.map((s) => [s.className, s.text]), stamped, "X-a17-export-4 (SPEC §20, spec.md:2320-2322 and :2331): the link holder's print carries the owner's marking, which is authoritative at export");
+  const imageDialog = await openImageDialog(anon);
+  const image = await exportPng(anon, imageDialog, "s-box", 2, 'id="s-box"');
+  const { width, height } = image.size;
+  const red = colourPixels(image.bytes, { color: LABEL_RGB, region: { x: Math.floor(width / 2), y: 0, w: width - Math.floor(width / 2), h: Math.floor(height * 0.3) } });
+  assert.ok(red.count >= 20, "the anonymous reader's PNG carries the owner's label pixels");
+  const vector = await exportSvgFile(anon, imageDialog, "Diagram one");
+  assert.ok(vector.bytes.toString("utf8").includes(marking.label), "the anonymous reader's SVG carries the owner's label");
   await privateAgain(ctx, owner, docId);
+});
+
+scenario("A17.1c public readers receive the owner's changed marking and explicit off without private metadata", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
+  const { owner } = await ownerSession(ctx);
+  const t = tag();
+  const up = await publishDoc(ctx, owner.http, { body: probeDoc({ title: `Public export ${t}` }), filename: "index.html", title: `Public export ${t}`, name: "a171c-public" });
+  await setMarking(ctx, owner, up.docId, { enabled: true, label: "First policy", footer: "First footer" });
+  await setVisibility(target, { owner, doc: up.docId, visibility: "public", timeoutMs: FN_MS, patient: patient(ctx) });
+  const anon = await ctx.users.user({ name: "public-reader" });
+  for (const marking of [{ enabled: true, label: `Changed ${t}`.slice(0, MAX_LABEL), footer: "Changed footer" }, MARKING_OFF]) {
+    await setMarking(ctx, owner, up.docId, marking);
+    const projection = await readDoc(target, `public/${up.docId}`);
+    assert.deepEqual(projection.marking, marking, "the public mirror follows the owner's latest marking");
+    for (const key of ["members", "ownerEmail", "stats", "defaultMarking", "storagePrefix"]) assert.ok(!(key in projection), `${key} is not public`);
+    await openDoc(ctx, anon, up.docId);
+    const printed = await printOnce(ctx, anon, "Print or save as PDF", "the public reader's print");
+    assert.deepEqual(printed.snap.stamps.map((stamp) => stamp.text), marking.enabled ? [marking.label, marking.footer] : [], "the public reader prints the changed policy, including off");
+  }
+  await privateAgain(ctx, owner, up.docId);
 });
 
 // --- A17.2 and A17.2b ------------------------------------------------------------------
@@ -784,7 +812,8 @@ const HOSTILE_CSS = [
 /** What A17.2 leaves for A17.2b: the snapshot print() received for the hostile document. */
 const hostilePrint = { html: null };
 
-scenario("A17.2 a document whose CSS sets every hiding vector SPEC §20 lists with !important on the stamps cannot hide them: under print media each locked property computes as with no author CSS, and the label and footer paint readable glyphs", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
+async function hostileSnapshot(ctx) {
+  if (hostilePrint.html) return hostilePrint.html;
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const title = `Hostile print ${t}`;
@@ -800,6 +829,11 @@ scenario("A17.2 a document whose CSS sets every hiding vector SPEC §20 lists wi
   ctx.ev.text("print-snapshot.html", snap.html);
   precondition(snap.html.includes('id="hostile"') && snap.stamps.length === 2, "the snapshot carries the hostile stylesheet and both stamps");
   hostilePrint.html = snap.html;
+  return snap.html;
+}
+
+scenario("A17.2 a document whose CSS sets every hiding vector SPEC §20 lists with !important on the stamps cannot hide them: under print media each locked property computes as with no author CSS, and the label and footer paint readable glyphs", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
+  const snap = { html: await hostileSnapshot(ctx) };
 
   ctx.step("render that snapshot under print media at A4 width (pool.printRenderer); again with no author CSS, for reference; and once with the stamps really hidden, the pixel oracle's own control");
   const r = await ctx.users.printRenderer();
@@ -827,9 +861,8 @@ scenario("A17.2 a document whose CSS sets every hiding vector SPEC §20 lists wi
   }
 });
 
-scenario("A17.2b hostile CSS outside SPEC §20's list cannot hide the stamps either: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-2", timeoutMs: 240_000 }, async (ctx) => {
-  // A17.2 fails (or is INCONCLUSIVE) on its own record when it captured nothing; this case then has nothing to measure.
-  if (!hostilePrint.html) ctx.inconclusive("A17.2 captured no print snapshot (it did not get that far, or was not selected), so there is nothing to render");
+scenario("A17.2b independent transforms, masks, blending and motion paths cannot hide the stamps: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
+  await hostileSnapshot(ctx);
   const r = await ctx.users.printRenderer();
   try {
     ctx.step("positive control: at the A4 width no unlisted vector is live and both stamps paint readable glyphs");
@@ -914,7 +947,9 @@ scenario("A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagr
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const title = `Image probe ${t}`;
-  const html = probeDoc({ title });
+  const html = probeDoc({ title })
+    .replace('<p id="p-box">A passage in the box, exported as an image.</p>', '<p id="p-box">A passage in the box, exported as an image.</p><canvas id="authored-chart" width="20" height="20"></canvas>')
+    .replace('console.log("tail script")', 'const chart = document.getElementById("authored-chart").getContext("2d"); chart.fillStyle = "#00ff00"; chart.fillRect(0, 0, 20, 20)');
   const up = await publishDoc(ctx, owner.http, { body: html, filename: "index.html", title, name: "a173-image" });
   await coverStored(ctx, owner, up.docId);
   const label = `IMG ${t}`.slice(0, MAX_LABEL);
@@ -939,6 +974,8 @@ scenario("A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagr
       precondition(png.rasterized, "html-to-image's foreignObject markup was captured");
       ctx.ev.text("rasterized-s-box.svg", png.rasterized);
       assert.deepEqual(decorations(await fingerprint(parser, png.rasterized), fp1), [], "DECOR: what the PNG rasterized");
+      const chart = colourPixels(png.bytes, { color: [0, 255, 0], tol: 0 });
+      assert.ok(chart.count >= 1000, "the clean PNG preserves authored canvas drawing pixels");
       const { width: w, height: h } = png.size;
       const red = colourPixels(png.bytes, { color: LABEL_RGB, region: { x: Math.floor(w / 2), y: 0, w: w - Math.floor(w / 2), h: Math.floor(h * 0.3) } });
       ctx.step(`label-coloured pixels in the PNG's top-right: ${JSON.stringify(red)}`);
@@ -991,7 +1028,9 @@ const highlightedPng = { rasterized: null, html: null };
  *
  * The PNG half is A17.3c: no SPEC sentence covers a picture's pixels.
  */
-scenario("A17.3b the diagram's SVG file, exported while the reader's comment is highlighted on its label, carries no highlight wrapper or annotation id (DECOR 0 on the file)", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-1", timeoutMs: 600_000 }, async (ctx) => {
+let highlightedExport;
+async function captureHighlightedExport(ctx) {
+  highlightedExport ??= (async () => {
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const title = `Highlighted export ${t}`;
@@ -1035,36 +1074,24 @@ scenario("A17.3b the diagram's SVG file, exported while the reader's comment is 
   };
   ctx.ev.json("decorations", found);
   ctx.step(`decoration found: ${JSON.stringify(found)}`);
-  assert.deepEqual(found.svg, [], "X-a17-export-1 (SPEC §6, spec.md:650-651: highlights are \"NEVER persisted\"): the downloaded SVG file carries the reader's highlight wrapper and annotation id");
+  return { found, html, png, svgText };
+  })();
+  return highlightedExport;
+}
+
+scenario("A17.3b the diagram's SVG file, exported while the reader's comment is highlighted on its label, carries no highlight wrapper or annotation id (DECOR 0 on the file)", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 600_000 }, async (ctx) => {
+  const { found } = await captureHighlightedExport(ctx);
+  assert.deepEqual(found.svg, [], "the downloaded SVG contains no reader decoration");
 });
 
-/**
- * X-a17-export-7, class I: matches the SPEC but may be harmful; report and
- * ask. No SPEC sentence covers an exported PNG's pixels, and this is that: no
- * annotation id leaves the page, only a picture of the highlight (html-to-image
- * inlines the wrapper's computed style, its border and shadow in the reader's
- * own colour, into the markup it draws). The nearest sentences pull both
- * ways. SPEC §6, spec.md:650-651, "Highlights are presentational and are
- * NEVER persisted": a picture is presentation. SPEC §20, spec.md:2364-2365,
- * accepts "highlights included" on paper, but only for the browser's own File
- * → Print, a path the app cannot reach. Against: SPEC §6d, spec.md:938-940,
- * strips decoration from every preview "so one reader's annotations never
- * appear in a preview", and the app's own print export strips it too. Harm:
- * one reader's highlight frames, in their colour, appear in an image they
- * paste into a deck, when a print of the same section shows none. The
- * question for the SPEC: should §20 say whether an image export shows the
- * exporter's highlights?
- *
- * It judges what A17.3b captured, as A17.2b renders what A17.2 captured.
- */
-scenario("A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized): class I, a SPEC question", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-7", timeoutMs: 180_000 }, async (ctx) => {
-  // A17.3b fails (or is INCONCLUSIVE) on its own record when it captured nothing; this case then has nothing to judge.
-  if (!highlightedPng.rasterized) ctx.inconclusive("A17.3b captured no rasterized markup (it did not get that far, or was not selected), so there is nothing to judge");
+/** A PNG is an authored-content export, so the reader's transient highlights do not become pixels (SPEC §20). */
+scenario("A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized)", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 600_000 }, async (ctx) => {
+  await captureHighlightedExport(ctx);
   const parser = await ctx.users.parser();
   const found = decorations(await fingerprint(parser, highlightedPng.rasterized), await fingerprint(parser, highlightedPng.html));
   ctx.ev.json("decorations", found);
   ctx.step(`decoration in what the PNG was drawn from: ${JSON.stringify(found)}`);
-  assert.deepEqual(found, [], "X-a17-export-7, class I (no SPEC sentence is violated; SPEC §6d spec.md:938-940 keeps one reader's annotations out of previews): the section's PNG is drawn from markup carrying the reader's highlight");
+  assert.deepEqual(found, [], "the PNG is drawn from clean markup without reader highlights (SPEC §20)");
 });
 
 // --- A17.4 and A17.4b ------------------------------------------------------------------
@@ -1185,24 +1212,8 @@ scenario("A17.4 downloads: the HTML is the entry's bytes named from the title, t
   noPageErrors([u]);
 });
 
-/**
- * X-a17-export-5, class I: matches the SPEC but may be harmful; report and
- * ask. No SPEC sentence says what the More menu offers a link holder. Its
- * download entries follow the version record (DocViewer.tsx gates them on
- * doc.version's sourceEntry and fileCount), and the SPEC keeps that record
- * from anyone without an account: SPEC §17, docs/architecture/spec.md:1736,
- * "Everything else under `docs/**` still requires an account, even on a
- * public document." The fields an unlisted link's holder gets from POST
- * /unlock (:1724-1726, :1733-1734) name no version record, and
- * app/src/viewer/useDocument.ts:205-207 says an anonymous reader "does not
- * need it". So the product does what the SPEC implies. The harm: the reader
- * is not offered what the server would hand them. SPEC §2, spec.md:422-423:
- * "`GET /download/:docId/:versionId` — `canRead`-gated zip of the version;
- * accepts `?k=` as `/content/**` does" (A17.4 shows it answering 200 for a
- * link holder), and the Markdown source is in that zip. The question for the
- * SPEC: should §17 or §20 say which downloads a link holder is offered?
- */
-scenario("A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-5", timeoutMs: 480_000 }, async (ctx) => {
+/** Download metadata is safe in the reader projection; the full version record remains private (SPEC §17). */
+scenario("A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const md = await publishDoc(ctx, owner.http, { body: SMALL_MD, filename: "notes.md", title: `Link menu ${t}`, name: "a174b-md" });
@@ -1221,13 +1232,14 @@ scenario("A17.4b an anonymous holder of an unlisted link is offered the Markdown
   ctx.ev.json("version-reads", reads);
   ctx.step(`version record reads: ${JSON.stringify(reads)}`);
   precondition(reads.owner === "ALLOW", `the owner reads the version record: ${JSON.stringify(reads)}`);
+  assert.equal(reads.anonymous, "DENY", "download choices do not expose the private version record");
 
   ctx.step(`the anonymous link holder's More menu, read for up to ${LINK_MENU_SETTLE_MS} ms`);
   const anon = await ctx.users.user({ name: "link-holder" });
   await openDoc(ctx, anon, md.docId, { k });
   const offered = await downloadsOffered(anon, "Download the Markdown source");
   ctx.ev.json("menu", offered);
-  assert.deepEqual(offered.labels, [...MD_DOWNLOADS], "X-a17-export-5, class I (no SPEC sentence is violated; the version record is refused per SPEC §17 spec.md:1736): the link holder is not offered the Markdown source and the .zip that GET /download?k= serves them (SPEC §2, spec.md:422-423)");
+  assert.deepEqual(offered.labels, [...MD_DOWNLOADS], "the link holder is offered the Markdown source and bundle permitted by the content and download endpoints");
   await privateAgain(ctx, owner, md.docId);
 });
 
@@ -1382,7 +1394,7 @@ scenario("A17.5 marking is the owner's alone: POST /marking is 200 for the owner
   noPageErrors([o, e]);
 });
 
-scenario("A17.5b the account default seeds a document its owner publishes through MCP publish_document or bikeshed publish, as for any new document", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-3", timeoutMs: 480_000 }, async (ctx) => {
+scenario("A17.5b the account default seeds a document its owner publishes through MCP publish_document or bikeshed publish, as for any new document", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const seeded = { enabled: true, label: `DEFAULT ${t}`.slice(0, MAX_LABEL), footer: "Default footer {version}" };

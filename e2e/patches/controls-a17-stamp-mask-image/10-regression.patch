@@ -1,0 +1,6 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -47,3 +47,2 @@
+   "offset-path": "none",
+-  "mask-image": "none",
+   "mix-blend-mode": "normal",

@@ -1,0 +1,6 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -44,3 +44,2 @@
+   transform: "none",
+-  scale: "1",
+   translate: "none",

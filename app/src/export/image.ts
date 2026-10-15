@@ -2,6 +2,9 @@
 // PNG and SVG export of a section or a diagram (SPEC §20).
 
 import { toPng } from "html-to-image";
+import { stripDecoration } from "../annotation/highlighter";
+import { withCleanImageNode } from "./cleanImage";
+import { embedFontCss, inlineSvgStyles } from "../viewer/capture";
 import { TOKENS } from "../brand/tokens";
 import { markingIsVisible } from "./labels";
 import { resolveFooter } from "../marking";
@@ -121,12 +124,16 @@ export async function exportNodePng(
   node: HTMLElement | SVGElement,
   opts: ImageExportOptions,
 ): Promise<void> {
-  const dataUrl = await toPng(node as HTMLElement, {
-    backgroundColor: BG[opts.background],
-    pixelRatio: opts.scale ?? 2,
-    // Fonts and images inside the node are fetched through the gated proxy, and
-    // a cached response can be a stale version's asset.
-    cacheBust: true,
+  const dataUrl = await withCleanImageNode(node, async (clean) => {
+    inlineSvgStyles(clean.ownerDocument);
+    return toPng(clean as HTMLElement, {
+      fontEmbedCSS: await embedFontCss(clean.ownerDocument),
+      backgroundColor: BG[opts.background],
+      pixelRatio: opts.scale ?? 2,
+      // Fonts and images inside the node are fetched through the gated proxy, and
+      // a cached response can be a stale version's asset.
+      cacheBust: true,
+    });
   });
   const stamped = opts.marking
     ? await stamp(dataUrl, opts.marking, {
@@ -150,6 +157,7 @@ export function exportSvg(
   marking?: Marking,
 ): void {
   const clone = svg.cloneNode(true) as SVGSVGElement;
+  stripDecoration(clone);
   if (!clone.getAttribute("xmlns")) {
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   }

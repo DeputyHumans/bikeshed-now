@@ -1882,8 +1882,8 @@ and not through the live log (§16).
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
-only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
-`visibility`, `publicEdit`, `trusted`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
+only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
+`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
 are the same refusal. The source document, current version and projection
@@ -1893,7 +1893,13 @@ restore the projection after a newer visibility change has completed.
 An **unlisted** document is not mirrored. Anything in `public/` is readable by
 whoever knows an id, and once was listable by anyone at all; an unlisted
 document's title belongs to the holders of its link. They get the same fields
-from `POST /unlock`, which checks the key.
+from `POST /unlock`, which checks the key. The bounded document marking is
+part of both reader shapes: exports use the owner's policy without exposing
+account defaults, member lists or version records. The current version's
+`sourceEntry` and `fileCount` offer the same permitted source and bundle
+downloads to these readers. `liveEpoch` names the non-secret editing generation
+for authorized editors. Changing a public document's marking or editing
+generation refreshes its projection.
 
 Everything else under `docs/**` still requires an account, even on a public
 document. Those records carry member lists and reviewer identities; publishing a
@@ -2514,8 +2520,9 @@ type Marking = { enabled: boolean; label: string; footer: string };
 
 Stamp styles are set **inline with `!important`**. An important inline
 declaration outranks any selector-based author `!important` rule, so hostile
-bundle CSS cannot suppress the marking. All 25 hiding vectors are locked — box
-(`display`, `visibility`, `opacity`, `transform`, `filter`, `clip`, `clip-path`,
+bundle CSS cannot suppress the locked properties. Hiding vectors are locked — box
+(`display`, `visibility`, `opacity`, `transform`, `scale`, `translate`,
+`offset-path`, `mask-image`, `mix-blend-mode`, `filter`, `clip`, `clip-path`,
 `content-visibility`, `max-height/width`, `overflow`, `zoom`) and text
 (`-webkit-text-fill-color`, `-webkit-text-stroke`, `text-indent`, `text-shadow`,
 `letter-spacing`, `word-spacing`, `white-space`, `text-transform`).
@@ -2530,6 +2537,14 @@ order, so a rule of ours would beat the document's and a fixed-size deck would
 spill every slide across two pages. The stamp nodes go **first** in `<body>`:
 anything after a document's final forced page break opens a page of its own,
 and a fixed box is positioned the same wherever it sits.
+
+**Image exports contain authored content, not the reader's decoration.** SVG
+serialization strips highlight wrappers, suggestion marks and peer overlays
+from a clone. PNG rendering uses an inert copy of the document at the reader's
+viewport, strips the same decoration before computing styles, and leaves the
+reading frame untouched. Ancestors and authored styles remain so the selected
+section or diagram keeps its layout. The owner's marking is then applied to
+the exported SVG or PNG, including for public and unlisted readers.
 
 **The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
 is routed to it — heard on the frame's window as well as the app's, because

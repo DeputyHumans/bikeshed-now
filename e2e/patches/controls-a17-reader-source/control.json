@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is",
+  "what": "The reader projection drops the current source entry",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is"
+  },
+  "expect": {
+    "message": "link holder is offered the Markdown source"
+  }
+}

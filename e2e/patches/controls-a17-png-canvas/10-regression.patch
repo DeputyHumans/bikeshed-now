@@ -1,0 +1,7 @@
+--- a/app/src/export/cleanImage.ts
++++ b/app/src/export/cleanImage.ts
+@@ -76,3 +76,3 @@
+       const canvas = atPath(doc.documentElement, path) as HTMLCanvasElement;
+-      canvas.getContext("2d")?.drawImage(source, 0, 0);
++      void canvas;
+     }

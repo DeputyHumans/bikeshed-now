@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import { getPublicDoc, getVersion, listVersions, watchDoc } from "../firestore";
 import { unlockDoc } from "../visibility";
-import type { DocMeta, DocVersion, PublicDoc, SourceFormat } from "../types";
+import { MARKING_OFF } from "../export/labels";
+import type { DocMeta, DocVersion, PublicDoc, SourceFormat, Marking } from "../types";
 
 /**
  * A reader arrives by one of four routes, and the viewer should not care which.
@@ -48,7 +49,13 @@ async function resolveReader(
   // The key only opens anything at the one endpoint that checks it.
   if (k) return unlockDoc(docId, k);
   const projection = await getPublicDoc(docId);
-  if (projection) return projection;
+  if (projection) {
+    // Older mirrors predate export policy and download metadata. Ask the gated
+    // reader endpoint for the current bounded shape rather than guessing off.
+    if (projection.marking !== undefined && projection.sourceEntry !== undefined
+      && projection.fileCount !== undefined && projection.liveEpoch !== undefined) return projection;
+    return unlockDoc(docId, null);
+  }
   // No key and no public mirror. A signed-in reader may still hold a grant
   // from opening the link before — a reply notification links without the
   // key. An anonymous one cannot, so they never ask.
@@ -75,10 +82,14 @@ export interface ResolvedDocument {
   currentVersion: string;
   entry: string;
   format: SourceFormat;
+  sourceEntry: string | null;
+  fileCount: number;
   /** The selected version or projection has supplied its actual format. */
   formatReady: boolean;
   trusted: boolean | undefined;
   publicEdit: boolean;
+  /** The owner's document policy, including for a reader without the member record. */
+  marking: Marking;
 
   versions: DocVersion[];
   version: DocVersion | null;
@@ -94,9 +105,12 @@ const EMPTY: ResolvedDocument = {
   currentVersion: "",
   entry: "index.html",
   format: "html",
+  sourceEntry: null,
+  fileCount: 1,
   formatReady: false,
   trusted: undefined,
   publicEdit: false,
+  marking: MARKING_OFF,
   versions: [],
   version: null,
 };
@@ -251,9 +265,12 @@ export function useDocument(
     currentVersion: resolvedVersionId,
     entry: version?.entry ?? projection?.entry ?? "index.html",
     format: version?.format ?? projection?.format ?? "html",
+    sourceEntry: version?.sourceEntry ?? projection?.sourceEntry ?? null,
+    fileCount: version?.fileCount ?? projection?.fileCount ?? 1,
     formatReady: Boolean(version || projection),
     trusted: meta?.trusted ?? publicDoc?.trusted,
     publicEdit: meta?.publicEdit ?? publicDoc?.publicEdit ?? false,
+    marking: meta?.marking ?? publicDoc?.marking ?? MARKING_OFF,
     versions,
     version,
   };

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep owner export markings and permitted source/bundle downloads available to link readers, refresh legacy public projections, lock five additional print-hiding CSS properties, and strip reader decoration from SVG/PNG exports while preserving authored canvas pixels.
+
 ### Fixed
 
 - Live editing preserves the identity of repeated letters through concurrent

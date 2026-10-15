@@ -1,0 +1,6 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -48,3 +48,2 @@
+   "mask-image": "none",
+-  "mix-blend-mode": "normal",
+   filter: "none",

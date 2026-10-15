@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.3b the diagram's SVG file, exported while the reader's comment is highlighted on its label, carries no highlight wrapper or annotation id (DECOR 0 on the file)",
+  "what": "The SVG clone serializes its annotation wrappers and identifiers",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.3b the diagram's SVG file, exported while the reader's comment is highlighted on its label, carries no highlight wrapper or annotation id (DECOR 0 on the file)"
+  },
+  "expect": {
+    "message": "downloaded SVG contains no reader decoration"
+  }
+}

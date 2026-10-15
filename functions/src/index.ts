@@ -1108,6 +1108,7 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
   }
 
   await ref.set({ marking, updatedAt: now() }, { merge: true });
+  await syncPublicProjection(db(), docId);
   res.status(200).json({ marking });
 });
 

@@ -28,6 +28,10 @@ const MEMO: PublicDoc = {
   title: "Build estimate",
   slug: "memo",
   currentVersion: "v1",
+  liveEpoch: "initial",
+  marking: { enabled: false, label: "", footer: "" },
+  sourceEntry: null,
+  fileCount: 1,
   entry: "index.html",
   format: "html",
   visibility: "unlisted",
@@ -86,13 +90,39 @@ describe("useDocument for a reader who is not a member", () => {
 
   it.each(["unlisted", "public"] as const)("carries the owner's marking for an anonymous %s reader", async (kind) => {
     const marking = { enabled: true, label: "OWNER", footer: "Owner footer" };
-    const projection = { ...MEMO, visibility: kind, marking };
+    const projection = { ...MEMO, visibility: kind, marking, sourceEntry: "index.md", fileCount: 2 };
     if (kind === "unlisted") visibility.unlockDoc.mockResolvedValue(projection);
     else firestore.getPublicDoc.mockResolvedValue(projection);
     const { result } = open({ k: kind === "unlisted" ? KEY : "", uid: null, settled: true });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.meta).toBeNull();
     expect(result.current.marking).toEqual(marking);
+    expect(result.current.sourceEntry).toBe("index.md");
+    expect(result.current.fileCount).toBe(2);
+  });
+
+  it.each(["marking", "sourceEntry", "fileCount", "liveEpoch"] as const)("refreshes an older public mirror missing %s through the gated reader endpoint", async (field) => {
+    const stale: PublicDoc = { ...MEMO, visibility: "public" };
+    delete stale[field];
+    const fresh: PublicDoc = { ...MEMO, visibility: "public", marking: { enabled: true, label: "Current policy", footer: "" }, sourceEntry: "index.md", fileCount: 2, liveEpoch: "current-generation" };
+    firestore.getPublicDoc.mockResolvedValue(stale);
+    visibility.unlockDoc.mockResolvedValue(fresh);
+    const { result } = open({ k: "", uid: null, settled: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(visibility.unlockDoc).toHaveBeenCalledWith("memo", null);
+    expect(result.current.publicDoc).toEqual(fresh);
+    expect(result.current.marking).toEqual(fresh.marking);
+    expect(result.current.sourceEntry).toBe("index.md");
+    expect(result.current.fileCount).toBe(2);
+  });
+
+  it("does not reuse an older public mirror after the gated refresh refuses it", async () => {
+    firestore.getPublicDoc.mockResolvedValue({ ...MEMO, visibility: "public", marking: undefined });
+    visibility.unlockDoc.mockResolvedValue(null);
+    const { result } = open({ k: "", uid: null, settled: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.notFound).toBe(true);
+    expect(result.current.publicDoc).toBeNull();
   });
 
   it("shows nothing for a wrong key, exactly as for no key", async () => {

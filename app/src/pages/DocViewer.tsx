@@ -614,13 +614,13 @@ export function DocViewer() {
     if (!frame.doc) return;
     void printDoc(frame.doc, {
       baseHref: contentBase(docId, doc.currentVersion, linkKey || undefined),
-      marking: doc.meta?.marking ?? MARKING_OFF,
+      marking: doc.marking,
       title: doc.title,
       version: doc.currentVersion,
       user: emailLower,
     });
     logEvent({ name: "export", params: { kind: "pdf" } });
-  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.meta?.marking, doc.title, emailLower]);
+  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the
@@ -779,7 +779,7 @@ export function DocViewer() {
         },
       },
     ];
-    if (doc.version?.sourceEntry) {
+    if (doc.sourceEntry) {
       entries.push({
         id: "source",
         label: "Download the Markdown source",
@@ -790,7 +790,7 @@ export function DocViewer() {
               downloadSource(
                 docId,
                 doc.currentVersion,
-                doc.version!.sourceEntry!,
+                doc.sourceEntry!,
                 doc.title,
                 linkKey || undefined,
               ),
@@ -800,7 +800,7 @@ export function DocViewer() {
         },
       });
     }
-    if ((doc.version?.fileCount ?? 1) > 1) {
+    if (doc.fileCount > 1) {
       entries.push({
         id: "zip",
         label: "Download everything as a .zip",
@@ -1229,7 +1229,7 @@ export function DocViewer() {
           title={doc.title}
           version={doc.currentVersion}
           user={emailLower}
-          marking={doc.meta?.marking}
+          marking={doc.marking}
           onClose={() => setDialog(null)}
         />
       ) : null}

@@ -4,6 +4,7 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { expiryMs, visibilityOf, type DocAclData } from "./acl";
+import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
 
@@ -35,12 +36,19 @@ export interface ReaderDoc {
   title: string;
   slug: string;
   currentVersion: string;
+  /** Generation for authorized live editors; no session identity is exposed. */
+  liveEpoch: string;
   entry: string;
   format: "html" | "markdown";
+  /** Download choices for this version, without exposing its private record. */
+  sourceEntry: string | null;
+  fileCount: number;
   visibility: "unlisted" | "public";
   publicEdit: boolean;
   /** Needed so an anonymous reader's iframe is sandboxed the same way (SPEC §6c). */
   trusted: boolean;
+  /** The owner's export policy is the same for members and other readers (SPEC §20). */
+  marking: Marking;
   /**
    * Epoch milliseconds, or null. Carried so an anonymous reader is TOLD the
    * document expired rather than shown an empty frame.
@@ -73,11 +81,15 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "title",
   "slug",
   "currentVersion",
+  "liveEpoch",
   "entry",
   "format",
+  "sourceEntry",
+  "fileCount",
   "visibility",
   "publicEdit",
   "trusted",
+  "marking",
   "expiresAt",
   "forked",
 ];
@@ -117,11 +129,15 @@ export function projectReader(
       slug: typeof data.slug === "string" ? data.slug : docId,
       currentVersion:
         typeof data.currentVersion === "string" ? data.currentVersion : "",
+      liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial",
       entry: typeof data.entry === "string" ? data.entry : "index.html",
       format: data.format === "markdown" ? "markdown" : "html",
+      sourceEntry: typeof data.sourceEntry === "string" ? data.sourceEntry : null,
+      fileCount: typeof data.fileCount === "number" && Number.isSafeInteger(data.fileCount) && data.fileCount > 0 ? data.fileCount : 1,
       visibility,
       publicEdit: data.publicEdit === true,
       trusted: data.trusted !== false,
+      marking: resolveMarking(data.marking),
       expiresAt: expiryMs(data as DocAclData),
       forked: data.forked === true,
     },
@@ -163,6 +179,8 @@ async function withVersionFields(
     typeof data.currentVersion === "string" ? data.currentVersion : "";
   let entry = "index.html";
   let format: "html" | "markdown" = "html";
+  let sourceEntry: string | null = null;
+  let fileCount = 1;
   if (versionId) {
     const versionRef = docRef.collection("versions").doc(versionId);
     const vSnap = tx ? await tx.get(versionRef) : await versionRef.get();
@@ -170,9 +188,11 @@ async function withVersionFields(
       const v = vSnap.data() || {};
       if (typeof v.entry === "string") entry = v.entry;
       if (v.format === "markdown") format = "markdown";
+      if (typeof v.sourceEntry === "string") sourceEntry = v.sourceEntry;
+      if (Number.isSafeInteger(v.fileCount) && v.fileCount > 0) fileCount = v.fileCount;
     }
   }
-  return { ...data, entry, format };
+  return { ...data, entry, format, sourceEntry, fileCount };
 }
 
 /** The reader projection of a stored document, as POST /unlock returns it. */

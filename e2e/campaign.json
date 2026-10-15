@@ -10111,7 +10111,7 @@
     },
     {
       "id": "X-a17-export-2",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G09-export-marking-seeding",
       "classification": "P",
@@ -10130,14 +10130,18 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.2b hostile CSS outside SPEC §20's list cannot hide the stamps either: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs",
+          "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.2b independent transforms, masks, blending and motion paths cannot hide the stamps: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending"
+      }
     },
     {
       "id": "X-a17-export-3",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G09-export-marking-seeding",
       "classification": "P",
@@ -10159,11 +10163,15 @@
           "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.5b the account default seeds a document its owner publishes through MCP publish_document or bikeshed publish, as for any new document",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending"
+      }
     },
     {
       "id": "X-a17-export-4",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G09-export-marking-seeding",
       "classification": "P",
@@ -10184,8 +10192,16 @@
         {
           "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.1b an anonymous holder of an unlisted document's link who prints it gets the owner's marking stamped, as a member does",
           "n": null
+        },
+        {
+          "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.1c public readers receive the owner's changed marking and explicit off without private metadata",
+          "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending"
+      }
     },
     {
       "id": "X-a19-account-1",
@@ -10291,7 +10307,7 @@
     },
     {
       "id": "X-a17-export-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G10-decoration-reaches-bytes",
       "classification": "P",
@@ -10313,7 +10329,11 @@
           "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.3b the diagram's SVG file, exported while the reader's comment is highlighted on its label, carries no highlight wrapper or annotation id (DECOR 0 on the file)",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending"
+      }
     },
     {
       "id": "X-a11-live-2",
@@ -11776,7 +11796,7 @@
     },
     {
       "id": "X-a17-export-5",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "I",
       "claim": "An anonymous holder of an unlisted link is offered only 'Download the rendered HTML': no Markdown source and no .zip. Yet GET /download?k= serves them the zip (A17.4 proves it).",
@@ -11798,11 +11818,16 @@
           "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending",
+        "semanticDecision": "Authorized product clarification: link readers receive permitted downloads; PNG exports carry authored content without reader highlights (SPEC §17, §20). Historical classification retained."
+      }
     },
     {
       "id": "X-a17-export-7",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "I",
       "claim": "New id split from X-a17-export-1 by w1d/fix-a17-export.json: the exported PNG shows the reader's highlight as pixels (html-to-image inlines the wrapper's computed style), and no SPEC sentence covers a picture's pixels. The SVG-file half stays P in G10. W2: A17.3c TODO.",
@@ -11813,10 +11838,15 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized): class I, a SPEC question",
+          "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized)",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/g09/unit-negative-controls.json",
+        "status": "source and unit/browser probes repaired; fresh E2E and control pairs pending",
+        "semanticDecision": "Authorized product clarification: link readers receive permitted downloads; PNG exports carry authored content without reader highlights (SPEC §17, §20). Historical classification retained."
+      }
     },
     {
       "id": "X-a23-email-1",
@@ -13264,6 +13294,45 @@
         "controls-c05-input-identity"
       ],
       "note": "C05 edge race promoted, with an N=2 control discarding beforeinput intent. The browser range is accepted only if its unchanged prefix and suffix match the actual mutation; other mutations retain minimal diff behavior. onRemote notifies the caller after changed remote DOM application and observer draining, without notifying for local writes or duplicate updates. Parent owns G05 autosave integration. g04-controls.json records isolated assertion failures and patch/target validation. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a17-export-1",
+        "X-a17-export-2",
+        "X-a17-export-3",
+        "X-a17-export-4",
+        "X-a17-export-5",
+        "X-a17-export-7"
+      ],
+      "scope": "local working tree; full E2E and control pairs pending",
+      "tests": [
+        "39 focused app tests pass",
+        "24 focused backend tests pass",
+        "15 isolated source mutants fail, then restored suites pass",
+        "Legacy projection bypass and three Chrome image mutants fail; restored Chrome probe passes"
+      ],
+      "evidence": "e2e/.out/harness-review-controls/g09/",
+      "controls": [
+        "controls-a17-stamp-scale",
+        "controls-a17-stamp-translate",
+        "controls-a17-stamp-offset-path",
+        "controls-a17-stamp-mask-image",
+        "controls-a17-stamp-mix-blend-mode",
+        "controls-a17-svg-decoration",
+        "controls-a17-png-decoration",
+        "controls-a17-png-live-source",
+        "controls-a17-reader-marking",
+        "controls-a17-print-reader-marking",
+        "controls-a17-image-reader-marking",
+        "controls-a17-public-marking-refresh",
+        "controls-a17-reader-source",
+        "controls-a17-reader-files",
+        "controls-a17-menu-source",
+        "controls-a17-menu-zip",
+        "controls-a17-png-canvas"
+      ],
+      "note": "Five independent print hiding vectors are locked; bounded owner marking and current-version download metadata reach public/unlisted readers; legacy public mirrors refresh through the gated reader endpoint. Public marking updates refresh the mirror. SVG strips decoration on its clone; PNG recomputes styles in a clean inert document at the source viewport and preserves authored canvas pixels. A17.2b and A17.3c perform setup when selected alone. A17.5b is now a normal assertion following the prior account-default fix. liveEpoch is included as non-secret generation metadata for the root epoch batch. No item closed."
     }
   ]
 }
