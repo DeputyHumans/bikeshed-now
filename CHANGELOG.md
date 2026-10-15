@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Register the native acknowledgement-loss pause at its actual helper source and named gate call, allowing the existing amplifier-composition checks to verify that controls preserve it.
+
 - Keep operator historical-deduplication, withdrawal epoch and public-projection controls applicable after acknowledgement recovery, preserving each original mutation.
 
 - Require complete projection-failure, endpoint acknowledgement-loss and operator acknowledgement-loss runs in the E2E acceptance matrix, preserving every original axis and recording the new transaction-retry defect family without premature closure.

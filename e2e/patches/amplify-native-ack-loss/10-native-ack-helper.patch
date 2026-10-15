@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/functions/src/lib/e2eAckTransaction.ts
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,49 @@
 +// SPDX-License-Identifier: Apache-2.0
 +// Stack-only native Firestore commit acknowledgement loss, keyed to one observed operation (SPEC §2, §6a).
 +
@@ -28,13 +28,8 @@
 +        const hasWrites = !native._writeBatch!.isEmpty;
 +        await commit();
 +        if (lost || !hasWrites) return;
-+        const base = process.env.E2E_GATE_URL;
-+        if (!base) throw new Error("e2e ACK: E2E_GATE_URL is required");
 +        const key = `${operation}:${docId}`;
-+        const url = `${base.replace(/\/$/, "")}/gate/ack-after-commit/pass?key=${encodeURIComponent(key)}&side=server&caller=${caller}&run=${callbacks}`;
-+        const response = await fetch(url, { method: "POST" });
-+        const body = await response.json() as { outcome?: string };
-+        if (response.status !== 200 || !["passed", "released"].includes(body.outcome ?? "")) throw new Error(`e2e ACK: gate did not explicitly pass or release (${response.status}, ${body.outcome})`);
++        const body = await e2eAckGate("ack-after-commit", key, caller, callbacks);
 +        if (body.outcome === "released") {
 +          lost = true;
 +          console.log(`E2E_ACK_LOSS ${operation} ${docId} ${caller}`);
@@ -44,4 +39,14 @@
 +    }
 +    return work(tx);
 +  });
++}
++
++async function e2eAckGate(name: string, key: string, caller: string, run: number): Promise<{ outcome?: string }> {
++  const base = process.env.E2E_GATE_URL;
++  if (!base) throw new Error("e2e ACK: E2E_GATE_URL is required");
++  const url = `${base.replace(/\/$/, "")}/gate/${name}/pass?key=${encodeURIComponent(key)}&side=server&caller=${caller}&run=${run}`;
++  const response = await fetch(url, { method: "POST" });
++  const body = await response.json() as { outcome?: string };
++  if (response.status !== 200 || !["passed", "released"].includes(body.outcome ?? "")) throw new Error(`e2e ACK: gate did not explicitly pass or release (${response.status}, ${body.outcome})`);
++  return body;
 +}

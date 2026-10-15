@@ -4,7 +4,7 @@
     {
       "name": "ack-after-commit",
       "side": "server",
-      "where": "native Transaction.commit after real commit, before its successful acknowledgement",
+      "where": "functions/src/lib/e2eAckTransaction.ts: e2eAckGate after the real native commit, before its acknowledgement",
       "key": "operation:docId"
     }
   ]
