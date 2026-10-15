@@ -115,6 +115,62 @@ describe("realtime database rules", () => {
     );
   });
 
+  it("session records have immutable authenticated ownership while sibling tabs remain independent", async () => {
+    const memberDb = verified(env, MEMBER).database();
+    const otherDb = verified(env, OTHER).database();
+    const payload = (uid, email, mode = "edit") => ({ uid, email, mode, lastChanged: serverTimestamp() });
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-a"), payload(MEMBER.uid, MEMBER.email)));
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-b"), payload(MEMBER.uid, MEMBER.email, "view")));
+    await assertFails(set(ref(otherDb, "status/doc1/peers/session-a"), payload(OTHER.uid, OTHER.email, "view")));
+    await assertFails(set(ref(otherDb, "status/doc1/peers/session-a"), null));
+    await assertFails(set(ref(memberDb, "status/doc1/peers/session-forged"), payload(OTHER.uid, MEMBER.email)));
+    await assertFails(set(ref(memberDb, "status/doc1/peers/session-anonymous"), { email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() }));
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-b"), null));
+    await assertSucceeds(get(ref(memberDb, "status/doc1/peers/session-a")));
+    const a = await get(ref(memberDb, "status/doc1/peers/session-a"));
+    if (a.val()?.mode !== "edit") throw new Error("the other tab's editor record must survive");
+  });
+
+  it("revocation and expiry allow only deleting one's existing session or legacy record", async () => {
+    const doc = "revoked-presence";
+    const db = verified(env, MEMBER).database();
+    const otherDb = verified(env, OTHER).database();
+    const payload = { uid: MEMBER.uid, email: MEMBER.email, mode: "edit", lastChanged: serverTimestamp() };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      await set(ref(adminDb, `presenceAccess/${doc}`), { [key(MEMBER.email)]: true, [key(OTHER.email)]: true, __expiresAt: Date.now() - 1 });
+      await set(ref(adminDb, `status/${doc}/peers/session`), { ...payload, lastChanged: 1 });
+      await set(ref(adminDb, `status/${doc}/peers/${MEMBER.uid}`), { email: MEMBER.email, mode: "edit", lastChanged: 1 });
+      await set(ref(adminDb, `status/${doc}/peers/${OTHER.uid}`), { uid: MEMBER.uid, email: MEMBER.email, mode: "edit", lastChanged: 1 });
+    });
+    await assertFails(set(ref(db, `status/${doc}/peers/session`), payload));
+    await assertFails(set(ref(otherDb, `status/${doc}/peers/${OTHER.uid}`), null));
+    await assertFails(set(ref(otherDb, `status/${doc}/peers/session`), null));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/session`), null));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `presenceAccess/${doc}/${key(MEMBER.email)}`), null);
+    });
+    await assertFails(set(ref(db, `status/${doc}/peers/new-session`), payload));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/${MEMBER.uid}`), null));
+  });
+
+  it("only current editors may announce edit, including after a same-person tab is downgraded", async () => {
+    const viewerDb = verified(env, OTHER).database();
+    const payload = { uid: OTHER.uid, email: OTHER.email, mode: "view", lastChanged: serverTimestamp() };
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), payload));
+    await assertFails(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), { ...payload, mode: "edit" }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `editAccess/doc1/${key(OTHER.email)}`), true);
+    });
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/editor-tab"), { ...payload, mode: "edit" }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `editAccess/doc1/${key(OTHER.email)}`), null);
+    });
+    await assertFails(set(ref(viewerDb, "status/doc1/peers/editor-tab"), { ...payload, mode: "edit" }));
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), payload));
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/editor-tab"), null));
+  });
+
   it("a presence payload cannot lie about its address or its mode", async () => {
     const db = verified(env, MEMBER).database();
     await assertFails(

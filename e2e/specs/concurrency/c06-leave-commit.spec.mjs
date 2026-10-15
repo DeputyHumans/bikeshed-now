@@ -146,21 +146,11 @@
  *
  * Joining is live.mjs joinShared on every target: one POST /access on a
  * local stack, share() per editor through the operator script elsewhere (no
- * email; C11a's removal goes the way the grant went: POST /access locally,
- * the operator script elsewhere; the agent's suggestion is the owner's own,
- * so it notifies nobody: no `effects`). It joins with `mirror:
- * "write-missing"`: on the operator path scripts/set-access.mjs writes no
- * RTDB mirror (S16), so the harness writes presenceAccess/{d} and
- * editAccess/{d} from docs/{d}, as the product's grant path would have
- * (lib/grant.mjs writeMirror, its own narrow guard, recorded in
- * findings.jsonl), and a mirror still missing after that ends the case
- * INCONCLUSIVE before any browser. C11a's removal does the same for the
- * revoke (removeEditor): a mirror the script leaves naming the removed
- * editor is recorded and rewritten from docs/{d}. So production C11 gets
- * past S16's grant half and measures its RUNTIME half (outside the emulator
- * liveEditing may read nobody, and the agent then writes under an open
- * editor), which no local stack can: there the functions have the
- * emulator's RTDB and the product writes the mirror itself.
+ * email; C11a's removal goes the same route. Both grant and removal must
+ * deliver their own RTDB mirrors; no harness repair is permitted. Operator
+ * databaseURL is explicitly configured. A deployed runtime's IAM/configuration
+ * remains an external verification boundary rather than a local proof.
+ *
  * Every Realtime Database read here (status/{d}/y, status/{d}/peers, the
  * access mirrors, waitI12's polls) goes through rtdbGetPatient, read again
  * on the Database emulator's 503; settleLive reads y that way by itself.
@@ -177,6 +167,7 @@
  * and a log nobody is using is dropped with the write".
  */
 
+import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after } from "node:test";
@@ -186,7 +177,7 @@ import { eventually } from "../../lib/assert.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
 import { readFixture } from "../../lib/seed.mjs";
-import { operatorSetAccess, recordFinding, unshare, writeMirror } from "../../lib/grant.mjs";
+import { operatorSetAccess, unshare } from "../../lib/grant.mjs";
 import { mintToken } from "../../lib/session.mjs";
 import { bodyAttrDiff, diffFingerprint, fingerprint, KNOWN_OWN_VALUES, parseAndRun } from "../../lib/bytes.mjs";
 import { idSelector } from "../../lib/frame.mjs";
@@ -287,20 +278,9 @@ function inconclusive(ctx, obs, reason) {
 
 // --- joining ---------------------------------------------------------------------------------
 
-/**
- * joinShared on the fixture, with `mirror: "write-missing"` (lib/live.mjs;
- * the plan's "Sharing without email" row): on the operator path, a joiner's
- * RTDB mirror that scripts/set-access.mjs leaves missing (S16, recorded in
- * findings.jsonl) is written by the harness from docs/{d}, as
- * functions/src/lib/presence.ts syncPresenceAccess would have (grant.mjs
- * writeMirror), and read back; one still missing after that, or a write the
- * database refuses, ends the case INCONCLUSIVE before any browser. On the
- * access path (a local stack) the product writes the mirror itself and
- * nothing is written (`mirrored: null`). Resolves joinShared's result
- * (`grantVia` and `mirrored` included).
- */
+/** Grants must deliver their own mirrors; a harness repair would hide S16. */
 function join(ctx, { n, title }) {
-  return joinShared(ctx, { n, fixture: FIXTURE, title, mirror: "write-missing" });
+  return joinShared(ctx, { n, fixture: FIXTURE, title, mirror: "stop" });
 }
 
 /** Both RTDB mirrors of `email` on `docId`, read through a 503: {presence, edit, gone}. */
@@ -320,26 +300,7 @@ async function mirrorDropped(t, docId, email, timeoutMs) {
   }
 }
 
-/**
- * Remove `account` from `docId` the way join() granted it (`via`, joinShared's
- * `grantVia`), and see both RTDB mirrors drop it.
- *   "access" (a local stack): POST /access {remove} (grant.mjs unshare); the
- *     product rewrites the mirror before it answers (persistDocMembership →
- *     presence.ts syncPresenceAccess), so a mirror still naming the account
- *     after 15 s is the product's and FAILS (a precondition).
- *   "operator": scripts/set-access.mjs --remove, which rewrites no mirror
- *     (S16, its revoke half). A mirror still naming the account once the
- *     script has exited is recorded in findings.jsonl (`mirror-stale`), and
- *     the harness rewrites it from docs/{d} (grant.mjs writeMirror: what the
- *     record says NOW, the same narrow guard as join()'s), then reads it
- *     again: still named, or a write the database refuses, is INCONCLUSIVE.
- * LIB-REQUEST: c06-unshare-mirror. unshare() takes no `via` and no `mirror`
- * mode, so a revoke on the operator path cannot be mirrored as joinShared's
- * grant is; this helper composes operatorSetAccess, recordFinding and
- * writeMirror for it.
- * Resolves {via, mirror (the last read), stale (the read before the
- * harness's write, or null), mirrored (writeMirror's result, or null)}.
- */
+/** Revoke through the product/operator path, then require its mirror delivery. */
 async function removeEditor(ctx, obs, { owner, docId, account, via }) {
   if (via === "operator") {
     // As share() picks the console identity: the owner's address on a local stack, the operator's elsewhere.
@@ -349,22 +310,9 @@ async function removeEditor(ctx, obs, { owner, docId, account, via }) {
   } else {
     await unshare(ctx.target, { owner, doc: docId, account, timeoutMs: 120_000 });
   }
-  const first = await mirrorDropped(ctx.target, docId, account.email, via === "operator" ? 2_000 : 15_000);
-  if (first.gone) return { via, mirror: first, stale: null, mirrored: null };
-  const shown = (m) => JSON.stringify({ presence: m.presence, edit: m.edit });
-  precondition(via === "operator", `the RTDB mirrors drop ${account.email} once POST /access removes it from ${docId} (presenceAccess/editAccess still read ${shown(first)})`);
-  recordFinding(ctx.target, { kind: "mirror-stale", suspect: "S16", docId, email: String(account.email).toLowerCase(), mirror: { presence: first.presence, edit: first.edit }, via: "scripts/set-access.mjs --remove" });
-  let mirrored;
-  try {
-    mirrored = await writeMirror(ctx.target, { doc: docId });
-  } catch (err) {
-    if (err?.code === "E2E_MIRROR") inconclusive(ctx, obs, `the sync precondition did not hold: after scripts/set-access.mjs removed ${account.email} from ${docId}, its RTDB mirror still read ${shown(first)} (suspect S16, recorded in findings.jsonl) and the harness could not rewrite it: ${err.message}`);
-    throw err;
-  }
-  ctx.step(`suspect S16: scripts/set-access.mjs --remove left ${account.email} in the RTDB mirror of ${docId} (${shown(first)}, recorded in findings.jsonl); the harness rewrote presenceAccess/${docId} and editAccess/${docId} from docs/${docId} (${mirrored.members.length} member(s), ${mirrored.editorMembers.length} editor(s)), as the product's revoke would have (grant.mjs writeMirror)`);
-  const after = await mirrorDropped(ctx.target, docId, account.email, 15_000);
-  if (!after.gone) inconclusive(ctx, obs, `the sync precondition did not hold: after scripts/set-access.mjs removed ${account.email} from ${docId} and the harness rewrote the RTDB mirror from docs/${docId}, presenceAccess/editAccess still read ${shown(after)} (suspect S16)`);
-  return { via, mirror: after, stale: first, mirrored };
+  const mirror = await mirrorDropped(ctx.target, docId, account.email, 15_000);
+  precondition(mirror.gone, `the product's ${via} revocation drops both RTDB mirrors (presence=${mirror.presence}, edit=${mirror.edit})`);
+  return { via, mirror, stale: null, mirrored: null };
 }
 
 /**
@@ -462,7 +410,7 @@ async function peersRaw(t, docId) {
 
 /** status/{d}/peers as {uid: mode}. */
 async function peerModes(t, docId) {
-  return Object.fromEntries(Object.entries(await peersRaw(t, docId)).map(([uid, p]) => [uid, p?.mode ?? null]));
+  return presenceModes(await peersRaw(t, docId));
 }
 
 /** Wait until `pred(modes)` holds; resolves {ok, modes} (the last read when it never held). */
@@ -486,7 +434,7 @@ const editorsIn = (modes, except = []) => Object.entries(modes).filter(([uid, m]
 async function waitPeersGone(t, docId, since) {
   let last = null;
   const r = await waitI12(t, docId, { since, read: async () => (last = await rtdbGetPatient(t, `status/${docId}/peers`)) });
-  return { ...r, peersLeft: Object.keys(last ?? {}) };
+  return { ...r, peersLeft: Object.keys(presenceModes(last)) };
 }
 
 /** How many entries status/{d}/y holds now. */
@@ -1291,11 +1239,13 @@ scenario("C11a revoked ghost: an editor is removed while in the editor and leave
     obs.ghostAfterClose = { gone: gone.ok, ms: gone.ok ? Date.now() - t0 : null, modes: gone.modes };
     ctx.ev.json("c11a-ghost", { grant: obs.grant, removal: obs.removal, revokedNode: obs.revokedNode, peersBeforeLeaving: obs.peersBeforeLeaving, peersLeft: obs.peersLeft, peersAtCall: obs.peersAtCall, afterClose: obs.ghostAfterClose });
     ctx.step(gone.ok ? `the revoked tab's node went ${obs.ghostAfterClose.ms} ms after the tab closed` : `the revoked tab's node is still there ${GHOST_CLOSE_MS} ms after the tab closed: ${JSON.stringify(gone.modes)}`);
+    assertInvariant(obs.i12);
+    assert.deepEqual(agentOutcome(obs.agent), { accept: "accepted", commit: "published" }, "C11a: nobody retains an editing veto after revocation and leave");
     obs.stage = "done";
   });
 });
 
-scenario("C11a presence: once the removed editor and every member have left the document, status/{d}/peers is empty within 5 s (I12)", { tiers: BOTH, n: NS, timeoutMs: JUDGE_MS, defect: "S11" }, async (ctx) => {
+scenario("C11a presence: once the removed editor and every member have left the document, status/{d}/peers is empty within 5 s (I12)", { tiers: BOTH, n: NS, timeoutMs: JUDGE_MS }, async (ctx) => {
   const i12 = observation(ctx, "C11a", "i12");
   const o = observed.get(keyOf("C11a", ctx));
   ctx.step(`status/{d}/peers after everyone left: ${o.peersLeft.map((uid) => `${o.names?.[uid] ?? uid}${uid === o.revokedUid ? " (removed)" : ""}`).join(", ") || "empty"}; the removed editor's node while it was being removed: ${JSON.stringify(o.revokedNode ?? null)}`);
@@ -1303,7 +1253,7 @@ scenario("C11a presence: once the removed editor and every member have left the 
   assertInvariant(i12);
 });
 
-scenario("C11a agent: once every member has left the editor and the removed editor has left the document, the agent's accept_suggestion and commit_draft go ahead", { tiers: BOTH, n: NS, timeoutMs: JUDGE_MS, defect: "S11" }, async (ctx) => {
+scenario("C11a agent: once every member has left the editor and the removed editor has left the document, the agent's accept_suggestion and commit_draft go ahead", { tiers: BOTH, n: NS, timeoutMs: JUDGE_MS }, async (ctx) => {
   const a = observation(ctx, "C11a", "agent");
   const o = observed.get(keyOf("C11a", ctx));
   ctx.step(`presence the agent read: ${JSON.stringify(o.peersAtCall)}`);
@@ -1322,7 +1272,7 @@ scenario("C11a-serial positive control: the editor leaves the document before it
   assertInvariant(i2InVersion(v, log.typed));
 });
 
-scenario("C11a closed: an editor is removed while in the editor and closes its tab still in the editor (no leave in the app), then the members press Done and leave; status/{d}/peers is empty within 5 s (I12) and the agent's accept_suggestion and commit_draft go ahead", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, defect: "S11", ...LIVE }, async (ctx) => {
+scenario("C11a closed: an editor is removed while in the editor and closes its tab still in the editor (no leave in the app), then the members press Done and leave; status/{d}/peers is empty within 5 s (I12) and the agent's accept_suggestion and commit_draft go ahead", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const obs = { stage: "started", inconclusive: null };
   await withRss(ctx, ctx.n, () => c11aFlow(ctx, obs, { how: "close", first: false }));
   ctx.ev.json("c11a-closed", { grant: obs.grant, removal: obs.removal, revokedNode: obs.revokedNode, peersBeforeLeaving: obs.peersBeforeLeaving, peersLeft: obs.peersLeft, peersAtCall: obs.peersAtCall, i12: obs.i12, agent: obs.agent });
@@ -1457,7 +1407,7 @@ async function c11bThenAhead(ctx, { docId, e, agent, threadId, log }, what) {
   assertInvariant(i2InVersion(v, log.typed));
 }
 
-scenario("C11b same person in two tabs: while one tab of an editor is in the editor, a second tab of the same account opens the document and closes; the agent's accept_suggestion and commit_draft are still refused", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, defect: "S21", ...LIVE }, async (ctx) => {
+scenario("C11b same person in two tabs: while one tab of an editor is in the editor, a second tab of the same account opens the document and closes; the agent's accept_suggestion and commit_draft are still refused", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const { e, accept, commit } = await c11bFlow(ctx, { tabFirst: false });
   assertRefusedWhileEditing(accept, commit, e.name);
 });
@@ -1525,7 +1475,7 @@ async function c11bBothOpenFlow(ctx, { tabFirst }) {
   return { docId, users, e, tabB, others, agent, threadId, log, accept, commit };
 }
 
-scenario("C11b both open: while one tab of an editor is in the editor, a second tab of the same account opens the document and stays open; while both are open the agent's accept_suggestion and commit_draft are refused", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, defect: "S21", ...LIVE }, async (ctx) => {
+scenario("C11b both open: while one tab of an editor is in the editor, a second tab of the same account opens the document and stays open; while both are open the agent's accept_suggestion and commit_draft are refused", { tiers: BOTH, n: NS, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const { e, accept, commit } = await c11bBothOpenFlow(ctx, { tabFirst: false });
   assertRefusedWhileEditing(accept, commit, e.name, "C11b both open");
 });

@@ -1611,11 +1611,27 @@ Three reasons this is not merely tidier:
 Realtime Database, under `status/{docId}`:
 
 ```
-status/{docId}/peers/{uid}    { email, name, mode, focus?, viewport?, composing?, lastChanged }
-status/{docId}/lock           { uid, email, since }
-status/{docId}/requests/{uid} { email, at }
+status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, composing?, lastChanged }
+status/{docId}/y/{entry}        base64 shared-document update
 presenceAccess/{docId}/{emailKey}   server-maintained mirror, client-unreadable
 ```
+
+Each tab owns a random session key and an authenticated, immutable `uid` in
+its record. A second tab cannot replace or remove the first tab's record.
+Readers aggregate sessions by uid: any editing tab keeps the person in edit
+mode; focus and viewport come from the newest editing session, or the newest
+reading session when none edits. Legacy uid-keyed records remain readable and
+may be removed by their own uid during the transition. The withdrawn `lock`
+and `requests` nodes remain rejected.
+
+Leaving cancels queued presence updates and suppresses late connection callbacks.
+An authenticated session owner may delete only their own existing record even
+after revocation or expiry; writes still require current membership and identity
+checks. Announcing `mode: edit` additionally requires current editor access.
+The server's editing veto counts distinct currently authorized editor uids,
+so stale records from a completed downgrade or revocation cannot block a write.
+A failed mirror read refuses the write. This assumes successful mirror delivery;
+the existing delivery limitation below still applies.
 
 | Field | Updated on | Throttle |
 |---|---|---|

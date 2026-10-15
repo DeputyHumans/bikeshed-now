@@ -1,0 +1,11 @@
+--- a/app/src/presence.ts
++++ b/app/src/presence.ts
+@@ -112,7 +112,7 @@
+
+   // A tab owns one record. Another tab of the same person must neither
+   // replace its mode nor remove it through its own onDisconnect handler.
+-  const sessionId = crypto.randomUUID();
++  const sessionId = uid;
+   const meRef = ref(rtdb, `status/${docId}/peers/${sessionId}`);
+   const connRef = ref(rtdb, ".info/connected");
+   const emailLower = email.toLowerCase();

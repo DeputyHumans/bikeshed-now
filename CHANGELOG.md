@@ -18,6 +18,13 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Give each browser tab its own presence record, cancel departed callbacks, and
+  retain editing status while any tab of a person edits. Revoked sessions can
+  clean up their own records; readers cannot claim editing to block publishing.
+  Agent guards ignore records whose editor access has been withdrawn.
+- Resolve operator Realtime Database URLs explicitly from environment or ignored
+  deployment configuration; reject malformed targets and isolate demo emulators.
+
 - Hosting pins MCP transport headers even when the Functions runtime rejects
   malformed JSON before the handler runs. The documented boundary is HTTP 400
   with a diagnostic; handler parse errors retain JSON-RPC `-32700`.

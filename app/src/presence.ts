@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Ephemeral collaboration state: peers, the edit lock, and handoff (SPEC §16).
+// Ephemeral, session-owned peer state and per-person aggregation (SPEC §16).
 
 import {
   onDisconnect,
@@ -32,10 +32,6 @@ import type { Anchor } from "./types";
 
 export const FOCUS_THROTTLE_MS = 200;
 export const VIEWPORT_THROTTLE_MS = 500;
-
-/** How long a lock survives without activity, and when the holder is warned. */
-export const LOCK_IDLE_MS = 5 * 60 * 1000;
-export const LOCK_WARN_MS = 4 * 60 * 1000;
 
 export type PresenceMode = "view" | "edit";
 
@@ -72,27 +68,33 @@ const INERT: PresenceHandle = {
 };
 
 /** Trailing-edge throttle: the LAST value in a window is the one that matters. */
-function throttle<T>(ms: number, apply: (value: T) => void): (value: T) => void {
+function throttle<T>(ms: number, apply: (value: T) => void) {
   let last = 0;
-  let pending: T | null = null;
+  let pending: T;
+  let hasPending = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  return (value: T) => {
+  const push = (value: T) => {
     const now = Date.now();
     const wait = ms - (now - last);
     if (wait <= 0) {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      hasPending = false;
       last = now;
       apply(value);
       return;
     }
     pending = value;
+    hasPending = true;
     if (timer) return;
     timer = setTimeout(() => {
       timer = null;
       last = Date.now();
-      if (pending !== null) apply(pending);
-      pending = null;
+      if (hasPending) apply(pending);
+      hasPending = false;
     }, wait);
   };
+  return { push, cancel() { if (timer) clearTimeout(timer); timer = null; hasPending = false; } };
 }
 
 /**
@@ -111,7 +113,10 @@ export function joinPresence(
 ): PresenceHandle {
   if (!rtdb) return INERT;
 
-  const meRef = ref(rtdb, `status/${docId}/peers/${uid}`);
+  // A tab owns one record. Another tab of the same person must neither
+  // replace its mode nor remove it through its own onDisconnect handler.
+  const sessionId = crypto.randomUUID();
+  const meRef = ref(rtdb, `status/${docId}/peers/${sessionId}`);
   const connRef = ref(rtdb, ".info/connected");
   const emailLower = email.toLowerCase();
 
@@ -120,10 +125,12 @@ export function joinPresence(
   let viewport: number | null = null;
   let composing: string | null = null;
   let connected = false;
+  let left = false;
 
   const write = () => {
-    if (!connected) return;
+    if (left || !connected) return;
     const payload: Record<string, unknown> = {
+      uid,
       email: emailLower,
       name: name.slice(0, 120),
       mode,
@@ -149,6 +156,7 @@ export function joinPresence(
   };
 
   const unsubConn = onValue(connRef, (snap) => {
+    if (left) return;
     connected = snap.val() === true;
     if (!connected) return;
     void onDisconnect(meRef).remove().then(write).catch(() => {});
@@ -166,18 +174,23 @@ export function joinPresence(
   return {
     setMode(next) {
       // Edge-triggered: a mode change is rare and always worth sending.
-      if (next === mode) return;
+      if (left || next === mode) return;
       mode = next;
       write();
     },
-    setFocus: pushFocus,
-    setViewport: pushViewport,
+    setFocus(value) { if (!left) pushFocus.push(value); },
+    setViewport(value) { if (!left) pushViewport.push(value); },
     setComposing(threadId) {
-      if (threadId === composing) return;
+      if (left || threadId === composing) return;
       composing = threadId;
       write();
     },
     leave() {
+      if (left) return;
+      left = true;
+      connected = false;
+      pushFocus.cancel();
+      pushViewport.cancel();
       unsubConn();
       void remove(meRef).catch(() => {});
     },
@@ -197,40 +210,33 @@ export function watchPeers(
   return onValue(
     ref(rtdb, `status/${docId}/peers`),
     (snap) => {
-      const val = (snap.val() as Record<string, Omit<Peer, "uid" | "color">> | null) ?? {};
-      cb(
-        Object.entries(val)
-          .filter(([uid]) => uid !== selfUid)
-          .map(([uid, v]) => ({
-            uid,
-            email: v.email,
-            name: v.name || v.email,
-            mode: v.mode === "edit" ? "edit" : "view",
-            focus: v.focus,
-            viewport: typeof v.viewport === "number" ? v.viewport : undefined,
-            composing: v.composing,
-            lastChanged: typeof v.lastChanged === "number" ? v.lastChanged : 0,
-            color: peerColor(v.email),
-          })),
-      );
+      const val = (snap.val() as Record<string, Partial<Peer>> | null) ?? {};
+      const people = new Map<string, Peer>();
+      for (const [session, v] of Object.entries(val)) {
+        // Old clients used uid as the key. Read those during the transition;
+        // new session records carry an authenticated, immutable uid instead.
+        const uid = v?.uid ?? session;
+        if (uid === selfUid || typeof v?.email !== "string") continue;
+        const candidate: Peer = {
+          uid, email: v.email, name: v.name || v.email,
+          mode: v.mode === "edit" ? "edit" : "view",
+          focus: v.focus,
+          viewport: typeof v.viewport === "number" ? v.viewport : undefined,
+          composing: v.composing,
+          lastChanged: typeof v.lastChanged === "number" ? v.lastChanged : 0,
+          color: peerColor(v.email),
+        };
+        const previous = people.get(uid);
+        // Editing is an OR across tabs; choose the newest of equally active
+        // sessions for focus and viewport instead of letting a reader hide it.
+        if (!previous || (candidate.mode === "edit" && previous.mode !== "edit") ||
+          (candidate.mode === previous.mode && candidate.lastChanged >= previous.lastChanged)) {
+          people.set(uid, candidate);
+        }
+      }
+      cb([...people.values()]);
     },
     () => cb([]),
   );
 }
-
-// --- The edit lock ---------------------------------------------------------
-
-/**
- * Why a lock at all
- * -----------------
- * Showing live cursors without one would actively invite the single thing
- * last-writer-wins handles badly: two people typing in the same paragraph. The
- * lock is what makes "no CRDT" an honest position rather than a gap.
- *
- * It is SOFT. A peer who does not hold it enters observe mode — watching the
- * draft, seeing the holder's caret, still able to highlight and comment.
- * Review does not stop because somebody is typing.
- */
-
-// --- "Ask to edit" ---------------------------------------------------------
 

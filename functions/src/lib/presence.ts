@@ -163,8 +163,15 @@ export async function liveEditing(docId: string): Promise<{ editors: number; log
   } catch {
     return null;
   }
-  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
-  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
+  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { uid?: unknown; email?: unknown; mode?: unknown }> | null;
+  const access = (await db.ref(`editAccess/${docId}`).once("value")).val() as Record<string, unknown> | null;
+  // A completed downgrade/revocation must withdraw the veto of older records.
+  // Failure to read this mirror throws, as does failure to read the peers.
+  const mayEdit = (email: unknown) => typeof email === "string" &&
+    (access?.[emailKey(email)] === true || access?.[OPEN_EDIT_KEY] === true);
+  // Count people, not tabs; any editing session keeps the refusal active.
+  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "edit" && mayEdit(p.email))
+    .map(([session, p]) => typeof p.uid === "string" ? p.uid : session)).size;
   const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
   return { editors, log };
 }

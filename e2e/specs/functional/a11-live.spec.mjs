@@ -79,6 +79,7 @@
  * Only e2e/lib/ talks to the stack.
  */
 
+import { presenceModes, presenceFor } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { isDeepStrictEqual } from "node:util";
@@ -355,9 +356,14 @@ async function selectIn(user, id, exact) {
   return r;
 }
 
+/** Read one person explicitly from their raw, independently owned session records. */
+async function serverPeer(docId, uid) {
+  return presenceFor(await rtdbGet(target, `status/${docId}/peers`), uid);
+}
+
 /** The focus a peer has broadcast, as the server holds it (null when none). */
 async function serverFocus(docId, uid) {
-  return rtdbGet(target, `status/${docId}/peers/${uid}/focus`);
+  return (await serverPeer(docId, uid))?.focus ?? null;
 }
 
 /** The frame's scroll fraction, computed as the product computes it (peers.ts scrollFraction). */
@@ -716,7 +722,7 @@ scenario("A11.4 follow keeps the reader within 0.02 of the leader's scroll fract
   const leadTop = await scrollFrac(l);
   const leaderUid = w.owner.uid;
   await eventually(async () => {
-    const v = await rtdbGet(target, `status/${w.docId}/peers/${leaderUid}/viewport`);
+    const v = (await serverPeer(w.docId, leaderUid))?.viewport;
     if (typeof v !== "number" || Math.abs(v - leadTop.frac) > 0.005) throw new Error(`viewport ${v}`);
     return v;
   }, { timeout: 10_000, interval: 200, message: "the leader's new viewport reached the server" });
@@ -1033,7 +1039,7 @@ scenario("A11.10 closing an editor's tab removes their peer node and their chip 
   ctx.step("both peer nodes exist (the editor's in edit mode), and the reading owner shows the editor's chip");
   const nodes = await eventually(async () => {
     const peers = (await rtdbGet(target, `status/${w.docId}/peers`)) ?? {};
-    const modes = Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode]));
+    const modes = presenceModes(peers);
     if (modes[w.owner.uid] !== "view" || modes[ed.account.uid] !== "edit") throw new Error(JSON.stringify(modes));
     return modes;
   }, { timeout: 10_000, message: "both peers present" });
@@ -1046,11 +1052,11 @@ scenario("A11.10 closing an editor's tab removes their peer node and their chip 
   let goneAt = null;
   let chipGoneAt = null;
   await eventually(async () => {
-    if (goneAt === null && (await rtdbGet(target, `status/${w.docId}/peers/${ed.account.uid}`)) === null) goneAt = Date.now() - t0;
+    if (goneAt === null && (await serverPeer(w.docId, ed.account.uid)) === null) goneAt = Date.now() - t0;
     if (chipGoneAt === null && (await chipFor(o, ed.account.email)) === null) chipGoneAt = Date.now() - t0;
     return goneAt !== null && chipGoneAt !== null;
   }, { timeout: 15_000, interval: 100, message: "the peer node and the chip are gone" }).catch(() => undefined);
-  const ownerNode = await rtdbGet(target, `status/${w.docId}/peers/${w.owner.uid}`);
+  const ownerNode = await serverPeer(w.docId, w.owner.uid);
   ctx.step(`peer node gone after ${goneAt ?? "never (15 s)"} ms; chip gone after ${chipGoneAt ?? "never (15 s)"} ms; the owner's own node: ${ownerNode?.mode}`);
   assert.equal(ownerNode?.mode, "view", "the owner's node is untouched");
   assert.ok(goneAt !== null && goneAt <= 5_000, `the closed tab's peer node is removed within 5 s (took ${goneAt ?? "more than 15 000"} ms)`);
@@ -1069,7 +1075,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
   const o = w.users.owner;
   await o.open(w.docId);
   await bothShared(o);
-  const ownerNode = await eventually(async () => (await rtdbGet(target, `status/${w.docId}/peers/${w.owner.uid}`)) ?? false, { timeout: 10_000, message: "the owner's peer node" });
+  const ownerNode = await eventually(async () => (await serverPeer(w.docId, w.owner.uid)) ?? false, { timeout: 10_000, message: "the owner's peer node" });
   const logBefore = Object.keys(await logEntries(w.docId)).sort();
 
   const db = rtdbFor(ctx, "editor", ed.session.idToken);
@@ -1085,7 +1091,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
     ["a client-chosen lastChanged", mine, { ...peer, lastChanged: Date.now() - 60_000 }],
     ["a mode that is neither view nor edit", mine, { ...peer, mode: "lock" }],
     ["an email that is not the caller's", mine, { ...peer, email: w.ownerAcct.email.toLowerCase() }],
-    ["another account's peer key", `status/${w.docId}/peers/${w.owner.uid}`, { ...peer }],
+    ["another account's peer key", `status/${w.docId}/peers/${ownerNode.key}`, { ...peer, uid: ed.session.uid }],
     ["a viewport outside 0..1", mine, { ...peer, viewport: 1.5 }],
     ["a log entry that is not a string", `status/${w.docId}/y/${newEntry("n")}`, 12345],
     ["a log entry over 200 000 characters", `status/${w.docId}/y/${newEntry("big")}`, "A".repeat(200_004)],
@@ -1110,15 +1116,32 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
   assert.equal(okLog, "ALLOW", "control: a string log entry is allowed");
   assert.deepEqual(got.filter((g) => g.verdict !== "DENY").map((g) => g.what), [], "every malformed write is rejected");
   assert.deepEqual(Object.keys(stored).sort(), ["peers", "y"], "nothing but peers and y exists under status/{doc}");
-  assert.deepEqual(Object.keys(stored.peers).sort(), [w.owner.uid, ed.session.uid].sort(), "only the two callers' own peer nodes exist");
+  assert.deepEqual(Object.keys(stored.peers).sort(), [ownerNode.key, ed.session.uid].sort(), "only the two callers' own peer nodes exist");
   assert.deepEqual(
-    { email: stored.peers[w.owner.uid].email, mode: stored.peers[w.owner.uid].mode },
+    { email: stored.peers[ownerNode.key].email, mode: stored.peers[ownerNode.key].mode },
     { email: ownerNode.email, mode: "edit" },
     "nobody overwrote the owner's live node",
   );
   assert.deepEqual(Object.keys(stored.peers[ed.session.uid]).sort(), ["email", "lastChanged", "mode"], "the editor's node holds exactly the fields written");
   assert.deepEqual(logAfter.filter((k) => !logBefore.includes(k)), [okEntry], "the only entry added to the log is the well-formed one");
   assert.deepEqual(badge, { state: "shared", text: "Shared" }, "the live session is still Shared");
+});
+
+scenario("A11.11b a reader can announce view but cannot claim editing or remove another session", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  await rulesEnforced(ctx);
+  const w = await world(ctx, { roles: { editor: "editor", reader: "viewer" }, sessions: ["editor", "reader"], title: "A11.11b presence authority" });
+  const editor = w.people.editor.session, reader = w.people.reader.session;
+  const editDb = rtdbFor(ctx, "editor", editor.idToken), readDb = rtdbFor(ctx, "reader", reader.idToken);
+  const body = (person, email, mode) => ({ uid: person.uid, email: email.toLowerCase(), mode, lastChanged: { ".sv": "timestamp" } });
+  const own = `status/${w.docId}/peers/reader-session`, other = `status/${w.docId}/peers/editor-session`;
+  const view = body(reader, w.people.reader.account.email, "view");
+  const edit = body(editor, w.people.editor.account.email, "edit");
+  assert.equal(rtdbVerdict(await readDb.put(own, view), "reader view"), "ALLOW", "reader view presence remains allowed");
+  assert.equal(rtdbVerdict(await editDb.put(other, edit), "editor edit"), "ALLOW", "editor edit presence remains allowed");
+  assert.equal(rtdbVerdict(await readDb.put(own, { ...view, mode: "edit" }), "reader edit"), "DENY", "a reader cannot claim editing to veto publishing");
+  assert.equal(rtdbVerdict(await readDb.delete(other), "another session delete"), "DENY", "a reader cannot remove another session");
+  assert.equal(rtdbVerdict(await readDb.delete(own), "own session delete"), "ALLOW", "a reader can remove its own session");
+  assert.deepEqual(await rtdbGet(target, `status/${w.docId}/peers`), { "editor-session": { ...edit, lastChanged: (await rtdbGet(target, other)).lastChanged } }, "only the editor's untouched session remains");
 });
 
 // --- A11.12 --------------------------------------------------------------------

@@ -183,6 +183,7 @@
  * mirror is missing (S16) is INCONCLUSIVE.
  */
 
+import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
 import { createHash } from "node:crypto";
@@ -802,7 +803,7 @@ async function realtimeRules(ctx) {
 /** status/{d}/peers as {uid: mode}; `retryMs` as rtdbGetPatient's (0: a 503 throws at once). */
 async function peerModes(docId, { retryMs } = {}) {
   const peers = (await rtdbGetPatient(target, `status/${docId}/peers`, retryMs === undefined ? {} : { retryMs })) ?? {};
-  return Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode ?? null]));
+  return presenceModes(peers);
 }
 
 const editorsIn = (modes) => Object.entries(modes).filter(([, m]) => m === "edit").map(([uid]) => uid);

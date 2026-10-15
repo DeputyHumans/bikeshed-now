@@ -91,11 +91,33 @@ export function getBucketName(projectOverride, bucketOverride) {
   return `${getProjectId(projectOverride)}-content`;
 }
 
+/** Explicit RTDB target for operators; unlike bucket names, it is never derived. */
+function getDatabaseUrl(projectOverride) {
+  if (process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
+    if (!getProjectId(projectOverride).startsWith("demo-")) {
+      throw new Error("Realtime Database emulator use requires a demo- project");
+    }
+    // The SDK derives the emulator namespace from the demo project. A local
+    // invocation must not inherit a deployment's database URL or namespace.
+    return undefined;
+  }
+  const value = process.env.BIKESHED_DATABASE_URL ?? deployConfig().databaseURL;
+  if (value === undefined || value === "") return undefined;
+  let parsed;
+  try { parsed = typeof value === "string" ? new URL(value) : null; } catch { /* rejected below */ }
+  if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password ||
+    parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("databaseURL must be an HTTPS database URL without credentials, path, query or fragment");
+  }
+  return parsed.origin;
+}
+
 function getApp(projectOverride, bucketOverride) {
   if (_app) return _app;
   _app = admin.initializeApp({
     projectId: getProjectId(projectOverride),
     storageBucket: getBucketName(projectOverride, bucketOverride),
+    databaseURL: getDatabaseUrl(projectOverride),
   });
   return _app;
 }
@@ -114,8 +136,9 @@ export function getBucket(projectOverride, bucketOverride) {
 
 /** Realtime Database handle, or null when the deployment has none. */
 export function getRtdb(projectOverride) {
+  const app = getApp(projectOverride);
   try {
-    return admin.database(getApp(projectOverride));
+    return admin.database(app);
   } catch {
     return null;
   }

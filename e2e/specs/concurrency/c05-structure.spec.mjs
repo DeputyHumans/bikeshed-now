@@ -172,6 +172,7 @@
  * unwritten), so no case declares an email effect.
  */
 
+import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
@@ -499,7 +500,7 @@ const PRESENCE_MS = 10_000;
 /** status/{d}/peers as {uid: mode} (rtdbGetPatient: a Database 503 is read again). */
 async function peerModes(t, docId) {
   const peers = (await rtdbGetPatient(t, `status/${docId}/peers`)) ?? {};
-  return Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode ?? null]));
+  return presenceModes(peers);
 }
 
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
