@@ -14092,14 +14092,17 @@
     },
     {
       "id": "n20-common-document-transaction-timeouts",
-      "state": "open",
+      "state": "in-progress",
       "classification": "unresolved-product-vs-emulator-boundary",
       "claim": "At N20, common-document view/thumbnail/draft traffic produced ABORTED transaction lock timeouts and Functions worker/socket failures. The exact installed lock-upgrade cycle reproduces independently; attribution of each request and the required product response remain under investigation.",
       "evidence": "e2e/.out/n20-transaction-audit/proof.json",
       "mustNotDo": [
         "Do not silently classify the N20 matrix as a local limit.",
         "Do not lower N, relax every-save200 assertions, or substitute serialized requests."
-      ]
+      ],
+      "candidateCommit": "0f3f259",
+      "candidateEvidence": "e2e/.out/n20-transaction-audit/candidate-proof.json",
+      "authoringStatus": "Six unchanged selected N20 browser cases pass, including120 autosaves all200 and all-peer saved-byte equality. Adverse unconditional helper stress remains retained; no universal performance or full matrix claim."
     },
     {
       "id": "stale-done-completes-in-replacement-editor",
@@ -14179,6 +14182,95 @@
       "remaining": [
         "Full frozen verification and actual final campaign imports remain required."
       ]
+    },
+    {
+      "id": "thumbnail-revocation-during-upload",
+      "state": "in-progress",
+      "claim": "An editor downgraded or removed while JPEG upload was in flight could still set a shared thumbnail pointer. Recheck current editor authority inside the metadata transaction, preserve reader-aware403/404, and retire only the rejected upload key.",
+      "sourceCommit": "cb7839f",
+      "relatedOriginalItems": [],
+      "controls": [
+        {
+          "set": "controls-thumb-candidate-keeps",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail revocation: only candidate JPEGs are deleted"
+        },
+        {
+          "set": "controls-thumb-cleanup-wide",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail revocation: only candidate JPEGs are deleted"
+        },
+        {
+          "set": "controls-thumb-editor-revoked",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail viewer: fresh authority answers 403"
+        },
+        {
+          "set": "controls-thumb-member-removed",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor removed after JPEG upload receives 404, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail removed: fresh authority answers 404"
+        },
+        {
+          "set": "controls-thumb-owner-refused",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: the owner still stores and serves its exact JPEGs after removing another editor during upload (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail owner: fresh authority answers 200"
+        },
+        {
+          "set": "controls-thumb-refusal-metadata",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail refusal discloses no metadata"
+        },
+        {
+          "set": "controls-thumb-stranger-disclosure",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor removed after JPEG upload receives 404, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail removed: fresh authority answers 404"
+        },
+        {
+          "set": "controls-thumb-viewer-private",
+          "target": {
+            "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+            "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+            "suite": "concurrency"
+          },
+          "intendedFailure": "thumbnail viewer: fresh authority answers 403"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/thumb-authority-proof/manifest.json"
+      ],
+      "remaining": [
+        "Eight new and two refreshed actual control pairs are being evaluated at cb7839f; the three new clean cases pass.",
+        "Final frozen-source acceptance, default trials and controls remain required."
+      ],
+      "distinction": "Fresh thumbnail authorization is distinct from initial ACL refusal and competing thumbnail captures. No original finding or proof axis is replaced."
     }
   ],
   "acceptance": {
@@ -15043,6 +15135,27 @@
           ]
         },
         "command": "node e2e/run.mjs run --suite functional --spec a20-cli.spec.mjs --patches a20-cli-no-retry-delay",
+        "proofs": []
+      },
+      {
+        "id": "concurrency-thumb-authority-n2",
+        "kind": "e2e-run",
+        "suite": "concurrency",
+        "n": 2,
+        "planTrials": true,
+        "capabilities": [
+          "storage-preconditions",
+          "rtdb-proxy",
+          "gates",
+          "patch:amplify-thumb-authority"
+        ],
+        "options": {
+          "patches": [
+            "amplify-thumb-authority"
+          ]
+        },
+        "command": "node e2e/run.mjs run --suite concurrency --storage-shim --rtdb-proxy --n 2 --spec c17-identity.spec.mjs --patches amplify-thumb-authority",
+        "spec": "c17-identity.spec.mjs",
         "proofs": []
       }
     ],
@@ -16019,6 +16132,28 @@
       "remaining": [
         "Draft-contention repair and unchanged N20 browser validation.",
         "Final frozen full checks, original matrix, complete control catalog and local releases."
+      ]
+    },
+    {
+      "kind": "n20-draft-and-thumbnail-authoring",
+      "scope": "Targeted authoring evidence only; all original51 cells retained plus the new thumbnail authority cell",
+      "sourceCommits": [
+        "0f3f259",
+        "cb7839f"
+      ],
+      "checks": [
+        "Six selected N20 browser scenarios pass unchanged, including120 autosaves all200; RTDB diagnostics archived between quiescent cases without heap failure.",
+        "Thumbnail viewer downgrade, private-member removal and owner-success browser cases pass after real access changes during held uploads.",
+        "Complete authoring selftest has1341 passes and2 failures. The lock-recording contract is fixed and focused green; the unchanged sync-pages probe passes alone. A complete quiet rerun remains required."
+      ],
+      "evidence": [
+        "e2e/.out/n20-transaction-audit/candidate-proof.json",
+        "e2e/.out/2610150303-uyax/invocations/20261015T100744Z-p38916-ynsy/results.json",
+        "e2e/.out/thumb-authority-proof/manifest.json"
+      ],
+      "remaining": [
+        "Full quiet selftest, full N20 and all original matrix axes/default trials.",
+        "All actual controls at the final frozen source and local releases."
       ]
     }
   ]

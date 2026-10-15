@@ -171,7 +171,7 @@ test("negative controls: a filtered matrix cell, shortened trials or mismatched 
 
 
 test("all three additional CLI capability cells are mandatory and remain unproved until executed", () => {
-  assert.equal(imported.acceptance.requirements.length, 51, "48 original cells plus three CLI variants");
+  assert.equal(imported.acceptance.requirements.filter(r => r.id !== "concurrency-thumb-authority-n2").length, 51, "all original cells remain beside the added thumbnail variant");
   for (const id of ["cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor"]) {
     const cell = imported.acceptance.requirements.find((r) => r.id === id);
     assert.equal(cell.spec, "a20-cli.spec.mjs");
@@ -455,4 +455,19 @@ test("a matrix cell cannot use unselected N rows as execution proof", t => {
   write(f.root, `${dirname(proof.artifact)}/invocation.json`, { ...completion, n: [2] });
   assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /N=20 was not executed/);
   assert.throws(() => importRun(f.c, proof.artifact, { root: f.root, cellId: cell.id }), /matrix N differs/);
+});
+
+
+test("the new thumbnail authority cell preserves its N2 default trials and cannot be removed", () => {
+  const id = "concurrency-thumb-authority-n2";
+  const cell = imported.acceptance.requirements.find(r => r.id === id);
+  assert.ok(cell, "thumbnail authority matrix cell is required");
+  assert.equal(cell.n, 2);
+  assert.equal(cell.planTrials, true);
+  assert.equal(cell.spec, "c17-identity.spec.mjs");
+  assert.deepEqual(cell.options.patches, ["amplify-thumb-authority"]);
+  assert.ok(cell.capabilities.includes("patch:amplify-thumb-authority"));
+  const c = structuredClone(imported);
+  c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
+  assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), "removing thumbnail authority must invalidate the matrix");
 });

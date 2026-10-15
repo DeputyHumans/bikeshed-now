@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Add a default-trial thumbnail authority matrix cell while retaining every original campaign axis, and record the targeted N20 repair evidence without closing final acceptance.
+
 - Judge C14 wire overlap from unrounded request timestamps while accepting a positive sub-tenth-millisecond margin displayed as zero; a true zero overlap still refuses the evidence.
 
 - Keep stale-draft, delayed-autosave and checked-snapshot negative controls applicable to both draft commit paths after the snapshot-precondition repair.

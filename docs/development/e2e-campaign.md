@@ -45,7 +45,8 @@ npm run verify
 npm run test:rules:emulated
 ```
 
-The ledger's `acceptance.requirements` contains the 51 explicit command cells:
+The ledger's `acceptance.requirements` contains 52 explicit command cells: the 51 original cells and the new
+thumbnail authority variant at N=2. The original cells comprise
 three repository/harness checks, the complete control-set run, plain and capability-enabled smoke, plain
 functional, eight functional build variants, and nine concurrency variants at
 each of N=2,5,10,20. Print the executable matrix without starting anything:
@@ -57,7 +58,7 @@ node --input-type=module -e 'import fs from "node:fs"; const c=JSON.parse(fs.rea
 The checked-in commands default to immutable HEAD snapshots. For final local
 acceptance, commit the integrated source first, prepare the release version
 changes, then freeze that worktree. The evidence helper rewrites only tree
-selection to `--tree worktree`, preserving all 51 cell IDs and axes, and records
+selection to `--tree worktree`, preserving all 52 cell IDs and axes, and records
 the base SHA, version, source digest and complete control inventory. Evidence
 imports are proposals under `e2e/.out/`; they never resolve findings. Keep the
 source frozen until the acceptance evidence is complete, then make the release

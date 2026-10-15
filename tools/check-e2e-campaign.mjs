@@ -92,7 +92,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   const controls = index(campaign?.controls, "controls");
   const acceptance = campaign?.acceptance ?? {};
   const requirements = index(acceptance.requirements, "requirements");
-  const matrixIds = ["verify", "rules", "selftest", "controls", "smoke", "smoke-capabilities", "functional", "account-measurement", "account-live-consent", "account-default-mark", "cli-bad-skill", "cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor", "email-off", ...["natural", "c01", "c04", "c08", "c10", "c12", "c13", "c16", "c17"].flatMap((v) => [2, 5, 10, 20].map((n) => `concurrency-${v}-n${n}`))];
+  const matrixIds = ["verify", "rules", "selftest", "controls", "smoke", "smoke-capabilities", "functional", "account-measurement", "account-live-consent", "account-default-mark", "cli-bad-skill", "cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor", "email-off", "concurrency-thumb-authority-n2", ...["natural", "c01", "c04", "c08", "c10", "c12", "c13", "c16", "c17"].flatMap((v) => [2, 5, 10, 20].map((n) => `concurrency-${v}-n${n}`))];
   for (const id of matrixIds) need(requirements.has(id), `retain matrix requirement ${id}`);
   for (const id of ["coverage-new-version-dialog", "coverage-new-version-drop"]) need(discoveries.has(id), `retain later discovery ${id}`);
   const all = [...coverageItems.values(), ...items.values(), ...discoveries.values()];
