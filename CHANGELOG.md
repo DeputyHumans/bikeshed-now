@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Make presentation hiding checks start with visible comments and banners, require real deck keyboard dispatch, pin thumbnail cache duration independently, and exercise two-image cover refusals and thumbnail side effects with directional controls.
+
 - Verify Markdown readiness without a timed gate, inspect real section hierarchy and external-resource channels, and preserve exact authored raw blocks and duplicate comments across a second save, with directional regression controls.
 
 - Add CLI cases that cross the unchanged document and event page limits, isolate the polling interval floor from the server retry delay, and challenge parent-directory, uppercase and underscore skill names. Trace only local call timing and tool names; slow measurements remain inconclusive.

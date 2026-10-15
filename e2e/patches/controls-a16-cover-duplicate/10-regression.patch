@@ -1,0 +1,8 @@
+--- a/app/src/viewer/useThumbCapture.ts
++++ b/app/src/viewer/useThumbCapture.ts
+@@ -75,4 +75,5 @@
+           if (live.current.needs?.cover && !first.uniform && claim(`${docId}/${version}/cover`)) {
+             await upload(docId, version, "cover", [first.blob]);
++            await upload(docId, version, "cover", [first.blob]);
+           }
+           if (cancelled || !live.current.needs?.slides) return;

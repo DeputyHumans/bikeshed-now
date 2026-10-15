@@ -1,0 +1,13 @@
+{
+  "oracle": "presenting hides the header, toolbar, banners, comments and rail",
+  "what": "Regress present comments panel",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.3 Present hides the chrome and shows a counter that follows the deck; leaving fullscreen without Exit ends it (fullscreenchange); Exit ends it; a refused fullscreen still presents",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "presenting hides the header, toolbar, banners, comments and rail"
+  }
+}

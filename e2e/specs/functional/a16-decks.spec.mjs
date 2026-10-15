@@ -569,14 +569,21 @@ scenario("A16.2 keys scroll a flat deck and the rail follows; on a stacked trust
   precondition(d0.offsets.every((top) => top === d0.offsets[0]), `D's slides share one top (stacked): ${JSON.stringify(d0.offsets)}`);
   precondition((await o.page.evaluate(() => document.querySelector("iframe.doc-frame").getAttribute("sandbox"))) === null, "the trusted deck's frame is unsandboxed");
   await settleFrame(o, ".deck > section", "D at load");
+  await (await o.frame()).evaluate(() => {
+    window.__a16Keys = [];
+    document.addEventListener("keydown", (e) => window.__a16Keys.push({ key: e.key, trusted: e.isTrusted }), true);
+  });
 
   // Act, wait until the deck moved at all, let its transition finish, then say where it is.
   const dStep = async (what, act, want, message = `${what}: D shows slide ${want + 1} and the frame did not scroll`) => {
     const from = (await frameState(o, ".deck > section")).active;
+    const keyMark = await (await o.frame()).evaluate(() => window.__a16Keys.length);
     await act();
     await eventually(async () => (await frameState(o, ".deck > section")).active !== from, { timeout: 5_000, message: `${what}: the deck moved off slide ${from + 1}` });
     const s = await settleFrame(o, ".deck > section", what);
     assert.deepEqual(s, { y: 0, active: want }, message);
+    const keys = await (await o.frame()).evaluate((mark) => window.__a16Keys.slice(mark), keyMark);
+    if (!what.includes("inside the frame")) assert.deepEqual(keys, Array.from({ length: Math.abs(want - from) }, () => ({ key: want > from ? "ArrowRight" : "ArrowLeft", trusted: false })), `${what}: stacked navigation dispatches the exact synthetic deck keys`);
   };
   await focusParent(o);
   await dStep("ArrowRight on the parent", () => o.page.keyboard.press("ArrowRight"), 1);
@@ -693,11 +700,18 @@ scenario("A16.3 Present hides the chrome and shows a counter that follows the de
 }, async (ctx) => {
   const { owner, accounts } = await castWithOwner(ctx, []);
   const q = readSample(target, "deck-quarter-review");
-  const docId = (await publish(owner.http, { body: q.bytes, filename: q.filename, title: `Q ${tag()}`, name: "a163-q", patient: { ctx, stopAt: "budget" } })).docId;
+  const withScript = Buffer.from(q.bytes.toString("utf8").replace("</body>", "<script>window.a16Blocked = true;</script></body>"));
+  const docId = (await publish(owner.http, { body: withScript, filename: q.filename, title: `Q ${tag()}`, name: "a163-q", patient: { ctx, stopAt: "budget" } })).docId;
   const o = await ownerBrowser(ctx, accounts[0]);
   await openDeck(o, docId);
+  const heading = await (await o.frame()).locator("h1").first().textContent();
+  precondition(heading?.trim(), "the deck has a title to attach a real comment to");
+  await o.selectText("h1", heading.trim());
+  await o.comment("A16 presentation keeps this thread when leaving fullscreen");
+  await o.openComments();
+  await o.page.locator(".comments-panel .thread").first().waitFor({ state: "visible" });
   const before = await chromeState(o);
-  precondition(before.header === true && before.toolbar === true && before.rail === true, `the header, toolbar and rail are on screen before presenting: ${JSON.stringify(before)}`);
+  precondition(Object.values(before).every((value) => value === true), `the header, toolbar, script banner, comment thread and rail are on screen before presenting: ${JSON.stringify(before)}`);
   const hidden = (c) => ({ header: c.header, toolbar: c.toolbar, banners: c.banners === true, comments: c.comments === true, rail: c.rail });
   const allHidden = { header: false, toolbar: false, banners: false, comments: false, rail: false };
 
@@ -772,7 +786,7 @@ scenario("A16.4 the owner's browser posts Q's cover, then its slides, once each;
 }, async (ctx) => {
   const REV = Number(treeConstant(target, "functions/src/lib/thumbs.ts", "THUMB_REVISION"));
   const SETTLE_MS = Number(treeConstant(target, "app/src/viewer/useThumbCapture.ts", "SETTLE_MS"));
-  const CACHE_S = Number(treeConstant(target, "functions/src/lib/thumbs.ts", "THUMB_CACHE_SECONDS"));
+  const CACHE_S = 86_400; // SPEC §6d: one day; do not follow a regressed product constant.
 
   ctx.step("cast an owner, a viewer and a stranger; the owner publishes Q and shares it with the viewer");
   const { owner, accounts } = await castWithOwner(ctx, ["viewer", "stranger"]);
@@ -920,6 +934,7 @@ scenario("A16.5 POST /thumb refuses an r other than the deployment's, a version 
     ["r one above the deployment's", { doc: docId, v: "v2", kind: "cover", images: [tiny], r: REV + 1 }, 409, "captured by an older version of the app"],
     ["no r at all", { doc: docId, v: "v2", kind: "cover", images: [tiny] }, 409, "captured by an older version of the app"],
     ["a version that is not current", { doc: docId, v: "v1", kind: "cover", images: [tiny], r: REV }, 409, "not the current version"],
+    ["two images for one cover", { doc: docId, v: "v2", kind: "cover", images: [tiny, tiny], r: REV }, 400, "a cover is one image"],
     ["a PNG", { doc: docId, v: "v2", kind: "cover", images: [png], r: REV }, 400, "not a JPEG"],
     [`a JPEG of ${MAX_BYTES + 1} bytes`, { doc: docId, v: "v2", kind: "cover", images: [jpeg({ width: 1280, height: 720, total: MAX_BYTES + 1 })], r: REV }, 400, "image too large"],
     [`a JPEG ${MAX_SIDE + 1} px wide`, { doc: docId, v: "v2", kind: "cover", images: [jpeg({ width: MAX_SIDE + 1, height: 720 })], r: REV }, 400, "image too large"],

@@ -14040,6 +14040,16 @@
       ],
       "evidence": "e2e/.out/a10-controls-proof/oracle-proof.json; e2e/.out/a10-controls-proof/compile-proof.json",
       "note": "B10 6c38cc6: full A10 7/7 pass at 20261015T063924Z-p14391-xdw6; exact authored-count final A10.4 restored at 20261015T064539Z-p26831-n1n4. Eleven scratch controls reached intended assertion failures (oracle-proof.json), ten inspector selftests and two source mutants restored green. Twelve stored product controls apply/typecheck. Fresh exact-revision patched-stack pairs and matrix remain required; canonical states unchanged."
+    },
+    {
+      "scope": "a16-decks coverage obligations; source reconciliation and local browser proof",
+      "checks": [
+        "Four affected B10 cases pass and restore without TODO/inconclusive/failure",
+        "Fourteen scratch oracle controls fail intended assertions",
+        "Fourteen directional stored product controls apply/typecheck; 22 shared focused control/inspector selftests pass"
+      ],
+      "evidence": "e2e/.out/a16-controls-proof/oracle-proof.json; e2e/.out/a16-controls-proof/compile-proof.json",
+      "note": "B10 6c38cc6: four affected cases pass and restore at 20261015T064956Z-p40498-09ch; fourteen scratch controls reach intended assertions at 20261015T064453Z-p24697-vkij. Fourteen stored product controls apply/typecheck. Fresh exact-revision patched-stack pairs and final matrix remain required; canonical states unchanged."
     }
   ]
 }

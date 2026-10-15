@@ -1,0 +1,8 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -344,5 +344,4 @@
+    header is a sibling of <main> — and presenting left it on screen. */
+ .is-presenting .app-header,
+-.is-presenting .viewer-toolbar,
+ .is-presenting .viewer-banners,
+ .is-presenting .comments-panel,

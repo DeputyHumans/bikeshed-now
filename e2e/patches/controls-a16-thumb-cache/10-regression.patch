@@ -1,0 +1,9 @@
+--- a/functions/src/lib/thumbs.ts
++++ b/functions/src/lib/thumbs.ts
+@@ -31,5 +31,5 @@
+  * held. It is capped at the time left before expiry like every other window.
+  */
+-export const THUMB_CACHE_SECONDS = 86_400;
++export const THUMB_CACHE_SECONDS = 3_600;
+
+ /**

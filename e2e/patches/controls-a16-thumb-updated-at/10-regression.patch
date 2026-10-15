@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -647,5 +647,5 @@
+     const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
+     if (!decision.write) return { stored: false, moved: false, stale: [] };
+-    tx.update(docRef, { thumb: decision.thumb });
++    tx.update(docRef, { thumb: decision.thumb, updatedAt: now() });
+     return { stored: true, moved: false, stale: decision.stale };
+   });
