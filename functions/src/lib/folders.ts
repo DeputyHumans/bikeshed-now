@@ -41,6 +41,7 @@ import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
 
 type Db = admin.firestore.Firestore;
 
@@ -317,13 +318,23 @@ async function transactionTeams(db: Db, tx: admin.firestore.Transaction, grants:
 export async function persistFolderMembership(
   db: Db,
   ref: admin.firestore.DocumentReference,
-  change: (data: admin.firestore.DocumentData) => Record<string, unknown> = () => ({}),
+  change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
 ): Promise<{ data: admin.firestore.DocumentData; before: Membership; membership: Membership; grants: RoleGrants } | null> {
-  return db.runTransaction(async (tx) => {
+  const receipt = change ? freshReceiptId() : null;
+  let originalData: admin.firestore.DocumentData | undefined;
+  type Result = { before: Membership; membership: Membership; grants: RoleGrants };
+  const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    if (receipt) {
+      const committed = readReceipt<Result>(snap, receipt);
+      if (committed.found) {
+        if (!originalData) throw new Error("membership receipt has no request snapshot");
+        return { data: originalData, ...committed.result };
+      }
+    }
     if (!snap.exists) return null;
     const data = snap.data() || {};
-    const patch = change(data);
+    const patch = change?.(data) ?? {};
     const parentId = typeof data.parentId === "string" ? data.parentId : null;
     const parentSnap = parentId ? await tx.get(db.collection("folders").doc(parentId)) : null;
     const parent = parentSnap?.exists ? membershipOf(parentSnap.data()) : null;
@@ -335,8 +346,14 @@ export async function persistFolderMembership(
     const membership = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
     const ancestors = parentId ? [...parentAncestors, parentId] : [];
     tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (receipt) {
+      originalData = data; // request-local only: never persist a document snapshot in its receipt
+      recordReceipt(tx, ref, snap, receipt, { before, membership, grants });
+    }
     return { data, before, membership, grants };
   });
+  if (receipt) await clearReceipt(ref, receipt);
+  return result;
 }
 
 /**
@@ -384,14 +401,21 @@ export async function persistDocMembership(
   db: Db,
   docRef: admin.firestore.DocumentReference,
   /** Apply a delta to the transaction's current record, never a caller's snapshot. */
-  change: (data: admin.firestore.DocumentData) => Record<string, unknown> = () => ({}),
+  change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
   events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
 ): Promise<Membership> {
+  const receipt = change ? freshReceiptId() : null;
   const membership = await db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
+    if (receipt) {
+      const committed = readReceipt<Membership>(snap, receipt);
+      // Do not rerun callbacks: endpoints retain the committed attempt's
+      // before/after invitation delta in their request-local closure.
+      if (committed.found) return committed.result;
+    }
     if (!snap.exists) throw new Error("document no longer exists");
     const before = snap.data() || {};
-    const patch = change(before);
+    const patch = change?.(before) ?? {};
     const data = { ...before, ...patch };
     const folderId = typeof data.folderId === "string" ? data.folderId : null;
     const parentSnap = folderId ? await tx.get(db.collection("folders").doc(folderId)) : null;
@@ -407,8 +431,10 @@ export async function persistDocMembership(
     const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
     tx.set(docRef, { ...patch, ...next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     for (const event of events(next, before, previous)) addEvent(tx, docRef, event);
+    if (receipt) recordReceipt(tx, docRef, snap, receipt, next);
     return next;
   });
+  if (receipt) await clearReceipt(docRef, receipt);
   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
   await syncPublicProjection(db, docRef.id);
   return membership;
