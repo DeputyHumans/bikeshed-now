@@ -47,7 +47,7 @@
  *           when the selection is collapsed, and usePeerPresence.ts:95-96 sends
  *           that null), so a reader never sees where an editor is typing
  *           (X-a11-live-1, class P).
- *   A11.7b  SPEC §16 `*` on a public open-editing document: a share drops it,
+ *   A11.7b  SPEC §16 `*` on a public open-editing document survives a share,
  *           because persistDocMembership (folders.ts) refreshes the mirror
  *           without the open-editing flag (X-a11-live-3).
  *   A11.12b SPEC §6a spec.md:732-733 "Containers the author left empty for
@@ -881,7 +881,7 @@ scenario("A11.7 a non-member joining a public open-editing document while a memb
 
 // --- A11.7b (found by A11.7's positive control) -------------------------------------
 
-scenario("A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-3", ...ON_STACK }, async (ctx) => {
+scenario("A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   ctx.step("SPEC §16: \"A public open-editing document also carries the key `*`: any verified account.\" presence.ts: the mirror is refreshed by every path that recomputes members");
   const w = await world(ctx, { roles: { openeditor: null, colleague: null }, sessions: ["openeditor"], title: "A11.7b open editing after a share", visibility: "public", publicEdit: true });

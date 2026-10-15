@@ -1156,7 +1156,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   }, { annotations: 0, thumb: null, thumbs: [], oldView: "v2-deleted" }, "nothing of the withdrawn v2 attaches to the new one");
 });
 
-scenario("A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains", { tiers: ["local"], needs: ["operator-scripts"], defect: "X-a12-versions-1", timeoutMs: 300_000, ...STALLS }, async (ctx) => {
+scenario("A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 300_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner; publish revision 1, update to revision 2, make it public");
   const { owner, accounts } = await castWithOwner(ctx, []);
   const ownerEmail = accounts[0].email.toLowerCase();
@@ -1181,7 +1181,7 @@ scenario("A12.7 (public projection) withdrawing the current version of a public 
     const observed = { projection, frameVersion: srcVersion(src, docId), contentStatus };
     ctx.ev.json("anonymous", { src, ...observed });
     ctx.step(`observed ${JSON.stringify(observed)}`);
-    assert.deepEqual(observed, { projection: "v1", frameVersion: "v1", contentStatus: 200 }, "public/{docId} follows the repoint, and the anonymous reader loads v1 (scripts/delete-version.mjs never syncs the projection)");
+    assert.deepEqual(observed, { projection: "v1", frameVersion: "v1", contentStatus: 200 }, "public/{docId} follows the repoint, and the anonymous reader loads v1");
   } finally {
     await setVisibility(target, { owner, doc: docId, visibility: "private", timeoutMs: HTTP_MS }).catch(() => undefined);
   }

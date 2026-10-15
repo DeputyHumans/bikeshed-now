@@ -1,0 +1,11 @@
+--- a/scripts/delete-version.mjs
++++ b/scripts/delete-version.mjs
+@@ -284,7 +284,7 @@
+
+   if (meta.draft) {
+     console.log("  deleting draft objects ...");
+-    await bucket.deleteFiles({ prefix: draftPrefix, force: true });
++    await bucket.deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+     console.log("    done.");
+   }
+   console.log(`  deleting gs://${bucketName}/${prefix} ...`);

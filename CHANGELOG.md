@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Withdrawing a version repoints its public view atomically and deletes the exact
+  immutable version and draft bundles named by metadata, preserving other bundles.
+  A changed draft or version aborts before destructive work.
+
 - Live co-editor autosaves no longer offer competing-copy notices. Unpinned
   readers never flash an obsolete version announcement when following another
   publish, and a single orphaned comment uses singular grammar.

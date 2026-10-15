@@ -1118,7 +1118,7 @@ credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
 and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
-`firebase`, `hash`, `membership`, `operator-writes`, `endpoints`.
+`firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`, `endpoints`.
 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
 They authenticate with the Admin SDK and require `--account` explicitly on every
@@ -1132,6 +1132,16 @@ a Firestore transaction. A duplicate content hash returns its existing version;
 a different publish from a base that advanced during upload refuses and must
 be rerun. Current sharing is preserved during version selection. Unselected
 attempt bundles can remain unreferenced; they never overwrite selected bytes.
+
+Version withdrawal resolves exact version and draft prefixes from captured metadata
+(with legacy-path fallbacks) before deleting bytes. The repoint transaction checks
+that the current version, doomed version bytes and draft have not changed, and
+that the retained version still exists. It refuses to delete a prefix referenced
+by a retained version. The same transaction updates the existing public
+projection's version, entry, format and publish time, or removes a stale projection
+for a private/unlisted document. A public document with a missing projection must
+be repaired before destructive withdrawal. This keeps anonymous readers on the
+retained version and prevents deletion of a newer draft created after the preview.
 
 
 `publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin

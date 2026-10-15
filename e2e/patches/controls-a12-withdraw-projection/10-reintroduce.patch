@@ -1,0 +1,11 @@
+--- a/scripts/lib/withdraw-version.mjs
++++ b/scripts/lib/withdraw-version.mjs
+@@ -50,7 +50,7 @@
+     }
+     tx.update(docRef, update);
+     if (data.visibility === 'public') {
+-      tx.update(publicRef, { currentVersion: plan.repoint, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html', publishedAt: version.publishedAt ?? null });
++      // Leave the old public pointer behind.
+     } else if (projection.exists) tx.delete(publicRef);
+   });
+ }

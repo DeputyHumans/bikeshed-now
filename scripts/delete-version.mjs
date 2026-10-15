@@ -17,7 +17,8 @@
  * that aborts if anything published mid-run, because the viewer resolves a bare
  * /d/{docId} from that field — deleting first strands every reader on a version
  * that no longer exists. The same transaction clears a `thumb` record naming
- * the version. Then the Storage bytes (the version record's storagePrefix is
+ * the version. The same transaction repoints an existing public projection,
+ * or removes a stale private one, and refuses a changed draft. Then the Storage bytes (the version record's storagePrefix is
  * the only pointer to them) and the thumbnails captured from them, then the
  * Firestore record.
  *
@@ -27,8 +28,8 @@
  */
 
 import { parse, fail } from "./lib/args.mjs";
+import { withdrawalPrefix, repointWithdrawal } from "./lib/withdraw-version.mjs";
 import {
-  FieldValue,
   getBucket,
   getBucketName,
   getDb,
@@ -214,7 +215,8 @@ async function main() {
     }
   }
 
-  const prefix = `docs/${docId}/${doomed}/`;
+  const prefix = withdrawalPrefix(docId, doomed, target);
+  const draftPrefix = meta.draft ? withdrawalPrefix(docId, 'draft', meta.draft) : null;
   const [objects] = await bucket.getFiles({ prefix });
   const files = objects.filter((o) => !o.name.endsWith("/"));
   const totalBytes = files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);
@@ -274,39 +276,15 @@ async function main() {
 
   console.log("");
   console.log(`  repointing currentVersion -> ${repoint} ...`);
-  await db.runTransaction(async (tx) => {
-    const fresh = await tx.get(docRef);
-    if (!fresh.exists) throw new Error("the document disappeared mid-run");
-    const cur = fresh.data().currentVersion;
-    if (cur !== meta.currentVersion) {
-      throw new Error(
-        `currentVersion changed mid-run (${meta.currentVersion} -> ${cur}); ` +
-          "aborted without deleting anything",
-      );
-    }
-    const update = {
-      currentVersion: repoint,
-      // A withdrawal is not a publish, so updatedAt goes BACK to the repoint
-      // target's publish time rather than forward to now.
-      updatedAt: versions.find((v) => v.id === repoint).publishedAt,
-    };
-    if (meta.draft) update.draft = FieldValue.delete();
-    // Read fresh: a capture can land between the plan and this transaction.
-    if (fresh.data().thumb?.versionId === doomed) update.thumb = FieldValue.delete();
-    if (!values["keep-stats"]) {
-      update["stats.commits"] = nextCommits;
-      if (nextCommits === 0) {
-        update["stats.lastEditedAt"] = FieldValue.delete();
-        update["stats.lastEditedByEmail"] = FieldValue.delete();
-      }
-    }
-    tx.update(docRef, update);
+  await repointWithdrawal(db, docRef, {
+    currentVersion: meta.currentVersion, doomed, repoint, version: target,
+    draft: meta.draft ?? null, keepStats: values["keep-stats"],
   });
   console.log("    done.");
 
   if (meta.draft) {
     console.log("  deleting draft objects ...");
-    await bucket.deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+    await bucket.deleteFiles({ prefix: draftPrefix, force: true });
     console.log("    done.");
   }
   console.log(`  deleting gs://${bucketName}/${prefix} ...`);

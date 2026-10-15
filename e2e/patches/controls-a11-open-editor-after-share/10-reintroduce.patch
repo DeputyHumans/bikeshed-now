@@ -1,0 +1,11 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -108,7 +108,7 @@
+       return out;
+     };
+     const edit = keyed(data.editorMembers);
+-    if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
++    if (publicEdit && opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
+     const replace = async (path: string, next: Record<string, true | string | number>) => {
+       await db.ref(path).transaction((current) => {
+         const prior = current?.__revision;
