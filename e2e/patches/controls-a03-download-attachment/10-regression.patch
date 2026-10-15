@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -732,7 +732,7 @@
+   res.setHeader("Cache-Control", "private, no-store");
+   res.setHeader(
+     "Content-Disposition",
+-    `attachment; filename="${base}-${versionId}.zip"`,
++    `inline; filename="${base}-${versionId}.zip"`,
+   );
+   if (req.method === "HEAD") {
+     res.status(200).end();

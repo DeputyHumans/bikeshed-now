@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Align visibility coverage with the explicit reader metadata and response-type contracts while retaining strict field allowlists and header controls.
+
 - Keep reading identities in editor-only history, remove the legacy last-reader email from shared stats, and provide a bounded redaction command for existing records.
 
 - Cover upload-revision refusals from workspace actions and document-frame drops, including permission and expiry changes after opening, pending and accepted suggestions, and active peers; pin readable errors, retry state and unchanged stored content with negative controls.

@@ -11411,7 +11411,7 @@
     },
     {
       "id": "X-a03-visibility-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "w1d/fix-a03-visibility.json: no SPEC sentence requires nosniff on /download, /unlock or GET /access (SPEC §2 names only Cache-Control for them), and there is no concrete harm, given ORB, attachment disposition and SameSite=Strict. W2: A3.1q TODO.",
@@ -11422,7 +11422,7 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/functional/a03-visibility.spec.mjs::A3.1q SPEC QUESTION: /download, /unlock and GET /access carry no X-Content-Type-Options: nosniff, which plan 3.1 expects on every response but SPEC §2 names only for /content and /d",
+          "caseId": "e2e/specs/functional/a03-visibility.spec.mjs::A3.1q download, unlock and access keep their declared types, attachment disposition and no-store policy",
           "n": null
         }
       ]
@@ -13602,6 +13602,18 @@
         "controls-a18-reader-privacy"
       ],
       "note": "Authorized repair of demonstrated reading-history exposure: shared stats no longer name the last reader; protected history remains. Human and automated reads erase the legacy field. A bounded idempotent operator redaction supports dry-run and preserves counters. Existing deployments require that migration; none was run remotely. A18.1 agrees with the privacy oracle. No item closed."
+    },
+    {
+      "kind": "spec-alignment-observation",
+      "items": [
+        "X-a03-visibility-1"
+      ],
+      "scope": "harmless header semantics preserved; E2E controls pending",
+      "controls": [
+        "controls-a03-download-type",
+        "controls-a03-download-attachment"
+      ],
+      "note": "SPEC section2 requires nosniff on the documented byte and shell paths; no demonstrated harm justifies changing JSON/attachment endpoints. A3.1q now checks declared MIME types, attachment disposition and existing no-store policy without requiring header absence. The reader/public metadata allowlists retain explicit fields and now include bounded marking, download metadata and non-secret live epoch. B6 reproduced stale allowlist failures; fresh execution pending. No item closed."
     }
   ]
 }
