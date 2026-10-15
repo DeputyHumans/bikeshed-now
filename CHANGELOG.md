@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Audit the original smoke, live-editing, workspace and account attempts; preserve unresolved save and page-close causes, and distinguish the account shared-stack one-of-three result from dedicated runs.
+
 - Expand MCP coverage for exact schemas, browser preflight and error headers, historical fork provenance, and every permitted or member-only link-key boundary. Add directional protocol, paging, identity and lineage controls, and reuse the shared visibility helper for cleanup.
 
 - Exercise specific-thread and panel review entry points, deletion and repeated-quote retries, failed draft saves, claim release and protection, adopted highlight paint, stale panel state and full committed attributes; add independent controls without treating scratch negatives as product control proof.

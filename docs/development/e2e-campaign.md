@@ -140,13 +140,14 @@ these classifications; later green runs do not erase them:
 |---|---|---|
 | `20261011T065316Z-p42261-yg5z` | A11.11 | H: the isolation tripwire treated Firestore's connectivity image as an external escape. The harness now blocks and records that exact SDK probe separately. |
 | `20261011T132245Z-p33044-5rao` | A11.9 | H: the old 20-second autosave settle bound expired with two of three stable samples already observed; this bound is now 45 seconds. |
-| `20261011T135145Z-p11249-uqog` | A11.9 | E: the document frame did not load within 45 seconds; the revocation oracle was not reached. |
-| `20261011T135145Z-p11249-uqog` | A11.11 | E: the case exhausted its 180-second bound; it did not establish a rules verdict. |
+| `20261011T135145Z-p11249-uqog` | A11.9 | E: the owner logged Firestore offline at 14:07:06.716Z and 14:07:36.544Z during the 45-second frame wait; the revocation oracle was not reached. |
+| `20261011T135145Z-p11249-uqog` | A11.11 | U: setup reached Shared only at +166.52 s, then the 180-second case ended without a completed malformed-rule probe. Earlier Firestore offline notices do not explain the RTDB delay. |
 
 Two earlier red records are deliberate scratch controls, identified by their
 invocation metadata: `20261011T055854Z-p65146-nloe` used
 `m5-not-revoked.spec.mjs`, and `20261011T060004Z-p69407-suyh` used
 `m7-wellformed-cell.spec.mjs`. They are not ordinary product-run failures.
+The attempt annotations and their evidence are recorded in [the historical review](e2e-historical-triage.md).
 Fresh final-revision A11 runs and applicable controls remain required; the old
 three-run stability claim is not carried forward.
 
