@@ -1312,9 +1312,9 @@ scenario("A11.12b a joiner's edit frame outlines the containers the document's s
   for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `outline fixture: decoded live log never carries ${attribute}`);
   const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
   precondition(os.document === es.document, "the document itself round-tripped identical (A11.12)");
-  precondition(os.outlined.join() === "a11-filled-by-script", `the seeder's edit frame outlines the container the script fills (${JSON.stringify(os.outlined)})`);
+  assert.deepEqual(os.outlined, ["a11-filled-by-script"], "the seeder's edit frame outlines the container the script fills");
   const styled = await (await e.frame()).evaluate(() => Boolean(document.getElementById("bshd-edit-placeholders")));
   ctx.step(`outlined: seeder ${JSON.stringify(os.outlined)}; joiner ${JSON.stringify(es.outlined)} (the joiner's frame still has the outline stylesheet: ${styled})`);
   ctx.ev.json("outlined", { seeder: os.outlined, joiner: es.outlined, joinerHasStylesheet: styled });
-  assert.deepEqual(es.outlined, os.outlined, "X-a11-live-2: the joiner's edit frame does not outline the script-filled containers the seeder's does (SPEC §6a spec.md:732-733 \"outlined in edit mode\"): the joiner never re-marks after the adopt replaces its body (useInlineEditor.ts:136 marks once; sync.ts:272-281 adopts)");
+  assert.deepEqual(es.outlined, ["a11-filled-by-script"], "X-a11-live-2: the joiner's edit frame does not outline the script-filled containers the seeder's does (SPEC §6a spec.md:732-733 \"outlined in edit mode\"): the joiner never re-marks after the adopt replaces its body (useInlineEditor.ts:136 marks once; sync.ts:272-281 adopts)");
 });

@@ -14160,6 +14160,28 @@
       ],
       "evidence": "docs/development/e2e-historical-triage.md; e2e/.out/history-a21-a22/{review,review-more}.json; /tmp/soapbox-history-judges.log",
       "note": "Five early A06/A21 observations retain uncertainty. Historical loaded-stack conclusions are not borrowed across attempts. A08 current repeated runs and refreshed controls remain pending."
+    },
+    {
+      "kind": "harness-coverage-observation",
+      "items": [
+        "r2:07",
+        "r2:08",
+        "r1:05",
+        "deep:a19-account:08"
+      ],
+      "scope": "local authoring only; canonical items remain open",
+      "tests": [
+        "Repaired smoke on B12: 24 pass, 2 capability skips, no failures; 20261015T071509Z-p45190-z27s",
+        "Four smoke/live scratch red-restored pairs: delayed comment, delayed save, standalone BODYATTR, 2001 ms shared-arrival bound",
+        "A2 operator-response shape: old response check red, stored-grant setup green",
+        "A11 joiner outline assertion: injected missing outline red, restored green"
+      ],
+      "evidence": [
+        "e2e/.out/smoke-oracle-controls/proof.json",
+        "e2e/.out/a02-operator-control/proof.json",
+        "e2e/.out/a11-joiner-control/proof.json"
+      ],
+      "note": "The controlled save delay changes response delivery only, preserving requests. Early scratch timing copies used an after-hook after user cleanup and are invalid setup evidence; repaired finally cleanup produced the intended timeout and restored pass. A19 combined lifecycle retains the explicit local guard with a documented catalogue correction; no production verification claimed."
     }
   ]
 }

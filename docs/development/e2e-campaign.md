@@ -156,3 +156,21 @@ selected demo namespace for emulator runs. Local sharing checks still require
 an observed correct mirror, and revoked-editor checks still require its removal.
 No production setup failure is excused by a local pass, and no remote mirror
 has been repaired or claimed verified by this campaign.
+
+## Catalogue tier correction
+
+A19.4 remains local in this campaign. Its original catalogue describes only
+member addition as local, while the same plan's zero-email guard refuses the
+whole team endpoint on production. Team creation, rename and deletion do not
+send email themselves; the broader guard is a harness policy, not a product
+restriction. This campaign adopts that guard consistently for the combined
+team lifecycle case, including the second-member admin transitions. It does
+not claim production coverage or relax the guard to make a test runnable.
+A future production suite may split the non-mailing lifecycle operations after
+its guard explicitly permits ledgered team writes (SPEC §17).
+
+The A2 member setup now verifies the stored grant rather than requiring a
+member list in the share helper's response. A local browser/API experiment
+omits that list, matching the operator response shape: the earlier response
+check fails and the stored-grant check passes. This proves the setup contract,
+not execution against a deployment.

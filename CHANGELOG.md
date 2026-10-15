@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Wait for separately written smoke comments, allow slow completed saves without weakening convergence checks, and let the saved-attribute smoke case prepare its own version. Keep the autosave race open by holding a real response without imposing a cold-server speed requirement, and assert both peers retain generated-container hints.
+
 - Reconcile original comments, review, change-feed and OAuth failures from their saved artifacts, preserving uncertain attempts and historical outcomes instead of treating current passing runs as retroactive proof.
 
 - Explain when a suggestion changed after its previous replacement reached the draft, so an approver can review or undo that edit instead of being told to retry a now-stale acceptance.
