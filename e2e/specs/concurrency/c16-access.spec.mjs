@@ -71,7 +71,8 @@ const keysOf = (o) => {
   if (o.__revision !== undefined) assert.match(o.__revision, /^\d{12}:\d{9}$/, "the reserved mirror revision is a timestamp fence");
   if (o.__expiresAt !== undefined) assert.ok(Number.isFinite(o.__expiresAt) && o.__expiresAt >= 0, "the reserved expiry is a nonnegative epoch deadline");
   if (o.__owner !== undefined) assert.ok(typeof o.__owner === "string" && o.__owner === o.__owner.toLowerCase() && /^[^@\s]+@[^@\s]+$/.test(o.__owner), "the reserved owner is a normalized email");
-  const metadata = ["__revision", "__expiresAt", "__owner"];
+  if (o.__liveEpoch !== undefined) assert.ok(typeof o.__liveEpoch === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(o.__liveEpoch), "the reserved live epoch identifies a bounded editing session");
+  const metadata = ["__revision", "__expiresAt", "__owner", "__liveEpoch"];
   for (const [key, value] of Object.entries(o)) if (!metadata.includes(key)) assert.equal(value, true, `${key} is an access grant`);
   return Object.keys(o).filter((key) => !metadata.includes(key)).sort();
 };
