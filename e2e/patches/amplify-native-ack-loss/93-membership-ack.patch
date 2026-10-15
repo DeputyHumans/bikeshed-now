@@ -1,0 +1,16 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -43,2 +43,3 @@
+ import { syncPublicProjection } from "./publicdoc";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
+@@ -325,3 +326,3 @@
+   type Result = { before: Membership; membership: Membership; grants: RoleGrants };
+-  const result = await db.runTransaction(async (tx) => {
++  const result = await e2eAckTransaction(db, ref.id, change ? "folder-membership" : "folder-recompute", async (tx) => {
+     const snap = await tx.get(ref);
+@@ -407,3 +408,3 @@
+   const receipt = change ? freshReceiptId() : null;
+-  const membership = await db.runTransaction(async (tx) => {
++  const membership = await e2eAckTransaction(db, docRef.id, change ? "doc-membership" : "doc-recompute", async (tx) => {
+     const snap = await tx.get(docRef);

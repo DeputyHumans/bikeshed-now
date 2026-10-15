@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise native acknowledgement loss during folder and document sharing while a later request revokes the grant. Bind the original successful response to its invitation delta, exact event records and the later membership state, with four directional controls.
+
 - Preserve one endpoint operation when Firestore commits but loses its acknowledgement: verification sends its reserved code, wrong codes spend one guess, replaced challenges retain their budget, reading beats consume one cap, and team changes acknowledge prior authority while keeping their invitation delta. Add six real fault-gated endpoint cases and ten directional controls.
 
 - Drain MCP acknowledgement probes after releasing their gate even when setup inspection fails, so a completed case leaves no request running in the next case.

@@ -1,0 +1,7 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -413,3 +413,3 @@
+       // before/after invitation delta in their request-local closure.
+-      if (committed.found) return committed.result;
++      if (committed.found) void 0;
+     }
