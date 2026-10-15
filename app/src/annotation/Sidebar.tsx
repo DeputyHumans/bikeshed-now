@@ -193,7 +193,10 @@ function Thread({
   // A selected thread scrolls itself into view, because selection usually came
   // from clicking a highlight in the document rather than from this list.
   useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (selected) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      ref.current?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+    }
   }, [selected]);
 
   const send = async () => {

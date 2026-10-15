@@ -141,3 +141,15 @@ describe("UploadDialog while it uploads", () => {
     await act(async () => finish());
   });
 });
+
+
+describe("the file picker by keyboard", () => {
+  it("offers the visible chooser without a second invisible tab stop", () => {
+    renderDialog();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const click = vi.spyOn(input, "click");
+    expect(input.tabIndex).toBe(-1);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a file" }));
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+});

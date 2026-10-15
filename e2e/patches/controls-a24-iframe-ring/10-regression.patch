@@ -1,0 +1,7 @@
+--- a/app/src/viewer/frameFocus.ts
++++ b/app/src/viewer/frameFocus.ts
+@@ -10,3 +10,3 @@
+   const update = () => {
+-    frame.toggleAttribute("data-frame-focus", doc.activeElement === frame && doc.hasFocus());
++    frame.removeAttribute("data-frame-focus");
+   };

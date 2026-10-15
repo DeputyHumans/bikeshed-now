@@ -2,6 +2,7 @@
 // Sole owner of the document iframe (SPEC §6a, §6c).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { observeFrameFocus } from "./frameFocus";
 import { captureAssetTags } from "../annotation/highlighter";
 import {
   frameKey,
@@ -151,6 +152,10 @@ export function useDocFrame(options: {
   }, [mode.kind, mode.kind === "editing" ? mode.baseVersion : mode.versionId, reloadToken]);
 
   const held = hold && loadedIdentity === null;
+
+  useEffect(() => {
+    if (ref.current) return observeFrameFocus(ref.current);
+  }, [identity, epoch, held]);
 
   return {
     ref,

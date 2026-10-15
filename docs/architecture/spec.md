@@ -682,9 +682,11 @@ Because it is same-origin, the parent app drives annotation directly on
   open when a thread is unresolved, collapsed otherwise — resolved threads are
   hidden until asked for, so they do not count. Until that snapshot lands it
   is closed. Whichever comes first, the snapshot or the reader's toggle, wins,
-  and nothing after it changes the answer: a comment landing later does not
-  reopen a panel the reader closed, and a new version of the same document
-  does not collapse one they had open. Starting a comment opens it regardless.
+  and later annotation snapshots do not change the answer: a comment landing
+  later does not reopen a panel the reader closed, and a new version of the
+  same document does not collapse one they had open. Starting a comment or
+  explicitly selecting a highlight opens its thread regardless; on a phone
+  that selection also switches to the Comments pane.
 - **A click that carries a comment intent never reaches the document's own
   scripts.** A drag that selects text ends in a `click`, and a click on a
   highlight is the thread's. Both are stopped in the capture phase before any
@@ -1026,9 +1028,18 @@ app/src/
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```
 
-**Accessibility is a hard requirement:** visible `:focus-visible`, targets ≥44px,
-colour is never the sole signal, `prefers-reduced-motion` honoured, WCAG AA
-contrast. Brand chrome only — **never restyle embedded document content.**
+**Accessibility is a hard requirement:** visible focus indicators, targets
+≥44×44 CSS pixels on coarse pointers, colour is never the sole signal,
+`prefers-reduced-motion` honoured, WCAG AA contrast. A checkbox or radio may use
+its associated label as its hit area; inline links within prose retain their
+inline-target exception. Keyboard focus uses `:focus-visible`; when the browser
+focuses an iframe document without matching a focus pseudo-class on its host,
+the app reflects that focus with the same ring on the app-owned iframe. This
+indicator never decorates the authored document. Dialogs contain Tab focus even
+when a focused control is disabled or removed, and restore their opener when
+closed. Reduced motion applies to every app-driven scroll, including review
+navigation and the slide rail. Presence mode shapes remain visibly painted in
+forced colours. Brand chrome only — **never restyle embedded document content.**
 
 ---
 
@@ -1148,8 +1159,9 @@ and mirrored in `app/src/brand/tokens.ts`:
 **No brand-named tokens.** A token called `--teal` cannot be re-themed without a
 rename, and every consumer then encodes a colour rather than a role.
 
-`--color-focus` appears **nowhere** but `:focus-visible`, so the ring is the only
-colour of its kind on the page. Shadows are tinted with the ink RGB, never
+`--color-focus` appears **nowhere** but a focus indicator: `:focus-visible` or
+the app-owned iframe indicator described in §7. The ring is the only colour of
+its kind on the page. Shadows are tinted with the ink RGB, never
 neutral black.
 
 Typography is **one self-hosted variable font**. No font CDN: this product holds

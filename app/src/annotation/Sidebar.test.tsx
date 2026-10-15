@@ -36,7 +36,7 @@ const THREAD = {
   anchor: { exact: "the passage" },
 } as Annotation;
 
-function mount() {
+function mount(selectedId: string | null = null) {
   render(
     <ToastProvider>
       <Sidebar
@@ -44,7 +44,7 @@ function mount() {
         versionId="v1"
         annotations={[THREAD]}
         orphaned={[]}
-        selectedId={null}
+        selectedId={selectedId}
         canComment
         signedIn
         peers={[]}
@@ -294,6 +294,26 @@ describe("a suggestion's thread", () => {
     expect(screen.getByText("Withdrawn.")).toBeTruthy();
     for (const name of ["Withdraw", "Edit", "Reject…", "Review"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+});
+
+
+describe("scrolling to the selected thread", () => {
+  it.each([true, false])("honours reduced motion %s when a highlight selects its card", (reduce) => {
+    const scroll = vi.fn();
+    const old = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+    const original = window.matchMedia;
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ ...original(query), matches: reduce }));
+    try {
+      mount(THREAD.annId);
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    } finally {
+      cleanup();
+      media.mockRestore();
+      if (old) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", old);
+      else delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     }
   });
 });

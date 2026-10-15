@@ -15,63 +15,18 @@
  *           never scroll sideways, and each one's primary actions, once
  *           scrolled to, lie wholly inside the viewport, uncovered at their
  *           centre
- *   A24.1b  the same walk: every rendered `button, [role=button], a.btn,
- *           .icon-btn` is at least 44×44 — the floor styles/base.css states for
- *           a coarse pointer. Known defect X-a24-responsive-a11y-1: the floor
- *           is in @layer base, and `.btn` / `.btn-sm` (primitives) and the
- *           toolbar and pane-toggle buttons (feature) set their own size in
- *           later layers, which win whatever the media query
- *   A24.2a  sign-in by keyboard; every stop wears the one ring, solid 2 px
- *           `--color-focus` (SPEC §10)
- *   A24.2b  comment by keyboard: a one-word Range (the one step no key makes
- *           without caret browsing) is extended with Shift+→, Tab reaches
- *           Comment, Enter starts the thread, Tab reaches its reply box,
- *           Enter sends
- *   A24.2c  suggest by keyboard: Suggest edit by Tab and Enter, the form
- *           focused with the caret at the end, Escape cancels sending
- *           nothing, every control reachable, the submit by key
- *           (docs/development/verification.md §13.7)
- *   A24.2d  review by keyboard: Edit, Review them, Next, Previous, Reject… with
- *           a reason, Accept — each reached by Tab, pressed by key
- *   A24.2e  share by keyboard: the dialog takes focus, Tab and Shift+Tab stay
- *           in it, Escape closes it onto Share, a person is added by keys
- *   A24.2e2 once the person is added, focus is still in the dialog and
- *           Escape still closes it (measured in A24.2e). Known defect
- *           X-a24-responsive-a11y-6: Add and the address field are disabled
- *           while the grant is saved, so focus falls to <body>, outside the
- *           Modal's own key handler
- *   A24.2f  upload by keyboard: the dialog, Choose a file by key (the OS
- *           picker answered by the harness), a title, Upload by key
- *   A24.2f2 every Tab stop of that dialog is visible. Known defect
- *           X-a24-responsive-a11y-5: the visually hidden file input is a stop
- *   A24.2g  versions by keyboard: More actions, ArrowDown to an older version,
- *           Enter pins it; Escape closes the menu onto its trigger
- *   A24.2h  deck keys: ← →, from the page and from inside the frame; `o` opens
- *           the overview on the current slide, Enter on another card goes
- *           there, Escape closes it (SPEC §6d)
- *   A24.2j  the overview, a dialog with aria-modal="true", keeps Tab inside
- *           it (walked in A24.2h). Known defect X-a24-responsive-a11y-4
- *   A24.2i  consent by keyboard: Approve arms on a key press after its second,
- *           is reached by Tab, pressed with Enter; the redirect carries the
- *           code (SPEC §23)
- *   A24.3a  with reduced motion, selecting a thread brings its passage into
- *           view in one frame; with no preference the same scroll animates
- *           (the positive control)
- *   A24.3b  with reduced motion, a click on a highlight brings its thread card
- *           into view in one frame (measured in A24.3a). Known defect
- *           X-a24-responsive-a11y-3 (annotation/Sidebar.tsx, always smooth)
- *   A24.4a  a touch tablet (two columns): a tap on a highlight selects its
- *           thread in the visible panel; a long press selects a word and shows
- *           the selection toolbar, whose Comment, tapped, starts a thread
- *   A24.4b  a touch phone (one column): a tap on a highlight shows its thread.
- *           Known defect X-a24-responsive-a11y-2
- *   A24.5a  mode by shape: in forced colours, where colour carries nothing, an
- *           editor's chip differs from a reader's by its dot's shape and by
- *           the word "Editing" in its accessible name
- *   A24.5b  a suggestion is put in words for a screen reader, in the panel and
- *           in the review bar, the arrow silent (SPEC §22 Display)
- *   A24.5c  axe reports no serious or critical issue: SKIPPED, axe-core is
- *           not a dependency and none may be added
+ *   A24.1b  every interactive hit area, including labels for checkboxes and
+ *           radios, reaches 44×44; inline prose links retain their exception
+ *   A24.2   keyboard-only sign-in, comment, suggestion, review, Share, upload,
+ *           versions, deck overview and OAuth consent; every stop has a ring,
+ *           dialogs contain focus and restore their opener
+ *   A24.3   reduced motion in all five app scroll paths: passage, thread card,
+ *           review Next, deck arrows and rail follow
+ *   A24.4   closed tablet panel and phone pane open on explicit highlight tap;
+ *           long press, toolbar placement and Comment work on both devices
+ *   A24.5   forced-colour shapes remain painted, suggestions have spoken words,
+ *           and Chrome measures contrast, names and reserved focus paint on
+ *           all 11 screens and 2 dialogs, without an extra dependency
  *
  * EMAIL. Every account is cast with notifications off, so no comment,
  * suggestion or invitation notice is sent, and every case that comments
@@ -103,6 +58,7 @@
  */
 
 import assert from "node:assert/strict";
+import { inspectUi, spokenText } from "../../lib/accessibility.mjs";
 import { after } from "node:test";
 import { answered, currentTarget, pageStall, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
@@ -345,11 +301,11 @@ const describe = (f) => (f ? `${f.tag}${f.id ? `#${f.id}` : ""} "${f.label}"` : 
 
 /** The ring a keyboard stop must wear (SPEC §10: --color-focus appears nowhere but :focus-visible). */
 function ringProblem(f) {
-  if (!f || f.none || f.tag === "IFRAME") return null;
+  if (!f || f.none) return null;
   // A date field's own parts (day, month, year, the picker) are focus stops of one element; the ring is the element's.
   if (f.tag === "INPUT" && f.type === "date") return null;
   const problems = [];
-  if (!f.focusVisible) problems.push("not :focus-visible");
+  if (!f.focusVisible && f.tag !== "IFRAME") problems.push("not :focus-visible");
   if (f.ring.style !== "solid") problems.push(`outline-style ${f.ring.style}`);
   if (parseFloat(f.ring.width) < 2) problems.push(`outline-width ${f.ring.width}`);
   if (!f.ring.isFocusColor) problems.push(`outline-color ${f.ring.color}, not --color-focus ${f.ring.focusColor}`);
@@ -368,7 +324,7 @@ async function tabTo(page, want, { max = 40, back = false, what = "the target", 
     stops.push(f);
     if (want(f)) return f;
   }
-  precondition(false, `${what} is reachable by ${back ? "Shift+Tab" : "Tab"} within ${max} presses (stops: ${stops.slice(-12).map(describe).join(" → ")})`);
+  assert.fail(`${what} is reachable by ${back ? "Shift+Tab" : "Tab"} within ${max} presses (stops: ${stops.slice(-12).map(describe).join(" → ")})`);
 }
 
 /**
@@ -434,41 +390,14 @@ function assertRings(ctx, stops) {
 
 // --- A24.1: the phone walk ------------------------------------------------------------
 
-/** The selector base.css floors at 44 px on a coarse pointer (styles/base.css). */
-const TARGET_SELECTOR = 'button, [role="button"], a.btn, .icon-btn';
-
-/** One surface as a phone shows it: sideways scroll, and every rendered target under 44×44. */
-function measureSurfaceInPage({ selector, tap }) {
+/** Page-level geometry complements the nested scrollports checked by inspectUi. */
+function measureSurfaceInPage() {
   const de = document.documentElement;
   const before = window.scrollX;
   window.scrollTo(100000, window.scrollY);
   const scrolledX = window.scrollX;
   window.scrollTo(before, window.scrollY);
-  const overflowing = [];
-  for (const el of document.querySelectorAll("body *")) {
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) continue;
-    if (r.right > de.clientWidth + 1 && overflowing.length < 8) {
-      const cs = getComputedStyle(el);
-      if (cs.visibility === "hidden") continue;
-      // A box pushed off-canvas on purpose (a closed drawer) is not content.
-      if (cs.position === "fixed" && r.left >= de.clientWidth) continue;
-      overflowing.push(`${el.tagName.toLowerCase()}.${String(el.className?.baseVal ?? el.className).trim().replace(/\s+/g, ".")} right=${Math.round(r.right)}`);
-    }
-  }
-  const small = [];
-  for (const el of document.querySelectorAll(selector)) {
-    if (el.closest('[aria-hidden="true"], .visually-hidden, [inert]')) continue;
-    const cs = getComputedStyle(el);
-    if (cs.visibility === "hidden" || cs.display === "none") continue;
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) continue;
-    if (r.width < tap - 0.5 || r.height < tap - 0.5) {
-      const name = (el.getAttribute("aria-label") || el.textContent || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 40);
-      small.push(`${el.tagName.toLowerCase()}.${String(el.className?.baseVal ?? el.className).trim().replace(/\s+/g, ".")} "${name}" ${Math.round(r.width)}×${Math.round(r.height)}`);
-    }
-  }
-  return { vw: window.innerWidth, clientWidth: de.clientWidth, scrollWidth: Math.max(de.scrollWidth, document.body.scrollWidth), scrolledX, overflowing, small };
+  return { vw: innerWidth, clientWidth: de.clientWidth, scrollWidth: Math.max(de.scrollWidth, document.body.scrollWidth), scrolledX, overflowing: [] };
 }
 
 /** Is the element wholly inside the viewport, and is it what a finger at its centre would touch? */
@@ -480,7 +409,7 @@ function placementInPage(el) {
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   const onTop = Boolean(hit && (hit === el || el.contains(hit)));
   const coveredBy = onTop || !hit ? null : `${hit.tagName.toLowerCase()}.${String(hit.className?.baseVal ?? hit.className).trim().replace(/\s+/g, ".")}`;
-  return { inside, onTop, coveredBy, box: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] };
+  return { inside, horizontal: r.left >= -0.5 && r.right <= vw + 0.5, onTop, coveredBy, box: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] };
 }
 
 /** What the A24.1 walk measured, for A24.1b. */
@@ -512,7 +441,10 @@ scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scr
     await ready.loc.first().waitFor({ state: "visible", timeout: LISTEN_MS });
     await settle(u.page);
     if (!surfaces.some((x) => x.user === u.name)) await assertCoarse(u);
-    const m = await u.page.evaluate(measureSurfaceInPage, { selector: TARGET_SELECTOR, tap: TAP });
+    const m = await u.page.evaluate(measureSurfaceInPage);
+    const accessibility = await inspectUi(u.page);
+    m.small = accessibility.issues.small;
+    m.horizontal = accessibility.issues.horizontal;
     const places = [];
     for (const p of primary) {
       const el = p.loc.first();
@@ -526,9 +458,9 @@ scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scr
       // action is wholly on screen (never past the right edge) and nothing lies over it.
       const atLoad = await el.evaluate(placementInPage);
       await el.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
-      places.push({ label: p.label, visible, belowTheFold: !atLoad.inside, ...(await el.evaluate(placementInPage)) });
+      places.push({ label: p.label, visible, horizontalAtLoad: atLoad.horizontal, belowTheFold: !atLoad.inside, ...(await el.evaluate(placementInPage)) });
     }
-    surfaces.push({ name, user: u.name, ...m, primary: places });
+    surfaces.push({ name, user: u.name, ...m, primary: places, accessibility });
   };
   const btn = (u, name, within = u.page) => ({ label: `button "${name}"`, loc: within.getByRole("button", { name, exact: true }) });
   const css = (u, sel, label = sel) => ({ label, loc: u.page.locator(sel) });
@@ -586,21 +518,20 @@ scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scr
   for (const x of surfaces) ctx.step(`${x.name}: scrollWidth ${x.scrollWidth}/${x.clientWidth}, scrollX after scrollTo ${x.scrolledX}, primary ${x.primary.map((p) => `${p.label}${p.belowTheFold ? " (scrolled to)" : ""}${p.inside && p.onTop ? "" : " ✗"}`).join(", ") || "none"}`);
 
   ctx.step("no screen scrolls sideways: scrollWidth ≤ clientWidth, and scrollTo(100000, y) leaves scrollX at 0");
-  const sideways = surfaces.filter((x) => x.scrollWidth > x.clientWidth || x.scrolledX !== 0).map((x) => `${x.name}: scrollWidth ${x.scrollWidth} > ${x.clientWidth}, scrollX ${x.scrolledX} (${x.overflowing.join("; ")})`);
+  const sideways = surfaces.filter((x) => x.scrollWidth > x.clientWidth + 1 || x.scrolledX !== 0 || x.horizontal.length).map((x) => `${x.name}: scrollWidth ${x.scrollWidth} > ${x.clientWidth}, scrollX ${x.scrolledX} (${x.overflowing.join("; ")}; nested ${JSON.stringify(x.horizontal)})`);
   assert.deepEqual(sideways, [], `screens that scroll sideways at ${PHONE.width} px: ${sideways.join(" | ")}`);
-  if (stopped) throw stopped;
   ctx.step("every primary action is visible and, once scrolled to, wholly inside the viewport and the topmost element at its centre");
-  const misplaced = surfaces.flatMap((x) => x.primary.filter((p) => !p.visible || !p.inside || !p.onTop).map((p) => `${x.name}: ${p.label} ${!p.visible ? "not visible" : !p.inside ? `outside the viewport ${JSON.stringify(p.box)}` : `covered by ${p.coveredBy} at its centre`}`));
+  const misplaced = surfaces.flatMap((x) => x.primary.filter((p) => !p.visible || !p.horizontalAtLoad || !p.inside || !p.onTop).map((p) => `${x.name}: ${p.label} ${!p.visible ? "not visible" : !p.horizontalAtLoad ? "initially outside the horizontal viewport" : !p.inside ? `outside the viewport ${JSON.stringify(p.box)}` : `covered by ${p.coveredBy} at its centre`}`));
   assert.deepEqual(misplaced, [], `primary actions out of reach: ${misplaced.join(" | ")}`);
+  if (stopped) throw stopped;
 });
 
-scenario("A24.1b on the same touch phone walk, every rendered button, [role=button], a.btn and .icon-btn is at least 44×44 CSS px (base.css's coarse-pointer floor)", {
+scenario("A24.1b on the same touch phone walk, every interactive target has a 44×44 CSS px hit area, with an exception for inline prose links", {
   tiers: BOTH,
-  defect: "X-a24-responsive-a11y-1",
   timeoutMs: 30_000,
 }, async (ctx) => {
   if (walk.surfaces?.length !== walk.expected) ctx.inconclusive(`the A24.1 walk measured ${walk.surfaces?.length ?? 0} of ${walk.expected} surfaces (it runs first, and measures for this case)`);
-  const small = walk.surfaces.filter((x) => x.small.length).map((x) => `${x.name}: ${x.small.join(", ")}`);
+  const small = walk.surfaces.filter((x) => x.small.length).map((x) => `${x.name}: ${JSON.stringify(x.small)}`);
   ctx.ev.json("small-targets", walk.surfaces.map((x) => ({ surface: x.name, small: x.small })));
   assert.deepEqual(small, [], `targets under ${TAP}×${TAP} on a coarse pointer (SPEC §7 "targets ≥44px"; styles/base.css "Every interactive target reaches 44px on a coarse pointer"): ${small.join(" | ")}`);
 });
@@ -898,7 +829,6 @@ scenario("A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab ne
 
 scenario("A24.2e2 after a person is added from the Share dialog by keyboard, focus stays inside the dialog, so Escape still closes it", {
   tiers: ["local"],
-  defect: "X-a24-responsive-a11y-6",
   timeoutMs: 30_000,
 }, async (ctx) => {
   if (!afterAdd.focus) ctx.inconclusive("A24.2e did not get as far as adding a person by keyboard (it runs first, and measures for this case)");
@@ -974,7 +904,6 @@ scenario("A24.2f upload by keyboard: Tab to Upload, Enter opens the dialog with 
 
 scenario("A24.2f2 every Tab stop of the upload dialog is something visible: focus never lands on a visually hidden element", {
   tiers: BOTH,
-  defect: "X-a24-responsive-a11y-5",
   timeoutMs: 30_000,
 }, async (ctx) => {
   if (!(uploadRound.stops?.length > 1)) ctx.inconclusive("A24.2f recorded no Tab round of the upload dialog (it runs first, and measures for this case)");
@@ -1105,7 +1034,6 @@ scenario("A24.2h deck keys: → and ← move the current slide from the page and
 
 scenario("A24.2j the slide overview, a dialog with aria-modal=\"true\", keeps Tab and Shift+Tab inside it", {
   tiers: BOTH,
-  defect: "X-a24-responsive-a11y-4",
   timeoutMs: 30_000,
 }, async (ctx) => {
   if (!(overviewWalk.stops?.length >= 4 && overviewWalk.focusable >= 2)) ctx.inconclusive("A24.2h did not walk the overview by Tab (it runs first, and measures for this case)");
@@ -1181,7 +1109,7 @@ function startScrollSampler(ms) {
   const samples = [];
   window.__a24samples = samples;
   const t0 = performance.now();
-  const sample = () => samples.push({ t: Math.round(performance.now() - t0), frame: Math.round(frame?.contentWindow?.scrollY ?? -1), list: list ? Math.round(list.scrollTop) : null });
+  const sample = () => samples.push({ t: Math.round(performance.now() - t0), frame: Math.round(frame?.contentWindow?.scrollY ?? -1), list: list ? Math.round(list.scrollTop) : null, rail: Math.round(document.querySelector(".slide-rail")?.scrollTop ?? 0) });
   const tick = () => {
     sample();
     if (performance.now() - t0 < ms) requestAnimationFrame(tick);
@@ -1305,7 +1233,6 @@ scenario("A24.3a with reduced motion, selecting a thread brings its passage into
 
 scenario("A24.3b with reduced motion, a click on a highlight brings its thread card into view in the panel in one frame (with no preference it animates)", {
   tiers: BOTH,
-  defect: "X-a24-responsive-a11y-3",
   timeoutMs: 30_000,
 }, async (ctx) => {
   const { smooth, instant } = panelMotion;
@@ -1314,6 +1241,72 @@ scenario("A24.3b with reduced motion, a click on a highlight brings its thread c
   precondition(instant.moved > 200, `with reduced motion the click scrolled the panel (${instant.moved} px)`);
   ctx.step(`panel path with reduced motion: ${JSON.stringify(instant.path)}`);
   assert.equal(instant.between, 0, `with reduced motion the thread card is brought into view in one frame, not animated through ${instant.between} positions (SPEC §7 "prefers-reduced-motion honoured"): ${JSON.stringify(instant.path)}`);
+});
+
+/** Observe real scroll requests while preserving the native method and rendered motion. */
+function observeScrollCallsInPage() {
+  window.__a24scrollCalls = [];
+  const views = [["app", window], ["frame", document.querySelector("iframe.doc-frame").contentWindow]];
+  for (const [source, view] of views) {
+    const original = view.Element.prototype.scrollIntoView;
+    view.Element.prototype.scrollIntoView = function (options) {
+      window.__a24scrollCalls.push({ source, tag: this.tagName, id: this.id, rail: this.matches(".slide-thumb"), behavior: options?.behavior });
+      return original.call(this, options);
+    };
+  }
+}
+
+scenario("A24.3c reduced motion is honoured by review Next, deck arrow navigation and the slide rail following the current slide", {
+  tiers: BOTH,
+  timeoutMs: 180_000,
+  inconclusiveOnCaseTimeout: true,
+}, async (ctx) => {
+  const { u, owner } = await ownerOnPage(ctx);
+  await u.page.emulateMedia({ reducedMotion: "reduce" });
+  const title = `A24 review motion ${tag()}`;
+  const up = await publish(owner.http, { body: longHtml(title), filename: "index.html", title, name: "a24-review-motion", ownerEmail: owner.account.email });
+  precondition(up.status === 200, "the long review document was published");
+  await quietDoc(target, up.docId);
+  for (const n of [0, 29]) {
+    const exact = `${MARKERS[n]} marker phrase`;
+    const prefix = `Paragraph ${n + 1} speaks of the `;
+    const suffix = " and then goes on for a while so ";
+    await postSuggestion(owner, up.docId, { elementId: `m-${n + 1}`, exact, prefix, suffix, start: prefix.length, end: prefix.length + exact.length }, `${exact} revised`);
+  }
+  await openDoc(ctx, u, up.docId);
+  await u.enterEdit({ waitShared: true });
+  await u.page.locator(".review-bar").getByRole("button", { name: "Review them", exact: true }).click({ timeout: LISTEN_MS });
+  await settle(u.page);
+  await u.page.evaluate(observeScrollCallsInPage);
+  const review = await sampleScroll(u, () => u.page.locator(".review-bar").getByRole("button", { name: "Next", exact: true }).click(), { key: "frame" });
+  const reviewCalls = await u.page.evaluate(() => window.__a24scrollCalls.filter((x) => x.source === "frame"));
+  assert.ok(reviewCalls.length > 0 && reviewCalls.every((x) => x.behavior === "auto"), `review Next uses auto with reduced motion: ${JSON.stringify(reviewCalls)}`);
+  precondition(review.moved > 200, "review Next moved to a distant passage");
+  assert.equal(review.between, 0, `review Next does not animate: ${JSON.stringify(review.path)}`);
+
+  const deckTitle = `A24 motion deck ${tag()}`;
+  const body = `<!doctype html><html lang="en"><head><title>${deckTitle}</title><style>body{margin:0;font:24px sans-serif}section{height:800px;padding:40px;box-sizing:border-box}</style></head><body>${Array.from({ length: 20 }, (_, i) => `<section class="slide" id="slide-${i + 1}"><h1>Motion slide ${i + 1}</h1><p>Authored slide content.</p></section>`).join("")}</body></html>`;
+  const deck = await publish(owner.http, { body, filename: "index.html", title: deckTitle, name: "a24-motion-deck", ownerEmail: owner.account.email });
+  precondition(deck.status === 200, "the long deck was published");
+  await openDoc(ctx, u, deck.docId);
+  await u.page.locator(".slide-rail .slide-thumb").last().waitFor({ state: "attached", timeout: LISTEN_MS });
+  // End puts both scrollports far from their start. ArrowLeft then exercises
+  // the normal arrow path while the rail must follow a card outside its view.
+  await u.page.keyboard.press("End");
+  await settle(u.page);
+  await u.page.evaluate(() => { document.querySelector(".slide-rail").scrollTop = 0; });
+  await u.page.evaluate(observeScrollCallsInPage);
+  const deckMotion = await sampleScroll(u, () => u.page.keyboard.press("ArrowLeft"), { key: "frame" });
+  const samples = await u.page.evaluate(() => window.__a24samples);
+  const railMotion = scrollPath(samples, "rail");
+  const calls = await u.page.evaluate(() => window.__a24scrollCalls);
+  for (const [name, rows] of [["deck arrow", calls.filter((x) => x.source === "frame")], ["rail follow", calls.filter((x) => x.rail)]]) {
+    assert.ok(rows.length > 0 && rows.every((x) => x.behavior === "auto"), `${name} uses auto with reduced motion: ${JSON.stringify(rows)}`);
+  }
+  precondition(deckMotion.moved > 200 && railMotion.moved > 200, "the arrow moved the deck and its rail");
+  assert.equal(deckMotion.between, 0, `deck arrow does not animate: ${JSON.stringify(deckMotion.path)}`);
+  assert.equal(railMotion.between, 0, `rail follow does not animate: ${JSON.stringify(railMotion.path)}`);
+  ctx.ev.json("remaining-motion-paths", { review, reviewCalls, deckMotion, railMotion, calls });
 });
 
 // --- A24.4: touch -------------------------------------------------------------------------
@@ -1343,22 +1336,8 @@ async function touchCase(ctx, device, name) {
   return { u, docId };
 }
 
-scenario("A24.4a on a touch tablet (two columns), a tap on a highlight selects its thread in the visible panel, and a long press selects a word and shows the selection toolbar, whose Comment, tapped, starts a thread", {
-  tiers: BOTH,
-  timeoutMs: 180_000,
-  inconclusiveOnCaseTimeout: true,
-}, async (ctx) => {
-  const { u, docId } = await touchCase(ctx, TABLET, "touch-tablet");
-  await u.openComments();
-
-  ctx.step('tap the highlight on "lazy dog": its thread is selected, in the panel, on screen');
-  await u.tap(await quotePoint(u, "#a24-1", "lazy dog"));
-  const sel = await eventually(async () => {
-    const x = await u.page.evaluate(selectedThreadInPage);
-    return x.selected ? x : false;
-  }, { timeout: 10_000, message: "a thread is selected after the tap" });
-  assert.deepEqual({ quote: Boolean(sel.quote?.includes("lazy dog")), shown: sel.shown }, { quote: true, shown: true }, `the tapped passage's thread is selected and visible: ${JSON.stringify(sel)}`);
-
+/** Same real long press, toolbar geometry and comment persistence on phone and tablet. */
+async function longPressComment(ctx, u, docId) {
   ctx.step('a long press (a touch held 1.2 s) on "lanterns": the word is selected and the selection toolbar shows, inside the viewport');
   await u.tap(await quotePoint(u, "#a24-2", "lanterns"), { durationMs: 1_200 });
   const word = await eventually(async () => (await selectionText(await u.frame())).trim() || false, { timeout: 5_000, message: "the long press selected text" });
@@ -1376,15 +1355,35 @@ scenario("A24.4a on a touch tablet (two columns), a tap on a highlight selects i
     const x = await u.page.evaluate(selectedThreadInPage);
     return (x.selected && x.shown && x.quote?.includes("lanterns")) || false;
   }, { timeout: LISTEN_MS, message: "the new thread is selected and shown" });
+}
+
+scenario("A24.4a on a touch tablet (two columns), a tap on a highlight selects its thread in the visible panel, and a long press selects a word and shows the selection toolbar, whose Comment, tapped, starts a thread", {
+  tiers: BOTH,
+  timeoutMs: 180_000,
+  inconclusiveOnCaseTimeout: true,
+}, async (ctx) => {
+  const { u, docId } = await touchCase(ctx, TABLET, "touch-tablet");
+  await u.openComments();
+  await u.page.getByRole("button", { name: "Close comments", exact: true }).click();
+  precondition(await u.page.locator(".viewer-body").getAttribute("data-comments") === "closed", "the tablet panel is explicitly closed before the tap");
+
+  ctx.step('tap the highlight on "lazy dog": its thread is selected, in the panel, on screen');
+  await u.tap(await quotePoint(u, "#a24-1", "lazy dog"));
+  const sel = await eventually(async () => {
+    const x = await u.page.evaluate(selectedThreadInPage);
+    return x.selected ? x : false;
+  }, { timeout: 10_000, message: "a thread is selected after the tap" });
+  assert.deepEqual({ quote: Boolean(sel.quote?.includes("lazy dog")), shown: sel.shown }, { quote: true, shown: true }, `the tapped passage's thread is selected and visible: ${JSON.stringify(sel)}`);
+
+  await longPressComment(ctx, u, docId);
 });
 
 scenario("A24.4b on a touch phone (one column), a tap on a highlight shows its thread", {
   tiers: BOTH,
-  defect: "X-a24-responsive-a11y-2",
   timeoutMs: 150_000,
   inconclusiveOnCaseTimeout: true,
 }, async (ctx) => {
-  const { u } = await touchCase(ctx, PHONE, "touch-phone");
+  const { u, docId } = await touchCase(ctx, PHONE, "touch-phone");
   precondition((await u.page.locator(".viewer").getAttribute("data-pane")) === "doc", "the phone shows the document pane");
 
   ctx.step('tap the highlight on "lazy dog"');
@@ -1396,9 +1395,11 @@ scenario("A24.4b on a touch phone (one column), a tap on a highlight shows its t
   ctx.step(`after the tap: ${JSON.stringify(sel)}`);
   precondition(sel.quote?.includes("lazy dog"), `the selected thread is the tapped passage's (${sel.quote})`);
   await ctx.oracle(() => eventually(async () => (await u.page.evaluate(selectedThreadInPage)).shown || false, { timeout: 5_000, message: `the tapped highlight's thread is shown to the reader (it is selected, but the phone stays on pane "${sel.pane}" with the panel hidden)` }));
+  await u.page.locator(".pane-toggle button", { hasText: "Document" }).click();
+  await longPressComment(ctx, u, docId);
 });
 
-// --- A24.5: shape, words, axe -------------------------------------------------------------
+// --- A24.5: shape, words, contrast and names -------------------------------------------------------------
 
 /** The chip a user sees for `email`: its dot's shape, the Editing icon, its colour. */
 async function chipFor(u, email) {
@@ -1413,6 +1414,9 @@ async function chipFor(u, email) {
       transform: cs.transform,
       icon: chip.querySelector('[role="img"][aria-label="Editing"]') ? "Editing" : null,
       color: getComputedStyle(chip).color,
+      painted: cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== getComputedStyle(chip).backgroundColor,
+      dotBackground: cs.backgroundColor,
+      chipBackground: getComputedStyle(chip).backgroundColor,
     };
   }, email.toLowerCase());
 }
@@ -1448,24 +1452,13 @@ scenario("A24.5a mode is shown by shape: in forced colours, where colour carries
   ctx.ev.json("chips", { reading, editing, readNamed, editNamed });
 
   assert.equal(editing.color, reading.color, "in forced colours the chip's colour is the same in both modes, so colour cannot be what tells them apart");
+  assert.ok(reading.painted && editing.painted, `both mode dots remain painted in forced colours: ${JSON.stringify({ reading, editing })}`);
   assert.equal(reading.radius, "50%", "a reader's dot is round");
   assert.notEqual(editing.radius, reading.radius, `the dot's shape differs: ${reading.radius} reading, ${editing.radius} editing`);
   assert.notEqual(editing.transform, "none", "an editor's dot is turned (a diamond)");
   assert.deepEqual({ reading: reading.icon, editing: editing.icon }, { reading: null, editing: "Editing" }, "the Editing icon, with its name, only in edit mode");
   assert.deepEqual({ readNamed, editNamed }, { readNamed: 0, editNamed: 1 }, "the chip's accessible name says Editing in edit mode only");
 });
-
-/** The text a screen reader is given for a node: every text node, minus what aria-hidden takes out. */
-async function spokenText(locator) {
-  return locator.evaluate((el) => {
-    const walk = (n) => {
-      if (n.nodeType === 1 && n.getAttribute("aria-hidden") === "true") return "";
-      if (n.nodeType === 3) return n.data;
-      return [...n.childNodes].map(walk).join("");
-    };
-    return walk(el).replace(/\s+/g, " ").trim();
-  });
-}
 
 /** The text a sighted reader sees in a node: text inside a clipped or 1-px box (.visually-hidden) left out. */
 async function seenText(locator) {
@@ -1520,10 +1513,16 @@ scenario("A24.5b a suggestion is put in words for a screen reader in the panel a
   assert.equal(await change.getAttribute("aria-live"), "polite", "the bar announces each change as the pass moves");
 });
 
-scenario("A24.5c axe reports no serious or critical issue on the 11 screens", {
+scenario("A24.5c all 11 screens and 2 dialogs have AA text contrast, computed accessible names, and focus colour reserved for focused indicators", {
   tiers: BOTH,
-  needs: ["axe-core, not a dependency"],
   timeoutMs: 10_000,
-}, async () => {
-  assert.fail("unreachable: skipped until axe-core may be used");
+}, async (ctx) => {
+  if (walk.surfaces?.length !== walk.expected) ctx.inconclusive(`A24.1 measured ${walk.surfaces?.length ?? 0} of ${walk.expected} surfaces`);
+  ctx.ev.json("accessibility", walk.surfaces.map(({ name, accessibility }) => ({ name, ...accessibility })));
+  for (const { name, accessibility } of walk.surfaces) {
+    assert.ok(accessibility.checked.text > 0 && accessibility.checked.accessibleNames > 0, `${name}: rendered text and Chrome accessible names were measured`);
+    assert.deepEqual(accessibility.issues.contrast, [], `${name}: WCAG AA text contrast (4.5 normal, 3 large), including resolved translucent backgrounds`);
+    assert.deepEqual(accessibility.issues.names, [], `${name}: Chrome computes a nonempty accessible name for every exposed control and image`);
+    assert.deepEqual(accessibility.issues.focusPaint, [], `${name}: --color-focus is painted only by a focused indicator`);
+  }
 });

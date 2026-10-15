@@ -1,0 +1,13 @@
+{
+  "oracle": "A visually hidden file input must not become a keyboard stop.",
+  "what": "A visually hidden file input must not become a keyboard stop.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2f2 every Tab stop of the upload dialog is something visible: focus never lands on a visually hidden element",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a Tab stop shows nothing to focus"
+  }
+}

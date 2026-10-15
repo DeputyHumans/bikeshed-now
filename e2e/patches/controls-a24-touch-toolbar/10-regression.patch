@@ -1,0 +1,6 @@
+--- a/app/src/styles/comments.css
++++ b/app/src/styles/comments.css
+@@ -204 +204,3 @@
+ }
++
++.selection-fab { position: fixed !important; left: -9999px !important; }

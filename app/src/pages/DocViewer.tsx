@@ -283,7 +283,11 @@ export function DocViewer() {
     epoch: frame.epoch,
     annotations,
     selectedId,
-    onSelect: setSelectedId,
+    onSelect: (id: string) => {
+      setSelectedId(id);
+      setCommentsOpen(true);
+      setPane("comments");
+    },
   });
 
   const presence = usePeerPresence({

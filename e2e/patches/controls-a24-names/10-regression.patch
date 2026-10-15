@@ -1,0 +1,7 @@
+--- a/app/src/components/Modal.tsx
++++ b/app/src/components/Modal.tsx
+@@ -80,3 +80,3 @@
+           <h2 className="modal-title">{title}</h2>
+-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
++          <button type="button" className="icon-btn" onClick={onClose} aria-label="">
+             <Icon name="close" />

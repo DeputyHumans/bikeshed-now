@@ -1,0 +1,6 @@
+--- a/app/src/components/ViewerToolbar.tsx
++++ b/app/src/components/ViewerToolbar.tsx
+@@ -44,2 +44,3 @@
+       className={keepLabel ? "btn btn-sm btn-keep-label" : "btn btn-sm"}
++      tabIndex={label === "Share" ? -1 : undefined}
+       aria-label={label}

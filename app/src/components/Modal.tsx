@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// A dialog that traps focus and returns it.
+// A dialog that traps focus and returns it (SPEC §7).
 
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "./Icon";
+import { containModalFocus, modalStops, trapModalTab } from "./modalFocus";
 
 /**
  * Three things a dialog must do, and all three are easy to forget:
@@ -15,9 +16,6 @@ import { Icon } from "./Icon";
  *     inside and ended outside — a text selection dragged past the edge is not
  *     a dismissal.
  */
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function Modal({
   title,
   onClose,
@@ -37,9 +35,12 @@ export function Modal({
 
   useEffect(() => {
     opener.current = document.activeElement;
-    const first = panel.current?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? panel.current)?.focus();
+    const root = panel.current;
+    if (!root) return;
+    (modalStops(root)[0] ?? root).focus();
+    const release = containModalFocus(root);
     return () => {
+      release();
       (opener.current as HTMLElement | null)?.focus?.();
     };
   }, []);
@@ -51,18 +52,7 @@ export function Modal({
         onClose();
         return;
       }
-      if (e.key !== "Tab" || !panel.current) return;
-      const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (panel.current) trapModalTab(e, panel.current);
     },
     [onClose],
   );

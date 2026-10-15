@@ -1,0 +1,7 @@
+--- a/app/src/components/PresenceBar.tsx
++++ b/app/src/components/PresenceBar.tsx
+@@ -49,3 +49,3 @@
+           {peer.mode === "edit" ? (
+-            <Icon name="edit" size={12} title="Editing" />
++            <Icon name="edit" size={12} title={undefined} />
+           ) : null}

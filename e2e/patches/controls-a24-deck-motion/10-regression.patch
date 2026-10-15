@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -248,3 +248,3 @@
+       slide.outer.scrollIntoView({
+-        behavior: reduceMotion ? "auto" : "smooth",
++        behavior: reduceMotion ? "smooth" : "smooth",
+         block: "start",

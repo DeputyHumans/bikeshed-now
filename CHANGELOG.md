@@ -18,6 +18,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Dialogs keep focus when controls become disabled, the slide overview traps
+  Tab, and closing a dialog returns focus to its opener. The hidden file picker
+  is no longer a Tab stop. Document frames show their own focus ring.
+- Touch controls retain their 44-pixel hit areas across component styles.
+  Explicitly selecting a highlight opens its thread on phones and tablets.
+  Thread scrolling honours reduced motion, and presence dots remain visible
+  in forced colours.
+
 - Operator sharing and publishing now use transactional records and isolated,
   create-only uploads. The E2E mirror repair uses revision fences and conditional
   node writes, preserving concurrent revocations.
@@ -45,6 +53,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Accessibility E2E checks now measure Chrome's computed control names, text
+  contrast and focus paint on 11 screens and two dialogs without an extra
+  dependency. Nested overflow, all interactive hit areas, all five app scroll
+  paths and phone long-press comments have explicit checks and regression
+  controls.
 
 - Endpoint test transactions retry conflicting document and query reads, and
   failed batches and transactions roll back every write.

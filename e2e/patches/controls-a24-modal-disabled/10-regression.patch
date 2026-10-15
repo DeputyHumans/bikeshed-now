@@ -1,0 +1,6 @@
+--- a/app/src/components/modalFocus.ts
++++ b/app/src/components/modalFocus.ts
+@@ -38,2 +38,3 @@
+     if (Array.from(doc.querySelectorAll('[aria-modal="true"]')).at(-1) !== panel) return;
++    return;
+     const items = modalStops(panel);

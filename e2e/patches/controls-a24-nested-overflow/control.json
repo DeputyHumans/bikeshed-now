@@ -1,0 +1,13 @@
+{
+  "oracle": "A nested modal scrollport must fail even when the page itself has no horizontal scroll.",
+  "what": "A nested modal scrollport must fail even when the page itself has no horizontal scroll.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.1 at 400\u00d7800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^screens that scroll sideways"
+  }
+}

@@ -58,6 +58,8 @@ export function FileDropzone({ file, onFile }: { file: File | null; onFile: (fil
       <input
         ref={inputRef}
         type="file"
+        tabIndex={-1}
+        aria-label="Choose a document file"
         className="visually-hidden"
         accept=".html,.htm,.md,.markdown,.zip"
         onChange={(e) => accept(e.target.files?.[0] ?? null)}

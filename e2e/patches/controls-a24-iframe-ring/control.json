@@ -1,0 +1,13 @@
+{
+  "oracle": "An active iframe has no focus pseudo-class: removing the parent indicator must fail its keyboard ring check.",
+  "what": "An active iframe has no focus pseudo-class: removing the parent indicator must fail its keyboard ring check.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2b comment by keyboard: Shift+\u2192 extends a one-word selection to the phrase, Tab reaches Comment, Enter starts the thread, Tab reaches its reply box and Enter sends",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^every keyboard stop wears the ring"
+  }
+}
