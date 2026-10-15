@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Hosting pins MCP transport headers even when the Functions runtime rejects
+  malformed JSON before the handler runs. The documented boundary is HTTP 400
+  with a diagnostic; handler parse errors retain JSON-RPC `-32700`.
+
 - Empty offline caches no longer claim the workspace is empty. Formatting waits
   for the selected version's format, and late responses from older versions
   cannot replace the current entry or palette.
@@ -113,6 +117,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Revision upload checks follow the version record's immutable entry and wait
+  for the document iframe before testing a file drop.
 
 - Spawned publish and update watchers verify that both JSON results stay on
   stdout while the readiness notice goes to stderr after registration.

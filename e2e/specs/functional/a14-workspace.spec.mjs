@@ -1278,6 +1278,13 @@ async function chooseVersionFile(dlg, f) {
   await dlg.locator('input[type="file"]').setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
 }
 
+/** Read the exact immutable entry selected by the published version record. */
+async function publishedEntry(docId, versionId) {
+  const version = await readDoc(target, `docs/${docId}/versions/${versionId}`);
+  precondition(version?.entry, `the ${versionId} record names its entry`);
+  return readObject(target, `${version.storagePrefix ?? `docs/${docId}/${versionId}`}/${version.entry}`);
+}
+
 async function submitVersion(u, dlg) {
   const mark = u.responseMark();
   await dlg.getByRole("button", { name: "Publish", exact: true }).click();
@@ -1318,7 +1325,7 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   assert.deepEqual({ status: updated.status, id: updated.json?.docId, version: updated.json?.versionId }, { status: 200, id: doc.docId, version: "v2" }, "the browser revision preserves the document address");
   await dlg.waitFor({ state: "detached" });
   assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.", "the revision success message names the new version");
-  assert.equal((await readObject(target, `docs/${doc.docId}/v2/index.html`))?.toString("utf8"), next.data.toString("utf8"), "the browser revision stores the selected bytes");
+  assert.equal((await publishedEntry(doc.docId, "v2"))?.toString("utf8"), next.data.toString("utf8"), "the browser revision stores the selected bytes");
   await dismissToasts(u);
 
   ctx.step("the same file is a no-op and says so, without minting a third version");
@@ -1348,6 +1355,7 @@ scenario("A14.8 dropping a file onto an open document offers a confirmed revisio
   const u = await ctx.users.user({ name: "owner" });
   await u.signInUi(O.account.email, O.account.password);
   await u.goto(`/d/${doc.docId}`);
+  await u.page.locator("iframe.doc-frame").waitFor({ state: "attached", timeout: PAGE_LOAD_MS });
   const frame = await u.frame();
   await frame.locator("h1").filter({ hasText: "Original drop target" }).waitFor({ timeout: PAGE_LOAD_MS });
   const watch = watchRequests(u.page);
@@ -1383,7 +1391,7 @@ scenario("A14.8 dropping a file onto an open document offers a confirmed revisio
   assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.");
   assert.equal(new URL(u.page.url()).pathname, `/d/${doc.docId}`, "the dropped revision stays at its permanent address");
   await (await u.frame()).locator("h1").filter({ hasText: "Dropped replacement" }).waitFor({ timeout: PAGE_LOAD_MS });
-  assert.equal((await readObject(target, `docs/${doc.docId}/v2/index.html`))?.toString("utf8"), next.data.toString("utf8"), "the dropped revision stores its selected bytes");
+  assert.equal((await publishedEntry(doc.docId, "v2"))?.toString("utf8"), next.data.toString("utf8"), "the dropped revision stores its selected bytes");
   watch.stop();
   noPageErrors([u]);
 });
