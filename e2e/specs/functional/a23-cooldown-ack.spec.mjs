@@ -43,8 +43,9 @@ async function claimWithLoss(ctx, s, recipient, kind, trigger, duringHold = asyn
   } finally { await g.release(gate, { key }).catch(() => undefined); }
   const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${id} ([a-f0-9-]+)`), { file, since });
   await waitForLog(`E2E_ACK_RETRY ${operation} ${id} ${loss[1]} callback2`, { file, since });
-  ctx.ev.json(`cooldown-ack-retry-${kind}`, { docId: s.docId, recipientUid: recipient.uid, kind, caller: loss[1] });
-  return sent;
+  const { match: completed } = await waitForLog(new RegExp(`E2E_COOLDOWN_RESULT ${id} (true|false)`), { file, since });
+  ctx.ev.json(`cooldown-ack-retry-${kind}`, { docId: s.docId, recipientUid: recipient.uid, kind, caller: loss[1], permitted: completed[1] === "true" });
+  return { sent, permitted: completed[1] === "true" };
 }
 async function noticeCount(s, to, subject, count, message) {
   let messages;
@@ -73,7 +74,7 @@ scenario("A23.8c a reader whose document expires while its committed cooldown AC
   const { db } = await adminFor(target);
   await db.doc(`users/${s.owner.uid}`).update({ emailNotifications: false });
   const thread = await webThread(s.fs(reader), reader.account, { docId: s.docId, versionId: "v1", anchor, body: "Reader joined this thread." });
-  await claimWithLoss(ctx, s, reader, "comment", () => webReply(s.fs(s.author), s.author.account, { docId: s.docId, versionId: "v1", annId: thread.annId, body: "Private bytes must not cross expiry." }), async claimAt => {
+  const claim = await claimWithLoss(ctx, s, reader, "comment", () => webReply(s.fs(s.author), s.author.account, { docId: s.docId, versionId: "v1", annId: thread.annId, body: "Private bytes must not cross expiry." }), async claimAt => {
     let expiry;
     for (const lead of [3000, 10_000, 30_000]) {
       const proposed = Date.now() + lead;
@@ -84,5 +85,6 @@ scenario("A23.8c a reader whose document expires while its committed cooldown AC
     await new Promise(resolve => setTimeout(resolve, Math.max(0, expiry + 50 - Date.now())));
     precondition(Date.now() > expiry, "cooldown ACK retry will observe the expired clock boundary");
   });
+  assert.equal(claim.permitted, false, "ACK cooldown expiry: the expired reader receives no private comment notice");
   await noticeCount(s, reader.account.email, `${s.author.account.email} commented on “${s.title}”`, 0, "ACK cooldown expiry: the expired reader receives no private comment notice");
 });

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Bind the native-retry email privacy check to completion of the actual cooldown decision before counting absent mail. A keyed fault-capability marker distinguishes a finished denial from a callback still waiting in Firestore.
+
 - Preserve later suggestion lease operations when a completed claim or release loses its transaction acknowledgement. Bounded request receipts prevent an older claim from resurrecting a released lease or an older release from clearing a newer claim; cover both same-account races with native retry regressions and keyed endpoint controls.
 
 - Preserve a completed rename across native transaction retries without replaying it over a later name or duplicating its change event. Reject a missing document instead of recreating a partial record; retain regression tests and a keyed endpoint control.
