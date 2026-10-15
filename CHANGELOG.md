@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Let the operator smoke case create its own owner when selected alone, so its negative controls reach the command under test.
+
 - Refresh regression mutations after presence, activity and write-authority repairs; keep verification race controls applicable alone and after their timing gates.
 
 - Close the operator-owned Admin app after awaited publishing, access, withdrawal or teardown work, so a live realtime mirror connection cannot keep a completed command running.
