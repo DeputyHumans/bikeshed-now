@@ -1,0 +1,12 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -369,3 +369,3 @@
+         checkDraftSnapshot(current, draft);
+-        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
++        void anyOpenThread;
+         retiredEpoch = String(current?.liveEpoch ?? "initial");
+@@ -418,3 +418,3 @@
+       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
+-      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
++      void anyOpenThread;
+       const vRef = versionsRef.doc(versionId);

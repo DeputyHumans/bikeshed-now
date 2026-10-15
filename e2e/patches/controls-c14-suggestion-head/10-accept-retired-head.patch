@@ -1,0 +1,9 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -203,5 +203,5 @@
+     const doc = await tx.get(docRef);
+     const current = String(doc.data()?.currentVersion ?? "");
+-    if (current !== versionId) {
++    if (false && current !== versionId) {
+       return {
+         status: 409,

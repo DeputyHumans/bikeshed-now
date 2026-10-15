@@ -1,0 +1,16 @@
+{
+  "oracle": "A refused publication keeps existing published bytes at their exact paths",
+  "what": "controls-c14-refusal-version-bytes",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 commit held: the owner's agent's commit_draft held after its open-thread check and upload while N agents' comments land on v1, then released; its transaction refuses it for the open comments and nothing is left behind [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c13-feedback"
+  ],
+  "expect": {
+    "message": "^C14 refusal preserves exact version object bytes and paths"
+  }
+}

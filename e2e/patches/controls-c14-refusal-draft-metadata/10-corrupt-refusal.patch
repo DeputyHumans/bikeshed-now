@@ -1,0 +1,16 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -423,5 +423,5 @@
+   // inside the transaction that makes the new version current.
+   const open = await openThreadsRefusal(docRef, baseVersion);
+-  if (open) return { status: 409, body: open };
++  if (open) { await docRef.update({ draft: FieldValue.delete() }); return { status: 409, body: open }; }
+ 
+   const version = await loadVersionMeta(docRef, baseVersion);
+@@ -563,5 +563,5 @@
+       // Opened while the bytes were uploading: refused as it would have been before.
+       const open = await openThreadsRefusal(docRef, baseVersion);
+-      if (open) return { status: 409, body: open };
++      if (open) { await docRef.update({ draft: FieldValue.delete() }); return { status: 409, body: open }; }
+     }
+     if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN") {

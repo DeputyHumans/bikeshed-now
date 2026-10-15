@@ -156,6 +156,7 @@ import { grantEditors } from "../../lib/live.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually, settleStill } from "../../lib/assert.mjs";
 import { assertBrowserFeedback } from "../../lib/feedback-oracles.mjs";
+import { publicationSnapshot, assertPublicationBaseline, assertPublicationPreserved } from "../../lib/publication-oracles.mjs";
 import { naturalRaceAttempts } from "../../lib/review-race.mjs";
 import { requireConclusive, syncHttp } from "../../lib/sync.mjs";
 import { gates, holdCalls } from "../../lib/gates.mjs";
@@ -704,7 +705,7 @@ const landedBy = (state) => Object.fromEntries(state.versions.map((v) => [v, sta
 
 /** Keep each attempt's artifacts separate; measurements also survive a passing case's evidence cleanup. */
 function attemptContext(ctx, attempt) {
-  return { ...ctx, step: text => ctx.step(`attempt ${attempt}: ${text}`), ev: { ...ctx.ev,
+  return { ...ctx, c14Attempt: attempt, step: text => ctx.step(`attempt ${attempt}: ${text}`), ev: { ...ctx.ev,
     json: (name, value) => ctx.ev.json(`attempt-${attempt}-${name}`, value),
     text: (name, value) => ctx.ev.text(`attempt-${attempt}-${name}`, value) } };
 }
@@ -726,6 +727,8 @@ async function c14SyncWork(ctx) {
 async function c14SyncAttempt(ctx) {
   await working(ctx, "C14 SYNC-T", async (obs) => {
     const s = await c14Stage(ctx, "C14 race", { web: true });
+    const before = await publicationSnapshot(target, s.docId);
+    assertPublicationBaseline(before);
     if (ctx.target.kind === "local") {
       await admitWorkers(ctx, { requests: ctx.n + 1, what: "C14 feedback and publisher workers" });
       await Promise.all([...s.feedback, s.publisher].map(agent => agent.mcp.initialize()));
@@ -767,6 +770,10 @@ async function c14SyncAttempt(ctx) {
     // Judge every attempt before another may replace its observation.
     if (published) assertNoneLeftBehind(state, { pick: AGENT_COMMENT, what: "add_comment threads (S12)" });
     assertBrowserFeedback(state, feedback);
+    const after = await publicationSnapshot(target, s.docId);
+    ctx.ev.json("publication-state", { before, after });
+    if (!published) assertPublicationPreserved(before, after);
+    record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "natural", docId: s.docId, attempt: ctx.c14Attempt ?? 1, outcome: published ? "published" : "refused", judged: true, race: fired.race, commit, state, answers: feedback, before, after });
   });
 }
 
@@ -808,6 +815,8 @@ scenario("C14 judge (SYNC-T, web threads): browser feedback stays on its selecte
 async function c14CommentHeldWork(ctx) {
   await working(ctx, "C14 comment held", async (obs) => {
     const s = await c14Stage(ctx, "C14 comment held");
+    const before = await publicationSnapshot(target, s.docId);
+    assertPublicationBaseline(before);
     obs.stage = "staged";
     const calls = s.feedback.map((a, i) => tool(a, "add_comment", commentArgs(s, i + 1, a.name)));
     let commit = null;
@@ -819,6 +828,8 @@ async function c14CommentHeldWork(ctx) {
         ctx.step(`while every add_comment is held past its read of v1, the publisher's commit_draft runs`);
         const out = await s.publisher.mcp.call("commit_draft", { id: s.docId });
         commit = { who: "publisher", what: "commit_draft", status: 200, isError: out.isError, text: out.text, json: out.json ?? null };
+        commit.currentWhileHeld = (await readDoc(target, `docs/${s.docId}`))?.currentVersion;
+        assert.equal(commit.currentWhileHeld, "v2", "C14 comment held: publication commits v2 before releasing the old-head comments");
         ctx.step(`commit: ${brief(commit)}`);
         return commit;
       },
@@ -835,6 +846,11 @@ async function c14CommentHeldWork(ctx) {
     const odd = fired.answers.filter((a) => !(madeOn(a, "v1") || madeOn(a, "v2") || (a.isError && COMMENT_NEWER_RE.test(a.text))));
     assert.deepEqual(odd.map(brief), [], "C14 comment held: every add_comment answered a thread, or a refusal for the newer version");
     assertWhereTold(state, fired.answers);
+    assert.equal(state.current, "v2", "C14 comment held: v2 remains current after the stale comments resume");
+    assertNoneLeftBehind(state, { pick: AGENT_COMMENT });
+    const after = await publicationSnapshot(target, s.docId);
+    ctx.ev.json("publication-state", { before, after });
+    record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "comment-held", docId: s.docId, outcome: "published", judged: true, race: fired.race, commit, state, answers: fired.answers, before, after });
   });
 }
 
@@ -867,6 +883,8 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
   const s = await c14Stage(ctx, "C14 suggestion held");
+  const before = await publicationSnapshot(target, s.docId);
+  assertPublicationBaseline(before);
   const calls = s.feedback.map((a, i) => tool(a, "suggest_edit", suggestArgs(s, i + 1, a.name)));
   let commit = null;
   const fired = await holdAndRun(ctx, {
@@ -876,6 +894,8 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
     whileHeld: async () => {
       const out = await s.publisher.mcp.call("commit_draft", { id: s.docId });
       commit = { who: "publisher", what: "commit_draft", status: 200, isError: out.isError, text: out.text, json: out.json ?? null };
+      commit.currentWhileHeld = (await readDoc(target, `docs/${s.docId}`))?.currentVersion;
+      assert.equal(commit.currentWhileHeld, "v2", "C14 suggestion held: publication commits v2 before releasing the old-head suggestions");
       ctx.step(`while every suggest_edit is held, commit: ${brief(commit)}`);
       return commit;
     },
@@ -888,11 +908,17 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
   assert.ok(commitOk(commit), `C14 suggestion held: with nothing pending on v1, the commit publishes (${brief(commit)})`);
   const notRefused = fired.answers.filter((a) => !(a.isError && NEWER_RE.test(a.text)));
   assert.deepEqual(notRefused.map(brief), [], "C14 suggestion held: every suggestion counted on v1 and written after v2 was current is refused for the newer version (SPEC §22)");
+  assert.equal(state.current, "v2", "C14 suggestion held: v2 remains current after the stale suggestions resume");
+  const after = await publicationSnapshot(target, s.docId);
+  ctx.ev.json("publication-state", { before, after });
+  record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "suggestion-held", docId: s.docId, outcome: "published", judged: true, race: fired.race, commit, state, answers: fired.answers, before, after });
 });
 
 /** C14's commit held at commit-before-tx while `land()` opens threads on v1; released, the transaction must refuse it. */
 async function c14CommitHeld(ctx, { label, web, land }) {
   const s = await c14Stage(ctx, label, { web });
+  const before = await publicationSnapshot(target, s.docId);
+  assertPublicationBaseline(before);
   let landed = null;
   const fired = await holdAndRun(ctx, {
     gate: COMMIT_GATE,
@@ -914,8 +940,12 @@ async function c14CommitHeld(ctx, { label, web, land }) {
   assert.deepEqual(notMade.map(brief), [], `${label}: every thread opened while the commit was held is a thread on v1`);
   assert.ok(commit.isError && OPEN_RE.test(commit.text), `${label}: the commit's transaction sees the threads opened during its upload and refuses: "Resolve all comments before publishing a new version." (${brief(commit)})`);
   assert.equal(state.current, "v1", `${label}: v1 is still current`);
-  assert.ok(state.hasDraft, `${label}: the refused commit leaves the draft`);
   assertWhereTold(state, landed);
+  if (web) assertBrowserFeedback(state, landed);
+  const after = await publicationSnapshot(target, s.docId);
+  ctx.ev.json("publication-state", { before, after });
+  assertPublicationPreserved(before, after);
+  record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: web ? "commit-held-web" : "commit-held-agent", docId: s.docId, outcome: "refused", judged: true, race: fired.race, commit, state, answers: landed, before, after });
 }
 
 scenario("C14 commit held: the owner's agent's commit_draft held after its open-thread check and upload while N agents' comments land on v1, then released; its transaction refuses it for the open comments and nothing is left behind", {

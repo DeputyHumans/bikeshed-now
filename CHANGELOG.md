@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve exact draft and version bytes when publication loses a feedback race, retain every natural attempt, and add forced-order controls for the separately reported C14 composite safety proof.
+
 - Preserve the RTDB coverage-retention and incomplete-report discoveries in the campaign ledger, and record completed C6 authoring controls without closing final acceptance.
 
 - Archive and recycle the pinned local RTDB emulator’s unbounded rule-value coverage at verified quiescent boundaries, preserving exact rules, data and diagnostics without raising resource caps.
