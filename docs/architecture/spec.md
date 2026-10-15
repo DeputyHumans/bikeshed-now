@@ -887,9 +887,14 @@ competing-copy notice. Saves from outside the live editor still offer that
 choice. A newer-version announcement names the current head only and is shown
 only while the reader remains on an older version.
 
-Deletion beats concurrent typing: if one person removes a passage while another
-edits it, the passage goes. That is the CRDT's semantics, not a policy choice,
-and it is tested rather than assumed.
+Deleting an element removes its descendants, including concurrent edits within
+that element. Deleting a text range removes the character identities the writer
+observed. Unseen concurrent insertions in a surviving parent remain once at the
+cut; they are not silently discarded as if the deleting writer had selected
+them. If those insertions reached the writer before deletion, they are observed
+text and are deleted too. Across paragraphs, removed parents take their
+concurrent descendants with them; the surviving parent keeps its unseen text.
+All peers converge to the same result, with untouched text kept in place.
 
 ### 6c. Trust and the untrusted-content sandbox
 

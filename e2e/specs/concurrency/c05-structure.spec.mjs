@@ -567,10 +567,9 @@ scenario("C5 serial control: the same typing into the paragraph, then its deleti
  * that must stay exactly v1's; `ids` every element read.
  *
  * In "inside" and "across" every caret is just before a SPACE, which no token
- * holds: sync.ts diffs a text edit by its longest common prefix, so a typed
- * character equal to the one after the caret would be recorded one place to
- * the right (X-c05-structure-3, judged by "edge"), and those two variants
- * must show only what a range deletion does to typing inside it
+ * holds. They isolate text-range deletion from equal-adjacent-character
+ * identity (X-c05-structure-3, judged by "edge") and show what deleting
+ * observed characters does to unseen concurrent typing inside the range
  * (X-c05-structure-2). "edge" puts the caret just before "russet": every
  * token's second character is "r", so every token meets that diff, and the
  * deletion takes the words AFTER the caret, so the tokens are typed outside
@@ -722,9 +721,9 @@ async function caretAt(u, p) {
 
 /**
  * C5's I4 for a passage, one result: tokens.mjs's I4 over the segments
- * (every token typed inside the passage gone, every other token, survivors
- * and edge tokens alike, once and whole inside its paragraph, the passage's
- * texts gone), plus what the deletion must have taken and
+ * (observed tokens and tokens in removed parents gone; unseen tokens in
+ * surviving parents, survivor tokens and edge tokens once and whole inside
+ * their paragraph; the passage's observed text gone), plus what deletion took and
  * left: the paragraph kept is v1's with the passage cut out (tokens aside:
  * the token analysis judges them), the elements it removed absent, the
  * neighbours exactly v1's, the top-level count v1's less what it removed,
@@ -737,6 +736,15 @@ function c5PassageI4(where, { v, base, typed }) {
   for (const [name, { shape }] of Object.entries(where)) {
     for (const [id, text] of Object.entries(base.kept)) {
       if (shape.count[id] !== 1 || withoutTokens(shape.texts[id]) !== text) failures.push(`${name}: #${id} is not v1's with the passage cut out (${shape.count[id]}×, tokens aside): ${JSON.stringify(withoutTokens(shape.texts[id]).slice(0, 160))}, want ${JSON.stringify(text.slice(0, 160))}`);
+    }
+    // Known text around the cut stays in place; retained concurrent tokens
+    // belong at that cut, never elsewhere in the surviving paragraph.
+    for (const id of new Set(typed.filter((token) => token.expect !== "absent" && Object.hasOwn(base.kept, token.target)).map((token) => token.target))) {
+      const cut = base.texts[id].indexOf(v.from.exact);
+      const before = base.kept[id].slice(0, cut);
+      const after = base.kept[id].slice(cut);
+      const actual = String(shape.texts[id] ?? "").replace(/ /g, " ");
+      if (!actual.startsWith(before) || !actual.endsWith(after)) failures.push(`${name}: retained insertions in #${id} moved outside the deleted range's cut`);
     }
     for (const id of base.gone) if (shape.count[id] !== 0) failures.push(`${name}: #${id} is still there (${shape.count[id]}×): ${JSON.stringify(String(shape.texts[id]).slice(0, 80))}`);
     for (const id of v.unchanged) if (shape.count[id] !== 1 || shape.texts[id] !== base.texts[id]) failures.push(`${name}: #${id} is not v1's (${shape.count[id]}×): ${JSON.stringify(String(shape.texts[id]).slice(0, 80))}`);
@@ -878,13 +886,17 @@ async function c5PassageSession(ctx, { v, serial, title, n = ctx.n }) {
     await lat.reset().catch(() => undefined);
   }
   ctx.step("the delay is gone");
-  return { docId, users, owner, base, log, proof, n };
+  return { docId, users, owner, base, log, proof, n, serial };
 }
 
 /** A passage variant judged live: I4 on every peer, then the settle's own failure, if any. */
 async function c5PassageJudge(ctx, s, v) {
   const { error } = await c5Settle(ctx, s);
-  if (!v.edge) for (const id of new Set(v.points.map((p) => p.id))) s.log.expectAbsent(id);
+  if (!v.edge) for (const id of new Set(v.points.map((p) => p.id))) {
+    // Observed text is removed; unseen insertions survive in a retained parent.
+    // Removing the parent itself also removes its unseen descendants.
+    if (s.serial || s.base.gone.includes(id)) s.log.expectAbsent(id);
+  }
   const peers = {};
   for (const u of s.users) peers[u.name] = { segments: await readSegments(u, v.ids), shape: await shapeAt(u, v.ids) };
   ctx.ev.json(`c5-${v.key}-peers`, shapesOf(peers));
@@ -892,19 +904,13 @@ async function c5PassageJudge(ctx, s, v) {
   if (error) throw error;
 }
 
-// X-c05-structure-2 (class Q, a SPEC question): a deletion inside a
-// paragraph reaches the CRDT as Y.XmlText.delete(start, n) (sync.ts
-// onMutations, characterData), which marks only the characters the deleter
-// had; a concurrent insert inside that range is a new item, which Yjs keeps.
-// So the passage's own text goes, but whatever was typed into it concurrently
-// stays, on every peer, converged ("marble ⟦…⟧⟦…⟧russet"). ADR 0010 promises
-// this for a paragraph (the element case above holds); SPEC §6b says
-// "passage" and calls it "the CRDT's semantics", which for a text range it is
-// not.
-scenario("C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)", {
+// X-c05-structure-2, intentional text-range semantics: delete known character
+// identities, preserve unseen concurrent inserts in a surviving parent. The
+// serial control still deletes tokens the deleter already observed. Whole
+// parent deletion removes its descendants, including concurrent inserts.
+scenario("C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-2",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -929,10 +935,9 @@ scenario("C5 passage serial control: the same typing inside the passage, then it
 // (Chrome removes the element and moves its tail into #e2e-9) take their
 // tokens with them; the token typed into the deleted tail of #e2e-9, a text
 // range in the element that stays, survives.
-scenario("C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)", {
+scenario("C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-2",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,

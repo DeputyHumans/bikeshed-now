@@ -11566,35 +11566,35 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)",
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)",
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)",
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)",
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)",
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)",
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)",
           "n": 20
         },
         {
-          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)",
+          "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)",
           "n": 20
         }
       ]
@@ -13823,6 +13823,24 @@
         "controls-c14-historical-comment"
       ],
       "note": "Browser comments explicitly name the displayed version, including historical versions already supported by A7.7; requiring every new thread on the current head would remove intentional review behavior. SPEC section6 now states version/passage/body fidelity and unchanged current bytes. C13 web judges enforce that contract, and A7.7 now posts a real historical UI comment while observing the pinned-reader version notice. Baseline titles and observations remain historical; only requiredCase mappings change. No browser rules change or E2E closure."
+    },
+    {
+      "kind": "spec-alignment-observation",
+      "items": [
+        "X-c05-structure-2"
+      ],
+      "scope": "intentional observed-text deletion semantics; E2E pending",
+      "tests": [
+        "29 CRDT DOM-binding tests pass, including concurrent text, serial observed text and whole-parent deletion",
+        "Three isolated deletion controls apply, typecheck and fail assertions against clean passing tests"
+      ],
+      "evidence": "e2e/.out/passage-controls-CUt5fw/proof.json",
+      "controls": [
+        "controls-c05-unseen-insertions",
+        "controls-c05-passage-deletion",
+        "controls-c05-i4-deletion"
+      ],
+      "note": "SPEC section6b previously overstated paragraph deletion semantics as applying to any passage. Preserve unseen concurrent text in surviving parents; deleting a whole parent still removes its descendants. Both former question cases now assert observed text removal, exact surviving token counts and cut positions, removed parent absence and convergence. Serial controls still require observed inserted tokens to disappear. Historical claims remain unchanged and cross-group requiredCase mappings follow renamed cases. No product rewrite or E2E closure."
     }
   ]
 }

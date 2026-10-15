@@ -447,3 +447,44 @@ it("notifies autosave once after a changed remote transaction is applied, withou
     expect(seen).toEqual(["<p>two</p>"]);
   } finally { binding.destroy(); y.destroy(); a.sync.destroy(); a.y.destroy(); }
 });
+
+
+describe("text-range and parent deletion", () => {
+  it("preserves an unseen insertion once at a deleted text range's cut", async () => {
+    const a = peer('<p id="p">left DELETE THIS right</p>');
+    const b = peer('', a.y);
+    try {
+      a.body.querySelector('p')!.firstChild!.nodeValue = 'left right';
+      b.body.querySelector('p')!.firstChild!.nodeValue = 'left DELETE INSERTTHIS right';
+      await flush();
+      exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="p">left INSERTright</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
+  });
+
+  it("deletes inserted text once the deleting writer has observed it", async () => {
+    const a = peer('<p id="p">left DELETE THIS right</p>');
+    const b = peer('', a.y);
+    try {
+      b.body.querySelector('p')!.firstChild!.nodeValue = 'left DELETE INSERTTHIS right';
+      await flush(); exchange(a, b);
+      a.body.querySelector('p')!.firstChild!.nodeValue = 'left right';
+      await flush(); exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="p">left right</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
+  });
+
+  it("removes unseen edits when their whole parent is deleted", async () => {
+    const a = peer('<p id="p">delete me</p><p id="q">kept</p>');
+    const b = peer('', a.y);
+    try {
+      a.body.querySelector('#p')!.remove();
+      b.body.querySelector('#p')!.firstChild!.nodeValue = 'delete INSERTme';
+      await flush(); exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="q">kept</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
+  });
+});
