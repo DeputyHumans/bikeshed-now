@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Follow explicit stale-base reload in the natural co-editor observation, and recognize per-tab peer records in the leave-presence canary precondition.
+
 - Reject control definitions whose suite cannot select their spec before allocating a stack; explicitly select concurrency for twelve affected controls.
 
 - Cover an owner signing into an existing workspace while the first backend listen is delayed past the SDK offline transition; require the eventual document and no false empty state, with a direct cache-guard control.

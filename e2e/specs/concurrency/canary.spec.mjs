@@ -28,6 +28,7 @@
  * its callers, a presence that never showed) is INCONCLUSIVE, never FAIL.
  */
 
+import { sessionsFor } from "../../lib/presence.mjs";
 import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
@@ -363,7 +364,7 @@ scenario("canary I12: when both editors leave the document in the app, status/{d
   const uids = accounts.map((a) => a.uid).sort();
   await eventually(async () => {
     const peers = (await rtdbGet(ctx.target, `status/${docId}/peers`)) ?? {};
-    return uids.every((u) => u in peers);
+    return uids.every((uid) => sessionsFor(peers, uid).length > 0);
   }, { timeout: 30_000, message: "both readers present" }).catch(() => ctx.inconclusive("the sync precondition did not hold: both readers never showed in status/{d}/peers"));
   ctx.step("both readers are present; both leave through the app's home link");
   await Promise.all(users.map(leaveInApp));

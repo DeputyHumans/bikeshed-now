@@ -1731,6 +1731,11 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   p2Loads.stop();
   // From the press: the page sees the new version (and remounts) before this process sees the toast.
   const remounts = p2Loads.filter((r) => r.t >= pressAt).map((r) => ({ afterPublishedMs: r.t - publishedAt, status: r.status, url: r.url.replace(/^.*\/draft\//, "/draft/") }));
+  if (p2Save.status === 409) {
+    ctx.step(`${p2.name}'s retained old-base snapshot was refused; explicitly reload before leaving the editor`);
+    await p2.page.getByRole("button", { name: "Reload draft", exact: true }).click({ timeout: 15_000 });
+    await p2.awaitEdit({ waitShared: true, timeout: 90_000 });
+  }
   await p2.done({ timeout: 60_000 });
   await nobodyEditing(ctx, docId, `${p1.name} published and ${p2.name} pressed Done`);
   const yLeft = entriesOf(await readLog(docId));
@@ -1768,9 +1773,11 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const fate =
     where.inV2 === 0 && where.nextEditorSees === late.length && where.draftOfV2Holds === late.length
       ? `kept as unpublished text: in no version, but in the draft of v2${p2Save.status === 200 && where.p2SaveAfterCommit.base === "v2" ? ` (${p2.name}'s own editor, remounted on v2, saved them there)` : ""} and in what the next editor sees`
-      : where.nextEditorSees === 0 && where.draftOfV2Holds === 0
-        ? "lost: in no version, no draft and nothing the next editor sees"
-        : "split";
+      : where.nextEditorSees === 0 && where.draftOfV2Holds === 0 && where.inP2Page > 0
+        ? "retained in the stale editor until its explicit reload, without crossing into the new draft"
+        : where.nextEditorSees === 0 && where.draftOfV2Holds === 0
+          ? "absent from the version, local editor and next draft"
+          : "split";
   ctx.step(`RECORDED (S8's other side, class Q): of ${late.length} token(s) ${p2.name} began after the pre-commit save, v2 holds ${where.inV2}, ${p2.name}'s page held ${where.inP2Page} (its edit frame loaded ${remounts.length} time(s) after the press), its own next save answered ${p2Save.status} on ${where.p2SaveAfterCommit.base}; the live log held ${left.n} entries ${(left.ms / 1000).toFixed(1)} s after "Published" and ${yLeft} once ${p2.name} left; ${next.name} sees ${where.nextEditorSees} and its first keystroke (${probe.status} on ${where.nextKeystroke.base}) left ${where.draftOfV2Holds} in the draft of v2: ${fate}`);
   ctx.t.diagnostic(`C12d co-editor N=${n}: ${late.length} late token(s): v2 ${where.inV2}, next editor ${where.nextEditorSees}, draft of v2 ${where.draftOfV2Holds} (${fate}); y ${yBefore} → ${left.n} → ${yLeft}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12d co-editor", ...where, p2FrameLoadsAfterCommit: remounts.length, p2SaveAfterCommit: `${p2Save.status}@${where.p2SaveAfterCommit.base}`, fate });
