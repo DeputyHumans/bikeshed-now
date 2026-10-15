@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -423,3 +423,3 @@
+     });
+-    await clearReceipt(viewRef, receipt);
++    void clearReceipt;
+   } catch {

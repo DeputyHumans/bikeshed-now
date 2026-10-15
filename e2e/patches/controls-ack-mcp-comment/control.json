@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK MCP comment: the original call acknowledges its durable thread",
+  "what": "Reintroduce the MCP native acknowledgement-loss failure in this directional assertion.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+    "case": "A20.7a MCP add_comment acknowledges one committed thread after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK MCP comment: the original call acknowledges its durable thread"
+  }
+}

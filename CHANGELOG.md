@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise native commit acknowledgement loss through MCP comment creation and overlapping document fetches. Bind each fault to its real commit and retry, with four directional controls for the comment receipt, both read counters and independent receipt cleanup.
+
 - Acknowledge an MCP comment already committed before a lost Firestore acknowledgement, and count each automated fetch once even when another fetch commits before its retry. Keep bounded per-operation receipts on existing records, with independent cleanup and age guards that prevent expired operations from replaying.
 
 - Recognize completed suggestion creations, revisions and thread decisions when the native Firestore SDK retries after losing a commit acknowledgement. Unique annotation/history/note receipts prevent false refusals, duplicate revision history and an old resolution overwriting a later reopen; retain focused native-retry regressions and gated E2E controls.
