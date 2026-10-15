@@ -34,9 +34,10 @@
  *         the SDK goes offline and the empty state comes from its cache: that
  *         run measured A1.8b's path, not this one, and is INCONCLUSIVE
  *   A1.8b the same, with the Listen channel held past the SDK's 10 s on
- *         purpose: the workspace announces "Nothing here yet" from the offline
- *         cache before it lists the shared document (suspected defect
- *         X-a01-identity-3)
+ *         purpose: no false empty state from the offline cache before it lists
+ *         the shared document (regression X-a01-identity-3)
+ *   A1.8c the owner's existing document, under the same delayed first listen:
+ *         no false empty state before the server's card (X-a14-workspace-2)
  *   A1.9  /connect and /signup send X-Frame-Options: DENY and
  *         frame-ancestors 'none' (§23 Consent)
  *   A1.9b mixed case, trailing slash and encoded routes, and protected account
@@ -879,27 +880,26 @@ function afterHold(err, ctx) {
   return pageStall(err, { usersSoFar: users });
 }
 
-scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {
-  tiers: ["local"],
-  effects: ["email:POST /access"],
-  timeoutMs: 600_000,
-}, budgeted(600_000, async (ctx) => {
+async function slowWorkspaceInitialListen(ctx, ownerOnly) {
   const setupBy = Date.now() + SETUP_MS;
-  const [ownerAcct, inviteeAcct] = await cast(target, ["owner", "invitee"]);
+  const [ownerAcct, inviteeAcct] = await cast(target, ownerOnly ? ["owner"] : ["owner", "invitee"]);
   const owner = await sessionFor(ctx, ownerAcct, "owner", setupBy);
-  const title = `A1.8b shared before sign-in ${runTag(target.runId)}-${rand4()}`;
+  const title = `${ownerOnly ? "A1.8c owned" : "A1.8b shared"} before sign-in ${runTag(target.runId)}-${rand4()}`;
   const up = await publish(owner.http, { fixture: "crdt-paragraphs.html", title, name: "a18b-slow", patient: { ctx, stopAt: setupBy } });
-  ctx.step(`the owner shares with ${inviteeAcct.email}, who has never signed in`);
-  const granted = await share(target, { owner, doc: up.docId, account: inviteeAcct, role: "viewer" });
-  precondition(granted.members?.includes(inviteeAcct.email), `members: ${JSON.stringify(granted.members)}`);
+  if (!ownerOnly) {
+    ctx.step(`the owner shares with ${inviteeAcct.email}, who has never signed in`);
+    const granted = await share(target, { owner, doc: up.docId, account: inviteeAcct, role: "viewer" });
+    precondition(granted.members?.includes(inviteeAcct.email), `members: ${JSON.stringify(granted.members)}`);
+  }
 
-  ctx.step(`the invitee signs in while every Firestore Listen request is held ${LISTEN_HOLD_MS} ms (a backend slower than the SDK's 10 s), watched from the first document on`);
-  const u = await ctx.users.user({ name: "invitee" });
+  const who = ownerOnly ? "owner" : "invitee", account = ownerOnly ? ownerAcct : inviteeAcct;
+  ctx.step(`the ${who} signs in while every Firestore Listen request is held ${LISTEN_HOLD_MS} ms (a backend slower than the SDK's 10 s), watched from the first document on`);
+  const u = await ctx.users.user({ name: who });
   await u.page.addInitScript(workspaceObserver);
   const hold = await holdListen(u, LISTEN_HOLD_MS);
   holds.set(ctx, hold);
   try {
-    await u.signInUi(inviteeAcct.email, inviteeAcct.password, { timeout: ANSWER_MS });
+    await u.signInUi(account.email, account.password, { timeout: ANSWER_MS });
     await u.page.locator(".doc-card .doc-card-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
   } finally {
     await hold.restore();
@@ -913,8 +913,18 @@ scenario("A1.8b a document shared before sign-in is listed even when the backend
   ctx.ev.json("workspace-renders", { seen, held, offlineAt: offline?.t ?? null });
   if (!offline) ctx.inconclusive(`holding the Listen channel ${LISTEN_HOLD_MS} ms did not take the page's Firestore client offline: the path under test never ran`);
   ctx.step(`${held.length} Listen POST(s) held (${JSON.stringify(held.map((h) => h.heldMs))} ms); the SDK went offline ${offline.t - held[0].t} ms after the first; empty states at ${JSON.stringify(seen.empty.map((e) => e.t - offline.t))} ms and the first card at ${seen.cards[0] ? seen.cards[0].t - offline.t : null} ms from then`);
-  await ctx.oracle(() => assert.deepEqual(seen.empty, [], "the workspace told the invitee \"Nothing here yet\" from its offline cache before listing the document shared with them"));
-}, { pages: afterHold }));
+  await ctx.oracle(() => assert.deepEqual(seen.empty, [], ownerOnly
+    ? "the workspace told its owner \"Nothing here yet\" from its offline cache before listing their existing document"
+    : "the workspace told the invitee \"Nothing here yet\" from its offline cache before listing the document shared with them"));
+}
+
+scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {
+  tiers: ["local"], effects: ["email:POST /access"], timeoutMs: 600_000,
+}, budgeted(600_000, (ctx) => slowWorkspaceInitialListen(ctx, false), { pages: afterHold }));
+
+scenario("A1.8c an owner's existing document is listed after a delayed first workspace listen, without a false empty state from the offline cache", {
+  tiers: ["local"], timeoutMs: 600_000,
+}, budgeted(600_000, (ctx) => slowWorkspaceInitialListen(ctx, true), { pages: afterHold }));
 
 // --- A1.9 ---------------------------------------------------------------------
 

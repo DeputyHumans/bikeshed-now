@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Cover an owner signing into an existing workspace while the first backend listen is delayed past the SDK offline transition; require the eventual document and no false empty state, with a direct cache-guard control.
+
 - Exercise real local operator access grants and removals through Firestore, both live-access mirrors and authenticated content/presence/log gates, with separate missing-grant and missing-revoke controls.
 
 - Observe the deck overview opening independently of its image renderer, so a stored-thumbnail regression reaches the exact image assertion rather than a setup timeout.

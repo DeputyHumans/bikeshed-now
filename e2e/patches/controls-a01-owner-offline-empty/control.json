@@ -1,0 +1,13 @@
+{
+  "oracle": "owner workspace offline cache",
+  "what": "Render an unconfirmed empty cache to an owner before the delayed server snapshot",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.8c an owner's existing document is listed after a delayed first workspace listen, without a false empty state from the offline cache",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the workspace told its owner"
+  }
+}

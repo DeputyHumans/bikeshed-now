@@ -1516,8 +1516,10 @@ sharing an address would be an ACL bug.
 ### Sign-up
 
 An empty workspace cache while the backend is unavailable remains loading; only
-a server answer establishes that nothing is shared. Cached documents can still
-be shown, and a server-confirmed empty list clears them after revocation.
+a server answer establishes that there are no visible documents. This applies
+both to an owner's existing documents and documents shared before sign-in.
+Cached documents can still be shown, and a server-confirmed empty list clears
+them after revocation.
 
 Password signup asks Firebase for the current password policy. While its answer
 is pending the form waits; a known-invalid password stays disabled with its
