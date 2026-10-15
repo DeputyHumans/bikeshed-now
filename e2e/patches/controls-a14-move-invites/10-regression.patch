@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1958,6 +1958,9 @@
+           ? []
+           : [{ type: "doc.moved", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { from: fromFolder, to: target.id } }],
+     );
++    if (target.id) await sendInvitations(caller.emailLower,
++      (target.membership?.members ?? []).filter((email) => email !== caller.emailLower).map((email) => ({ email, role: "viewer" })),
++      { title: "Moved document", kind: "document", url: `${publicOrigin()}/d/${id}` });
+     res.status(200).json({ ok: true });
+     return;
+   }

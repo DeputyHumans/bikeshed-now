@@ -153,3 +153,23 @@ describe("the file picker by keyboard", () => {
     expect(click).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe("UploadDialog's arriving account default", () => {
+  it("follows a late default until the person chooses, then keeps that explicit choice", async () => {
+    const shown = (enabled: boolean, label: string) => <ToastProvider><UploadDialog folderId={null} accountDefaultMarking={{ enabled, label, footer: "Footer" }} onClose={vi.fn()} onUploaded={vi.fn()} /></ToastProvider>;
+    const view = render(shown(false, ""));
+    chooseFile();
+    const checkbox = screen.getByLabelText(/Stamp exports/) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    view.rerender(shown(true, "Account label"));
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    view.rerender(shown(true, "Later label"));
+    expect(checkbox.checked).toBe(false);
+    clickUpload();
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
+    expect(uploadDoc.mock.calls[0][1].marking).toEqual({ enabled: false, label: "Account label", footer: "Footer" });
+  });
+});

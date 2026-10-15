@@ -1,0 +1,10 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2017,6 +2017,6 @@
+     res.status(403).end();
+     return;
+   }
+-  const newParent = data.parentId ?? null;
++  const newParent = null;
+   const childFolders = await db().collection("folders").where("parentId", "==", id).get();
+   const childDocs = await db().collection("docs").where("folderId", "==", id).get();

@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders",
+  "what": "sort updated",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+  },
+  "expect": {
+    "message": "Recently updated: updatedAt desc"
+  }
+}

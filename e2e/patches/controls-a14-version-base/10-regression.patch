@@ -1,0 +1,11 @@
+--- a/app/src/components/UploadVersionDialog.tsx
++++ b/app/src/components/UploadVersionDialog.tsx
+@@ -56,7 +56,7 @@
+   const [progress, setProgress] = useState<number | null>(null);
+   // Fixed at open: what the person is told they are replacing.
+   const [base] = useState(headVersion);
+-  const moved = Boolean(headVersion && base && headVersion !== base);
++  const moved = Boolean(headVersion && base && headVersion !== base && false);
+   const blocked = moved || editing.length > 0;
+
+   const upload = async () => {

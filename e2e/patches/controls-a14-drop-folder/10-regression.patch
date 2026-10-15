@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -305,7 +305,7 @@
+       for (const file of usable) {
+         try {
+           const result = await uploadDoc(file, {
+-            folderId: target,
++            folderId: target ? null : target,
+             marking: defaultMarkingRef.current,
+             onProgress: (fraction) =>
+               setDropping({ done, total: usable.length, fraction }),

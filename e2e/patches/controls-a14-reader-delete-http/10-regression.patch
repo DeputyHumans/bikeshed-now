@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2013,7 +2013,7 @@
+   }
+
+   // Delete: folder only, owner only, children reparented — never orphaned.
+-  if (!canManageFolder(data, emailLower)) {
++  if (false && !canManageFolder(data, emailLower)) {
+     res.status(403).end();
+     return;
+   }

@@ -166,6 +166,16 @@ a scenario with `n`, as `"<scenario> [N=<k>]"`: both sides then run with
 `--n <k> --trials 1` (see Adding a negative control), so no fixed-N copy of
 the scenario is needed.
 
+A14 workspace coverage includes independent title, creation, update, view-count
+and last-read orders; deeper folder reparenting; silence after moves and folder
+deletion; and cover absence windows anchored before navigation and after the
+trusted document fetch. A14.7/A14.8 exercise revision uploads through the card
+menu and document-frame drops, including format refusal, retry, deduplication,
+confirmation and stale-dialog prevention. The `controls-a14-*` sets also target
+A17.5c's late account-default and explicit-choice sequence. Their presence is
+not execution evidence: the campaign ledger retains pending controls and the
+remaining revision-refusal coverage.
+
 A23 also exercises cooldown expiry by aging only its own account's cooldown
 keys on a local `admin-emulator` stack, then sending fresh comments and
 suggestions through the normal product paths. Its HTML content, recipient,

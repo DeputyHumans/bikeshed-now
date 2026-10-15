@@ -1511,7 +1511,7 @@ async function watchOpenDialog(u, dlg, seeded, since) {
  * and the hand-off was seen. A failure of either FAILS the case (or ends it
  * INCONCLUSIVE when a page saw the stack stall), never this defect's TODO.
  */
-scenario("A17.5c an Upload dialog opened before the workspace has the account record still seeds Stamp exports from the account default once the record arrives", { tiers: BOTH, inconclusiveOnCaseTimeout: true, defect: "X-a17-export-6", timeoutMs: 480_000 }, async (ctx) => {
+scenario("A17.5c an Upload dialog opened before the workspace has the account record still seeds Stamp exports from the account default once the record arrives", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 480_000 }, async (ctx) => {
   const { owner, accounts } = await ownerSession(ctx);
   const t = tag();
   const seeded = { enabled: true, label: `EARLY ${t}`.slice(0, MAX_LABEL), footer: "Early footer {version}" };
@@ -1575,6 +1575,15 @@ scenario("A17.5c an Upload dialog opened before the workspace has the account re
   precondition(watch.checkedMs !== null || watch.handedMs !== null, watch.found
     ? `the workspace never handed the open dialog the account default within ${HANDOFF_MS} ms of its card (its prop: ${JSON.stringify(watch.last?.handed)}), though a dialog opened afresh is seeded: nothing was measured`
     : "no component on the page has UploadDialog's accountDefaultMarking prop, so the hand-off cannot be seen: the measurement needs updating");
+
+  ctx.step("an explicit unchecked choice survives a later account-default snapshot in the same dialog");
+  await dlg.locator("#upload-marking").uncheck();
+  const changed = { ...seeded, label: `LATER ${t}`.slice(0, MAX_LABEL) };
+  const later = await fs.update(`users/${accounts[0].uid}`, { defaultMarking: changed });
+  precondition(later.verdict === "ALLOW", "the owner changes their account default while the dialog stays open");
+  await eventually(async () => isDeepStrictEqual((await dlg.locator("#upload-marking").evaluate(uploadDialogState)).handed, changed), { timeout: PAGE_MS, message: "the open dialog receives the later account preference" });
+  await o.page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await dlg.locator("#upload-marking").isChecked(), false, "a later account snapshot preserves the person's explicit unchecked choice");
 
   ctx.step("X-a17-export-6's oracle: the open dialog, handed the default, shows Stamp exports checked");
   assert.ok(watch.checkedMs !== null, `X-a17-export-6 (SPEC §20, spec.md:2332: the account default "seeds new documents"): the open Upload dialog was handed the account default ${watch.handedMs} ms after the release and its Stamp exports box was still unchecked ${APPLY_GRACE_MS} ms later`);

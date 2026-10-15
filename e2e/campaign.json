@@ -5391,45 +5391,105 @@
       },
       {
         "id": "deep:a14-workspace:03",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:03"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:04",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:04"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:05",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:05"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:06",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:06"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:07",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:07"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:08",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:08"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a14-workspace:09",
@@ -5441,6 +5501,16 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
@@ -5453,6 +5523,16 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.2 a folder made with the Folder button, and one made inside it, deep-link: the URL survives a reload and a fresh navigation with its breadcrumb, rail and contents"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
@@ -5465,6 +5545,20 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.3 upload dialog: only the listed types, an invalid id is a 400 that stores nothing, a taken id becomes {id}-[a-z0-9]{6}, the title comes from <title>, then og:title, then the file name (Markdown: its first H1; a typed title wins), and the marking checkbox is applied"
+            },
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.3b unchecking an account-default export stamp publishes an explicitly unmarked document"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
@@ -5477,6 +5571,16 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.4 drag and drop behaves as the dialog: the same types, one upload per accepted file, the folder it was dropped on or in, the account's default marking; the dialog's own drop zone refuses the same files"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
@@ -5489,6 +5593,16 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
@@ -5501,14 +5615,34 @@
           "source": "w1d/fix-a14-workspace.json",
           "kind": "coverage-repair",
           "note": "Imported pre-campaign bookkeeping, not current product verification. See the source report and baseline revision."
+        },
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
         }
       },
       {
         "id": "deep:a14-workspace:15",
-        "state": "open",
+        "state": "in-progress",
         "observations": [
           "deep:a14-workspace:15"
-        ]
+        ],
+        "implementation": {
+          "cases": [
+            {
+              "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+              "case": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor"
+            }
+          ],
+          "evidence": "e2e/.out/harness-review-controls/a14/coverage-control-sets.json",
+          "status": "implemented; fresh E2E and applicable red/restored controls still required"
+        }
       },
       {
         "id": "deep:a20-mcp:01",
@@ -10420,7 +10554,7 @@
     },
     {
       "id": "X-a17-export-6",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G13-ui-acts-before-record-arrives",
       "classification": "P",
@@ -10442,7 +10576,11 @@
           "caseId": "e2e/specs/functional/a17-export.spec.mjs::A17.5c an Upload dialog opened before the workspace has the account record still seeds Stamp exports from the account default once the record arrives",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/a14/product-control-evidence.json",
+        "status": "source fixed and unit mutants observed red/restored; E2E proof pending"
+      }
     },
     {
       "id": "S7",
@@ -11246,7 +11384,7 @@
     },
     {
       "id": "X-a14-workspace-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "A file dropped on the workspace is titled and addressed by its file name, never by its <title> or og:title, or a Markdown file's first H1. The upload dialog, the CLI and MCP let the server derive the title. Dropping q3.html titled 'Quarterly review' makes a document titled 'q3' at q3-…, where the dialog makes 'Quarterly review' at quarterly-review.",
@@ -11268,7 +11406,11 @@
           "caseId": "e2e/specs/functional/a14-workspace.spec.mjs::A14.4b a dropped file is titled, and so addressed, as the dialog titles it: an HTML file by its <title>, a Markdown file by its first H1, never by the file name",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "evidence": "e2e/.out/harness-review-controls/a14/product-control-evidence.json",
+        "status": "source fixed and unit mutants observed red/restored; E2E proof pending"
+      }
     },
     {
       "id": "X-a18-stats-1",
@@ -11990,13 +12132,43 @@
   "discoveries": [
     {
       "id": "coverage-new-version-dialog",
-      "state": "open",
-      "claim": "Cover Upload a new version dialog: success, each refusal and message, with negative controls. Added after the original critics."
+      "state": "in-progress",
+      "claim": "Cover Upload a new version dialog: success, each refusal and message, with negative controls. Added after the original critics.",
+      "implementation": {
+        "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+        "case": "A14.7 Upload a new version from the workspace preserves the address, explains refusals, retries, reports identical files and blocks an outdated open dialog",
+        "covered": [
+          "successful revision at the same address with stored bytes",
+          "format refusal message and retry without losing the dialog",
+          "cancel or deduplication behavior",
+          "stale open-dialog prevention"
+        ],
+        "remaining": [
+          "remaining server refusals and messages: revoked permission, expired document, pending suggestions, accepted draft and active editors",
+          "fresh E2E and red/restored control evidence"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
+      }
     },
     {
       "id": "coverage-new-version-drop",
-      "state": "open",
-      "claim": "Cover dropping a file onto an open document: success, each refusal and message, with negative controls. Added after the original critics."
+      "state": "in-progress",
+      "claim": "Cover dropping a file onto an open document: success, each refusal and message, with negative controls. Added after the original critics.",
+      "implementation": {
+        "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+        "case": "A14.8 dropping a file onto an open document offers a confirmed revision, cancel sends nothing, and a refused file can be replaced before publishing",
+        "covered": [
+          "successful revision at the same address with stored bytes",
+          "format refusal message and retry without losing the dialog",
+          "cancel or deduplication behavior",
+          "actual document-frame file drop and explicit confirmation"
+        ],
+        "remaining": [
+          "remaining server refusals and messages: revoked permission, expired document, pending suggestions, accepted draft and active editors",
+          "fresh E2E and red/restored control evidence"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
+      }
     }
   ],
   "acceptance": {
@@ -12936,6 +13108,83 @@
         }
       ],
       "note": "Only refusal status changes, never write authority. Current grants after expiry keep the existing ACL-member refusal convention. All three E2E controls have applicable patches and declared targets. No campaign item is closed until E2E controls and fresh runs are observed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a12-versions-1",
+        "X-a11-live-3"
+      ],
+      "scope": "local working tree; operator E2E pending",
+      "tests": [
+        "tools/withdraw-version.test.mjs + operator-writes.test.mjs: 13 pass,0 fail"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/g11-green.log",
+      "controls": [
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g11-original.log",
+          "result": "Extracted original repoint behavior and legacy-only prefixes fail all8 withdrawal tests before fixes (0 pass,8 assertion failures)."
+        }
+      ],
+      "note": "Withdrawal now chooses exact metadata prefixes, guards changed drafts and version byte pointers, and repoints existing public projection atomically. Four new E2E controls apply and target declared cases (.out/g11-patches-7yO8fj): stale projection, version-byte cleanup, draft-byte cleanup, and lost public open-editor mirror after sharing. X-a11-live-3 source repair was in the prior current-document mirror batch; A11.7b promoted after root reported b4 passing, with fresh control still pending. No item is closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a14-workspace-1",
+        "X-a17-export-6",
+        "coverage-new-version-dialog",
+        "coverage-new-version-drop"
+      ],
+      "scope": "local working tree; E2E pending",
+      "tests": [
+        "upload, workspace, version dialog and frame-drop focused tests: 40 pass"
+      ],
+      "evidence": "e2e/.out/harness-review-controls/a14/focused-green.log",
+      "controls": [
+        "e2e/.out/harness-review-controls/a14/product-control-evidence.json",
+        "e2e/.out/harness-review-controls/a14/version-unit-control-evidence.json"
+      ],
+      "controlSets": [
+        "controls-a14-backfill-duplicate",
+        "controls-a14-backfill-offscreen",
+        "controls-a14-backfill-reload",
+        "controls-a14-breadcrumb-link",
+        "controls-a14-checkbox-marking",
+        "controls-a14-delete-disabled",
+        "controls-a14-delete-invites",
+        "controls-a14-delete-reason",
+        "controls-a14-delete-refusal",
+        "controls-a14-drop-count",
+        "controls-a14-drop-folder",
+        "controls-a14-drop-marking",
+        "controls-a14-drop-refusal",
+        "controls-a14-drop-title",
+        "controls-a14-explicit-choice",
+        "controls-a14-explicit-marking-off",
+        "controls-a14-id-length",
+        "controls-a14-id-suffix",
+        "controls-a14-late-default",
+        "controls-a14-lift-descendants",
+        "controls-a14-lift-parent",
+        "controls-a14-move-invites",
+        "controls-a14-move-members",
+        "controls-a14-reader-delete",
+        "controls-a14-reader-delete-http",
+        "controls-a14-rename-address",
+        "controls-a14-sort-last-read",
+        "controls-a14-sort-name",
+        "controls-a14-sort-updated",
+        "controls-a14-sort-views",
+        "controls-a14-title-precedence",
+        "controls-a14-version-base",
+        "controls-a14-version-dedupe-message",
+        "controls-a14-version-drop-claim",
+        "controls-a14-version-drop-prefill",
+        "controls-a14-version-message",
+        "controls-a14-version-retry"
+      ],
+      "note": "Four product regressions and six revision UI regressions observed with isolated source mutants: green, intended red and restored green. Workspace title/address defaults, explicit stamp off and late defaults are fixed. A14 fixtures distinguish all sort orders with real non-owner reads, verify deeper folder reparenting, check move/delete mail silence and anchor backfill absence windows. A14.7/A14.8 cover browser revision entry points. Other revision refusal messages remain explicitly open. No E2E claim or campaign closure is made."
     }
   ]
 }

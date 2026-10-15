@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.4b a dropped file is titled, and so addressed, as the dialog titles it: an HTML file by its <title>, a Markdown file by its first H1, never by the file name",
+  "what": "a14 drop title",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.4b a dropped file is titled, and so addressed, as the dialog titles it: an HTML file by its <title>, a Markdown file by its first H1, never by the file name"
+  },
+  "expect": {
+    "message": "a dropped document uses its embedded title and that title's permanent address"
+  }
+}

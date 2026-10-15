@@ -1,0 +1,10 @@
+--- a/app/src/workspace/tree.ts
++++ b/app/src/workspace/tree.ts
+@@ -147,6 +147,6 @@
+         (a, b) => millis(b.stats?.lastViewedAt) - millis(a.stats?.lastViewedAt),
+       );
+     default:
+-      return list.sort((a, b) => millis(b.updatedAt) - millis(a.updatedAt));
++      return list.sort((a, b) => millis(a.updatedAt) - millis(b.updatedAt));
+   }
+ }

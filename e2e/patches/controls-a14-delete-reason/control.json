@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level",
+  "what": "delete reason",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level"
+  },
+  "expect": {
+    "message": "permanent by design"
+  }
+}

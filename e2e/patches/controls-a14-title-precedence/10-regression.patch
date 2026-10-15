@@ -1,0 +1,11 @@
+--- a/functions/src/lib/head.ts
++++ b/functions/src/lib/head.ts
+@@ -89,7 +89,7 @@
+   const headEnd = Math.min(bodyAt === -1 ? text.length : bodyAt, HEAD_REGION_CHARS);
+   const declared = scanHead(text.slice(0, headEnd), lower.slice(0, headEnd));
+
+-  const title = declared.title ?? declared.ogTitle;
++  const title = declared.ogTitle ?? declared.title;
+   const keywords = declared.keywords;
+   let description = declared.description ?? declared.ogDescription;
+   let image = declared.ogImage ?? declared.twitterImage;

@@ -22,9 +22,8 @@
  *   A14.4  dropping files on the workspace, on a folder card, inside a folder
  *          and on the dialog's drop zone: the same type rule, the folder it
  *          landed in, the account's default marking, one upload per file
- *   A14.4b dropping a file names the document as the dialog does: known
- *          defect X-a14-workspace-1, the drop always sends the file name. A
- *          SPEC question (class Q), not a SPEC violation: see the case
+ *   A14.4b dropping a file uses the same embedded title and permanent-address
+ *          defaults as the upload dialog
  *   A14.5  the actions menus: rename keeps the docId, document delete is a
  *          disabled entry and /organize answers 400, deleting a folder lifts
  *          its children one level
@@ -48,36 +47,10 @@
  * was cut off or its Firestore client had lost the emulator. Assertions are
  * never excused.
  *
- * Negative controls. Three patch sets turn A14.1's search and A14.6's
- * backfill oracles red (e2e/patches/controls-workspace-search-quiet,
- * controls-cover-backfill-trusted, controls-cover-expired-placeholder). The
- * families below were seen red by spec mutation: a copy of this file with one
- * bug planted, run with `run --attach <runId> --spec-file <copy> --grep
- * '<case>'` (README, Adding a negative control), each failing with the
- * message of the assertion it plants against. Never seen red, a known
- * weakness: where a drop lands and its marking (A14.4), rename and the delete
- * refusals (A14.5), a reader's folder menu (A14.5b), and the backfill's
- * exactly-once, reload and off-screen counts (A14.6).
- *
- *   sort order       Recently updated expected in createdAt desc; Most read
- *                    with no views in the Recently updated order; Recently
- *                    read with no reads in createdAt ascending
- *   deep links       the root's view under /folder/<id> (history.replaceState)
- *                    in place of the reload, and of the fresh navigation
- *   id rules         a valid id among the refused ones (answered 200); a
- *                    refused id's record, and its bytes, read where the
- *                    60-character id's are stored; a taken id answered as
- *                    asked; a seven-character suffix
- *   titles           <title> and og:title swapped; og:title dropped; the two
- *                    H1s swapped; with neither, the whole file name expected,
- *                    extension kept; Markdown with no H1 expected titled by its
- *                    level-two heading
- *   refusal toast    the dialog's toast expected to show the server's refusal
- *                    as sent, not as the sentence it shows from 0.16.0
- *   folder lift      after F's delete, G's record, or the document's
- *                    folderId, set to the root
- *   members on move  after the move in, members set back to the owner alone;
- *                    after the move out, the reader put back
+ * Negative controls live under e2e/patches/controls-a14-* and the existing
+ * controls-workspace-search-quiet / controls-cover-* sets. Each targets a
+ * named assertion; campaign closure still requires observed red and restored
+ * green runs, not merely the existence of these patch files.
  */
 
 import assert from "node:assert/strict";
@@ -86,9 +59,11 @@ import { answered, currentTarget, precondition, scenario } from "../../lib/test.
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, docIdFor, ledgerDoc, ledgerFolder, publish, readSample, updateUpload, zipBundle } from "../../lib/seed.mjs";
-import { share } from "../../lib/grant.mjs";
-import { adminFor, closeAdmin, listObjects, readDoc, readObject } from "../../lib/admin.mjs";
+import { share, shareFolder } from "../../lib/grant.mjs";
+import { adminFor, closeAdmin, listObjects, readDoc, readObject, writeUser } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
+import { shimControl } from "../../lib/mail/shimctl.mjs";
+import { mailbox } from "../../lib/mail/reader.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -404,28 +379,29 @@ function noPageErrors(users) {
 
 // --- A14.1 ----------------------------------------------------------------------
 
-scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders", { tiers: BOTH, timeoutMs: 360_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
-  const { owner: O } = await sessions(["owner"]);
+scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders", { tiers: BOTH, effects: ["email:POST /access"], timeoutMs: 420_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+  const { owner: O, viewer: V } = await sessions(["owner", "viewer"]);
   const tag = tagFor();
   const titles = { A: `Alpha ${tag}`, B: `Bravo ${tag}`, C: `Charlie ${tag}` };
 
-  ctx.step("the owner publishes Alpha, Bravo and Charlie in that order, then a second version of Alpha");
+  ctx.step("the owner publishes Charlie, Alpha and Bravo in that order, then a second version of Charlie");
   const ids = {};
-  for (const k of ["A", "B", "C"]) {
+  for (const k of ["C", "A", "B"]) {
     const up = await publish(O.http, { body: pageHtml({ title: titles[k], heading: titles[k] }), filename: "index.html", title: titles[k], name: `a14-1-${k}` });
     ids[k] = up.docId;
+    await share(target, { owner: O, doc: up.docId, account: V.account, role: "viewer" });
   }
-  const v2 = await updateUpload(O.http, ids.A, { body: pageHtml({ title: titles.A, heading: `${titles.A} (second version)` }), baseVersion: "v1", expect: 200 });
+  const v2 = await updateUpload(O.http, ids.C, { body: pageHtml({ title: titles.C, heading: `${titles.C} (second version)` }), baseVersion: "v1", expect: 200 });
   assert.equal(v2.json?.versionId, "v2", `the update minted v2: ${JSON.stringify(v2.json)}`);
   const rec = {};
   for (const k of ["A", "B", "C"]) rec[k] = await readDoc(target, `docs/${ids[k]}`);
-  const created = ["A", "B", "C"].map((k) => millis(rec[k].createdAt));
+  const created = ["C", "A", "B"].map((k) => millis(rec[k].createdAt));
   const updated = Object.fromEntries(["A", "B", "C"].map((k) => [k, millis(rec[k].updatedAt)]));
-  precondition(created[0] < created[1] && created[1] < created[2], `createdAt rises A < B < C: ${created}`);
-  precondition(updated.A > updated.C && updated.C > updated.B, `updatedAt: A's second version is the newest: ${JSON.stringify(updated)}`);
+  precondition(created[0] < created[1] && created[1] < created[2], `createdAt rises C < A < B: ${created}`);
+  precondition(updated.C > updated.B && updated.B > updated.A, `updatedAt: C's second version is the newest: ${JSON.stringify(updated)}`);
   ctx.ev.json("records", { ids, created, updated });
 
-  ctx.step("the owner signs in; the sort control reads Recently updated, and the cards are Alpha, Charlie, Bravo (updatedAt desc), not createdAt's Charlie, Bravo, Alpha");
+  ctx.step("the owner signs in; the sort control reads Recently updated, and the cards are Charlie, Bravo, Alpha (updatedAt desc), distinct from title and creation order");
   const u = await ctx.users.user({ name: "owner" });
   await u.signInUi(O.account.email, O.account.password);
   await waitDocCards(u.page, Object.values(ids));
@@ -435,17 +411,31 @@ scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a s
     { value: "recent", label: "Recently updated" },
     "the default sort",
   );
-  assert.deepEqual(await docOrder(u.page), [ids.A, ids.C, ids.B], "Recently updated: updatedAt desc");
+  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "Recently updated: updatedAt desc");
 
   ctx.step("Name sorts by title; Most read and Recently read, with no reads to sort on, keep the query's createdAt desc (SPEC §5)");
   await sort.selectOption("name");
   assert.deepEqual(await docOrder(u.page), [ids.A, ids.B, ids.C], "Name: by title");
   await sort.selectOption("views");
-  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "Most read with no views: the listener's createdAt desc");
+  assert.deepEqual(await docOrder(u.page), [ids.B, ids.A, ids.C], "Most read with no views: the listener's createdAt desc");
   await sort.selectOption("lastViewed");
-  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "Recently read with no reads: the listener's createdAt desc");
+  assert.deepEqual(await docOrder(u.page), [ids.B, ids.A, ids.C], "Recently read with no reads: the listener's createdAt desc");
   await sort.selectOption("recent");
-  assert.deepEqual(await docOrder(u.page), [ids.A, ids.C, ids.B], "back to Recently updated");
+  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "back to Recently updated");
+
+  ctx.step("real counted reads distinguish Most read from Recently read and from creation order");
+  for (const k of ["B", "B", "B", "C", "C", "A"]) {
+    const r = await V.http.postJson("/view", { docId: ids[k], versionId: rec[k].currentVersion, sessionId: `a14-${rand4()}-${rand4()}-${Date.now()}`, ms: 0 });
+    assert.equal(r.status, 200, `a counted read for ${k}`);
+  }
+  const readOrder = async (value, expected, message) => {
+    await sort.selectOption(value);
+    await eventually(async () => JSON.stringify(await docOrder(u.page)) === JSON.stringify(expected), { timeout: PAGE_LOAD_MS, message });
+    assert.deepEqual(await docOrder(u.page), expected, message);
+  };
+  await readOrder("views", [ids.B, ids.C, ids.A], "Most read uses nonzero view totals");
+  await readOrder("lastViewed", [ids.A, ids.C, ids.B], "Recently read uses distinct last-read times");
+  await readOrder("recent", [ids.C, ids.B, ids.A], "reading does not change Recently updated");
 
   ctx.step("let the workspace settle: its cover backfill fills in all three covers, and then the page starts nothing for 2.5 s");
   const watch = watchRequests(u.page);
@@ -475,7 +465,7 @@ scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a s
 
   ctx.step("clearing the search brings every card back in the default order");
   await u.page.locator("#workspace-search").fill("");
-  await eventually(async () => JSON.stringify(await docOrder(u.page)) === JSON.stringify([ids.A, ids.C, ids.B]), { timeout: 5_000, message: "all three cards, Recently updated" });
+  await eventually(async () => JSON.stringify(await docOrder(u.page)) === JSON.stringify([ids.C, ids.B, ids.A]), { timeout: 5_000, message: "all three cards, Recently updated" });
   watch.stop();
 
   ctx.step("a document filed in a folder is not a root card, but searching reaches it");
@@ -743,6 +733,22 @@ scenario("A14.3 upload dialog: only the listed types, an invalid id is a 400 tha
   noPageErrors([u]);
 });
 
+scenario("A14.3b unchecking an account-default export stamp publishes an explicitly unmarked document", { tiers: BOTH, timeoutMs: 240_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+  const [account] = await cast(target, ["owner"]);
+  const marking = { enabled: true, label: "Account label", footer: "Account footer" };
+  await writeUser(target, account.uid, { uid: account.uid, email: account.email, defaultMarking: marking });
+  await openSession(target, account, { timeoutMs: REQUEST_MS, cutoffError: true });
+  const u = await ctx.users.user({ name: "owner" });
+  await u.signInUi(account.email, account.password);
+  await u.page.getByRole("button", { name: "Upload", exact: true }).click();
+  const dlg = u.page.getByRole("dialog", { name: "Upload a document" });
+  await dlg.locator("#upload-marking").waitFor();
+  await eventually(() => dlg.locator("#upload-marking").isChecked(), { timeout: PAGE_LOAD_MS, message: "the account default arrives in the open dialog" });
+  await dlg.getByRole("button", { name: "Cancel", exact: true }).click();
+  const made = await uploadOk(u, account.email, { f: file("unstamped.html", pageHtml({ title: `Unstamped ${tagFor()}`, heading: "Explicit off" })), marking: false });
+  assert.equal((await readDoc(target, `docs/${made.docId}`))?.marking?.enabled, false, "an explicit unchecked stamp overrides the account default");
+});
+
 // --- A14.4 and A14.4b -------------------------------------------------------------
 
 /** Turn on the account's default marking from the Account page, and wait for the record. */
@@ -871,40 +877,9 @@ scenario("A14.4 drag and drop behaves as the dialog: the same types, one upload 
   noPageErrors([u]);
 });
 
-/*
- * X-a14-workspace-1 is a SPEC QUESTION (class Q), not a SPEC violation.
- *
- * SPEC §2 (docs/architecture/spec.md:376-378) sets only the server's default
- * for a request that has no title: "`title` is optional: for HTML the
- * document's own `<title>` (read by the §17 head scanner, else `og:title`) is
- * the default, then the file name without its extension; for Markdown, the
- * first level-one heading." A drop sends a title, the file name's stem
- * (app/src/pages/DocList.tsx:308), and the server honours it, as §2 and
- * A14.3's "a title given wins" require. No SPEC sentence says what a browser
- * drop must send. What the drop contradicts is the product's own word: the
- * comment above uploadFiles (DocList.tsx:283, "The title comes from the
- * filename exactly as the dialog derives it") and CHANGELOG.md:1392-1397
- * (0.2.0, "a browser upload follows the document's title exactly as CLI and
- * MCP uploads already did"). That entry is commit 5dc1a1c, which stopped the
- * dialog prefilling the file name (UploadDialog.tsx:37 now sends a title only
- * when one is typed) and missed the drop path that a2af2e6 had added four days
- * earlier.
- *
- * The harm is the address. Unless one is asked for, a docId is
- * slugify(title), and it "never changes" (SPEC §4, spec.md:591-593); a rename
- * changes the title and slug, never the docId (spec.md:607-608). Dropping
- * q3.html, titled "Quarterly review", makes a document titled "q3" at /d/q3
- * for good. The dialog, the CLI and MCP make "Quarterly review" at
- * /d/quarterly-review.
- *
- * The question for the SPEC: should §2 say that every browser upload, a drop
- * included, leaves `title` absent unless one is typed? Until it is answered,
- * this case pins what a drop does. The setup FAILS rather than counting as the
- * defect: signing in, both uploads landing (an `eventually`, outside
- * ctx.oracle), and exactly two documents made (a precondition). Only the last
- * assertion, on the title and address, is the defect's oracle.
- */
-scenario("A14.4b a dropped file is titled, and so addressed, as the dialog titles it: an HTML file by its <title>, a Markdown file by its first H1, never by the file name", { tiers: BOTH, defect: "X-a14-workspace-1", timeoutMs: 300_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+// Browser drops use the same documented title and permanent-address defaults as
+// an untitled upload dialog (SPEC §2, §4; the 0.2.0 browser upload contract).
+scenario("A14.4b a dropped file is titled, and so addressed, as the dialog titles it: an HTML file by its <title>, a Markdown file by its first H1, never by the file name", { tiers: BOTH, timeoutMs: 300_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
   const { owner: O } = await sessions(["owner"]);
   const email = O.account.email;
   const tag = tagFor();
@@ -933,7 +908,7 @@ scenario("A14.4b a dropped file is titled, and so addressed, as the dialog title
   assert.deepEqual(got, [
     { format: "html", title: htmlTitle, docId: slugify(htmlTitle) },
     { format: "markdown", title: mdTitle, docId: slugify(mdTitle) },
-  ], "X-a14-workspace-1, a SPEC question (class Q): a dropped document's title and address. The drop sends the file name's stem as title (app/src/pages/DocList.tsx:308), so the server's default never applies. SPEC §2 (spec.md:376-378) sets that default only for an absent title and says nothing of what a drop sends; CHANGELOG.md:1392-1397 says a browser upload follows the document's title. Harm: the docId, which never changes (SPEC §4, spec.md:591), comes from the file name");
+  ], "a dropped document uses its embedded title and that title's permanent address");
 });
 
 // --- A14.5 and A14.5b -------------------------------------------------------------
@@ -1006,6 +981,8 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
     createFolderAs(O, `Leaf ${tag}`, F),
     publish(O.http, { body: pageHtml({ title: `In F ${tag}`, heading: "F" }), filename: "index.html", title: `In F ${tag}`, folderId: F, name: "a14-5-inf" }),
   ]);
+  const H = await createFolderAs(O, `Grandchild ${tag}`, G);
+  const inH = await publish(O.http, { body: pageHtml({ title: `In H ${tag}`, heading: "H" }), filename: "index.html", title: `In H ${tag}`, folderId: H, name: "a14-5-inh" });
   await gotoWorkspace(u, P);
   await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
 
@@ -1027,6 +1004,9 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
   const g1 = await readDoc(target, `folders/${G}`);
   assert.deepEqual({ parentId: g1?.parentId, ancestors: g1?.ancestors, depth: g1?.depth }, { parentId: P, ancestors: [P], depth: 1 }, "G is lifted into P");
   assert.equal((await readDoc(target, `docs/${inF.docId}`))?.folderId, P, "the document is lifted into P");
+  const h1 = await readDoc(target, `folders/${H}`);
+  assert.deepEqual({ parentId: h1?.parentId, ancestors: h1?.ancestors, depth: h1?.depth }, { parentId: G, ancestors: [P, G], depth: 2 }, "the deeper descendant is recomputed after F is removed");
+  assert.equal((await readDoc(target, `docs/${inH.docId}`))?.folderId, H, "the deeper document stays in its own folder");
   await waitDocCards(u.page, [inF.docId], { what: "P after F is deleted" });
   await eventually(async () => JSON.stringify(await folderOrder(u.page)) === JSON.stringify([G]), { timeout: 90_000, message: "P now shows G" });
 
@@ -1039,6 +1019,10 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
   assert.equal((await pageAnswer(u, pMark, "POST", "/organize")).status, 200);
   const g2 = await readDoc(target, `folders/${G}`);
   assert.deepEqual({ parentId: g2?.parentId, ancestors: g2?.ancestors, depth: g2?.depth }, { parentId: null, ancestors: [], depth: 0 }, "G is at the root");
+  const h2 = await readDoc(target, `folders/${H}`);
+  assert.deepEqual({ parentId: h2?.parentId, ancestors: h2?.ancestors, depth: h2?.depth }, { parentId: G, ancestors: [G], depth: 1 }, "the deeper descendant is recomputed after P is removed");
+  const deepDoc = await readDoc(target, `docs/${inH.docId}`);
+  assert.deepEqual({ folderId: deepDoc?.folderId, members: deepDoc?.members }, { folderId: H, members: [email] }, "the deeper document survives both folder deletions");
   const lifted = await readDoc(target, `docs/${inF.docId}`);
   assert.deepEqual({ folderId: lifted?.folderId, members: lifted?.members }, { folderId: null, members: [email] }, "the document is at the root");
   noPageErrors([u]);
@@ -1061,6 +1045,7 @@ async function moveUi(u, card, title, to) {
 scenario("A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach", {
   tiers: BOTH,
   effects: ["email:POST /folder-access"],
+  needs: ["email", "mailpit", "mail-fail-recipient"],
   timeoutMs: 420_000,
   inconclusiveOnCaseTimeout: true,
 }, async (ctx) => {
@@ -1070,7 +1055,12 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   const tag = tagFor();
   const fName = `Shared shelf ${tag}`;
   const F = await createFolderAs(O, fName);
-  const g = await O.http.postJson("/folder-access", { folderId: F, add: [{ email: vEmail, role: "viewer" }] });
+  const shim = shimControl(target);
+  const box = mailbox(target);
+  const g = await shareFolder(target, { owner: O, folder: F, account: V.account, role: "viewer", timeoutMs: REQUEST_MS });
+  const invitation = `${email} shared “${fName}” with you`;
+  const sends = async () => (await shim.requests({ to: vEmail })).map((r) => [r.subject, r.status]);
+  precondition(JSON.stringify(await sends()) === JSON.stringify([[invitation, 200]]), "the folder grant sent exactly its own invitation");
   precondition(g.status === 200, `POST /folder-access shared the folder (${g.status})`);
   precondition((await readDoc(target, `folders/${F}`))?.members?.includes(vEmail), "the folder's members include the viewer");
   const title = `Moved doc ${tag}`;
@@ -1089,6 +1079,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   const inside = await readDoc(target, `docs/${docId}`);
   assert.deepEqual({ folderId: inside?.folderId, members: [...inside.members].sort() }, { folderId: F, members: [email, vEmail].sort() }, "filed: the folder's reader is a member");
   assert.equal((await V.http.get(content)).status, 200, "the folder's reader now reads it");
+  assert.deepEqual(await sends(), [[invitation, 200]], "moving into a shared folder sends no new invitation");
   await waitDocCards(u.page, [], { what: "the root after the move" });
 
   ctx.step("from inside the folder, the owner moves it back to Everything");
@@ -1098,6 +1089,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   const outside = await readDoc(target, `docs/${docId}`);
   assert.deepEqual({ folderId: outside?.folderId, members: outside?.members }, { folderId: null, members: [email] }, "out of the folder, its reader is no longer a member");
   assert.equal((await V.http.get(content)).status, 404, "the reader is back to the absent id's 404");
+  assert.deepEqual(await sends(), [[invitation, 200]], "moving out of a shared folder sends no invitation");
 
   ctx.step("the reader's workspace shows the folder, whose Delete entry is disabled with its reason; their POST /organize delete is 403");
   const v = await ctx.users.user({ name: "viewer" });
@@ -1112,6 +1104,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   ctx.step("filed again, then the folder deleted from the owner's menu: the document is lifted to the root and its reader loses it");
   await O.http.postJson("/organize", { kind: "doc", id: docId, op: "move", targetFolderId: F }, { expect: 200 });
   precondition((await members()).includes(vEmail), "filed again");
+  assert.deepEqual(await sends(), [[invitation, 200]], "API filing sends no new invitation");
   await gotoWorkspace(u);
   await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   const menu = await openActions(u.page, folderCard(u.page, F), fName);
@@ -1121,6 +1114,8 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   const lifted = await readDoc(target, `docs/${docId}`);
   assert.deepEqual({ folderId: lifted?.folderId, members: lifted?.members }, { folderId: null, members: [email] });
   assert.equal((await V.http.get(content)).status, 404);
+  assert.deepEqual(await sends(), [[invitation, 200]], "deleting a shared folder sends no new invitation");
+  await box.expectMailboxes({ [vEmail]: [invitation] }, { timeout: REQUEST_MS });
   noPageErrors([u, v]);
 });
 
@@ -1142,6 +1137,15 @@ async function coverCounts(watch, docs) {
     out[k] = { posts: posts.length, statuses };
   }
   return out;
+}
+
+/** The backfill reached this exact document and its content request completed. */
+async function backfillFetched(watch, docId, since = 0) {
+  await eventually(async () => {
+    const requests = watch.since(since).filter((r) => r.method === "GET" && pathOf(r.url).startsWith(`/content/${docId}/v1/`));
+    for (const r of requests) if ((await r.req.response().catch(() => null))?.status() === 200) return true;
+    return false;
+  }, { timeout: 240_000, message: "the backfill fetched the trusted document before its absence window" });
 }
 
 /** Until docs/{id} names a stored cover (a throwing predicate: eventually() takes any value but false as success). */
@@ -1215,6 +1219,7 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
     for (const k of owed) if (!(await readDoc(target, `docs/${docs[k]}`))?.thumb?.cover) throw new Error(`${k} has no cover yet`);
     return true;
   }, { timeout: 240_000, interval: 300, message: "every owed cover stored" });
+  await backfillFetched(oWatch, docs.deckTrusted);
   await sleep(BACKFILL_SETTLE_MS);
   const oCounts = await coverCounts(oWatch, docs);
   ctx.ev.json("owner-cover-posts", oCounts);
@@ -1230,17 +1235,20 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
   await eventually(async () => JSON.stringify((await cardsWithCover(o.page)).sort()) === JSON.stringify([...owed.map((k) => docs[k]), docs.control].sort()), { timeout: 60_000, message: "the owner's cards draw every stored cover" });
 
   ctx.step("a reload sends no cover POST at all; opening the folder sends exactly one, for the filed document");
-  await o.page.reload({ waitUntil: "load" });
   const tReload = Date.now();
+  await o.page.reload({ waitUntil: "load" });
   await waitDocCards(o.page, rootIds, { what: "the reloaded workspace" });
+  await backfillFetched(oWatch, docs.deckTrusted, tReload);
   await sleep(BACKFILL_SETTLE_MS);
   const afterReload = oWatch.since(tReload).filter((r) => r.method === "POST" && pathOf(r.url) === "/thumb");
   assert.deepEqual(afterReload.map(describe), [], "no cover POST after a reload");
+  assert.deepEqual((await coverCounts(oWatch, { filed: docs.filed })).filed, { posts: 0, statuses: [] }, "the filed document had no cover POST before opening its folder");
+  const tFolder = Date.now();
   await o.page.locator(`a.doc-card-title[href="/folder/${folderId}"]`).click();
   await waitDocCards(o.page, [docs.filed], { what: "the folder" });
   await coverStored(docs.filed, "the filed document's cover stored");
   await sleep(BACKFILL_SETTLE_MS);
-  assert.deepEqual((await coverCounts(oWatch, { filed: docs.filed })).filed, { posts: 1, statuses: [200] }, "one cover POST for the filed document, once on screen");
+  assert.deepEqual((await coverCounts({ list: oWatch.since(tFolder) }, { filed: docs.filed })).filed, { posts: 1, statuses: [200] }, "one cover POST for the filed document, once on screen");
 
   ctx.step("the editor reloads: the expired card is still a placeholder though its cover is stored, and nothing is sent for it");
   const tE = Date.now();
@@ -1253,4 +1261,129 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
   eWatch.stop();
   oWatch.stop();
   noPageErrors([o, e]);
+});
+
+// --- A14.7 / A14.8 ---------------------------------------------------------------
+
+/** The workspace's revision action opens the real shared upload dialog. */
+async function openVersionDialog(u, docId, title) {
+  const menu = await openActions(u.page, docCard(u.page, docId), title);
+  await menu.getByRole("menuitem", { name: "Upload a new version…" }).click();
+  const dlg = u.page.getByRole("dialog", { name: "Upload a new version", exact: true });
+  await dlg.waitFor({ state: "visible" });
+  return dlg;
+}
+
+async function chooseVersionFile(dlg, f) {
+  await dlg.locator('input[type="file"]').setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
+}
+
+async function submitVersion(u, dlg) {
+  const mark = u.responseMark();
+  await dlg.getByRole("button", { name: "Publish", exact: true }).click();
+  const res = await pageAnswer(u, mark, "POST", "/publish");
+  return { status: res.status, json: await res.json().catch(() => null) };
+}
+
+scenario("A14.7 Upload a new version from the workspace preserves the address, explains refusals, retries, reports identical files and blocks an outdated open dialog", { tiers: BOTH, timeoutMs: 420_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+  const { owner: O } = await sessions(["owner"]);
+  const title = `Revision ${tagFor()}`;
+  const doc = await publish(O.http, { body: pageHtml({ title, heading: "Original" }), filename: "index.html", title, name: "a14-7" });
+  const u = await ctx.users.user({ name: "owner" });
+  await u.signInUi(O.account.email, O.account.password);
+  await waitDocCards(u.page, [doc.docId]);
+  const next = file("revision.html", pageHtml({ title: "Authored next title", heading: "Revised body" }), "text/html");
+
+  ctx.step("the card action opens a dialog naming its document, fixed base and permanent address; Publish needs a file");
+  let dlg = await openVersionDialog(u, doc.docId, title);
+  assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "a revision cannot publish without a file");
+  assert.match(await dlg.textContent(), /after v1, at the same address/);
+  assert.match(await dlg.textContent(), /Comments stay on v1/);
+
+  ctx.step("a Markdown file cannot change the HTML document's format: the refusal is readable, the dialog stays open, and the head is untouched");
+  await chooseVersionFile(dlg, file("wrong.md", "# Wrong format\n", "text/markdown"));
+  let toastAt = u.toastMark();
+  const refused = await submitVersion(u, dlg);
+  assert.equal(refused.status, 400, "a format-changing browser revision is refused");
+  const refusal = await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 });
+  assert.deepEqual({ kind: refusal.kind, text: refusal.text }, { kind: "error", text: "This document is HTML, so an update to it cannot be Markdown." }, "the revision refusal explains the format conflict");
+  assert.equal(await dlg.isVisible(), true, "a refused revision keeps its dialog open");
+  assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1", "a refused revision does not change the head");
+  await dismissToasts(u);
+
+  ctx.step("choose a valid replacement and retry in the same dialog: v2 at the same id, with its actual new bytes and success message");
+  await chooseVersionFile(dlg, next);
+  toastAt = u.toastMark();
+  const updated = await submitVersion(u, dlg);
+  assert.deepEqual({ status: updated.status, id: updated.json?.docId, version: updated.json?.versionId }, { status: 200, id: doc.docId, version: "v2" }, "the browser revision preserves the document address");
+  await dlg.waitFor({ state: "detached" });
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.", "the revision success message names the new version");
+  assert.equal((await readObject(target, `docs/${doc.docId}/v2/index.html`))?.toString("utf8"), next.data.toString("utf8"), "the browser revision stores the selected bytes");
+  await dismissToasts(u);
+
+  ctx.step("the same file is a no-op and says so, without minting a third version");
+  dlg = await openVersionDialog(u, doc.docId, title);
+  await chooseVersionFile(dlg, next);
+  toastAt = u.toastMark();
+  const duplicate = await submitVersion(u, dlg);
+  assert.deepEqual({ status: duplicate.status, version: duplicate.json?.versionId, deduped: duplicate.json?.deduped }, { status: 200, version: "v2", deduped: true }, "an identical browser revision is deduplicated");
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "No changes — the file is identical to v2.", "the identical-file message names the retained version");
+  await dismissToasts(u);
+
+  ctx.step("another publisher advances the head while the dialog is open: the dialog explains it and disables Publish before any request");
+  dlg = await openVersionDialog(u, doc.docId, title);
+  await chooseVersionFile(dlg, next);
+  await updateUpload(O.http, doc.docId, { body: pageHtml({ title, heading: "Another publisher" }), baseVersion: "v2", expect: 200 });
+  await dlg.getByRole("status").filter({ hasText: "v3 was published while this was open" }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "an outdated open revision dialog cannot publish");
+  assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v3");
+  await dlg.getByRole("button", { name: "Cancel" }).click();
+  noPageErrors([u]);
+});
+
+scenario("A14.8 dropping a file onto an open document offers a confirmed revision, cancel sends nothing, and a refused file can be replaced before publishing", { tiers: BOTH, timeoutMs: 360_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+  const { owner: O } = await sessions(["owner"]);
+  const title = `Drop revision ${tagFor()}`;
+  const doc = await publish(O.http, { body: pageHtml({ title, heading: "Original drop target" }), filename: "index.html", title, name: "a14-8" });
+  const u = await ctx.users.user({ name: "owner" });
+  await u.signInUi(O.account.email, O.account.password);
+  await u.goto(`/d/${doc.docId}`);
+  const frame = await u.frame();
+  await frame.locator("h1").filter({ hasText: "Original drop target" }).waitFor({ timeout: PAGE_LOAD_MS });
+  const watch = watchRequests(u.page);
+  const next = file("dropped.html", pageHtml({ title, heading: "Dropped replacement" }), "text/html");
+  const dlg = u.page.getByRole("dialog", { name: "Upload a new version", exact: true });
+
+  ctx.step("a drop in the actual content frame opens the confirmation dialog with the selected file, without publishing");
+  assert.equal((await dropFiles(frame, "body", [next])).at(-1).claimed, true, "the document frame consumes the file drop");
+  await dlg.waitFor();
+  assert.equal(await dlg.locator(".upload-dropzone strong").textContent(), next.name, "the document drop preselects its file");
+  assert.match(await dlg.textContent(), /after v1, at the same address/);
+  assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "dropping a revision never publishes before confirmation");
+  await dlg.getByRole("button", { name: "Cancel" }).click();
+  await dlg.waitFor({ state: "detached" });
+  assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1", "cancelled dropped revision leaves the head unchanged");
+
+  ctx.step("a dropped Markdown file receives the format refusal, remains replaceable, and does not replace the published bytes");
+  await dropFiles(frame, "body", [file("wrong.md", "# Wrong format\n", "text/markdown")]);
+  await dlg.waitFor();
+  let toastAt = u.toastMark();
+  assert.equal((await submitVersion(u, dlg)).status, 400);
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "This document is HTML, so an update to it cannot be Markdown.", "a dropped revision explains its format refusal");
+  assert.equal(await dlg.isVisible(), true);
+  assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1");
+  await dismissToasts(u);
+
+  ctx.step("replace the refused file in the open dialog and confirm: exactly one version is minted and shown at the same address");
+  await chooseVersionFile(dlg, next);
+  toastAt = u.toastMark();
+  const updated = await submitVersion(u, dlg);
+  assert.deepEqual({ status: updated.status, id: updated.json?.docId, version: updated.json?.versionId }, { status: 200, id: doc.docId, version: "v2" }, "a confirmed dropped revision preserves the address");
+  await dlg.waitFor({ state: "detached" });
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.");
+  assert.equal(new URL(u.page.url()).pathname, `/d/${doc.docId}`, "the dropped revision stays at its permanent address");
+  await (await u.frame()).locator("h1").filter({ hasText: "Dropped replacement" }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.equal((await readObject(target, `docs/${doc.docId}/v2/index.html`))?.toString("utf8"), next.data.toString("utf8"), "the dropped revision stores its selected bytes");
+  watch.stop();
+  noPageErrors([u]);
 });

@@ -1,0 +1,10 @@
+--- a/app/src/components/UploadVersionDialog.tsx
++++ b/app/src/components/UploadVersionDialog.tsx
+@@ -66,6 +66,6 @@
+       onPublished(await uploadVersion(file, { docId, baseVersion: base, onProgress: setProgress }));
+     } catch (e) {
+       toast.error((e as Error).message);
+-      setProgress(null);
++      setProgress(1);
+     }
+   };

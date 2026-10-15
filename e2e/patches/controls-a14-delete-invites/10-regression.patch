@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2035,6 +2035,9 @@
+     }
+   }
+
++  await sendInvitations(caller.emailLower,
++    (Array.isArray(data.members) ? data.members as string[] : []).filter((email) => email !== caller.emailLower).map((email) => ({ email, role: "viewer" })),
++    { title: "Deleted folder", kind: "folder", url: `${publicOrigin()}/folder/${id}` });
+   await ref.delete();
+   res.status(200).json({ ok: true });
+ });

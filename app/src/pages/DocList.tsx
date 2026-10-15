@@ -280,8 +280,8 @@ export function DocList() {
    * Upload dropped files where they landed.
    *
    * No dialog: everything the dialog collects is already determined by the
-   * drop. The title comes from the filename exactly as the dialog derives it,
-   * the marking from the account default exactly as the dialog seeds it, and
+   * drop. The server derives the title from the document exactly as it does
+   * for an untitled dialog upload, the marking comes from the account default, and
    * the folder from what was dropped on. Asking again would be asking somebody
    * to confirm what they just did.
    *
@@ -305,7 +305,6 @@ export function DocList() {
       for (const file of usable) {
         try {
           const result = await uploadDoc(file, {
-            title: file.name.replace(/\.[^.]+$/, "") || undefined,
             folderId: target,
             marking: defaultMarkingRef.current,
             onProgress: (fraction) =>

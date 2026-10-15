@@ -389,7 +389,9 @@ own pending proposal, and neither destroys anything.
   `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`.
   `title` is optional: for HTML the document's own `<title>` (read by the §17
   head scanner, else `og:title`) is the default, then the file name without its
-  extension; for Markdown, the first level-one heading. `id` is optional too:
+  extension; for Markdown, the first level-one heading. The browser upload
+  dialog and file-drop paths leave `title` absent unless the uploader enters
+  one, so both use these defaults. `id` is optional too:
   the docId to publish at, refused with a `400` before anything is stored if it
   breaks the rules in §4. A taken `id` is not refused; see §4.
 

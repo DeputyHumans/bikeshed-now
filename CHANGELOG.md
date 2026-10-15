@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Browser file drops use the document title and address defaults. Upload dialogs
+  adopt late account marking defaults until the uploader chooses, and explicit
+  stamp-off remains off when sent to the server.
+
 - Withdrawing a version repoints its public view atomically and deletes the exact
   immutable version and draft bundles named by metadata, preserving other bundles.
   A changed draft or version aborts before destructive work.
@@ -98,6 +102,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   removed reader; expiry and rotated link grants are checked too.
 
 ### Tests
+
+- Workspace coverage checks independent sort orders, inherited folder movement,
+  invitation silence, thumbnail backfill and both revision-upload entry paths,
+  with refusal, retry and deduplication controls.
 
 - Version and withdrawal checks read immutable snapshot paths, keep retired
   byte evidence, and detect uploads without a committed version record.
