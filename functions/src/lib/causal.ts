@@ -18,7 +18,7 @@ export function parseCausalStamp(value: unknown): CausalStamp | null {
   if (!record(value.vector) || !record(value.deletes)) return null;
   const vectorEntries = Object.entries(value.vector);
   const deleteEntries = Object.entries(value.deletes);
-  if (vectorEntries.length === 0 || vectorEntries.length > 4096 || deleteEntries.length > 4096) return null;
+  if (vectorEntries.length > 4096 || deleteEntries.length > 4096) return null;
   if (vectorEntries.some(([id, count]) => !client(id) || !clock(count))) return null;
   let ranges = 0;
   for (const [id, intervals] of deleteEntries) {

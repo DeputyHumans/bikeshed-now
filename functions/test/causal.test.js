@@ -29,7 +29,8 @@ test("deletions order equal vectors and a missing deletion cannot be hidden by a
 test("bounded metadata rejects malformed clocks, ranges, generations and unknown fields", () => {
   const valid = stamp({ 1: 10 }, { 1: [[2, 3]] });
   assert.deepEqual(parseCausalStamp(valid), valid);
-  for (const bad of [null, [], {}, { ...valid, extra: true }, { ...valid, generation: "" }, stamp({}), stamp({ x: 10 }), stamp({ 1: -1 }), stamp({ 1: 1.5 }), stamp({ 1: Infinity }), stamp({ 1: 10 }, { 1: [[9, 2]] }), stamp({ 1: 10 }, { 1: [[2, 0]] }), stamp({ 1: 10 }, { 1: [[4, 2], [3, 1]] }), stamp({ 1: 10 }, { 2: [[1, 2]] }), stamp({ 1: 10 }, { 1: [[1, 1, 1]] }), stamp({ 1: 10 }, { 1: "bad" }), stamp(Object.fromEntries(Array.from({ length: 4097 }, (_, i) => [i, 1]))), stamp({ 1: 20000 }, { 1: Array.from({ length: 16385 }, (_, i) => [i, 1]) })]) assert.equal(parseCausalStamp(bad), null, JSON.stringify(bad).slice(0, 120));
+  assert.deepEqual(parseCausalStamp(stamp({})), stamp({}), "an untouched empty shared body has no inserted items");
+  for (const bad of [null, [], {}, { ...valid, extra: true }, { ...valid, generation: "" }, stamp({ x: 10 }), stamp({ 1: -1 }), stamp({ 1: 1.5 }), stamp({ 1: Infinity }), stamp({ 1: 10 }, { 1: [[9, 2]] }), stamp({ 1: 10 }, { 1: [[2, 0]] }), stamp({ 1: 10 }, { 1: [[4, 2], [3, 1]] }), stamp({ 1: 10 }, { 2: [[1, 2]] }), stamp({ 1: 10 }, { 1: [[1, 1, 1]] }), stamp({ 1: 10 }, { 1: "bad" }), stamp(Object.fromEntries(Array.from({ length: 4097 }, (_, i) => [i, 1]))), stamp({ 1: 20000 }, { 1: Array.from({ length: 16385 }, (_, i) => [i, 1]) })]) assert.equal(parseCausalStamp(bad), null, JSON.stringify(bad).slice(0, 120));
 });
 
 

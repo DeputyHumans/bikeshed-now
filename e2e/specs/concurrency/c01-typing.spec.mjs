@@ -845,7 +845,7 @@ async function lateSave(ctx, { hold }) {
         // request after that drain, so a corrective save cannot hide data loss.
         const oldRequest = delay.rows[0]?.postJson;
         precondition(Boolean(oldRequest?.causal && oldRequest?.liveEpoch), "the delayed request captured its causal history and live epoch");
-        const replay = await early.http.postJson("/draft", oldRequest);
+        const replay = await owner.http.postJson("/draft", oldRequest);
         assert.equal(replay.status, 200, "C1 late replay: an already superseded save is idempotent");
         ctx.ev.json("late-replay", { request: oldRequest, response: replay.json });
         ctx.step("replayed the exact older autosave after all corrective saves finished; read the durable draft before any further input");

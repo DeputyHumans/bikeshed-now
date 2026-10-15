@@ -22,6 +22,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Accept an untouched empty shared document's causal history, and replay the
+  delayed-save regression through its authenticated owner session.
+
 - Clarify that a recognized two-slide deck keeps its navigator; cover both
   destinations and the single-slide boundary in the end-to-end suite.
 
