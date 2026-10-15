@@ -1,7 +1,7 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -193,3 +193,3 @@
-       if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
--      if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
-+      if (false && args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
-         error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
+@@ -208,3 +208,3 @@
+     if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+-    if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
++    if (false && args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
+       error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,

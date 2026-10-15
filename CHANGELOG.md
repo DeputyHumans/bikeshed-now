@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep stale-draft, delayed-autosave and checked-snapshot negative controls applicable to both draft commit paths after the snapshot-precondition repair.
+
 - Bind the separate C14 local safety assessment to every original natural and forced trial, exact saved bytes, request timing, completed records, and actual directional controls. Retain raw inconclusive observations and the original open obligation, so local acceptance never claims full completion.
 
 - Recheck thumbnail editor authority after JPEG upload, so a concurrent downgrade or removal cannot publish a shared image. Refuse with the existing reader-aware status and remove only the rejected candidate's objects; preserve owner uploads and existing thumbnails.

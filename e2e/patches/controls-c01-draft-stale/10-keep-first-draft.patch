@@ -1,6 +1,6 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -186,2 +186,3 @@
-       retiredEpoch = undefined;
-+      if (current?.draft?.storagePrefix) { draft = current.draft; reused = true; return; }
-       const currentCausal = readStoredCausalStamp(current?.draft?.causal);
+@@ -220,2 +220,3 @@
+     retiredEpoch = undefined;
++    if (current?.draft?.storagePrefix) { draft = current.draft; reused = true; return null; }
+     const currentCausal = readStoredCausalStamp(current?.draft?.causal);
