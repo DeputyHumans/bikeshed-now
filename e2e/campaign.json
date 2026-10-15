@@ -9977,7 +9977,7 @@
       "track": "grouped",
       "group": "G07-draft-vs-moving-base",
       "classification": "P",
-      "claim": "A POST /draft on a base that a concurrent commit is superseding answers 200. It leaves docs/{id}.draft with baseVersion v1 on a document at v2, with no draft bytes. GET /draft then falls back to v1 and serves the superseded content to every editor. Their next save on base v2 republishes v1's content. A single user can reach this alone, because Save never cancels the pending debounced autosave.",
+      "claim": "A POST /draft on a base that a concurrent commit is superseding answers 200. It leaves docs/{id}.draft with baseVersion v1 on a document at v2, with no draft bytes. GET /draft then falls back to v1 and serves the superseded content to every editor. Their next save on base v2 republishes v1's content.",
       "baseline": {
         "id": "X-a12-versions-2",
         "ref": "A12.6",
@@ -10011,7 +10011,8 @@
           "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.6 (racing a commit) a POST /draft on the base a concurrent commit is superseding is refused or lands first: it never leaves a draft on the superseded version, which GET /draft would serve to every editor (SPEC §2)",
           "n": null
         }
-      ]
+      ],
+      "evidenceClarification": "The server race is independently exercised by concurrent /draft and /commit. X-a09-editing-1 is the related client debounce trigger and has a separate fix; older stale-toast/frame-timeout observations alone do not prove an old-base draft persisted."
     },
     {
       "id": "S14",
@@ -10491,7 +10492,7 @@
       "track": "grouped",
       "group": "G12-viewer-banners",
       "classification": "P",
-      "claim": "On every new version after the first, an unpinned reader at /d/<doc> renders 'A newer version has been published. Open v2 / Stay here' for one render, offering a version older than the one shown. With the CPU slowed 6x (User.throttleCpu) this is painted every time, for 14-26 ms.",
+      "claim": "An unpinned reader following a second new version inserted a stale newer-version banner into the DOM for one render. The watcher measured insertion and layout visibility, including at 6x CPU throttling; it did not prove browser paint or flicker duration.",
       "baseline": {
         "id": "X-a12-versions-3",
         "ref": "A12.3",
@@ -10509,7 +10510,8 @@
           "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.3 (a second new version) an unpinned reader who followed one new version never sees the banner for the next one either, not even on a slower CPU",
           "n": null
         }
-      ]
+      ],
+      "evidenceClarification": "The historical baseline remains verbatim; current A12.3 and its control judge DOM insertion, not painted frames."
     },
     {
       "id": "X-a06-comments-1",
@@ -13908,6 +13910,15 @@
       ],
       "evidence": "e2e/.out/a21-controls-proof/proof.json; e2e/.out/a21-controls-proof/setup-proof.json; e2e/.out/a21-controls-proof/hidden-audience-cursor.log",
       "note": "Adds A21.7b tied server timestamps at events 100/101 through real visibility+expiry transaction; persisted publish/fork cursors; deterministic unseen events before reply/update cursor nonmovement; generated-note and empty-page needsReply; actual editor draft privacy. A21.5b was already independent and its stale header is corrected. A21.3 remains explicitly LOCAL because its access.changed path mails; this local-only campaign does not claim production audience coverage. Original timeout run classifications remain historical evidence to reconcile, not rewritten as passes. Current E2E and patched-stack controls remain pending."
+    },
+    {
+      "scope": "A12 coverage audit: withdrawal events, dedup controls, pinned versions and claim boundaries",
+      "checks": [
+        "Expanded A12.7 withdrawal-event scenario passes on B9",
+        "A12.4 and A12.4b pass on B9; historical content controls in progress"
+      ],
+      "evidence": "e2e/.out/2610142252-mia9/invocations/20261015T060216Z-p93683-kjcf/results.json",
+      "note": "Added exact withdrawal/remint events and viewer feed assertions, plus directional dedup/trust/menu/event controls. Removed an unmeasured operation-order claim from the case title; report interpretation now distinguishes DOM insertion from paint and the backend draft race from the client debounce trigger. Source work is not campaign closure."
     }
   ]
 }

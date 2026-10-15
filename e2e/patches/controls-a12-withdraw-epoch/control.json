@@ -3,7 +3,7 @@
   "what": "controls-a12-withdraw-epoch",
   "target": {
     "spec": "e2e/specs/functional/a12-versions.spec.mjs",
-    "case": "A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints first and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean",
+    "case": "A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean",
     "suite": "functional"
   },
   "stack": [],

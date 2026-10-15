@@ -1,0 +1,13 @@
+{
+  "oracle": "/publish?update= answers",
+  "what": "dedup-mint",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.1 an identical update is a no-op through /publish?update=, update_document and an editor's commit: the dedup answer, nothing minted or uploaded, global and personal trust kept; a changed update then withdraws both",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "/publish?update= answers"
+  }
+}

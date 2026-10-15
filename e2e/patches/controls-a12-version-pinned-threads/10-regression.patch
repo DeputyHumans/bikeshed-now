@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -451,7 +451,7 @@
+     if (!doc.currentVersion) return;
+     return listAnnotations(
+       docId,
+-      doc.currentVersion,
++      doc.meta?.currentVersion ?? doc.currentVersion,
+       (anns) => {
+         setAnnotationsUnreadable(false);
+         setAnnotations(anns);

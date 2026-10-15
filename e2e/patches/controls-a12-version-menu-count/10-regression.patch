@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -851,7 +851,7 @@
+     if (doc.versions.length > 1) {
+       entries.push({ id: "sep2", separator: true });
+       entries.push({ id: "h-versions", label: "Versions", heading: true });
+-      for (const v of [...doc.versions].reverse().slice(0, 8)) {
++      for (const v of [...doc.versions].reverse().slice(0, 9)) {
+         entries.push({
+           id: v.versionId,
+           label:

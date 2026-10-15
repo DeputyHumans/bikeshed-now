@@ -16,8 +16,8 @@
  *        (Open / Stay here); an unpinned reader follows to the new version
  *        and never sees the banner (useLiveSync.ts)
  *   12.3 (a second new version) the unpinned reader's next new version
- *        renders a stale "Open v2" banner for a render, which a slower CPU
- *        paints every time: X-a12-versions-3
+ *        must not insert a stale "Open v2" banner into the DOM, including
+ *        under CPU throttling: X-a12-versions-3 (no paint claim)
  *   12.4 restoring historical bytes creates a new current version through
  *        draft commit, MCP, upload and the real editor. Existing history is
  *        immutable; only a match with the current version is a no-op.
@@ -93,13 +93,14 @@ import { mintToken, openSession } from "../../lib/session.mjs";
 import { docIdFor, publish, publishOperator, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
 import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
-import { eventually, lineHunks } from "../../lib/assert.mjs";
+import { eventually } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { postThumb } from "../../lib/thumbs.mjs";
 import { runOperator } from "../../lib/operator.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
 import { rtdbAs } from "../../lib/rtdb.mjs";
+import { changeLog, settleLog } from "../../lib/changes.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -286,27 +287,6 @@ async function openThreads(docId, v) {
 
 function noPageErrors(users) {
   for (const u of users) assert.deepEqual(u.log.errors.map((e) => e.message), [], `${u.name}: uncaught page errors`);
-}
-
-/*
- * One uncaught page error is a product defect that A12.4 does not own, so it
- * is recorded in findings.jsonl rather than failing that case; any other
- * page error still fails it. app/src/crdt/rtdb.ts:26-38 calls `stop()` inside
- * the onValue callback whose return value `stop` is. When onValue raises its
- * first event before it returns (the page error's stack runs through onValue
- * itself), the read throws "Cannot access '<stop, minified>' before
- * initialization" through the RTDB SDK's user-callback guard. resolve() is
- * then never called, and useSharedDocument.ts:69 waits on that ready() for
- * good, so that editing session never binds its shared document. Seen in A9.9
- * (run 1rac), A10.4 (wr3h) and A12.4 (l7wb, 1 of 3 full runs, as an in-app
- * commit answered). It has no defect id or case of its own yet.
- */
-const LOG_READY_TDZ = /^Cannot access '([\w$]+)' before initialization$/;
-function isLogReadyTdz(u, e) {
-  const m = LOG_READY_TDZ.exec(e.message ?? "");
-  if (!m || !/\.onValue \(/.test(e.stack ?? "")) return false;
-  const guard = `Exception was thrown by user callback. ReferenceError: Cannot access '${m[1]}' before initialization`;
-  return u.log.console.some((c) => typeof c.text === "string" && c.text.includes("@firebase/database") && c.text.includes(guard));
 }
 
 // --- the viewer -------------------------------------------------------------------
@@ -592,11 +572,9 @@ scenario("A12.3 a reader pinned to an older version gets the newer-version banne
  * in an EFFECT, after the render in which an unpinned reader's shownVersion
  * has already moved on. So when a second new version lands, that render
  * compares the new shownVersion with the previous announcement ("v2" against
- * "v3") and renders "Open v2 / Stay here" until the effect catches up. On an
- * idle machine React usually commits both renders inside one scheduler time
- * slice and nothing paints; on a slower CPU the slice runs out between them
- * and the stale banner renders. The CPU throttle (the rate DevTools calls a
- * mid-tier phone) makes that the normal case rather than an occasional one.
+ * "v3") and inserts "Open v2 / Stay here" until the effect catches up.
+ * This oracle observes DOM insertion and layout visibility under CPU
+ * throttling. It does not establish that the browser painted the banner.
  */
 scenario("A12.3 (a second new version) an unpinned reader who followed one new version never sees the banner for the next one either, not even on a slower CPU", { tiers: BOTH, timeoutMs: 360_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner and a viewer; publish revision 1 and share it; the viewer reads /d/<doc> unpinned and watches every render for the banner");
@@ -1011,7 +989,7 @@ async function recordViewOf(session, docId, versionId) {
   return sessionId;
 }
 
-scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints first and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 480_000, ...STALLS }, async (ctx) => {
+scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 480_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner and a viewer; publish revision 1, share it, update to revision 2 (v2)");
   const { owner, accounts } = await castWithOwner(ctx, ["viewer"]);
   const ownerEmail = accounts[0].email.toLowerCase();
@@ -1035,11 +1013,15 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const logged = await live.put(`status/${docId}/y/${epoch}/withdrawalProbe`, "AAA=");
   precondition(logged.status === 200, `the owner wrote a retiring live-log entry: ${logged.status}`);
 
+  const initialEventCounts = { "version.published": 2, "access.changed": 1, "thread.opened": 1, "comment.added": 1 };
+  await settleLog(target, docId, initialEventCounts, { message: "withdrawal setup events" });
+
   /** Everything the withdrawal touches, as plain data. */
   const snapshot = async () => {
     const rec = await docRecord(docId);
     const views = Object.fromEntries((await readCollection(target, `docs/${docId}/views`)).map((r) => [r.id, r.data.versionId]));
     return {
+      events: plain(await changeLog(target, docId)),
       currentVersion: rec.currentVersion,
       liveEpoch: rec.liveEpoch ?? "initial",
       liveLog: await rtdbGet(target, `status/${docId}/y`),
@@ -1106,13 +1088,21 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const run = await deleteVersion(ctx, [...real, "--version", "v2", "--drop-draft", "--allow-annotations"], "real run");
   assert.equal(run.code, 0, `exit ${run.code}: ${scrub(run.stderr).slice(0, 300)}`);
   assert.ok(run.stdout.includes(`withdrew ${docId}/v2; currentVersion is now v1.`), "it says what it did");
+  await settleLog(target, docId, { ...initialEventCounts, "version.withdrawn": 1 }, { message: "exactly one withdrawal event" });
   const afterRun = await snapshot();
+  const withdrawals = afterRun.events.filter((event) => event.data.type === "version.withdrawn");
+  assert.deepEqual(withdrawals.map(({ data }) => pick(data, ["type", "audience", "version"])), [{ type: "version.withdrawn", audience: "readers", version: "v2" }], "withdrawal records the removed version exactly once for readers");
+  assert.deepEqual(afterRun.events.filter((event) => event.data.type !== "version.withdrawn"), before.events, "withdrawal preserves all preceding events");
+  const viewerMcp = await mcpFor(ctx, viewer, "viewer-withdrawal-mcp");
+  const feed = await viewerMcp.ok("get_changes", { id: docId, since: "all", includeMine: true });
+  assert.deepEqual(feed.events.filter((event) => event.type === "version.withdrawn").map((event) => pick(event, ["type", "version"])), [{ type: "version.withdrawn", version: "v2" }], "a viewer reads the withdrawal event through MCP");
   assert.match(afterRun.liveEpoch, /^[a-f0-9-]{36}$/, "withdrawal selects a fresh live epoch");
   assert.notEqual(afterRun.liveEpoch, before.liveEpoch, "withdrawal retires the previous live epoch");
   assert.equal((await rtdbGet(target, `editAccess/${docId}`))?.__liveEpoch, afterRun.liveEpoch, "withdrawal publishes the new live epoch to the edit-access mirror");
   ctx.ev.json("after", afterRun);
   const v1rec = await versionRecord(docId, "v1");
   assert.deepEqual(afterRun, {
+    events: afterRun.events,
     currentVersion: "v1",
     liveEpoch: afterRun.liveEpoch,
     liveLog: null,
@@ -1137,6 +1127,9 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const r3 = docHtml(title, 3);
   const re = await updateUpload(owner.http, docId, { body: r3, baseVersion: "v1", timeoutMs: HTTP_MS });
   assert.deepEqual({ status: re.status, ...pick(re.json, ["versionId", "deduped"]) }, { status: 200, versionId: "v2", deduped: false }, "the withdrawn id is re-used");
+  const remintedEvents = await settleLog(target, docId, { ...initialEventCounts, "version.published": 3, "version.withdrawn": 1 }, { message: "re-mint records one new publication" });
+  const newPublications = remintedEvents.filter(({ id }) => !afterRun.events.some((event) => event.id === id));
+  assert.deepEqual(newPublications.map(({ data }) => pick(data, ["type", "audience", "version"])), [{ type: "version.published", audience: "readers", version: "v2" }], "re-mint emits one new v2 publication after its withdrawal");
   assert.equal(sha(await versionObject(docId, "v2", "index.html")), sha(Buffer.from(r3)), "the new v2 holds the new bytes");
   assert.deepEqual({
     annotations: (await readCollection(target, `docs/${docId}/versions/v2/annotations`)).length,

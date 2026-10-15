@@ -1,0 +1,11 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -486,6 +486,8 @@
+   const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
+   const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
+   if (dup?.exists && dup.data()?.contentHash === contentHash) {
++    const grants = await docRef.collection("trust").get();
++    await Promise.all(grants.docs.map((grant) => grant.ref.delete()));
+     return {
+       versionId: dup.id,
+       contentHash,

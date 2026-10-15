@@ -1,0 +1,10 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1456,6 +1456,7 @@
+       const includeMine = args.includeMine === true;
+       const visible = page.filter((e) => {
+         const v = e.data();
++        if (v.type === "version.withdrawn") return false;
+         if (v.audience === "editors" && !editor) return false;
+         if (v.audience === "owner" && !owner) return false;
+         return includeMine || !causedBy(v.actor as EventActor | undefined, ctx.caller);
