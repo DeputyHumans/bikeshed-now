@@ -1173,7 +1173,9 @@ scenario("A8.8 with a personal token an approver's claim, release, accept and re
 function replacementFixture(kind) {
   if (kind === "deletion") return { n: 3, exact: "really", replacement: "", expected: "This sentence is quite important to the argument." };
   if (kind === "whitespace") return { n: 1, exact: Q[1].exact, replacement: " ", expected: "The quick brown fox jumps over the   near the riverbank." };
-  const replacement = `very lazy dog ${tag()}`;
+  // Retain the quote's right context so both the quote and its containing
+  // replacement resolve on retry. Changing both sides would skip that branch.
+  const replacement = `very ${tag()} lazy dog`;
   return { n: 1, exact: Q[1].exact, replacement, expected: TEXT[Q[1].id].replace(Q[1].exact, replacement) };
 }
 
@@ -1258,7 +1260,7 @@ scenario("A8.6e a failed draft save records no acceptance and retrying after rec
   try {
     const since = a.toastMark(), mark = posts.mark();
     await barButton(a, "Accept").click();
-    const failedSaveToast = await a.waitForToast(t => t.text === APP.unsaved || t.text === APP.endPublish, { since, timeout: CLIENT_MS });
+    const failedSaveToast = await a.waitForToast(t => t.kind === "error" || t.text === APP.endPublish, { since, timeout: CLIENT_MS });
     assert.equal(failedSaveToast.text, APP.unsaved, "failed saving is reported before any acceptance");
     assert.ok(failure.failed.length > 0, "the draft save was actually failed");
     assert.deepEqual(posts.filter(r => r.seq >= mark && isOp(r, "accept")), [], "no acceptance is sent after the failed draft save");
