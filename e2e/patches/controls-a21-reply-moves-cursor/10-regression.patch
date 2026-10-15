@@ -1,0 +1,6 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1713,2 +1713,3 @@
+       });
++      await startingCursor(ctx, ref, "always");
+       return { commentId: commentRef.id, threadId, documentId: ref.id };

@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.1 a browser thread, comment and resolve reach the owner's agent as thread.opened, comment.added (body and quote read from the source) and thread.resolved (by the resolver), once each, in recorded order; the log stores no body or address; an edited body reads edited, a deleted comment drops out",
+  "what": "Persist private comment authorEmail in the durable log instead of joining current source data.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.1 a browser thread, comment and resolve reach the owner's agent as thread.opened, comment.added (body and quote read from the source) and thread.resolved (by the resolver), once each, in recorded order; the log stores no body or address; an edited body reads edited, a deleted comment drops out",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "comment.added: the stored event holds the address"
+  }
+}

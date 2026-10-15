@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Strengthen change-feed coverage with a real tied page boundary, saved publish and fork cursors, unseen events before writes, generated-note and page-local reply checks, and existing-draft privacy. Classify evidenced emulator timeouts without suppressing extra events, and add directional regression controls.
+
 - Test debug-log limits at watchdog checks, including delayed-poll overshoot and bounded recovery, instead of assuming the scheduler guarantees a hard continuous size cap. Refresh the update-race amplifier for snapshot-bound draft loading.
 
 - Publish restored historical content as a new current version across draft, upload, MCP and operator paths; only content matching the current version is a no-op, so reverting an edit cannot silently discard the draft.

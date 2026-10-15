@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.7b equal-timestamp events straddling the 100-event boundary are returned once each in event-id order",
+  "what": "Drop the event-id half of the cursor, skipping its same-timestamp sibling on the next page.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.7b equal-timestamp events straddling the 100-event boundary are returned once each in event-id order",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the equal-timestamp boundary returns"
+  }
+}

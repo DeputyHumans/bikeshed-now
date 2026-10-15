@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.6 needsReply names only open threads on the current version whose latest comment a person wrote in the browser: never an agent's thread or reply, a resolved thread, or an older version's",
+  "what": "Allow resolved threads to ask for a reply.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.6 needsReply names only open threads on the current version whose latest comment a person wrote in the browser: never an agent's thread or reply, a resolved thread, or an older version's",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^needsReply: T3's latest comment"
+  }
+}

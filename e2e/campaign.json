@@ -8852,7 +8852,7 @@
     },
     {
       "id": "X-c12-agent-vs-editors-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G01-mint-races",
       "classification": "P",
@@ -8887,7 +8887,11 @@
           "caseId": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs::C12c race (SYNC-P, amplify-c08-mint-races): the agent's update passes the editors question while nobody edits and is held; editors then open the editor, type and save on v1; the update is let go and publishes; once they have left, the next editor to open the editor sees the agent's version",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "status": "implemented and N2/trials1 regression passed; full matrix and applicable product control pairs pending",
+        "evidence": "e2e/.out/2610142210-0t7t/invocations/20261015T053525Z-p1625-gsk6/results.json"
+      }
     },
     {
       "id": "S18",
@@ -9603,7 +9607,7 @@
     },
     {
       "id": "S27",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G04-crdt-binding",
       "classification": "P",
@@ -9645,7 +9649,11 @@
           "caseId": "e2e/specs/functional/a11-live.spec.mjs::A11.7 a non-member joining a public open-editing document while a member edits leaves one sentinel and receives the member's keys",
           "n": null
         }
-      ]
+      ],
+      "implementation": {
+        "status": "implemented and N2/trials1 regression passed; full matrix and applicable product control pairs pending",
+        "evidence": "e2e/.out/2610142210-0t7t/invocations/20261015T053525Z-p1625-gsk6/results.json"
+      }
     },
     {
       "id": "S17",
@@ -9677,7 +9685,7 @@
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so every save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
+          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so each initial save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
           "n": 2
         },
         {
@@ -9697,7 +9705,7 @@
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so every save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
+          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so each initial save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
           "n": 5
         },
         {
@@ -9717,7 +9725,7 @@
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so every save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
+          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so each initial save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
           "n": 10
         },
         {
@@ -9737,7 +9745,7 @@
           "n": 20
         },
         {
-          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so every save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
+          "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency: with every client→database byte held past the debounce, everyone types and presses Done at once, so each initial save after Done lacks another editor's last keys; the version the agent's commit_draft publishes still holds every token anybody saved (I2)",
           "n": 20
         },
         {
@@ -9811,7 +9819,7 @@
     },
     {
       "id": "X-c05-structure-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "grouped",
       "group": "G05-draft-last-writer-wins",
       "classification": "U (P pending W2 minimal repro + 2 skeptics; becomes Q if G1 reads spec.md:748-750 'an edit' as a local edit only)",
@@ -9846,7 +9854,11 @@
           "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C5 delete a paragraph while N−1 type into it: once everyone has left the editor, the saved draft, what each of them then reads, and the version an agent's commit_draft then publishes have lost the paragraph and every token typed into it too (I4)",
           "n": 20
         }
-      ]
+      ],
+      "implementation": {
+        "status": "implemented and N2/trials1 regression passed; full matrix and applicable product control pairs pending",
+        "evidence": "e2e/.out/2610142210-0t7t/invocations/20261015T053525Z-p1625-gsk6/results.json"
+      }
     },
     {
       "id": "X-c01-typing-2",
@@ -13868,6 +13880,34 @@
         "controls-a12-historical-operator-transaction"
       ],
       "note": "Resolve the reported ambiguity against demonstrated data loss: compare only with current content. Restoring an earlier hash now mints a new version and retains history. Baseline observations remain unchanged; no E2E closure."
+    },
+    {
+      "kind": "e2e-promotion-observation",
+      "items": [
+        "S27",
+        "X-c05-structure-1",
+        "S17",
+        "X-c12-agent-vs-editors-1"
+      ],
+      "scope": "local B7 immutable 152a84e; N2/trials1 only",
+      "tests": [
+        "Nine selected work/judge cases pass with zero failures, inconclusive results or TODOs; 27 other-N skips",
+        "Seven former defect declarations promoted only after observed passing assertions",
+        "Twelve control selection/directory selftests pass"
+      ],
+      "evidence": "e2e/.out/2610142210-0t7t/invocations/20261015T053525Z-p1625-gsk6/results.json",
+      "note": "Fixtures now follow immutable version storage pointers, compare authored reader DOM while retaining persisted decoration/root-attribute checks, and retry Done/Accept only after explicit causal draftChanged refusal and merged save. Every accepted replacement/token and final epoch outcome remains asserted. Initial attempts exposed stale fixture assumptions; all original results retained. Exact C06 title now specifies initial snapshots. Scratch oracle controls, broad matrix and current-revision product control pairs remain pending; no item closure."
+    },
+    {
+      "scope": "A21 deep coverage observations 01–11; current-source harness and unit proof only",
+      "checks": [
+        "34 backend event tests pass",
+        "9 setup and function-kill classification selftests pass",
+        "17 distinct product mutations compile and fail focused backend assertions; hidden-cursor mutation separately fails own-event and other-audience tests",
+        "2 harness mutations fail cutoff/kill-judge wiring assertions"
+      ],
+      "evidence": "e2e/.out/a21-controls-proof/proof.json; e2e/.out/a21-controls-proof/setup-proof.json; e2e/.out/a21-controls-proof/hidden-audience-cursor.log",
+      "note": "Adds A21.7b tied server timestamps at events 100/101 through real visibility+expiry transaction; persisted publish/fork cursors; deterministic unseen events before reply/update cursor nonmovement; generated-note and empty-page needsReply; actual editor draft privacy. A21.5b was already independent and its stale header is corrected. A21.3 remains explicitly LOCAL because its access.changed path mails; this local-only campaign does not claim production audience coverage. Original timeout run classifications remain historical evidence to reconcile, not rewritten as passes. Current E2E and patched-stack controls remain pending."
     }
   ]
 }

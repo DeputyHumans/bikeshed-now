@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.4 \"last\" with nothing saved answers from the start with resumedFrom:\"start\", then resumes exactly where the credential left off; a write moves no cursor; get_document starts one only when none is saved; \"all\" returns the whole log",
+  "what": "Make an ordinary reply advance past earlier unseen changes.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.4 \"last\" with nothing saved answers from the start with resumedFrom:\"start\", then resumes exactly where the credential left off; a write moves no cursor; get_document starts one only when none is saved; \"all\" returns the whole log",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^and moves none"
+  }
+}

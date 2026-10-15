@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -627,3 +627,3 @@
+         // publish. Saved as "last" only if this credential has none for it.
+-        cursor: await startingCursor(ctx, ref, "ifNone"),
++        cursor: await startingCursor(ctx, ref, "always"),
+         // Ahead of the source, not after it: an agent reads this result as JSON

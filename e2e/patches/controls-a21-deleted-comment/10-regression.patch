@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1492,3 +1492,3 @@
+             const c = (await read(`${threadPath(v.version, v.threadId)}/comments/${v.commentId}`)).data();
+-            if (!c) continue; // deleted by its author: gone from the feed too
++            if (!c) { events.push(Object.assign(out, { commentId: v.commentId, body: null })); continue; }
+             Object.assign(out, { commentId: v.commentId, by: c.authorEmail, body: c.body });

@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1538,3 +1538,3 @@
+       const needsReply: string[] = [];
+-      for (const threadId of new Set(events.filter((e) => e.version === current && e.threadId).map((e) => String(e.threadId)))) {
++      for (const threadId of (await ref.collection("versions").doc(current).collection("annotations").get()).docs.map((doc) => doc.id)) {
+         const thread = (await read(threadPath(current, threadId))).data();
