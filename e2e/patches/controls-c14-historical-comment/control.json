@@ -1,0 +1,13 @@
+{
+  "oracle": "historical browser feedback and version clarity",
+  "what": "controls-c14-historical-comment",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "historical browser feedback remains permitted on the selected version"
+  }
+}

@@ -895,7 +895,10 @@ scenario("A7.6 twenty pending suggestions per author per version: the twenty-fir
 scenario("A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers Comment only, the head offers Suggest edit", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, owner, accounts, others } = await setup(ctx, { roles: [{ as: "suggester", role: "suggester" }], name: "a77-version", title: "A7.7 versions" });
   const [sugSession] = others;
-  ctx.step("the owner publishes v2 over v1");
+  const [s] = await browsers(ctx, [accounts[1]], ["suggester"]);
+  await openDoc(s, docId, { v: "v1" });
+  await s.selectText("#sg-2", "harbour lights");
+  ctx.step("the owner publishes v2 while the reader is selecting a passage on pinned v1");
   const body = suggestionDoc({ title: "A7.7 versions", sg1: "The quick <em>brown</em> fox jumps over the lazy dog near the old riverbank." });
   const { out: v2, landed: v2Landed } = await untilLanded(ctx, "POST /publish?update (v2)", () => updateUpload(owner.http, docId, { body, baseVersion: "v1", timeoutMs: HTTP_MS }), async () => {
     const d = await readDoc(target, `docs/${docId}`);
@@ -912,10 +915,27 @@ scenario("A7.7 a suggestion on a version that is no longer current is 409 with c
   assert.deepEqual({ status: fresh.status, versionId: fresh.json?.versionId }, { status: 200, versionId: "v2" });
 
   ctx.step("in the app: reading v1 the toolbar offers Comment only; on the head it offers Suggest edit");
-  const [s] = await browsers(ctx, [accounts[1]], ["suggester"]);
-  await openDoc(s, docId, { v: "v1" });
+  await eventually(() => s.page.getByText("A newer version has been published.", { exact: true }).isVisible(), { timeout: SLOW, message: "pinned historical reader sees the newer-version notice" });
+  assert.equal(await s.page.getByRole("button", { name: "Open v2", exact: true }).isVisible(), true, "the historical reader is offered the new version");
+  assert.equal(await s.page.locator(".viewer-toolbar .chip").filter({ hasText: /^v1$/ }).count(), 1, "the comment target remains visibly v1");
   await s.selectText("#sg-2", "harbour lights");
   const onOld = await fabLabels(s);
+  const headBefore = await owner.http.get(`/content/${docId}/v2/index.html`);
+  assert.equal(headBefore.status, 200);
+  const historicalBody = "A comment deliberately left on the version I am reading.";
+  await s.comment(historicalBody, { timeout: SLOW, retryServiceError: 2, reselect: () => s.selectText("#sg-2", "harbour lights") }).catch((error) => {
+    if (error.stackCut) throw error;
+    assert.fail(`historical browser comment is accepted: ${error.message}`);
+  });
+  const historical = (await annotationsOf(docId, "v1")).find((a) => a.data.anchor?.exact === "harbour lights");
+  assert.ok(historical, "the historical comment stays on its selected v1 passage");
+  assert.equal(historical.data.anchor.elementId, "sg-2");
+  const messages = await readCollection(target, `docs/${docId}/versions/v1/annotations/${historical.id}/comments`);
+  assert.deepEqual(messages.map((row) => row.data.body), [historicalBody], "the historical comment body stays on v1");
+  assert.equal((await annotationsOf(docId, "v2")).some((a) => a.id === historical.id), false, "a historical thread is never silently moved to the head");
+  const headAfter = await owner.http.get(`/content/${docId}/v2/index.html`);
+  assert.equal(headAfter.status, 200);
+  assert.deepEqual(headAfter.buffer, headBefore.buffer, "historical feedback does not change current bytes");
   await openDoc(s, docId);
   await s.selectText("#sg-2", "harbour lights");
   const onHead = await fabLabels(s);

@@ -27,8 +27,10 @@
  *             suggestion on the current one is pending, through ANY account
  *             channel"; §19 a thread "holds back a new version saved in the
  *             app"; §22 a suggestion "is never left behind on a version nobody
- *             reads"): once a version is current, nothing open is left on an
- *             older one, and every thread a caller was told it opened is where
+ *             reads"): current-only MCP comments and suggestions cannot race
+ *             past publication onto a retired head. Browser comments target
+ *             the explicitly displayed version, including a historical one;
+ *             they retain that version, passage and body. Every thread is where
  *             it was told. The publish is the in-app mint (commitDraft, as the
  *             owner's agent's commit_draft) or the update mint (reviseDocument:
  *             update_document, POST /publish?update=), whose own guard and
@@ -61,6 +63,8 @@
  *             TAB (X-c13-feedback-1): v2 is published, then N tabs that still
  *             show v1 open a thread each on v1, in order; it is the losing
  *             side of a web thread racing the commit, made deterministic.
+ *             Historical browser feedback is intentional; its fidelity oracle
+ *             replaces the contradictory no-old-open-thread expectation.
  *               Against reviseDocument (comments are exempt there, SPEC §19:
  *             "holds back a new version saved in the app, but not
  *             update_document"): UPDATE SYNC-T: N suggestions and the owner's
@@ -151,6 +155,7 @@ import { shareMany } from "../../lib/grant.mjs";
 import { grantEditors } from "../../lib/live.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { settleStill } from "../../lib/assert.mjs";
+import { assertBrowserFeedback } from "../../lib/feedback-oracles.mjs";
 import { requireConclusive, syncHttp } from "../../lib/sync.mjs";
 import { gates, holdCalls } from "../../lib/gates.mjs";
 import { ACCEPT, DEFAULT_PROTOCOL, parseMcpBody, toolOutcome } from "../../lib/mcp.mjs";
@@ -405,7 +410,7 @@ const answerOf = (c, out) => ({ who: c.who, what: c.name, status: 200, isError: 
  */
 function webThreadCall(who, web, acct, { docId, versionId, k }) {
   const w = webAnnotationWrite(web.fs, acct, { docId, versionId, anchor: anchorOf(k) });
-  const made = { threadId: w.annId, version: versionId };
+  const made = { threadId: w.annId, version: versionId, expectedAnchor: { elementId: anchorOf(k).elementId, exact: anchorOf(k).exact } };
   return {
     who,
     what: "web thread",
@@ -424,8 +429,10 @@ async function webThreads(ctx, s, versionId, label) {
     s.feedback.map(async (a, i) => {
       const who = `${a.name}-tab`;
       try {
-        const r = await webThread(s.web.fs, s.owner.account, { docId: s.docId, versionId, anchor: anchorOf(WEB_FROM + i + 1), body: `C14 ${s.tag}: ${label}, ${who} on paragraph ${WEB_FROM + i + 1}` });
-        return { who, what: "web thread", status: 200, isError: false, text: "committed", json: { threadId: r.annId, version: versionId } };
+        const anchor = anchorOf(WEB_FROM + i + 1);
+        const body = `C14 ${s.tag}: ${label}, ${who} on paragraph ${WEB_FROM + i + 1}`;
+        const r = await webThread(s.web.fs, s.owner.account, { docId: s.docId, versionId, anchor, body });
+        return { who, what: "web thread", status: 200, isError: false, text: "committed", json: { threadId: r.annId, version: versionId, expectedAnchor: { elementId: anchor.elementId, exact: anchor.exact }, expectedBody: body } };
       } catch (err) {
         if (err?.code !== "E2E_WEB_WRITE") throw err;
         return { who, what: "web thread", status: err.result?.status ?? null, isError: true, text: err.message, json: null };
@@ -639,7 +646,8 @@ async function feedbackState(docId) {
       const kind = a.data.suggestion ? "suggestion" : "comment";
       const state = a.data.suggestion?.state ?? null;
       const resolved = a.data.resolved === true;
-      threads.push({ version: v, annId: a.id, kind, channel: a.data.actor?.channel ?? null, resolved, state, open: kind === "suggestion" ? state === "pending" : !resolved });
+      const bodies = a.data.actor?.channel === "web" ? (await readCollection(target, `docs/${docId}/versions/${v}/annotations/${a.id}/comments`)).map((comment) => comment.data.body) : [];
+      threads.push({ version: v, annId: a.id, kind, channel: a.data.actor?.channel ?? null, resolved, state, open: kind === "suggestion" ? state === "pending" : !resolved, anchor: { elementId: a.data.anchor?.elementId, exact: a.data.anchor?.exact }, bodies });
     }
   }
   threads.sort((x, y) => (x.version + x.annId < y.version + y.annId ? -1 : 1));
@@ -647,7 +655,6 @@ async function feedbackState(docId) {
 }
 
 const AGENT_COMMENT = (t) => t.kind === "comment" && t.channel === "mcp";
-const WEB_THREAD = (t) => t.kind === "comment" && t.channel === "web";
 const SUGGESTION = (t) => t.kind === "suggestion";
 const threadLabel = (t) => `${t.kind} ${t.annId} on ${t.version} (${t.channel ?? "no channel"})`;
 const stateLine = (state) => `current ${state.current}; threads: ${state.threads.map((t) => `${t.kind[0]}${t.channel === "web" ? "w" : ""}:${t.version}${t.open ? "" : "(closed)"}`).join(" ") || "none"}`;
@@ -756,12 +763,16 @@ scenario("C14 judge (SYNC-T, agent comments): when the commit published, no thre
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => c14SyncJudge(ctx, AGENT_COMMENT, "add_comment threads (S12)"));
 
-scenario("C14 judge (SYNC-T, web threads): when the commit published, no thread opened in the browser in the race is left unresolved on the version it replaced", {
+scenario("C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it", {
   tiers: BOTH,
   n: N,
-  defect: "X-c13-feedback-1",
-  timeoutMs: JUDGE_MS,
-}, async (ctx) => c14SyncJudge(ctx, WEB_THREAD, "web threads (X-c13-feedback-1)"));
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
+}, async (ctx) => {
+  if (!observed.has(keyOf("C14 SYNC-T", ctx))) await c14SyncWork(ctx);
+  const { state, answers } = observation(ctx, "C14 SYNC-T", "state");
+  assertBrowserFeedback(state, answers);
+});
 
 /** C14 comment held: the work (S12's judge reads it). */
 async function c14CommentHeldWork(ctx) {
@@ -918,12 +929,17 @@ async function c14StaleTabWork(ctx) {
     const commit = answerOf({ who: "publisher", name: "commit_draft" }, await s.publisher.mcp.call("commit_draft", { id: s.docId }));
     ctx.step(`commit: ${brief(commit)}`);
     precondition(commitOk(commit) && commit.json.versionId === "v2", `with nothing open on v1, the owner's agent's commit_draft publishes v2 (${brief(commit)})`);
+    const headBefore = await s.owner.http.get(`/content/${s.docId}/v2/index.html`);
+    precondition(headBefore.status === 200, "the published v2 content is readable before historical feedback");
     ctx.step(`v2 is current; ${ctx.n} tab(s) of the owner that still show v1 each open a thread on it, as the app's createAnnotation and addComment write them (through the rules)`);
     const threads = await webThreads(ctx, s, "v1", "a tab still showing v1");
     obs.stage = "fired";
     ctx.step(`web threads: ${threads.map(brief).join("; ")}`);
     const state = await settleStill(() => feedbackState(s.docId), { what: "C14 threads and versions", step: stepOf(ctx) });
     ctx.ev.json("state", state);
+    const headAfter = await s.owner.http.get(`/content/${s.docId}/v2/index.html`);
+    assert.equal(headAfter.status, 200, "historical feedback keeps the current version readable");
+    assert.deepEqual(headAfter.buffer, headBefore.buffer, "historical feedback does not change current bytes");
     obs.state = { state, answers: threads };
     obs.stage = "measured";
     record(ctx, { ref: "C14 stale tab", current: state.current, landed: landedBy(state), refused: threads.filter((a) => a.isError).length });
@@ -941,15 +957,16 @@ scenario("C14 stale tab: v2 is published, then N browser tabs that still show v1
   inconclusiveOnStackTimeout: true,
 }, c14StaleTabWork);
 
-scenario("C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced", {
+scenario("C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content", {
   tiers: BOTH,
   n: N,
-  defect: "X-c13-feedback-1",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C14 stale tab", ctx))) await c14StaleTabWork(ctx);
   const { state, answers } = observation(ctx, "C14 stale tab", "state");
   ctx.step(`${stateLine(state)}; the tabs were told: ${answers.map((a) => (a.isError ? "refused" : a.json?.version)).join(", ")}`);
-  assertNoneLeftBehind(state, { pick: WEB_THREAD, what: "web threads opened on a replaced version (X-c13-feedback-1)" });
+  assertBrowserFeedback(state, answers);
 });
 
 // --- C14 against the update mint path (reviseDocument) ------------------------------------------

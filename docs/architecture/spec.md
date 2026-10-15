@@ -674,6 +674,13 @@ The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`.
 Because it is same-origin, the parent app drives annotation directly on
 `iframe.contentDocument`. **The proxy injects nothing.**
 
+A browser comment belongs to the version the frame displays, including an
+explicitly selected historical version. Its passage and body stay there when
+a newer version is published; historical feedback does not rewrite current
+content or retroactively veto a completed publication. A pinned reader sees
+the newer-version notice and may stay to comment on the version shown.
+MCP `add_comment` selects the current head and rechecks it atomically (§19).
+
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
   `dom-anchor-text-position` as the fallback, both scoped to the **nearest

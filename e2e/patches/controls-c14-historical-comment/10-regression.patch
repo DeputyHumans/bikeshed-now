@@ -1,0 +1,6 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -213,2 +213,3 @@
+           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
++            && versionId == docData(docId).currentVersion
+             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])

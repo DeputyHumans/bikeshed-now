@@ -11201,20 +11201,23 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced",
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content",
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced",
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content",
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced",
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content",
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced",
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content",
           "n": 20
+        },
+        {
+          "caseId": "e2e/specs/functional/a07-suggestions.spec.mjs::A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers Comment only, the head offers Suggest edit"
         }
       ]
     },
@@ -13801,6 +13804,25 @@
         "controls-c01-late-autosave"
       ],
       "note": "Observed red/restored green pairs, not closure on the final acceptance revision. Full B7 self-test had 1220 pass and three patch applicability failures. A sweep enumerated stale mutation contexts so all can be refreshed without weakening assertions. No campaign item closed."
+    },
+    {
+      "kind": "spec-alignment-observation",
+      "items": [
+        "X-c13-feedback-1"
+      ],
+      "scope": "intentional historical browser feedback; E2E/control pairs pending",
+      "tests": [
+        "Seven historical-feedback oracle selftests pass",
+        "Four isolated oracle regressions and the exact newer-notice suppression mutation fail assertions",
+        "Three E2E controls apply to their declared standalone cases"
+      ],
+      "evidence": "e2e/.out/historical-feedback-controls-7zApBd/proof.json",
+      "controls": [
+        "controls-a07-historical-comment",
+        "controls-a07-historical-notice",
+        "controls-c14-historical-comment"
+      ],
+      "note": "Browser comments explicitly name the displayed version, including historical versions already supported by A7.7; requiring every new thread on the current head would remove intentional review behavior. SPEC section6 now states version/passage/body fidelity and unchanged current bytes. C13 web judges enforce that contract, and A7.7 now posts a real historical UI comment while observing the pinned-reader version notice. Baseline titles and observations remain historical; only requiredCase mappings change. No browser rules change or E2E closure."
     }
   ]
 }
