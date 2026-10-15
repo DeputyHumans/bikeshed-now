@@ -1,8 +1,6 @@
 --- a/scripts/lib/withdraw-version.mjs
 +++ b/scripts/lib/withdraw-version.mjs
-@@ -54,12 +54,7 @@
-     }
-     tx.update(docRef, update);
+@@ -60,8 +60,3 @@
      if (data.visibility === 'public') {
 -      tx.update(publicRef, {
 -        currentVersion: plan.repoint, liveEpoch, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html',
@@ -12,5 +10,3 @@
 -      });
 +      // Leave the old public pointer behind.
      } else if (projection.exists) tx.delete(publicRef);
-     return { retiredEpoch, draftPrefix };
-   });

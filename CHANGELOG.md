@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep operator historical-deduplication, withdrawal epoch and public-projection controls applicable after acknowledgement recovery, preserving each original mutation.
+
 - Require complete projection-failure, endpoint acknowledgement-loss and operator acknowledgement-loss runs in the E2E acceptance matrix, preserving every original axis and recording the new transaction-retry defect family without premature closure.
 
 - Exercise actual Firestore commit acknowledgement loss through a document-keyed local fault capability. Seven endpoint and operator cases check successful receipts, retained exact bytes and completed retirement after native SDK retries; fifteen directional controls cover false refusals, lost objects and skipped cleanup. Confine the separate projection fault to its marked fixture so whole-area capability runs remain valid.
