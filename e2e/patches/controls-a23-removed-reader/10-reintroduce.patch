@@ -1,11 +1,7 @@
 --- a/functions/src/email/notify.ts
 +++ b/functions/src/email/notify.ts
-@@ -69,7 +69,7 @@
-     const grant = visibilityOf(doc) === "unlisted" && !isMember(doc, uid, emailLower)
-       ? await tx.get(linkGrantRef(docRef, uid))
+@@ -73,3 +73,3 @@
        : null;
 -    if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) })) return false;
 +    if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) }) && false) return false;
-     if (isExpired(doc, now) && !canManageSharing(doc, emailLower)) return false;
-
-     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+     if (isExpired(doc, Date.now()) && !canManageSharing(doc, emailLower)) return false;

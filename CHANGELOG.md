@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep membership race gates, PKCE spending, email cooldown and retired-head comment controls applicable after native acknowledgement recovery; preserve each fault and validate the capability combinations.
+
 - Keep the retired-head suggestion and unwritten thread-flip controls effective after native acknowledgement recovery, preserving their original faults and E2E targets.
 
 - Retain the existing verification race gates and reading-statistics regression controls after native retry recovery, preserving their original faults and assertions in either capability order.

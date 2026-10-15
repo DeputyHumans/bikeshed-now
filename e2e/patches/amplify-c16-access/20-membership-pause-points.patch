@@ -1,43 +1,27 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -41,6 +41,7 @@
+@@ -41,2 +41,3 @@
  import { EMPTY_TEAM_INDEX, referencedTeamIds, type TeamIndex } from "./teams";
- import { syncPresenceAccess } from "./presence";
- import { syncPublicProjection } from "./publicdoc";
 +import { e2eAccessGate } from "./e2eAccessGate";
- 
- type Db = admin.firestore.Firestore;
- 
-@@ -364,10 +365,12 @@
-     const ref = db.collection("folders").doc(folderId);
-     const result = await persistFolderMembership(db, ref);
+ import { syncPresenceAccess } from "./presence";
+@@ -383,2 +384,3 @@
      if (!result) continue;
 +    await e2eAccessGate("subtree-before-docs-read", folderId);
      // The traversal only discovers ids. Each write rereads its current node,
-     // parent and teams, so an older traversal cannot restore revoked access.
+@@ -386,3 +388,4 @@
      const docs = await db.collection("docs").where("folderId", "==", folderId).get();
 -    for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
 +    await e2eAccessGate("subtree-docs-before-write", folderId);
 +    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, true);
      const children = await db.collection("folders").where("parentId", "==", folderId).get();
-     for (const child of children.docs) queue.push(child.id);
-   }
-@@ -386,7 +389,10 @@
-   /** Apply a delta to the transaction's current record, never a caller's snapshot. */
-   change: (data: admin.firestore.DocumentData) => Record<string, unknown> = () => ({}),
+@@ -405,3 +408,6 @@
    events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
 +  e2eFromCascade = false,
  ): Promise<Membership> {
 +  // Pause outside pessimistic locks; deterministic conflict retries have unit coverage.
 +  if (!e2eFromCascade) await e2eAccessGate("doc-membership-before-write", docRef.id);
-   const membership = await db.runTransaction(async (tx) => {
-     const snap = await tx.get(docRef);
-     if (!snap.exists) throw new Error("document no longer exists");
-@@ -409,6 +415,7 @@
-     for (const event of events(next, before, previous)) addEvent(tx, docRef, event);
-     return next;
-   });
+   const receipt = change ? freshReceiptId() : null;
+@@ -437,2 +443,3 @@
+   if (receipt) await clearReceipt(docRef, receipt);
 +  if (!e2eFromCascade) await e2eAccessGate("doc-mirror-before-write", docRef.id);
    await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
-   await syncPublicProjection(db, docRef.id);
-   return membership;
