@@ -960,6 +960,44 @@ scenario("C6-serial positive control: the same typing and Done inside the deboun
   await c6Serial(ctx, ctx.n);
 });
 
+scenario("C6 a timed-out Done from a replaced frame cannot change its new editing session", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users, owner } = await join(ctx, { n: 2, title: "C6 replaced editing frame" });
+  const [writer, peer] = users;
+  const tokens = tokenLog(ctx.target.runId);
+  const oldToken = tokens.next(writer.name, paragraph(0));
+  const newToken = tokens.next(writer.name, paragraph(1));
+  const held = holdRequests(writer.page, isDraftPost, 1, { method: "POST", timeoutMs: 15_000 });
+  try {
+    await held.installed;
+    await typeTokens(writer, paragraph(0), [oldToken]);
+    const since = writer.toastMark();
+    const started = Date.now();
+    await clickDone(writer);
+    await held.held;
+    // A real iframe navigation replaces the editing Document while retaining
+    // this DocViewer and its pending Done. If another save advances the pinned
+    // draft meanwhile, use the product's explicit Reload draft recovery.
+    const oldFrame = await writer.frame();
+    const loaded = await oldFrame.goto(oldFrame.url(), { timeout: 20_000 });
+    if (loaded?.status() === 409) await writer.page.getByRole("button", { name: "Reload draft", exact: true }).click({ timeout: 10_000 });
+    else assert.equal(loaded?.status(), 200, "C6 stale Done: the replacement frame loads the pinned draft");
+    await writer.awaitEdit({ waitShared: true, timeout: 20_000 });
+    await writer.typeAndAutosave(idSelector(paragraph(1)), newToken, { delay: KEY_DELAY_MS, at: "end", timeout: 20_000 });
+    precondition(Date.now() - started < 28_000, "the replacement frame saves before the old Done deadline");
+    await sleep(Math.max(0, started + 31_000 - Date.now()));
+    assert.equal(await writer.saveState(), "saved", "C6 stale Done: an old deadline must not replace the new session's Saved state");
+    assert.deepEqual(writer.toastsSince(since).filter((toast) => toast.kind === "error" && /not fully saved and shared/.test(toast.text)), [],
+      "C6 stale Done: a replaced frame's completion must not report its old error");
+    const released = await held.release();
+    assert.equal(released.records[0].status, 200, "C6 stale Done: the dominated old snapshot is acknowledged without replacing the newer draft");
+    assert.equal(await writer.page.getByRole("toolbar", { name: "Formatting" }).count(), 1, "C6 stale Done: an old completion must not close the replacement frame's editor");
+    const durable = await readDraft(owner, docId);
+    assert.ok(durable.includes(oldToken) && durable.includes(newToken), "C6 stale Done: the new saved session keeps both acknowledged edits");
+    await clickDone(writer); await editorClosed(writer);
+    await clickDone(peer); await editorClosed(peer);
+  } finally { await held.unroute(); }
+});
+
 scenario("C6 a timed-out Done from another document cannot change the replacement editor or report its failure there", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
   const { docId, users, owner } = await join(ctx, { n: 2, title: "C6 old Done session" });
   const [writer, peer] = users;
@@ -975,8 +1013,8 @@ scenario("C6 a timed-out Done from another document cannot change the replacemen
     const started = Date.now();
     await clickDone(writer);
     await held.held;
-    // Keep this JavaScript realm alive: a real SPA navigation reuses the
-    // viewer instance, unlike page.goto/reload which would kill the old timer.
+    // Keep this JavaScript realm alive: SPA navigation unmounts the keyed
+    // viewer, but its pending Done still finishes unless explicitly cancelled.
     await writer.page.evaluate((id) => {
       history.pushState({}, "", `/d/${encodeURIComponent(id)}`);
       dispatchEvent(new PopStateEvent("popstate", { state: {} }));
