@@ -145,6 +145,13 @@ test("operatorEnv: the stack's HOME (never the user's), its emulators, a dummy A
   assert.throws(() => operatorEnv({ ...t, kind: "prod" }), /local stack only/);
 });
 
+test("operatorEnv forwards only its stack gate and refuses gate overrides", () => {
+  const t = localTarget(record({ options: { gates: true }, ports: { ...PORTS, gate: 36123 }, aux: { gates: true }, processes: [{ name: "aux" }] }));
+  assert.equal(operatorEnv(t).E2E_GATE_URL, "http://127.0.0.1:36123");
+  assert.equal(operatorEnv(localTarget(record())).E2E_GATE_URL, undefined);
+  assert.throws(() => operatorEnv(t, { extra: { E2E_GATE_URL: "http://127.0.0.1:36124" } }), /cannot be overridden/);
+});
+
 test("verifyBuild refuses a build an --app-env value never reached", () => {
   const tree = join(work, "build-tree");
   mkdirSync(join(tree, "app", "dist", "assets"), { recursive: true });

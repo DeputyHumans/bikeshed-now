@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -483,3 +483,3 @@
+         const current = (await tx.get(docRef)).data();
+-        if (retirementMayHaveCommitted && current?.liveEpoch === retirementEpoch) return;
++        if (false && retirementMayHaveCommitted && current?.liveEpoch === retirementEpoch) return;
+         checkDraftBase(current, baseVersion);

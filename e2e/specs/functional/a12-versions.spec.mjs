@@ -38,6 +38,11 @@
  *        withdrawn version, so an anonymous reader of a public document loads
  *        a version that no longer exists: X-a12-versions-1
  *
+ *   12.8 a marked postcommit projection failure preserves the successful draft response and exact bytes.
+ *   12.9 native commit acknowledgement loss preserves remembered-link drafts,
+ *        minted/deduplicated versions, and thumbnail cover/slides; actual
+ *        committed state precedes loss and the installed SDK retries once.
+ *
  * A loaded shared stack answers late: inside one failed run of this file on
  * wr3h, POST /publish took 11 s, POST /access 12 s, POST /publish?update= 24 s,
  * POST /draft 11 s and 22 s, POST /commit 22 s, and a page's Firestore Listen
@@ -96,12 +101,13 @@ import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readColle
 import { eventually } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
-import { postThumb } from "../../lib/thumbs.mjs";
+import { postThumb, jpegSkeleton, thumbPath } from "../../lib/thumbs.mjs";
 import { runOperator } from "../../lib/operator.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
 import { rtdbAs } from "../../lib/rtdb.mjs";
 import { changeLog, settleLog } from "../../lib/changes.mjs";
-import { logFile, logMark, readLog } from "../../lib/logs.mjs";
+import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { gates, requireHeld } from "../../lib/gates.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -191,7 +197,7 @@ scenario("A12.8 a failed postcommit projection refresh still returns 200 for the
   tiers: ["local"], needs: ["admin-emulator", "logs", "patch:a12-projection-unavailable"], timeoutMs: 180_000, ...STALLS,
 }, async (ctx) => {
   const { owner } = await castWithOwner(ctx, []);
-  const title = `Projection fault ${tag()}`;
+  const title = `E2E_PROJECTION_FAULT: ${tag()}`;
   const docId = await publishDoc(ctx, owner, { title, name: "a12-projection" });
   const visibility = await setVisibility(target, { owner, doc: docId, visibility: "public", timeoutMs: HTTP_MS });
   precondition(visibility.status === 200, "the public projection exists before saving the draft");
@@ -203,7 +209,7 @@ scenario("A12.8 a failed postcommit projection refresh still returns 200 for the
   const response = await owner.http.postJson("/draft", { docId, baseVersion: "v1", liveEpoch: before.liveEpoch ?? "initial", html }, { timeoutMs: HTTP_MS })
     .catch((error) => ({ status: null, json: undefined, error: String(error?.message ?? error) }));
   const marker = `E2E_PROJECTION_UNAVAILABLE ${docId}`;
-  await eventually(() => readLog(log, since).includes(marker), { timeout: 10_000, interval: 100, message: "the exact draft reached the injected projection transaction failure" });
+  await waitForLog(marker, { file: log, since });
   const after = await docRecord(docId);
   assert.equal(after.currentVersion, "v1", "postcommit projection: saving a draft does not mint a version");
   assert.equal(after.draft?.baseVersion, "v1", "postcommit projection: draft metadata committed before the dependency failed");
@@ -216,6 +222,121 @@ scenario("A12.8 a failed postcommit projection refresh still returns 200 for the
   const served = await owner.http.get(`/draft/${docId}/index.html`, { timeoutMs: HTTP_MS });
   assert.equal(served.status, 200, "postcommit projection: the successful draft can be read back");
   assert.equal(served.text, html, "postcommit projection: read-back serves the committed bytes");
+});
+
+// ACK loss is injected after durable commit, before the installed SDK receives
+// success. The keyed gate proves ordering; one request/caller must log its loss
+// and a second native callback. Neither an HTTP retry nor a fake commit suffices.
+const ACK_CASE = { tiers: ["local"], needs: ["admin-emulator", "logs", "gates", "patch:amplify-native-ack-loss"], timeoutMs: 240_000, ...STALLS };
+async function loseCommitAck(ctx, docId, operation, send, inspectCommitted) {
+  const g = gates(target), name = "ack-after-commit", key = `${operation}:${docId}`;
+  const log = logFile(target.runId), since = logMark(log);
+  let answeredRequest = false, pending, committed;
+  try {
+    await g.hold(name, { key });
+    pending = send().catch((error) => ({ status: null, error: String(error?.message ?? error) })).then((response) => { answeredRequest = true; return response; });
+    const held = await requireHeld(ctx, g, name, 1, { key, timeoutMs: 90_000 });
+    precondition(!answeredRequest, "ACK loss: the original request is unanswered after its actual commit");
+    committed = await inspectCommitted();
+    ctx.ev.json(`ack-held-${operation}`, { docId, operation, key, held, committed });
+    await g.release(name, { key });
+  } finally {
+    await g.release(name, { key }).catch(() => undefined);
+  }
+  const response = await pending;
+  const { match: loss } = await waitForLog(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`), { file: log, since });
+  await waitForLog(`E2E_ACK_RETRY ${operation} ${docId} ${loss[1]} callback2`, { file: log, since });
+  ctx.ev.json(`ack-result-${operation}`, { docId, operation, caller: loss[1], response, committed });
+  return { response, committed };
+}
+
+scenario("A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes", ACK_CASE, async (ctx) => {
+  const { owner, accounts } = await castWithOwner(ctx, ["holder"]);
+  const holder = await sessionFor(ctx, accounts[1]);
+  const title = `Link ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-link" });
+  const visibility = await setVisibility(target, { owner, doc: docId, visibility: "unlisted", publicEdit: true, timeoutMs: HTTP_MS });
+  precondition(visibility.status === 200 && visibility.linkToken, "unlisted open editing has a current link token");
+  precondition((await holder.http.postJson("/unlock", { docId, k: visibility.linkToken }, { timeoutMs: HTTP_MS })).status === 200, "the nonmember has a remembered current link grant");
+  const before = await docRecord(docId), html = docHtml(title, 2, " Remembered grant ACK bytes.");
+  precondition(!before.members.includes(accounts[1].email), "the holder has no document membership shortcut");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-link", () => holder.http.postJson("/draft", { docId, baseVersion: "v1", liveEpoch: before.liveEpoch ?? "initial", html }, { timeoutMs: HTTP_MS }), async () => {
+    const d = await docRecord(docId);
+    precondition(d.draft?.storagePrefix && d.liveEpoch !== (before.liveEpoch ?? "initial"), "the draft pointer and retired epoch exist before ACK loss");
+    precondition((await readDraftObject(target, docId, "index.html")).toString() === html, "the candidate bytes are real before ACK loss");
+    return { storagePrefix: d.draft.storagePrefix, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, "ACK link draft: its own durable commit is acknowledged with 200");
+  const after = await docRecord(docId);
+  assert.equal(response.json?.draft?.storagePrefix, committed.storagePrefix, "ACK link draft: response names the committed pointer");
+  assert.equal(after.draft?.storagePrefix, committed.storagePrefix, "ACK link draft: retry retains its committed pointer");
+  assert.equal(after.liveEpoch, committed.liveEpoch, "ACK link draft: retry does not retire the session twice");
+  const served = await holder.http.get(`/draft/${docId}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "ACK link draft: committed bytes remain readable");
+  assert.equal(served.text, html, "ACK link draft: served bytes remain exact");
+});
+
+async function publishWithLostAck(ctx, mode) {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Publish ACK ${mode} ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: `a12-ack-${mode}` });
+  const html = docHtml(title, mode === "dedup" ? 1 : 2), operation = mode === "external" ? "external-publish" : mode === "dedup" ? "draft-dedup" : "draft-publish";
+  let retiring = null;
+  if (mode !== "external") {
+    const saved = await owner.http.postJson("/draft", { docId, baseVersion: "v1", html }, { timeoutMs: HTTP_MS });
+    precondition(saved.status === 200, "a real draft exists before publishing with ACK loss");
+    retiring = (await docRecord(docId)).draft.storagePrefix;
+    precondition((await listObjects(target, `${retiring}/`)).length > 0, "the draft cleanup assertion has concrete preexisting objects");
+  }
+  const before = await docRecord(docId), want = mode === "dedup" ? "v1" : "v2";
+  const send = () => mode === "external" ? updateUpload(owner.http, docId, { body: html, baseVersion: "v1", timeoutMs: HTTP_MS }) : owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: HTTP_MS });
+  const { response, committed } = await loseCommitAck(ctx, docId, operation, send, async () => {
+    const d = await docRecord(docId), v = await versionRecord(docId, want);
+    precondition(d.currentVersion === want && !d.draft && d.liveEpoch !== (before.liveEpoch ?? "initial"), "the published head and retirement exist before ACK loss");
+    precondition(v && (await versionObject(docId, want, "index.html")).toString() === html, "published bytes exist before ACK loss");
+    return { storagePrefix: v.storagePrefix ?? `docs/${docId}/${want}`, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, `ACK ${operation}: its own durable commit is acknowledged with 200`);
+  assert.equal(response.json?.versionId, want, `ACK ${operation}: response names the committed version`);
+  assert.equal(response.json?.deduped, mode === "dedup", `ACK ${operation}: response preserves the dedup result`);
+  const after = await docRecord(docId), version = await versionRecord(docId, want);
+  assert.equal(after.currentVersion, want, `ACK ${operation}: current head remains its committed version`);
+  assert.equal(after.liveEpoch, committed.liveEpoch, `ACK ${operation}: retry does not retire the session twice`);
+  assert.equal(after.draft, undefined, `ACK ${operation}: successful publication retires the draft`);
+  assert.equal(version.storagePrefix ?? `docs/${docId}/${want}`, committed.storagePrefix, `ACK ${operation}: immutable pointer remains committed`);
+  assert.deepEqual(await versionIds(docId), mode === "dedup" ? ["v1"] : ["v1", "v2"], `ACK ${operation}: retry mints no extra version`);
+  const served = await owner.http.get(`/content/${docId}/${want}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, `ACK ${operation}: committed bytes remain readable`);
+  assert.equal(served.text, html, `ACK ${operation}: served bytes remain exact`);
+  if (retiring) assert.deepEqual(await listObjects(target, `${retiring}/`), [], `ACK ${operation}: success finishes retiring the old draft bytes`);
+  assert.equal((await rtdbGet(target, `editAccess/${docId}`))?.__liveEpoch, after.liveEpoch, `ACK ${operation}: success refreshes the live epoch mirror`);
+}
+scenario("A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "draft"));
+scenario("A12.9c external publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "external"));
+scenario("A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement", ACK_CASE, (ctx) => publishWithLostAck(ctx, "dedup"));
+scenario("A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const docId = await publishDoc(ctx, owner, { title: `Thumb ACK ${tag()}`, name: "a12-ack-thumb" });
+  for (const kind of ["cover", "slides"]) {
+    const images = kind === "cover" ? [jpegSkeleton({ pad: 73 })] : [jpegSkeleton({ pad: 79 }), jpegSkeleton({ pad: 83 })];
+    const before = await docRecord(docId);
+    const { response, committed } = await loseCommitAck(ctx, docId, `thumb-${kind}`, () => postThumb(owner.http, { docId, versionId: "v1", kind, images, timeoutMs: HTTP_MS }), async () => {
+      const d = await docRecord(docId), key = kind === "cover" ? d.thumb?.cover : d.thumb?.slides?.key;
+      precondition(key && key !== (kind === "cover" ? before.thumb?.cover : before.thumb?.slides?.key), "the new thumbnail key committed before ACK loss");
+      return { key, thumb: d.thumb };
+    });
+    assert.equal(response.status, 200, `ACK thumb ${kind}: its own durable commit answers 200`);
+    assert.deepEqual(response.json, { stored: true }, `ACK thumb ${kind}: its own committed key reports stored true`);
+    assert.deepEqual((await docRecord(docId)).thumb, committed.thumb, `ACK thumb ${kind}: retry preserves the exact committed record`);
+    for (let i = 0; i < images.length; i++) {
+      const served = await owner.http.get(thumbPath(docId, "v1", committed.key, kind === "cover" ? "cover" : i), { timeoutMs: HTTP_MS });
+      assert.equal(served.status, 200, `ACK thumb ${kind}: committed JPEG remains readable`);
+      assert.deepEqual(served.buffer, images[i], `ACK thumb ${kind}: served JPEG remains exact`);
+    }
+    if (kind === "slides") {
+      const sibling = await owner.http.get(thumbPath(docId, "v1", before.thumb.cover, "cover"), { timeoutMs: HTTP_MS });
+      assert.equal(sibling.status, 200, "ACK thumb slides: previously committed cover remains readable");
+      assert.deepEqual(sibling.buffer, jpegSkeleton({ pad: 73 }), "ACK thumb slides: previously committed cover remains exact");
+    }
+  }
 });
 
 /**

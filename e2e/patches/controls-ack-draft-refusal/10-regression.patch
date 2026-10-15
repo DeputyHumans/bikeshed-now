@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -538,3 +538,3 @@
+       // if another writer has advanced the head since its acknowledgement was lost.
+-      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
++      if (false && candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");

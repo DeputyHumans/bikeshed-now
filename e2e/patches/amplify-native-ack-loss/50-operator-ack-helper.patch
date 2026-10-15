@@ -1,0 +1,45 @@
+--- /dev/null
++++ b/scripts/lib/e2e-ack-transaction.mjs
+@@ -0,0 +1,42 @@
++// SPDX-License-Identifier: Apache-2.0
++// Stack-only native Firestore commit acknowledgement loss, keyed to one observed operation (SPEC §2, §6a).
++
++import { randomUUID } from "node:crypto";
++
++
++/** Keep the installed SDK transaction/retry loop and all actual writes. Only a
++ * deliberately released postcommit gate loses one acknowledgement. Unarmed
++ * setup calls pass; a missing/expired gate never masquerades as injected loss.
++ */
++export function e2eAckTransaction(db, docId, operation, work) {
++  const caller = randomUUID(), wrapped = new WeakSet();
++  let lost = false, callbacks = 0;
++  return db.runTransaction(async (tx) => {
++    callbacks++;
++    if (lost) console.log(`E2E_ACK_RETRY ${operation} ${docId} ${caller} callback${callbacks}`);
++    const native = tx;
++    if (!wrapped.has(native)) {
++      if (typeof native.commit !== "function" || typeof native._writeBatch?.isEmpty !== "boolean") throw new Error("e2e ACK: installed SDK transaction internals changed");
++      wrapped.add(native);
++      const commit = native.commit.bind(native);
++      native.commit = async () => {
++        const hasWrites = !native._writeBatch.isEmpty;
++        await commit();
++        if (lost || !hasWrites) return;
++        const base = process.env.E2E_GATE_URL;
++        if (!base) throw new Error("e2e ACK: E2E_GATE_URL is required");
++        const key = `${operation}:${docId}`;
++        const url = `${base.replace(/\/$/, "")}/gate/ack-after-commit/pass?key=${encodeURIComponent(key)}&side=server&caller=${caller}&run=${callbacks}`;
++        const response = await fetch(url, { method: "POST" });
++        const body = await response.json();
++        if (response.status !== 200 || !["passed", "released"].includes(body.outcome ?? "")) throw new Error(`e2e ACK: gate did not explicitly pass or release (${response.status}, ${body.outcome})`);
++        if (body.outcome === "released") {
++          lost = true;
++          console.log(`E2E_ACK_LOSS ${operation} ${docId} ${caller}`);
++          throw Object.assign(new Error("e2e: committed transaction acknowledgement lost"), { code: 14 });
++        }
++      };
++    }
++    return work(tx);
++  });
++}

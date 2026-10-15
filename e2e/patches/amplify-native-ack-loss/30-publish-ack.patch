@@ -1,0 +1,11 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -21,2 +21,3 @@
+ import * as admin from "firebase-admin";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { randomUUID } from "node:crypto";
+@@ -524,3 +525,3 @@
+   try {
+-    await db.runTransaction(async (tx) => {
++    await e2eAckTransaction(db, docRef.id, "external-publish", async (tx) => {
+       // Both asked again here, where the version becomes current: the checks

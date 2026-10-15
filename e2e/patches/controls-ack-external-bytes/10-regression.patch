@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -571,3 +571,4 @@
+   await retireLiveSession(db, docRef.id, retiredEpoch);
++  await removeDraftSnapshot(docRef.id, { storagePrefix });
+
+   return { versionId, contentHash, fileCount, bytes, deduped: false };

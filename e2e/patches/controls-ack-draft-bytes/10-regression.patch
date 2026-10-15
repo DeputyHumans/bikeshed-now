@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -620,3 +620,4 @@
+   await retireLiveSession(db, docId, retiredEpoch);
++  await removeDraftSnapshot(docId, { storagePrefix });
+
+   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };

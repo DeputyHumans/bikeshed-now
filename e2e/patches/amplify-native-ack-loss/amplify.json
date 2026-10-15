@@ -1,0 +1,11 @@
+{
+  "what": "Lose one acknowledgement only after an actual native Firestore transaction has committed and the case explicitly releases its operation/doc gate. Cover both HTTP endpoints and local operator commands. Keep the installed SDK retry loop, real writes, retry budgets and authority checks. Logs bind the loss and retry callback to the same request.",
+  "gates": [
+    {
+      "name": "ack-after-commit",
+      "side": "server",
+      "where": "native Transaction.commit after real commit, before its successful acknowledgement",
+      "key": "operation:docId"
+    }
+  ]
+}

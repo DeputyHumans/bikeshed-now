@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK link draft: committed bytes remain readable",
+  "what": "Delete the immutable candidate after a remembered-link draft was acknowledged, leaving a broken metadata pointer.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK link draft: committed bytes remain readable"
+  }
+}

@@ -1,0 +1,6 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -681,2 +681,3 @@
+   }
++  await bucket().deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true });
+   // What the record moved past — a whole older version, or an older

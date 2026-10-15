@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -649,3 +649,3 @@
+     // as a competing winner and delete the JPEGs it now references.
+-    if (held?.versionId === versionId && held.rev === THUMB_REVISION &&
++    if (Boolean(0) && held?.versionId === versionId && held.rev === THUMB_REVISION &&
+         (kind === "cover" ? held.cover === key : held.slides?.key === key && held.slides.count === count)) {

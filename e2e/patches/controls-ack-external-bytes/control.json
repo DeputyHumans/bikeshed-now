@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK external-publish: committed bytes remain readable",
+  "what": "Delete the externally published immutable candidate after acknowledging its retry.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9c external publication survives native commit acknowledgement loss without deleting the committed version",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK external-publish: committed bytes remain readable"
+  }
+}

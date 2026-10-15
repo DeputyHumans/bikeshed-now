@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK operator publish: completed commit finishes its captured retirement",
+  "what": "Remove the operator publish receipt reconciliation after its real commit loses its acknowledgement.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+    "case": "A12.10a an operator publish completes its exact retirement after native commit acknowledgement loss without reporting its own commit as a duplicate",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK operator publish: completed commit finishes its captured retirement"
+  }
+}

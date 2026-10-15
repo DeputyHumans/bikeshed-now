@@ -1,0 +1,7 @@
+--- a/scripts/lib/withdraw-version.mjs
++++ b/scripts/lib/withdraw-version.mjs
+@@ -27,3 +27,3 @@
+     // the document. A lost ACK must not abort the remaining withdrawal work.
+-    if (attempted && data.liveEpoch === liveEpoch) return attempted;
++    if (false && attempted && data.liveEpoch === liveEpoch) return attempted;
+     const retiredEpoch = data.liveEpoch ?? 'initial';

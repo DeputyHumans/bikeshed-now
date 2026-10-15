@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise actual Firestore commit acknowledgement loss through a document-keyed local fault capability. Seven endpoint and operator cases check successful receipts, retained exact bytes and completed retirement after native SDK retries; fifteen directional controls cover false refusals, lost objects and skipped cleanup. Confine the separate projection fault to its marked fixture so whole-area capability runs remain valid.
+
 - Keep the draft and external-update cleanup controls effective after acknowledgement recovery: their mutations suppress both direct cleanup and cleanup proven safe by stored references, while preserving the original loser-upload assertions.
 
 - Preserve operator publication and withdrawal completion after a lost transaction acknowledgement. A retry recognizes its own immutable version or retirement epoch, keeps the successful cleanup receipt, and finishes mirror, old-log and captured-draft cleanup without repointing newer work.

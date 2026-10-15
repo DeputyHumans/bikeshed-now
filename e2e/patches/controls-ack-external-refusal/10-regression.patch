@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -529,3 +529,3 @@
+       const candidate = await tx.get(versionsRef.doc(versionId));
+-      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
++      if (false && candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");

@@ -1,0 +1,6 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -299,2 +299,3 @@
+         });
++        await removeDraftSnapshot(docRef.id, { storagePrefix });
+         break;

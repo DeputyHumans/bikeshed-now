@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -55,2 +55,3 @@
+ import { verifyIdToken, verifySessionCookie } from "./lib/auth";
++import { e2eAckTransaction } from "./lib/e2eAckTransaction";
+ import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
+@@ -642,3 +643,3 @@
+   let candidateStale: StaleThumbs[] = [];
+-  const outcome = await db().runTransaction(async (tx) => {
++  const outcome = await e2eAckTransaction(db(), docId, `thumb-${kind}`, async (tx) => {
+     const fresh = await tx.get(docRef);

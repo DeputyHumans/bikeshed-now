@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK link draft: its own durable commit is acknowledged with 200",
+  "what": "Remove reconciliation only from the remembered-link native transaction retry.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK link draft: its own durable commit is acknowledged with 200"
+  }
+}
