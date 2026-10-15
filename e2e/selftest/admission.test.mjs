@@ -4,8 +4,8 @@
 /**
  * Scratch stacks and locks directories: never the machine's. liveStacks is
  * checked on records in each shape a stack can leave; then real processes
- * race admitStack (helpers/admit-racer.mjs) for slots, each holding one for
- * 1.5 s.
+ * race admitStack (helpers/admit-racer.mjs) for slots. IPC keeps admitted
+ * owners alive until the parent has observed both capacity and contention.
  */
 
 import { test } from "node:test";
@@ -27,18 +27,51 @@ function record(stacksDir, runId, rec) {
   writeFileSync(join(stacksDir, runId, "stack.json"), JSON.stringify({ runId, processes: [], ...rec }));
 }
 
-function race(n, { max, holdMs = 1500 }) {
+async function race(n, { max }) {
   const dir = tempDir("e2e-admit-race-");
   const [stacksDir, locksDir] = [join(dir, "stacks"), join(dir, "locks")];
-  const startAt = Date.now() + 800;
-  return Promise.all(
-    Array.from({ length: n }, (_, i) => new Promise((resolve, reject) => {
-      const c = spawn(process.execPath, [RACER, stacksDir, locksDir, String(max), String(holdMs), `selftest-race-${i}`, String(startAt)], { stdio: ["ignore", "pipe", "inherit"] });
-      let out = "";
-      c.stdout.on("data", (d) => (out += d));
-      c.on("close", (code) => (code === 0 ? resolve(JSON.parse(out)) : reject(new Error(`racer ${i} exited ${code}: ${out}`))));
-    })),
-  ).then((rs) => rs.sort((a, b) => a.admittedAt - b.admittedAt));
+  const children = [];
+  const admitted = [];
+  const waiting = new Set();
+  let released = false;
+  let ready = 0;
+  let done = 0;
+  let deadline;
+  try {
+    return await new Promise((resolve, reject) => {
+      deadline = setTimeout(() => reject(new Error(`admission race did not finish: ${admitted.length} admitted, ${waiting.size} waiting, ${done} exited`)), 60_000);
+      const advance = () => {
+        if (admitted.length === n) {
+          for (const c of children) if (c.connected) c.send("release");
+        } else if (!released && admitted.length === max && waiting.size > 0) {
+          // No owner leaves until the available capacity is occupied AND
+          // another contender has actually observed the cap under the lock.
+          released = true;
+          children.find((c) => c.runId === admitted[0].runId).send("release");
+        }
+      };
+      for (let i = 0; i < n; i++) {
+        const runId = `selftest-race-${i}`;
+        const c = spawn(process.execPath, [RACER, stacksDir, locksDir, String(max), runId], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
+        c.runId = runId;
+        children.push(c);
+        c.on("error", reject);
+        c.on("message", (message) => {
+          if (message.event === "ready" && ++ready === n) for (const child of children) child.send("start");
+          if (message.event === "waiting") waiting.add(runId);
+          if (message.event === "admitted") admitted.push(message);
+          advance();
+        });
+        c.on("close", (code) => {
+          if (code !== 0) reject(new Error(`racer ${i} exited ${code}`));
+          else if (++done === n) resolve(admitted);
+        });
+      }
+    });
+  } finally {
+    clearTimeout(deadline);
+    for (const c of children) if (c.exitCode === null) c.kill("SIGKILL");
+  }
 }
 
 test("E2E_MAX_STACKS: 3 by default, a whole number of at least 1", () => {
@@ -73,15 +106,16 @@ test("a stack is live while a recorded group runs, a process carries its mark, o
   }
 });
 
-test("three stacks racing for two slots: two start at once, the third only once a slot is free", async () => {
+test("three stacks racing for two slots: both slots fill before an owner leaves, and the third observes the cap", async () => {
   const rs = await race(3, { max: 2 });
-  assert.ok(rs[1].admittedAt - rs[0].admittedAt < 1000, `the first two together (${rs[1].admittedAt - rs[0].admittedAt} ms apart)`);
-  assert.ok(rs[2].admittedAt - rs[0].admittedAt >= 1400, `the third waited for a slot: ${rs[2].admittedAt - rs[0].admittedAt} ms after the first`);
+  assert.deepEqual(rs.map((r) => r.priorLive).sort(), [0, 1, 1], "at most one other stack is live when a contender claims its slot");
+  assert.equal(rs.filter((r) => r.waitedForSlot).length, 1, "exactly the contender beyond capacity waited for an owner to leave");
 });
 
-test("NEGATIVE: with the cap above the racers, all three start at once", async () => {
+test("NEGATIVE: with the cap above the racers, all three hold a slot together without waiting", async () => {
   const rs = await race(3, { max: 10 });
-  assert.ok(rs[2].admittedAt - rs[0].admittedAt < 1000, `all three within ${rs[2].admittedAt - rs[0].admittedAt} ms: only the cap holds the third back`);
+  assert.deepEqual(rs.map((r) => r.priorLive).sort(), [0, 1, 2], "all three owners remain live together; only the cap held the third back");
+  assert.equal(rs.some((r) => r.waitedForSlot), false);
 });
 
 test("a start that never gets a slot gives up with E2E_ADMISSION, naming the stacks that hold them", async () => {

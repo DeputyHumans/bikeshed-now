@@ -44,6 +44,17 @@ test("NEGATIVE: a relative, unresolved or missing-value path is refused", () => 
   assert.throws(() => runDir("../escape"), /not a valid run id/);
 });
 
+test("path missing-value guards match whole components, including dash-delimited values, not random suffixes", () => {
+  for (const path of ["/a/e2e-clispawn-run-NaN2W0/cli/cut-start", "/a/non-nullable/b", "/a/undefinedness/b", "/a/prefixNaN-suffix/b"]) {
+    assert.equal(assertPath(path), path, "a substring of an ordinary directory name is not a missing value");
+  }
+  for (const value of ["undefined", "null", "NaN", "[object Object]"]) {
+    for (const path of [`/a/${value}/b`, `/a/stack-${value}/b`, `/a/${value}-stack/b`, `/a/stack-${value}-tree/b`]) {
+      assert.throws(() => assertPath(path), /a value is missing/, `${value} remains refused as a complete token`);
+    }
+  }
+});
+
 test("NEGATIVE: an inherited credential or binding never reaches a built or scrubbed env", () => {
   const ambient = {
     PATH: "/usr/bin", HOME: "/h", GOOGLE_APPLICATION_CREDENTIALS: "/x.json", GCLOUD_PROJECT: "real", FIREBASE_TOKEN: "t",
