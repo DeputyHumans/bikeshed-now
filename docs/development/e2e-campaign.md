@@ -128,3 +128,30 @@ node --test tools/check-e2e-campaign.test.mjs
 The gate exits 0 only on completion, 1 for open obligations, and 2 for invalid
 or unverifiable evidence. `--validate` may exit 0 with open work and always
 prints that it is structural validation only.
+
+## Historical live-editing failures
+
+The original stack `2610102145-0a2t` contains four unclassified failures behind
+its A11.9/A11.11 flaky labels. Reading the individual invocation records gives
+these classifications; later green runs do not erase them:
+
+| Invocation | Case | Classification and evidence |
+|---|---|---|
+| `20261011T065316Z-p42261-yg5z` | A11.11 | H: the isolation tripwire treated Firestore's connectivity image as an external escape. The harness now blocks and records that exact SDK probe separately. |
+| `20261011T132245Z-p33044-5rao` | A11.9 | H: the old 20-second autosave settle bound expired with two of three stable samples already observed; this bound is now 45 seconds. |
+| `20261011T135145Z-p11249-uqog` | A11.9 | E: the document frame did not load within 45 seconds; the revocation oracle was not reached. |
+| `20261011T135145Z-p11249-uqog` | A11.11 | E: the case exhausted its 180-second bound; it did not establish a rules verdict. |
+
+Two earlier red records are deliberate scratch controls, identified by their
+invocation metadata: `20261011T055854Z-p65146-nloe` used
+`m5-not-revoked.spec.mjs`, and `20261011T060004Z-p69407-suyh` used
+`m7-wellformed-cell.spec.mjs`. They are not ordinary product-run failures.
+Fresh final-revision A11 runs and applicable controls remain required; the old
+three-run stability claim is not carried forward.
+
+The A11 production mirror concern remains outside this local campaign.
+Operator initialization now accepts an explicit database URL and uses the
+selected demo namespace for emulator runs. Local sharing checks still require
+an observed correct mirror, and revoked-editor checks still require its removal.
+No production setup failure is excused by a local pass, and no remote mirror
+has been repaired or claimed verified by this campaign.

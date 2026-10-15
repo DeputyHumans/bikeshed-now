@@ -1,0 +1,10 @@
+--- a/app/src/crdt/binding.ts
++++ b/app/src/crdt/binding.ts
+@@ -106,6 +106,7 @@
+   // (linearGradient stays linearGradient) where tagName would shout DIV at us
+   // for every HTML element.
+   const out = new Y.XmlElement(el.localName);
++  out.setAttribute("contenteditable", "true");
+   for (const attr of Array.from(el.attributes)) {
+     if (INJECTED_ATTRS.has(attr.name)) continue;
+     out.setAttribute(attr.name, attr.value);

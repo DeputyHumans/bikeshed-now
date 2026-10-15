@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Verify live peer colours against independent comment accents and distinct email-derived expectations, inspect decoded shared-log bytes for editor decoration, enforce the exact two-second sharing bound, and add directional suggester-write controls. Explain historical live-editing failures without carrying old stability claims into current acceptance.
+
 - Preserve inline-code markup at the start of a paragraph without changing the authored block or native undo. Exercise the commit/autosave race by holding only a completed response, with exact draft cleanup and request-count checks; the response-delay helper preserves redirects and never resends a completed request during cleanup.
 
 - Distinguish revoked-reader responses from absent-document responses byte for byte, require fresh unrecovered listener failures before excusing a sharing observation, and add directional controls for team and folder removals, invitation contents, inherited rows and private editing.

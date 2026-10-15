@@ -151,10 +151,23 @@ const token = (peer) => makeToken(target.runId, peer, (tokenSeq += 1));
  * through the UI, WHILE the document is set up: the two are independent, and
  * on a loaded shared stack each takes tens of seconds.
  */
-async function world(ctx, { roles = {}, sessions = [], browsers = [], title = "A11 live", fixture = FIXTURE, visibility = null, publicEdit = false } = {}) {
+// Independent palette expectation: presence, thread and overlay must all map
+// each email through the same stable ten-hue palette, never a constant colour.
+function expectedPeerHsl(email) {
+  let hash = 0;
+  for (const char of email.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return `hsl(${[262, 200, 338, 152, 28, 286, 176, 8, 224, 62][hash % 10]} 62% 42%)`;
+}
+async function world(ctx, { roles = {}, sessions = [], browsers = [], title = "A11 live", fixture = FIXTURE, visibility = null, publicEdit = false, distinctPeerColors = false } = {}) {
   const names = Object.keys(roles);
   // Opted out of notices before any session, as production's accounts are.
   const accounts = await cast(target, ["owner", ...names], { notifications: false });
+  if (distinctPeerColors) {
+    for (let tries = 0; tries < 32 && expectedPeerHsl(accounts[0].email) === expectedPeerHsl(accounts[1].email); tries++) {
+      accounts[1] = (await cast(target, [names[0]], { notifications: false }))[0];
+    }
+    precondition(expectedPeerHsl(accounts[0].email) !== expectedPeerHsl(accounts[1].email), "the two seeded authors have distinct expected palette colours");
+  }
   const byRole = { owner: accounts[0], ...Object.fromEntries(names.map((n, i) => [n, accounts[i + 1]])) };
   const signingIn = Promise.all(browsers.map(([name, role]) => browserUser(ctx, name, byRole[role])));
   const setup = (async () => {
@@ -439,7 +452,7 @@ scenario("A11.1 two editors both show Shared, and a token typed by either reache
 // --- A11.2 ---------------------------------------------------------------------
 
 scenario("A11.2 a peer's presence chip shows data-mode=edit while they edit, in one colour that survives a mode change, a reload and the caret overlay", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2 chip" });
+  const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2 chip", distinctPeerColors: true });
   const ownerEmail = w.ownerAcct.email.toLowerCase();
   const editorEmail = w.people.editor.account.email.toLowerCase();
   const { owner: o, editor: e } = w.users;
@@ -464,6 +477,19 @@ scenario("A11.2 a peer's presence chip shows data-mode=edit while they edit, in 
   const viewO = await chipNow(e, ownerEmail, "view");
   ctx.step(`owner sees the editor ${JSON.stringify(viewE)}; editor sees the owner ${JSON.stringify(viewO)}`);
   assert.equal(viewE.editingIcon, false, "a reader's chip carries no Editing icon");
+  const expected = await o.page.evaluate((colors) => colors.map(color => { const probe = document.createElement("span"); probe.style.color = color; return probe.style.color; }), [expectedPeerHsl(ownerEmail), expectedPeerHsl(editorEmail)]);
+  assert.equal(viewO.color, expected[0], "the owner's chip uses the email's expected palette colour");
+  assert.equal(viewE.color, expected[1], "the editor's chip uses the email's expected palette colour");
+  assert.notEqual(viewO.color, viewE.color, "two authors with distinct expected colours have distinct chips");
+  for (const [user, paragraphId, text, color] of [[o, "e2e-2", "Paragraph 2", expected[0]], [e, "e2e-3", "Paragraph 3", expected[1]]]) {
+    const note = `Palette check ${user.name}`;
+    await user.selectText(`#${paragraphId}`, text);
+    await user.comment(note);
+    const thread = user.page.locator(".thread").filter({ hasText: note });
+    const threadColor = await thread.evaluate(el => { const probe = document.createElement("span"); probe.style.color = getComputedStyle(el).getPropertyValue("--thread-color"); return probe.style.color; });
+    assert.equal(threadColor, color, "the independent comment accent uses its author's expected colour");
+  }
+
 
   ctx.step("the editor presses Edit: the owner's chip for them turns data-mode=edit, square dot, Editing icon, the same colour");
   await bothShared(e);
@@ -954,10 +980,11 @@ scenario("A11.8 an unlisted open-editing link holder in the editor is not shown 
   await armArrival(p, "e2e-10", probe);
   const t0 = Date.now();
   await o.typeInFrame("#e2e-10", probe);
+  const typingEnd = Date.now();
   // 2 s from the end of the typing; the time is taken in the link holder's page.
   let received = null;
   try {
-    received = (await waitForArrival(p, probe, { timeout: 2_000 + (Date.now() - t0) })).at;
+    received = (await waitForArrival(p, probe, { timeout: 2_000 })).at;
   } catch (err) {
     // Only "it did not come" is an answer; an unarmed or replaced probe measured nothing.
     if (err.code !== "E2E_ARRIVAL" || err.reason !== "timeout") throw err;
@@ -965,7 +992,7 @@ scenario("A11.8 an unlisted open-editing link holder in the editor is not shown 
   }
   const shownShared = joined.share === "shared" || badge?.state === "shared";
   ctx.step(`shown as Shared: ${shownShared}; probe received: ${received ? `${received - t0} ms after typing began` : "no"}`);
-  assert.ok(!shownShared || received !== null, "the link holder is shown as Shared but does not receive the member's keystrokes (S24: not merged live)");
+  assert.ok(!shownShared || (received !== null && received - typingEnd <= 2_000), "the link holder is shown as Shared but does not receive the member's keystrokes within 2 s after typing ends (S24: not merged live)");
   assert.notEqual(badge?.state, "joining", "the link holder's editor is not stuck joining");
 });
 
@@ -1213,6 +1240,8 @@ scenario("A11.12 joining a live session with no edits rebuilds the body byte-ide
     ctx.step(`${letter}: the editor joins with no edits, so its body is rebuilt from the wire`);
     await bothShared(e);
     const joined = await logSettled(up.docId, { min: 1 });
+    const wire = await logEntries(up.docId);
+    for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `${letter}: decoded live log never carries ${attribute}`);
     const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
     const [ob, eb] = [os.document, es.document];
     const r = { letter, sample, docId: up.docId, seedEntries: seeded.length, entriesAfterJoin: joined.length, equal: ob === eb, ownerBytes: ob.length, editorBytes: eb.length, outlined: { owner: os.outlined, editor: es.outlined } };
@@ -1279,6 +1308,8 @@ scenario("A11.12b a joiner's edit frame outlines the containers the document's s
   await bothShared(e);
   const joined = await logSettled(up.docId, { min: 1 });
   precondition(joined.length === seeded.length, `the joiner adopted the log (${seeded.length} → ${joined.length} entries)`);
+  const wire = await logEntries(up.docId);
+  for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `outline fixture: decoded live log never carries ${attribute}`);
   const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
   precondition(os.document === es.document, "the document itself round-tripped identical (A11.12)");
   precondition(os.outlined.join() === "a11-filled-by-script", `the seeder's edit frame outlines the container the script fills (${JSON.stringify(os.outlined)})`);
