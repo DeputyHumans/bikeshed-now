@@ -910,6 +910,20 @@ async function c6Serial(ctx, n, { latencyMs = 0 } = {}) {
         const cap = u.capture({ paths: ["/draft"], method: "POST" });
         await typeTokens(u, id, tokens);
         await clickDone(u);
+        if (latencyMs >= 10_000) {
+          // N20 deliberately delays each upstream batch as long as the live
+          // acknowledgment deadline. A truthful refusal is retried once that
+          // transport window drains; convergence's later I1 bound is unchanged.
+          await eventually(async () => !(await u.page.getByRole("toolbar", { name: "Formatting" }).count()) || (await u.saveState()) === "error",
+            { timeout: 35_000, interval: 100, message: `${u.name}'s first delayed Done reaches an outcome` });
+          if (await u.page.getByRole("toolbar", { name: "Formatting" }).count()) {
+            assert.match(await u.page.locator(".save-state").textContent(), /not acknowledged|still being saved or shared/,
+              "C6 serial: a delayed Done may refuse only with its explicit delivery retry outcome");
+            await sleep(latencyMs + 500);
+            ctx.step(`${u.name}: retry Done after its deliberate live delivery deadline`);
+            await clickDone(u);
+          }
+        }
         await editorClosed(u);
         await savesLanded(u, cap);
         const r = await rec.stop();
@@ -1225,6 +1239,15 @@ async function c6LateSave(ctx, { hold }) {
       const released = await held.release();
       ctx.ev.json("held-save", released.records);
       precondition(released.records[0]?.status === 200, `${p1.name}'s released save is answered 200 (${released.records[0]?.status})`);
+      // Larger peer sets can deliberately hold this request beyond Done's
+      // total deadline. Once its ordered save finishes, retry the explicit
+      // leave action; the first-save race and final-token oracles stay intact.
+      await eventually(async () => !(await p1.page.getByRole("toolbar", { name: "Formatting" }).count()) || (await p1.saveState()) === "saved",
+        { timeout: 30_000, interval: 100, message: `${p1.name}'s released ordered save finishes` });
+      if (await p1.page.getByRole("toolbar", { name: "Formatting" }).count()) {
+        ctx.step(`${p1.name}: retry Done after the deliberately held save finishes`);
+        await clickDone(p1);
+      }
       await editorClosed(p1);
     }
     p1.inEdit = false;
