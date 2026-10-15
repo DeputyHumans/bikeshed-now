@@ -1,0 +1,9 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -1005,5 +1005,5 @@
+         <div className="banner banner-warn" role="alert">
+           {shared.error}{" "}
+-          {!shared.bound ? <button className="btn btn-sm" onClick={() => void setWantsEdit(false)}>Leave editing</button> : null}
++          {false ? <button className="btn btn-sm" onClick={() => void setWantsEdit(false)}>Leave editing</button> : null}
+         </div>
+       ) : null}

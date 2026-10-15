@@ -52,6 +52,80 @@ describe("saving on the way out of the editor", () => {
     vi.useRealTimers();
   });
 
+  it("Done starts the durable save immediately and waits for shared delivery before leaving", async () => {
+    let release!: () => void;
+    const flushShared = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    const { view, type, doc } = setup(undefined, { flushShared });
+    act(type);
+    let settled = false;
+    let done!: Promise<boolean>;
+    act(() => { done = view.result.current.flushUnsaved().then((value) => { settled = true; return value; }); });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    await act(async () => { await Promise.resolve(); });
+    expect(settled, "Done must retain the editor until live updates are acknowledged").toBe(false);
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    release();
+    await act(async () => { expect(await done).toBe(true); });
+  });
+
+  it("a delivery failure retains the editor and a later Done retries sharing without losing saved text", async () => {
+    const flushShared = vi.fn().mockRejectedValueOnce(new Error("Live sharing was not acknowledged")).mockResolvedValue(undefined);
+    const { view, type, doc } = setup(undefined, { flushShared });
+    doc.querySelector("p")!.textContent = "Keep this text";
+    act(type);
+    await act(async () => { expect(await view.result.current.flushUnsaved()).toBe(false); });
+    expect(doc.body.textContent).toContain("Keep this text");
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    expect(view.result.current.saveError).toMatch(/not acknowledged/);
+    await act(async () => { expect(await view.result.current.flushUnsaved()).toBe(true); });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(flushShared).toHaveBeenCalledTimes(2);
+    expect(view.result.current.saveError).toBeNull();
+  });
+
+  it("Done has a bounded outcome while remote edits keep the ordered save drain busy", async () => {
+    const releases: (() => void)[] = [];
+    saveDraft.mockImplementation(() => new Promise((resolve) => { releases.push(() => resolve({})); }));
+    const { view, type, doc } = setup();
+    act(type);
+    let result: boolean | undefined;
+    let done!: Promise<boolean>;
+    act(() => { done = view.result.current.flushUnsaved().then((value) => { result = value; return value; }); });
+    try {
+      for (let i = 0; i < 10; i += 1) {
+        act(() => { doc.querySelector("p")!.textContent += ` remote-${i}`; view.result.current.markChanged(); });
+        await act(() => vi.advanceTimersByTimeAsync(3_000));
+        if (i < 9) await act(async () => { releases.at(-1)!(); await Promise.resolve(); });
+      }
+      expect(result, "Done must finish with a retryable refusal despite continuous remote input").toBe(false);
+      expect(view.result.current.saveError).toMatch(/still being saved/);
+      expect(doc.body.textContent).toContain("remote-9");
+      expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    } finally {
+      saveDraft.mockResolvedValue({});
+      await act(async () => { releases.at(-1)!(); await done; });
+    }
+    await act(async () => { expect(await view.result.current.flushUnsaved()).toBe(true); });
+    expect(saveDraft.mock.calls.at(-1)![2]).toContain("remote-9");
+    view.unmount();
+  });
+
+  it("a remote edit during delivery is saved before Done leaves", async () => {
+    let release!: () => void;
+    const flushShared = vi.fn().mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; })).mockResolvedValue(undefined);
+    const { view, type, doc } = setup(undefined, { flushShared });
+    act(type);
+    let done!: Promise<boolean>;
+    act(() => { done = view.result.current.flushUnsaved(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(flushShared).toHaveBeenCalledTimes(1);
+    act(() => { doc.querySelector("p")!.textContent += " remote"; view.result.current.markChanged(); });
+    release();
+    await act(async () => { expect(await done).toBe(true); });
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(saveDraft.mock.calls.at(-1)?.[2]).toContain("remote");
+  });
+
   it("saves nothing when nothing was typed, so opening the editor makes no draft", async () => {
     const { view } = setup();
     await act(() => view.result.current.flushUnsaved());

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { connect, LiveLogSizeError, type Connection } from "../crdt/log";
+import { causalOrder, type CausalStamp } from "../crdt/causal";
 import { rtdbLog } from "../crdt/rtdb";
 import { seedFragment } from "../crdt/binding";
 import { bindSync, type Sync } from "../crdt/sync";
@@ -38,9 +39,9 @@ export function useSharedDocument(options: {
   enabled: boolean;
   liveEpoch?: string;
   onRemote?: () => void;
-  expectedGeneration?: string;
+  expectedCausal?: CausalStamp;
 }) {
-  const { mode, doc, epoch, docId, enabled, liveEpoch = "initial", onRemote, expectedGeneration } = options;
+  const { mode, doc, epoch, docId, enabled, liveEpoch = "initial", onRemote, expectedCausal } = options;
   const editing = mode.kind === "editing";
   const [state, setState] = useState<ShareState>("off");
   // Whether the host is bound yet. "off" alone cannot say: it is also what
@@ -91,8 +92,11 @@ export function useSharedDocument(options: {
             // become synchronously available to the editor.
             await connection.initialize();
           }
-          if (expectedGeneration && connection.causalStamp().generation !== expectedGeneration) {
-            throw new Error("The shared document seed no longer matches the saved editing history");
+          if (expectedCausal) {
+            const order = causalOrder(connection.causalStamp(), expectedCausal);
+            if (order !== "same" && order !== "ahead") {
+              throw new Error("saved draft is ahead of live history");
+            }
           }
           shared = true;
         }
@@ -100,7 +104,9 @@ export function useSharedDocument(options: {
         if (cancelled) return;
         // Configured live state is authoritative. A read/seed failure cannot
         // become a solo autosave over a newer shared draft.
-        setError(cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
+        setError(cause instanceof Error && cause.message.includes("saved draft")
+          ? "The saved draft contains changes that live editing has not received. Keep original editing tabs open until sharing catches up. If they are gone, leave editing and ask the document owner to publish the saved draft after everyone leaves."
+          : cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
           ? "An older editing session must be saved first. Save or publish from its original tab, then reload this page."
           : "Live editing could not start. Reload to retry. Keep other editing tabs open until their changes are saved.");
         setState("off");
@@ -117,16 +123,28 @@ export function useSharedDocument(options: {
       setState(shared ? "shared" : "off");
     })();
 
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      bound?.flush();
+      if (!connection?.hasPending()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
     return () => {
       cancelled = true;
+      window.removeEventListener("beforeunload", beforeUnload);
       // Unbind BEFORE destroying the doc: the binding holds observers on it,
       // and tearing the doc out from under them throws inside a cleanup, where
       // React swallows it and the next mount inherits a half-attached observer.
+      bound?.flush();
       bound?.destroy();
       sync.current = null;
-      connection?.destroy();
       connected.current = null;
-      ydoc.destroy();
+      // Normal navigation can finish a queued append in the background. A hard
+      // close cannot promise delivery; the next join checks the saved frontier.
+      const dispose = () => { connection?.destroy(); ydoc.destroy(); };
+      if (connection?.hasPending()) void connection.flush().then(dispose, dispose);
+      else dispose();
       setState("off");
       setBound(false);
     };
@@ -136,6 +154,7 @@ export function useSharedDocument(options: {
 
   return {
     state, bound, error,
+    flush: async () => { sync.current?.flush(); await connected.current?.flush(); },
     snapshot: () => { sync.current?.flush(); return connected.current?.snapshot() ?? {}; },
     causalStamp: () => { sync.current?.flush(); return bound ? connected.current?.causalStamp() ?? null : null; },
   };

@@ -1,0 +1,15 @@
+{
+  "oracle": "An unbound failed join can leave editing without saving partial history, releasing presence for explicit recovery.",
+  "what": "Remove the Leave editing action from a failed join.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^C6 abrupt close: a blocked join offers Leave editing"
+  }
+}

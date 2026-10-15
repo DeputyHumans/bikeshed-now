@@ -1,0 +1,13 @@
+{
+  "oracle": "Done returns a retryable refusal within its total deadline while a durable save remains held, preserving the editor.",
+  "what": "Raise Done's total deadline beyond the observation window so a held save keeps it waiting.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 Done deadline preserves the editor while a durable save is held and permits retry after its answer [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C6 Done deadline: a held save must produce a bounded retryable outcome"
+  }
+}

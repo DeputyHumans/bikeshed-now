@@ -18,7 +18,7 @@ import { versionStoragePrefix } from "./lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
-import { parseCausalStamp } from "./lib/causal";
+import { parseCausalStamp, readStoredCausalStamp } from "./lib/causal";
 /**
  * FieldValue and Timestamp come from the MODULAR entry point, never through
  * `admin.firestore.*`.
@@ -1272,7 +1272,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   const docData = docSnap.data() as DocAclData & {
     currentVersion?: string;
     liveEpoch?: string;
-    draft?: { baseVersion?: string; entry?: string; sourceEntry?: string; storagePrefix?: string } | null;
+    draft?: { baseVersion?: string; entry?: string; sourceEntry?: string; storagePrefix?: string; causal?: unknown } | null;
   };
   const proof = await linkProofFor(docSnap.ref, docData, caller, null);
   if (!canEdit(docData, caller, proof)) {
@@ -1305,7 +1305,8 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   if (strParam(req, "session") === "1") {
     const version = await loadVersionMeta(docSnap.ref, baseVersion);
     if (!version) { res.status(404).end(); return; }
-    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry });
+    const causal = hasDraft ? readStoredCausalStamp(docData.draft?.causal) : null;
+    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(causal ? { causal } : {}) });
     return;
   }
 

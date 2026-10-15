@@ -946,6 +946,128 @@ scenario("C6-serial positive control: the same typing and Done inside the deboun
   await c6Serial(ctx, ctx.n);
 });
 
+scenario("C6 Done deadline preserves the editor while a durable save is held and permits retry after its answer", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users, owner } = await join(ctx, { n: 2, title: "C6 bounded Done" });
+  const [writer, peer] = users;
+  const token = tokenLog(ctx.target.runId).next(writer.name, paragraph(0));
+  const held = holdRequests(writer.page, isDraftPost, 1, { method: "POST", timeoutMs: 15_000 });
+  try {
+    await held.installed;
+    await typeTokens(writer, paragraph(0), [token]);
+    await clickDone(writer);
+    await held.held;
+    const deadline = await eventually(async () => (await writer.saveState()) === "error",
+      { timeout: 35_000, interval: 100, message: "Done produces a bounded outcome while its save is held" }).then(() => true, () => false);
+    assert.equal(deadline, true, "C6 Done deadline: a held save must produce a bounded retryable outcome");
+    assert.match(await writer.page.locator(".save-state").textContent(), /still being saved or shared/,
+      "C6 Done deadline: the pending operation is explained truthfully");
+    assert.equal(await writer.page.getByRole("toolbar", { name: "Formatting" }).count(), 1,
+      "C6 Done deadline: the unsaved editor stays open");
+    assert.ok((await (await writer.frame()).evaluate(() => document.body.textContent)).includes(token),
+      "C6 Done deadline: local typing survives the deadline");
+    const answer = await held.release();
+    assert.equal(answer.records[0].status, 200, "C6 Done deadline: the already-started save may safely finish");
+    await waitTextIn(peer, paragraph(0), token);
+    await clickDone(writer); await editorClosed(writer);
+    await clickDone(peer); await editorClosed(peer);
+    assert.ok((await readDraft(owner, docId)).includes(token), "C6 Done deadline: retry leaves the saved typing intact");
+  } finally { await held.unroute(); }
+});
+
+// A deliberately longer delay tests the bounded failure/retry path separately
+// from convergence's existing 15-second N=2 deadline.
+scenario("C6 delivery timeout keeps saved local typing open until the live queue recovers", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users, owner, lat } = await joinThroughProxy(ctx, "C6 bounded delivery");
+  const [writer, peer] = users;
+  const log = tokenLog(ctx.target.runId);
+  const tokens = Array.from({ length: TOKENS }, () => log.next(writer.name, paragraph(0)));
+  const cap = writer.capture({ paths: ["/draft"], method: "POST" });
+  try {
+    await underLatency(ctx, lat, 15_000, async () => {
+      await typeTokens(writer, paragraph(0), tokens);
+      await clickDone(writer);
+      await eventually(() => [...cap].some((r) => r.settled && r.status === 200), { timeout: 15_000, interval: 100, message: "Done saves the durable snapshot before waiting for live delivery" });
+      await eventually(async () => (await writer.saveState()) === "error" || !(await writer.page.getByRole("toolbar", { name: "Formatting" }).count()),
+        { timeout: 13_000, interval: 100, message: "Done reaches a bounded delivery outcome" });
+      assert.equal(await writer.saveState(), "error", "C6 delivery: unacknowledged live updates keep Done in an explicit recoverable error state");
+      assert.match(await writer.page.locator(".save-state").textContent(), /not acknowledged/,
+        "C6 delivery: the timeout explains the outstanding live acknowledgment");
+      assert.equal(await writer.page.getByRole("toolbar", { name: "Formatting" }).count(), 1,
+        "C6 delivery: failed Done keeps the local editor open");
+      const local = await (await writer.frame()).evaluate(() => document.body.textContent);
+      const durable = await readDraft(owner, docId);
+      for (const token of tokens) {
+        assert.ok(local.includes(token), "C6 delivery: local typing survives the failed Done");
+        assert.ok(durable.includes(token), "C6 delivery: HTTP saved typing survives the live timeout");
+      }
+    });
+    await waitTextIn(peer, paragraph(0), tokens.at(-1));
+    await clickDone(writer); await editorClosed(writer);
+    await clickDone(peer); await editorClosed(peer);
+    await settleReaders(users, docId);
+    assert.deepEqual(editorsIn((await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0)).modes), [],
+      "C6 delivery: retry leaves no editor presence behind");
+  } finally { cap.stop(); await lat.reset(); }
+});
+
+scenario("C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery", { tiers: LOCAL, n: [2], trials: 1, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users, owner, lat } = await joinThroughProxy(ctx, "C6 closed writer recovery");
+  const [writer, peer] = users;
+  const agent = await agentFor(ctx, owner);
+  // Nobody else writes while the lost delivery is staged. Recovery must not
+  // retire another person's still-open editing work.
+  await clickDone(peer); await editorClosed(peer);
+  const log = tokenLog(ctx.target.runId);
+  const tokens = Array.from({ length: TOKENS }, () => log.next(writer.name, paragraph(0)));
+  const cap = writer.capture({ paths: ["/draft"], method: "POST" });
+  let reopened;
+  try {
+    await underLatency(ctx, lat, 15_000, async () => {
+      await typeTokens(writer, paragraph(0), tokens);
+      await eventually(() => [...cap].some((r) => r.settled && r.status === 200 && tokens.every((token) => r.postJson?.html?.includes(token))),
+        { timeout: 15_000, interval: 100, message: "autosave durably stores all typing before forced close" });
+      const warned = await writer.page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })));
+      assert.equal(warned, true, "C6 abrupt close: pending shared delivery warns even after HTTP saved");
+      // Forced closure deliberately bypasses beforeunload, as a browser crash
+      // can. It makes no claim that browsers can guarantee final delivery.
+      await writer.page.close({ runBeforeUnload: false });
+      writer.inEdit = false;
+    });
+    const savedBefore = await readDraft(owner, docId);
+    for (const token of tokens) assert.ok(savedBefore.includes(token), "C6 abrupt close: durable saved typing remains recoverable");
+    reopened = await writer.newTab();
+    await reopened.open(docId, { timeout: 90_000 });
+    const rec = reopened.capture({ paths: ["/draft"], method: "POST" });
+    try {
+      await reopened.page.locator('.viewer-toolbar [aria-label="Edit"]').first().click();
+      await eventually(async () => (await reopened.shareState()) === "shared" || (await reopened.page.getByRole("alert").allTextContents()).some((text) => text.includes("saved draft contains changes")),
+        { timeout: 30_000, interval: 100, message: "the join either adopts history or refuses it" });
+      const alerts = (await reopened.page.getByRole("alert").allTextContents()).join(" ");
+      assert.match(alerts, /saved draft contains changes/, "C6 abrupt close: incomplete history must be refused before adopting the saved draft");
+      const frame = await reopened.frame();
+      assert.equal(await frame.evaluate(() => document.body.isContentEditable), false,
+        "C6 abrupt close: a partial live history never enables editing");
+      const text = await frame.evaluate(() => document.body.textContent);
+      for (const token of tokens) assert.ok(text.includes(token), "C6 abrupt close: the blocked frame retains every saved token");
+      assert.equal([...rec].length, 0, "C6 abrupt close: joining never autosaves partial live history");
+      assert.equal(await reopened.page.getByRole("button", { name: "Leave editing", exact: true }).count(), 1, "C6 abrupt close: a blocked join offers Leave editing for recovery");
+      await reopened.page.getByRole("button", { name: "Leave editing", exact: true }).click();
+      await editorClosed(reopened);
+    } finally { rec.stop(); }
+    const left = await waitModes(ctx.target, docId, (m) => editorsIn(m).length === 0, 30_000);
+    assert.deepEqual(editorsIn(left.modes), [], "C6 abrupt close: Leave editing releases the blocked session for recovery");
+    assert.equal(await readDraft(owner, docId), savedBefore, "C6 abrupt close: blocked joining and leaving do not replace saved bytes");
+    assertPublished(await agentCall(agent, "commit_draft", { id: docId }), "C6 abrupt close recovery");
+    const html = await versionHtml(ctx.target, docId, "v2");
+    for (const token of tokens) assert.equal(html.split(token).length - 1, 1, "C6 abrupt close: explicit recovery publishes every saved token exactly once");
+    await assertLogDropped(ctx.target, docId, "explicit saved-draft recovery");
+    await reopened.open(docId, { timeout: 90_000 });
+    await reopened.enterEdit({ waitShared: true });
+    for (const token of tokens) await waitTextIn(reopened, paragraph(0), token);
+    await clickDone(reopened); await editorClosed(reopened);
+  } finally { cap.stop(); await lat.reset(); await reopened?.close(); }
+});
+
 // --- C6 latency ----------------------------------------------------------------------------------
 
 /**

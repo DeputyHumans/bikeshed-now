@@ -1,9 +1,45 @@
 --- a/app/src/viewer/useInlineEditor.ts
 +++ b/app/src/viewer/useInlineEditor.ts
-@@ -238,5 +238,5 @@
-     /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
+@@ -252,40 +252,6 @@
+     /** Save first, then deliver queued shared updates before the connection is torn down. */
      flushUnsaved: useCallback(async () => {
--      if (unsaved.current || inFlight.current?.session === session.current) return flush();
-+      // e2e negative control: report success without saving the pending edit.
-       return true;
+-      let expired = false;
+-      const attempt = async () => {
+-        const currentSession = session.current;
+-        do {
+-          if (unsaved.current || inFlight.current?.session === currentSession) {
+-            if (!(await flush())) return false;
+-          }
+-          if (expired || session.current !== currentSession) return false;
+-          try {
+-            await flushSharedRef.current?.();
+-            if (expired || session.current !== currentSession) return false;
+-            setSaveError(null);
+-            setSaveState("saved");
+-          } catch (error) {
+-            if (expired || session.current !== currentSession) return false;
+-            setSaveError((error as Error).message);
+-            setSaveState("error");
+-            return false;
+-          }
+-          // Remote updates can arrive while the local queue drains. Save that
+-          // merged snapshot too before cleanup cancels its autosave timer.
+-        } while (unsaved.current);
+-        return true;
+-      };
+-      let timeout: ReturnType<typeof setTimeout>;
+-      // A perpetually changing peer can keep the durable save drain busy too.
+-      // Stop waiting without aborting an already-started save or losing DOM.
+-      const bounded = new Promise<boolean>((resolve) => {
+-        timeout = setTimeout(() => {
+-          expired = true;
+-          setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
+-          setSaveState("error");
+-          resolve(false);
+-        }, DONE_TIMEOUT_MS);
+-      });
+-      return Promise.race([attempt(), bounded]).finally(() => clearTimeout(timeout));
++      // negative control: leave without the pending durable save.
++      return true;
      }, [flush]),
+     /** True when the last save failed: a commit must not proceed. */

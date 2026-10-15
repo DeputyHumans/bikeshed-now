@@ -321,7 +321,7 @@ export function DocViewer() {
     docId,
     enabled: shareLive,
     liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
-    expectedGeneration: mode.kind === "editing" && mode.liveEpoch === currentLiveEpoch ? doc.meta?.draft?.causal?.generation : undefined,
+    expectedCausal: editingOrigin?.causal,
     onRemote: () => remoteChanged.current?.(),
   });
 
@@ -333,6 +333,7 @@ export function DocViewer() {
     authoredAssets: frame.authoredAssets,
     ready: !shareLive || shared.bound,
     causalStamp: shared.causalStamp,
+    flushShared: shared.flush,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
 
@@ -654,7 +655,7 @@ export function DocViewer() {
 
   const stopEditing = useCallback(async () => {
     if (!(await editor.flushUnsaved())) {
-      toast.error("The draft didn’t save. Keep this editor open and try again.");
+      toast.error("Your changes are not fully saved and shared. Keep this editor open and try again.");
       return;
     }
     setWantsEdit(false);
@@ -1001,7 +1002,10 @@ export function DocViewer() {
         </div>
       ) : null}
       {mode.kind === "editing" && shared.error ? (
-        <div className="banner banner-warn" role="alert">{shared.error}</div>
+        <div className="banner banner-warn" role="alert">
+          {shared.error}{" "}
+          {!shared.bound ? <button className="btn btn-sm" onClick={() => void setWantsEdit(false)}>Leave editing</button> : null}
+        </div>
       ) : null}
       <ViewerBanners
         draft={draftOnScreen}

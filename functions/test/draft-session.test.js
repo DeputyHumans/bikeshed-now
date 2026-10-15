@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
 const { getDraft } = require("../lib/index.js");
+const { storedCausalStamp } = require("../lib/lib/causal.js");
 const { draftRevision } = require("../lib/lib/draft.js");
 
 const owner = { uid: "owner", email: "owner@example.com", email_verified: true };
@@ -123,4 +124,19 @@ test("the HTTP draft path enforces the supplied revision and retires successful 
     if (descriptor) Object.defineProperty(admin, "storage", descriptor); else delete admin.storage;
     if (env === undefined) delete process.env.BIKESHED_BUCKET; else process.env.BIKESHED_BUCKET = env;
   }
+});
+
+
+test("session carries the validated saved causal frontier without its private draft metadata", async () => {
+  const { db } = world();
+  const causal = { generation: "a".repeat(64), vector: { "12": 9 }, deletes: { "12": [[2, 3]] } };
+  await db.doc("docs/d").update({ "draft.causal": { ...storedCausalStamp(causal), private: "not-for-the-client" } });
+  await withFakeAdmin({ db, sessions: { s: owner } }, async () => {
+    const response = await invoke(getDraft, { ...req, query: { session: "1", baseVersion: "v1" } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.causal, causal);
+    assert.match(response.headers["cache-control"], /no-store/);
+    assert.ok(!JSON.stringify(response.body).includes("private-path"));
+    assert.ok(!JSON.stringify(response.body).includes("not-for-the-client"));
+  });
 });

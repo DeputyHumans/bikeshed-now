@@ -76,10 +76,14 @@ export class LiveLogSizeError extends Error {
 }
 export const COMPACT_AFTER = 64;
 export const SEED_KEY = "_seed";
+export const DELIVERY_TIMEOUT_MS = 10_000;
 
 export interface Connection {
   initialize(seed?: Uint8Array): Promise<void>;
   causalStamp(): CausalStamp;
+  /** Wait for queued local updates to be acknowledged before leaving edit mode. */
+  flush(): Promise<void>;
+  hasPending(): boolean;
   destroy(): void;
   /** Entry keys currently believed to be in the log. Exposed for tests. */
   size(): number;
@@ -106,6 +110,10 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
   let readFailed = false;
   let failures = 0;
   let retry: ReturnType<typeof setTimeout> | null = null;
+
+  const waiters = new Set<(error?: Error) => void>();
+  const finishWaiters = (error?: Error) => { for (const finish of [...waiters]) finish(error); };
+  const deliveryError = () => new Error("Live sharing has not acknowledged every change. Keep this editor open and try Done again.");
 
   const unsubscribe = log.subscribe((key, payload) => {
     if (destroyed || seen.has(key)) return;
@@ -148,12 +156,16 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
           // flight. Later Yjs deltas may depend on those earlier item ids.
           pending = pending ? Y.mergeUpdates([update, pending]) : update;
           onDelivery(false);
+          finishWaiters(deliveryError());
           retry = setTimeout(() => { retry = null; void drain(); }, Math.min(2_000, 200 * 2 ** Math.min(failures++, 4)));
           return;
         }
       }
       if (!destroyed && !readFailed) onDelivery(true);
-    } finally { sending = false; }
+    } finally {
+      sending = false;
+      if (!pending && !retry && !destroyed) finishWaiters();
+    }
   }
   doc.on("update", onUpdate);
 
@@ -210,8 +222,24 @@ export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = (
           [client, ranges.map(({ clock, len }) => [clock, len] as [number, number])])),
       };
     },
+    flush() {
+      if (destroyed) return Promise.reject(deliveryError());
+      if (!pending && !sending && !retry) return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        const finish = (error?: Error) => {
+          clearTimeout(timeout);
+          waiters.delete(finish);
+          if (error) reject(error); else resolve();
+        };
+        const timeout = setTimeout(() => finish(deliveryError()), DELIVERY_TIMEOUT_MS);
+        waiters.add(finish);
+        void drain();
+      });
+    },
+    hasPending: () => Boolean(pending || sending || retry),
     destroy() {
       destroyed = true;
+      finishWaiters(deliveryError());
       if (retry) clearTimeout(retry);
       pending = null;
       doc.off("update", onUpdate);

@@ -64,6 +64,7 @@ function rethrow(e: unknown): never {
 
 /** An editor's exact version, epoch and immutable draft snapshot. */
 export interface DraftSession {
+  causal?: CausalStamp;
   baseVersion: string;
   liveEpoch: string;
   draftRevision: string;

@@ -1797,8 +1797,28 @@ A missing or different seed in a populated/stamped session also blocks editing
 with recovery instructions, instead of adopting stale HTML as a new history.
 
 Failed append bytes stay queued, merge with subsequent local deltas, and retry
-with bounded backoff. The toolbar says Off while delivery is unacknowledged and
-Shared only once that queue drains. Destroying the session cancels its retries.
+with bounded backoff. The toolbar says Off after a delivery failure and Shared
+once that queue drains. Done first saves durable HTML, then waits for its live
+updates to be acknowledged before leaving; a refused append or a 10-second
+acknowledgment deadline keeps the editor open with an explicit retry message.
+Remote edits received during that wait are saved before leaving too. The entire
+Done attempt has a 30-second deadline, including continuously arriving remote
+edits; expiry keeps the editor open and lets any in-flight save finish safely. Normal
+navigation gives pending updates the same bounded drain before disposing the
+connection. Closing a page with pending live updates requests the browser's
+unsaved-work warning even when the HTTP draft save has succeeded; forced closure
+cannot promise delivery.
+
+An editing session returns the saved draft's validated causal frontier alongside
+its opaque revision. Before replacing that frame with live history, the client
+requires the log to include every saved item clock and deletion, with the same
+seed. A missing or incomparable frontier blocks editing and preserves the saved
+HTML. Leave editing releases this unbound session's presence without saving or
+retiring any live work. If the original tab cannot deliver the missing updates,
+the owner/approver can recover the durable draft with `bikeshed commit` or MCP
+`commit_draft` after all editors leave; normal publication gates still apply.
+That explicit publication retires the old epoch, so a new join seeds from the
+recovered version. No join automatically retires another editor's history.
 A configured transport that refuses initialization never enables the editor or
 falls back to a solo autosave. The encoded seed and each update are bounded at
 2,097,152 base64 characters (2 MiB), below the installed database SDK's 10 MiB
@@ -1826,8 +1846,9 @@ before saving again; a causal save waiting for concurrent live edits to merge
 keeps its current editor open and may retry after those edits arrive.
 
 **The log belongs to the draft.** When an editor opens a document, a log that
-holds anything wins over the bytes it loaded, because it may hold edits they do
-not. So a write made outside the editor is refused while anybody is in it, and
+contains the saved frame's causal frontier wins over the bytes it loaded,
+because it may hold edits they do not. Incomplete live history never replaces a
+fuller saved draft. So a write made outside the editor is refused while anybody is in it, and
 drops a log nobody is using: an agent's accept and `commit_draft` (§22), and
 every update, through `/publish?update=`, the CLI or `update_document` (§6a).
 An update deletes the draft's files with it; left in place, `/draft` would

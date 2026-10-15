@@ -23,6 +23,7 @@ import type { FrameMode } from "./frameMode";
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const AUTOSAVE_MS = 1000;
+const DONE_TIMEOUT_MS = 30_000;
 
 /**
  * LEG 3 of the four: the UNCONDITIONAL strip on editor entry, plus an assertion.
@@ -45,6 +46,7 @@ export function useInlineEditor(options: {
   docId: string;
   ready?: boolean;
   causalStamp?: () => CausalStamp | null;
+  flushShared?: () => Promise<void>;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
 }) {
@@ -55,6 +57,8 @@ export function useInlineEditor(options: {
   readyRef.current = ready;
   const causalStampRef = useRef(options.causalStamp);
   causalStampRef.current = options.causalStamp;
+  const flushSharedRef = useRef(options.flushShared);
+  flushSharedRef.current = options.flushShared;
   const changedRef = useRef<(() => void) | null>(null);
   const editing = mode.kind === "editing";
   const baseVersion = mode.kind === "editing" ? mode.baseVersion : null;
@@ -245,10 +249,44 @@ export function useInlineEditor(options: {
      * it would otherwise publish the PREVIOUS draft and call it done.
      */
     flushNow: flush,
-    /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
+    /** Save first, then deliver queued shared updates before the connection is torn down. */
     flushUnsaved: useCallback(async () => {
-      if (unsaved.current || inFlight.current?.session === session.current) return flush();
-      return true;
+      let expired = false;
+      const attempt = async () => {
+        const currentSession = session.current;
+        do {
+          if (unsaved.current || inFlight.current?.session === currentSession) {
+            if (!(await flush())) return false;
+          }
+          if (expired || session.current !== currentSession) return false;
+          try {
+            await flushSharedRef.current?.();
+            if (expired || session.current !== currentSession) return false;
+            setSaveError(null);
+            setSaveState("saved");
+          } catch (error) {
+            if (expired || session.current !== currentSession) return false;
+            setSaveError((error as Error).message);
+            setSaveState("error");
+            return false;
+          }
+          // Remote updates can arrive while the local queue drains. Save that
+          // merged snapshot too before cleanup cancels its autosave timer.
+        } while (unsaved.current);
+        return true;
+      };
+      let timeout: ReturnType<typeof setTimeout>;
+      // A perpetually changing peer can keep the durable save drain busy too.
+      // Stop waiting without aborting an already-started save or losing DOM.
+      const bounded = new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => {
+          expired = true;
+          setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
+          setSaveState("error");
+          resolve(false);
+        }, DONE_TIMEOUT_MS);
+      });
+      return Promise.race([attempt(), bounded]).finally(() => clearTimeout(timeout));
     }, [flush]),
     /** True when the last save failed: a commit must not proceed. */
     saveFailed: () => lastSaveFailed.current,

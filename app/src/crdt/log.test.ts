@@ -8,7 +8,7 @@ import { seedFragment } from "./binding";
 import { createHash, webcrypto } from "node:crypto";
 import * as Y from "yjs";
 import { bindSync } from "./sync";
-import { COMPACT_AFTER, LOG_ENTRY_MAX, connect, fromBase64, toBase64, type UpdateLog } from "./log";
+import { COMPACT_AFTER, DELIVERY_TIMEOUT_MS, LOG_ENTRY_MAX, connect, fromBase64, toBase64, type UpdateLog } from "./log";
 
 beforeAll(() => vi.stubGlobal("crypto", webcrypto));
 afterAll(() => vi.unstubAllGlobals());
@@ -352,4 +352,80 @@ it("skips oversized compaction without dropping any seed or deltas, so late join
     expect(text(late)).toBe(text(doc));
     joined.destroy(); late.destroy();
   } finally { conn.destroy(); doc.destroy(); seed.destroy(); }
+});
+
+it("waits for the in-flight append and its queued dependents before Done destroys the connection", async () => {
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  let release!: () => void;
+  vi.spyOn(log, "append").mockImplementationOnce(async (payload) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return append(payload);
+  });
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    a.getText("t").insert(5, " second");
+    let left = false;
+    const done = Promise.resolve(ca.flush()).then(() => { ca.destroy(); left = true; });
+    await settle();
+    expect(left, "Done must retain the connection while transport acknowledgement is pending").toBe(false);
+    release();
+    await done;
+    expect(text(b)).toBe("first second");
+  } finally { release?.(); ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); }
+});
+
+it("a refused append refuses Done while keeping the update available for recovery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockRejectedValueOnce(new Error("permission_denied")).mockImplementation(append);
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "retained");
+    const flushing = Promise.resolve(ca.flush());
+    await expect(flushing).rejects.toThrow(/acknowledged|sharing/i);
+    await vi.advanceTimersByTimeAsync(2_500);
+    await ca.flush();
+    expect(text(b)).toBe("retained");
+  } finally { ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+
+it("a transport that never acknowledges bounds Done without dropping queued edits", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  let release!: () => void;
+  vi.spyOn(log, "append").mockImplementationOnce(async (payload) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return append(payload);
+  });
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    a.getText("t").insert(5, " retained");
+    const refused = expect(ca.flush()).rejects.toThrow(/not acknowledged/);
+    await vi.advanceTimersByTimeAsync(DELIVERY_TIMEOUT_MS);
+    await refused;
+    expect(text(a)).toBe("first retained");
+    expect(text(b)).toBe("");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await ca.flush();
+    expect(text(b)).toBe("first retained");
+  } finally { release?.(); ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+it("destroy rejects a waiting drain instead of reporting success or leaving it pending", async () => {
+  const log = makeLog(), doc = new Y.Doc();
+  vi.spyOn(log, "append").mockImplementation(() => new Promise(() => {}));
+  const conn = connect(doc, log);
+  doc.getText("t").insert(0, "pending");
+  const refused = expect(conn.flush()).rejects.toThrow(/not acknowledged/);
+  conn.destroy();
+  await refused;
+  await expect(conn.flush()).rejects.toThrow(/not acknowledged/);
+  doc.destroy();
 });

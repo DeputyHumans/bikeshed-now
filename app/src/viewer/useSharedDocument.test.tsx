@@ -4,7 +4,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
-import { LiveLogSizeError, type UpdateLog } from "../crdt/log";
+import * as Y from "yjs";
+import { seedFragment } from "../crdt/binding";
+import { connect, toBase64, LiveLogSizeError, type UpdateLog } from "../crdt/log";
 import { useSharedDocument } from "./useSharedDocument";
 
 beforeAll(() => vi.stubGlobal("crypto", webcrypto));
@@ -67,9 +69,9 @@ function sharedOptions(doc: Document, liveEpoch = "initial") {
 it("does not bind a fresh seed over saved causal history after the shared log is lost", async () => {
   transport.current = memoryLog();
   const doc = new DOMParser().parseFromString("<p>Saved text</p>", "text/html");
-  const view = renderHook(() => useSharedDocument({ ...sharedOptions(doc), expectedGeneration: "0".repeat(64) }));
+  const view = renderHook(() => useSharedDocument({ ...sharedOptions(doc), expectedCausal: { generation: "0".repeat(64), vector: {}, deletes: {} } }));
   try {
-    await waitFor(() => expect(view.result.current.error).toMatch(/could not start/));
+    await waitFor(() => expect(view.result.current.error).toMatch(/saved draft/));
     expect(view.result.current.bound).toBe(false);
     expect(view.result.current.causalStamp()).toBeNull();
     expect(doc.body.textContent).toBe("Saved text");
@@ -130,4 +132,116 @@ it("shows an actionable size refusal and keeps an oversized document unbound", a
     expect(view.result.current.error).toMatch(/upload/);
     expect(doc.body.textContent).toBe("Large authored content");
   } finally { view.unmount(); }
+});
+
+
+it("flush drains synchronous DOM edits through the live transport before resolving", async () => {
+  let release!: () => void;
+  let pending = false;
+  transport.current = { ...memoryLog(), append: async () => {
+    pending = true;
+    await new Promise<void>((resolve) => { release = resolve; });
+    return "delivered";
+  } };
+  const doc = new DOMParser().parseFromString("<p>Before</p>", "text/html");
+  const view = renderHook(() => useSharedDocument(sharedOptions(doc)));
+  try {
+    await waitFor(() => expect(view.result.current.bound).toBe(true));
+    doc.querySelector("p")!.firstChild!.textContent = "Before after";
+    let finished = false;
+    let flushed!: Promise<void>;
+    act(() => { flushed = view.result.current.flush().then(() => { finished = true; }); });
+    await act(async () => { await Promise.resolve(); });
+    expect(pending).toBe(true);
+    expect(finished).toBe(false);
+    release();
+    await act(() => flushed);
+    expect(finished).toBe(true);
+  } finally { release?.(); view.unmount(); }
+});
+
+
+it("refuses partial live history before replacing a fuller saved draft", async () => {
+  const source = new Y.Doc();
+  seedFragment(source.getXmlFragment("body"), new DOMParser().parseFromString("<p>Before</p>", "text/html").body);
+  const seed = Y.encodeStateAsUpdate(source);
+  const connection = connect(source, { ...memoryLog(), append: async () => null });
+  await connection.initialize(seed);
+  (source.getXmlFragment("body").get(0) as Y.XmlElement).insert(1, [new Y.XmlText(" saved but not delivered")]);
+  const expectedCausal = connection.causalStamp();
+  connection.destroy(); source.destroy();
+  const append = vi.fn();
+  transport.current = { ...memoryLog(), subscribe(receive) { receive("_seed", toBase64(seed)); return () => {}; }, append };
+  const doc = new DOMParser().parseFromString("<p>Before saved but not delivered</p>", "text/html");
+  const view = renderHook(() => useSharedDocument({ ...sharedOptions(doc), expectedCausal }));
+  try {
+    await waitFor(() => expect(view.result.current.error).toMatch(/saved draft/i));
+    expect(view.result.current.bound).toBe(false);
+    expect(view.result.current.causalStamp()).toBeNull();
+    expect(doc.body.textContent).toBe("Before saved but not delivered");
+    expect(append).not.toHaveBeenCalled();
+  } finally { view.unmount(); }
+});
+
+it("warns before closing while shared bytes remain pending, even after taking a save stamp", async () => {
+  let release!: () => void;
+  transport.current = { ...memoryLog(), append: async () => {
+    await new Promise<void>((resolve) => { release = resolve; }); return "delivered";
+  } };
+  const doc = new DOMParser().parseFromString("<p>Before</p>", "text/html");
+  const view = renderHook(() => useSharedDocument(sharedOptions(doc)));
+  try {
+    await waitFor(() => expect(view.result.current.bound).toBe(true));
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(true);
+    doc.querySelector("p")!.firstChild!.textContent = "Before after";
+    expect(view.result.current.causalStamp()).not.toBeNull();
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+    release(); await act(() => view.result.current.flush());
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(true);
+  } finally { release?.(); view.unmount(); }
+});
+
+
+it("normal navigation drains already queued typing before releasing the live connection", async () => {
+  let release!: () => void;
+  const stopped = vi.fn();
+  const updates: string[] = [];
+  transport.current = { ...memoryLog(), subscribe: () => stopped, append: async (payload) => {
+    updates.push(payload);
+    if (updates.length === 1) await new Promise<void>((resolve) => { release = resolve; });
+    return `delivered-${updates.length}`;
+  } };
+  const doc = new DOMParser().parseFromString("<p>Before</p>", "text/html");
+  const view = renderHook(() => useSharedDocument(sharedOptions(doc)));
+  await waitFor(() => expect(view.result.current.bound).toBe(true));
+  doc.querySelector("p")!.firstChild!.textContent = "Before first";
+  view.result.current.causalStamp();
+  doc.querySelector("p")!.firstChild!.textContent = "Before first second";
+  view.unmount();
+  expect(stopped).not.toHaveBeenCalled();
+  release();
+  await waitFor(() => expect(stopped).toHaveBeenCalledOnce());
+  expect(updates).toHaveLength(2);
+});
+
+it("adopts a matching saved frontier and a live history ahead of it", async () => {
+  const source = new Y.Doc();
+  seedFragment(source.getXmlFragment("body"), new DOMParser().parseFromString("<p>Before</p>", "text/html").body);
+  const seed = Y.encodeStateAsUpdate(source);
+  const connection = connect(source, memoryLog());
+  await connection.initialize(seed);
+  const expectedCausal = connection.causalStamp();
+  for (const ahead of [false, true]) {
+    if (ahead) (source.getXmlFragment("body").get(0) as Y.XmlElement).insert(1, [new Y.XmlText(" live")]);
+    const current = toBase64(Y.encodeStateAsUpdate(source));
+    transport.current = { ...memoryLog(), subscribe(receive) { receive("_seed", toBase64(seed)); receive("later", current); return () => {}; } };
+    const doc = new DOMParser().parseFromString("<p>Before</p>", "text/html");
+    const view = renderHook(() => useSharedDocument({ ...sharedOptions(doc), expectedCausal }));
+    try {
+      await waitFor(() => expect(view.result.current.bound).toBe(true));
+      expect(view.result.current.error).toBeNull();
+      expect(doc.body.textContent).toBe(ahead ? "Before live" : "Before");
+    } finally { view.unmount(); }
+  }
+  connection.destroy(); source.destroy();
 });
