@@ -172,6 +172,7 @@ const NAMES = {
   r: "A20.7r login --paste --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
   s: "A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each",
   t: "A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC §19 says every command takes --json",
+  v: "A20.7v login in CI refuses before opening a browser or saving a credential",
   u: "A20.7u no CLI process this spec started reached for anything outside the stack (zero egress refusals with this spec as parent), and the commands it runs here reach the stack itself",
 };
 
@@ -328,7 +329,7 @@ async function cli(ctx, who, args, o = {}) {
   const token = "token" in o ? o.token : who?.token;
   const home = o.home ?? who?.home ?? cliHome(target);
   ctx.step(`bikeshed ${args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ")}${token ? "" : "   (no token)"}`);
-  const r = await runCli(target, args, { token, home, input: o.input, timeoutMs: o.timeoutMs ?? CLI_MS });
+  const r = await runCli(target, args, { token, home, input: o.input, env: o.env, timeoutMs: o.timeoutMs ?? CLI_MS });
   ctx.step(`  → ${args[0]} exit ${r.code}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms${r.stderr ? `; stderr ${JSON.stringify(r.stderr.slice(0, 200))}` : ""}`);
   // A case's own run that the stack did not answer (runCli's `cut`) ends
   // INCONCLUSIVE here; a background phase (a stepLog, no ctx.inconclusive)
@@ -622,8 +623,9 @@ scenario(NAMES.d, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   assert.equal(sha(Buffer.from(plain.stdout, "utf8")), sha(bytes), "get prints the whole source, byte for byte, and nothing else");
   const viaLink = okJson(await cli(ctx, stranger, ["get", link, "--json"]), "get <link> --json");
   assert.deepEqual(
-    { id: viaLink.id, version: viaLink.version, truncated: viaLink.truncated, canEdit: viaLink.canEdit, length: viaLink.source?.length },
-    { id: up.docId, version: "v1", truncated: false, canEdit: false, length: bytes.length },
+    { id: viaLink.id, version: viaLink.version, truncated: viaLink.truncated, canEdit: viaLink.canEdit, length: viaLink.source?.length, cursor: typeof viaLink.cursor },
+    { id: up.docId, version: "v1", truncated: false, canEdit: false, length: bytes.length, cursor: "string" },
+    "the whole-source JSON preserves the cursor to watch from",
   );
   assert.equal(sha(Buffer.from(viaLink.source, "utf8")), sha(bytes), "get --json carries the whole source: the link's key reached /content for the rest too");
   refused(bare, "get <unlisted id> without its key", /^error: no document with id "/);
@@ -1025,7 +1027,7 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   ]);
   okJson(listR, "list with the saved sign-in");
   answered(cross, "POST /tokens revoke (another token's id)");
-  assert.deepEqual({ status: cross.status, error: cross.json?.error }, { status: 403, error: "A token can revoke only itself." });
+  assert.deepEqual({ status: cross.status, error: cross.json?.error }, { status: 403, error: "A token can revoke only itself." }, "a token cannot revoke another token id");
   for (const [label, tok] of [["the bystander", o.token], ["the saved token", config.token]]) {
     const mcp = ctx.mcp({ token: tok, actor: label, timeoutMs: REQUEST_MS });
     await mcp.initialize();
@@ -1033,7 +1035,9 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   }
 
   ctx.step("logout --json revokes the saved token on the deployment and forgets it, keeping the origin");
-  const out = okJson(await cli(ctx, null, ["logout", "--json"], { home, token: null }), "logout --json");
+  const logout = await cli(ctx, null, ["logout", "--json"], { home, token: o.token });
+  const out = okJson(logout, "logout --json beside BIKESHED_TOKEN");
+  assert.match(logout.stderr, /BIKESHED_TOKEN is set in this shell/, "logout names the separate shell credential");
   assert.deepEqual(out, { origin: target.origin, revoked: true, forgot: true });
   assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), { origin: target.origin }, "the token is gone, the origin kept (SPEC §23)");
   const [probe, listedAfter] = await Promise.all([
@@ -1045,6 +1049,13 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   const bystander = ctx.mcp({ token: o.token, actor: "bystander-after", timeoutMs: REQUEST_MS });
   await bystander.initialize();
   await bystander.ok("list_documents", { limit: 1 });
+
+  ctx.step("an already-revoked saved browser credential is confirmed dead and still forgotten");
+  writeFileSync(configPath, JSON.stringify(config));
+  const dead = await cli(ctx, null, ["logout", "--json"], { home, token: null });
+  assert.deepEqual(okJson(dead, "logout of an already-revoked browser credential"), { origin: target.origin, revoked: true, forgot: true }, "an already-dead credential is confirmed revoked");
+  assert.equal(dead.stderr, "", "a confirmed dead credential needs no revocation advice");
+  assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), { origin: target.origin }, "logout forgets an already-dead credential and retains the origin");
 });
 
 scenario(NAMES.q, { tiers: BOTH, timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
@@ -1234,4 +1245,12 @@ scenario(NAMES.u, { tiers: LOCAL, needs: ["egress-guard"], timeoutMs: 300_000, i
   assert.equal(runs[3].json.origin, target.origin, "logout with nothing saved names the stack as its deployment");
   // lastUsedAt is written best-effort after the request (functions/src/lib/tokens.ts), so it is waited for.
   await eventually(async () => Boolean((await tokensOf(o.session)).find((t) => t.tokenId === o.tokens[0].tokenId)?.lastUsedAt), { timeout: 120_000, interval: 500, message: "the stack saw the CLI's token (lastUsedAt set, SPEC §19)" });
+});
+
+scenario(NAMES.v, { tiers: BOTH, timeoutMs: 30_000 }, async (ctx) => {
+  const home = cliHome(target);
+  const result = await cli(ctx, null, ["login", "--json"], { home, token: null, env: { CI: "1", BIKESHED_LOGIN_TIMEOUT_MS: "1000" }, timeoutMs: 5000 });
+  refused(result, "login in CI", /error: In CI, set BIKESHED_TOKEN and BIKESHED_ORIGIN\./);
+  assert.deepEqual(openedIn(home), [], "CI login opens no browser");
+  assert.equal(existsSync(join(home.config, "bikeshed", "config.json")), false, "CI login saves no credential");
 });

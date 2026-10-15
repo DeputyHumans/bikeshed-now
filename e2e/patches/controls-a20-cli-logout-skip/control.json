@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7p login --json signs in through the browser flow and saves a cli token marked via browser; logout --json revokes it on the deployment (401 after) and keeps the origin; a token revoking another token's id is refused 403",
+  "what": "cli logout skip",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7p login --json signs in through the browser flow and saves a cli token marked via browser; logout --json revokes it on the deployment (401 after) and keeps the origin; a token revoking another token's id is refused 403",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the revoked token is refused at /mcp"
+  }
+}

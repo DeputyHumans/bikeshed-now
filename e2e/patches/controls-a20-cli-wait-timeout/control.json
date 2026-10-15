@@ -1,0 +1,13 @@
+{
+  "oracle": "a watched passage",
+  "what": "cli wait timeout",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "a watched passage",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "--wait that times out exits 3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7i suggest needs exactly one of --with and --delete and refuses an empty --with before anything is sent; suggest, revise, withdraw, reject, accept and commit --json carry suggestions to a published version, and comments --version reads the earlier one",
+  "what": "cli suggest exclusive",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7i suggest needs exactly one of --with and --delete and refuses an empty --with before anything is sent; suggest, revise, withdraw, reject, accept and commit --json carry suggestions to a published version, and comments --version reads the earlier one",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "suggest with both"
+  }
+}

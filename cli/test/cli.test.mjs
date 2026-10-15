@@ -608,11 +608,12 @@ test("the rest is read from the source file the tool named, with the link's key"
 });
 
 test("--json carries the whole source, and no longer says it was cut", async () => {
-  const { stdout } = await getAgainst(["big-deck", "--json"]);
+  const { stdout } = await getAgainst(["big-deck", "--json"], { result: { cursor: "after-big-deck" } });
   const result = JSON.parse(stdout.toString("utf8"));
   assert.equal(result.truncated, false);
   assert.equal(result.source, WHOLE);
   assert.equal(result.version, "v3", "the rest of the result survives");
+  assert.equal(result.cursor, "after-big-deck", "whole-source JSON retains the change cursor");
 });
 
 test("when the rest cannot be read, nothing is printed and the command fails", async () => {

@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7d get and get --json return the whole source of a document over get_document's 200,000-character cap (truncated false, the uploaded bytes); a pasted ?k= link reads an unlisted document for a non-member, and the bare id answers as an absent one",
+  "what": "cli get whole",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7d get and get --json return the whole source of a document over get_document's 200,000-character cap (truncated false, the uploaded bytes); a pasted ?k= link reads an unlisted document for a non-member, and the bare id answers as an absent one",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "get prints the whole source"
+  }
+}

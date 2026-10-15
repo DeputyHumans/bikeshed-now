@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7k mkdir, folders, folder, publish --folder, mv and rename --json file and retitle documents; mv needs its destination and spells the root `root`; rename keeps the address",
+  "what": "cli mv destination",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7k mkdir, folders, folder, publish --folder, mv and rename --json file and retitle documents; mv needs its destination and spells the root `root`; rename keeps the address",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "mv without a destination"
+  }
+}

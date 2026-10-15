@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -529,5 +529,5 @@
+   // published a version missing everything past the cut. So a cut source is
+   // read whole, or nothing is printed.
+-  const whole = result.truncated
++  const whole = false && result.truncated
+     ? await fetchSource(origin, token, {
+         id: doc.id,

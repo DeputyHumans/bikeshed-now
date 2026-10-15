@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise CLI saved-sign-in revocation beside a shell token, already-dead credentials and immediate CI refusal; retain large-source change cursors and add directional controls for logout, replacement arguments, move destinations and wait timeouts.
+
 - Make reading-statistics E2E checks wait for the exact page-exit beacon in both stored records, and add independent controls for automated metrics, both activity filters, malformed beats and editor detail gates.
 
 - Exercise OAuth focus rearming, resource and client binding, live identity closure, hostile redirects, duplicate parameters and capability disclosure; exchange short-lived credentials before unrelated waits and add directional source controls for the protocol and public entry points.

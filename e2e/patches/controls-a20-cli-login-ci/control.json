@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7v login in CI refuses before opening a browser or saving a credential",
+  "what": "cli login ci",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7v login in CI refuses before opening a browser or saving a credential",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "login in CI"
+  }
+}

@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -389,5 +389,5 @@
+
+   const kept = { ...config, origin };
+-  delete kept.token;
++  // regression: retain the saved token after logout.
+   delete kept.via;
+   writeConfig(kept);
