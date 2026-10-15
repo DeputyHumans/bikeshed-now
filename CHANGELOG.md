@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve operator publication and withdrawal completion after a lost transaction acknowledgement. A retry recognizes its own immutable version or retirement epoch, keeps the successful cleanup receipt, and finishes mirror, old-log and captured-draft cleanup without repointing newer work.
+
 - Keep normal losing-transaction cleanup while protecting acknowledged-lost uploads: a known refusal may remove a staged candidate only after a fresh read finds its unique prefix in neither the current draft nor any historical version. Failed reference reads and unknown transport outcomes retain bytes.
 
 - Retain the thumbnail upload gate and existing timestamp, authority and nontransactional-write controls after acknowledgement reconciliation, with their original assertions unchanged.

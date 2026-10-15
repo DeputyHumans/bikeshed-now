@@ -17,10 +17,15 @@ export function withdrawalPrefix(docId, versionId, record) {
 }
 
 export async function repointWithdrawal(db, docRef, plan, deleteField = () => FieldValue.delete()) {
+  const liveEpoch = randomUUID();
+  let attempted;
   return db.runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     if (!fresh.exists) throw new Error('the document disappeared mid-run');
     const data = fresh.data();
+    // The unique retirement epoch proves this invocation already repointed
+    // the document. A lost ACK must not abort the remaining withdrawal work.
+    if (attempted && data.liveEpoch === liveEpoch) return attempted;
     const retiredEpoch = data.liveEpoch ?? 'initial';
     if (typeof retiredEpoch !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(retiredEpoch)) throw new Error('invalid live editing epoch');
     if (data.currentVersion !== plan.currentVersion) throw new Error('currentVersion changed mid-run; aborted without deleting anything');
@@ -41,7 +46,6 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
     const projection = await tx.get(publicRef);
     if (data.visibility === 'public' && !projection.exists) throw new Error('public projection is missing; repair it before withdrawing');
     const version = repoint.data();
-    const liveEpoch = randomUUID();
     const update = { currentVersion: plan.repoint, liveEpoch, updatedAt: version.publishedAt ?? null };
     if (plan.draft) update.draft = deleteField();
     if (data.thumb?.versionId === plan.doomed) update.thumb = deleteField();
@@ -61,6 +65,7 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
         publishedAt: version.publishedAt ?? null,
       });
     } else if (projection.exists) tx.delete(publicRef);
-    return { retiredEpoch, draftPrefix };
+    attempted = { retiredEpoch, draftPrefix };
+    return attempted;
   });
 }

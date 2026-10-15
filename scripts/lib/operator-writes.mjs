@@ -44,9 +44,14 @@ export async function persistOperatorAccess(db, docRef, { add, remove, role }, t
 
 /** Select a version only after upload; losing attempts never modify another version. */
 export async function commitOperatorVersion(db, docRef, input, timestamp, deleteField = () => FieldValue.delete()) {
+  let attempted;
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     const versions = await tx.get(docRef.collection('versions'));
+    // A retried callback can observe our already-committed upload. Preserve
+    // its retirement receipt instead of calling it a duplicate and skipping
+    // the mirror, old log and captured-draft cleanup still owed by this run.
+    if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().storagePrefix === input.version.storagePrefix)) return attempted;
     const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion && version.data().contentHash === input.version.contentHash);
     if (duplicate) return { duplicate: true, versionId: duplicate.id };
     const current = snap.data() || {};
@@ -94,7 +99,8 @@ export async function commitOperatorVersion(db, docRef, input, timestamp, delete
         publishedAt: timestamp,
       });
     } else if (projection.exists) tx.delete(publicRef);
-    return { duplicate: false, versionId, membership, existed: snap.exists, retiredEpoch, draftPrefix };
+    attempted = { duplicate: false, versionId, membership, existed: snap.exists, retiredEpoch, draftPrefix };
+    return attempted;
   });
 }
 

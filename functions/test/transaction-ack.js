@@ -16,6 +16,7 @@ function loseFirstTransactionAcknowledgement(db, { afterCommit = async () => {} 
       _writeBatch: { _reset: () => { queued = []; } },
       _backoff: { backoffAndWait: async () => {}, resetToMax() {} },
       get: ref => ref.get(),
+      create: (...args) => { queued.push(["create", args]); return sdk; },
       set: (...args) => { queued.push(["set", args]); return sdk; },
       update: (...args) => { queued.push(["update", args]); return sdk; },
       delete: (...args) => { queued.push(["delete", args]); return sdk; },

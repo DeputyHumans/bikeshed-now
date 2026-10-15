@@ -1226,6 +1226,11 @@ restoring an older version's bytes creates a new version, preserving history;
 a different publish from a base that advanced during upload refuses and must
 be rerun. Current sharing is preserved during version selection. Unselected
 attempt bundles can remain unreferenced; they never overwrite selected bytes.
+A transaction retry after a lost acknowledgement recognizes the operator's
+own immutable version prefix and retains the successful replacement receipt;
+it does not turn that replacement into a duplicate that skips cleanup. A
+withdrawal similarly recognizes its own unique retirement epoch. Acknowledging
+either completed operation does not repeat its writes or erase a later draft.
 
 An operator replacement also advances `liveEpoch` and clears the current draft
 in that transaction. Its return value captures the retired epoch and exact
