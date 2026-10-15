@@ -182,7 +182,7 @@ test("negative controls: a filtered matrix cell, shortened trials or mismatched 
 
 
 test("all three additional CLI capability cells are mandatory and remain unproved until executed", () => {
-  assert.equal(imported.acceptance.requirements.filter(r => !["concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators"].includes(r.id)).length, 51, "all original cells remain beside the added failure variants");
+  assert.equal(imported.acceptance.requirements.filter(r => !["concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators", "native-ack-feedback-threads", "native-ack-suggestions", "native-ack-verification-views-teams", "native-ack-membership", "native-ack-mcp", "native-ack-oauth", "native-ack-email-cooldown", "native-ack-rename", "native-ack-suggestion-leases"].includes(r.id)).length, 51, "all original cells remain beside the added failure variants");
   for (const id of ["cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor"]) {
     const cell = imported.acceptance.requirements.find((r) => r.id === id);
     assert.equal(cell.spec, "a20-cli.spec.mjs");
@@ -483,17 +483,26 @@ test("the new thumbnail authority cell preserves its N2 default trials and canno
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), "removing thumbnail authority must invalidate the matrix");
 });
 
-for (const [id, spec, patch] of [
+for (const [id, spec, patch, extraCapabilities = []] of [
   ["postcommit-projection-failure", "a12-versions.spec.mjs", "a12-projection-unavailable"],
   ["native-ack-endpoints", "a12-versions.spec.mjs", "amplify-native-ack-loss"],
   ["native-ack-operators", "a12-operator-ack.spec.mjs", "amplify-native-ack-loss"],
+  ["native-ack-feedback-threads", "a07-thread-ack.spec.mjs", "amplify-native-ack-loss", []],
+  ["native-ack-suggestions", "a08-suggestion-ack.spec.mjs", "amplify-native-ack-loss", []],
+  ["native-ack-verification-views-teams", "a12-endpoint-ack.spec.mjs", "amplify-native-ack-loss", ["email", "mailpit"]],
+  ["native-ack-membership", "a14-membership-ack.spec.mjs", "amplify-native-ack-loss", ["email", "mail-fail-recipient"]],
+  ["native-ack-mcp", "a20-mcp-ack.spec.mjs", "amplify-native-ack-loss", []],
+  ["native-ack-oauth", "a20-oauth-ack.spec.mjs", "amplify-native-ack-loss", []],
+  ["native-ack-email-cooldown", "a23-cooldown-ack.spec.mjs", "amplify-native-ack-loss", ["email", "mailpit"]],
+  ["native-ack-rename", "a14-rename-ack.spec.mjs", "amplify-native-ack-loss", []],
+  ["native-ack-suggestion-leases", "a08-suggestion-lease-ack.spec.mjs", "amplify-native-ack-loss", []],
 ]) test(`${id} keeps its complete spec and required fault capability`, () => {
   const cell = imported.acceptance.requirements.find(r => r.id === id);
   assert.ok(cell, `${id}: matrix cell is required`);
   assert.equal(cell.suite, "functional");
   assert.equal(cell.spec, spec);
   assert.deepEqual(cell.options.patches, [patch]);
-  assert.deepEqual(cell.capabilities, ["gates", `patch:${patch}`]);
+  assert.deepEqual(cell.capabilities, ["gates", ...extraCapabilities, `patch:${patch}`]);
   assert.equal(cell.command, `node e2e/run.mjs run --suite functional --spec ${spec} --patches ${patch}`);
   const c = structuredClone(imported);
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);

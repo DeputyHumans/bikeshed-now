@@ -14294,12 +14294,25 @@
     {
       "id": "native-transaction-ack-loss-misclassifies-own-commit",
       "state": "in-progress",
-      "claim": "A native transaction can durably commit, lose its acknowledgement, and retry the callback. Draft saves, draft/external publication, thumbnail writes and operator publish/withdraw treated their own committed pointer as a conflict, duplicate or losing upload; some cleanup then deleted bytes still referenced by immutable versions or draft metadata. Recognize the unique completed operation before fresh-write guards and finish its captured retirement; delete a known refused candidate only after proving no draft or version references it.",
+      "claim": "A native transaction can durably commit, lose its acknowledgement, and retry the callback. Draft saves, draft/external publication, thumbnail writes and operator publish/withdraw treated their own committed pointer as a conflict, duplicate or losing upload; some cleanup then deleted bytes still referenced by immutable versions or draft metadata. Recognize the unique completed operation before fresh-write guards and finish its captured retirement; delete a known refused candidate only after proving no draft or version references it. The same native commit-acknowledgement boundary also caused false feedback refusals, duplicate revision/read/verification effects, suppressed notices or invitations, unsafe OAuth replay handling, and replayed membership, rename, or suggestion lease changes. Later legitimate operations could erase mutable receipt evidence or have their results overwritten; deletable ordinary feedback could be recreated. Each case must prove its own real durable commit and installed SDK retry before judging the exact operation-specific result.",
       "sourceCommits": [
         "3838b31",
         "0ce2f41",
         "69e5b91",
-        "036908e"
+        "036908e",
+        "a044aa773e24e0b9b41765dff83750d87c50e069",
+        "3ced9a445aee801802396a426600d493b70c2f68",
+        "a65b7f18a4faf56a87bab141a3eef425b01e6ad0",
+        "fff2cf36b960593a935d39df7027a7085b6a482c",
+        "c9e2875057b6f521be15db1961dbd996f34a55f1",
+        "ec0a3d34140b04628dd2bec4c2ec3059d146784f",
+        "89d3a3d82e905059ec57241e7131f19c234a868f",
+        "215f2704404d72e0a0f98571afc066af81251eab",
+        "c9c98301d5fa71a5bc69fd29a4e7f2c235608046",
+        "c35e7e2357c05e4c5f46607421ffdfdab8febf3c",
+        "84193894935c61fa3d46232eca55e8d68e7ad5be",
+        "4e813d59dc42e3f4f357a6d1bf816ad931164c3a",
+        "c6813531f08376724fa5cb50544c9d31730a802c"
       ],
       "relatedOriginalItems": [
         "S5"
@@ -14439,6 +14452,366 @@
             "suite": "functional"
           },
           "intendedFailure": "ACK draft-dedup: success refreshes the live epoch mirror"
+        },
+        {
+          "set": "controls-ack-dedup-later",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9f deduplicated publication acknowledges its retirement after a later publication and draft save",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK later dedup: the original committed retirement is acknowledged"
+        },
+        {
+          "set": "controls-ack-link-later",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9h a remembered-link save acknowledges its commit after a later editor saves another draft",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK later link: the original committed save is acknowledged"
+        },
+        {
+          "set": "controls-ack-thumb-later-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb later: the newer thumbnail JPEG remains readable"
+        },
+        {
+          "set": "controls-ack-thumb-later-head",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb later: the newer publication remains current"
+        },
+        {
+          "set": "controls-ack-thumb-later-response",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb later: the first committed upload still answers 200"
+        },
+        {
+          "set": "controls-ack-thumb-later-retirement",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb later: the first upload finishes its original obsolete-version cleanup"
+        },
+        {
+          "set": "controls-operator-access-ack",
+          "target": {
+            "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+            "case": "A12.10c an operator access grant ACK retry preserves a later real revocation and its mirrors",
+            "suite": "functional"
+          },
+          "intendedFailure": "^ACK operator access: original retry preserves"
+        },
+        {
+          "set": "controls-operator-withdraw-later-ack",
+          "target": {
+            "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+            "case": "A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication",
+            "suite": "functional"
+          },
+          "intendedFailure": "^ACK operator withdrawal later head: exact captured retirement"
+        },
+        {
+          "set": "controls-ack-thread-reopen",
+          "target": {
+            "spec": "e2e/specs/functional/a07-thread-ack.spec.mjs",
+            "case": "A7.8 a thread resolution acknowledges its committed note after native ACK loss without undoing a later reopen",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thread: retry preserves the later reopen and both original notes"
+        },
+        {
+          "set": "controls-ack-suggestion-create",
+          "target": {
+            "spec": "e2e/specs/functional/a08-suggestion-ack.spec.mjs",
+            "case": "A8.10a suggestion creation acknowledges its single committed annotation after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK suggestion create: its own durable annotation is acknowledged with 200"
+        },
+        {
+          "set": "controls-ack-suggestion-revise",
+          "target": {
+            "spec": "e2e/specs/functional/a08-suggestion-ack.spec.mjs",
+            "case": "A8.10b suggestion revision records exactly one history entry after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK suggestion revise: native retry records exactly one history entry"
+        },
+        {
+          "set": "controls-ack-suggestion-claim-replay",
+          "target": {
+            "spec": "e2e/specs/functional/a08-suggestion-lease-ack.spec.mjs",
+            "case": "A8.11a a completed suggestion claim does not resurrect a lease released before its native retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK suggestion claim: native retry preserves the later lease operation"
+        },
+        {
+          "set": "controls-ack-suggestion-release-replay",
+          "target": {
+            "spec": "e2e/specs/functional/a08-suggestion-lease-ack.spec.mjs",
+            "case": "A8.11b a completed suggestion release does not erase a newer same-account lease before its native retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK suggestion release: native retry preserves the later lease operation"
+        },
+        {
+          "set": "controls-ack-verification-mail",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11a a verification reservation survives native acknowledgement loss and mails its current code exactly once",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK verification start: its reserved code is mailed exactly once"
+        },
+        {
+          "set": "controls-ack-verification-start",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11a a verification reservation survives native acknowledgement loss and mails its current code exactly once",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK verification start: its durable reservation returns200"
+        },
+        {
+          "set": "controls-ack-verification-final",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11b a wrong verification request spends one guess through native acknowledgement loss including the final slot",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK wrong code 4: its completed attempt retains the original refusal"
+        },
+        {
+          "set": "controls-ack-verification-first",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11b a wrong verification request spends one guess through native acknowledgement loss including the final slot",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK wrong code 0: one request spends one guess"
+        },
+        {
+          "set": "controls-ack-verification-replaced",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11c a retried wrong code cannot spend a replacement challenge's guess budget",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK replacement: the original checked challenge changed"
+        },
+        {
+          "set": "controls-ack-reading-member",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11d member and public reading beats consume their five-minute cap once after native acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK reading member: one request consumes one cap"
+        },
+        {
+          "set": "controls-ack-reading-public",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11d member and public reading beats consume their five-minute cap once after native acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK reading public: one request consumes one cap"
+        },
+        {
+          "set": "controls-ack-team-cleanup",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11e an administrator acknowledges self-removal after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK team: completed request clears its temporary receipt"
+        },
+        {
+          "set": "controls-ack-team-self-removal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11e an administrator acknowledges self-removal after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK team: self-removal acknowledges the completed authorized change"
+        },
+        {
+          "set": "controls-ack-team-invitation",
+          "target": {
+            "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+            "case": "A12.11f a committed team addition keeps its invitation delta through native acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK team: the winning addition sends exactly one invitation"
+        },
+        {
+          "set": "controls-ack-folder-invitation",
+          "target": {
+            "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+            "case": "A14.8a a folder grant ACK retry retains its invitation delta without regranting access revoked by a later request",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK folder membership: original invitation delta sends exactly one message"
+        },
+        {
+          "set": "controls-ack-folder-replay",
+          "target": {
+            "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+            "case": "A14.8a a folder grant ACK retry retains its invitation delta without regranting access revoked by a later request",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK folder membership: original retry preserves the later revocation and exact events"
+        },
+        {
+          "set": "controls-ack-doc-invitation",
+          "target": {
+            "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+            "case": "A14.8b a document grant ACK retry retains its invitation and one event without regranting access revoked by a later request",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK doc membership: original invitation delta sends exactly one message"
+        },
+        {
+          "set": "controls-ack-doc-replay",
+          "target": {
+            "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+            "case": "A14.8b a document grant ACK retry retains its invitation and one event without regranting access revoked by a later request",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK doc membership: original retry preserves the later revocation and exact events"
+        },
+        {
+          "set": "controls-ack-rename-replay",
+          "target": {
+            "spec": "e2e/specs/functional/a14-rename-ack.spec.mjs",
+            "case": "A14.9 a rename acknowledges its own native commit without overwriting a later rename or duplicating its change event",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK rename: original retry preserves the newer title and exact two events"
+        },
+        {
+          "set": "controls-ack-mcp-comment",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7a MCP add_comment acknowledges one committed thread after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP comment: the original call acknowledges its durable thread"
+        },
+        {
+          "set": "controls-ack-mcp-read",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP read: overlapping native retries count each session read once"
+        },
+        {
+          "set": "controls-ack-mcp-read-aggregate",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP read: overlapping native retries count each aggregate read once"
+        },
+        {
+          "set": "controls-ack-mcp-read-cleanup",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP read: successful calls remove only their completed receipts"
+        },
+        {
+          "set": "controls-ack-mcp-deleted-cleanup",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP author deletion: the completed request removes its bounded receipt"
+        },
+        {
+          "set": "controls-ack-mcp-deleted-result",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP author deletion: the committed creation still succeeds"
+        },
+        {
+          "set": "controls-ack-mcp-deleted-resurrection",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+            "case": "A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK MCP author deletion: the native retry never resurrects deleted feedback"
+        },
+        {
+          "set": "controls-ack-cli-oauth",
+          "target": {
+            "spec": "e2e/specs/functional/a20-oauth-ack.spec.mjs",
+            "case": "A20.oauth-ack the CLI first code exchange survives native ACK loss with one usable token while an independent replay still revokes it",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK CLI OAuth: the first exchange acknowledges its committed token"
+        },
+        {
+          "set": "controls-ack-dcr-oauth",
+          "target": {
+            "spec": "e2e/specs/functional/a20-oauth-ack.spec.mjs",
+            "case": "A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed grant while independent code replay still can",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK DCR OAuth: own retry preserves the newer unrevoked generation"
+        },
+        {
+          "set": "controls-ack-comment-cooldown",
+          "target": {
+            "spec": "e2e/specs/functional/a23-cooldown-ack.spec.mjs",
+            "case": "A23.8a a comment cooldown claim surviving native ACK loss still delivers its winning notice exactly once",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK comment cooldown: the winning committed claim delivers exactly one notice"
+        },
+        {
+          "set": "controls-ack-suggestion-cooldown",
+          "target": {
+            "spec": "e2e/specs/functional/a23-cooldown-ack.spec.mjs",
+            "case": "A23.8b a suggestion cooldown claim surviving native ACK loss still delivers its winning notice exactly once",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK suggestion cooldown: the winning committed claim delivers exactly one notice"
+        },
+        {
+          "set": "controls-ack-cooldown-expiry",
+          "target": {
+            "spec": "e2e/specs/functional/a23-cooldown-ack.spec.mjs",
+            "case": "A23.8c a reader whose document expires while its committed cooldown ACK is held receives no comment bytes after retry",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK cooldown expiry: the expired reader receives no private comment notice"
         }
       ],
       "evidence": [
@@ -14449,13 +14822,138 @@
         "e2e/.out/transaction-ack-review/operator-after.log",
         "e2e/.out/transaction-ack-review/backend-final.log",
         "e2e/.out/thumb-ack-controls-xa0L0R/proof.json",
-        "e2e/.out/native-ack-proof/helper-inverses/manifest.json"
+        "e2e/.out/native-ack-proof/helper-inverses/manifest.json",
+        "e2e/.out/mcp-ack-proof/baseline.log",
+        "e2e/.out/mcp-ack-proof/green.log",
+        "e2e/.out/mcp-ack-proof/inverse-proof.json",
+        "e2e/.out/endpoint-ack-proof-E16VeF/proof.json",
+        "e2e/.out/remaining-ack-proof/proof.json",
+        "e2e/.out/transaction-ack-review/suggestion-before.log",
+        "e2e/.out/transaction-ack-review/thread-before.log",
+        "e2e/.out/transaction-ack-review/membership-proof.json",
+        "e2e/.out/transaction-ack-review/operator-receipt-proof.json",
+        "e2e/.out/transaction-ack-review/operator-access-before.log",
+        "e2e/.out/transaction-ack-review/operator-withdraw-later-before.log",
+        "e2e/.out/transaction-ack-review/oauth-code-superseded-probe.jsonl",
+        "e2e/.out/draft-later-proof-FQJIrh/proof.json",
+        "e2e/.out/mcp-delete-ack-proof/baseline.log",
+        "e2e/.out/mcp-delete-ack-proof/green.log",
+        "e2e/.out/mcp-delete-ack-proof/inverse-proof.json",
+        "e2e/.out/mcp-delete-ack-proof/patch-proof.json",
+        "e2e/.out/lease-rename-ack-proof/manifest.json",
+        "e2e/.out/lease-rename-ack-proof/compositions/proof.json",
+        "e2e/.out/dcr-ack-proof/proof.json",
+        "e2e/.out/transaction-ack-review/transaction-inventory.json"
       ],
       "remaining": [
-        "Five endpoint and two operator E2E cases plus 15 intended controls are authored; actual native emulator acknowledgement-loss runs and final same-revision acceptance remain required."
+        "34 exact E2E cases and 55 directional controls are authored across original and appended scopes. Actual native emulator runs, every exact control pair and final same-revision/version/fingerprint acceptance remain required."
       ],
       "distinction": "This is a transport ambiguity after a real successful commit. It is distinct from ordinary transaction contention, refusal cleanup, thumbnail authority changes and projection maintenance failure. The scoped capability must prove durable state before faulting the native acknowledgement and observe the SDK retry.",
-      "testCommit": "32657505326bd26e00dbbd0e7667cc840191ef6a"
+      "testCommit": "32657505326bd26e00dbbd0e7667cc840191ef6a",
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9c external publication survives native commit acknowledgement loss without deleting the committed version"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-operator-ack.spec.mjs::A12.10a an operator publish completes its exact retirement after native commit acknowledgement loss without reporting its own commit as a duplicate"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-operator-ack.spec.mjs::A12.10b an operator withdrawal completes its exact retirement and removes only the withdrawn version after native commit acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9f deduplicated publication acknowledges its retirement after a later publication and draft save"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9h a remembered-link save acknowledges its commit after a later editor saves another draft"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-versions.spec.mjs::A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-operator-ack.spec.mjs::A12.10c an operator access grant ACK retry preserves a later real revocation and its mirrors"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-operator-ack.spec.mjs::A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication"
+        },
+        {
+          "caseId": "e2e/specs/functional/a07-thread-ack.spec.mjs::A7.8 a thread resolution acknowledges its committed note after native ACK loss without undoing a later reopen"
+        },
+        {
+          "caseId": "e2e/specs/functional/a08-suggestion-ack.spec.mjs::A8.10a suggestion creation acknowledges its single committed annotation after native transaction acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a08-suggestion-ack.spec.mjs::A8.10b suggestion revision records exactly one history entry after native transaction acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a08-suggestion-lease-ack.spec.mjs::A8.11a a completed suggestion claim does not resurrect a lease released before its native retry"
+        },
+        {
+          "caseId": "e2e/specs/functional/a08-suggestion-lease-ack.spec.mjs::A8.11b a completed suggestion release does not erase a newer same-account lease before its native retry"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11a a verification reservation survives native acknowledgement loss and mails its current code exactly once"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11b a wrong verification request spends one guess through native acknowledgement loss including the final slot"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11c a retried wrong code cannot spend a replacement challenge's guess budget"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11d member and public reading beats consume their five-minute cap once after native acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11e an administrator acknowledges self-removal after native transaction acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a12-endpoint-ack.spec.mjs::A12.11f a committed team addition keeps its invitation delta through native acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a14-membership-ack.spec.mjs::A14.8a a folder grant ACK retry retains its invitation delta without regranting access revoked by a later request"
+        },
+        {
+          "caseId": "e2e/specs/functional/a14-membership-ack.spec.mjs::A14.8b a document grant ACK retry retains its invitation and one event without regranting access revoked by a later request"
+        },
+        {
+          "caseId": "e2e/specs/functional/a14-rename-ack.spec.mjs::A14.9 a rename acknowledges its own native commit without overwriting a later rename or duplicating its change event"
+        },
+        {
+          "caseId": "e2e/specs/functional/a20-mcp-ack.spec.mjs::A20.7a MCP add_comment acknowledges one committed thread after native transaction acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a20-mcp-ack.spec.mjs::A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss"
+        },
+        {
+          "caseId": "e2e/specs/functional/a20-mcp-ack.spec.mjs::A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry"
+        },
+        {
+          "caseId": "e2e/specs/functional/a20-oauth-ack.spec.mjs::A20.oauth-ack the CLI first code exchange survives native ACK loss with one usable token while an independent replay still revokes it"
+        },
+        {
+          "caseId": "e2e/specs/functional/a20-oauth-ack.spec.mjs::A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed grant while independent code replay still can"
+        },
+        {
+          "caseId": "e2e/specs/functional/a23-cooldown-ack.spec.mjs::A23.8a a comment cooldown claim surviving native ACK loss still delivers its winning notice exactly once"
+        },
+        {
+          "caseId": "e2e/specs/functional/a23-cooldown-ack.spec.mjs::A23.8b a suggestion cooldown claim surviving native ACK loss still delivers its winning notice exactly once"
+        },
+        {
+          "caseId": "e2e/specs/functional/a23-cooldown-ack.spec.mjs::A23.8c a reader whose document expires while its committed cooldown ACK is held receives no comment bytes after retry"
+        }
+      ]
     }
   ],
   "acceptance": {
@@ -15392,6 +15890,165 @@
           "patch:amplify-native-ack-loss"
         ],
         "command": "node e2e/run.mjs run --suite functional --spec a12-operator-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-feedback-threads",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a07-thread-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a07-thread-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-suggestions",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a08-suggestion-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a08-suggestion-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-suggestion-leases",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a08-suggestion-lease-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a08-suggestion-lease-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-verification-views-teams",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a12-endpoint-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "email",
+          "mailpit",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a12-endpoint-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-membership",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a14-membership-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "email",
+          "mail-fail-recipient",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a14-membership-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-rename",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a14-rename-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a14-rename-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-mcp",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a20-mcp-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a20-mcp-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-oauth",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a20-oauth-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a20-oauth-ack.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-email-cooldown",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a23-cooldown-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "email",
+          "mailpit",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a23-cooldown-ack.spec.mjs --patches amplify-native-ack-loss",
         "proofs": []
       }
     ],

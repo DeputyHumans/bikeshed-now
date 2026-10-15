@@ -28,9 +28,9 @@ function fixture(t) {
   write(root, "e2e/.out/controls/ledger.json", ledger);
   return { c, root, base, def, ledger, report: "e2e/.out/green/invocations/i/results.json", controls: "e2e/.out/controls/ledger.json" };
 }
-test("prepared worktree commands preserve all 55 axes and every unresolved finding", () => {
+test("prepared worktree commands preserve all 64 axes and every unresolved finding", () => {
   const { candidate, plan } = prepareCampaign(original, snapshot);
-  assert.equal(plan.matrix.length, 55);
+  assert.equal(plan.matrix.length, 64);
   assert.deepEqual(candidate.items, original.items);
   assert.deepEqual(candidate.coverage, original.coverage);
   for (const [i, r] of candidate.acceptance.requirements.entries()) {

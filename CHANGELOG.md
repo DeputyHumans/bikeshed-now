@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Retain all original E2E acceptance obligations and add nine complete native-retry area runs, bringing the local matrix to 64 cells. Bind the retry discovery to 34 exact cases and 55 directional controls; keep every finding open until fresh integrated evidence satisfies it.
+
 - Refresh six retained fault patches after transaction receipts changed source context. Keep their projection, minting, deduplication, rename and thumbnail mutations unchanged; verify the complete patch catalog reverses exactly and the affected directional unit checks still detect their faults.
 
 - Distinguish a native OAuth code-exchange retry from independent code replay after another request refreshes the grant. Keep the newer credentials valid, refuse obsolete original credentials without revocation, and retain independent replay protection; cover the real recovery→refresh→retry ordering with a keyed endpoint control.
