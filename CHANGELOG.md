@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve sufficient patch context for the Done-deadline negative control while keeping its mutation limited to the timeout.
+
 - Verify both external update paths retire a live log created after their initial editor check and fence subsequent writes from that old epoch; independently remove epoch advancement to prove the regression.
 
 - Tie every reported product finding to current executable witnesses, retaining original case identities and peer counts beside explicit rename rationales; no finding is closed by the mapping.
