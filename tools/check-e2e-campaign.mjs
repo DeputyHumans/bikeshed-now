@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseExpandedCase } from "../e2e/lib/controls.mjs";
 import { commandCounts } from "./e2e-campaign-evidence.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -18,6 +19,14 @@ const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
 const purePass = (c) => c.status === "pass" && !c.todo && !c.skipReason && !c.inconclusive && !c.notReproduced && !c.error && (!c.outcome || c.outcome === "PASS");
 const pureFail = (c) => c.status === "fail" && !c.todo && !c.skipReason && !c.inconclusive && !c.notReproduced && (!c.outcome || c.outcome === "FAIL");
 const key = (c) => `${c.id}::${c.n ?? "-"}::${c.trial ?? 1}`;
+
+/** Match the canonical scenario while retaining and validating the artifact's expanded identity. */
+function affectedCaseMatches(proof, required) {
+  if ((proof.n ?? null) !== (required.n ?? null)) return false;
+  const expanded = parseExpandedCase(proof.caseId);
+  if (expanded && (expanded.n !== proof.n || (expanded.trial ?? 1) !== (proof.trial ?? 1))) return false;
+  return proof.caseId === required.caseId || expanded?.scenario === required.caseId;
+}
 
 /** --validate checks structure only; the default also reads evidence and gates completion. */
 export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = {}) {
@@ -196,9 +205,9 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const item of items.values()) if (item.state === "resolved" && item.resolution?.kind === "fixed") {
       const witnessed = array(item.resolution.proofs).flatMap((id) => {
         const p = proofs.get(id);
-        return p?.kind === "e2e-case" ? [{ caseId: p.caseId, n: p.n ?? null }] : [];
+        return p?.kind === "e2e-case" ? [p] : [];
       });
-      for (const c of array(item.requiredCases)) need(witnessed.some((w) => w.caseId === c.caseId && w.n === (c.n ?? null)), `${item.id}: missing affected case ${c.caseId} [N=${c.n ?? "-"}]`);
+      for (const c of array(item.requiredCases)) need(witnessed.some((w) => affectedCaseMatches(w, c)), `${item.id}: missing affected case ${c.caseId} [N=${c.n ?? "-"}]`);
     }
     const passedKeys = new Set([...loaded.values()].flatMap((x) => array(x.report?.cases).filter(purePass).map(key)));
     const exclusions = array(acceptance.exclusions);

@@ -263,3 +263,34 @@ test("control matrix accepts genuine aggregate commands but refuses missing, dup
   write(root, p.artifact, { ...aggregate, controlSets: ["controls-unproved"] });
   assert.match(checkCampaign(c, { root }).errors.join("\n"), /control command names an unproved set/);
 });
+
+
+test("expanded concurrency witnesses satisfy canonical affected cases without changing proof identity", (t) => {
+  const { c, root, positive, negative, report, rewrite } = fixture(t);
+  const scenario = "e2e/specs/concurrency/proof.spec.mjs::same scenario";
+  const item = c.items.find((i) => i.id === "S3");
+  item.resolution = { kind: "fixed", reason: "Synthetic concurrency repair", spec: "SPEC §16", proofs: [positive.id], controls: ["control"] };
+  item.requiredCases = [{ caseId: scenario, n: 5 }];
+  const setIdentity = (caseId, n, trial) => {
+    for (const p of [positive, negative]) Object.assign(p, { caseId, n, trial });
+    const row = { ...report.cases[0], id: caseId, n, trial };
+    rewrite({ ...report, cases: [row] });
+    write(root, negative.artifact, { ...report, runId: negative.runId, cases: [{ ...row, status: "fail", error: "intended synthetic assertion" }] });
+  };
+  setIdentity(`${scenario} [N=5] #3`, 5, 3);
+  assert.deepEqual(checkCampaign(c, { root }).errors, [], "a real expanded case proves its canonical scenario and N");
+  assert.equal(positive.caseId, `${scenario} [N=5] #3`, "proof retains the exact artifact identity");
+  for (const [id, n, trial] of [
+    [`${scenario} [N=2] #3`, 5, 3],
+    [`${scenario} [N=2] #3`, 2, 3],
+    [`${scenario} [N=5] #2`, 5, 3],
+    [`${scenario} [N=5]`, 5, 3],
+    [`${scenario} [N=5] #3`, 2, 3],
+    [`${scenario} other [N=5] #3`, 5, 3],
+  ]) {
+    setIdentity(id, n, trial);
+    assert.match(checkCampaign(c, { root }).errors.join("\n"), /S3: missing affected case/, `contradictory or unrelated witness ${id}/${n}/${trial} must not match`);
+  }
+  setIdentity(`${scenario} [N=5]`, 5, 1);
+  assert.deepEqual(checkCampaign(c, { root }).errors, [], "a single-trial expansion matches without a trial suffix");
+});

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Match affected concurrency scenarios to their actual expanded result identities without losing the recorded peer count or trial; reject contradictory suffix metadata and unrelated scenarios.
+
 - Compare authored reader bodies after Done without per-person presence paint, while retaining the original convergence deadline, save/log stability checks, and independent persisted-byte decoration checks.
 
 - Retarget historical-comment, annotation-access and generated-note controls around the new expiry gates, preserving the specific regressions each control reintroduces.
