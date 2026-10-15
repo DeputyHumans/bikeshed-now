@@ -141,6 +141,25 @@ let tokenSeq = 0;
 /** A checksummed token (lib/tokens.mjs) for this run, `peer` and a fresh sequence number. */
 const token = (peer) => makeToken(target.runId, peer, (tokenSeq += 1));
 
+scenario("A11.14 an untouched empty shared body can save its empty causal history before publication", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  const [account] = await cast(target, ["owner"], { notifications: false });
+  const owner = await openSession(target, account);
+  const up = await publish(owner.http, { body: "<!doctype html><html><head><title>Empty shared body</title></head><body></body></html>", name: "empty-shared", title: "Empty shared body" });
+  precondition(up.status === 200, "the empty authored body was published");
+  const user = await browserUser(ctx, "owner", account);
+  await user.open(up.docId);
+  await bothShared(user);
+  const draftResponse = user.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/draft", { timeout: AUTOSAVE_MS });
+  const commitResponse = user.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/commit", { timeout: AUTOSAVE_MS }).catch(() => null);
+  await user.page.getByRole("button", { name: "Save as new version", exact: true }).click();
+  const response = await draftResponse;
+  const posted = response.request().postDataJSON();
+  precondition(posted.causal && Object.keys(posted.causal.vector).length === 0 && Object.keys(posted.causal.deletes).length === 0, "the real shared editor sent an untouched empty insertion/deletion history");
+  assert.equal(response.status(), 200, "A11 empty history: the real editor's empty causal history must be accepted");
+  const committed = await commitResponse;
+  precondition(committed?.status() === 200, "the accepted draft's publication request completed");
+});
+
 // --- Setup -------------------------------------------------------------------
 
 /**

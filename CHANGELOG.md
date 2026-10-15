@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Exercise an untouched empty shared document through the real save and publish path, and prove its causal-history acceptance with an exact rejecting control.
+
 - Keep a pending Done deadline and completion tied to the editing session that started it, so navigating to another document cannot change its save state, display an old error, or close its editor.
 
 - Bind the local trigger-overlap limitation to completed run metadata, exact case identities and pinned runtime evidence; retain inconclusive outcomes and distinguish local acceptance from full completion.
