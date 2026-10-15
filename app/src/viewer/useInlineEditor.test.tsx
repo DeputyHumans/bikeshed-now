@@ -98,6 +98,62 @@ describe("saving on the way out of the editor", () => {
     expect(saveDraft).toHaveBeenCalledTimes(2);
   });
 
+  it("coalesces Done with the pending debounce while the request is held", async () => {
+    const { view, type } = setup();
+    let release: () => void = () => {};
+    saveDraft.mockImplementationOnce(() => new Promise((r) => { release = () => r({}); }));
+    act(type);
+    let done: Promise<unknown>;
+    act(() => { done = view.result.current.flushUnsaved(); });
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    release();
+    await act(() => done!);
+    await act(() => vi.runAllTimersAsync());
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("Done waits for an autosave already in flight, including a failed result", async () => {
+    const { view, type } = setup();
+    let reject: (e: Error) => void = () => {};
+    saveDraft.mockImplementationOnce(() => new Promise((_r, no) => { reject = no; }));
+    act(type);
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    let settled = false;
+    let done: Promise<unknown>;
+    act(() => { done = view.result.current.flushUnsaved().then((result) => { settled = true; return result; }); });
+    await act(async () => { await Promise.resolve(); });
+    expect(settled).toBe(false);
+    reject(new Error("offline"));
+    let result: unknown;
+    await act(async () => { result = await done!; });
+    expect(result).toBe(false);
+    expect(view.result.current.saveFailed()).toBe(true);
+  });
+
+  it("serializes overlapping flushes and drains edits made while the first snapshot saves", async () => {
+    const { view, type, doc } = setup();
+    const releases: (() => void)[] = [];
+    saveDraft.mockImplementation(() => new Promise((r) => { releases.push(() => r({})); }));
+    doc.querySelector("p")!.textContent = "First snapshot";
+    act(type);
+    let first: Promise<unknown>, second: Promise<unknown>;
+    act(() => { first = view.result.current.flushNow(); });
+    doc.querySelector("p")!.textContent = "Later snapshot";
+    act(type);
+    act(() => { second = view.result.current.flushNow(); });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    await act(async () => { releases[0](); await Promise.resolve(); });
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(saveDraft.mock.calls[1][2]).toContain("Later snapshot");
+    expect(view.result.current.saveState).toBe("saving");
+    releases[1]();
+    await act(async () => { expect(await first!).toBe(true); expect(await second!).toBe(true); });
+    await act(() => vi.runAllTimersAsync());
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(view.result.current.saveState).toBe("saved");
+  });
+
   it("says whether the save a commit waits on went through", async () => {
     // The commit asked saveFailed() BEFORE this save and never after it, so a
     // save failing here published the previous draft and toasted "Published".
@@ -180,4 +236,24 @@ describe("authored attributes and editor decoration", () => {
     shared.destroy();
     view.unmount();
   });
+});
+
+it("blocks input and saving until the initial shared document has been adopted, preserving authored attributes", async () => {
+  const doc = new DOMParser().parseFromString('<body contenteditable="plaintext-only"><p contenteditable="true">Draft</p></body>', "text/html");
+  const view = renderHook(({ ready }) => useInlineEditor({ mode: EDITING, doc, epoch: 1, docId: "d1", ready, authoredAssets: { current: null }, onStale: () => {} }), { initialProps: { ready: false } });
+  try {
+    expect(doc.body.getAttribute("contenteditable")).toBe("false");
+    const early = new Event("beforeinput", { bubbles: true, cancelable: true });
+    doc.querySelector("p")!.dispatchEvent(early);
+    expect(early.defaultPrevented).toBe(true);
+    let result: unknown;
+    await act(async () => { result = await view.result.current.flushNow(); });
+    expect(result).toBe(false);
+    view.rerender({ ready: true });
+    expect(doc.body.getAttribute("contenteditable")).toBe("true");
+    const input = new Event("beforeinput", { bubbles: true, cancelable: true });
+    doc.querySelector("p")!.dispatchEvent(input);
+    expect(input.defaultPrevented).toBe(false);
+  } finally { view.unmount(); }
+  expect(doc.body.getAttribute("contenteditable")).toBe("plaintext-only");
 });

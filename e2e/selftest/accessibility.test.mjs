@@ -61,12 +61,12 @@ test('focus colour is reserved by actual paint, including non-focused outlines; 
   assert.ok(issues.some((x) => x.paints.includes('outline')));
 });
 
-const cssFiles = ['tokens', 'base', 'primitives', 'viewer'];
+const cssFiles = ['tokens', 'base', 'primitives', 'viewer', 'slides', 'comments'];
 async function productCss() {
   const sheets = await Promise.all(cssFiles.map(async (name) => `@layer ${name}{${await readFile(new URL(`../../app/src/styles/${name}.css`, import.meta.url), 'utf8')}}`));
-  return `@layer tokens,base,primitives,viewer;${sheets.join('\n')}`;
+  return `@layer tokens,base,primitives,viewer,slides,comments;${sheets.join('\n')}`;
 }
-const controls = '<button class="btn btn-sm">Small button</button><a href="#">Navigation</a><select aria-label="Mode"><option>View</option></select><label class="check-label"><input type="checkbox">Check</label><iframe class="doc-frame" title="Document" srcdoc="<p>Authored content</p>"></iframe>';
+const controls = '<button class="btn btn-sm">Small button</button><a href="#">Navigation</a><select aria-label="Mode"><option>View</option></select><label class="check-label"><input type="checkbox">Check</label><div class="checkbox-row"><input type="checkbox" id="account-check"><label for="account-check">Default marking</label></div><iframe class="doc-frame" title="Document" srcdoc="<p>Authored content</p>"></iframe>';
 
 test('the actual product cascade floors touch controls and paints the focused iframe; old cascade and iframe exemption fail', async () => {
   const css = await productCss();
@@ -98,4 +98,12 @@ test('forced-colour presence dots retain visible paint; browser colour substitut
     const bad = await paint();
     assert.equal(bad[0], bad[1], 'negative: both become Canvas in forced colours');
   } finally { await u.page.emulateMedia({ forcedColors: 'none' }); }
+});
+
+test('the phone slide drawer stays below the viewer toolbar; the previous viewport anchoring covers Comments', async () => {
+  await u.page.setContent(`<style>${await productCss()}</style><div style="height:var(--header-h)"></div><div class="viewer"><div class="viewer-toolbar"><div class="pane-toggle"><button>Document</button><button id="comments">Comments</button></div></div><div class="viewer-body"><div class="doc-frame-wrap"><aside class="slide-rail" data-drawer="open"><button class="slide-thumb"><span class="slide-thumb-box">Slide one</span></button></aside><main class="doc-frame-stage">Document</main></div></div></div>`);
+  const reachable = () => u.page.locator('#comments').evaluate((el) => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
+  assert.equal(await reachable(), true);
+  await u.page.addStyleTag({ content: '@media(max-width:860px){.slide-rail{position:fixed;inset:var(--header-h) auto 0 0}}' });
+  assert.equal(await reachable(), false, 'negative: the old drawer overlaps the toolbar');
 });

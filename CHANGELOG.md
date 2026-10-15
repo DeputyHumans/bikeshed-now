@@ -18,6 +18,14 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Simultaneous live editors elect one initial document, retain its CRDT seed
+  through compaction, and preserve carets and pending local edits when remote
+  updates arrive. Editing waits for initial adoption. Autosave, Done and
+  publish share one ordered save drain; a failed Done keeps the editor open.
+  Publishing retires only an unchanged snapshot of the applied live log.
+- Phone slide rails stay below wrapped toolbars, and external checkbox labels
+  meet the 44-pixel touch target requirement.
+
 - Draft saves and publishes select immutable snapshots, recheck the current
   version, permissions and expiry at commit time, and preserve later saves
   during deduplication and cleanup. Concurrent suggestion accepts retry on

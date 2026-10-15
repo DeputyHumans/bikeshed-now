@@ -23,7 +23,7 @@
  *   crdt/log.ts:36-39 ("two people opening the editor in the same second
  *   would both seed and the document would appear twice").
  *
- * S1 (C4). Joining is connect → `await log.ready()` → bindSync
+ * S1 regression (C4). Before atomic seed election, joining was connect → `await log.ready()` → bindSync
  *   (useSharedDocument.ts:66-72). ready() is the log's first value event
  *   (crdt/rtdb.ts:26-40): "everything already here", never "nobody else is
  *   seeding". bindSync seeds the loaded DOM into an EMPTY fragment
@@ -673,7 +673,6 @@ scenario("C4 simultaneous first join, client gate: N editors held at join-before
   effects: EFFECTS,
   needs: ["gates", "patch:amplify-mint-join", "rtdb-proxy"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 600_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {
@@ -918,7 +917,6 @@ scenario("C4 simultaneous first join, held frames: N editors' editable draft fra
   effects: EFFECTS,
   needs: ["rtdb-proxy", "!gates"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 900_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {
@@ -934,7 +932,6 @@ scenario("C4 simultaneous first join, free-running: N editors press Edit 0, 100,
   effects: EFFECTS,
   needs: ["rtdb-proxy", "!gates"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 1_500_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {

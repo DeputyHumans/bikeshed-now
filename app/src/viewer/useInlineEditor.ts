@@ -41,13 +41,17 @@ export function useInlineEditor(options: {
   doc: Document | null;
   epoch: number;
   docId: string;
+  ready?: boolean;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
 }) {
-  const { mode, doc, epoch, docId, authoredAssets, onStale } = options;
+  const { mode, doc, epoch, docId, authoredAssets, onStale, ready = true } = options;
   // There is no longer a state in which somebody may open the editor and not
   // type in it: edits merge (SPEC §6b), so the mode is the whole condition.
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
   const editing = mode.kind === "editing";
+  const baseVersion = mode.kind === "editing" ? mode.baseVersion : null;
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -67,6 +71,8 @@ export function useInlineEditor(options: {
   const unsaved = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyAttributes = useRef<EditingBodyAttributes | undefined>(undefined);
+  const session = useRef(0);
+  const inFlight = useRef<{ session: number; promise: Promise<boolean> } | null>(null);
 
   /**
    * `onStale` is held in a ref so it cannot destabilise `flush`.
@@ -86,35 +92,56 @@ export function useInlineEditor(options: {
   const onStaleRef = useRef(onStale);
   onStaleRef.current = onStale;
 
-  /** Save the draft; true when it is saved. */
+  /** Save in order and wait until this session's latest edit is durable. */
   const flush = useCallback(async (): Promise<boolean> => {
-    if (!doc || mode.kind !== "editing") return false;
-    setSaveState("saving");
-    // Cleared before the save rather than after it: an edit typed while this
-    // save is in flight is not in these bytes, and must still count as unsaved.
-    unsaved.current = false;
-    try {
-      const html = serializeCleanHtml(doc, {
-        authoredAssets: authoredAssets.current ?? undefined,
-        authoredBodyAttributes: bodyAttributes.current,
-      });
-      await saveDraft(docId, mode.baseVersion, html);
-      lastSaveFailed.current = false;
-      setSaveState("saved");
-      setSaveError(null);
-      return true;
-    } catch (e) {
-      unsaved.current = true;
-      lastSaveFailed.current = true;
-      setSaveState("error");
-      if (e instanceof StaleVersionError) {
-        onStaleRef.current(e.currentVersion);
-        setSaveError(e.message);
-      } else {
-        setSaveError((e as Error).message);
-      }
-      return false;
+    if (!doc || mode.kind !== "editing" || !readyRef.current) return false;
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
     }
+    const currentSession = session.current;
+    if (inFlight.current?.session === currentSession) return inFlight.current.promise;
+    const flight = { session: currentSession, promise: Promise.resolve(false) };
+    const run = async (): Promise<boolean> => {
+      do {
+        if (session.current !== currentSession) return false;
+        // An input may arm the debounce while the previous snapshot is saving.
+        // This ordered drain owns that edit now; the timer must not save it again.
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        setSaveState("saving");
+        unsaved.current = false;
+        try {
+          const html = serializeCleanHtml(doc, {
+            authoredAssets: authoredAssets.current ?? undefined,
+            authoredBodyAttributes: bodyAttributes.current,
+          });
+          await saveDraft(docId, mode.baseVersion, html);
+          if (session.current !== currentSession) return false;
+          lastSaveFailed.current = false;
+          setSaveError(null);
+        } catch (e) {
+          if (session.current !== currentSession) return false;
+          unsaved.current = true;
+          lastSaveFailed.current = true;
+          setSaveState("error");
+          if (e instanceof StaleVersionError) onStaleRef.current(e.currentVersion);
+          setSaveError((e as Error).message);
+          return false;
+        }
+      } while (unsaved.current);
+      setSaveState("saved");
+      return true;
+    };
+    // Every caller (autosave, Done, publish) joins one ordered save. A later
+    // snapshot cannot arrive before an older request and then be overwritten.
+    flight.promise = run().finally(() => {
+      if (inFlight.current === flight) inFlight.current = null;
+    });
+    inFlight.current = flight;
+    return flight.promise;
   }, [doc, mode, docId, authoredAssets]);
 
   /** Held in a ref for the same reason, so the effect can close over it safely. */
@@ -123,6 +150,11 @@ export function useInlineEditor(options: {
 
   useEffect(() => {
     if (!editing || !doc) return;
+    session.current += 1;
+    unsaved.current = false;
+    lastSaveFailed.current = false;
+    setSaveState("idle");
+    setSaveError(null);
 
     // Strip FIRST, unconditionally, before contentEditable is set. Anything
     // still here would be serialized into the next version.
@@ -139,7 +171,7 @@ export function useInlineEditor(options: {
       spellcheck: body.getAttribute("spellcheck"),
     };
     bodyAttributes.current = authored;
-    body.setAttribute("contenteditable", "true");
+    body.setAttribute("contenteditable", readyRef.current ? "true" : "false");
     body.setAttribute("spellcheck", "true");
     markGeneratedContainers(doc);
     // A shared-document join can adopt the body after this effect ran. Keep
@@ -159,10 +191,16 @@ export function useInlineEditor(options: {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flushRef.current(), AUTOSAVE_MS);
     };
+    // Descendants may carry their own authored contenteditable=true. A body
+    // override alone cannot prevent their input while the shared host joins.
+    const beforeInput = (event: Event) => { if (!readyRef.current) event.preventDefault(); };
+    doc.addEventListener("beforeinput", beforeInput, true);
     doc.addEventListener("input", onInput);
 
     return () => {
+      session.current += 1;
       doc.removeEventListener("input", onInput);
+      doc.removeEventListener("beforeinput", beforeInput, true);
       if (timer.current) clearTimeout(timer.current);
       placeholders.disconnect();
       clearGeneratedContainers(doc);
@@ -171,7 +209,11 @@ export function useInlineEditor(options: {
     };
     // NOT `flush`. Depending on it would reintroduce exactly the tear-down
     // described above the ref declaration, one indirection further away.
-  }, [editing, doc, epoch]);
+  }, [editing, doc, epoch, baseVersion]);
+
+  useEffect(() => {
+    if (editing && doc?.body) doc.body.setAttribute("contenteditable", ready ? "true" : "false");
+  }, [editing, doc, epoch, ready]);
 
   return {
     saveState,
@@ -184,7 +226,8 @@ export function useInlineEditor(options: {
     flushNow: flush,
     /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
     flushUnsaved: useCallback(async () => {
-      if (unsaved.current) await flush();
+      if (unsaved.current || inFlight.current?.session === session.current) return flush();
+      return true;
     }, [flush]),
     /** True when the last save failed: a commit must not proceed. */
     saveFailed: () => lastSaveFailed.current,

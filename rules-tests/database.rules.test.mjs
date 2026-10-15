@@ -197,8 +197,9 @@ describe("realtime database rules", () => {
     const expiry = Date.now() + 2_000;
     const maps = { __revision: "000000000001:000000000", __expiresAt: expiry, __owner: MEMBER.email, [key(MEMBER.email)]: true, [key(OTHER.email)]: true };
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await set(ref(ctx.database(), "presenceAccess/expiring"), maps);
-      await set(ref(ctx.database(), "editAccess/expiring"), { ...maps, "*": true });
+      const db = ctx.database();
+      await set(ref(db, "presenceAccess/expiring"), maps);
+      await set(ref(db, "editAccess/expiring"), { ...maps, "*": true });
     });
     const ownerDb = verified(env, MEMBER).database();
     const editorDb = verified(env, OTHER).database();
@@ -209,14 +210,16 @@ describe("realtime database rules", () => {
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, expiry + 100 - Date.now())));
     await assertFails(set(ref(editorDb, "status/expiring/y/after"), "AQIDBA=="));
     await assertFails(set(ref(ownerDb, "status/expiring/y/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y"), null));
     await assertFails(set(ref(publicDb, "status/expiring/y/after"), "AQIDBA=="));
     await assertFails(get(ref(editorDb, "status/expiring/y")));
     await assertFails(get(ref(editorDb, "status/expiring/peers")));
     await assertFails(get(ref(publicDb, "status/expiring/y")));
     await assertSucceeds(get(ref(ownerDb, "status/expiring/y")));
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await set(ref(ctx.database(), "presenceAccess/expiring/__expiresAt"), 0);
-      await set(ref(ctx.database(), "editAccess/expiring/__expiresAt"), 0);
+      const db = ctx.database();
+      await set(ref(db, "presenceAccess/expiring/__expiresAt"), 0);
+      await set(ref(db, "editAccess/expiring/__expiresAt"), 0);
     });
     await assertSucceeds(set(ref(editorDb, "status/expiring/y/restored"), "AQIDBA=="));
     await assertSucceeds(get(ref(editorDb, "status/expiring/y")));
@@ -232,6 +235,15 @@ describe("realtime database rules", () => {
     const db = verified(env, MEMBER).database();
     await assertSucceeds(set(ref(db, "status/doc1/y/e4"), "AQIDBA=="));
     await assertSucceeds(set(ref(db, "status/doc1/y/e4"), null));
+  });
+
+  it("an editor can retire the entire log but cannot replace it; a viewer cannot retire it", async () => {
+    const editorDb = verified(env, MEMBER).database();
+    const viewerDb = verified(env, OTHER).database();
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y/retire"), "AQIDBA=="));
+    await assertFails(set(ref(viewerDb, "status/doc1/y"), null));
+    await assertFails(set(ref(editorDb, "status/doc1/y"), { replacement: "AQIDBA==" }));
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y"), null));
   });
 
   it("rejects an entry that is not a bounded string", async () => {

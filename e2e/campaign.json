@@ -12852,6 +12852,35 @@
       ],
       "controls": "e2e/.out/unit-controls-expiry/g08-unit-results.json; write-authority-results.json",
       "note": "Expired organize and omission semantics observed red before repair, then green. Isolated negative controls reintroduce organize bypass (4 assertion failures), mutation before refusal (4), omitted expiry clearing (2), absent function/operator mirrored deadline (1 each), absent write-authority expiry (1), absent authority gate (3), untracked link-grant read (1). No cancelled cases. New realtime policy and six E2E negative controls await emulated-rule and E2E runs; every item remains open. S25/S26 policy is explicitly amended in SPEC sections 2,16,17 under authorized repair of demonstrated harm."
+    },
+    {
+      "kind": "emulated-rule-observation",
+      "items": [
+        "X-a02-matrix-data-2",
+        "S26",
+        "S27",
+        "S8"
+      ],
+      "scope": "Node 24.21.0, Firebase CLI 15.25.1; fresh local default-port emulators, stopped after each command",
+      "command": "npm run test:rules:emulated",
+      "counts": {
+        "pass": 81,
+        "fail": 0,
+        "skip": 0,
+        "todo": 0
+      },
+      "evidence": "e2e/.out/unit-controls-expiry/rules-green-final.log",
+      "negativeControls": [
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/rules-original.log",
+          "result": "Previous rules fail viewer draft-read, public open-editor read and whole-log retirement assertions; expiry setup also fails on the old public read gate and is not counted as expiry proof."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/rules-no-expiry.log",
+          "result": "Current rules with only expiry terms removed fail the post-deadline write denial after successful before-deadline writes/reads (1 fail,0 cancellations)."
+        }
+      ],
+      "note": "Rule-level evidence only. Browser and full product E2E cases remain required; no campaign item is closed. Parent delete-only y grant supports atomic unchanged-snapshot retirement; late old-generation appends remain a separate protocol limitation."
     }
   ]
 }

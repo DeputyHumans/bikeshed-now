@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { connect, type Connection } from "../crdt/log";
 import { rtdbLog } from "../crdt/rtdb";
+import { seedFragment } from "../crdt/binding";
 import { bindSync, type Sync } from "../crdt/sync";
 import type { FrameMode } from "./frameMode";
 
@@ -22,15 +23,10 @@ import type { FrameMode } from "./frameMode";
  *
  * Joining is three steps and the order of those matters too:
  *
- *   1. Connect to the log and WAIT for what is already in it. Skipping the wait
- *      is the seeding race: two people opening the editor in the same second
- *      both find an empty document and both publish the bytes they loaded, and
- *      everyone sees the document twice.
- *   2. Bind the host. Empty shared document means we are first and the authored
- *      DOM becomes the shared one, in place, with no re-render and no moved
- *      caret. Non-empty means somebody is ahead of us and their document wins
- *      over the bytes we loaded, because theirs includes edits ours does not.
- *   3. Report ready, so the editor knows typing will be shared rather than lost.
+ *   1. Replay the existing log, then atomically elect a single seed if empty.
+ *      Waiting alone cannot distinguish simultaneous first joiners.
+ *   2. Bind the host to that elected shared document, including earlier edits.
+ *   3. Report ready, so input cannot be overwritten by the initial adoption.
  */
 export type ShareState = "off" | "joining" | "shared";
 
@@ -49,6 +45,7 @@ export function useSharedDocument(options: {
   // a non-empty shared document replaces the host's children when it binds.
   const [bound, setBound] = useState(false);
   const sync = useRef<Sync | null>(null);
+  const connected = useRef<Connection | null>(null);
 
   useEffect(() => {
     if (!editing || !doc?.body || !enabled) {
@@ -64,17 +61,34 @@ export function useSharedDocument(options: {
 
     void (async () => {
       const log = rtdbLog(docId);
-      if (log) {
-        connection = connect(ydoc, log);
-        await log.ready();
+      let shared = false;
+      try {
+        if (log) {
+          connection = connect(ydoc, log, () => bound?.flush());
+          connected.current = connection;
+          await log.ready();
+          if (cancelled || !doc.body) return;
+          if (ydoc.getXmlFragment("body").length === 0) {
+            const proposal = new Y.Doc();
+            try {
+              seedFragment(proposal.getXmlFragment("body"), doc.body);
+              await connection.initialize(Y.encodeStateAsUpdate(proposal));
+            } finally { proposal.destroy(); }
+          }
+          shared = true;
+        }
+      } catch {
+        // A refused or unavailable transport must not claim collaboration.
+        // Disconnect before the local fallback, which must not publish updates.
+        connection?.destroy();
+        connection = null;
+        connected.current = null;
       }
       if (cancelled || !doc.body) return;
       bound = bindSync(ydoc.getXmlFragment("body"), doc.body);
       sync.current = bound;
       setBound(true);
-      // Without a Realtime Database there are no peers to share with, and
-      // editing alone is the documented fallback rather than a failure.
-      setState(log ? "shared" : "off");
+      setState(shared ? "shared" : "off");
     })();
 
     return () => {
@@ -85,6 +99,7 @@ export function useSharedDocument(options: {
       bound?.destroy();
       sync.current = null;
       connection?.destroy();
+      connected.current = null;
       ydoc.destroy();
       setState("off");
       setBound(false);
@@ -93,5 +108,5 @@ export function useSharedDocument(options: {
     // the binding is attached to a body that no longer exists after one.
   }, [editing, doc, epoch, docId, enabled]);
 
-  return { state, bound };
+  return { state, bound, snapshot: () => { sync.current?.flush(); return connected.current?.snapshot() ?? {}; } };
 }

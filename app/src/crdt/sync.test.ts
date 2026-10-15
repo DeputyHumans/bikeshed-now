@@ -284,3 +284,55 @@ describe("joining", () => {
     expect(a.sync.html()).toBe(`<p>x</p>`);
   });
 });
+
+describe("the real selection during remote changes", () => {
+  it("keeps a collapsed caret after preceding remote text and before a concurrent insertion at the caret", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = '<p id="p">hello world</p>';
+    doc.body.contentEditable = "true";
+    const y = new Y.Doc();
+    const binding = bindSync(y.getXmlFragment("body"), doc.body);
+    const remote = peer("", y);
+    const node = doc.querySelector("p")!.firstChild!;
+    const selection = doc.getSelection()!;
+    selection.setBaseAndExtent(node, 5, node, 5);
+    try {
+      remote.body.querySelector("p")!.firstChild!.nodeValue = "REMOTE hello world";
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorNode).toBe(node);
+      expect(selection.anchorOffset).toBe(12);
+      expect(selection.isCollapsed).toBe(true);
+      // The caret stays with this writer's word, rather than jumping after a
+      // peer's insertion and splitting the writer's next keystroke from it.
+      remote.body.querySelector("p")!.firstChild!.nodeValue = "REMOTE helloPEER world";
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorOffset).toBe(12);
+      expect(node.textContent).toBe("REMOTE helloPEER world");
+    } finally { binding.destroy(); remote.sync.destroy(); y.destroy(); remote.y.destroy(); iframe.remove(); }
+  });
+
+  it("retains a backwards selection when a remote sibling insertion moves the selected nodes", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = '<p id="p">selected text</p>';
+    const y = new Y.Doc();
+    const binding = bindSync(y.getXmlFragment("body"), doc.body);
+    const remote = peer("", y);
+    const node = doc.querySelector("p")!.firstChild!;
+    const selection = doc.getSelection()!;
+    selection.setBaseAndExtent(node, 8, node, 2);
+    try {
+      remote.body.insertBefore(Object.assign(remote.doc.createElement("p"), { textContent: "before" }), remote.body.firstChild);
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorNode).toBe(node);
+      expect(selection.focusNode).toBe(node);
+      expect([selection.anchorOffset, selection.focusOffset]).toEqual([8, 2]);
+    } finally { binding.destroy(); remote.sync.destroy(); y.destroy(); remote.y.destroy(); iframe.remove(); }
+  });
+});

@@ -1,0 +1,7 @@
+--- a/app/src/crdt/rtdb.ts
++++ b/app/src/crdt/rtdb.ts
+@@ -76,3 +76,3 @@
+ export async function clearLog(docId: string, consumed: Record<string, string>): Promise<void> {
+-  if (!rtdb || Object.keys(consumed).length === 0) return;
++  if (!rtdb || docId || Object.keys(consumed).length === 0) return;
+   try {

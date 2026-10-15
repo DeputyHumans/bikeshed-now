@@ -192,7 +192,7 @@ export function EditToolbar({
 
   const run = useCallback(
     (command: Command) => {
-      if (!doc) return;
+      if (!doc || sharing === "joining") return;
       doc.defaultView?.focus();
       if (command.kind === "block") {
         doc.execCommand("formatBlock", false, command.value);
@@ -200,7 +200,7 @@ export function EditToolbar({
         doc.execCommand(command.command, false, command.value);
       }
     },
-    [doc],
+    [doc, sharing],
   );
 
   /** Reflect the caret's current formatting, so the toolbar is not lying. */
@@ -237,7 +237,7 @@ export function EditToolbar({
           title={unavailable ? MARKDOWN_UNAVAILABLE : control.title}
           aria-label={control.title}
           aria-pressed={active.has(control.id)}
-          disabled={unavailable}
+          disabled={unavailable || sharing === "joining"}
           onClick={() => run(control.command)}
         >
           {control.icon ? <Icon name={control.icon} size={16} /> : control.label}
@@ -299,7 +299,7 @@ export function EditToolbar({
             className="toolbar-select"
             aria-label="Font"
             title={markdown ? MARKDOWN_UNAVAILABLE : "Font"}
-            disabled={markdown}
+            disabled={markdown || sharing === "joining"}
             onChange={(e) => run({ kind: "exec", command: "fontName", value: e.target.value })}
             defaultValue={EDITOR_FONT_CHOICES[0].value}
           >
@@ -319,7 +319,7 @@ export function EditToolbar({
             className="toolbar-select"
             aria-label="Text colour"
             title={markdown ? MARKDOWN_UNAVAILABLE : "Text colour"}
-            disabled={markdown}
+            disabled={markdown || sharing === "joining"}
             defaultValue={TOKENS.ink}
             onChange={(e) => run({ kind: "exec", command: "foreColor", value: e.target.value })}
           />
@@ -335,7 +335,7 @@ export function EditToolbar({
               className="icon-btn toolbar-btn"
               aria-label={command === "justifyLeft" ? "Align left" : "Align centre"}
               title={markdown ? MARKDOWN_UNAVAILABLE : "Alignment"}
-              disabled={markdown}
+              disabled={markdown || sharing === "joining"}
               onClick={() => run({ kind: "exec", command })}
             >
               <Icon

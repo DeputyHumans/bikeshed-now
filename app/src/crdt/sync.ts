@@ -31,6 +31,8 @@ type YNode = Y.XmlElement | Y.XmlText;
 
 export interface Sync {
   destroy(): void;
+  /** Publish queued local mutations before a remote update changes their base. */
+  flush(): void;
   /** The document as the CRDT currently holds it. */
   html(): string;
 }
@@ -95,7 +97,42 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
     }
   }
 
+  type FocusPoint = { node: Node; offset: number };
+  const focusPath = (node: Node | null, offset: number): FocusPoint[] => {
+    if (!node || !host.contains(node)) return [];
+    const path: FocusPoint[] = [{ node, offset }];
+    while (node !== host && node.parentNode) {
+      const parent: ParentNode = node.parentNode;
+      path.push({ node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, node) });
+      node = parent;
+    }
+    return path;
+  };
+  const shift = (offset: number, delta: { retain?: number; delete?: number; insert?: unknown }[]): number => {
+    let at = 0;
+    let next = offset;
+    for (const part of delta) {
+      if (part.retain) at += part.retain;
+      if (part.insert != null && at < offset) next += typeof part.insert === "string" || Array.isArray(part.insert) ? part.insert.length : 1;
+      if (part.delete) { next -= Math.min(part.delete, Math.max(0, offset - at)); at += part.delete; }
+    }
+    return next;
+  };
+
   function applyRemote(events: Y.YEvent<any>[]): void {
+    const selection = doc.getSelection();
+    const anchor = focusPath(selection?.anchorNode ?? null, selection?.anchorOffset ?? 0);
+    const focus = focusPath(selection?.focusNode ?? null, selection?.focusOffset ?? 0);
+    // Text.data and replaceChildren both reset native Range offsets, even when
+    // the original nodes survive. Move the captured offsets through the remote
+    // delta, preserving direction and keeping a writer before a concurrent
+    // insertion exactly at their caret so their word remains contiguous.
+    for (const event of events) {
+      const node = event.target === fragment ? host : domOf.get(event.target as YNode);
+      for (const point of [...anchor, ...focus]) {
+        if (point.node === node) point.offset = shift(point.offset, event.changes.delta);
+      }
+    }
     applyingRemote = true;
     try {
       for (const event of events) {
@@ -121,6 +158,11 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
       }
     } finally {
       applyingRemote = false;
+      const surviving = (path: FocusPoint[]) => path.find((p) => host.contains(p.node));
+      const a = surviving(anchor);
+      const f = surviving(focus);
+      const limit = (p: FocusPoint) => Math.min(p.offset, p.node.nodeType === Node.TEXT_NODE ? (p.node as Text).length : p.node.childNodes.length);
+      if (selection && a && f) selection.setBaseAndExtent(a.node, limit(a), f.node, limit(f));
     }
   }
 
@@ -310,6 +352,10 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
   fragment.observeDeep(onDeep);
 
   return {
+    flush() {
+      const records = observer?.takeRecords() ?? [];
+      if (records.length) onMutations(records);
+    },
     destroy() {
       observer?.disconnect();
       fragment.unobserveDeep(onDeep);

@@ -99,6 +99,13 @@ export function rangeFromAnchor(iframeDoc: Document, anchor: Anchor): Range | nu
   const root = rootForElementId(iframeDoc, anchor.elementId);
   if (!root) return null;
 
+  // Empty quotes do not identify a passage. A peer caret is positional and
+  // must not resolve to the first empty match elsewhere in the element.
+  if (anchor.exact === "" && anchor.start === anchor.end) {
+    try { return textPosition.toRange(root, { start: anchor.start, end: anchor.end }); }
+    catch { return null; }
+  }
+
   try {
     const byQuote = textQuote.toRange(
       root,
@@ -127,4 +134,11 @@ export function sameAnchor(a: Anchor | undefined, b: Anchor | undefined): boolea
     a.end === b.end &&
     a.exact === b.exact
   );
+}
+
+/** Presence includes a collapsed caret; comments still require selected text. */
+export function describeFocusFromSelection(iframeDoc: Document): Anchor | null {
+  const selection = iframeDoc.getSelection();
+  if (!selection?.rangeCount) return null;
+  return describeAnchorFromRange(iframeDoc, selection.getRangeAt(0));
 }

@@ -781,10 +781,10 @@ async function typeThenDone(u, selector, text, ctx) {
  * DocViewer.tsx's own comment on stopEditing says the flush on the way out
  * stands in for the timer the cleanup clears. The slow save is forced here
  * by holding Done's POST /draft 1.5 s in the page (User.delayRequests), as a
- * slow network or a loaded stack does; e2e/patches/a09-defect-fixes
- * (10-flush-cancels-the-pending-autosave) makes this pass.
+ * slow network or a loaded stack does. controls-a09-save-coalescing restores
+ * the uncancelled concurrent save as its negative control.
  */
-scenario("A9.6 a Done save that outlasts the debounce is not followed by a second POST /draft of the same edit", { tiers: ["local", "prod"], defect: "X-a09-editing-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A9.6 a Done save that outlasts the debounce is not followed by a second POST /draft of the same edit", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { accounts, docId } = await stage(ctx, { name: "a96-twice", title: "A9.6 Done once" });
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   await openEditor(o);
@@ -906,57 +906,19 @@ scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVi
   noPageErrors([o]);
 });
 
-/**
- * S8, a SPEC QUESTION (class Q). It stays a known-defect case so the
- * observation stays pinned. It is not a SPEC violation.
- *
- * What happens. DocViewer's commit calls clearLog (DocViewer.tsx:580), a
- * remove() of the whole node status/{doc}/y (crdt/rtdb.ts:72). The realtime
- * rules grant writes only at status/{doc}/y/$entry (database.rules.json:
- * 98-103). So with the rules enforced (as in production; on a stack, only
- * where rtdbRulesStatus says so) the remove is denied, clearLog swallows the
- * error (rtdb.ts:73-75), and the log outlives every in-app commit.
- *
- * What asks for it to go. The app's own code means to clear it
- * (DocViewer.tsx:576-579: "Leaving it behind means the next person to open
- * the editor syncs the old draft from the log and it reappears on top of the
- * version that replaced it"). No SPEC sentence asks this of the in-app
- * commit. The nearest is SPEC §16, spec.md:1556-1560: "The log belongs to
- * the draft. When an editor opens a document, a log that holds anything wins
- * over the bytes it loaded, because it may hold edits they do not. So a write
- * made outside the editor is refused while anybody is in it, and drops a log
- * nobody is using: an agent's accept and `commit_draft` (§22), and every
- * update …". The in-app commit is made inside the editor and is not on that
- * list. §22's "a log nobody is using is dropped with the write"
- * (spec.md:2556-2559) is about an agent's accept. §6b (spec.md:790-806) and
- * ADR 0010 say nothing about the log.
- *
- * The harm. The one this file cited before needed S6/S14 as well: a v3
- * published from bytes after the commit, opened in the editor, showed v2's
- * text, because an update never cleared the log either. Since 0.16.0 every
- * update drops a log nobody is using once its version is current
- * (functions/src/lib/publish.ts:537-539, dropReplacedDraft :597-608). That
- * harm is now gone with S8 still present. What S8 alone leaves, traced in
- * source and not reproduced here: the log holds the draft that became v2,
- * plus anything typed into the session after the pre-commit save (a
- * co-editor's keys). The next person to open the editor on v2 adopts that
- * log over v2's bytes, and their first save makes it a draft of v2, so text
- * nobody published comes back unannounced. Dropping the log would instead
- * lose those keys. Which of the two the in-app commit should do is the
- * question for the SPEC.
- */
-scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], defect: "S8", timeoutMs: JUDGE_MS }, async (ctx) => {
+/** S8 regression: the commit atomically retires the unchanged log it applied before saving. */
+scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], timeoutMs: JUDGE_MS }, async (ctx) => {
   if (!liveLog.measured) ctx.inconclusive("the A9.8 commit case did not reach its commit (see its outcome), so nothing was measured");
   precondition(liveLog.rules.ok, `the realtime rules are enforced where the commit cleared the log, or the remove is allowed and nothing is proved: ${liveLog.rules.reason}`);
   precondition(liveLog.before > 0, `the live log held entries before the commit (${liveLog.before})`);
   ctx.step(`status/${liveLog.docId}/y: ${liveLog.before} entries before the commit, ${liveLog.left ?? 0} ${liveLog.leftAfterMs} ms after "Published v2."`);
   assert.ok(
     liveLog.left === null,
-    `S8, a SPEC QUESTION, not a SPEC violation: status/${liveLog.docId}/y still holds ${liveLog.left} entries ${liveLog.leftAfterMs} ms after "Published v2.". The app's clearLog (DocViewer.tsx:580) was denied by the realtime rules, which allow writes only per entry, so the published draft's log outlives the commit. The app means to clear it (DocViewer.tsx:576-579). The nearest SPEC sentence is §16 spec.md:1556 "The log belongs to the draft.", and no SPEC sentence requires the in-app commit to drop the log`,
+    `S8: the published draft's live log still holds ${liveLog.left} entries ${liveLog.leftAfterMs} ms after "Published v2."`,
   );
 });
 
-scenario("A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded", { tiers: ["local", "prod"], defect: "X-a09-editing-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { accounts, docId } = await stage(ctx, { name: "a98-quick", title: "A9.8 quick commit" });
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   await openEditor(o);

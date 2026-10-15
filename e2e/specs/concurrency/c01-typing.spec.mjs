@@ -633,7 +633,7 @@ scenario("C1 draft: after disjoint typing settles, GET /draft's body equals ever
   assertDraftEqualsPeers(d);
 });
 
-scenario("C1 BODYATTR: the draft disjoint typing left carries no spellcheck attribute on <body> or <html> that v1 lacks (I5's BODYATTR, S3's own attribute)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S3" }, async (ctx) => {
+scenario("C1 BODYATTR: the draft disjoint typing left carries no spellcheck attribute on <body> or <html> that v1 lacks (I5's BODYATTR, S3's own attribute)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const d = observation(ctx, "C1", "draft");
   const s = d.spellcheck;
   ctx.step(`spellcheck v1→draft: <body> ${JSON.stringify(s.body.v1)} → ${JSON.stringify(s.body.draft)}, <html> ${JSON.stringify(s.html.v1)} → ${JSON.stringify(s.html.draft)}; every other root attribute is the work case's (BODYATTR apart from S3)`);
@@ -1004,7 +1004,7 @@ scenario("C2 same-paragraph typing: N editors type tokens at the end of one para
   }));
 });
 
-scenario("C2 tokens: after same-paragraph typing, every token is once and whole inside #e2e-1 on every peer (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S2" }, async (ctx) => {
+scenario("C2 tokens: after same-paragraph typing, every token is once and whole inside #e2e-1 on every peer (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const t = observation(ctx, "C2", "tokens");
   assertInvariant(checkI2({ peers: t.peers, typed: t.typed }));
 });
@@ -1198,7 +1198,7 @@ scenario("C3 Enter elsewhere: one editor presses Enter at the end of the documen
   }));
 });
 
-scenario("C3 tokens: every typist's tokens are once and whole inside its own paragraph on every peer, though Enter was pressed elsewhere as it typed (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S2b" }, async (ctx) => {
+scenario("C3 tokens: every typist's tokens are once and whole inside its own paragraph on every peer, though Enter was pressed elsewhere as it typed (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const t = observation(ctx, "C3", "tokens");
   assertInvariant(checkI2({ peers: t.peers, typed: t.typed }));
 });

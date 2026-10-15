@@ -1,7 +1,7 @@
 --- a/app/src/styles/base.css
 +++ b/app/src/styles/base.css
-@@ -135,4 +135,4 @@
-   textarea, summary, label:has(input:is([type="checkbox"], [type="radio"])) {
+@@ -136,4 +136,4 @@
+   .checkbox-row > label {
 -    min-height: var(--tap) !important;
 -    min-width: var(--tap) !important;
 +    min-height: var(--tap);

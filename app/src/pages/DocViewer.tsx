@@ -324,6 +324,7 @@ export function DocViewer() {
     epoch: frame.epoch,
     docId,
     authoredAssets: frame.authoredAssets,
+    ready: !shareLive || shared.bound,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
 
@@ -571,6 +572,7 @@ export function DocViewer() {
     try {
       // Saved first, every time, and published only if that save went
       // through: never the previous draft's bytes reported as published.
+      const consumedLog = shared.snapshot();
       const result = await publishSaved(editor.flushNow, () => commitVersion(docId, doc.currentVersion));
       if (!result) {
         toast.error("The draft didn’t save, so nothing was published. Try again.");
@@ -581,7 +583,7 @@ export function DocViewer() {
       // consumed. Leaving it behind means the next person to open the editor
       // syncs the old draft from the log and it reappears on top of the version
       // that replaced it — published work silently reverted by a stale cache.
-      await clearLog(docId);
+      await clearLog(docId, consumedLog);
       setWantsEdit(false);
       toast.show(
         result.deduped
@@ -596,7 +598,7 @@ export function DocViewer() {
     } finally {
       setCommitting(false);
     }
-  }, [editor, docId, doc.currentVersion, doc.format, navigate, toast]);
+  }, [editor, shared, docId, doc.currentVersion, doc.format, navigate, toast]);
 
   /**
    * Leave the editor without publishing.
@@ -644,9 +646,12 @@ export function DocViewer() {
   });
 
   const stopEditing = useCallback(async () => {
-    await editor.flushUnsaved();
+    if (!(await editor.flushUnsaved())) {
+      toast.error("The draft didn’t save. Keep this editor open and try again.");
+      return;
+    }
     setWantsEdit(false);
-  }, [editor]);
+  }, [editor, toast]);
 
   // Leaving the editor ends the review pass; it lives in the editing session.
   useEffect(() => {
@@ -914,8 +919,8 @@ export function DocViewer() {
           onCommit={() => void commit()}
           onExit={() => void stopEditing()}
           committing={committing}
-          commitDisabled={annotations.some((a) => !a.resolved)}
-          commitDisabledReason={publishBlockedReason({
+          commitDisabled={!reviewReady || annotations.some((a) => !a.resolved)}
+          commitDisabledReason={!reviewReady ? "Wait for the shared document to join." : publishBlockedReason({
             pending: pendingSuggestions.length,
             unresolved: annotations.some((a) => !a.resolved),
             canDecide: isApprover(doc.meta, emailLower),
@@ -1014,7 +1019,7 @@ export function DocViewer() {
             <SlidePanel
               slides={deck.slides}
               current={deck.current}
-              editable={editingNow}
+              editable={editingNow && reviewReady}
               drawerOpen={singleColumn ? railOpen : undefined}
               baseHref={baseHref}
               stage={deck.stage}

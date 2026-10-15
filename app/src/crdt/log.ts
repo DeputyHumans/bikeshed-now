@@ -30,14 +30,9 @@ export interface UpdateLog {
   subscribe(onEntry: (key: string, payload: string) => void): () => void;
   append(payload: string): Promise<string | null>;
   remove(keys: readonly string[]): Promise<void>;
-  /**
-   * Resolves once every entry that existed at join time has been delivered.
-   *
-   * This is what decides WHO SEEDS. `bindSync` seeds an empty fragment from the
-   * local DOM, so two people opening the editor in the same second would both
-   * seed and the document would appear twice. Waiting for the existing log
-   * first means the second one finds a non-empty fragment and adopts it.
-   */
+  /** Atomically retain one initial update; return the winner to every joiner. */
+  initialize(payload: string): Promise<string>;
+  /** Resolves once all entries that existed at join time have been delivered. */
   ready(): Promise<void>;
 }
 
@@ -73,11 +68,14 @@ export function fromBase64(value: string): Uint8Array {
  * same document.
  */
 export const COMPACT_AFTER = 64;
+export const SEED_KEY = "_seed";
 
 export interface Connection {
+  initialize(seed: Uint8Array): Promise<void>;
   destroy(): void;
   /** Entry keys currently believed to be in the log. Exposed for tests. */
   size(): number;
+  snapshot(): Record<string, string>;
 }
 
 /**
@@ -88,9 +86,10 @@ export interface Connection {
  * Without it every remote update is immediately re-appended by every peer that
  * receives it, and the log grows without bound while the document does nothing.
  */
-export function connect(doc: Y.Doc, log: UpdateLog): Connection {
+export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = () => {}): Connection {
   const REMOTE = Symbol("remote");
   const seen = new Set<string>();
+  const payloads = new Map<string, string>();
   let destroyed = false;
   let compacting = false;
 
@@ -98,7 +97,10 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
     if (destroyed || seen.has(key)) return;
     seen.add(key);
     try {
+      // Preserve DOM edits whose MutationObserver has not delivered yet.
+      beforeRemote();
       Y.applyUpdate(doc, fromBase64(payload), REMOTE);
+      payloads.set(key, payload);
     } catch {
       // A malformed entry is one peer's problem, not everybody's. Applying the
       // rest still converges every client that can read them.
@@ -108,7 +110,7 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
   const onUpdate = (update: Uint8Array, origin: unknown) => {
     if (destroyed || origin === REMOTE) return;
     void log.append(toBase64(update)).then((key) => {
-      if (key) seen.add(key);
+      if (key) { seen.add(key); payloads.set(key, toBase64(update)); }
       void compact();
     });
   };
@@ -125,12 +127,13 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
   async function compact(): Promise<void> {
     if (compacting || destroyed || seen.size < COMPACT_AFTER) return;
     compacting = true;
-    const consumed = [...seen];
+    const consumed = [...seen].filter((key) => key !== SEED_KEY);
     try {
-      const merged = await log.append(toBase64(Y.encodeStateAsUpdate(doc)));
-      if (merged) seen.add(merged);
+      const payload = toBase64(Y.encodeStateAsUpdate(doc));
+      const merged = await log.append(payload);
+      if (merged) { seen.add(merged); payloads.set(merged, payload); }
       await log.remove(consumed);
-      for (const key of consumed) seen.delete(key);
+      for (const key of consumed) { seen.delete(key); payloads.delete(key); }
     } catch {
       /* the log stays longer than it needs to; nothing is lost */
     } finally {
@@ -139,11 +142,19 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
   }
 
   return {
+    async initialize(seed) {
+      const elected = await log.initialize(toBase64(seed));
+      if (!destroyed) {
+        Y.applyUpdate(doc, fromBase64(elected), REMOTE);
+        seen.add(SEED_KEY); payloads.set(SEED_KEY, elected);
+      }
+    },
     destroy() {
       destroyed = true;
       doc.off("update", onUpdate);
       unsubscribe();
     },
     size: () => seen.size,
+    snapshot: () => Object.fromEntries(payloads),
   };
 }

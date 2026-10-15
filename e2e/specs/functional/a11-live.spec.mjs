@@ -550,7 +550,7 @@ async function caretsOver(user, id) {
  * travelling the same path to the same reader first. The oracle alone (the
  * focus on the server, the caret in the reader's overlay) is the defect's.
  */
-scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the server as their focus, and a reader's frame draws it there, labelled", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-1", ...ON_STACK }, async (ctx) => {
+scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the server as their focus, and a reader's frame draws it there, labelled", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   ctx.step("SPEC §16 spec.md:1516: \"`focus` — selection or caret, as an ephemeral `Anchor`\" (selectionchange, 200 ms); spec.md:1575: \"Peer carets and selections update at 200 ms\"; spec.md:1480: \"carets carry name labels\"");
   const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2b caret" });
   const editorEmail = w.people.editor.account.email.toLowerCase();

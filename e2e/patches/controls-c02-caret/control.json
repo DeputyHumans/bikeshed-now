@@ -1,0 +1,13 @@
+{
+  "oracle": "^I2:",
+  "what": "c02 caret",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C2 tokens: after same-paragraph typing, every token is once and whole inside #e2e-1 on every peer (I2) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I2:"
+  }
+}

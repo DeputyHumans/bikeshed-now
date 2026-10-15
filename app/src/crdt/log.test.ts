@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
+import { bindSync } from "./sync";
 import { COMPACT_AFTER, connect, fromBase64, toBase64, type UpdateLog } from "./log";
 
 /**
@@ -27,6 +28,13 @@ function makeLog() {
       for (const l of listeners) for (const [k, p] of entries) l(k, p);
     },
     async ready() {},
+    async initialize(payload) {
+      if (!entries.has("_seed")) {
+        entries.set("_seed", payload);
+        if (online) for (const receive of listeners) receive("_seed", payload);
+      }
+      return entries.get("_seed")!;
+    },
     subscribe(onEntry) {
       listeners.add(onEntry);
       for (const [k, p] of entries) onEntry(k, p);
@@ -160,4 +168,50 @@ describe("two peers on one log", () => {
     // Still readable, still converged with what came before it.
     expect(text(a)).toBe("good");
   });
+});
+
+
+it("flushes a queued local DOM edit before applying a peer update", async () => {
+  const log = makeLog();
+  const a = new Y.Doc();
+  const da = document.implementation.createHTMLDocument("");
+  da.body.innerHTML = "<p>shared</p>";
+  const sa = bindSync(a.getXmlFragment("body"), da.body);
+  const b = new Y.Doc();
+  Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+  const db = document.implementation.createHTMLDocument("");
+  const sb = bindSync(b.getXmlFragment("body"), db.body);
+  const ca = connect(a, log, () => sa.flush());
+  const cb = connect(b, log, () => sb.flush());
+  try {
+    // No event-loop turn between the DOM edit and the arriving wire update:
+    // this is the MutationObserver queue the old binding simply discarded.
+    (da.body.querySelector("p")!.firstChild as Text).appendData(" LOCAL");
+    const text = (b.getXmlFragment("body").get(0) as Y.XmlElement).get(0) as Y.XmlText;
+    text.insert(text.length, " REMOTE");
+    await settle();
+    expect(da.body.textContent).toContain("LOCAL");
+    expect(da.body.textContent).toContain("REMOTE");
+    expect(da.body.textContent).toBe(db.body.textContent);
+  } finally { ca.destroy(); cb.destroy(); sa.destroy(); sb.destroy(); a.destroy(); b.destroy(); }
+});
+
+it("retains the elected seed through compaction so another empty snapshot cannot elect a second identity", async () => {
+  const log = makeLog();
+  const a = new Y.Doc();
+  const proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "seed");
+  const connection = connect(a, log);
+  await connection.initialize(Y.encodeStateAsUpdate(proposal));
+  for (let i = 0; i < COMPACT_AFTER + 2; i += 1) {
+    a.getText("t").insert(a.getText("t").length, "x");
+    await settle();
+  }
+  expect(log.entries.has("_seed")).toBe(true);
+  expect(log.entries.size).toBeLessThan(COMPACT_AFTER);
+  const b = new Y.Doc();
+  const second = connect(b, log);
+  await second.initialize(Y.encodeStateAsUpdate(proposal));
+  expect(text(b)).toBe(text(a));
+  connection.destroy(); second.destroy(); a.destroy(); b.destroy(); proposal.destroy();
 });
