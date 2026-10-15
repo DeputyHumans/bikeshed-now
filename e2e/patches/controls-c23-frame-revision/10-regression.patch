@@ -1,0 +1,10 @@
+--- a/app/src/viewer/frameMode.ts
++++ b/app/src/viewer/frameMode.ts
+@@ -108,7 +108,2 @@
+     const query = new URLSearchParams({ r: String(epoch) });
+-    if (mode.draftRevision) {
+-      query.set("baseVersion", mode.baseVersion);
+-      query.set("liveEpoch", mode.liveEpoch ?? "initial");
+-      query.set("draftRevision", mode.draftRevision);
+-    }
+     return `/draft/${docId}/${entry}?${query}`;

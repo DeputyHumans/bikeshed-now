@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useDocFrame.ts
++++ b/app/src/viewer/useDocFrame.ts
+@@ -138,3 +138,3 @@
+     if (!frameDoc) return;
+-    if (mode.kind === "editing" && frameDoc.contentType !== "text/html") {
++    if (mode.kind === "editing" && frameDoc.contentType !== "text/html" && false) {
+       setDoc(null);

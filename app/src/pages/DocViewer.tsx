@@ -146,7 +146,7 @@ export function DocViewer() {
   // A file dropped onto the document, waiting in the upload dialog.
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const currentLiveEpoch = doc.meta?.liveEpoch ?? doc.publicDoc?.liveEpoch ?? "initial";
-  const { origin: editingOrigin, setEditing: setWantsEdit } = useEditSession(docId, doc.currentVersion, currentLiveEpoch);
+  const { origin: editingOrigin, error: editOpenError, setEditing: setWantsEdit } = useEditSession(docId, doc.currentVersion);
   const wantsEdit = editingOrigin !== null;
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
@@ -210,7 +210,7 @@ export function DocViewer() {
   const mode: FrameMode = useMemo(
     () =>
       editingOrigin
-        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch }
+        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
         : {
             kind: "reading",
             versionId: doc.currentVersion,
@@ -228,7 +228,7 @@ export function DocViewer() {
   const frame = useDocFrame({
     mode,
     docId,
-    entry: doc.entry,
+    entry: editingOrigin?.entry ?? doc.entry,
     trustToken: trust.trustToken,
     linkToken: linkKey || undefined,
     // Editing is always sandboxed, so no answer could change how it loads.
@@ -992,6 +992,12 @@ export function DocViewer() {
         />
       )}
 
+      {editOpenError || frame.loadError || editor.reloadRequired ? (
+        <div className="banner banner-warn" role="alert">
+          {editOpenError ?? frame.loadError ?? editor.saveError}{" "}
+          <button className="btn btn-sm" onClick={() => void setWantsEdit(true)}>Reload draft</button>
+        </div>
+      ) : null}
       {mode.kind === "editing" && shared.error ? (
         <div className="banner banner-warn" role="alert">{shared.error}</div>
       ) : null}
@@ -1004,8 +1010,7 @@ export function DocViewer() {
         conflict={live.conflict}
         onTakeTheirs={() => {
           live.dismissConflict();
-          setWantsEdit(true);
-          frame.reload();
+          void setWantsEdit(true);
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}

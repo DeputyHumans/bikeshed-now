@@ -42,6 +42,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Refuse stale whole-document draft saves, bind editor frames to their prepared
+  snapshot, and retire old live sessions after link-holder saves so accepted work
+  survives delayed member autosaves and explicit reload resumes from those bytes.
+
 - Preserve reader scroll and unchanged selections across overlapping draft reloads,
   and keep mobile toolbar actions visible while every presence chip remains reachable.
 

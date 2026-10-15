@@ -95,51 +95,17 @@
  *        (frameMode.ts:60-67 puts the reload epoch in the iframe's key,
  *        useDocFrame drops the document). The frame must restore the same
  *        selected passage after each reload; no overlap is needed.
- *   C23  an unlisted open-editing link holder among N−1 co-editors. The
- *        members edit live ("Shared"); the link holder opens the link with
- *        its key and presses Edit. Work: it is NOT shown "Shared", or it is
- *        genuinely merged: a member's probe reaches it, and its own token
- *        reaches every member, each within I13's 2 s of the last keystroke
- *        (checkI13, PROBE_ARRIVAL_MS, measured as A11.8 measures it; the
- *        wait runs to the settle deadline so a late arrival is told from a
- *        missing one) (SPEC §16 spec.md:1567-1571 "An unlisted one never
- *        does … its link holders edit through /draft instead … and are not
- *        merged live with the members", §16 spec.md:1583 "live co-editing
- *        through an unlisted link" is not built, §17 spec.md:1717-1718); a
- *        link holder not merged live sends its edit through POST /draft: a
- *        save CARRYING its token answers 200 (SPEC §16); and GET /draft, as
- *        the owner, holds that token before any member types (else
- *        INCONCLUSIVE: nothing of its was there to replace); the members
- *        settle (I1). Suspect S24, refuted at 2 peers by A11.8
- *        (DocViewer.tsx:308 shareLive excludes a non-member of an unlisted
- *        document), judged here at N. Judge (told): S24's harm, "silent
- *        last-writer-wins", by the path that remains: the members type
- *        after the link holder saved, a member's autosave (recorded: the
- *        first member POST /draft 200 after the link holder's) replaces the
- *        draft it saved (their live log never held its edit), and its edit
- *        must then still be in the draft, or the link holder must have been
- *        told (the conflict banner useLiveSync.ts:54-58 offers an editor:
- *        "the choice is offered"). A link holder has no `docs/{id}`
- *        (firestore.rules:147 `allow get: if isMember(...)`), so
- *        useLiveSync.ts:44 returns before any banner: X-c18-scale-ui-1.
- *        CLASS Q, weighed against SPEC §16 spec.md:1542-1544 ("Anyone who
- *        may edit a document may edit it at any time … edits merge, and
- *        every copy converges on the same document whatever order the
- *        updates arrive in"): the link holder may edit, its edit does not
- *        merge, and its copy never converges, so read alone that sentence
- *        makes this a P. But the same section carves link holders out of the
- *        merge by name (spec.md:1570-1571 "edit through /draft instead … and
- *        are not merged live with the members"), lists "live co-editing
- *        through an unlisted link" as deliberately not built (spec.md:1583),
- *        and ADR 0012:54-56 calls /draft "the documented fallback when there
- *        is no Realtime Database", which is whole-document last-writer-wins.
- *        Whether that carve-out waives "every copy converges" for a link
- *        holder (loss under last-writer-wins is then the intended outcome,
- *        and only the missing notice is in question) or only the LIVE
- *        channel (the loss is then a P against 1543-1544, and "told" would
- *        not be enough) is a SPEC question the code cannot answer: Q. The
- *        judge asserts the weaker reading (kept, or told), so it is red
- *        under both; a P reading would also need "kept".
+ *   C23  an unlisted open-editing link holder among N−1 live members.
+ *        A stale unclocked snapshot must refuse a newer member save. After
+ *        explicit reload, a successful link-holder replacement retires the
+ *        previous live epoch: delayed member autosaves must answer 409 and
+ *        retain the accepted link-holder bytes. Each member explicitly
+ *        reloads and resumes merging from those bytes. This replaces the
+ *        historical weaker last-writer-wins "kept or told" oracle for
+ *        X-c18-scale-ui-1 with a refusal and recovery contract.
+ *        A separate held-frame case changes the draft between preparing
+ *        Edit and loading its frame; that GET must refuse, never become an
+ *        editable error page, and recover after an explicit reload.
  *   All C23 cases need `rtdb-rules` on a local stack: a stack attached from
  *        before the RTDB binding runs the live log's rules OPEN (S31), where
  *        an S24-patched link holder would be merged through open rules and
@@ -212,6 +178,7 @@ import { tokenLog } from "../../lib/tokens.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { idSelector } from "../../lib/frame.mjs";
 import { signInMany } from "../../lib/browser.mjs";
+import { holdRequests } from "../../lib/sync.mjs";
 import { PROBE_ARRIVAL_MS, assertInvariant, checkI13, checkI2, readSegments } from "../../lib/invariants.mjs";
 import {
   addMember, grantEditors, joinGrantVia, joinShared, probeArrivals, rssFile, rtdbGetPatient, settleDeadlineMs, settleLive, startRssSampler,
@@ -1379,51 +1346,105 @@ const joinerRow = (j, members, kind) => ({
   draftHeldOwn: j.draftHeldOwn,
 });
 
-scenario("C23 unlisted link holder among co-editors: N−1 members edit live and an unlisted open-editing link holder enters the editor; it is not shown Shared, or it is genuinely merged both ways; its edit goes out through POST /draft; the members settle (I1)", {
-  tiers: BOTH,
-  n: N_ALL,
-  needs: RTDB_RULES,
-  timeoutMs: CASE_MS,
-  ...LIVE,
-}, async (ctx) => {
+const C23_WORK = "C23 an unlisted link editor uses a checked draft snapshot: stale replacement is refused, an accepted replacement fences old member saves, and explicit reload resumes merging without losing it";
+scenario(C23_WORK, { tiers: BOTH, n: N_ALL, needs: RTDB_RULES, timeoutMs: CASE_MS, ...LIVE }, c23SnapshotWork);
+
+async function c23SnapshotWork(ctx) {
   const obs = record(ctx, "C23");
-  const { docId, owner, members, linkToken } = await unlistedWorld(ctx, obs, { title: `C23 N=${ctx.n}` });
+  const { docId, owner, members, linkToken } = await unlistedWorld(ctx, obs, { title: `C23 checked snapshots N=${ctx.n}` });
   const { user: holder } = await addMember(ctx, { docId, name: `p${ctx.n}`, role: null, k: linkToken });
-  precondition((await holder.page.locator('.viewer-toolbar [aria-label="Edit"]').count()) === 1, "open editing gives the link holder an Edit button");
+  await holder.enterEdit({ waitShared: false, timeout: 90_000 });
+  assert.notEqual(await holder.shareState(), "shared", "S24: an unlisted link editor is not presented as merged live");
   const log = tokenLog(ctx.target.runId);
-  const j = await joinerSaves(ctx, { docId, owner, members, joiner: holder, log });
-  ctx.ev.json("joiner-saves", j);
-  if (!j.shownShared) {
-    // SPEC §16: a link holder not merged live edits through /draft: a save of its, carrying its edit, is answered 200.
-    assert.equal(j.carried?.status, 200, `C23: a link holder who is not merged live edits through POST /draft (SPEC §16 spec.md:1570-1571): a POST /draft carrying its token ${j.own} answers 200 (its first save: ${j.save?.status ?? "never sent"}; one carrying the token: ${j.carried?.status ?? "never sent"})`);
-    if (j.draftHeldOwn !== true) inconclusive(ctx, obs, `the told judge's precondition did not hold: the link holder's save carrying ${j.own} answered ${j.carried.status}, but the draft (GET /draft as the owner: ${j.draftStatus ?? "failed"}) does not hold it before any member typed, so there is nothing of its for the members' saves to replace`);
+  const prior = log.next(members[0].name, PROBE_PARAGRAPH);
+  await members[0].typeAndAutosave(idSelector(PROBE_PARAGRAPH), prior, { delay: KEY_DELAY_MS, timeout: 60_000 });
+  await settleLive(members, { docId, n: ctx.n });
+  const stale = log.next(holder.name, LINK_PARAGRAPH);
+  const refused = await holder.typeAndAutosave(idSelector(LINK_PARAGRAPH), stale, { delay: KEY_DELAY_MS, timeout: 60_000, expectStatus: [200, 409] });
+  assert.equal(refused.status, 409, "X-c18 snapshot: a stale unclocked replacement refuses instead of erasing a newer member draft");
+  await holder.page.getByRole("button", { name: "Reload draft", exact: true }).waitFor({ timeout: 15_000 });
+  assert.equal((await draftHolds(owner, docId, prior)).holds, true, "X-c18 snapshot: a refused link save preserves the member's bytes");
+  assert.equal((await draftHolds(owner, docId, stale)).holds, false, "X-c18 snapshot: a refused replacement cannot become durable");
+
+  ctx.step("the link holder explicitly reloads the member's checked snapshot");
+  await holder.page.getByRole("button", { name: "Reload draft", exact: true }).click();
+  await holder.awaitEdit({ waitShared: false, timeout: 90_000 });
+  assert.ok((await (await holder.frame()).locator("body").textContent()).includes(prior), "X-c18 reload: the link holder sees the member's accepted edit");
+
+  const late = log.next(members[0].name, PROBE_PARAGRAPH);
+  const held = holdRequests(members.map((m) => m.page), "**/draft", members.length, { method: "POST", predicate: (req) => String(req.postDataJSON()?.html ?? "").includes(late), timeoutMs: 90_000 });
+  await held.installed;
+  let released = false;
+  try {
+    await members[0].typeInFrame(idSelector(PROBE_PARAGRAPH), late, { delay: KEY_DELAY_MS });
+    await held.held;
+    precondition(held.extra === 0, "one serialized autosave per member is held before the link holder replaces the draft");
+    const own = log.next(holder.name, LINK_PARAGRAPH);
+    const saved = await holder.typeAndAutosave(idSelector(LINK_PARAGRAPH), own, { delay: KEY_DELAY_MS, timeout: 60_000, expectStatus: [200, 409] });
+    assert.equal(saved.status, 200, "X-c18 snapshot: the checked unclocked replacement saves");
+    const more = log.next(holder.name, LINK_PARAGRAPH);
+    const second = await holder.typeAndAutosave(idSelector(LINK_PARAGRAPH), more, { delay: KEY_DELAY_MS, timeout: 60_000, expectStatus: [200, 409] });
+    assert.equal(second.status, 200, "X-c18 snapshot: a solo writer advances its revision and epoch for its next save");
+    const releasedRows = await held.release(); released = true;
+    ctx.ev.json("c23-delayed-member-saves", releasedRows);
+    assert.deepEqual(releasedRows.records.map((r) => r.status), Array(members.length).fill(409), "X-c18 fence: member autosaves captured before the unclocked replacement are refused");
+    assert.equal((await draftHolds(owner, docId, own)).holds, true, "X-c18 fence: delayed member saves preserve the link holder's edit");
+    assert.equal((await draftHolds(owner, docId, more)).holds, true, "X-c18 fence: both solo saves remain durable");
+    for (const m of members) await m.page.getByRole("button", { name: "Reload draft", exact: true }).waitFor({ timeout: 15_000 });
+    assert.ok((await (await members[0].frame()).locator("body").textContent()).includes(late), "X-c18 refusal: the member retains its unsaved local text until it chooses reload");
+
+    ctx.step("each member explicitly reloads the accepted link-holder snapshot into the new live session");
+    for (const m of members) {
+      await m.page.getByRole("button", { name: "Reload draft", exact: true }).click();
+      await m.awaitEdit({ waitShared: true, timeout: 90_000 });
+      assert.ok((await (await m.frame()).locator("body").textContent()).includes(own), "X-c18 reload: the new live history seeds from the link holder's accepted bytes");
+    }
+    const resumed = log.next(members[0].name, PROBE_PARAGRAPH);
+    await members[0].typeAndAutosave(idSelector(PROBE_PARAGRAPH), resumed, { delay: KEY_DELAY_MS, timeout: 60_000 });
+    await settleLive(members, { docId, n: ctx.n });
+    const final = await owner.http.get(`/draft/${docId}/index.html`, { timeoutMs: 60_000 });
+    precondition(final.status === 200, `the final draft is readable: ${final.status}`);
+    for (const token of [prior, own, more, resumed]) assert.ok(final.text.includes(token), "X-c18 recovery: merging after explicit reload preserves every accepted edit");
+    obs.fenced = { staleStatus: refused.status, lateStatuses: releasedRows.records.map((r) => r.status), recovered: true };
+    obs.stage = "measured";
+  } finally {
+    if (!released) await held.release();
   }
-  const marks = members.map((m) => m.responseMark());
-  await memberProbe(ctx, j, { members, joiner: holder, log });
-  ctx.ev.json("joiner", j);
-  measure(ctx, "c23-joiner", joinerRow(j, members, "link-holder"));
-  ctx.step(`link holder: shown Shared ${j.shownShared} (now ${j.finalState}); a member's probe ${j.toJoiner?.ms == null ? "never reached it" : `reached it in ${j.toJoiner.ms} ms`}; its token reached ${j.ownArrivals.filter((a) => a.ms != null).length} of ${members.length} member(s) live (I13 bound ${PROBE_ARRIVAL_MS} ms)`);
-  const settled = await settleLive(members, { docId, n: ctx.n });
-  ctx.step(`the members settled in ${settled.ms} ms`);
-  const memberSave = firstMemberSave(members, marks, j);
-  ctx.step(`the first member POST /draft 200 after the link holder's save: ${memberSave ? `${memberSave.who}'s, ${memberSave.msAfterJoiner} ms after it, ${memberSave.holdsOwn ? "holding" : "NOT holding"} the link holder's token` : "none"}`);
-  obs.lww = {
-    ...(await lastWriter(ctx, { owner, docId, joiner: holder, members, own: j.own, kind: "link-holder", extra: { saved: j.carried?.status ?? null, draftHeldOwn: j.draftHeldOwn, memberSave } })),
-    saved: j.carried?.status ?? null,
-    draftHeldOwn: j.draftHeldOwn,
-    memberSave,
-  };
-  obs.stage = "measured";
-  const unmerged = mergedProblems(j, members);
-  assert.deepEqual(unmerged, [], `S24: the link holder is shown as Shared but is not merged live with the members: ${unmerged.join("; ")}`);
+}
+
+scenario("C23 fenced draft: no accepted link-holder edit is silently replaced, and stale editors resume only after explicit reload", { tiers: BOTH, n: N_ALL, needs: RTDB_RULES, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  if (!observed.has(keyOf("C23", ctx))) await c23SnapshotWork(ctx);
+  const result = observation(ctx, "C23", "fenced");
+  assert.equal(result.recovered, true, "X-c18 snapshot: accepted edits survive stale save refusal and explicit recovery");
 });
 
-scenario("C23 told: once the members' autosaves have replaced the draft the unlisted link holder saved, its edit is still in the draft, or the link holder was told a peer's save replaced it (last-writer-wins is never silent for it)", { tiers: BOTH, n: N_ALL, needs: RTDB_RULES, timeoutMs: JUDGE_MS, defect: "X-c18-scale-ui-1" }, async (ctx) => {
-  const l = observation(ctx, "C23", "lww");
-  if (l.kept === null) ctx.inconclusive(`the C23 work case could not read the draft (GET /draft ${l.draftStatus ?? "failed"}), so there is nothing to judge`);
-  if (l.saved !== 200 || l.draftHeldOwn !== true) ctx.inconclusive(`the link holder's save carrying its token answered ${l.saved ?? "nothing"} and the draft ${l.draftHeldOwn ? "held" : "did not hold"} it before the members typed, so no save of its was there to replace`);
-  if (!l.memberSave) ctx.inconclusive("no member's POST /draft was answered after the link holder's save, so nothing replaced it");
-  assert.deepEqual(silentLoss(l, "the link holder"), [], `X-c18-scale-ui-1: the unlisted link holder's edit was lost to ${l.memberSave.who}'s autosave (${l.memberSave.msAfterJoiner} ms after its own), silently`);
+scenario("C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes", { tiers: BOTH, n: [2], needs: RTDB_RULES, timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const obs = record(ctx, "C23 frame");
+  const { docId, owner, linkToken } = await unlistedWorld(ctx, obs, { title: "C23 checked frame" });
+  const { user: holder } = await addMember(ctx, { docId, name: "p2", role: null, k: linkToken });
+  const held = holdRequests(holder.page, `**/draft/${docId}/index.html?*`, 1, { method: "GET", timeoutMs: 90_000 });
+  await held.installed;
+  let released = false;
+  try {
+    await holder.page.locator('.viewer-toolbar [aria-label="Edit"]').click();
+    await held.held;
+    const heldUrl = new URL(held.records[0].url);
+    assert.ok(heldUrl.searchParams.has("draftRevision"), "X-c18 frame: the editor GET carries the revision it prepared");
+    const html = `<!doctype html><html><body><p id="replacement">New bytes after Edit was prepared.</p></body></html>`;
+    const saved = await owner.http.postJson("/draft", { docId, baseVersion: "v1", html }, { timeoutMs: 60_000 });
+    precondition(saved.status === 200, `the intervening draft saved: ${saved.status}`);
+    const result = await held.release(); released = true;
+    assert.equal(result.records[0].status, 409, "X-c18 frame: an editor GET cannot silently adopt a different snapshot");
+    await holder.page.waitForFunction(() => {
+      const doc = document.querySelector(".doc-frame")?.contentDocument;
+      return doc?.body?.isContentEditable || [...document.querySelectorAll("button")].some((button) => button.textContent === "Reload draft");
+    }, null, { timeout: 15_000 });
+    const refusedFrame = await holder.frame();
+    assert.notEqual(await refusedFrame.locator("body").getAttribute("contenteditable"), "true", "X-c18 frame: refused JSON is never made editable");
+    await holder.page.getByRole("button", { name: "Reload draft", exact: true }).click();
+    await holder.awaitEdit({ waitShared: false, timeout: 90_000 });
+    assert.equal(await (await holder.frame()).locator("#replacement").textContent(), "New bytes after Edit was prepared.", "X-c18 frame: explicit reload opens the new checked bytes");
+  } finally { if (!released) await held.release(); }
 });
 
 scenario("C23-serial positive control: a member takes the link holder's place, entering after the others; it is Shared, a member's probe reaches it, its token reaches every member, and its edit is in the draft the members settle on", {

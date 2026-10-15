@@ -154,7 +154,7 @@ import {
   saveCursor,
   versionEvents,
 } from "./lib/events";
-import { commitDraft, DraftConflict, loadVersionMeta, writeDraft } from "./lib/draft";
+import { commitDraft, DraftConflict, draftRevision, loadVersionMeta, writeDraft } from "./lib/draft";
 import { WriteAuthorityError } from "./lib/writeAuthority";
 import {
   bearerFrom,
@@ -367,6 +367,7 @@ function streamObject(
   objectKey: string,
   relPath: string,
   isHead: boolean,
+  jsonErrors = false,
 ): void {
   const file = bucket().file(objectKey);
   res.setHeader("Content-Type", mime.lookup(relPath) || "application/octet-stream");
@@ -381,6 +382,7 @@ function streamObject(
       res.destroy(err);
       return;
     }
+    if (jsonErrors) res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.status(err.code === 404 ? 404 : 500).end();
   });
   stream.pipe(res);
@@ -1137,6 +1139,7 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     baseVersion?: unknown;
     html?: unknown;
     liveEpoch?: unknown;
+    draftRevision?: unknown;
     causal?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
@@ -1152,6 +1155,10 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   const liveEpoch = body?.liveEpoch;
   if (liveEpoch !== undefined && (typeof liveEpoch !== "string" || !safeSegment(liveEpoch))) {
     badRequest(res, "invalid liveEpoch"); return;
+  }
+  const expectedRevision = body?.draftRevision;
+  if (expectedRevision !== undefined && (typeof expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(expectedRevision))) {
+    badRequest(res, "invalid draftRevision"); return;
   }
   const causal = body?.causal === undefined ? undefined : parseCausalStamp(body.causal);
   if (causal === null || (causal !== undefined && liveEpoch === undefined)) {
@@ -1214,6 +1221,10 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
       baseVersion,
       liveEpoch,
       causal,
+      // Unclocked writers replace a whole snapshot, so they must not overwrite
+      // any newer save. Legacy API callers still get request-time CAS.
+      ...(!causal ? (expectedRevision === undefined ? { expectedDraft: data.draft } : { expectedRevision }) : {}),
+      retireLive: !causal,
       version,
       content:
         markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
@@ -1238,6 +1249,8 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
 export const getDraft = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
   noStore(res); // before any branch can return — see noStore()
+  // Even empty refusals must not look like editable HTML to the parent frame.
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
@@ -1258,6 +1271,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
   const docData = docSnap.data() as DocAclData & {
     currentVersion?: string;
+    liveEpoch?: string;
     draft?: { baseVersion?: string; entry?: string; sourceEntry?: string; storagePrefix?: string } | null;
   };
   const proof = await linkProofFor(docSnap.ref, docData, caller, null);
@@ -1274,6 +1288,24 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   const baseVersion = docData.currentVersion;
   if (typeof baseVersion !== "string" || !safeSegment(baseVersion)) {
     res.status(404).end();
+    return;
+  }
+
+  const revision = draftRevision(docData);
+  const liveEpoch = docData.liveEpoch ?? "initial";
+  const requestedBase = strParam(req, "baseVersion");
+  const requestedEpoch = strParam(req, "liveEpoch");
+  const requestedRevision = strParam(req, "draftRevision");
+  if ((requestedBase && requestedBase !== baseVersion) ||
+      (requestedEpoch && requestedEpoch !== liveEpoch) ||
+      (requestedRevision && requestedRevision !== revision)) {
+    res.status(409).json({ error: "The draft changed. Reload before editing.", draftChanged: true });
+    return;
+  }
+  if (strParam(req, "session") === "1") {
+    const version = await loadVersionMeta(docSnap.ref, baseVersion);
+    if (!version) { res.status(404).end(); return; }
+    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry });
     return;
   }
 
@@ -1308,7 +1340,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
 
   res.setHeader("Cache-Control", "private, no-store");
-  streamObject(res, objectKey, relPath, req.method === "HEAD");
+  streamObject(res, objectKey, relPath, req.method === "HEAD", true);
 });
 
 /**

@@ -71,7 +71,7 @@ describe("useDocFrame loading", () => {
 
     rerender({ mode: READING, entry: "index.html", trustToken: "t1" });
 
-    expect(result.current.doc).not.toBeNull();
+    expect(result.current.doc).toBeNull();
     expect(result.current.loading).toBe(true);
   });
 
@@ -210,4 +210,28 @@ describe("useDocFrame reading checkpoints", () => {
     load(); next.paint();
     expect(next.doc.getSelection()!.rangeCount).toBe(0);
   });
+});
+
+it("never hands a refused JSON editor response to editing hooks, and clears it on a successful retry", () => {
+  const { result, load } = harness({ mode: { kind: "editing", baseVersion: "v1", liveEpoch: "old", draftRevision: "a".repeat(64) } });
+  const doc = result.current.ref.current!.contentDocument!;
+  Object.defineProperty(doc, "contentType", { value: "application/json", configurable: true });
+  doc.body.textContent = '{"error":"The draft changed"}';
+  load();
+  expect(result.current.loading).toBe(false);
+  expect(result.current.doc).toBeNull();
+  expect(result.current.loadError).toContain("Reload");
+  Object.defineProperty(doc, "contentType", { value: "text/html", configurable: true });
+  act(() => result.current.reload()); load();
+  expect(result.current.doc).toBe(doc);
+  expect(result.current.loadError).toBeNull();
+});
+
+it("withholds the previous document immediately when the same-version editor revision changes", () => {
+  const { result, load, rerender } = harness({ mode: { kind: "editing", baseVersion: "v1", draftRevision: "a".repeat(64) } });
+  load();
+  expect(result.current.doc).not.toBeNull();
+  rerender({ mode: { kind: "editing", baseVersion: "v1", draftRevision: "b".repeat(64) }, entry: "index.html", trustToken: "t0" });
+  expect(result.current.doc).toBeNull();
+  expect(result.current.loading).toBe(true);
 });

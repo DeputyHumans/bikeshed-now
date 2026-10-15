@@ -1,0 +1,11 @@
+{
+  "oracle": "C23 an unlisted link editor uses a checked draft snapshot: stale replacement is refused, an accepted replacement fences old member saves, and explicit reload resumes merging without losing it [N=2]",
+  "what": "unclocked fence",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C23 an unlisted link editor uses a checked draft snapshot: stale replacement is refused, an accepted replacement fences old member saves, and explicit reload resumes merging without losing it [N=2]"
+  },
+  "expect": {
+    "message": "X-c18 fence: member autosaves"
+  }
+}

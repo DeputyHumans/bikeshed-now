@@ -42,6 +42,8 @@ export interface DocFrame {
    * previous, detached document.
    */
   loading: boolean;
+  /** A refused editor document is never offered to the editing hooks. */
+  loadError: string | null;
   /**
    * Props to spread onto the <iframe>, or null while it is held: render no
    * iframe at all then. One rendered without a src still loads about:blank and
@@ -79,6 +81,7 @@ export function useDocFrame(options: {
   const ref = useRef<HTMLIFrameElement>(null);
   const [doc, setDoc] = useState<Document | null>(null);
   const [epoch, setEpoch] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const key = frameKey(mode, trustToken, reloadToken);
@@ -133,6 +136,12 @@ export function useDocFrame(options: {
 
     const frameDoc = ref.current?.contentDocument ?? null;
     if (!frameDoc) return;
+    if (mode.kind === "editing" && frameDoc.contentType !== "text/html") {
+      setDoc(null);
+      setLoadError("The draft changed or could not be loaded. Reload to continue editing.");
+      return;
+    }
+    setLoadError(null);
 
     // ORDER IS LOAD-BEARING. The inventory is captured before the epoch bumps,
     // because bumping the epoch is what wakes every injecting effect — and an
@@ -164,14 +173,14 @@ export function useDocFrame(options: {
 
     setDoc(frameDoc);
     setEpoch((n) => n + 1);
-  }, [identity, docId]);
+  }, [identity, docId, mode.kind]);
 
   // A mode change means a different document. Dropping the stale reference
   // immediately keeps a consumer from decorating a document that is unloading.
   useEffect(() => {
     setDoc(null);
     authoredAssets.current = null;
-  }, [mode.kind, mode.kind === "editing" ? mode.baseVersion : mode.versionId, reloadToken]);
+  }, [identity]);
 
   const held = hold && loadedIdentity === null;
 
@@ -181,9 +190,10 @@ export function useDocFrame(options: {
 
   return {
     ref,
-    doc,
+    doc: loadedIdentity === identity ? doc : null,
     epoch,
     loading: loadedIdentity !== identity,
+    loadError: loadedIdentity === identity ? loadError : null,
     frameProps: held
       ? null
       : {

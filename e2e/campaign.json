@@ -11698,7 +11698,7 @@
     },
     {
       "id": "X-c18-scale-ui-1",
-      "state": "open",
+      "state": "in-progress",
       "track": "reported",
       "classification": "Q",
       "claim": "An unlisted link holder's edit is lost without notice. The members' next autosave (p1's POST /draft 200, 15-20 s after the link holder's, without its token) replaces the draft it saved, because the members' live log never held the edit. The link holder is never told; every member is shown the conflict banner.",
@@ -11718,22 +11718,49 @@
       "controls": [],
       "requiredCases": [
         {
-          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 told: once the members' autosaves have replaced the draft the unlisted link holder saved, its edit is still in the draft, or the link holder was told a peer's save replaced it (last-writer-wins is never silent for it)",
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 fenced draft: no accepted link-holder edit is silently replaced, and stale editors resume only after explicit reload",
           "n": 2
         },
         {
-          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 told: once the members' autosaves have replaced the draft the unlisted link holder saved, its edit is still in the draft, or the link holder was told a peer's save replaced it (last-writer-wins is never silent for it)",
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 fenced draft: no accepted link-holder edit is silently replaced, and stale editors resume only after explicit reload",
           "n": 5
         },
         {
-          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 told: once the members' autosaves have replaced the draft the unlisted link holder saved, its edit is still in the draft, or the link holder was told a peer's save replaced it (last-writer-wins is never silent for it)",
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 fenced draft: no accepted link-holder edit is silently replaced, and stale editors resume only after explicit reload",
           "n": 10
         },
         {
-          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 told: once the members' autosaves have replaced the draft the unlisted link holder saved, its edit is still in the draft, or the link holder was told a peer's save replaced it (last-writer-wins is never silent for it)",
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 fenced draft: no accepted link-holder edit is silently replaced, and stale editors resume only after explicit reload",
           "n": 20
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c18-scale-ui.spec.mjs::C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes",
+          "n": 2
         }
-      ]
+      ],
+      "implementation": {
+        "decision": "Preserve the unlisted link-editor live-access boundary; refuse stale snapshot replacement and fence old member autosaves instead of accepting silent loss.",
+        "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+        "covered": [
+          "authenticated opaque snapshot preparation with version/epoch/revision checked again by the iframe GET",
+          "refused or expired reads are non-HTML and cannot become an editable empty/error document",
+          "transactional revision comparison for unclocked saves and epoch retirement after a winning replacement",
+          "sequential solo saves advance their accepted revision/epoch without remounting or discarding local edits",
+          "explicit reload seeds a new live session from the accepted link-holder bytes; causal merge retries remain distinct from reload refusals"
+        ],
+        "controls": [
+          "controls-c23-stale-snapshot",
+          "controls-c23-unclocked-fence",
+          "controls-c23-session-read",
+          "controls-c23-frame-revision",
+          "controls-c23-frame-refusal",
+          "controls-c23-solo-advance"
+        ],
+        "evidence": "e2e/.out/harness-review-controls/draft-revision/negative-controls.json",
+        "remaining": [
+          "fresh E2E and red/restored control evidence across required N values"
+        ]
+      }
     },
     {
       "id": "S26",

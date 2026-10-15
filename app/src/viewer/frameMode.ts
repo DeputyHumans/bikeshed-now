@@ -21,7 +21,7 @@
  */
 export type FrameMode =
   | { kind: "reading"; versionId: string; draft: boolean; sandboxed: boolean }
-  | { kind: "editing"; baseVersion: string; liveEpoch?: string };
+  | { kind: "editing"; baseVersion: string; liveEpoch?: string; draftRevision?: string };
 
 /**
  * Whether reading shows the draft rather than the version asked for.
@@ -59,7 +59,7 @@ export function readsDraft(r: {
  */
 export function frameKey(mode: FrameMode, trustToken: string, epoch: number): string {
   if (mode.kind === "editing") {
-    return `edit:${mode.baseVersion}:${epoch}`;
+    return `edit:${mode.baseVersion}:${mode.liveEpoch ?? "initial"}:${mode.draftRevision ?? "legacy"}:${epoch}`;
   }
   return `read:${mode.versionId}:${mode.draft ? "draft" : "published"}:${
     mode.sandboxed ? "sandboxed" : "trusted"
@@ -105,7 +105,13 @@ export function frameSrc(
   if (mode.kind === "editing") {
     // Cache-busted on the epoch: the draft path is no-store, but a browser that
     // reuses a live document would show the previous save.
-    return `/draft/${docId}/${entry}?r=${epoch}`;
+    const query = new URLSearchParams({ r: String(epoch) });
+    if (mode.draftRevision) {
+      query.set("baseVersion", mode.baseVersion);
+      query.set("liveEpoch", mode.liveEpoch ?? "initial");
+      query.set("draftRevision", mode.draftRevision);
+    }
+    return `/draft/${docId}/${entry}?${query}`;
   }
   if (mode.draft) return `/draft/${docId}/${entry}?r=${epoch}`;
   return `${contentBase(docId, mode.versionId, linkToken)}${entry}`;

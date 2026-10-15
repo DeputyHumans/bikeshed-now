@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1298,8 +1298,3 @@
+   const requestedRevision = strParam(req, "draftRevision");
+-  if ((requestedBase && requestedBase !== baseVersion) ||
+-      (requestedEpoch && requestedEpoch !== liveEpoch) ||
+-      (requestedRevision && requestedRevision !== revision)) {
+-    res.status(409).json({ error: "The draft changed. Reload before editing.", draftChanged: true });
+-    return;
+-  }
++  void [requestedBase, requestedEpoch, requestedRevision];
+   if (strParam(req, "session") === "1") {

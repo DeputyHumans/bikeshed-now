@@ -2,7 +2,7 @@
 // The shared draft: writing it, reading it back, and publishing it as a version (SPEC §6a).
 
 import * as admin from "firebase-admin";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { causalOrder, readStoredCausalStamp, storedCausalStamp, type CausalStamp } from "./causal";
 import { clearEditLog, syncPresenceAccess } from "./presence";
 import { FieldValue } from "firebase-admin/firestore";
@@ -85,6 +85,11 @@ export function draftIdentity(value: unknown): string | null {
   return JSON.stringify([draft.baseVersion, draft.entry, draft.updatedAt ?? null]);
 }
 
+/** An opaque identity for the exact immutable bytes a browser was offered. */
+export function draftRevision(data: { currentVersion?: unknown; draft?: unknown }): string {
+  return createHash("sha256").update(JSON.stringify([data.currentVersion ?? null, draftIdentity(data.draft)])).digest("hex");
+}
+
 export class DraftConflict extends Error {
   constructor(readonly detail: Record<string, unknown>) {
     super(String(detail.error));
@@ -141,6 +146,7 @@ export async function writeDraft(args: {
   version: VersionMeta;
   content: DraftContent;
   expectedDraft?: unknown;
+  expectedRevision?: string;
   liveEpoch?: string;
   causal?: CausalStamp;
   retireLive?: boolean;
@@ -176,6 +182,7 @@ export async function writeDraft(args: {
   let previous: unknown;
   let retiredEpoch: string | undefined;
   let reused = false;
+  let savedEpoch = "initial";
   let draft: Record<string, unknown> = {};
   try {
     await args.db.runTransaction(async (tx) => {
@@ -184,11 +191,15 @@ export async function writeDraft(args: {
       checkDraftBase(current, baseVersion);
       await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: args.actor.uid ?? "", emailLower: args.emailLower });
       if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+      if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
+        error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
+      });
       const epoch = String(current?.liveEpoch ?? "initial");
       if (args.liveEpoch !== undefined && args.liveEpoch !== epoch) throw new DraftConflict({
         error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
       });
       reused = false;
+      savedEpoch = epoch;
       retiredEpoch = undefined;
       const currentCausal = readStoredCausalStamp(current?.draft?.causal);
       if (args.causal && currentCausal) {
@@ -207,6 +218,7 @@ export async function writeDraft(args: {
       }
       previous = current?.draft;
       if (args.retireLive) retiredEpoch = epoch;
+      savedEpoch = args.retireLive ? randomUUID() : epoch;
       draft = {
         baseVersion, storagePrefix, entry: version.entry,
         ...(args.causal ? { causal: storedCausalStamp(args.causal) } : {}),
@@ -216,7 +228,7 @@ export async function writeDraft(args: {
       };
       tx.update(docRef, {
         draft: { ...draft, updatedAt: now() }, updatedAt: now(),
-        ...(args.retireLive ? { liveEpoch: randomUUID() } : {}),
+        ...(args.retireLive ? { liveEpoch: savedEpoch } : {}),
         "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
       });
     });
@@ -230,11 +242,11 @@ export async function writeDraft(args: {
   }
   if (reused) {
     await removeDraftSnapshot(docRef.id, { storagePrefix });
-    return draft;
+    return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
   }
   await removeDraftSnapshot(docRef.id, previous);
   if (retiredEpoch !== undefined) await retireLiveSession(args.db, docRef.id, retiredEpoch);
-  return draft;
+  return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
 }
 
 /** The first of these objects that exists, as text, or null. */

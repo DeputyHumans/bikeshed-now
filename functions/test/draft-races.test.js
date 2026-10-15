@@ -220,3 +220,33 @@ test("projection refresh failure cannot turn a committed external draft change i
     assert.notEqual(store.get("docs/d").liveEpoch, "initial");
   });
 });
+
+test("an unclocked revision refuses a newer causal snapshot without deleting its bytes", async () => {
+  const { draftRevision } = require("../lib/lib/draft.js");
+  await world(async ({ save, store, objects }) => {
+    const opened = draftRevision(store.get("docs/d"));
+    const member = await save("<p>member work</p>", { liveEpoch: "initial", causal: causal({ 1: 1 }) });
+    await assert.rejects(save("<p>stale link work</p>", { expectedRevision: opened, liveEpoch: "initial", retireLive: true }), (error) => error.detail?.draftChanged === true);
+    assert.equal(store.get("docs/d").draft.storagePrefix, member.storagePrefix);
+    assert.equal(objects.get(`${member.storagePrefix}/index.html`).toString(), "<p>member work</p>");
+    assert.equal([...objects.keys()].filter((key) => key.startsWith("docs/d/bundles/")).length, 1);
+  });
+});
+
+test("a winning unclocked snapshot fences old causal saves and advances the solo writer's next revision", async () => {
+  const { draftRevision } = require("../lib/lib/draft.js");
+  await world(async ({ save, store, objects }) => {
+    const opened = draftRevision(store.get("docs/d"));
+    const solo = await save("<p>link holder work</p>", { expectedRevision: opened, liveEpoch: "initial", retireLive: true });
+    assert.notEqual(solo.liveEpoch, "initial");
+    assert.equal(solo.liveEpoch, store.get("docs/d").liveEpoch);
+    assert.equal(solo.draftRevision, draftRevision(store.get("docs/d")));
+    assert.notEqual(solo.draftRevision, opened);
+    await assert.rejects(save("<p>old member work</p>", { liveEpoch: "initial", causal: causal({ 1: 1 }) }), (error) => error.detail?.liveReset === true);
+    const next = await save("<p>more link holder work</p>", { expectedRevision: solo.draftRevision, liveEpoch: solo.liveEpoch, retireLive: true });
+    assert.equal(objects.get(`${next.storagePrefix}/index.html`).toString(), "<p>more link holder work</p>");
+    assert.notEqual(next.liveEpoch, solo.liveEpoch);
+    const reloaded = await save("<p>merged after explicit reload</p>", { liveEpoch: next.liveEpoch, causal: causal({ 2: 1 }, {}, "c".repeat(64)) });
+    assert.equal(objects.get(`${reloaded.storagePrefix}/index.html`).toString(), "<p>merged after explicit reload</p>");
+  });
+});

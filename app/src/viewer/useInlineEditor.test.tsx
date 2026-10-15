@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { bindSync } from "../crdt/sync";
 import { EMPTY_ATTR } from "../brand/dom";
+import { ConflictError } from "../api";
 import type { FrameMode } from "./frameMode";
 import { useInlineEditor } from "./useInlineEditor";
 
@@ -292,5 +293,44 @@ it("flushes the shared history before serializing matching bytes and sends the c
     await act(() => view.result.current.flushNow());
     expect(saveDraft.mock.calls[0][2]).toContain("Flushed shared bytes");
     expect(saveDraft.mock.calls[0][3]).toEqual({ liveEpoch: "session-1", causal: stamp });
+  } finally { view.unmount(); }
+});
+
+it("advances a solo writer's accepted revision and epoch before saving the next edit", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockResolvedValueOnce({ draftRevision: "b".repeat(64), liveEpoch: "second" }).mockResolvedValueOnce({});
+  const { view, doc } = setup(undefined, { mode: { kind: "editing", baseVersion: "v1", liveEpoch: "first", draftRevision: "a".repeat(64) } });
+  try {
+    await act(() => view.result.current.flushNow());
+    doc.querySelector("p")!.textContent = "Another edit";
+    await act(() => view.result.current.flushNow());
+    expect(saveDraft.mock.calls[0][3]).toEqual({ liveEpoch: "first", draftRevision: "a".repeat(64) });
+    expect(saveDraft.mock.calls[1][3]).toEqual({ liveEpoch: "second", draftRevision: "b".repeat(64) });
+  } finally { view.unmount(); }
+});
+
+it("keeps refused local edits and requests explicit reload after an unclocked conflict", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockRejectedValue(new ConflictError("Someone saved a newer draft. Reload.", { draftChanged: true, reloadRequired: true }));
+  const { view, doc, type } = setup();
+  try {
+    doc.querySelector("p")!.textContent = "My unsaved change";
+    act(type);
+    await act(() => view.result.current.flushUnsaved());
+    expect(view.result.current.reloadRequired).toBe(true);
+    expect(view.result.current.saveState).toBe("error");
+    expect(doc.querySelector("p")!.textContent).toBe("My unsaved change");
+    expect(view.result.current.saveFailed()).toBe(true);
+  } finally { view.unmount(); }
+});
+
+it("does not request reload for a causal save waiting for other live edits to merge", async () => {
+  saveDraft.mockReset();
+  saveDraft.mockRejectedValue(new ConflictError("Other edits are still arriving. Keep this editor open.", { draftChanged: true }));
+  const { view } = setup();
+  try {
+    await act(() => view.result.current.flushNow());
+    expect(view.result.current.reloadRequired).toBe(false);
+    expect(view.result.current.saveError).toContain("Keep this editor open");
   } finally { view.unmount(); }
 });

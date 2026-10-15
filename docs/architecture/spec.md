@@ -808,6 +808,18 @@ The one path that writes content, and it is explicit and server-mediated.
   another publisher changes the document record. Local and remotely merged
   edits both schedule autosave. Queued DOM mutations are flushed before the
   history stamp and matching HTML are captured in one synchronous turn.
+- Entering Edit first prepares an authenticated draft session with only its
+  version, entry, live epoch and opaque snapshot revision. The iframe GET
+  validates those identities against the same snapshot used to resolve its
+  immutable bytes. A changed or refused read stays non-editable and offers
+  Reload draft; it is never treated as an empty document to save.
+- A whole-document save without a causal history compares that revision in
+  the write transaction. A newer snapshot refuses the replacement, preserving
+  both stored bytes and the editor's unsaved DOM until an explicit reload.
+  A successful replacement retires the prior live epoch; its response advances
+  the solo writer's next save revision and epoch without remounting the frame.
+  Legacy API callers without a revision still compare the snapshot read by
+  their request, while browser editors always supply their loaded revision.
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
   `lib/draft.ts`), allowed only when every comment on the current version is
@@ -1785,9 +1797,11 @@ with `requests/{uid}`, the idle release and the "Ask to edit" hand-off. The
 reasoning that chose it, and the reasoning that reversed it, are both in
 [ADR 0010](adr/0010-crdt-for-shared-document-state.md).
 
-The stale-base `409` **stays**, and now means only what it always meant:
-somebody PUBLISHED a new version while you were editing. It never described
-concurrent drafts, and no longer has to.
+A stale-base `409` means somebody published a new version while the editor
+was open. A separate draft-revision refusal protects whole-document saves
+from replacing a newer draft. A retired live epoch requires an explicit reload
+before saving again; a causal save waiting for concurrent live edits to merge
+keeps its current editor open and may retry after those edits arrive.
 
 **The log belongs to the draft.** When an editor opens a document, a log that
 holds anything wins over the bytes it loaded, because it may hold edits they do
@@ -1805,6 +1819,11 @@ any verified account. An **unlisted** one never does. The realtime rules cannot
 see a link's key, so `*` there would let any account write into a document it
 cannot name; its link holders edit through `/draft` instead, which can check
 their grant, and are not merged live with the members (§17).
+Their checked snapshot saves must not silently replace newer member work, and
+an accepted link-holder save fences members' older autosaves. A member who
+chooses Reload draft or Load theirs opens those accepted bytes in the new live
+epoch before resuming shared editing. Keeping an old editor open retains its
+local unsaved text; it does not override the server's snapshot or epoch refusal.
 
 ### The caret is still faster than the text
 

@@ -2,7 +2,7 @@
 // Client for the draft and commit endpoints (SPEC §2, §6a).
 
 import type { CausalStamp } from "./crdt/causal";
-import { ConflictError, post } from "./api";
+import { ConflictError, get, post } from "./api";
 
 /**
  * Content writes are server-side only, so inline editing calls these endpoints.
@@ -62,7 +62,23 @@ function rethrow(e: unknown): never {
   throw e;
 }
 
+/** An editor's exact version, epoch and immutable draft snapshot. */
+export interface DraftSession {
+  baseVersion: string;
+  liveEpoch: string;
+  draftRevision: string;
+  entry: string;
+}
+
+export function openDraftSession(docId: string, baseVersion: string): Promise<DraftSession> {
+  return get(`/draft/${encodeURIComponent(docId)}`, { session: "1", baseVersion }, {
+    forbidden: "You do not have edit access to this document.",
+  });
+}
+
 export interface DraftResult {
+  draftRevision?: string;
+  liveEpoch?: string;
   baseVersion: string;
   entry: string;
   sourceEntry?: string;
@@ -75,7 +91,7 @@ export async function saveDraft(
   docId: string,
   baseVersion: string,
   html: string,
-  session?: { liveEpoch: string; causal?: CausalStamp },
+  session?: { liveEpoch: string; draftRevision?: string; causal?: CausalStamp },
 ): Promise<DraftResult> {
   try {
     const result = await post<{ draft: DraftResult }>(

@@ -16,6 +16,7 @@ import {
 } from "../wysiwyg/placeholders";
 import { rewriteLegacyFontTags } from "../wysiwyg/EditToolbar";
 import { StaleVersionError, saveDraft } from "../edit";
+import { ConflictError } from "../api";
 import type { CausalStamp } from "../crdt/causal";
 import type { FrameMode } from "./frameMode";
 
@@ -60,6 +61,7 @@ export function useInlineEditor(options: {
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [reloadRequired, setReloadRequired] = useState(false);
   /**
    * A commit is REFUSED when the last draft save failed. Publishing anyway
    * would promote the PREVIOUS draft bytes as a new version while reporting
@@ -77,6 +79,7 @@ export function useInlineEditor(options: {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyAttributes = useRef<EditingBodyAttributes | undefined>(undefined);
   const session = useRef(0);
+  const writeSession = useRef<{ liveEpoch: string; draftRevision?: string }>({ liveEpoch: "initial" });
   const inFlight = useRef<{ session: number; promise: Promise<boolean> } | null>(null);
 
   /**
@@ -126,10 +129,13 @@ export function useInlineEditor(options: {
             authoredAssets: authoredAssets.current ?? undefined,
             authoredBodyAttributes: bodyAttributes.current,
           });
-          await saveDraft(docId, mode.baseVersion, html, { liveEpoch: mode.liveEpoch ?? "initial", ...(causal ? { causal } : {}) });
+          const saved = await saveDraft(docId, mode.baseVersion, html, { ...writeSession.current, ...(causal ? { causal } : {}) });
           if (session.current !== currentSession) return false;
+          if (saved.draftRevision) writeSession.current.draftRevision = saved.draftRevision;
+          if (saved.liveEpoch) writeSession.current.liveEpoch = saved.liveEpoch;
           lastSaveFailed.current = false;
           setSaveError(null);
+          setReloadRequired(false);
         } catch (e) {
           if (session.current !== currentSession) return false;
           unsaved.current = true;
@@ -137,6 +143,7 @@ export function useInlineEditor(options: {
           setSaveState("error");
           if (e instanceof StaleVersionError) onStaleRef.current(e.currentVersion);
           setSaveError((e as Error).message);
+          setReloadRequired(e instanceof ConflictError && (e.detail.reloadRequired === true || e.detail.liveReset === true));
           return false;
         }
       } while (unsaved.current);
@@ -159,10 +166,12 @@ export function useInlineEditor(options: {
   useEffect(() => {
     if (!editing || !doc) return;
     session.current += 1;
+    writeSession.current = mode.kind === "editing" ? { liveEpoch: mode.liveEpoch ?? "initial", ...(mode.draftRevision ? { draftRevision: mode.draftRevision } : {}) } : { liveEpoch: "initial" };
     unsaved.current = false;
     lastSaveFailed.current = false;
     setSaveState("idle");
     setSaveError(null);
+    setReloadRequired(false);
 
     // Strip FIRST, unconditionally, before contentEditable is set. Anything
     // still here would be serialized into the next version.
@@ -228,6 +237,7 @@ export function useInlineEditor(options: {
   return {
     saveState,
     saveError,
+    reloadRequired,
     markChanged: useCallback(() => changedRef.current?.(), []),
     /**
      * Save now, changed or not: before a commit, which publishes the draft's

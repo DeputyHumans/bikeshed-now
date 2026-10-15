@@ -44,6 +44,15 @@ as ordinary assertions; fresh campaign runs and red controls remain required.
 A17.3 seeds and checks canvas runtime pixels through the parent driver before
 export because the untrusted upload correctly cannot run its drawing script.
 
+C23 now checks snapshot refusal and explicit recovery instead of accepting
+silent whole-document replacement. Its work holds each member's autosave,
+saves twice as an unlisted link editor, requires the delayed member requests to
+refuse, then reloads members and verifies all accepted edits survive resumed
+merging. A separate held-frame case changes the draft after preparing Edit and
+checks refusal, non-editability and explicit reload. The six `controls-c23-*`
+sets each execute a complete scenario at N=2; the campaign still requires the
+main scenario at N=2,5,10,20 on fresh integrated stacks.
+
 ## Outcomes
 
 | | |
