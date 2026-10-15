@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Let accessibility judges perform their shared setup when selected alone, while preserving inconclusive results after an earlier failed measurement and inheriting the setup budget and side effects.
+
 - Clarify and test text-range deletion: remove observed characters, retain unseen concurrent insertions at the cut in surviving parents, and remove descendants of deleted elements. Preserve the serial deletion controls.
 
 - Keep the campaign ledger deletion control pinned to its required discovery when new findings are appended.

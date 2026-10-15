@@ -5,10 +5,10 @@
  * Catalogue A24. SPEC §7: "Accessibility is a hard requirement: visible
  * `:focus-visible`, targets ≥44px, colour is never the sole signal,
  * `prefers-reduced-motion` honoured, WCAG AA contrast." Each case casts its
- * own accounts and publishes its own documents; where a known defect's case
- * is the same measurement as a passing case, the passing case measures both
- * and the defect's case reads what it recorded (as smoke 2b does); when
- * nothing was recorded the defect's case is INCONCLUSIVE, never a pass.
+ * own accounts and publishes its own documents. Related judges reuse a
+ * completed shared measurement, or run it when selected alone. A measurement
+ * already attempted unsuccessfully is never silently retried: its dependent
+ * judges remain INCONCLUSIVE.
  *
  *   A24.1   a 400×800 touch phone (the lib's touch device, so `(pointer: coarse)`
  *           and `(hover: none)` hold as on a phone): 11 screens and 2 dialogs
@@ -59,6 +59,7 @@
 
 import assert from "node:assert/strict";
 import { inspectUi, spokenText } from "../../lib/accessibility.mjs";
+import { sharedMeasurement } from "../../lib/shared-measurement.mjs";
 import { after } from "node:test";
 import { answered, currentTarget, pageStall, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
@@ -70,6 +71,9 @@ import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { authorizeParams, pkce, register, startReceiver } from "../../lib/oauth.mjs";
 import { frameGeometry, framePointToPage, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
+
+// Shared option objects are opaque to the static budget scanner; cover all 22 case budgets.
+const E2E_FILE_TIMEOUT_MS = 90 * 60_000;
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -415,7 +419,7 @@ function placementInPage(el) {
 /** What the A24.1 walk measured, for A24.1b. */
 const walk = { surfaces: null, expected: 13 };
 
-scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre", {
+const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre", {
   tiers: BOTH,
   timeoutMs: 360_000,
   inconclusiveOnCaseTimeout: true,
@@ -525,12 +529,11 @@ scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scr
   assert.deepEqual(misplaced, [], `primary actions out of reach: ${misplaced.join(" | ")}`);
   if (stopped) throw stopped;
 });
+scenario("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre", phoneWalk.options, phoneWalk.run);
 
-scenario("A24.1b on the same touch phone walk, every interactive target has a 44×44 CSS px hit area, with an exception for inline prose links", {
-  tiers: BOTH,
-  timeoutMs: 30_000,
-}, async (ctx) => {
-  if (walk.surfaces?.length !== walk.expected) ctx.inconclusive(`the A24.1 walk measured ${walk.surfaces?.length ?? 0} of ${walk.expected} surfaces (it runs first, and measures for this case)`);
+scenario("A24.1b on the same touch phone walk, every interactive target has a 44×44 CSS px hit area, with an exception for inline prose links", phoneWalk.options, async (ctx) => {
+  await phoneWalk.ensure(ctx);
+  if (walk.surfaces?.length !== walk.expected) ctx.inconclusive(`the A24.1 walk measured ${walk.surfaces?.length ?? 0} of ${walk.expected} surfaces`);
   const small = walk.surfaces.filter((x) => x.small.length).map((x) => `${x.name}: ${JSON.stringify(x.small)}`);
   ctx.ev.json("small-targets", walk.surfaces.map((x) => ({ surface: x.name, small: x.small })));
   assert.deepEqual(small, [], `targets under ${TAP}×${TAP} on a coarse pointer (SPEC §7 "targets ≥44px"; styles/base.css "Every interactive target reaches 44px on a coarse pointer"): ${small.join(" | ")}`);
@@ -766,7 +769,7 @@ scenario("A24.2d review by keyboard: Edit, Review them, Next, Previous, Reject�
 /** Where focus was once a person had been added from the Share dialog by keyboard, recorded in A24.2e for A24.2e2. */
 const afterAdd = { focus: null, escapeClosed: null };
 
-scenario("A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab never leave it, Escape closes it with focus back on Share, and a person is added by keys", {
+const shareKeyboard = sharedMeasurement("A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab never leave it, Escape closes it with focus back on Share, and a person is added by keys", {
   tiers: ["local"],
   effects: ["email:POST /access"],
   timeoutMs: 300_000,
@@ -826,12 +829,11 @@ scenario("A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab ne
   afterAdd.escapeClosed = await dialog.waitFor({ state: "detached", timeout: 5_000 }).then(() => true, () => false);
   assertRings(ctx, stops);
 });
+scenario("A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab never leave it, Escape closes it with focus back on Share, and a person is added by keys", shareKeyboard.options, shareKeyboard.run);
 
-scenario("A24.2e2 after a person is added from the Share dialog by keyboard, focus stays inside the dialog, so Escape still closes it", {
-  tiers: ["local"],
-  timeoutMs: 30_000,
-}, async (ctx) => {
-  if (!afterAdd.focus) ctx.inconclusive("A24.2e did not get as far as adding a person by keyboard (it runs first, and measures for this case)");
+scenario("A24.2e2 after a person is added from the Share dialog by keyboard, focus stays inside the dialog, so Escape still closes it", shareKeyboard.options, async (ctx) => {
+  await shareKeyboard.ensure(ctx);
+  if (!afterAdd.focus) ctx.inconclusive("A24.2e did not get as far as adding a person by keyboard");
   ctx.step(`after Add: focus on ${describe(afterAdd.focus)}; Escape closed the dialog: ${afterAdd.escapeClosed}`);
   assert.deepEqual({ focusInDialog: Boolean(afterAdd.focus.dialog?.startsWith("Share")), escapeClosed: afterAdd.escapeClosed }, { focusInDialog: true, escapeClosed: true }, `once Add has worked, focus has fallen to ${describe(afterAdd.focus)}: components/Modal.tsx "Trap Tab inside itself" and "Close on Escape" no longer hold`);
 });
@@ -841,7 +843,7 @@ const uploadFile = (title) => ({ name: "keyboard-upload.html", mimeType: "text/h
 /** One full Tab round of the upload dialog, recorded in A24.2f for A24.2f2. */
 const uploadRound = { stops: null };
 
-scenario("A24.2f upload by keyboard: Tab to Upload, Enter opens the dialog with focus inside and Tab kept in it; Choose a file by key (the OS picker answered by the harness), a title typed, Upload pressed by key publishes the document", {
+const uploadKeyboard = sharedMeasurement("A24.2f upload by keyboard: Tab to Upload, Enter opens the dialog with focus inside and Tab kept in it; Choose a file by key (the OS picker answered by the harness), a title typed, Upload pressed by key publishes the document", {
   tiers: BOTH,
   timeoutMs: 240_000,
   inconclusiveOnCaseTimeout: true,
@@ -901,12 +903,11 @@ scenario("A24.2f upload by keyboard: Tab to Upload, Enter opens the dialog with 
   assert.deepEqual({ title: doc?.title, owner: doc?.ownerEmail }, { title, owner: owner.account.email.toLowerCase() }, "the uploaded document, titled as typed");
   assertRings(ctx, stops);
 });
+scenario("A24.2f upload by keyboard: Tab to Upload, Enter opens the dialog with focus inside and Tab kept in it; Choose a file by key (the OS picker answered by the harness), a title typed, Upload pressed by key publishes the document", uploadKeyboard.options, uploadKeyboard.run);
 
-scenario("A24.2f2 every Tab stop of the upload dialog is something visible: focus never lands on a visually hidden element", {
-  tiers: BOTH,
-  timeoutMs: 30_000,
-}, async (ctx) => {
-  if (!(uploadRound.stops?.length > 1)) ctx.inconclusive("A24.2f recorded no Tab round of the upload dialog (it runs first, and measures for this case)");
+scenario("A24.2f2 every Tab stop of the upload dialog is something visible: focus never lands on a visually hidden element", uploadKeyboard.options, async (ctx) => {
+  await uploadKeyboard.ensure(ctx);
+  if (!(uploadRound.stops?.length > 1)) ctx.inconclusive("A24.2f recorded no Tab round of the upload dialog");
   const hidden = uploadRound.stops.filter((s) => !s.visible).map((s) => `${describe(s)} (class "${s.cls ?? ""}", ${s.box.w}×${s.box.h})`);
   ctx.step(`the round: ${uploadRound.stops.map((s) => `${describe(s)}${s.visible ? "" : " (hidden)"}`).join(" → ")}`);
   assert.deepEqual(hidden, [], "a Tab stop shows nothing to focus (WCAG 2.4.7; SPEC §7 \"visible :focus-visible\")");
@@ -968,7 +969,7 @@ const overview = (u) => u.page.locator('[role="dialog"][aria-label="All slides"]
 /** The overview's Tab walk, recorded in A24.2h for A24.2j. */
 const overviewWalk = { stops: null, focusable: 0, modal: null };
 
-scenario("A24.2h deck keys: → and ← move the current slide from the page and from inside the frame; o opens the overview on the current slide, Enter on another card goes there, Escape closes it", {
+const deckKeyboard = sharedMeasurement("A24.2h deck keys: → and ← move the current slide from the page and from inside the frame; o opens the overview on the current slide, Enter on another card goes there, Escape closes it", {
   tiers: BOTH,
   timeoutMs: 180_000,
   inconclusiveOnCaseTimeout: true,
@@ -1031,12 +1032,11 @@ scenario("A24.2h deck keys: → and ← move the current slide from the page and
   await overview(u).waitFor({ state: "detached", timeout: 10_000 });
   await at("Slide 3: The three numbers that moved", "Enter on a card went to that slide");
 });
+scenario("A24.2h deck keys: → and ← move the current slide from the page and from inside the frame; o opens the overview on the current slide, Enter on another card goes there, Escape closes it", deckKeyboard.options, deckKeyboard.run);
 
-scenario("A24.2j the slide overview, a dialog with aria-modal=\"true\", keeps Tab and Shift+Tab inside it", {
-  tiers: BOTH,
-  timeoutMs: 30_000,
-}, async (ctx) => {
-  if (!(overviewWalk.stops?.length >= 4 && overviewWalk.focusable >= 2)) ctx.inconclusive("A24.2h did not walk the overview by Tab (it runs first, and measures for this case)");
+scenario("A24.2j the slide overview, a dialog with aria-modal=\"true\", keeps Tab and Shift+Tab inside it", deckKeyboard.options, async (ctx) => {
+  await deckKeyboard.ensure(ctx);
+  if (!(overviewWalk.stops?.length >= 4 && overviewWalk.focusable >= 2)) ctx.inconclusive("A24.2h did not walk the overview by Tab");
   precondition(overviewWalk.modal === "true", `the overview declares aria-modal="true" (got ${overviewWalk.modal})`);
   const outside = overviewWalk.stops.filter((s) => s.dialog !== "All slides").map((s) => `${s.key}: ${describe(s)}`);
   ctx.step(`the walk: ${overviewWalk.stops.map((s) => `${s.key} ${describe(s)}${s.dialog === "All slides" ? "" : " (outside)"}`).join(" → ")}`);
@@ -1177,7 +1177,7 @@ async function markPoint(u, n) {
 /** The panel's scroll path when a highlight is clicked, measured in A24.3a for A24.3b. */
 const panelMotion = { smooth: null, instant: null };
 
-scenario("A24.3a with reduced motion, selecting a thread brings its passage into view in one frame; with no preference the same scroll animates", {
+const passageMotion = sharedMeasurement("A24.3a with reduced motion, selecting a thread brings its passage into view in one frame; with no preference the same scroll animates", {
   tiers: BOTH,
   timeoutMs: 240_000,
   inconclusiveOnCaseTimeout: true,
@@ -1230,13 +1230,12 @@ scenario("A24.3a with reduced motion, selecting a thread brings its passage into
     ctx.step(`panel path (${pref}): ${JSON.stringify(panelMotion[slot].path)} in ${panelMotion[slot].list}`);
   }
 });
+scenario("A24.3a with reduced motion, selecting a thread brings its passage into view in one frame; with no preference the same scroll animates", passageMotion.options, passageMotion.run);
 
-scenario("A24.3b with reduced motion, a click on a highlight brings its thread card into view in the panel in one frame (with no preference it animates)", {
-  tiers: BOTH,
-  timeoutMs: 30_000,
-}, async (ctx) => {
+scenario("A24.3b with reduced motion, a click on a highlight brings its thread card into view in the panel in one frame (with no preference it animates)", passageMotion.options, async (ctx) => {
+  await passageMotion.ensure(ctx);
   const { smooth, instant } = panelMotion;
-  if (!(smooth && instant)) ctx.inconclusive("A24.3a did not measure the panel's scroll after a highlight click (it runs first, and measures for this case)");
+  if (!(smooth && instant)) ctx.inconclusive("A24.3a did not measure the panel's scroll after a highlight click");
   precondition(smooth.list && smooth.moved > 200 && smooth.between >= 3, `with no preference the click scrolled the panel and the sampler saw it animate (moved ${smooth.moved}, ${smooth.between} between)`);
   precondition(instant.moved > 200, `with reduced motion the click scrolled the panel (${instant.moved} px)`);
   ctx.step(`panel path with reduced motion: ${JSON.stringify(instant.path)}`);
@@ -1513,10 +1512,8 @@ scenario("A24.5b a suggestion is put in words for a screen reader in the panel a
   assert.equal(await change.getAttribute("aria-live"), "polite", "the bar announces each change as the pass moves");
 });
 
-scenario("A24.5c all 11 screens and 2 dialogs have AA text contrast, computed accessible names, and focus colour reserved for focused indicators", {
-  tiers: BOTH,
-  timeoutMs: 10_000,
-}, async (ctx) => {
+scenario("A24.5c all 11 screens and 2 dialogs have AA text contrast, computed accessible names, and focus colour reserved for focused indicators", phoneWalk.options, async (ctx) => {
+  await phoneWalk.ensure(ctx);
   if (walk.surfaces?.length !== walk.expected) ctx.inconclusive(`A24.1 measured ${walk.surfaces?.length ?? 0} of ${walk.expected} surfaces`);
   ctx.ev.json("accessibility", walk.surfaces.map(({ name, accessibility }) => ({ name, ...accessibility })));
   for (const { name, accessibility } of walk.surfaces) {
