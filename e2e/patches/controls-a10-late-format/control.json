@@ -1,0 +1,11 @@
+{
+  "oracle": "the editor's first palette on a Markdown document",
+  "what": "controls-a10-late-format",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.1b the constrained palette is in place from the editor's first render: on a Markdown document whose version record arrives late, Edit never offers the presentation controls enabled"
+  },
+  "expect": {
+    "message": "the editor's first palette on a Markdown document"
+  }
+}

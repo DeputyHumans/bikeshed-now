@@ -912,7 +912,7 @@ export function DocViewer() {
     <div className="viewer" data-pane={pane}>
       {editingNow ? (
         <EditToolbar
-          format={doc.format}
+          format={doc.formatReady ? doc.format : null}
           doc={frame.doc}
           saveState={editor.saveState}
           saveError={editor.saveError}

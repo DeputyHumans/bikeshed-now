@@ -69,7 +69,14 @@ export function listMyDocs(
   );
   return onSnapshot(
     q,
-    (snap) => onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id }))),
+    { includeMetadataChanges: true },
+    (snap) => {
+      // After ten seconds offline the SDK can emit an empty first cache.
+      // Only a server answer can establish that nothing was shared. Metadata
+      // changes matter when the server confirms the same empty result later.
+      if (snap.metadata.fromCache && snap.docs.length === 0) return;
+      onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })));
+    },
     (err) => onError?.(err),
   );
 }

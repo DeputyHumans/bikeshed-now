@@ -119,7 +119,7 @@ const MARKDOWN_UNAVAILABLE =
 
 export interface EditToolbarProps {
   /** Which palette to offer. The only difference between the two modes. */
-  format: SourceFormat;
+  format: SourceFormat | null;
   /** The document being edited. Commands are dispatched against it. */
   doc: Document | null;
   saveState: "idle" | "dirty" | "saving" | "saved" | "error";
@@ -188,7 +188,8 @@ export function EditToolbar({
   sharing,
 }: EditToolbarProps) {
   const [active, setActive] = useState<Set<string>>(new Set());
-  const markdown = format === "markdown";
+  const presentationUnavailable = format !== "html";
+  const unavailableReason = format === null ? "Loading document format…" : MARKDOWN_UNAVAILABLE;
 
   const run = useCallback(
     (command: Command) => {
@@ -223,18 +224,18 @@ export function EditToolbar({
   }, [doc]);
 
   const renderControl = (control: Control) => {
-    const unavailable = control.formats && !control.formats.includes(format);
+    const unavailable = control.formats && (format === null || !control.formats.includes(format));
     return (
       <span
         key={control.id}
         className={unavailable ? "toolbar-unavailable" : undefined}
-        data-reason={unavailable ? MARKDOWN_UNAVAILABLE : undefined}
+        data-reason={unavailable ? unavailableReason : undefined}
       >
         <button
           type="button"
           className="icon-btn toolbar-btn"
           data-control={control.id}
-          title={unavailable ? MARKDOWN_UNAVAILABLE : control.title}
+          title={unavailable ? unavailableReason : control.title}
           aria-label={control.title}
           aria-pressed={active.has(control.id)}
           disabled={unavailable || sharing === "joining"}
@@ -292,14 +293,14 @@ export function EditToolbar({
           these are unavailable there rather than silently discarded on save. */}
       <div className="toolbar-group" data-overflow="true">
         <span
-          className={markdown ? "toolbar-unavailable" : undefined}
-          data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+          className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+          data-reason={presentationUnavailable ? unavailableReason : undefined}
         >
           <select
             className="toolbar-select"
             aria-label="Font"
-            title={markdown ? MARKDOWN_UNAVAILABLE : "Font"}
-            disabled={markdown || sharing === "joining"}
+            title={presentationUnavailable ? unavailableReason : "Font"}
+            disabled={presentationUnavailable || sharing === "joining"}
             onChange={(e) => run({ kind: "exec", command: "fontName", value: e.target.value })}
             defaultValue={EDITOR_FONT_CHOICES[0].value}
           >
@@ -311,15 +312,15 @@ export function EditToolbar({
           </select>
         </span>
         <span
-          className={markdown ? "toolbar-unavailable" : undefined}
-          data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+          className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+          data-reason={presentationUnavailable ? unavailableReason : undefined}
         >
           <input
             type="color"
             className="toolbar-select"
             aria-label="Text colour"
-            title={markdown ? MARKDOWN_UNAVAILABLE : "Text colour"}
-            disabled={markdown || sharing === "joining"}
+            title={presentationUnavailable ? unavailableReason : "Text colour"}
+            disabled={presentationUnavailable || sharing === "joining"}
             defaultValue={TOKENS.ink}
             onChange={(e) => run({ kind: "exec", command: "foreColor", value: e.target.value })}
           />
@@ -327,15 +328,15 @@ export function EditToolbar({
         {(["justifyLeft", "justifyCenter"] as const).map((command) => (
           <span
             key={command}
-            className={markdown ? "toolbar-unavailable" : undefined}
-            data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+            className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+            data-reason={presentationUnavailable ? unavailableReason : undefined}
           >
             <button
               type="button"
               className="icon-btn toolbar-btn"
               aria-label={command === "justifyLeft" ? "Align left" : "Align centre"}
-              title={markdown ? MARKDOWN_UNAVAILABLE : "Alignment"}
-              disabled={markdown || sharing === "joining"}
+              title={presentationUnavailable ? unavailableReason : "Alignment"}
+              disabled={presentationUnavailable || sharing === "joining"}
               onClick={() => run({ kind: "exec", command })}
             >
               <Icon

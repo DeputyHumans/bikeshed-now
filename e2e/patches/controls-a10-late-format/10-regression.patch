@@ -1,0 +1,9 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -913,5 +913,5 @@
+       {editingNow ? (
+         <EditToolbar
+-          format={doc.formatReady ? doc.format : null}
++          format={doc.format}
+           doc={frame.doc}
+           saveState={editor.saveState}

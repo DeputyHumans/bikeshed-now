@@ -75,6 +75,8 @@ export interface ResolvedDocument {
   currentVersion: string;
   entry: string;
   format: SourceFormat;
+  /** The selected version or projection has supplied its actual format. */
+  formatReady: boolean;
   trusted: boolean | undefined;
   publicEdit: boolean;
 
@@ -92,6 +94,7 @@ const EMPTY: ResolvedDocument = {
   currentVersion: "",
   entry: "index.html",
   format: "html",
+  formatReady: false,
   trusted: undefined,
   publicEdit: false,
   versions: [],
@@ -107,8 +110,9 @@ export function useDocument(
   const who = uid ?? "";
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [publicDoc, setPublicDoc] = useState<PublicDoc | null>(null);
-  const [versions, setVersions] = useState<DocVersion[]>([]);
-  const [version, setVersion] = useState<DocVersion | null>(null);
+  const [versionList, setVersionList] = useState<{ docId: string; rows: DocVersion[] } | null>(null);
+  const versions = versionList?.docId === docId ? versionList.rows : EMPTY.versions;
+  const [versionResult, setVersionResult] = useState<{ docId: string; versionId: string; value: DocVersion | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   // Whose read of the full record was refused. The fallback runs for that
@@ -207,7 +211,9 @@ export function useDocument(
   // not need it, because the projection already names the current version.
   useEffect(() => {
     if (!meta) return;
-    void listVersions(docId).then(setVersions).catch(() => setVersions([]));
+    let live = true;
+    void listVersions(docId).then((next) => { if (live) setVersionList({ docId, rows: next }); }).catch(() => { if (live) setVersionList({ docId, rows: [] }); });
+    return () => { live = false; };
   }, [docId, meta?.currentVersion]);
 
   const resolvedVersionId =
@@ -216,14 +222,20 @@ export function useDocument(
   useEffect(() => {
     if (!resolvedVersionId) return;
     const known = versions.find((v) => v.versionId === resolvedVersionId);
-    if (known) {
-      setVersion(known);
-      return;
-    }
-    void getVersion(docId, resolvedVersionId)
-      .then(setVersion)
-      .catch(() => setVersion(null));
+    if (known) return;
+    let live = true;
+    const finish = (value: DocVersion | null) => {
+      if (live) setVersionResult({ docId, versionId: resolvedVersionId, value });
+    };
+    void getVersion(docId, resolvedVersionId).then(finish).catch(() => finish(null));
+    return () => { live = false; };
   }, [docId, resolvedVersionId, versions]);
+
+  // A previous response must never supply the next version's format or entry,
+  // including the render before the next effect starts or an old failed read.
+  const version = versions.find((item) => item.versionId === resolvedVersionId)
+    ?? (versionResult?.docId === docId && versionResult.versionId === resolvedVersionId ? versionResult.value : null);
+  const projection = publicDoc?.currentVersion === resolvedVersionId ? publicDoc : null;
 
   if (!meta && !publicDoc) {
     return { ...EMPTY, loading, notFound, resolvedFor };
@@ -237,8 +249,9 @@ export function useDocument(
     resolvedFor,
     title: meta?.title ?? publicDoc?.title ?? "Untitled",
     currentVersion: resolvedVersionId,
-    entry: version?.entry ?? publicDoc?.entry ?? "index.html",
-    format: version?.format ?? publicDoc?.format ?? "html",
+    entry: version?.entry ?? projection?.entry ?? "index.html",
+    format: version?.format ?? projection?.format ?? "html",
+    formatReady: Boolean(version || projection),
     trusted: meta?.trusted ?? publicDoc?.trusted,
     publicEdit: meta?.publicEdit ?? publicDoc?.publicEdit ?? false,
     versions,

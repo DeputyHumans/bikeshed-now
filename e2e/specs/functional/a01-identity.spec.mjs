@@ -882,7 +882,6 @@ function afterHold(err, ctx) {
 scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {
   tiers: ["local"],
   effects: ["email:POST /access"],
-  defect: "X-a01-identity-3",
   timeoutMs: 600_000,
 }, budgeted(600_000, async (ctx) => {
   const setupBy = Date.now() + SETUP_MS;

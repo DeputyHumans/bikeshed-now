@@ -1217,6 +1217,10 @@ node only when its VALUE is one we write.
 
 ## 11. Markdown documents
 
+The editor offers only format-independent controls while the selected version's
+format is loading. Presentation controls enable only for confirmed HTML; old
+version responses cannot change the selected version's entry or format.
+
 `.md` is a first-class source format: uploadable, WYSIWYG-editable, versioned,
 annotated, exported and counted exactly like an HTML bundle.
 
@@ -1425,6 +1429,10 @@ is linked. One account per email is a correctness requirement: two accounts
 sharing an address would be an ACL bug.
 
 ### Sign-up
+
+An empty workspace cache while the backend is unavailable remains loading; only
+a server answer establishes that nothing is shared. Cached documents can still
+be shown, and a server-confirmed empty list clears them after revocation.
 
 Password signup asks Firebase for the current password policy. While its answer
 is pending the form waits; a known-invalid password stays disabled with its

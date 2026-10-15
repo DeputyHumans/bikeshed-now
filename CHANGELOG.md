@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Empty offline caches no longer claim the workspace is empty. Formatting waits
+  for the selected version's format, and late responses from older versions
+  cannot replace the current entry or palette.
+
 - MCP reads appear in Activity with a stable session start. Malformed change-feed
   cursors with partial positions, empty event ids or invalid timestamp ranges
   are refused without replaying the log or advancing the saved cursor.

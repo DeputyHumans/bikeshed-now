@@ -370,7 +370,7 @@ scenario("A10.1 a Markdown document's editor disables Underline, Font, Text colo
  */
 const VERSION_READ_DELAY_MS = 8_000;
 
-scenario("A10.1b the constrained palette is in place from the editor's first render: on a Markdown document whose version record arrives late, Edit never offers the presentation controls enabled", { tiers: ["local", "prod"], defect: "X-a10-markdown-2", timeoutMs: 180_000 }, async (ctx) => {
+scenario("A10.1b the constrained palette is in place from the editor's first render: on a Markdown document whose version record arrives late, Edit never offers the presentation controls enabled", { tiers: ["local", "prod"], timeoutMs: 180_000 }, async (ctx) => {
   const { acct, session } = await castOwner();
   const md = await publish(session.http, { body: SMALL_MD, filename: "small.md", title: "Late version probe", name: "a101b" });
   const u = await signedIn(ctx, acct);
