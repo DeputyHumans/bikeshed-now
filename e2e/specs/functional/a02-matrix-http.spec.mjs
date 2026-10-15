@@ -687,7 +687,6 @@ scenario("A2.exp-rename-move rename and move of an expired document are refused 
 scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only endpoints and /thumb refuse them 403, not 404", {
   tiers: ["local", "prod"],
   ...STALLS,
-  defect: "X-a02-matrix-http-2",
   timeoutMs: CASE_MS,
 }, async (ctx) => {
   const bad = [];
@@ -696,6 +695,8 @@ scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only en
     ctx.step(`${key}: ${fx.actor.name} on ${fx.d.id}, holding a link grant`);
     const out = await sendRow(ctx, key, fx, DEFECT_CELLS["X-a02-matrix-http-2"][key]);
     bad.push(...out.bad);
+    const inherited = answered(await fx.actor.http.get("/access", { query: { docId: fx.d.id } }));
+    if (inherited.status !== 403 || inherited.text !== "") bad.push(`GET /access: want empty 403, got ${inherited.status}`);
   }
   assertCells("grant-holder owner-only", bad);
 });

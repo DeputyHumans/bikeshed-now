@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Owner-only and thumbnail refusals recognize a current stored link grant while
+  preserving the refusal and all write gates. Inherited sharing rows show each
+  ancestor nearest first even in trees deeper than two folders.
+
 - Password signup remains usable when the policy request is unavailable, while
   Auth still validates submitted passwords. Every app-shell entry path denies
   framing, covering case variants and client-side navigation to consent.

@@ -12909,6 +12909,33 @@
         }
       ],
       "note": "Frame policy includes every SPA shell entry path because client-side navigation can reach signup or consent from otherwise unprotected routes. Document byte prefixes remain excluded. A1.2b now actually creates an unverified account in the local Auth emulator after the enabled-button assertion. A1.9b/c cover mixed case, trailing slash, encoded signup, account and folder routes; A1.9d covers all shell entry headers and byte-route exclusions. Three new E2E controls and one refreshed canonical-header control apply and name declared targets in .out/a01-patches-LilCzY. E2E runs pending; items remain open."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a02-matrix-http-2",
+        "X-a13-sharing-1"
+      ],
+      "scope": "local working tree; E2E pending",
+      "tests": [
+        "grant-refusal + inherited-order + existing filing tests: 58 pass,0 fail"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/g17-green.log",
+      "controls": [
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g17-no-proof.log",
+          "result": "Removing only refusal proof lookup fails 18 current-grant assertions;18 absent/stale/private grant checks still pass."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g17-root-first.log",
+          "result": "Restoring root-first inheritance fails the three-level ordering assertion."
+        },
+        {
+          "evidence": "e2e/.out/unit-controls-expiry/g17-lowest-role-first.log",
+          "result": "Restoring lowest-role-first ordering fails the role order assertion."
+        }
+      ],
+      "note": "Only refusal status changes, never write authority. Current grants after expiry keep the existing ACL-member refusal convention. All three E2E controls have applicable patches and declared targets. No campaign item is closed until E2E controls and fresh runs are observed."
     }
   ]
 }

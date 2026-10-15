@@ -105,6 +105,11 @@ check the read paths closed. This drops no feature and closes the existence
 oracle that an open gate would otherwise open. "May read" includes an unlisted
 document's key or link grant (§17), and nothing less: without them an unlisted
 document answers exactly as a private one.
+Owner-only refusals and thumbnail-write refusals resolve the caller's current stored
+link grant before choosing that status, including GET `/access`; this changes no
+authority. A rotated, missing, or private-document grant proves nothing. Expiry
+freezes content access and writes as §17 specifies; it does not erase an already
+known id from the refusal's ACL check.
 
 ---
 

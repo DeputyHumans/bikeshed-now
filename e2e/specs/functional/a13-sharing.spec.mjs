@@ -18,8 +18,8 @@
  *   A13.4  inherited grants in the dialog: after the document's own rows,
  *          nearest folder first and highest role first, each with its folder's
  *          path and no controls; a person granted directly and through a
- *          folder has both rows. Then three folder levels (suspected:
- *          X-a13-sharing-1, the chain is own folder, root, …, parent), and a
+ *          folder has both rows. Then three folder levels (X-a13-sharing-1
+ *          formerly listed own folder, root, …, parent), and a
  *          folder above that the owner cannot open
  *   A13.5  a team grant expands to the team's members (each holds the
  *          presence mirror); removing one from the team revokes them from the
@@ -543,7 +543,6 @@ scenario("A13.4 inherited grants: listed after the document's own, nearest folde
 scenario("A13.4 three folder levels: the inherited grants still come nearest folder first, the parent before the root", {
   tiers: ["local", "prod"],
   effects: ["email:POST /folder-access"],
-  defect: "X-a13-sharing-1",
   timeoutMs: 300_000,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -565,7 +564,7 @@ scenario("A13.4 three folder levels: the inherited grants still come nearest fol
   // `inherited.map`; the first A13.4 case asserts the dialog's order equals
   // the answer's), so the order the server gives is the order a person reads.
 
-  ctx.step("SPEC §2: nearest folder first — the leaf, then the middle, then the root");
+  ctx.step("SPEC §13: nearest folder first — the leaf, then the middle, then the root");
   const want = [
     { path: names.join("/"), principal: who.c },
     { path: `${names[0]}/${names[1]}`, principal: who.b },

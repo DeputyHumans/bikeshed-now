@@ -605,7 +605,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
   if (!isDocEditor(data, caller.uid, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
     return;
   }
   // Expired as a reader meets it: an editor cannot read an expired document,
@@ -839,7 +839,7 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
     members?: unknown;
   };
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
@@ -902,14 +902,15 @@ async function sendDocInheritance(
     badRequest(res, "invalid or missing docId");
     return;
   }
-  const snap = await db().collection("docs").doc(docId).get();
+  const ref = db().collection("docs").doc(docId);
+  const snap = await ref.get();
   if (!snap.exists) {
     res.status(404).end();
     return;
   }
   const data = snap.data() as DocAclData & { folderId?: unknown };
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
   const folderId = typeof data.folderId === "string" ? data.folderId : null;
@@ -961,7 +962,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData & { linkToken?: string };
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
@@ -1058,7 +1059,7 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData;
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
@@ -1102,7 +1103,7 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData;
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
