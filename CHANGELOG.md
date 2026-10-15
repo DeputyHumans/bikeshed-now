@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Require exact retained RTDB archives, runtime identity, JVM settings, rules and reporter timing for every campaign proof, including composite dependencies and control pairs. Provision the pinned public test archive without a Firebase account or CLI, and keep verification bounded by sharing immutable artifact inspection within each operation.
+
 - Verify the derived Database archive one bounded ZIP member at a time so the full campaign checker fits its unchanged memory limit. Preserve every member digest, CRC, canonical archive bytes and reviewed runtime profile; reject malformed local metadata, oversized output and trailing compressed data.
 
 - Keep the CAS pause patch composable with the existing feedback and minting pauses without changing its resulting code. Load the runtime dependency in isolated capability-parser controls so both admission faults reach their intended assertions.

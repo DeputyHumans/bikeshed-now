@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Evidence preparation refuses stale snapshots, misleading failures and invented completion while preserving every finding (SPEC §12).
 
+import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
@@ -24,9 +26,10 @@ function fixture(t) {
     write(root, `e2e/.out/${run}/invocations/i/results-functional.jsonl`, JSON.stringify({ ...base, ...(run === "red" ? { status: "fail", error: { message: "intended assertion: value differs" } } : {}) }) + "\n");
     write(root, `e2e/.out/${run}/invocations/i/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: run === "red" ? 1 : 0, interrupted: null, stackDown: null });
   }
+  for (const run of ["green", "red"]) attachRtdbFixture(root, { campaign: c, rel: `e2e/.out/${run}/invocations/i/results.json` });
   const ledger = { green: [{ sets: [def.set], invocationDir: "e2e/.out/green/invocations/i" }], controls: [{ set: def.set, ok: true, red: { invocationDir: "e2e/.out/red/invocations/i" } }] };
   write(root, "e2e/.out/controls/ledger.json", ledger);
-  return { c, root, base, def, ledger, report: "e2e/.out/green/invocations/i/results.json", controls: "e2e/.out/controls/ledger.json" };
+  return { c, root, base: { ...base, at: "2026-10-15T01:00:30.500Z" }, def, ledger, report: "e2e/.out/green/invocations/i/results.json", controls: "e2e/.out/controls/ledger.json" };
 }
 test("prepared worktree commands preserve all 64 axes and every unresolved finding", () => {
   const { candidate, plan } = prepareCampaign(original, snapshot);
@@ -66,6 +69,8 @@ test("filtered, TODO and inconclusive matrix results cannot be imported as compl
     assert.throws(() => importRun(f.c, f.report, { root: f.root, cellId: "functional" }), /failed or unjudged/);
   }
   write(f.root, f.report, { ...clean, invocation: { ...clean.invocation, grep: "one" } });
+  const completionPath = `${dirname(f.report)}/invocation.json`, completion = JSON.parse(readFileSync(join(f.root, completionPath)));
+  write(f.root, completionPath, { ...completion, grep: "one" });
   assert.throws(() => importRun(f.c, f.report, { root: f.root, cellId: "functional" }), /cannot use grep/);
 });
 test("a partial all-pass report cannot import a completed matrix cell", (t) => {
@@ -82,7 +87,7 @@ test("control imports read actual errors and mutation records, not summary label
   write(f.root, redPath, { ...red, cases: [{ ...red.cases[0], name: "Synthetic exact case", title: "intended assertion", error: { message: "another failure" } }] });
   assert.match(importControls(f.c, f.controls, options).refused[0]?.reason ?? "", /selected failure/);
   write(f.root, redPath, red);
-  write(f.root, "e2e/.out/red/stack.json", { fingerprint: { baseSha: snapshot.revision, sha256: snapshot.fingerprint }, expectVersion: snapshot.version, patches: [] });
+  write(f.root, "e2e/.out/red/stack.json", { ...JSON.parse(readFileSync(join(f.root, "e2e/.out/red/stack.json"))), patches: [] });
   assert.match(importControls(f.c, f.controls, options).refused[0]?.reason ?? "", /named mutation/);
 });
 test("duplicate control entries remain refused instead of inflating completion", (t) => {
@@ -134,4 +139,48 @@ test("control import refuses a shared artifact changed by a later definition rea
     }
     return set === f.def.set ? f.def : second;
   } }), /evidence changed during verification/, "no partly cached control import escapes the final byte check");
+});
+
+test("campaign preparation explicitly freezes the reviewed unofficial RTDB engine", () => {
+  const { candidate, plan } = prepareCampaign(original, snapshot);
+  assert.deepEqual(candidate.acceptance.rtdbEngine, {
+    kind: "request-context-sync-v1", label: "derived/unofficial diagnostic-append lock",
+    firebaseVersion: "15.25.1", databaseVersion: "4.11.2",
+    originalSha256: "b70d99344caf17c98b6f910fa8f6edf32a7c016cb1035e8915f70d38901eb97f",
+    actualSha256: "919e70261efbd666cd605621deb41f2dbf8c1d042a08b55e937bc06d8d09a18f",
+    profileSha256: "ea69a817b0ba05d6193621617ad696700ff354575f87f474ea6ef0926f878b35",
+  }, "preparation cannot silently inherit an absent or historical stock policy");
+  assert.deepEqual(plan.rtdbEngine, candidate.acceptance.rtdbEngine, "the executable plan displays its explicit runtime policy");
+});
+
+test("run and control import require independently verified runtime policy", t => {
+  const f = fixture(t); delete f.c.acceptance.rtdbEngine;
+  assert.throws(() => importRun(f.c, f.report, { root: f.root }), /acceptance must explicitly choose/, "run imports cannot bypass runtime attestation");
+  const result = importControls(f.c, f.controls, { root: f.root, readDefinition: () => f.def });
+  assert.deepEqual(result.imported, [], "unattested controls never become accepted pairs");
+  assert.match(result.refused[0].reason, /acceptance must explicitly choose/);
+});
+
+test("run import finalizes runtime bytes after its last per-proof validation", t => {
+  const f = fixture(t), report = JSON.parse(readFileSync(join(f.root, f.report)));
+  const runtimePath = join(f.root, report.invocation.rtdbRuntime.artifact), original = EvidenceArtifacts.prototype.assertUnchanged;
+  EvidenceArtifacts.prototype.assertUnchanged = function () {
+    original.call(this);
+    const runtime = JSON.parse(readFileSync(runtimePath)); runtime.changedAfterLastRead = true;
+    writeFileSync(runtimePath, JSON.stringify(runtime));
+  };
+  try { assert.throws(() => importRun(f.c, f.report, { root: f.root }), /evidence changed before final acceptance/, "the public importer must finalize its runtime snapshot"); }
+  finally { EvidenceArtifacts.prototype.assertUnchanged = original; }
+});
+
+test("control import finalizes runtime bytes after its last pair validation", t => {
+  const f = fixture(t), report = JSON.parse(readFileSync(join(f.root, f.report)));
+  const runtimePath = join(f.root, report.invocation.rtdbRuntime.artifact), original = EvidenceArtifacts.prototype.assertUnchanged;
+  EvidenceArtifacts.prototype.assertUnchanged = function () {
+    original.call(this);
+    const runtime = JSON.parse(readFileSync(runtimePath)); runtime.changedAfterLastRead = true;
+    writeFileSync(runtimePath, JSON.stringify(runtime));
+  };
+  try { assert.throws(() => importControls(f.c, f.controls, { root: f.root, readDefinition: () => f.def }), /evidence changed before final acceptance/, "the public control importer must finalize its runtime snapshot"); }
+  finally { EvidenceArtifacts.prototype.assertUnchanged = original; }
 });

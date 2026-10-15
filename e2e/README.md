@@ -227,6 +227,15 @@ the product's ten-second provider deadline.
 | Chrome | system Chrome for the browser specs; `playwright-core` never downloads one |
 | deps | `npm run install:all` in the checkout; stacks symlink its `node_modules` |
 
+`npm run test:tools` provisions the pinned public Database archive through
+`pretest:tools`, without a Firebase CLI installation or account. It verifies
+an existing tools-test cache or copies a hash-verified Firebase cache; otherwise
+it downloads the exact public archive, verifies its SHA-256 and publishes it
+atomically under `~/.cache/bikeshed-e2e/fixtures/rtdb/`. Subsequent runs work
+offline and verify the cached bytes again. These tests inspect real original
+and derived JAR bytes; they do not launch Java or substitute a ZIP inspector.
+The first run needs network access unless the pinned archive is already cached.
+
 `--self-test` resolves and checks Node 24 before launching the suite, even
 when the calling shell uses another Node version. It also requires an
 installed firebase-tools package, prints the selected executables and

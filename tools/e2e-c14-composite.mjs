@@ -12,6 +12,7 @@ import { assertPublicationBaseline, assertPublicationPreserved, isPublicationRev
 import { assertBrowserFeedback } from "../e2e/lib/feedback-oracles.mjs";
 import { verifyFinishedRun } from "./e2e-run-completion.mjs";
 import { C15_JUDGE } from "./e2e-local-limit.mjs";
+import { createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged, assertSameRtdbControlEngine } from "./e2e-rtdb-attestation.mjs";
 
 export const COMPOSITE_ID = "c14-natural-and-forced-serialization";
 export const COMPOSITE_ITEM = "W2-C14-SYNC-T-judges";
@@ -117,7 +118,13 @@ function measurement(row, n, kind) {
 }
 
 /** All positive N/trials are mandatory; control axes remain exactly their declared catalog targets. */
-export function verifyCompositeArtifact(campaign, artifact, { root }) {
+export function verifyCompositeArtifact(campaign, artifact, { root, runtimeCache }) {
+  const owned = !runtimeCache, cache = runtimeCache ?? createRtdbAttestationCache();
+  const result = verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeCache: cache });
+  if (owned) assertRtdbAttestationCacheUnchanged(cache);
+  return result;
+}
+function verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeCache }) {
   need(artifact?.schemaVersion === 1 && artifact.kind === "composite-c14-serialization-safety" && artifact.id === COMPOSITE_ID && artifact.command === "node tools/e2e-campaign-evidence.mjs capture-composite", "unsupported adjudication artifact");
   sourceMatches(campaign, artifact.source, "artifact");
   need(campaign.items.find(i => i.id === COMPOSITE_ITEM)?.state === "in-progress", "original item must remain in-progress, never resolved by the composite");
@@ -142,6 +149,7 @@ export function verifyCompositeArtifact(campaign, artifact, { root }) {
     ref.reporter.forEach(r => read(root, r));
     const hasInc = report.cases.some(incomplete);
     verifyFinishedRun(report, local(root, ref.report.artifact), { expectedExit: hasInc ? 3 : 0 });
+    verifyRtdbRunAttestation(campaign, { report, stack, rel: ref.report.artifact }, { root, cache: runtimeCache });
     need(Number.isFinite(Date.parse(artifact.observedAt)) && Date.parse(artifact.observedAt) >= Date.parse(done.endedAt), "capture predates completed run");
     const rows = read(root, ref.measurements).toString().trim().split("\n").map(line => JSON.parse(line));
     const relevant = rows.filter(r => r.ref === "C14 composite");
@@ -184,12 +192,12 @@ export function verifyCompositeArtifact(campaign, artifact, { root }) {
     for (const row of selected) { need(!documents.has(row.docId), "an attempt reused a fixture document"); documents.add(row.docId); }
     for (const c of report.cases) need(pass(c) || c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced || observations.includes(observedKey(ref.report.artifact, c)) || incomplete(c) && scenario(c, C15_JUDGE), "unrelated failed or incomplete case cannot be adjudicated");
   }
-  verifyControls(campaign, artifact, root);
+  verifyControls(campaign, artifact, root, runtimeCache);
   need(observations.length > 0, "no missing natural witness needs this adjudication");
   return { observations, axes, unresolvedNaturalWitness: { id: COMPOSITE_ID, item: COMPOSITE_ITEM, reason: "Natural publication-first reachability/frequency remains unobserved for the listed axes; controlled serialization safety does not establish that witness.", observations } };
 }
 
-function verifyControls(campaign, artifact, root) {
+function verifyControls(campaign, artifact, root, runtimeCache) {
   assert.deepEqual(artifact.controls.map(c => c.set).sort(), [...C14_CONTROLS].sort(), "C14 composite: exact directional controls are required");
   const ledgers = artifact.controlLedgers.map(ref => JSON.parse(read(root, ref)));
   for (const ledger of ledgers) need(ledger.ok === true && Number.isFinite(Date.parse(ledger.endedAt)) && Date.parse(artifact.observedAt) >= Date.parse(ledger.endedAt) && !ledger.interrupted && ledger.commit === campaign.acceptance.revision, "control ledger is unfinished or uses another source");
@@ -197,17 +205,19 @@ function verifyControls(campaign, artifact, root) {
     const control = campaign.controls.find(c => c.id === ref.id && c.set === ref.set); need(control, "control mapping is absent");
     need(ref.definition.artifact === `e2e/patches/${ref.set}/control.json`, "control definition path differs"); read(root, ref.definition);
     const definition = readControl(ref.set, resolve(root, "e2e/patches"));
-    const selected = {};
+    const selected = {}, runtimes = {};
     for (const color of ["red", "green"]) {
       const p = campaign.proofs.find(p => p.id === ref[color].id); need(p?.kind === "e2e-case" && p.id === control[color] && p.artifact === ref[color].report.artifact, "control proof identity differs");
       sourceMatches(campaign, p, "control proof");
       const report = JSON.parse(read(root, ref[color].report)), stack = JSON.parse(read(root, ref[color].stack)); stackMatches(campaign, stack);
+      runtimes[color] = verifyRtdbRunAttestation(campaign, { report, stack, rel: ref[color].report.artifact }, { root, cache: runtimeCache });
       need(ref[color].stack.artifact === `e2e/.out/${report.runId}/stack.json` && report.runId === p.runId && report.invocation.id === p.invocation, "control run identity differs");
       need(report.malformed?.length === 0, "malformed control report");
       const c = findTarget(report.cases, definition); need(c && c.id === `${c.file}::${c.name}` && report.cases.filter(r => key(r) === key(c)).length === 1 && p.caseId === c.id && p.n === c.n && p.trial === c.trial, "control does not target its catalog case and axis");
       need(color === "red" ? p.outcome === "FAIL" && fail(c) && (stack.patches ?? []).some(s => (s.set ?? s) === ref.set) : p.outcome === "PASS" && pass(c) && (stack.patches ?? []).every(s => (s.set ?? s).startsWith("amplify-")), "control lacks intended red or clean green");
       selected[color] = c;
     }
+    assertSameRtdbControlEngine(runtimes.red, runtimes.green);
     need(key(selected.red) === key(selected.green), "control pair has different cases or axes");
     const message = typeof selected.red.error === "string" ? selected.red.error : selected.red.error?.message;
     need(typeof message === "string" && new RegExp(definition.expect.message).test(message) && message.includes(control.assertion), "red did not fail the intended assertion");
@@ -220,9 +230,9 @@ function verifyControls(campaign, artifact, root) {
 }
 
 export function compositeReference(root, artifact, reportPath) { return { id: COMPOSITE_ID, ...bound(root, artifact), report: reportPath }; }
-export function verifyComposite(campaign, proof, loaded, { root }) {
+export function verifyComposite(campaign, proof, loaded, { root, runtimeCache }) {
   need(proof.kind === "e2e-run" && proof.outcome === "COMPOSITE-SAFETY" && proof.composite?.id === COMPOSITE_ID && proof.composite.report === proof.artifact, "only the named run-level assessment is supported");
-  const artifact = JSON.parse(read(root, proof.composite)), result = verifyCompositeArtifact(campaign, artifact, { root });
+  const artifact = JSON.parse(read(root, proof.composite)), result = verifyCompositeArtifact(campaign, artifact, { root, runtimeCache });
   const ref = artifact.runs.find(r => r.report.artifact === proof.artifact); need(ref, "proof is not one of the adjudicated runs");
   assert.deepEqual(JSON.parse(read(root, ref.report)), loaded.report, "C14 composite: supplied report differs");
   assert.deepEqual(JSON.parse(read(root, ref.stack)), loaded.stack, "C14 composite: supplied stack differs");

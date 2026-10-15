@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Campaign completion controls: missing work, disguised outcomes, stale evidence and ineffective controls never become a pass (SPEC §12).
 
+import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
@@ -48,6 +50,7 @@ function fixture(t) {
       write(root, `${dirname(artifact)}/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: 0, interrupted: null, stackDown: null });
       write(root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: (r.options?.patches ?? []).map((set) => ({ set })), options: { emailOff: r.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((r.options?.appEnvPresent ?? []).map((k) => [k, "synthetic"])), ...(r.options?.appEnv ?? {}) } } });
     }
+    if (r.kind === "e2e-run") attachRtdbFixture(root, { campaign: c, rel: artifact });
     c.proofs.push(p);
     r.proofs = [id];
   }
@@ -58,6 +61,7 @@ function fixture(t) {
   const negative = { ...positive, id: "negative-case", runId: "negative-stack", artifact: "e2e/.out/negative/report.json", outcome: "FAIL" };
   write(root, negative.artifact, { ...report, runId: negative.runId, cases: [{ ...report.cases[0], status: "fail", error: "intended synthetic assertion" }] });
   write(root, `e2e/.out/${negative.runId}/stack.json`, { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: [{ set: "controls-synthetic" }] });
+  attachRtdbFixture(root, { campaign: c, rel: negative.artifact });
   c.proofs.push(negative);
   c.controls.push({ id: "control", set: "controls-synthetic", mutation: "plant the synthetic bug", red: negative.id, green: positive.id, assertion: "intended synthetic assertion" });
   for (const item of [...c.coverage.items, ...c.items, ...c.discoveries]) {
@@ -90,6 +94,7 @@ test("projection dependency setup is allowed for positive proof without admittin
   write(root, proof.artifact, { ...report, runId: proof.runId, invocation: { ...report.invocation, runId: proof.runId } });
   const stack = { fingerprint: { baseSha: sha, sha256: fingerprint, dirty: false }, expectVersion: version, patches: [{ set: "a12-projection-unavailable" }] };
   write(root, "e2e/.out/projection-stack/stack.json", stack);
+  attachRtdbFixture(root, { campaign: c, rel: proof.artifact, stack });
   assert.deepEqual(checkCampaign(c, { root }).errors, []);
   write(root, "e2e/.out/projection-stack/stack.json", { ...stack, patches: [{ set: "a12-projection-unavailable-extra" }] });
   assert.match(checkCampaign(c, { root }).errors.join("\n"), /positive evidence contains a product mutant/);
@@ -306,6 +311,8 @@ test("expanded concurrency witnesses satisfy canonical affected cases without ch
     writeFileSync(join(root, dirname(positive.artifact), "results-final.jsonl"), JSON.stringify(row) + "\n");
     write(root, `${dirname(positive.artifact)}/invocation.json`, { ...invocation, endedAt: "2026-10-15T01:01:01Z", exit: 0, interrupted: null, stackDown: null });
     write(root, negative.artifact, { ...report, runId: negative.runId, cases: [{ ...row, status: "fail", error: "intended synthetic assertion" }] });
+    attachRtdbFixture(root, { campaign: c, rel: positive.artifact });
+    attachRtdbFixture(root, { campaign: c, rel: negative.artifact });
   };
   setIdentity(`${scenario} [N=5] #3`, 5, 3);
   assert.deepEqual(checkCampaign(c, { root }).errors, [], "a real expanded case proves its canonical scenario and N");
@@ -336,8 +343,8 @@ function limitFixture(t) {
   for (let trial = 1; trial <= 3; trial++) {
     const suffix = ` [N=20]${trial === 1 ? "" : ` #${trial}`}`;
     const name = C15_WORK + suffix;
-    report.cases.push({ id: `${file}::${name}`, file, name, n: 20, trial, status: "pass", error: null });
-    report.cases.push({ id: `${file}::${C15_JUDGE}${suffix}`, file, name: C15_JUDGE + suffix, n: 20, trial, status: "inconclusive", error: null, inconclusive: "the sync precondition did not hold: no two onCommentCreated runs overlapped while C15 ran (10 run(s), peak 1 at once; 1 Firestore trigger(s) of any kind at once, while the HTTP functions reached 4; 0 failure line(s)), so claimCommentCooldown's transaction was never contended: I11 held in sequence, not in a race" });
+    report.cases.push({ id: `${file}::${name}`, file, name, n: 20, trial, status: "pass", error: null, at: "2026-10-15T05:00:00.000Z" });
+    report.cases.push({ id: `${file}::${C15_JUDGE}${suffix}`, file, name: C15_JUDGE + suffix, n: 20, trial, status: "inconclusive", error: null, at: "2026-10-15T05:00:00.000Z", inconclusive: "the sync precondition did not hold: no two onCommentCreated runs overlapped while C15 ran (10 run(s), peak 1 at once; 1 Firestore trigger(s) of any kind at once, while the HTTP functions reached 4; 0 failure line(s)), so claimCommentCooldown's transaction was never contended: I11 held in sequence, not in a race" });
     metrics.push({ ref: "C15", case: name, n: 20, trial, naturalAttempts: [1, 2, 3].map(attempt => ({ attempt, outcome: "window-missed", diagnostic: { triggerRuns: { exact: true, peak: { onCommentCreated: 1 }, runs: { onCommentCreated: 10 }, failed: 0, open: {} } } })) });
   }
   const stackPath = `e2e/.out/${proof.runId}/stack.json`, stack = JSON.parse(readFileSync(join(f.root, stackPath)));
@@ -346,6 +353,8 @@ function limitFixture(t) {
   const probe = { schemaVersion: 1, kind: "unsupported-local-trigger-overlap", toolchain: { ...PIN }, structure: { core: 0, maximum: 4, queue: "unbounded LinkedBlockingQueue", delivery: "blocking HttpRequest.execute" }, behavior: { installedConfiguration: { core: 0, maximum: 4, active: 1, queued: 3 }, counterfactualCoreFour: { core: 4, maximum: 4, active: 4, queued: 0 } }, source: { revision: sha, version, fingerprint }, command: "node tools/e2e-campaign-evidence.mjs capture-local-limit", observedAt: "2026-10-15T11:00:00.000Z" };
   report.invocation.runId = proof.runId;
   const completed = { ...structuredClone(report.invocation), endedAt: "2026-10-15T10:00:01.000Z", exit: 3, interrupted: null, stackDown: null };
+  const runtimeFixture = attachRtdbFixture(f.root, { campaign: f.c, rel: proof.artifact, report, stack, done: completed });
+  Object.assign(completed, runtimeFixture.done);
   function flush() {
     write(f.root, proof.artifact, report); write(f.root, probePath, probe);
     write(f.root, `${dirname(proof.artifact)}/invocation.json`, completed);
@@ -465,6 +474,7 @@ test("a matrix cell cannot use unselected N rows as execution proof", t => {
   write(f.root, proof.artifact, report);
   const completion = JSON.parse(readFileSync(join(f.root, dirname(proof.artifact), "invocation.json")));
   write(f.root, `${dirname(proof.artifact)}/invocation.json`, { ...completion, n: [2] });
+  attachRtdbFixture(f.root, { campaign: f.c, rel: proof.artifact });
   assert.match(checkCampaign(f.c, { root: f.root }).errors.join("\n"), /N=20 was not executed/);
   assert.throws(() => importRun(f.c, proof.artifact, { root: f.root, cellId: cell.id }), /matrix N differs/);
 });
@@ -596,7 +606,29 @@ test("a thousand exact case proofs can share one report under a bounded verifica
   const campaignPath = join(root, "bounded-campaign.json"); writeFileSync(campaignPath, JSON.stringify(c));
   const script = `import { readFileSync } from 'node:fs'; import { checkCampaign } from ${JSON.stringify(new URL('./check-e2e-campaign.mjs', import.meta.url).href)}; const c=JSON.parse(readFileSync(process.argv[1], 'utf8')); const result=checkCampaign(c,{root:process.argv[2]}); console.log(JSON.stringify({complete:result.complete,errors:result.errors,proofs:c.proofs.length})); process.exit(result.complete?0:1);`;
   const child = spawnSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", script, campaignPath, root], { encoding: "utf8", timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
-  assert.equal(child.status, 0, `shared report verification must complete at128MiB; signal=${child.signal}; ${child.stderr.slice(-1500)}`);
+  assert.equal(child.status, 0, `shared report verification must complete at128MiB; signal=${child.signal}; ${child.stderr.slice(0, 1500)}\n${child.stderr.slice(-1500)}`);
   const result = JSON.parse(child.stdout.trim());
   assert.equal(result.complete, true); assert.deepEqual(result.errors, []); assert.equal(result.proofs, c.proofs.length);
+});
+
+test("the checker requires runtime evidence for every proof sharing an otherwise valid report", t => {
+  const { c, root } = fixture(t); delete c.acceptance.rtdbEngine;
+  const result = checkCampaign(c, { root });
+  assert.equal(result.complete, false, "legacy source-only evidence cannot prove the runtime");
+  for (const proof of c.proofs.filter(p => p.kind !== "command")) assert.ok(result.errors.some(error => error.startsWith(`${proof.id}:`) && error.includes("acceptance must explicitly choose")), "each proof independently requires the frozen runtime policy");
+});
+
+test("the checker finalizes runtime bytes after its last per-proof validation", t => {
+  const { c, root, report } = fixture(t);
+  const runtimePath = join(root, report.invocation.rtdbRuntime.artifact), original = EvidenceArtifacts.prototype.assertUnchanged;
+  EvidenceArtifacts.prototype.assertUnchanged = function () {
+    original.call(this);
+    const runtime = JSON.parse(readFileSync(runtimePath)); runtime.changedAfterLastRead = true;
+    writeFileSync(runtimePath, JSON.stringify(runtime));
+  };
+  try {
+    const result = checkCampaign(c, { root });
+    assert.equal(result.complete, false, "the checker must finalize its runtime snapshot");
+    assert.match(result.errors.join("\n"), /runtime evidence snapshot: RTDB attestation: evidence changed before final acceptance/);
+  } finally { EvidenceArtifacts.prototype.assertUnchanged = original; }
 });

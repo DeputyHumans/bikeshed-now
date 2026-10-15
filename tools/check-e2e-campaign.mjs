@@ -10,6 +10,7 @@ import { verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { verifyComposite, COMPOSITE_ITEM } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged, assertSameRtdbControlEngine } from "./e2e-rtdb-attestation.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const STATES = new Set(["open", "in-progress", "resolved", "historical-closed"]);
@@ -134,7 +135,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   }
   if (!validateOnly) {
     if (!SHA.test(acceptance.revision) || !text(acceptance.version)) pending.push("acceptance: pin the exact tested revision and version");
-    const loaded = new Map(), artifacts = new EvidenceArtifacts();
+    const loaded = new Map(), artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache();
     for (const p of proofs.values()) {
       try {
         need(p.revision === acceptance.revision && p.version === acceptance.version, `${p.id}: evidence differs from the acceptance revision/version`);
@@ -181,6 +182,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
         if (["PASS", "LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(p.outcome)) need(patches.every((name) => typeof name === "string" && (name.startsWith("amplify-") || ["a12-projection-unavailable", "a19-analytics-live", "a20-cli-bad-skill-name", "a20-cli-uppercase-skill", "a20-cli-underscore-skill", "a20-cli-no-retry-delay"].includes(name))), `${p.id}: positive evidence contains a product mutant/fix patch`);
+        const runtime = verifyRtdbRunAttestation(campaign, { report, stack, rel: p.artifact }, { root, cache: runtimeCache });
         const cases = array(report.cases);
         need(cases.length > 0, `${p.id}: report contains no cases`);
         const found = p.kind === "e2e-case" ? artifacts.cases(report, { id: p.caseId, n: p.n, trial: p.trial }) : [];
@@ -189,17 +191,17 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         }
         const limit = p.outcome === "LOCAL-LIMIT" || p.localLimit ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
         if (p.kind === "e2e-run" && p.outcome === "PASS") verifyCompletedRun(report, path);
-        const composite = p.outcome === "COMPOSITE-SAFETY" ? verifyComposite(campaign, p, { report, stack }, { root }) : null;
+        const composite = p.outcome === "COMPOSITE-SAFETY" ? verifyComposite(campaign, p, { report, stack }, { root, runtimeCache }) : null;
         if (composite) {
           if (!localAdjudications.has(COMPOSITE_ITEM)) unresolvedNaturalWitnesses.push({ proof: p.id, ...composite.unresolvedNaturalWitness, axes: composite.axes });
           localAdjudications.add(COMPOSITE_ITEM);
         }
         if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
-        loaded.set(p.id, { report, stack, limit, composite, selected: found[0] ?? null });
+        loaded.set(p.id, { report, stack, runtime, limit, composite, selected: found[0] ?? null });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
-      const red = loaded.get(c.red);
+      const red = loaded.get(c.red), green = loaded.get(c.green);
       const rp = proofs.get(c.red), gp = proofs.get(c.green);
       if (rp?.kind === "command" && gp?.kind === "command") {
         // Command controls carry the actual diagnostic and its log location;
@@ -211,6 +213,9 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(diagnostic.includes(c.assertion) && /(?:ERR_ASSERTION|AssertionError|failureType: 'testCodeFailure')/.test(diagnostic), `${c.id}: command diagnostic does not name the intended assertion`);
       } else {
         need(rp?.kind === "e2e-case" && gp?.kind === "e2e-case" && rp.caseId === gp.caseId && (rp.n ?? null) === (gp.n ?? null) && (rp.trial ?? 1) === (gp.trial ?? 1), `${c.id}: red and green must select the same exact case`);
+        if (need(red?.runtime && green?.runtime, `${c.id}: control pair lacks independently verified runtime evidence`)) {
+          try { assertSameRtdbControlEngine(red.runtime, green.runtime); } catch (error) { errors.push(`${c.id}: ${error.message}`); }
+        }
         const message = typeof red?.selected?.error === "string" ? red.selected.error : red?.selected?.error?.message;
         need(typeof message === "string" && message.includes(c.assertion), `${c.id}: selected red case does not name the intended assertion`);
         need(text(c.set) && array(red?.stack?.patches).some((p) => (p.set ?? p) === c.set), `${c.id}: named mutation is missing from the red stack`);
@@ -264,6 +269,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       need(JSON.stringify([...recorded].sort()) === JSON.stringify([...controlCell.controlSets].sort()), "matrix:controls: completed sets differ from the frozen control inventory");
     }
     try { artifacts.assertUnchanged(); } catch (error) { errors.push(`evidence snapshot: ${error.message}`); }
+    try { assertRtdbAttestationCacheUnchanged(runtimeCache); } catch (error) { errors.push(`runtime evidence snapshot: ${error.message}`); }
   }
   const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`));
   const localComplete = !validateOnly && errors.length === 0 && localPending.length === 0;

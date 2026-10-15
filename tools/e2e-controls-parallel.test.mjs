@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Parallel control evidence rejects missing pairs, stale sources, wrong failures and partial workers without starting product stacks (SPEC §12).
 
+import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -30,6 +32,7 @@ function fixture(t, count = 4) {
         const runId = `${set}-${side}`;
         write(root, `e2e/.out/${runId}/stack.json`, { fingerprint: { baseSha: snapshot.revision, sha256: snapshot.fingerprint }, expectVersion: snapshot.version, patches: side === "red" ? [{ set }] : [] });
         write(root, `e2e/.out/${runId}/invocations/i/results.json`, { runId, invocation: { id: "i" }, malformed: [], cases: [{ ...base, ...(side === "red" ? { status: "fail", error: { message: "intended assertion: synthetic bug" } } : {}) }] });
+        attachRtdbFixture(root, { campaign, rel: `e2e/.out/${runId}/invocations/i/results.json` });
       }
       return { set, ok: true, red: { invocationDir: `e2e/.out/${set}-red/invocations/i` } };
     });
@@ -155,6 +158,11 @@ test("the aggregate imports through the shared command contract and a changed ca
   const imported = importCommand(f.campaign, "e2e/.out/importable/command.json", { root: f.root, cellId: "controls" });
   assert.deepEqual(imported.candidate.controls.map((control) => control.set), f.sets);
   assert.equal(imported.candidate.acceptance.requirements[0].proofs.length, 1);
+  const greenReport = read(f.root, `e2e/.out/${old}-green/invocations/i/results.json`);
+  const runtimePath = join(f.root, greenReport.invocation.rtdbRuntime.artifact), originalBytes = readFileSync(runtimePath), finalize = EvidenceArtifacts.prototype.assertUnchanged;
+  EvidenceArtifacts.prototype.assertUnchanged = function () { finalize.call(this); writeFileSync(runtimePath, Buffer.concat([originalBytes, Buffer.from("\n")])); };
+  try { assert.throws(() => importCommand(f.campaign, "e2e/.out/importable/command.json", { root: f.root, cellId: "controls" }), /evidence changed before final acceptance/, "aggregate command import must finalize runtime bytes too"); }
+  finally { EvidenceArtifacts.prototype.assertUnchanged = finalize; writeFileSync(runtimePath, originalBytes); }
   write(f.root, report.log, "changed after capture");
   assert.throws(() => importCommand(f.campaign, "e2e/.out/importable/command.json", { root: f.root, cellId: "controls" }), /digest/);
 });
@@ -186,4 +194,12 @@ test("unprepared snapshots, a subset inventory and evidence outside .out are ref
   }
   await assert.rejects(runParallelControls(f.campaign, "../outside", options), /under e2e/);
   assert.equal(launched, false);
+});
+
+test("aggregate control imports cannot accept source-only runtime evidence", t => {
+  const f = fixture(t); delete f.campaign.acceptance.rtdbEngine;
+  const result = validateControlWorkers(f.campaign, f.sets, f.workers, f.options);
+  assert.equal(result.pass, 0, "every aggregate pair must pass independent runtime verification");
+  assert.equal(result.fail, f.sets.length);
+  for (const set of f.sets) assert.ok(result.problems.some(problem => problem.startsWith(`${set}:`) && problem.includes("acceptance must explicitly choose")), `${set}: the exact runtime refusal remains visible`);
 });

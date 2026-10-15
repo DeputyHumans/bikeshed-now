@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Challenge every positive axis, measurement, completion and control binding of the C14 local safety assessment (SPEC §12, §19).
+import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -18,8 +19,8 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const refusal = "Resolve all comments before publishing a new version.";
 const newer = "This document has a newer version. Reload, then suggest the edit on it.";
 const original = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url)));
-const write = (root, file, value) => { mkdirSync(dirname(join(root, file)), { recursive: true }); writeFileSync(join(root, file), typeof value === "string" ? value : JSON.stringify(value)); };
-const rowCase = (name, n, trial, status = "pass", extra = {}) => { const full = `${name} [N=${n}] #${trial}`; return { id: `${C14_FILE}::${full}`, name: full, file: C14_FILE, n, trial, status, ...extra }; };
+const write = (root, file, value) => { mkdirSync(dirname(join(root, file)), { recursive: true }); writeFileSync(join(root, file), typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n"); };
+const rowCase = (name, n, trial, status = "pass", extra = {}) => { const full = `${name} [N=${n}] #${trial}`; return { id: `${C14_FILE}::${full}`, name: full, file: C14_FILE, n, trial, status, at: "2026-10-15T01:30:00.000Z", ...extra }; };
 const snapshot = doc => ({ currentVersion: "v1", liveEpoch: { present: true, value: "initial" }, draft: { entry: "index.html", storagePrefix: `docs/${doc}/draft/one` }, versions: [{ id: "v1", metadata: { entry: "index.html" }, objects: [{ key: `docs/${doc}/v1/index.html`, size: 3, sha256: "1".repeat(64) }] }], draftObjects: [{ key: `docs/${doc}/draft/one/index.html`, size: 4, sha256: "2".repeat(64) }] });
 function measured(kind, n, trial, doc, caseName, attempt = 1) {
   const won = kind === "comment-held" || kind === "suggestion-held", before = snapshot(doc), after = structuredClone(before);
@@ -53,6 +54,8 @@ function fixture(t) {
   }
   const saveRun = run => { write(root, run.path, run.report); write(root, `${run.dir}/invocation.json`, run.done); write(root, `${run.dir}/results-concurrency.jsonl`, run.report.cases.map(c => JSON.stringify(c)).join("\n") + "\n"); write(root, `${run.dir}/c13-feedback.jsonl`, run.rows.map(c => JSON.stringify(c)).join("\n") + "\n"); };
   runs.forEach(saveRun);
+  for (const run of runs) { const prepared = attachRtdbFixture(root, { campaign, rel: run.path, report: run.report, done: run.done }); Object.assign(run.done, prepared.done); }
+  runs.forEach(saveRun);
   const ledger = { ok: true, endedAt: "2026-10-15T02:00:01Z", commit: source.revision, tree: source.revision, controls: [], green: [] };
   for (const set of C14_CONTROLS) {
     const targetName = `Synthetic exact ${set} [N=2]`, c = { id: `${C14_FILE}::${targetName}`, name: targetName, file: C14_FILE, n: 2, trial: 1, status: "pass" };
@@ -62,6 +65,7 @@ function fixture(t) {
       const id = `${set}-${color}`, dir = `e2e/.out/${id}/invocations/i`, path = `${dir}/results.json`, proof = { ...source, id, kind: "e2e-case", outcome: color === "red" ? "FAIL" : "PASS", artifact: path, runId: id, invocation: "i", caseId: c.id, n: 2, trial: 1 };
       write(root, path, { runId: id, invocation: { id: "i" }, malformed: [], cases: [{ ...c, ...(color === "red" ? { status: "fail", error: { message: control.assertion } } : {}) }] }); write(root, `e2e/.out/${id}/stack.json`, stack(color === "red" ? [set] : [])); campaign.proofs.push(proof); control[color] = id;
     }
+    for (const color of ["red", "green"]) attachRtdbFixture(root, { campaign, rel: `e2e/.out/${set}-${color}/invocations/i/results.json` });
     campaign.controls.push(control); ledger.controls.push({ set, ok: true, red: { invocationDir: `e2e/.out/${set}-red/invocations/i` } }); ledger.green.push({ sets: [set], invocationDir: `e2e/.out/${set}-green/invocations/i` });
   }
   write(root, manifest.controlLedgers[0], ledger);
@@ -158,6 +162,7 @@ function finishOtherObligations(f) {
       write(f.root, `e2e/.out/${id}/stack.json`, { fingerprint: { baseSha: source.revision, sha256: source.fingerprint }, expectVersion: source.version, patches: cell.options?.patches ?? [], options: { emailOff: cell.options?.emailOff ?? false, appEnv: { ...Object.fromEntries((cell.options?.appEnvPresent ?? []).map(k => [k, "synthetic"])), ...(cell.options?.appEnv ?? {}) } } });
       Object.assign(p, { runId: id, invocation: "i" });
     }
+    if (cell.kind === "e2e-run") attachRtdbFixture(f.root, { campaign: c, rel: artifact });
     c.proofs.push(p); cell.proofs = [id];
   }
   const positive = c.controls[0].green;
@@ -232,4 +237,35 @@ test("a rounded zero margin requires a genuinely positive raw wire overlap", t =
   f.saveRun(run); assert.doesNotThrow(f.capture, "strictly positive raw overlap remains valid after display rounding");
   run.rows.find(r => r.ref === "request burst").timing[0].firstByteAt = 101;
   f.saveRun(run); assert.throws(f.capture, /simultaneous overlap/);
+});
+
+function changeRuntime(f, reportPath, change) {
+  const report = JSON.parse(readFileSync(join(f.root, reportPath))), ref = report.invocation.rtdbRuntime;
+  const runtime = JSON.parse(readFileSync(join(f.root, ref.artifact))); change(runtime);
+  write(f.root, ref.artifact, runtime); ref.sha256 = hash(readFileSync(join(f.root, ref.artifact)));
+  const completionPath = `${dirname(reportPath)}/invocation.json`, done = JSON.parse(readFileSync(join(f.root, completionPath)));
+  done.rtdbRuntime = structuredClone(ref); write(f.root, completionPath, done); write(f.root, reportPath, report);
+}
+
+test("composite capture independently verifies every auxiliary run and control runtime", t => {
+  const f = fixture(t), path = f.runs[1].path;
+  changeRuntime(f, path, runtime => { runtime.after.heapMb = 512; });
+  assert.throws(f.capture, /RTDB attestation: after observed Database heap differs/, "an auxiliary positive run cannot inherit the selected run's valid JVM");
+  changeRuntime(f, path, runtime => { runtime.after.heapMb = 1024; });
+  const controlPath = `e2e/.out/${C14_CONTROLS[0]}-red/invocations/i/results.json`;
+  changeRuntime(f, controlPath, runtime => { runtime.after.mark = "another-stack"; });
+  assert.throws(f.capture, /RTDB attestation: after JVM belongs to another stack/, "each auxiliary control must prove its own runtime");
+  changeRuntime(f, controlPath, runtime => { runtime.after.mark = `mark-${C14_CONTROLS[0]}-red`; });
+  assert.doesNotThrow(f.capture, "restored actual byte-backed runtime fixtures qualify");
+});
+
+test("standalone composite verification finalizes its runtime artifact snapshot", t => {
+  const f = fixture(t), artifact = f.capture(), controls = artifact.controls;
+  const runtimePath = join(f.root, f.runs[0].report.invocation.rtdbRuntime.artifact);
+  controls[Symbol.iterator] = function* () {
+    for (let i = 0; i < this.length; i++) yield this[i];
+    const runtime = JSON.parse(readFileSync(runtimePath)); runtime.changedAfterLastRead = true;
+    writeFileSync(runtimePath, JSON.stringify(runtime));
+  };
+  assert.throws(() => verifyCompositeArtifact(f.campaign, artifact, { root: f.root }), /evidence changed before final acceptance/, "standalone verification cannot omit the final byte check");
 });

@@ -14,6 +14,9 @@ import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { captureComposite, compositeReference, verifyComposite } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { APPROVED_RTDB_DERIVATION, createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged, assertSameRtdbControlEngine } from "./e2e-rtdb-attestation.mjs";
+
+import { RTDB_STOCK_PIN } from "../e2e/lib/rtdb-runtime.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const hash = (s) => createHash("sha256").update(s).digest("hex");
@@ -62,7 +65,7 @@ export function prepareCampaign(campaign, snapshot, { tree = "worktree", control
   need(tree === "worktree", "prepared campaigns use a frozen worktree");
   const candidate = structuredClone(campaign);
   need(candidate.proofs.every((p) => p.revision === snapshot.revision && p.version === snapshot.version), "existing proofs use another acceptance snapshot; retain them separately before preparing a new proposal");
-  candidate.acceptance = { ...candidate.acceptance, ...snapshot, tree };
+  candidate.acceptance = { ...candidate.acceptance, ...snapshot, tree, rtdbEngine: { ...APPROVED_RTDB_DERIVATION, firebaseVersion: RTDB_STOCK_PIN.firebase, databaseVersion: RTDB_STOCK_PIN.database, originalSha256: RTDB_STOCK_PIN.sha256 } };
   for (const cell of candidate.acceptance.requirements) cell.command = withTree(cell.command, tree);
   const controlCell = candidate.acceptance.requirements.find((r) => r.id === "controls");
   controlCell.controlSets = controls.map((c) => c.set).sort();
@@ -74,16 +77,17 @@ export function prepareCampaign(campaign, snapshot, { tree = "worktree", control
     }
     return rows;
   });
-  return { candidate, plan: { snapshot, tree, mode: "prepare-only", policy: "Run cells sequentially; obey the existing stack cap and admission locks. Import candidate evidence outside tracked source until the frozen campaign finishes. No finding is resolved by this helper.", matrix: candidate.acceptance.requirements.map(({ proofs, ...r }) => r), controlBatches: batches, groups: candidate.groups.map((g) => ({ id: g.id, suspects: g.suspects, unresolved: g.suspects.filter((id) => candidate.items.find((i) => i.id === id)?.state !== "resolved") })) } };
+  return { candidate, plan: { snapshot, tree, rtdbEngine: structuredClone(candidate.acceptance.rtdbEngine), mode: "prepare-only", policy: "Run cells sequentially; obey the existing stack cap and admission locks. Import candidate evidence outside tracked source until the frozen campaign finishes. No finding is resolved by this helper.", matrix: candidate.acceptance.requirements.map(({ proofs, ...r }) => r), controlBatches: batches, groups: candidate.groups.map((g) => ({ id: g.id, suspects: g.suspects, unresolved: g.suspects.filter((id) => candidate.items.find((i) => i.id === id)?.state !== "resolved") })) } };
 }
-function loadReport(campaign, artifact, root, artifacts) {
+function loadReport(campaign, artifact, root, artifacts, runtimeCache) {
   const rel = localPath(root, artifact), report = artifacts.json(resolve(root, rel));
   need(report.invocation?.id && report.runId && Array.isArray(report.cases) && report.cases.length && report.malformed?.length === 0, "not a complete single-invocation result artifact");
   const stack = artifacts.json(resolve(root, `e2e/.out/${report.runId}/stack.json`));
   const a = campaign.acceptance;
   need(stack.fingerprint?.baseSha === a.revision && stack.expectVersion === a.version, "run differs from the acceptance revision/version");
   if (a.fingerprint) need(stack.fingerprint?.sha256 === a.fingerprint, "run differs from the frozen source fingerprint");
-  return { rel, report, stack };
+  const runtime = verifyRtdbRunAttestation(campaign, { report, stack, rel }, { root, cache: runtimeCache });
+  return { rel, report, stack, runtime };
 }
 function caseProof(campaign, loaded, c, outcome) {
   const { report, stack, rel } = loaded;
@@ -92,8 +96,8 @@ function caseProof(campaign, loaded, c, outcome) {
   return { id: `case-${hash(`${rel}\0${key(c)}\0${outcome}`).slice(0, 24)}`, kind: "e2e-case", revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: stack.fingerprint.sha256, artifact: rel, runId: report.runId, invocation: report.invocation.id, caseId: c.id, n: c.n ?? null, trial: c.trial ?? 1, outcome };
 }
 export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null, compositeArtifact = null } = {}) {
-  const artifacts = new EvidenceArtifacts();
-  const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root, artifacts);
+  const artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache();
+  const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root, artifacts, runtimeCache);
   for (const c of loaded.report.cases) if (pass(c) || fail(c)) upsert(candidate.proofs, caseProof(candidate, loaded, c, pass(c) ? "PASS" : "FAIL"));
   const unfinished = loaded.report.cases.filter((c) => !pass(c) && !(c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced));
   if (cellId) {
@@ -114,7 +118,7 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
     if (compositeArtifact) {
       p.outcome = "COMPOSITE-SAFETY";
       p.composite = compositeReference(root, localPath(root, compositeArtifact), loaded.rel);
-      limited.push(...verifyComposite(candidate, p, loaded, { root }).observations);
+      limited.push(...verifyComposite(candidate, p, loaded, { root, runtimeCache }).observations);
     }
     if (unfinished.length && localLimitArtifact) {
       if (!compositeArtifact) p.outcome = "LOCAL-LIMIT";
@@ -128,6 +132,7 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
     upsert(candidate.proofs, p); cell.proofs = [...new Set([...cell.proofs, p.id])];
   }
   artifacts.assertUnchanged();
+  assertRtdbAttestationCacheUnchanged(runtimeCache);
   return { candidate, importedCases: loaded.report.cases.filter((c) => pass(c) || fail(c)).length, unfinished: unfinished.map((c) => ({ id: c.id, status: c.status })) };
 }
 
@@ -150,7 +155,7 @@ export function captureCompositeEvidence(campaign, manifest, out, { root = ROOT,
   return artifact;
 }
 
-function importControlsInto(candidate, ledgerPath, { root, readDefinition, artifacts }) {
+function importControlsInto(candidate, ledgerPath, { root, readDefinition, artifacts, runtimeCache }) {
   const ledger = artifacts.json(resolve(root, localPath(root, ledgerPath))), imported = [], refused = [];
   const seen = new Set();
   for (const row of ledger.controls ?? []) {
@@ -160,7 +165,8 @@ function importControlsInto(candidate, ledgerPath, { root, readDefinition, artif
       const def = readDefinition(row.set); def.selection ??= assertTargetDeclared(def);
       const greenRows = (ledger.green ?? []).filter((g) => g.sets?.includes(row.set));
       need(greenRows.length === 1, "ambiguous or missing green invocation");
-      const red = loadReport(candidate, resolve(root, row.red.invocationDir, "results.json"), root, artifacts), green = loadReport(candidate, resolve(root, greenRows[0].invocationDir, "results.json"), root, artifacts);
+      const red = loadReport(candidate, resolve(root, row.red.invocationDir, "results.json"), root, artifacts, runtimeCache), green = loadReport(candidate, resolve(root, greenRows[0].invocationDir, "results.json"), root, artifacts, runtimeCache);
+      assertSameRtdbControlEngine(red.runtime, green.runtime);
       const rc = findTarget(red.report.cases, def), gc = findTarget(green.report.cases, def);
       need(fail(rc) && pass(gc) && key(rc) === key(gc), "the exact target must fail red and pass green");
       need((red.stack.patches ?? []).some((p) => (p.set ?? p) === row.set), "red stack lacks the named mutation");
@@ -176,9 +182,10 @@ function importControlsInto(candidate, ledgerPath, { root, readDefinition, artif
 }
 
 export function importControls(campaign, ledgerPath, { root = ROOT, readDefinition = readControl } = {}) {
-  const artifacts = new EvidenceArtifacts();
-  const result = importControlsInto(structuredClone(campaign), ledgerPath, { root, readDefinition, artifacts });
+  const artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache();
+  const result = importControlsInto(structuredClone(campaign), ledgerPath, { root, readDefinition, artifacts, runtimeCache });
   artifacts.assertUnchanged();
+  assertRtdbAttestationCacheUnchanged(runtimeCache);
   return result;
 }
 
@@ -235,7 +242,7 @@ export async function captureCommand(campaign, cellId, directory, { root = ROOT,
   writeProposal(root, `${dir}/command.json`, report); return report;
 }
 export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) {
-  const artifacts = new EvidenceArtifacts(), candidate = structuredClone(campaign);
+  const artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache(), candidate = structuredClone(campaign);
   const rel = localPath(root, artifact), report = artifacts.json(resolve(root, rel)), a = candidate.acceptance;
   need(report.revision === a.revision && report.version === a.version && report.fingerprint === a.fingerprint, "command differs from the frozen acceptance source");
   need(artifacts.digest(resolve(root, localPath(root, report.log))) === report.logSha256, "command log digest differs");
@@ -245,7 +252,7 @@ export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) 
   const ledgers = report.controlLedgers ?? (report.controlLedger ? [report.controlLedger] : []);
   if (ledgers.length) {
     const imported = [];
-    for (const ledger of ledgers) { const result = importControlsInto(candidate, ledger, { root, readDefinition: readControl, artifacts }); need(!result.refused.length, "control command ledger contains an invalid pair"); imported.push(...result.imported); }
+    for (const ledger of ledgers) { const result = importControlsInto(candidate, ledger, { root, readDefinition: readControl, artifacts, runtimeCache }); need(!result.refused.length, "control command ledger contains an invalid pair"); imported.push(...result.imported); }
     need(new Set(imported).size === imported.length && JSON.stringify(imported.sort()) === JSON.stringify(report.controlSets.toSorted()) && report.tests === imported.length, "control command ledger differs");
   } else {
     const counts = commandCounts(artifacts.text(resolve(root, report.log)));
@@ -254,6 +261,7 @@ export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) 
   const p = { id: `command-${hash(rel).slice(0, 24)}`, kind: "command", revision: report.revision, version: report.version, fingerprint: report.fingerprint, artifact: rel, outcome: "PASS", command: report.command, logSha256: report.logSha256 };
   upsert(candidate.proofs, p); const target = candidate.acceptance.requirements.find((r) => r.id === cellId); target.proofs = [...new Set([...target.proofs, p.id])];
   artifacts.assertUnchanged();
+  assertRtdbAttestationCacheUnchanged(runtimeCache);
   return { candidate };
 }
 
