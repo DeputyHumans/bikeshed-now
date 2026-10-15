@@ -98,6 +98,7 @@ describe("analytics is gated on consent", () => {
       setAnalyticsCollectionEnabled: vi.fn(),
     }));
     const analytics = await import("./analytics");
+    await analytics.setAnalyticsOptOut(false); // the anonymous account preference has resolved
     expect(analytics.analyticsConfigured()).toBe(true);
     analytics.initAnalytics();
     // resolve() is async inside; let its microtasks run.
@@ -141,6 +142,7 @@ describe("analytics is gated on consent", () => {
       setAnalyticsCollectionEnabled: vi.fn(),
     }));
     const analytics = await import("./analytics");
+    await analytics.setAnalyticsOptOut(false); // the anonymous account preference has resolved
 
     // Unanswered: nothing loads.
     analytics.initAnalytics();

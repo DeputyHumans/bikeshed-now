@@ -46,14 +46,14 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { answered, currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
 import { CONSENT_KEY } from "../../lib/browser.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, listTokens, mintToken, openSession } from "../../lib/session.mjs";
-import { docIdFor, ledgerDoc, publish } from "../../lib/seed.mjs";
+import { docIdFor, ledgerDoc, publish, publishMcp } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
 import { adminFor, closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
@@ -64,6 +64,7 @@ import { readZip } from "../../lib/zipread.mjs";
 import { isMeasurementIdShape, patchCapability } from "../../lib/options.mjs";
 import { REPO_ROOT } from "../../lib/paths.mjs";
 import { treeConstant } from "../../lib/target.mjs";
+import { cliHome, runCli } from "../../lib/cli.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -102,8 +103,6 @@ const ANALYTICS_SETTLE_MS = 5_000;
  */
 const RECORD_WAIT_MS = 90_000;
 const TOAST_WAIT_MS = 90_000;
-/** How long the deployment-default case lets the account screen show a seeded default (it runs only on a stack of its own). */
-const DEPLOYMENT_SEED_WAIT_MS = 20_000;
 /**
  * Every case declares `inconclusiveOnPageStall` (lib/test.mjs): on a loaded
  * shared stack Hosting cuts off a function that has not answered in 60 s, and
@@ -431,7 +430,73 @@ scenario("A19.2 with analytics live, declining fetches nothing and is remembered
     return c ?? false;
   }, { timeout: 10_000, message: "gtag is configured" });
   assert.deepEqual({ send_page_view: config[2]?.send_page_view, page_title: config[2]?.page_title }, { send_page_view: false, page_title: "Bikeshed" }, "the automatic page view is off and the title pinned (SPEC §15)");
+  ctx.step("a client-side route change reuses the script, and a document route sends only its pattern");
+  await a.page.getByRole("link", { name: "Terms", exact: true }).click();
+  await a.page.getByRole("heading", { name: "Terms of service", level: 1 }).waitFor({ timeout: RECORD_WAIT_MS });
+  const confidential = `private-a19-${tag()}`;
+  await a.page.evaluate((path) => { history.pushState(null, "", path); dispatchEvent(new PopStateEvent("popstate")); }, `/d/${confidential}/v1`);
+  const pageView = await eventually(() => a.page.evaluate(() => (window.dataLayer ?? []).map((e) => Array.from(e)).find((e) => e[0] === "event" && e[1] === "page_view" && e[2]?.page_path === "/d/:docId/:versionId")), { timeout: RECORD_WAIT_MS, message: "the document route emits its pattern" });
+  assert.deepEqual({ path: pageView[2].page_path, location: pageView[2].page_location, title: pageView[2].page_title }, { path: "/d/:docId/:versionId", location: "/d/:docId/:versionId", title: "/d/:docId/:versionId" }, "every page-view field is the route pattern");
+  assert.ok(!(await a.page.evaluate(() => JSON.stringify(window.dataLayer))).includes(confidential), "the concrete document slug never reaches the data layer");
+  await sleep(ANALYTICS_SETTLE_MS);
+  assert.equal(gtagRequests(seenA).length, 1, "later route changes still fetch the measurement script only once");
   noPageErrors([d, a]);
+});
+
+scenario("A19.2 account analytics opt-out survives reload and another browser, and the checkbox can enable and disable collection", {
+  tiers: LOCAL,
+  needs: ["measurement-id", ANALYTICS_LIVE],
+  timeoutMs: 240_000,
+  ...ON_STALL,
+}, async (ctx) => {
+  const [account] = await cast(target, ["analytics-opt-out"], { analytics: false, notifications: false });
+  const u = await ctx.users.user({ name: "opted-out", consent: "denied" });
+  const seen = await u.fulfilAnalytics();
+  precondition((await u.signInUi(account.email, account.password, { timeout: RECORD_WAIT_MS })).status === "ok", "the opted-out account signed in");
+  await openAccount(u, account.email);
+  const box = u.page.locator("#analytics");
+  await eventually(() => box.isChecked(), { timeout: RECORD_WAIT_MS, message: "the stored analytics opt-out reaches the checkbox" });
+  await setConsent(u, "granted");
+  await u.page.reload();
+  await openAccount(u, account.email);
+  await eventually(() => box.isChecked(), { timeout: RECORD_WAIT_MS, message: "the opt-out reads back after reload" });
+  await sleep(ANALYTICS_SETTLE_MS);
+  assert.deepEqual(seen.map((r) => r.host), [], "a saved opt-out fetches no measurement script after reload, despite granted consent");
+  assert.equal((await analyticsTraces(u)).dataLayer, null, "a restored opt-out records no event");
+  const other = await ctx.users.user({ name: "another-device", consent: "denied" });
+  const otherSeen = await other.fulfilAnalytics();
+  precondition((await other.signInUi(account.email, account.password, { timeout: RECORD_WAIT_MS })).status === "ok", "the same account signed in on another browser");
+  await setConsent(other, "granted");
+  await other.page.reload();
+  await openAccount(other, account.email);
+  await eventually(() => other.page.locator("#analytics").isChecked(), { timeout: RECORD_WAIT_MS, message: "another device reads the account opt-out" });
+  await sleep(ANALYTICS_SETTLE_MS);
+  assert.deepEqual(otherSeen.map((r) => r.host), [], "the account opt-out travels to another browser");
+  await box.uncheck();
+  await userRecord(account.uid, (r) => r.analyticsOptOut === false, "unchecking stores the account opt-in");
+  await eventually(() => gtagRequests(seen).length === 1, { timeout: RECORD_WAIT_MS, message: "unchecking enables analytics in the same page" });
+  await box.check();
+  await userRecord(account.uid, (r) => r.analyticsOptOut === true, "checking stores the account opt-out");
+  await eventually(() => u.page.evaluate((id) => window[`ga-disable-${id}`] === true, seen.measurementId), { timeout: RECORD_WAIT_MS, message: "checking disables the initialized analytics instance" });
+  noPageErrors([u, other]);
+});
+
+scenario("A19.2 corrupted stored consent is unanswered and fetches no measurement script", {
+  tiers: LOCAL,
+  needs: ["measurement-id", ANALYTICS_LIVE],
+  timeoutMs: 120_000,
+  ...ON_STALL,
+}, async (ctx) => {
+  const u = await ctx.users.user({ name: "corrupt-consent", consent: "denied" });
+  const seen = await u.fulfilAnalytics();
+  await u.goto("/privacy");
+  await setConsent(u, "GRANTED");
+  await u.page.reload();
+  await u.page.getByRole("heading", { name: "Privacy policy", level: 1 }).waitFor({ timeout: RECORD_WAIT_MS });
+  await sleep(ANALYTICS_SETTLE_MS);
+  assert.equal(await banner(u).count(), 1, "corrupted consent must ask for a new answer");
+  assert.deepEqual(seen.map((r) => r.host), [], "corrupted consent never grants collection");
+  noPageErrors([u]);
 });
 
 // --- A19.3 -------------------------------------------------------------------
@@ -483,6 +548,23 @@ scenario("A19.3 the account default marking seeds new documents only: turned on 
   assert.equal(marked.boxChecked, true, "the dialog's Stamp box is seeded on");
   assert.deepEqual((await readDoc(target, `docs/${marked.docId}`)).marking, seeded, "the new document carries the default");
 
+  ctx.step("MCP publishing without a marking field inherits the same account default");
+  const { token } = await mintToken(owner, { name: `a19 default ${t}`, channel: "mcp" });
+  const mcp = ctx.mcp({ token, actor: "default-marking-mcp" });
+  await mcp.initialize();
+  const fromMcp = await publishMcp(mcp, { title: `A19.3 MCP ${t}`, content: "<!doctype html><p>Account default via MCP.</p>", id: docIdFor(target, "a193-mcp") });
+  precondition(typeof fromMcp.docId === "string", `MCP published: ${JSON.stringify(fromMcp.json)}`);
+  assert.deepEqual((await readDoc(target, `docs/${fromMcp.docId}`)).marking, seeded, "MCP publish inherits the owner's account default");
+
+  const cliToken = (await mintToken(owner, { name: `a19 CLI default ${t}`, channel: "cli" })).token;
+  const home = cliHome(target);
+  writeFileSync(join(home.home, "default.html"), "<!doctype html><p>Account default via CLI.</p>");
+  const cli = answered(await runCli(target, ["publish", "default.html", "--id", docIdFor(target, "a193-cli"), "--json"], { home, token: cliToken, timeoutMs: 180_000 }), "CLI publish with an account default");
+  precondition(cli.code === 0, `CLI publication completed: ${cli.stderr}`);
+  const fromCli = JSON.parse(cli.stdout);
+  ledgerDoc(target, { docId: fromCli.docId, via: "cli", ownerEmail: ownerAcct.email, versionId: fromCli.versionId });
+  assert.deepEqual((await readDoc(target, `docs/${fromCli.docId}`)).marking, seeded, "CLI publish inherits the owner's account default");
+
   ctx.step("turned off: nothing is stored as a default, it reads back off, and the next upload starts unchecked and unmarked");
   await openAccount(o, ownerAcct.email);
   await box.waitFor({ state: "visible", timeout: RECORD_WAIT_MS });
@@ -512,7 +594,6 @@ scenario("A19.3 the deployment default marking (VITE_EXPORT_MARK_*) seeds a new 
   tiers: LOCAL,
   // stack up --app-env VITE_EXPORT_MARK_ENABLED --app-env "VITE_EXPORT_MARK_LABEL=…" --app-env "VITE_EXPORT_MARK_FOOTER=…"
   needs: ["export-mark-default"],
-  defect: "X-a19-account-1",
   timeoutMs: 240_000,
   ...ON_STALL,
 }, async (ctx) => {
@@ -529,7 +610,7 @@ scenario("A19.3 the deployment default marking (VITE_EXPORT_MARK_*) seeds a new 
   for (const src of scripts) if ((await http.get(src, { expect: 200 })).text.includes(deployment.label)) inBundle = true;
   ctx.ev.json("bundle", { scripts, deploymentLabelInBundle: inBundle });
   ctx.step(`the served bundle ${inBundle ? "holds" : "does not hold"} the deployment label`);
-  const [ownerAcct] = await cast(target, ["owner"]);
+  const [ownerAcct] = await cast(target, ["owner"], { notifications: false, analytics: false });
   const owner = await openSession(target, ownerAcct);
   const anchor = (await publish(owner.http, { fixture: "crdt-paragraphs.html", title: `A19.3 anchor ${t}`, name: "a193-danchor" })).docId;
   const o = await signedIn(ctx, ownerAcct, "owner");
@@ -538,12 +619,10 @@ scenario("A19.3 the deployment default marking (VITE_EXPORT_MARK_*) seeds a new 
   await openAccount(o, ownerAcct.email);
   const box = o.page.locator("#default-marking");
   await box.waitFor({ state: "visible", timeout: RECORD_WAIT_MS });
-  // The box reads unchecked until users/{uid} reaches the page (Account.tsx
-  // starts at MARKING_OFF), so a product that seeds the record is given time
-  // to show it: the read is "checked within DEPLOYMENT_SEED_WAIT_MS", not the
-  // first paint. On the defective product this costs the whole wait.
-  const shown = await eventually(async () => (await box.isChecked()) || false, { timeout: DEPLOYMENT_SEED_WAIT_MS, interval: 250 }).then(() => true, () => false);
-  ctx.step(`the account screen ${shown ? "shows" : "never showed"} the box checked`);
+  await eventually(async () => !(await o.page.locator("#notify").isChecked()), { timeout: RECORD_WAIT_MS, message: "the account record arrived (#notify reflects its stored opt-out)" });
+  const seededAccount = await userRecord(ownerAcct.uid, (u) => u.defaultMarking !== undefined, "the deployment default is stored on the new account");
+  assert.deepEqual(seededAccount.defaultMarking, deployment, "the new account stores the configured deployment marking");
+  const shown = await box.isChecked();
   ctx.step("the next upload through the dialog");
   const up = await uploadThroughDialog(o, ownerAcct.email, { name: "a193-deploy", title: `A19.3 deployment ${t}`, anchor });
   const stored = (await readDoc(target, `docs/${up.docId}`)).marking;
@@ -703,6 +782,10 @@ scenario("A19.4 teams on the account screen: create, rename, add (one invitation
   assert.deepEqual((await readDoc(target, `teams/${teamId}`)).members, [ownerAcct.email], "members");
   assert.ok(!(await readDoc(target, `docs/${doc.docId}`)).members.includes(memberAcct.email), "the member no longer reads the team's document");
 
+  ctx.step("re-add the member before deletion, so the delete must revoke inherited access");
+  await dlg.locator("#team-invite").fill(memberAcct.email);
+  await teamChange(o, { what: "re-add", path: "/team-members", press: () => dlg.getByRole("button", { name: "Add", exact: true }).click(), toast: `${memberAcct.email} is in ${name3}. Access updated on 1 item.`, affected: 1 });
+  assert.ok((await readDoc(target, `docs/${doc.docId}`)).members.includes(memberAcct.email), "the re-added member reads the document before team deletion");
   ctx.step("delete: Delete this team → Delete <name>; the record is gone and the list is empty");
   await dlg.getByRole("button", { name: "Delete this team" }).click();
   await teamChange(o, {
@@ -715,10 +798,11 @@ scenario("A19.4 teams on the account screen: create, rename, add (one invitation
   });
   await dlg.waitFor({ state: "detached", timeout: RECORD_WAIT_MS });
   assert.equal(await readDoc(target, `teams/${teamId}`), null, "the team record is deleted");
+  assert.ok(!(await readDoc(target, `docs/${doc.docId}`)).members.includes(memberAcct.email), "deleting a populated team revokes its member's document access");
   await teams.getByText("You are not in any team yet.").waitFor({ timeout: RECORD_WAIT_MS });
 
-  ctx.step("only the add sent mail: the member's count holds at one");
-  await box.expectMail({ to: memberAcct.email, count: 1 });
+  ctx.step("only the add and re-add sent mail: the member's count holds at two");
+  await box.expectMail({ to: memberAcct.email, count: 2 });
   noPageErrors([o]);
 });
 

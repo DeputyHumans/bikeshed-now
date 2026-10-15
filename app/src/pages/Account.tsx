@@ -12,7 +12,7 @@ import { Icon } from "../components/Icon";
 import { Spinner } from "../components/Spinner";
 import { TeamsSection } from "../components/TeamsSection";
 import { useToast } from "../components/Toast";
-import { MARKING_OFF } from "../export/labels";
+import { DEPLOYMENT_MARKING } from "../config";
 import type { Marking, TeamMeta, TokenSummary, UserRecord } from "../types";
 
 function TokenList({
@@ -243,13 +243,13 @@ export function Account() {
   const [minted, setMinted] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("");
   const [tokenChannel, setTokenChannel] = useState<TokenChannel>("cli");
-  const [marking, setMarking] = useState<Marking>(MARKING_OFF);
+  const [marking, setMarking] = useState<Marking>(DEPLOYMENT_MARKING);
 
   useEffect(() => {
     if (!user) return;
     const stopUser = watchUser(user.uid, (next) => {
       setRecord(next);
-      if (next?.defaultMarking) setMarking(next.defaultMarking);
+      setMarking(next?.defaultMarking ?? DEPLOYMENT_MARKING);
     });
     const stopTokens = watchMyTokens(user.uid, setTokens);
     const stopTeams = listMyTeams(emailLower, setTeams, () => setTeams([]));

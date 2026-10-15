@@ -1604,7 +1604,7 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     title: strParam(req, "title") || compiled.title,
     folderId: target.id,
     parentMembership: target.membership,
-    marking: jsonParam(req, "marking"),
+    marking: strParam(req, "marking") ? jsonParam(req, "marking") : undefined,
     via: "upload",
     ...(wantedId ? { docId: wantedId } : {}),
   }).catch((e: Error) => e);

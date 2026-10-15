@@ -42,7 +42,7 @@ import { coverUrl } from "../thumbs";
 import { useCoverBackfill } from "../hooks/useCoverBackfill";
 import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
-import { MARKING_OFF } from "../export/labels";
+import { DEPLOYMENT_MARKING } from "../config";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -273,8 +273,8 @@ export function DocList() {
     return watchUser(user.uid, setAccount);
   }, [user]);
 
-  const defaultMarkingRef = useRef(MARKING_OFF as Marking);
-  defaultMarkingRef.current = account?.defaultMarking ?? MARKING_OFF;
+  const defaultMarkingRef = useRef(DEPLOYMENT_MARKING as Marking);
+  defaultMarkingRef.current = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
   /**
    * Upload dropped files where they landed.
@@ -356,7 +356,7 @@ export function DocList() {
     return filterFolders(scoped, search).sort((a, b) => a.name.localeCompare(b.name));
   }, [folders, folderId, search]);
 
-  const defaultMarking: Marking = account?.defaultMarking ?? MARKING_OFF;
+  const defaultMarking: Marking = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
   const shareDoc = (doc: DocMeta) =>
     setSharing({

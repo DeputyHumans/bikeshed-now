@@ -1,0 +1,17 @@
+{
+  "oracle": "A19.2 account analytics opt-out survives reload and another browser, and the checkbox can enable and disable collection",
+  "what": "a19 optout restore",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.2 account analytics opt-out survives reload and another browser, and the checkbox can enable and disable collection"
+  },
+  "expect": {
+    "message": "a saved opt-out fetches no measurement script after reload"
+  },
+  "stack": [
+    "--app-env",
+    "VITE_FIREBASE_MEASUREMENT_ID=dummy",
+    "--patches",
+    "a19-analytics-live"
+  ]
+}

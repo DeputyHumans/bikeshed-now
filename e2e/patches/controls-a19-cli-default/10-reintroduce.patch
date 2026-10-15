@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1618,7 +1618,7 @@
+     title: strParam(req, "title") || compiled.title,
+     folderId: target.id,
+     parentMembership: target.membership,
+-    marking: strParam(req, "marking") ? jsonParam(req, "marking") : undefined,
++    marking: jsonParam(req, "marking"),
+     via: "upload",
+     ...(wantedId ? { docId: wantedId } : {}),
+   }).catch((e: Error) => e);

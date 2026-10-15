@@ -18,6 +18,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Account preferences restore analytics consent before collection, keep route
+  names free of document identifiers, and apply the saved default marking to
+  browser, MCP and CLI publications. Explicit off remains an override.
+
 - Suggestion replacements reject Unicode line and paragraph separators and C1
   controls on both creation and revision, matching the single-line contract.
 - Dialogs keep focus when controls become disabled, the slide overview traps

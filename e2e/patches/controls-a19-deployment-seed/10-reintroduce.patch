@@ -1,0 +1,11 @@
+--- a/app/src/accountPreferences.ts
++++ b/app/src/accountPreferences.ts
+@@ -28,7 +28,7 @@
+       if (record?.defaultMarking === undefined && DEPLOYMENT_MARKING.enabled) {
+         // Account reads keep working if an offline write cannot seed yet. The
+         // transaction re-reads the record, so another tab's choice wins.
+-        void seedDefaultMarking(uid, emailLower, DEPLOYMENT_MARKING).catch(() => {});
++        void seedDefaultMarking(uid, emailLower, { ...DEPLOYMENT_MARKING, label: "wrong seed" }).catch(() => {});
+       }
+     }, () => {
+       if (!active) return;

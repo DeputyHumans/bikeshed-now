@@ -11,6 +11,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -30,6 +31,7 @@ import type {
   DocMeta,
   DocVersion,
   FolderMeta,
+  Marking,
   PublicDoc,
   TeamMeta,
   TokenSummary,
@@ -333,11 +335,12 @@ export async function listAclChanges(docId: string, max = 50): Promise<AclChange
 export function watchUser(
   uid: string,
   onData: (record: UserRecord | null) => void,
+  onError: () => void = () => onData(null),
 ): Unsubscribe {
   return onSnapshot(
     doc(db, "users", uid),
     (snap) => onData(snap.exists() ? (snap.data() as UserRecord) : null),
-    () => onData(null),
+    onError,
   );
 }
 
@@ -359,6 +362,16 @@ export async function saveUserProfile(
     { uid, email: emailLower, ...fields, updatedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+/** Seed once; a stored choice, including explicit off, always wins (SPEC §20). */
+export async function seedDefaultMarking(uid: string, emailLower: string, marking: Marking): Promise<void> {
+  const ref = doc(db, "users", uid);
+  await runTransaction(db, async (tx) => {
+    const current = await tx.get(ref);
+    if (current.exists() && current.data().defaultMarking !== undefined) return;
+    tx.set(ref, { uid, email: emailLower, defaultMarking: marking, updatedAt: serverTimestamp() }, { merge: true });
+  });
 }
 
 export function watchMyTokens(

@@ -380,7 +380,9 @@ export async function publishNewDocument(
     emptyGrants(),
     input.parentMembership,
   );
-  const marking: Marking = resolveMarking(input.marking);
+  const account = input.marking === undefined && input.ownerUid
+    ? await db.collection("users").doc(input.ownerUid).get() : null;
+  const marking: Marking = resolveMarking(input.marking === undefined ? account?.get("defaultMarking") : input.marking);
   const docRef = db.collection("docs").doc(docId);
 
   const batch = db.batch();

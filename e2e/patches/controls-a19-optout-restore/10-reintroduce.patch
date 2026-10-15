@@ -1,0 +1,11 @@
+--- a/app/src/accountPreferences.ts
++++ b/app/src/accountPreferences.ts
+@@ -23,7 +23,7 @@
+     let active = true;
+     const stop = watchUser(uid, (record) => {
+       if (!active) return;
+-      void setAnalyticsOptOut(record?.analyticsOptOut === true);
++      void setAnalyticsOptOut(false);
+       setReady(true);
+       if (record?.defaultMarking === undefined && DEPLOYMENT_MARKING.enabled) {
+         // Account reads keep working if an offline write cannot seed yet. The
