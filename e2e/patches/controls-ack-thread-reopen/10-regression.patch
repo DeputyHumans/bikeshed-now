@@ -1,7 +1,10 @@
 --- a/functions/src/lib/threads.ts
 +++ b/functions/src/lib/threads.ts
-@@ -40,3 +40,3 @@
-     const note = attempted ? await tx.get(noteRef) : null;
--    if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) return { resolved, changed: true };
-+    if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) void 0;
-     if (!snap.exists || !ann) return { status: 404, error: "no such thread" };
+@@ -32,3 +32,2 @@
+   const annRef = docRef.collection("versions").doc(versionId).collection("annotations").doc(annId);
+-  const noteRef = annRef.collection("comments").doc();
+   let attempted = false;
+@@ -37,2 +36,3 @@
+     const ann = snap.data();
++    const noteRef = annRef.collection("comments").doc();
+     // The note's preallocated id proves this operation committed already.

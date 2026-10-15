@@ -1,6 +1,6 @@
 {
   "oracle": "ACK thread: retry preserves the later reopen and both original notes",
-  "what": "Remove the completed-note receipt so the old native SDK retry resolves a thread that a later request reopened.",
+  "what": "Allocate the generated note inside each callback so an old native SDK retry cannot recognize its earlier note and overwrites a later reopen.",
   "target": {
     "spec": "e2e/specs/functional/a07-thread-ack.spec.mjs",
     "case": "A7.8 a thread resolution acknowledges its committed note after native ACK loss without undoing a later reopen",
