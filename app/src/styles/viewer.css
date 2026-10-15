@@ -375,7 +375,8 @@
   .frame-loading,
   .present-counter,
   .present-exit {
-    display: none;
+    /* Printing hides chrome even when a later feature stylesheet defines its display. */
+    display: none !important;
   }
   .viewer { height: auto; }
   .viewer-body { grid-template-columns: minmax(0, 1fr); }

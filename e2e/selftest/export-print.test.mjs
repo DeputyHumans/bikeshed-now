@@ -13,9 +13,12 @@ const source = resolve(process.env.E2E_PRINT_SOURCE_DIR ?? new URL('../..', impo
 const target = { kind: 'local', runId: 'selftest-export-print', origin: 'http://127.0.0.1:1', stack: { ports: { hosting: 1 } }, capabilities: new Set(['local']) };
 const MARKS = '.bshd-print-mark,.bshd-print-footer';
 const marking = { enabled: true, label: 'VISIBLE MARKING', footer: 'VISIBLE FOOTER' };
-let pool, user, bundle;
+let pool, user, bundle, fullCss, readerBundle;
 before(async () => {
   bundle = (await build({ stdin: { contents: `import {printDoc} from ${JSON.stringify(`${source}/app/src/export/pdf.ts`)};window.printProduct=printDoc;`, resolveDir: source }, bundle: true, write: false, format: 'iife', platform: 'browser', define: { 'import.meta.env.DEV': 'false' } })).outputFiles[0].text;
+  fullCss = (await build({ entryPoints: [`${source}/app/src/styles/index.css`], bundle: true, write: false, platform: 'browser' })).outputFiles[0].text;
+  const fixture = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{usePrinting}from'./src/viewer/usePrinting';function Reader(){const[doc,setDoc]=useState(null);usePrinting({doc,epoch:1,enabled:true,onPrint:()=>{}});return <div className="app-shell"><header className="app-header">header</header><main className="app-main"><div className="viewer" data-pane="comments"><div className="viewer-toolbar">toolbar</div><div className="viewer-banners">banner</div><div className="viewer-body" data-comments="open"><div className="doc-frame-wrap"><div className="doc-frame-stage"><iframe className="doc-frame" onLoad={e=>setDoc(e.currentTarget.contentDocument)} srcDoc={'<!doctype html><style>p{margin:30px}</style>'+Array.from({length:80},(_,i)=>'<p>Paragraph '+i+'</p>').join('')}/></div></div><aside className="comments-panel">Comments</aside></div></div></main></div>}createRoot(document.getElementById('root')).render(<Reader/>);`;
+  readerBundle = (await build({ stdin: { contents: fixture, resolveDir: `${source}/app`, loader: 'tsx' }, bundle: true, write: false, platform: 'browser', define: { 'process.env.NODE_ENV': '"production"' } })).outputFiles[0].text;
   pool = new BrowserPool({ target }); user = await pool.user();
 });
 after(async () => pool?.close());
@@ -87,18 +90,24 @@ test('print media hides all five rendered chrome classes; dropping each selector
   const css = await readFile(`${source}/app/src/styles/viewer.css`, 'utf8');
   const selectors = ['.app-header','.viewer-toolbar','.viewer-banners','.comments-panel','.consent'];
   const body = selectors.map((s) => `<div class="${s.slice(1)}">Rendered ${s}</div>`).join('');
+  const consentCss = await readFile(`${source}/app/src/styles/consent.css`, 'utf8');
+  const consentPrint = '@media print {\n  .consent {\n    display: none;\n  }\n}';
+  const compiled = async (viewerCss, selector) => (await build({ entryPoints: [`${source}/app/src/styles/index.css`], bundle: true, write: false, platform: 'browser', plugins: [{ name: 'print-selector-control', setup(build) {
+    build.onLoad({ filter: /viewer\.css$/ }, () => ({ contents: viewerCss, loader: 'css' }));
+    if (selector === '.consent') build.onLoad({ filter: /consent\.css$/ }, () => ({ contents: consentCss.replace(consentPrint, ''), loader: 'css' }));
+  } }] })).outputFiles[0].text;
   const read = () => user.page.evaluate((ss) => Object.fromEntries(ss.map((s) => [s,getComputedStyle(document.querySelector(s)).display])),selectors);
   const check = (r) => assert.deepEqual(r,Object.fromEntries(selectors.map((s)=>[s,'none'])),'all rendered viewer chrome is hidden in print media');
-  await user.page.setContent(`<style>${css}</style>${body}`);
+  await user.page.setContent(`<style>${fullCss}</style>${body}`);
   await user.page.emulateMedia({media:'screen'});
   assert.ok(Object.values(await read()).every((x)=>x!=='none'),'all five elements exist and display before print');
   await user.page.emulateMedia({media:'print'});check(await read());
   for (const selector of selectors) {
     const start=css.indexOf('@media print {');const before=css.slice(0,start), media=css.slice(start);
     assert.ok(media.includes(`  ${selector},`));
-    await user.page.setContent(`<style>${before}${media.replace(`  ${selector},\n`,'')}</style>${body}`);
+    await user.page.setContent(`<style>${await compiled(before + media.replace(`  ${selector},\n`,''), selector)}</style>${body}`);
     const result = await read();
-    assert.throws(()=>check(result), /all rendered viewer chrome/);
+    assert.throws(()=>check(result), /all rendered viewer chrome/, `removing ${selector}'s print guards is observable`);
   }
   await user.page.emulateMedia({media:'screen'});
 });
@@ -117,4 +126,33 @@ test('the print layout permits a full-height frame to paginate; clipping the vie
   const clipped = css.replace('  .viewer { height: auto; }','  .viewer { height: 700px; position: fixed; overflow: hidden; }');
   assert.notEqual(clipped,css);
   assert.equal(await count(clipped),1,'negative: the viewer clips all but the first page');
+});
+
+
+test('File Print with the comments pane selected still prints the full document and restores its place using the complete app stylesheet', async () => {
+  await user.page.emulateMedia({ media: null });
+  await user.page.setContent(`<style>${fullCss}</style><div id="root"></div>`);
+  await user.page.addScriptTag({ content: readerBundle });
+  await user.page.waitForFunction(() => document.querySelector('iframe')?.contentDocument?.body?.children.length === 80);
+  await user.page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const before = await user.page.evaluate(() => {
+    const frame = document.querySelector('iframe');
+    frame.contentDocument.scrollingElement.scrollTop = 1200;
+    const snapshot = (type) => {
+      window.printEvents.push({ type, height: frame.style.height, scroll: frame.contentDocument.scrollingElement.scrollTop });
+      if (type === 'before') frame.contentDocument.scrollingElement.scrollTop = 0;
+    };
+    window.printEvents = [];
+    window.addEventListener('beforeprint', () => snapshot('before'));
+    window.addEventListener('afterprint', () => snapshot('after'));
+    return frame.contentDocument.scrollingElement.scrollTop;
+  });
+  assert.equal(before,1200,'a scrolled document begins with the comments pane selected');
+  const pdf = await user.page.pdf({ format: 'A4' });
+  const pages = Number(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)/s.exec(pdf.toString('latin1'))?.[1] ?? 0);
+  assert.ok(pages >= 2,`File Print keeps the document visible with comments selected: ${pages} pages`);
+  const state = await user.page.evaluate(() => ({ events: window.printEvents, scroll: document.querySelector('iframe').contentDocument.scrollingElement.scrollTop }));
+  assert.deepEqual(state.events.map((e)=>e.type),['before','after']);
+  assert.equal(state.events[1].height,'');
+  assert.equal(state.scroll,before,'File Print restores the reader position with comments selected');
 });

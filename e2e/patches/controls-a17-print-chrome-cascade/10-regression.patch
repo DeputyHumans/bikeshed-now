@@ -1,0 +1,9 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -377,5 +377,5 @@
+   .present-exit {
+     /* Printing hides chrome even when a later feature stylesheet defines its display. */
+-    display: none !important;
++    display: none;
+   }
+   .viewer { height: auto; }

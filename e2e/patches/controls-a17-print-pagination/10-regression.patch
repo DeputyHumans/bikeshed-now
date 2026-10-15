@@ -1,8 +1,7 @@
 --- a/app/src/styles/viewer.css
 +++ b/app/src/styles/viewer.css
-@@ -377,6 +377,6 @@
-   .present-exit {
-     display: none;
+@@ -379,5 +379,5 @@
+     display: none !important;
    }
 -  .viewer { height: auto; }
 +  .viewer { height: 700px; position: fixed; overflow: hidden; }
