@@ -1,0 +1,13 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -177,10 +177,6 @@
+         "source": "/mcp",
+         "headers": [
+           {
+-            "key": "Cache-Control",
+-            "value": "private, no-store"
+-          },
+-          {
+             "key": "Access-Control-Expose-Headers",
+             "value": "WWW-Authenticate"
+           }

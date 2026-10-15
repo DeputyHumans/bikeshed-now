@@ -15,8 +15,8 @@
  *                  naming it, for every tool that requires one; -32601 for an
  *                  unknown tool or method; -32600; -32700; 202 for a
  *                  notification; a batch answers in order
- *   A20.3.parse    known defect X-a20-mcp-1: a malformed body sent as
- *                  application/json never reaches the handler
+ *   A20.3.parse    malformed application/json is rejected before the handler:
+ *                  HTTP 400, diagnostic body, transport headers, no mutation
  *   A20.4          the 401 challenge, invalid_token, no-store, the exposed
  *                  header, 405s
  *   A20.5          X-Bikeshed-Client / -Agent stored verbatim; the channel
@@ -1105,21 +1105,38 @@ scenario("A20.3 a missing or empty required argument is a tool error naming exac
   );
 });
 
-scenario("A20.3.parse a malformed body sent as application/json is answered as the JSON-RPC parse error, -32700, with private, no-store and the exposed WWW-Authenticate like every /mcp response", {
+scenario("A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
-  defect: "X-a20-mcp-1",
   timeoutMs: 240_000,
 }, async (ctx) => {
   const [o] = await crew(ctx, ["owner"]);
-  const r = await o.mcp.raw("{not json", { headers: { "content-type": "application/json" } });
+  const d = await publishDoc(o, "parse-refusal");
+  const before = await record(d.id);
+  precondition(before?.title === d.title && before?.currentVersion === "v1", "the parse probe starts with a published document");
+  // The complete request would rename our document. Truncating its final brace
+  // makes this a parser refusal, not a tool-validation failure.
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "rename_document", arguments: { id: d.id, title: `${d.title} changed` } } }).slice(0, -1);
+  const r = await o.mcp.raw(body, { headers: { "content-type": "application/json" } });
   answered(r.response, "POST /mcp of malformed application/json");
   ctx.step(`answer: ${r.status} ${r.headers.get("content-type")} cache-control=${r.headers.get("cache-control")} expose=${r.headers.get("access-control-expose-headers")} ${JSON.stringify(r.text.slice(0, 160))}`);
   ctx.ev.json("parse-error-answer", { status: r.status, headers: Object.fromEntries(r.headers), text: r.text.slice(0, 2000) });
   assert.deepEqual(
-    { status: r.status, cache: r.headers.get("cache-control"), expose: r.headers.get("access-control-expose-headers"), body: r.json },
-    { status: 400, cache: "private, no-store", expose: "WWW-Authenticate", body: { jsonrpc: "2.0", id: null, error: { code: -32700, message: "invalid JSON" } } },
-    "a malformed application/json body: the JSON-RPC parse error with /mcp's headers (SPEC §23, ADR 0009)",
+    { status: r.status, cache: r.headers.get("cache-control"), expose: r.headers.get("access-control-expose-headers") },
+    { status: 400, cache: "private, no-store", expose: "WWW-Authenticate" },
+    "a malformed application/json body: HTTP 400 with /mcp's protected transport headers (SPEC §23)",
+  );
+  assert.ok(r.text.trim().length > 0, "the parser refusal supplies a diagnostic body");
+  // Firebase's outer JSON parser may answer HTML before onRequest runs. If the
+  // request reaches our parser, the JSON-RPC contract remains exact (A20.3).
+  if (r.json !== null && r.json !== undefined) {
+    assert.deepEqual(r.json, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "invalid JSON" } }, "a handler parse refusal is the JSON-RPC -32700 error");
+  }
+  const after = await record(d.id);
+  assert.deepEqual(
+    { title: after?.title, version: after?.currentVersion, draft: after?.draft },
+    { title: before.title, version: before.currentVersion, draft: before.draft },
+    "a rejected malformed rename does not mutate the document",
   );
 });
 

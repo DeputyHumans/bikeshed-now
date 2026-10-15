@@ -48,6 +48,13 @@
     ],
     "headers": [
       {
+        "source": "/mcp",
+        "headers": [
+          { "key": "Cache-Control", "value": "private, no-store" },
+          { "key": "Access-Control-Expose-Headers", "value": "WWW-Authenticate" }
+        ]
+      },
+      {
         "source": "!/{content,draft,thumb}/**",
         "headers": [
           { "key": "X-Frame-Options", "value": "DENY" },

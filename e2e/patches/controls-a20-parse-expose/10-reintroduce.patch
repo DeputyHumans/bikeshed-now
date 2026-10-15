@@ -1,0 +1,13 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -179,10 +179,6 @@
+           {
+             "key": "Cache-Control",
+             "value": "private, no-store"
+-          },
+-          {
+-            "key": "Access-Control-Expose-Headers",
+-            "value": "WWW-Authenticate"
+           }
+         ]
+       },

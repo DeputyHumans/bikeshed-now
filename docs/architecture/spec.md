@@ -2859,6 +2859,17 @@ A refused `/mcp` request answers `401` with
 response sets `Access-Control-Expose-Headers: WWW-Authenticate` and
 `private, no-store`.
 
+The Hosting `/mcp` route also pins these two headers, including refusals from
+the runtime before the handler runs. The runtime parses `application/json`
+before invoking the function: malformed JSON can therefore produce an HTTP
+`400` with a runtime diagnostic rather than a JSON-RPC envelope, without
+executing a tool. Clients must accept this as a transport error. When a body
+reaches the MCP handler and its parser rejects it, the response is HTTP `400`
+with JSON-RPC error `-32700`, `invalid JSON`. This is a runtime boundary, not a
+second parser or a custom Functions runtime (ADR 0009). Local tests verify the
+emulator and the Hosting configuration; they do not establish production
+header behavior.
+
 ### Who is asking
 
 | `client_id` | Registration | What the consent page may say |

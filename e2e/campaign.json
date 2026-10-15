@@ -13229,6 +13229,24 @@
         }
       ],
       "note": "A21.5b now stages its own document, so it runs independently under grep and controls. A21.5 tests malformed positions; A18 Automation and People filters have positive human and automated sessions. Five new E2E controls cover empty/partial/range cursors, missing MCP activity and ignored filters. No campaign item closed."
+    },
+    {
+      "kind": "unit-repair-observation",
+      "items": [
+        "X-a20-mcp-1"
+      ],
+      "scope": "local Hosting configuration; runtime contract clarified; E2E and production headers unverified",
+      "tests": [
+        "Focused transport, framing, wiring and MCP tests: 58 pass, 0 fail",
+        "Original Hosting configuration: both new transport header tests fail",
+        "Normalized stack config: both clean copies pass2; omitting either header produces1 assertion failure and1 pass"
+      ],
+      "evidence": "e2e/.out/unit-controls-expiry/g15-green.log",
+      "controls": [
+        "controls-a20-parse-cache",
+        "controls-a20-parse-expose"
+      ],
+      "note": "Installed Firebase CLI 15.25.1 runs bodyParser.json before the function; onRequest does not expose a parser bypass. HTTP 400 with a runtime diagnostic is an explicit limitation, not a JSON-RPC-only fix. Handler-reached parse failures remain -32700. The new A20.3.parse case checks no rename/version/draft mutation. Seven mocked oracle variants (clean plus six bad responses/state) prove assertion sensitivity only; they are not live E2E proof (g15-oracle-controls.json). No campaign item is closed. Corrected mutant proof: e2e/.out/g15-normalized-Kilw6O/proof.json uses patchFirebaseJson plus functions/package.json. Earlier scratch mutant exits in g15-oracle-controls.json were module-loading failures, not assertion proof; their mutant rows are superseded. The mocked oracle rows remain valid sensitivity checks."
     }
   ]
 }
