@@ -37,7 +37,10 @@ async function loseAcks(ctx, docId, operation, send, inspect, count = 1) {
     committed = await inspect();
     ctx.ev.json(`mcp-ack-held-${operation}`, { docId, operation, held, committed });
     await g.release(gate, { key });
-  } finally { await g.release(gate, { key }).catch(() => undefined); }
+  } finally {
+    await g.release(gate, { key }).catch(() => undefined);
+    await Promise.allSettled(pending);
+  }
   const responses = await Promise.all(pending);
   await waitForLog(`E2E_ACK_RETRY ${operation} ${docId}`, { file, since });
   const callers = [...readLog(file, since).matchAll(new RegExp(`E2E_ACK_LOSS ${operation} ${docId} ([a-f0-9-]+)`, "g"))].map(match => match[1]);

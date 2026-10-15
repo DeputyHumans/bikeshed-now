@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Drain MCP acknowledgement probes after releasing their gate even when setup inspection fails, so a completed case leaves no request running in the next case.
+
 - Forward explicit native Firestore transaction options through the acknowledgement-loss capability, preserving endpoint retry budgets and testing a dropped-options inverse.
 
 - Preserve each completed document or folder membership mutation across native commit retries. Bounded receipts keep the original invitation delta and event emission, prevent an old grant or move from overwriting a later one, and leave pure membership recomputation receipt-free.
