@@ -2,6 +2,7 @@
 // Presence is gated by a server-maintained mirror, not by the identity gate (SPEC §16).
 
 import { after, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { ref, get, set, serverTimestamp } from "firebase/database";
+import { ref, get, set, serverTimestamp, onDisconnect, goOffline } from "firebase/database";
 
 import { renderDatabaseRules } from "../config/policy.mjs";
 
@@ -129,6 +130,39 @@ describe("realtime database rules", () => {
     await assertSucceeds(get(ref(memberDb, "status/doc1/peers/session-a")));
     const a = await get(ref(memberDb, "status/doc1/peers/session-a"));
     if (a.val()?.mode !== "edit") throw new Error("the other tab's editor record must survive");
+  });
+
+  it("a new session can arm disconnect cleanup before its first presence write", async () => {
+    const db = verified(env, MEMBER).database();
+    const path = "status/doc1/peers/armed-before-write";
+    await assertSucceeds(onDisconnect(ref(db, path)).remove());
+    await assertSucceeds(set(ref(db, path), { uid: MEMBER.uid, email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() }));
+    goOffline(db);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      const deadline = Date.now() + 5000;
+      while ((await get(ref(adminDb, path))).exists() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal((await get(ref(adminDb, path))).exists(), false, "disconnect removes the newly announced reader");
+    });
+  });
+
+  it("disconnect cleanup rechecks ownership after an absent path is claimed by another account", async () => {
+    const attacker = verified(env, OTHER).database();
+    const member = verified(env, MEMBER).database();
+    const victim = "status/doc1/peers/claimed-after-arm";
+    const marker = "status/doc1/peers/disconnect-marker";
+    await assertSucceeds(onDisconnect(ref(attacker, victim)).remove());
+    await set(ref(member, victim), { uid: MEMBER.uid, email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() });
+    await onDisconnect(ref(attacker, marker)).remove();
+    await set(ref(attacker, marker), { uid: OTHER.uid, email: OTHER.email, mode: "view", lastChanged: serverTimestamp() });
+    goOffline(attacker);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      const deadline = Date.now() + 5000;
+      while ((await get(ref(adminDb, marker))).exists() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal((await get(ref(adminDb, marker))).exists(), false, "the disconnect request reached the server");
+      assert.equal((await get(ref(adminDb, victim))).val()?.uid, MEMBER.uid, "a queued cleanup cannot remove another person's session");
+    });
   });
 
   it("revocation and expiry allow only deleting one's existing session or legacy record", async () => {

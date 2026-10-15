@@ -445,12 +445,19 @@ scenario("A11.2 a peer's presence chip shows data-mode=edit while they edit, in 
   const { owner: o, editor: e } = w.users;
   await Promise.all([o.open(w.docId), e.open(w.docId)]);
 
-  const chipNow = (u, email, mode) =>
-    eventually(async () => {
-      const c = await chipFor(u, email);
-      if (!c || c.mode !== mode) throw new Error(`${u.name}'s chip for ${email}: ${JSON.stringify(c)}`);
-      return c;
-    }, { timeout: 10_000, interval: 200, stableSamples: 2, message: `${u.name} shows ${email} as ${mode}` });
+  const chipNow = async (u, email, mode) => {
+    let observed = null;
+    await eventually(async () => {
+      observed = await chipFor(u, email);
+      return observed?.mode === mode && observed;
+    }, { timeout: 10_000, interval: 200, stableSamples: 2, message: `${u.name} shows ${email} as ${mode}` }).catch((error) => {
+      // A missing chip is a measured product state. Browser/runtime errors
+      // still propagate, rather than being relabelled as a presence defect.
+      if (error.cause) throw error;
+    });
+    assert.equal(observed?.mode, mode, `${u.name} sees ${email}'s announced ${mode} presence`);
+    return observed;
+  };
 
   ctx.step("both reading: each sees the other's chip with data-mode=view and a round dot");
   const viewE = await chipNow(o, editorEmail, "view");

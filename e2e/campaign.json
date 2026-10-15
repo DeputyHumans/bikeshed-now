@@ -12282,6 +12282,25 @@
           "fresh E2E and red/restored control evidence on a stack with mail-hold-recipient"
         ]
       }
+    },
+    {
+      "id": "presence-first-session-cleanup",
+      "state": "in-progress",
+      "claim": "Session-owned presence rules rejected onDisconnect removal on a new absent path, preventing reader announcements until a later mode or viewport write. The delete gate now admits an absent no-op while rechecking ownership when cleanup fires.",
+      "implementation": {
+        "spec": "e2e/specs/functional/a11-live.spec.mjs",
+        "cases": [
+          "A11.2 a peer's presence chip shows data-mode=edit while they edit, in one colour that survives a mode change, a reload and the caret overlay",
+          "A11.10 closing an editor's tab removes their peer node and their chip within 5 s"
+        ],
+        "controls": [
+          "controls-a11-presence-arm"
+        ],
+        "evidence": "e2e/.out/presence-arm-control/",
+        "remaining": [
+          "fresh browser and control-pair execution"
+        ]
+      }
     }
   ],
   "acceptance": {
@@ -13640,6 +13659,20 @@
         "controls-verify-lockout"
       ],
       "note": "Transaction reads reserve one resend challenge and spend at most five wrong guesses across concurrent requests. Code mail and Auth updates stay outside retry callbacks; successful completion retires only the challenge it checked, preserving newer requests. Four C19a/b cases promoted without relaxing their oracles. Gate-only preliminary reads precede authoritative transactions to avoid test-created Firestore read-lock deadlock. No campaign item closed."
+    },
+    {
+      "kind": "emulated-rule-observation",
+      "items": [
+        "presence-first-session-cleanup"
+      ],
+      "scope": "local RTDB ownership semantics; browser controls pending",
+      "tests": [
+        "26 RTDB tests pass",
+        "Original rules refuse both before-write disconnect registrations",
+        "Removing cleanup ownership deletes a different account session and fails the ownership assertion"
+      ],
+      "evidence": "e2e/.out/presence-arm-control/",
+      "note": "B6 A11.2/A11.10 and A24 forced-colour presence fail because initial reader announcements never happen. Permit authenticated absent deletion only; existing sessions remain owner-gated, including queued disconnect actions. A11.2 reports missing presence as a product assertion and still propagates browser errors. No item closed."
     }
   ]
 }

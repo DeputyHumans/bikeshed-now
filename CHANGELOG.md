@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Let new presence sessions register disconnect cleanup before announcing themselves, while rechecking ownership so queued cleanup cannot remove another person.
+
 - Align visibility coverage with the explicit reader metadata and response-type contracts while retaining strict field allowlists and header controls.
 
 - Keep reading identities in editor-only history, remove the legacy last-reader email from shared stats, and provide a bounded redaction command for existing records.
