@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Pin and behaviorally reproduce the local Firestore emulator’s serial trigger delivery, document its narrow overlap limitation, and retain each feedback burst’s wire timings and conservative warm-up memory reservation.
+
 - Preserve sufficient patch context for the Done-deadline negative control while keeping its mutation limited to the timeout.
 
 - Verify both external update paths retire a live log created after their initial editor check and fence subsequent writes from that old epoch; independently remove epoch advancement to prove the regression.

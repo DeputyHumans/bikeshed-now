@@ -380,6 +380,7 @@ async function fireAtOnce(ctx, calls, label) {
   const answers = calls.map((c, i) => ({ who: c.who, what: c.what, ...c.parse(run.results.find((r) => r.i === i), i + 1) }));
   const timing = run.results.map((r) => ({ i: r.i, status: r.status ?? null, error: r.error ?? null, firedAt: r.firedAt, sentAt: r.sentAt, firstByteAt: r.firstByteAt, endAt: r.endAt }));
   ctx.ev.json(`fire-${label}`, { spreadMs: run.spreadMs, conclusive: run.conclusive, overlap: run.overlap, timing, answers: answers.map(brief) });
+  record(ctx, { ref: "request burst", label, timing: timing.map(row => ({ ...row, who: calls[row.i].who, what: calls[row.i].what })), overlap: run.overlap });
   ctx.step(`${label}: fired ${calls.length} request(s) at once: spread ${Number(run.spreadMs).toFixed(2)} ms; overlap ${run.overlap.ok ? `proven (every request sent ${run.overlap.marginMs.toFixed(1)} ms before the first answer began)` : run.overlap.reason}`);
   const cut = answers.filter((a) => a.status === 504);
   if (cut.length) ctx.inconclusive(`the stack did not answer, so nothing was measured: Hosting answered 504 to ${cut.map((a) => `${a.who} ${a.what}`).join(", ")}`);
@@ -1309,7 +1310,8 @@ async function settleStorm(ctx, docId, cursor0, t0, want) {
  */
 async function warmCommentTriggers(ctx) {
   if (ctx.target.kind !== "local") return;
-  await admitWorkers(ctx, { requests: ctx.n, what: "C15 comment trigger warm-up" });
+  // Each thread creates an annotation and its first comment: three distinct trigger pools.
+  await admitWorkers(ctx, { requests: 3 * ctx.n, what: "C15 comment, thread-event and comment-event trigger warm-up" });
   const d = await ownerDoc(ctx, "C15 trigger warm-up"), web = await webOf(ctx, d.owner, "warmup-firestore");
   const since = logMark({ target: ctx.target });
   await Promise.all(Array.from({ length: ctx.n }, (_, i) => webThread(web.fs, d.owner.account,
