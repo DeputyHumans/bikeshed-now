@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Require every declared affected E2E case and concurrency axis when resolving product, discovery or coverage repairs. Command-only harness repairs remain valid when they declare no affected E2E cases.
+
 - Keep membership race gates, PKCE spending, email cooldown and retired-head comment controls applicable after native acknowledgement recovery; preserve each fault and validate the capability combinations.
 
 - Keep the retired-head suggestion and unwritten thread-flip controls effective after native acknowledgement recovery, preserving their original faults and E2E targets.

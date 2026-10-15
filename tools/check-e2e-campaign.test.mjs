@@ -499,3 +499,30 @@ for (const [id, spec, patch] of [
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `${id}: removing the variant must invalidate the matrix`);
 });
+
+for (const track of ["product", "discovery", "coverage"]) for (const kind of ["fixed", "coverage-repair"]) test(`explicit affected witnesses bind ${track} ${kind} resolutions to cases and axes`, t => {
+  const { c, root, positive } = fixture(t);
+  const item = track === "product" ? c.items[0] : track === "discovery" ? c.discoveries[0] : c.coverage.items.find(row => row.state !== "historical-closed");
+  item.requiredCases = [{ caseId: positive.caseId }];
+  item.resolution = { kind, reason: "Synthetic affected-case binding", spec: "SPEC §12", proofs: [c.proofs.find(p => p.kind === "command").id], controls: ["control"] };
+  const commandsOnly = checkCampaign(c, { root });
+  assert.equal(commandsOnly.complete, false, "a command PASS cannot substitute for an explicit affected E2E witness");
+  assert.ok(commandsOnly.errors.some(error => error.startsWith(`${item.id}: missing affected case`)), "the exact unresolved witness is reported");
+  item.resolution.proofs = [positive.id];
+  assert.deepEqual(checkCampaign(c, { root }).errors, [], "the exact recorded case satisfies its obligation");
+  item.requiredCases.push({ caseId: `${positive.caseId} other` });
+  assert.equal(checkCampaign(c, { root }).complete, false, "a second required case cannot disappear behind the first");
+  item.requiredCases = [{ caseId: positive.caseId, n: 2 }];
+  assert.equal(checkCampaign(c, { root }).complete, false, "the right case on a different N axis is insufficient");
+  item.requiredCases = [{ caseId: positive.caseId }];
+  assert.equal(checkCampaign(c, { root }).complete, true, "restoring the exact witness restores completion");
+});
+
+test("command-only harness repairs remain valid when no affected E2E witness is declared", t => {
+  const { c, root } = fixture(t);
+  const item = c.discoveries[0];
+  item.requiredCases = [];
+  item.resolution = { kind: "coverage-repair", reason: "Synthetic command-only harness repair", spec: "SPEC §12", proofs: [c.proofs.find(p => p.kind === "command").id], controls: ["control"] };
+  assert.deepEqual(checkCampaign(c, { root }).errors, []);
+  assert.equal(checkCampaign(c, { root }).complete, true);
+});

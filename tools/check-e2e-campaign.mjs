@@ -216,7 +216,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         need(text(c.set) && array(red?.stack?.patches).some((p) => (p.set ?? p) === c.set), `${c.id}: named mutation is missing from the red stack`);
       }
     }
-    for (const item of items.values()) if (item.state === "resolved" && item.resolution?.kind === "fixed") {
+    for (const item of all) if (item.state === "resolved" && ["fixed", "coverage-repair"].includes(item.resolution?.kind)) {
       const witnessed = array(item.resolution.proofs).flatMap((id) => {
         const p = proofs.get(id);
         return p?.kind === "e2e-case" ? [p] : [];
