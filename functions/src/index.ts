@@ -114,6 +114,7 @@ import {
   thumbPrefix,
   thumbSlots,
   type ThumbKind,
+  type StaleThumbs,
 } from "./lib/thumbs";
 import {
   extractBundle,
@@ -638,9 +639,18 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     ),
   );
 
+  let candidateStale: StaleThumbs[] = [];
   const outcome = await db().runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+    const held = readThumb(d?.thumb);
+    // The SDK retries the callback if a committed response is lost. This
+    // request's unpredictable key proves its earlier write; do not treat it
+    // as a competing winner and delete the JPEGs it now references.
+    if (held?.versionId === versionId && held.rev === THUMB_REVISION &&
+        (kind === "cover" ? held.cover === key : held.slides?.key === key && held.slides.count === count)) {
+      return { stored: true, moved: false, stale: candidateStale };
+    }
     // Uploading bytes does not reserve authority: a sharing change may have
     // removed this editor while Storage was accepting the candidate images.
     if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
@@ -651,6 +661,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     }
     const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
     if (!decision.write) return { stored: false, moved: false, stale: [] };
+    candidateStale = decision.stale;
     tx.update(docRef, { thumb: decision.thumb });
     return { stored: true, moved: false, stale: decision.stale };
   });

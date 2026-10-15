@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: Apache-2.0
+// A retried thumbnail transaction acknowledges its own committed key without deleting the referenced JPEGs (SPEC §2).
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const admin = require("firebase-admin");
+const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
+const { loseFirstTransactionAcknowledgement } = require("./transaction-ack.js");
+const { saveThumbs } = require("../lib/index.js");
+const { THUMB_REVISION } = require("../lib/lib/thumbs.js");
+const owner = "owner@example.com", editor = "editor@example.com";
+const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9]);
+const sibling = "0123456789abcdef";
+
+async function upload({ kind = "cover", revoke = false, oldVersion = false } = {}) {
+  const beforeThumb = oldVersion ? { versionId: "v0", rev: THUMB_REVISION, cover: sibling }
+    : { versionId: "v1", rev: THUMB_REVISION, ...(kind === "cover" ? { slides: { key: sibling, count: 1 } } : { cover: sibling }) };
+  const { db, store } = fakeFirestore({ "docs/d": {
+    ownerUid: "owner", ownerEmail: owner, members: [owner, editor], editorMembers: [owner, editor], visibility: "private", currentVersion: "v1", thumb: beforeThumb,
+  } });
+  const siblingPath = `docs/d/thumbs/${oldVersion ? "v0" : "v1"}/${sibling}/${oldVersion || kind === "slides" ? "cover" : "s0"}.jpg`;
+  const objects = new Map([[siblingPath, Buffer.from("previous JPEG")]]), saved = [];
+  const faults = loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
+    if (revoke) await db.doc("docs/d").update({ editorMembers: [owner], members: [owner] });
+  } });
+  const descriptor = Object.getOwnPropertyDescriptor(admin, "storage"), oldBucket = process.env.BIKESHED_BUCKET;
+  process.env.BIKESHED_BUCKET = "test-bucket";
+  Object.defineProperty(admin, "storage", { configurable: true, value: () => ({ bucket: () => ({
+    file: name => ({ save: async bytes => { saved.push(name); objects.set(name, Buffer.from(bytes)); } }),
+    deleteFiles: async ({ prefix }) => { for (const key of objects.keys()) if (key.startsWith(prefix)) objects.delete(key); },
+  }) }) });
+  try {
+    const images = kind === "cover" ? [jpeg] : [jpeg, jpeg];
+    const response = await withFakeAdmin({ db, sessions: { s: { uid: "editor", email: editor, email_verified: true } } }, () => invoke(saveThumbs, {
+      headers: { cookie: "__session=s" }, query: { doc: "d", v: "v1", kind, sizes: images.map(b => b.length).join(","), r: String(THUMB_REVISION) }, rawBody: Buffer.concat(images),
+    }));
+    assert.equal(faults().failures, 1, "the SDK retried after one committed response was lost");
+    return { response, objects, saved, siblingPath, record: store.get("docs/d") };
+  } finally {
+    if (descriptor) Object.defineProperty(admin, "storage", descriptor); else delete admin.storage;
+    if (oldBucket === undefined) delete process.env.BIKESHED_BUCKET; else process.env.BIKESHED_BUCKET = oldBucket;
+  }
+}
+
+for (const kind of ["cover", "slides"]) {
+  test(`${kind}: a lost commit acknowledgement still reports the accepted upload`, async () => {
+    const r = await upload({ kind });
+    assert.deepEqual({ status: r.response.status, body: r.response.body }, { status: 200, body: { stored: true } }, "an accepted candidate is not a competing loser");
+  });
+  test(`${kind}: retry keeps every referenced JPEG and its previous sibling`, async () => {
+    const r = await upload({ kind });
+    assert.deepEqual(r.objects, new Map([[r.siblingPath, Buffer.from("previous JPEG")], ...r.saved.map(key => [key, jpeg])]), "acknowledgement loss must not delete committed thumbnail bytes");
+  });
+}
+
+test("a role revoked after the thumbnail committed does not misreport the completed upload", async () => {
+  const r = await upload({ revoke: true });
+  assert.deepEqual({ status: r.response.status, body: r.response.body }, { status: 200, body: { stored: true } }, "the unique key proves the write completed before revocation");
+});
+test("a postcommit revocation cannot make retry delete the stored thumbnail", async () => {
+  const r = await upload({ revoke: true });
+  assert.deepEqual(r.objects.get(`docs/d/thumbs/v1/${r.record.thumb.cover}/cover.jpg`), jpeg, "the recorded key still names the committed bytes");
+});
+test("a reconciled thumbnail commit still retires only the obsolete version's JPEGs", async () => {
+  const r = await upload({ oldVersion: true });
+  assert.deepEqual(r.objects, new Map(r.saved.map(key => [key, jpeg])), "reconciliation retains new JPEGs and completes the original retirement");
+});
