@@ -189,6 +189,35 @@ test("once the update is current, the draft it replaced loses its log and its fi
   }
 });
 
+for (const route of ["update", "upload"]) {
+test(`${route} fences a log first created after its editors check and late writes from that retired epoch`, async () => {
+    const live = { editAccess: { d1: { __liveEpoch: "initial", "owner@example,com": true } }, status: { d1: { peers: { reader: { mode: "view" } } } } };
+    const w = world({ rtdb: live });
+    const store = w.objects.set.bind(w.objects);
+    let seededDuringUpload = false;
+    w.objects.set = (key, value) => {
+      if (key.startsWith("docs/d1/bundles/")) {
+        // The editors/log read already returned empty, but an old-session tab
+        // establishes its seed before this candidate wins the transaction.
+        live.status.d1.y = { initial: { _seed: "AAA=", before: "AAEC" } };
+        seededDuringUpload = true;
+      }
+      return store(key, value);
+    };
+    const result = route === "update" ? await w.update(NEXT) : (await w.upload(NEXT)).body;
+    assert.equal(seededDuringUpload, true, `${route}: the initially absent log is created during upload`);
+    assert.equal(result.versionId, "v2");
+    assert.equal(live.status.d1.y, undefined, `${route}: retirement clears the captured epoch even when the earlier log check was empty`);
+    const currentEpoch = w.doc().liveEpoch ?? "initial";
+    assert.notEqual(currentEpoch, "initial", `${route}: publication advances the initially empty editing epoch`);
+    // Deletion alone cannot fence an old peer that appends after cleanup.
+    live.status.d1.y = { initial: { after: "AAEC" } };
+    assert.equal(live.status.d1.y.initial.after, "AAEC", `${route}: the old peer's late entry really exists`);
+    assert.equal(live.status.d1.y[currentEpoch], undefined, `${route}: the new editor's namespace cannot adopt that late old-session entry`);
+    assert.equal(w.doc().draft, undefined);
+});
+}
+
 test("a refused update leaves the draft, its files and its log to the people editing them", async () => {
   const live = leftBehind();
   const w = world({ rtdb: live, anns: { s1: PENDING } });

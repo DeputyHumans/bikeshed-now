@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Verify both external update paths retire a live log created after their initial editor check and fence subsequent writes from that old epoch; independently remove epoch advancement to prove the regression.
+
 - Tie every reported product finding to current executable witnesses, retaining original case identities and peer counts beside explicit rename rationales; no finding is closed by the mapping.
 
 - Wait for live update acknowledgment before Done tears down editing, retain failed or timed-out work for retry, and bound the whole Done attempt. Warn on closing with pending live typing; refuse incomplete live history over a fuller saved draft and offer an explicit leave-and-publish recovery path.
