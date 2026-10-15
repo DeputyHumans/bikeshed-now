@@ -4,6 +4,7 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
+import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
@@ -73,6 +74,43 @@ export function appendEditSession(existing: unknown, actor: Actor): EditSession[
 /** What a draft holds: an HTML entry, or a Markdown source and its rendering. */
 export type DraftContent = { html: string } | { markdown: string; html: string };
 
+/** Identifies the exact draft a reader observed, including legacy timestamped drafts. */
+export function draftIdentity(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const draft = value as Record<string, unknown>;
+  if (typeof draft.storagePrefix === "string") return draft.storagePrefix;
+  return JSON.stringify([draft.baseVersion, draft.entry, draft.updatedAt ?? null]);
+}
+
+export class DraftConflict extends Error {
+  constructor(readonly detail: Record<string, unknown>) {
+    super(String(detail.error));
+    this.name = "DraftConflict";
+  }
+}
+
+function checkDraftBase(data: Record<string, unknown> | undefined, base: string): void {
+  if (data?.currentVersion !== base) throw new DraftConflict({
+    error: "This document has a newer version. Reload before editing.",
+    currentVersion: data?.currentVersion ?? "",
+  });
+}
+
+function checkDraftSnapshot(data: Record<string, unknown> | undefined, expected: unknown): void {
+  if (draftIdentity(data?.draft) !== draftIdentity(expected)) throw new DraftConflict({
+    error: "The draft changed while this request was running. Retry with the current draft.",
+    draftChanged: true,
+  });
+}
+
+/** Delete only the snapshot a completed operation replaced, never a newer save. */
+export async function removeDraftSnapshot(docId: string, draft: unknown): Promise<void> {
+  if (!draft || typeof draft !== "object") return;
+  const prefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
+  try { await bucket().deleteFiles({ prefix, force: true }); }
+  catch { console.error("could not remove a replaced draft snapshot"); }
+}
+
 /**
  * Store `content` as the draft of `baseVersion`, which the caller has checked
  * is current, and record who wrote it. For Markdown both files are written:
@@ -80,16 +118,18 @@ export type DraftContent = { html: string } | { markdown: string; html: string }
  * draft needs no special case (SPEC §11).
  */
 export async function writeDraft(args: {
+  db: Db;
   docRef: DocRef;
   baseVersion: string;
   version: VersionMeta;
   content: DraftContent;
-  existingSessions: unknown;
+  expectedDraft?: unknown;
   emailLower: string;
   actor: Actor;
 }): Promise<Record<string, unknown>> {
   const { docRef, baseVersion, version, content } = args;
-  const prefix = `docs/${docRef.id}/draft/`;
+  const storagePrefix = newBundlePrefix(docRef.id);
+  const prefix = `${storagePrefix}/`;
   let bytes = 0;
   let sourceEntry: string | undefined;
 
@@ -113,26 +153,32 @@ export async function writeDraft(args: {
     bytes = htmlBuf.length;
   }
 
-  const draft = {
-    baseVersion,
-    entry: version.entry,
-    ...(sourceEntry ? { sourceEntry } : {}),
-    bytes,
-    updatedByEmail: args.emailLower,
-    editSessions: appendEditSession(args.existingSessions, args.actor),
-  };
-  await docRef.set(
-    {
-      draft: { ...draft, updatedAt: now() },
-      updatedAt: now(),
-      // Edit provenance, folded into a write that was happening anyway. The
-      // draft is cleared on commit, so without this the "last edited by" signal
-      // would vanish the moment a version is published. A nested map under
-      // set/merge deep-merges, leaving the view counters alone.
-      stats: { lastEditedAt: now(), lastEditedByEmail: args.emailLower },
-    },
-    { merge: true },
-  );
+  let previous: unknown;
+  let draft: Record<string, unknown> = {};
+  try {
+    await args.db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const current = snap.data();
+      checkDraftBase(current, baseVersion);
+      await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: args.actor.uid ?? "", emailLower: args.emailLower });
+      if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+      previous = current?.draft;
+      draft = {
+        baseVersion, storagePrefix, entry: version.entry,
+        ...(sourceEntry ? { sourceEntry } : {}), bytes,
+        updatedByEmail: args.emailLower,
+        editSessions: appendEditSession(current?.draft?.editSessions, args.actor),
+      };
+      tx.update(docRef, {
+        draft: { ...draft, updatedAt: now() }, updatedAt: now(),
+        "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
+      });
+    });
+  } catch (error) {
+    await removeDraftSnapshot(docRef.id, { storagePrefix });
+    throw error;
+  }
+  await removeDraftSnapshot(docRef.id, previous);
   return draft;
 }
 
@@ -162,7 +208,7 @@ export type WorkingCopy = {
  */
 export async function readWorkingCopy(
   docRef: DocRef,
-  data: { currentVersion?: unknown; draft?: { baseVersion?: unknown } | null },
+  data: { currentVersion?: unknown; draft?: { baseVersion?: unknown; storagePrefix?: unknown } | null },
 ): Promise<WorkingCopy | null> {
   const baseVersion = String(data.currentVersion ?? "");
   const version = baseVersion ? await loadVersionMeta(docRef, baseVersion) : null;
@@ -171,8 +217,8 @@ export async function readWorkingCopy(
   const hasDraft = data.draft?.baseVersion === baseVersion;
   const read = (rel: string) =>
     readFirst([
-      ...(hasDraft ? [`docs/${docRef.id}/draft/${rel}`] : []),
-      `${version.storagePrefix}/${rel}`,
+      ...(hasDraft ? [`${versionStoragePrefix(docRef.id, "draft", data.draft ?? {})}/${rel}`] : []),
+      ...(!hasDraft ? [`${version.storagePrefix}/${rel}`] : []),
     ]);
   if (version.format === "markdown") {
     const markdown = await read(version.sourceEntry ?? "index.md");
@@ -209,7 +255,7 @@ export async function openThreadsRefusal(
   };
 }
 
-export type CommitOutcome = { status: 200 | 409; body: Record<string, unknown> };
+export type CommitOutcome = { status: 200 | 403 | 409; body: Record<string, unknown> };
 
 /**
  * Promote the draft of `baseVersion` into a new immutable version, for a
@@ -225,7 +271,7 @@ export async function commitDraft(args: {
   db: Db;
   docRef: DocRef;
   baseVersion: string;
-  draft: { entry?: unknown; editSessions?: unknown } | null | undefined;
+  draft: { entry?: unknown; editSessions?: unknown; storagePrefix?: unknown; updatedAt?: unknown; baseVersion?: unknown } | null | undefined;
   emailLower: string;
   actor: Actor;
 }): Promise<CommitOutcome> {
@@ -249,7 +295,7 @@ export async function commitDraft(args: {
   // one rule covers both formats — for Markdown the draft carries index.md and
   // index.html, for HTML just the entry — with no branch here.
   const basePrefix = `${version.storagePrefix}/`;
-  const draftPrefix = `docs/${docId}/draft/`;
+  const draftPrefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
   const baseFiles = await readPrefix(basePrefix);
   const draftFiles = await readPrefix(draftPrefix);
   const byRel = new Map<string, Buffer>();
@@ -265,8 +311,24 @@ export async function commitDraft(args: {
 
   const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
   if (!dup.empty) {
-    await docRef.set({ draft: FieldValue.delete(), updatedAt: now() }, { merge: true });
-    await bucket().deleteFiles({ prefix: draftPrefix, force: true });
+    try {
+      await db.runTransaction(async (tx) => {
+        const current = (await tx.get(docRef)).data();
+        checkDraftBase(current, baseVersion);
+        await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+        checkDraftSnapshot(current, draft);
+        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
+        tx.update(docRef, { draft: FieldValue.delete(), updatedAt: now() });
+      });
+    } catch (error) {
+      if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
+      if (error instanceof DraftConflict) return { status: 409, body: error.detail };
+      if ((error as Error).message === "OPEN") {
+        return { status: 409, body: await openThreadsRefusal(docRef, baseVersion) ?? { error: "The review changed. Retry publishing." } };
+      }
+      throw error;
+    }
+    await removeDraftSnapshot(docId, draft);
     return {
       status: 200,
       body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
@@ -299,6 +361,8 @@ export async function commitDraft(args: {
     await db.runTransaction(async (tx) => {
       const cur = await tx.get(docRef);
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+      await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+      checkDraftSnapshot(cur.data(), draft);
       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       const vRef = versionsRef.doc(versionId);
       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
@@ -346,6 +410,8 @@ export async function commitDraft(args: {
       if (!keeps) withdrawTrust(tx, docRef, grants);
     });
   } catch (e) {
+    if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
+    if (e instanceof DraftConflict) return { status: 409, body: e.detail };
     const reason = (e as Error).message;
     if (reason === "OPEN") {
       // Opened while the bytes were uploading: refused as it would have been before.
@@ -365,7 +431,7 @@ export async function commitDraft(args: {
     throw e;
   }
 
-  await bucket().deleteFiles({ prefix: draftPrefix, force: true });
+  await removeDraftSnapshot(docId, draft);
   await syncPublicProjection(db, docId);
 
   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };

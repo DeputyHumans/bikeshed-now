@@ -1,6 +1,6 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -7,6 +7,7 @@ import * as mime from "mime-types";
+@@ -9,6 +9,7 @@
  import { MAX_BUNDLE_BYTES, bucketName } from "../config";
  import { keepsTrust, type DocAclData } from "./acl";
  import { isAutomated, type Actor } from "./actor";
@@ -8,21 +8,19 @@
  import { hashBundleFiles, type BundleFile } from "./hash";
  import { safeRelPath } from "./http";
  import { renderMarkdown } from "./markdown/render";
-@@ -242,6 +243,9 @@ export async function commitDraft(args: {
+@@ -291,6 +292,8 @@
    const version = await loadVersionMeta(docRef, baseVersion);
    if (!version) return { status: 409, body: { error: "the base version is missing" } };
- 
-+  // e2e amplify (amplify-c08-mint-races): a pause point after the endpoint's base check, before the base and draft files are read.
+
 +  await e2eRaceGate("commit-before-read", docId);
 +
    // Assemble: base assets, with anything the draft carries overriding it. That
    // one rule covers both formats — for Markdown the draft carries index.md and
    // index.html, for HTML just the entry — with no branch here.
-@@ -249,6 +253,8 @@ export async function commitDraft(args: {
-   const draftPrefix = `docs/${docId}/draft/`;
+@@ -298,6 +301,7 @@
+   const draftPrefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
    const baseFiles = await readPrefix(basePrefix);
    const draftFiles = await readPrefix(draftPrefix);
-+  // e2e amplify (amplify-c08-mint-races): a pause point after the draft is read, before it is hashed and deduplicated.
 +  await e2eRaceGate("commit-after-read", docId);
    const byRel = new Map<string, Buffer>();
    for (const f of baseFiles) byRel.set(f.rel, f.data);

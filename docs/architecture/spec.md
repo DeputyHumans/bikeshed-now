@@ -335,12 +335,16 @@ caller's link grant), Admin-SDK only, versions immutable — a commit always
 mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
 - **`POST /draft`** — `{ docId, baseVersion, entry?, html }`. `409 { currentVersion }`
-  when `baseVersion !== currentVersion`. Writes `docs/{docId}/draft/{entry}` and
-  `docs/{docId}.draft`. For a Markdown-sourced document the edited HTML is
+  when `baseVersion !== currentVersion`. Uploads an isolated immutable snapshot
+  and transactionally selects it in `docs/{docId}.draft.storagePrefix`, checking
+  the current base, edit authority and expiry again after the upload. For a
+  Markdown-sourced document the edited HTML is
   converted to Markdown server-side and `index.md` is what is stored (§11).
 - **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
-  `docs/{docId}/{baseVersion}/<relPath>` for anything the draft does not carry,
-  so first-edit and non-entry assets render. `private, no-store`.
+  the current version's stored bundle for non-entry assets the draft does not
+  carry. An absent selected draft entry refuses with `409 { draftChanged }`,
+  rather than silently serving older published content. Legacy drafts without
+  a storage pointer retain their historical prefix. `private, no-store`.
 - **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no
   draft, or if any annotation on the current version is unresolved
   (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds
@@ -348,7 +352,9 @@ mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
   Markdown if applicable, hashes with the §9 framing, **dedups on `contentHash`**
   (identical bytes → no-op, clear the draft, `deduped: true`), else uploads and,
   in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
-  clears `draft`.
+  clears `draft`. Both the mint and dedup transactions require the exact
+  snapshot originally read; a newer save returns `409 { draftChanged }` and
+  stays intact. Cleanup deletes only the replaced snapshot's own files.
 
 ### `POST /suggestion`
 Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and
@@ -765,6 +771,10 @@ The one path that writes content, and it is explicit and server-mediated.
 - Leaving edit mode saves only an edit the autosave has not yet taken. Any
   save creates a draft, so a save on the way out of an unchanged session
   would leave a draft that differs from nothing.
+- Concurrent suggestion accepts compare the draft snapshot at the write. A
+  conflicting accept rereads and reapplies its change before retrying, so
+  every accepted decision is present in the resulting draft. A changed quote
+  or version refuses instead of recording an unapplied acceptance.
 - While a draft exists, an editor reading the **published head** reads the
   draft, under a banner that says so — who saved it last, and when — and a
   version label that reads `vN · draft`. The banner is the only signal: the
@@ -1617,6 +1627,12 @@ and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
 not client-readable. A public open editor with `editAccess/*` may read and write
 `y`, but gains no access to members' peer presence. These rules apply independently
 of any UI affordance or the HTTP draft endpoint.
+
+The `y` parent accepts an editor's delete-only transaction while the document
+is unexpired. The browser retires a log only if its complete contents still
+match the snapshot captured before publishing. If any entry changed, it keeps
+the whole log, including the seed required to interpret later incremental
+updates. Replacing the whole log with arbitrary content is not permitted.
 
 ### Concurrent editing
 

@@ -43,6 +43,7 @@ export class PendingSuggestionsError extends Error {
 
 function rethrow(e: unknown): never {
   if (e instanceof ConflictError) {
+    if (e.detail.draftChanged === true || e.detail.expired === true) throw e;
     // First: a pending suggestion is also an unresolved thread, so it is in
     // `unresolvedCount` too, and "resolve every comment" would send someone to
     // a Resolve button that is not there.
@@ -53,7 +54,7 @@ function rethrow(e: unknown): never {
     if (typeof e.detail.unresolvedCount === "number") {
       throw new UnresolvedCommentsError(e.detail.unresolvedCount);
     }
-    if (typeof e.detail.currentVersion === "string" || e.detail.currentVersion === undefined) {
+    if (typeof e.detail.currentVersion === "string") {
       throw new StaleVersionError(e.detail.currentVersion as string | undefined);
     }
   }

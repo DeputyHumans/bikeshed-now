@@ -21,6 +21,8 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { newBundlePrefix, versionStoragePrefix } from "./storage";
+import { removeDraftSnapshot } from "./draft";
+import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
@@ -44,6 +46,9 @@ import {
   type AcceptedRefusal,
   type PendingRefusal,
 } from "./review";
+
+/** Access or expiry changed while bytes were uploading. */
+export type AuthorityRefusal = { status: 403 | 409; error: string; expired?: boolean };
 
 /** Another version became current while this one was uploading. */
 export interface StaleRefusal {
@@ -206,7 +211,7 @@ export async function reviseDocument(args: {
   actor: Actor;
   authorEmail: string;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -467,7 +472,7 @@ export async function commitNewVersion(args: {
   authorEmail: string;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
@@ -506,17 +511,21 @@ export async function commitNewVersion(args: {
   await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 
   const base = args.baseVersion ?? "";
+  let replacedDraft: unknown;
   try {
     await db.runTransaction(async (tx) => {
       // Both asked again here, where the version becomes current: the checks
       // above ran before the upload, and either may have changed during it.
       const cur = await tx.get(docRef);
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
+      await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail });
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
+      replacedDraft = cur.data()?.draft;
       await mintVersion(tx);
     });
   } catch (e) {
+    if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };
     const reason = (e as Error).message;
     if (reason === "PENDING") {
       const pending = await refuseIfPending(docRef, base);
@@ -539,7 +548,7 @@ export async function commitNewVersion(args: {
 
   // Only once the version is current, so a refused or stale update leaves the
   // draft and its log to the people editing them.
-  await dropReplacedDraft(docRef.id, editing.log);
+  await dropReplacedDraft(docRef.id, editing.log, replacedDraft);
   await syncPublicProjection(db, docRef.id);
 
   return { versionId, contentHash, fileCount, bytes, deduped: false };
@@ -597,15 +606,11 @@ export async function commitNewVersion(args: {
  * Best effort, because the version is already current: failing the request now
  * would report as unpublished a version everybody can already see.
  */
-async function dropReplacedDraft(docId: string, log: boolean): Promise<void> {
+async function dropReplacedDraft(docId: string, log: boolean, draft: unknown): Promise<void> {
   try {
     if (log) await clearEditLog(docId);
   } catch (e) {
     console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
   }
-  try {
-    await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
-  } catch (e) {
-    console.error(`could not delete the draft files of ${docId}:`, (e as Error)?.message ?? e);
-  }
+  await removeDraftSnapshot(docId, draft);
 }

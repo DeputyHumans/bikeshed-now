@@ -207,7 +207,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { eventually, settleStill } from "../../lib/assert.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
 import { idSelector } from "../../lib/frame.mjs";
@@ -564,7 +564,7 @@ async function saveFreshDraft(ctx, s, baseVersion, bytes, marker) {
  */
 async function freshDraftSplit(s, baseVersion, marker) {
   const d = await readDoc(target, `docs/${s.docId}`);
-  const obj = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+  const obj = await readDraftObject(target, s.docId, s.entry);
   const gone = [];
   const other = [];
   if (!d?.draft) gone.push(`docs/${s.docId}.draft is gone`);
@@ -751,7 +751,7 @@ async function editedAndLeft(ctx, label, tag) {
   await typeAndSettle(ctx, s, log);
   await p1.done({ timeout: 60_000 });
   await nobodyEditing(ctx, s.docId);
-  precondition(await readObject(target, `docs/${s.docId}/draft/${s.entry}`), "the editor's draft is saved");
+  precondition(await readDraftObject(target, s.docId, s.entry), "the editor's draft is saved");
   const agents = await agentsOf(ctx, s.owner, ctx.n - 1, tag);
   return { s, p1, key: s.docId, agents };
 }
@@ -862,7 +862,7 @@ scenario("C8 N × Save as new version (SYNC-H): N editors' commits, held in thei
       if (err?.code === "E2E_SYNC_TIMEOUT") ctx.inconclusive(`the sync precondition did not hold: ${err.held}/${ctx.n} POST /commit held within 90 s`);
       throw err;
     }
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, `the draft every commit is about to publish is in Storage (docs/${s.docId}/draft/${s.entry})`);
     released = await hold.release();
   } finally {
@@ -918,7 +918,7 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
     const lp = losers.map(pressSave);
     pending = [wp, ...lp];
     await requireHeld(ctx, g, "commit-before-read", ctx.n, { key, timeoutMs: HELD_MS });
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while every commit is held");
     ctx.step(`let ${w.name}'s commit go alone (the first to arrive)`);
     await g.release("commit-before-read", { count: 1 });
@@ -981,7 +981,7 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
     ctx.step(`${w.name} presses Save: its commit reads draft D1 and is held at mint-before-id`);
     const wp = pressSave(w);
     await requireHeld(ctx, g, "mint-before-id", 1, { key, timeoutMs: HELD_MS });
-    d1 = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    d1 = await readDraftObject(target, s.docId, s.entry);
     precondition(d1, "the draft the first commit read is in Storage");
     ctx.step(`${losers.map((u) => u.name).join(", ")} each type one more token and press Save: a later draft, held at mint-before-id too`);
     const lp = losers.map((u) => settled((async () => {
@@ -1285,12 +1285,12 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
     ctx.step(`${s.users.map((u) => u.name).join(", ")} press Save: every commit is held at mint-before-id, in flight past its base check`);
     pending = s.users.map(pressSave);
     await requireHeld(ctx, g, "mint-before-id", m, { key, timeoutMs: HELD_MS });
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while the commits are held");
     before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await rtdbGet(target, `status/${s.docId}/y`)) ?? {}).sort() };
     ctx.step(`while they are held, ${k} agent(s) update on v1 at once`);
     ({ rows } = await fireUpdates(ctx, agents, s.docId, "C9b updates"));
-    const obj = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    const obj = await readDraftObject(target, s.docId, s.entry);
     during = {
       snap: await serverSnapshot(s.docId),
       draftSha: obj ? sha(obj) : "absent",
@@ -1345,7 +1345,7 @@ scenario("C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the edito
   await typeAndSettle(ctx, s, log);
   await p1.done({ timeout: 60_000 });
   await nobodyEditing(ctx, s.docId);
-  const draftBytes = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+  const draftBytes = await readDraftObject(target, s.docId, s.entry);
   precondition(draftBytes, "the editor's draft is saved");
   const agents = await agentsOf(ctx, s.owner, ctx.n - 1, "c09bs4");
   const caps = captureSaves(s.users);

@@ -1,31 +1,27 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -8,6 +8,7 @@
+@@ -9,6 +9,7 @@
  import { renderMarkdown } from "./markdown/render";
  import { clearEditLog, editorsRefusal } from "./presence";
  import { changeSuggestion, type Author, type Refusal } from "./suggestions";
 +import { e2eGate } from "./e2eGate";
- 
+
  /**
   * The app accepts in four steps: claim, so no other approver applies it too;
-@@ -73,6 +74,9 @@
+@@ -75,6 +76,8 @@
        : applyToMarkdown(working.markdown, anchor, replacement, (md) => renderMarkdown(md, { title }).html);
    if (made.state === "refused") return { status: 409, error: REFUSALS[made.reason], refused: made.reason };
- 
-+  // e2e amplify (amplify-c10-accept): a pause point after the working copy is read and the change made in memory, before the claim and the draft write.
+
 +  await e2eGate("accept-after-read", docRef.id);
 +
    const change = (op: "claim" | "release" | "accept") =>
      changeSuggestion({
        db,
-@@ -89,6 +93,10 @@
- 
+@@ -91,6 +94,7 @@
+
    const claimed = await change("claim");
    if ("status" in claimed) return claimed;
-+
-+  // e2e amplify (amplify-c10-accept): a pause point once the claim is held, before the draft is written and the decision recorded.
 +  await e2eGate("accept-after-claim", docRef.id);
-+
    try {
-     if (made.state === "applied") {
-       if (editors.log) await clearEditLog(docRef.id);
+     // A different suggestion can replace the shared draft after this request
+     // reads it. Keep our claim, reread and reapply on that newer snapshot.

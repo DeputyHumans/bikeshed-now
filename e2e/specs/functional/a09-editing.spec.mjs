@@ -127,7 +127,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
-import { closeAdmin, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { frameText, inFrameDoc } from "../../lib/frame.mjs";
@@ -365,7 +365,7 @@ const postRows = (rows, t0 = 0) =>
 
 /** The stored draft entry (Storage, docs/<doc>/draft/<entry>) as text, or null. */
 async function draftObject(docId, entry = "index.html") {
-  const b = await readObject(target, `docs/${docId}/draft/${entry}`);
+  const b = await readDraftObject(target, docId, entry);
   return b ? b.toString("utf8") : null;
 }
 

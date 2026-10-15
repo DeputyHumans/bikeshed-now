@@ -1,49 +1,39 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -13,6 +13,7 @@
+@@ -15,6 +15,7 @@
  import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
  import { syncPublicProjection } from "./publicdoc";
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
- 
+
  /**
   * The browser's editor and the agent surface both change a document through
-@@ -269,6 +270,9 @@
-       body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
+@@ -335,6 +336,8 @@
      };
    }
-+
-+  // e2e amplify (amplify-mint-join): a pause point before the version id is chosen.
+
 +  await e2eGate("mint-before-id", docId);
- 
++
    // Version ids mint as max(N)+1 over EXISTING version documents, so a
    // withdrawn id is re-used by the next commit. That is deliberate; the view
-@@ -289,6 +293,9 @@
+   // tombstone in delete-version.mjs is what keeps the two from being conflated.
+@@ -354,6 +357,8 @@
+       preconditionOpts: { ifGenerationMatch: 0 },
      });
    }
- 
-+  // e2e amplify (amplify-mint-join): a pause point between the upload of v(N+1)/ and the transaction.
-+  await e2eGate("mint-after-upload", docId);
 +
++  await e2eGate("mint-after-upload", docId);
+
    const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
- 
-   try {
+
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -6,6 +6,7 @@
- import { connect, type Connection } from "../crdt/log";
- import { rtdbLog } from "../crdt/rtdb";
+@@ -9,2 +9,3 @@
  import { bindSync, type Sync } from "../crdt/sync";
 +import { e2eGate } from "../e2eGate";
  import type { FrameMode } from "./frameMode";
- 
- /**
-@@ -67,6 +68,8 @@
-       if (log) {
-         connection = connect(ydoc, log);
-         await log.ready();
-+        // e2e amplify (amplify-mint-join): a client gate after the log is read, before the host is bound.
-+        await e2eGate("join-before-bind", docId);
-       }
-       if (cancelled || !doc.body) return;
-       bound = bindSync(ydoc.getXmlFragment("body"), doc.body);
+@@ -69,2 +70,4 @@
+           await log.ready();
++          // Hold simultaneous empty reads before the seed is elected.
++          await e2eGate("join-before-bind", docId);
+           if (cancelled || !doc.body) return;

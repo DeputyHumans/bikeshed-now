@@ -62,7 +62,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
 import { rehashZip } from "../../lib/bytes.mjs";
 import { holdListen } from "../../lib/sync.mjs";
@@ -530,6 +530,7 @@ scenario("A10.3 an in-app commit changes index.md by the edit and the first-pass
   await u.open(docId);
   await u.enterEdit();
   await u.typeAndAutosave('[id="edit-target"] > p', "x", { thenBackspace: 1 });
+  const retiring = (await readDoc(target, `docs/${docId}`)).draft;
   const second = await commitInApp(u);
   assert.deepEqual(
     { status: second.commit.status, versionId: second.commit.json?.versionId, deduped: second.commit.json?.deduped, toast: second.toast.text },
@@ -539,7 +540,7 @@ scenario("A10.3 an in-app commit changes index.md by the edit and the first-pass
   const versions = (await readCollection(target, `docs/${docId}/versions`)).map((v) => v.id).sort();
   const doc = await readDoc(target, `docs/${docId}`);
   assert.deepEqual({ versions, currentVersion: doc.currentVersion, draft: doc.draft ?? null }, { versions: ["v1", "v2"], currentVersion: "v2", draft: null }, "nothing minted, the draft cleared");
-  assert.deepEqual(await listObjects(target, `docs/${docId}/draft/`), [], "the draft's objects are gone");
+  assert.deepEqual(await listObjects(target, `${draftStoragePrefix(docId, retiring)}/`), [], "the draft's objects are gone");
 });
 
 // --- 10.3b --------------------------------------------------------------------
@@ -626,7 +627,7 @@ scenario("A10.4 idempotence after the first pass: md' (the first in-app save of 
   // for anything the draft lacks, and would compare md' with itself.
   const doc = await readDoc(target, `docs/${second.docId}`);
   precondition(doc.draft?.baseVersion === "v1" && doc.draft?.sourceEntry === "index.md", `the autosave wrote a Markdown draft of md': ${JSON.stringify(doc.draft ?? null)}`);
-  const draftObject = await readObject(target, `docs/${second.docId}/draft/index.md`);
+  const draftObject = await readDraftObject(target, second.docId, "index.md");
   precondition(draftObject !== null, "the draft holds its own index.md");
   const md2 = draftObject.toString("utf8");
   ctx.ev.text("md-second.md", md2);

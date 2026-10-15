@@ -155,6 +155,22 @@ export async function queryCollection(target, path, filters = [], { db } = {}) {
   return snap.docs.map((d) => ({ id: d.id, data: d.data() }));
 }
 
+/** The selected immutable draft snapshot; old records retain their legacy prefix. */
+export function draftStoragePrefix(docId, draft) {
+  const prefix = draft?.storagePrefix ?? `docs/${docId}/draft`;
+  if (typeof prefix !== "string" || !prefix.startsWith(`docs/${docId}/`) || prefix.endsWith("/") || prefix.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw new Error("draft storage prefix must belong to its document");
+  }
+  return prefix;
+}
+
+/** Read the entry selected by current draft metadata, without falling back to a published version. */
+export async function readDraftObject(target, docId, rel) {
+  const data = await readDoc(target, `docs/${docId}`);
+  if (!data?.draft) return null;
+  return readObject(target, `${draftStoragePrefix(docId, data.draft)}/${rel}`);
+}
+
 /** A Storage object's bytes, or null when it does not exist. */
 export async function readObject(target, objectKey) {
   const file = adminFor(target).bucket.file(objectKey);

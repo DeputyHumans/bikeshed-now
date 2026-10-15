@@ -192,7 +192,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readDoc, readObject, watchRtdb } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, watchRtdb } from "../../lib/admin.mjs";
 import { grepLog, logFile, logMark } from "../../lib/logs.mjs";
 import { DATABASE_LOG, drainDatabaseLog } from "../../lib/debuglogs.mjs";
 import { rtdbRulesStatus } from "../../lib/rtdb.mjs";
@@ -1481,7 +1481,7 @@ async function c12cRace(ctx, { gated }) {
   await own.check(() => judgeAgentView(view, { label, mark: markA, who: p1.name }));
   // Recorded, not judged: whether one keystroke of the next editor saves what it was shown as the draft of the new version.
   const probe = await p1.typeAndAutosave(idSelector(paragraph(0)), log.next(p1.name, paragraph(0)), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const saved = (await readObject(target, `docs/${docId}/draft/${await v1Entry(docId)}`))?.toString("utf8") ?? "";
+  const saved = (await readDraftObject(target, docId, await v1Entry(docId)))?.toString("utf8") ?? "";
   const savedIs = saved.includes(markA) ? "the agent's version" : saved.includes(`>${V1_HEADING}<`) ? "v1's content (the update reverted)" : saved ? "something else" : "absent";
   ctx.step(`OBSERVED: ${p1.name} types one token; its autosave answered ${probe.status} on ${probe.body?.draft?.baseVersion ?? "?"}, and the draft of ${v} now holds ${savedIs}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: `${label} keystroke`, status: probe.status, base: probe.body?.draft?.baseVersion ?? null, draftHolds: savedIs });
@@ -1719,7 +1719,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const view = await editorView(ctx, next, docId);
   await o.check(() => assert.ok(view.i3.sentinels === 1 && view.i3.children === baseline.children, `C12d co-editor next editor: ${next.name} sees the sentinel once and v2's ${baseline.children} top-level elements (sentinel ${view.i3.sentinels} time(s), ${view.i3.children} element(s))`));
   const probe = await next.typeAndAutosave(idSelector(paragraph(users.indexOf(next))), log.next(next.name, paragraph(users.indexOf(next))), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const draftNow = (await readObject(target, `docs/${docId}/draft/${entry}`))?.toString("utf8") ?? "";
+  const draftNow = (await readDraftObject(target, docId, entry))?.toString("utf8") ?? "";
 
   const count = (text) => (text == null ? null : late.filter((r) => text.includes(r.token)).length);
   const where = {

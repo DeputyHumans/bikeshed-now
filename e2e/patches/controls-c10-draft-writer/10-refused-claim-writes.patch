@@ -1,12 +1,11 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -88,7 +88,8 @@
+@@ -90,7 +90,7 @@
      });
- 
+
    const claimed = await change("claim");
 -  if ("status" in claimed) return claimed;
-+  // e2e control (controls-c10-draft-writer): a refused claim no longer stops the change (only a missing suggestion does), so an approver the claim refused writes the draft too.
 +  if ("status" in claimed && claimed.status === 404) return claimed;
    try {
-     if (made.state === "applied") {
-       if (editors.log) await clearEditLog(docRef.id);
+     // A different suggestion can replace the shared draft after this request
+     // reads it. Keep our claim, reread and reapply on that newer snapshot.

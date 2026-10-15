@@ -153,7 +153,8 @@ import {
   saveCursor,
   versionEvents,
 } from "./lib/events";
-import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
+import { commitDraft, DraftConflict, loadVersionMeta, writeDraft } from "./lib/draft";
+import { WriteAuthorityError } from "./lib/writeAuthority";
 import {
   bearerFrom,
   isTokenShaped,
@@ -1192,16 +1193,23 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   // For Markdown the posted HTML is converted back to Markdown HERE, and its
   // rendering stored beside it (SPEC §11).
   const markdown = version.format === "markdown" ? htmlToMarkdown(html) : null;
-  const draft = await writeDraft({
-    docRef: ref,
-    baseVersion,
-    version,
-    content:
-      markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
-    existingSessions: data.draft?.editSessions,
-    emailLower: caller.emailLower,
-    actor: actorFrom(caller, req),
-  });
+  let draft;
+  try {
+    draft = await writeDraft({
+      db: db(),
+      docRef: ref,
+      baseVersion,
+      version,
+      content:
+        markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
+      emailLower: caller.emailLower,
+      actor: actorFrom(caller, req),
+    });
+  } catch (error) {
+    if (error instanceof WriteAuthorityError) { res.status(error.status).json(error.detail); return; }
+    if (error instanceof DraftConflict) { res.status(409).json(error.detail); return; }
+    throw error;
+  }
 
   res.status(200).json({ draft: { ...draft, editSessions: undefined } });
 });
@@ -1235,7 +1243,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
   const docData = docSnap.data() as DocAclData & {
     currentVersion?: string;
-    draft?: { baseVersion?: string; entry?: string } | null;
+    draft?: { baseVersion?: string; entry?: string; sourceEntry?: string; storagePrefix?: string } | null;
   };
   const proof = await linkProofFor(docSnap.ref, docData, caller, null);
   if (!canEdit(docData, caller, proof)) {
@@ -1247,7 +1255,8 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const baseVersion = docData.draft?.baseVersion ?? docData.currentVersion;
+  const hasDraft = docData.draft?.baseVersion === docData.currentVersion;
+  const baseVersion = docData.currentVersion;
   if (typeof baseVersion !== "string" || !safeSegment(baseVersion)) {
     res.status(404).end();
     return;
@@ -1256,7 +1265,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   let relPath = segments.slice(1).join("/");
   if (relPath.length === 0) {
     const version = await loadVersionMeta(docSnap.ref, baseVersion);
-    const entry = docData.draft?.entry ?? version?.entry;
+    const entry = (hasDraft ? docData.draft?.entry : undefined) ?? version?.entry;
     if (typeof entry !== "string" || safeRelPath(entry) == null) {
       res.status(404).end();
       return;
@@ -1264,12 +1273,16 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     relPath = entry;
   }
 
-  const draftKey = `docs/${docId}/draft/${relPath}`;
+  const draftKey = `${versionStoragePrefix(docId, "draft", docData.draft ?? {})}/${relPath}`;
   const version = await loadVersionMeta(docSnap.ref, baseVersion);
   if (!version) { res.status(404).end(); return; }
   const baseKey = `${version.storagePrefix}/${relPath}`;
   let objectKey = draftKey;
-  const [draftExists] = await bucket().file(draftKey).exists();
+  const [draftExists] = hasDraft ? await bucket().file(draftKey).exists() : [false];
+  if (hasDraft && !draftExists && (relPath === docData.draft?.entry || relPath === docData.draft?.sourceEntry)) {
+    res.status(409).json({ error: "The draft changed. Reload to read its current snapshot.", draftChanged: true });
+    return;
+  }
   if (!draftExists) {
     objectKey = baseKey;
     const [baseExists] = await bucket().file(baseKey).exists();

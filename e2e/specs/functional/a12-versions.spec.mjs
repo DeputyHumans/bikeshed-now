@@ -98,7 +98,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { docIdFor, publish, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
-import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
@@ -697,7 +697,7 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   // The revert reaches S13's situation only if the editor serializes it to
   // exactly v2's bytes; if it does not, this part measured nothing.
   const v2Bytes = await readObject(target, `docs/${appDoc}/v2/index.html`);
-  const draftBytes = await readObject(target, `docs/${appDoc}/draft/index.html`);
+  const draftBytes = await readDraftObject(target, appDoc, "index.html");
   if (!draftBytes || sha(draftBytes) !== sha(v2Bytes)) {
     /*
      * Seen on a loaded l7wb, 3 of 4 diagnostic runs of this case: the draft
@@ -829,14 +829,14 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   ctx.step("the owner accepts it through accept_suggestion: the change is in the draft; an update is now 409 acceptedInDraft and leaves the draft");
   const acc = await oMcp.call("accept_suggestion", { id: docId, threadId: sug.json.threadId });
   precondition(!acc.isError && acc.json?.inDraft === true, `accept_suggestion: ${acc.text.slice(0, 300)}`);
-  const draftBefore = await readObject(target, `docs/${docId}/draft/index.html`);
+  const draftBefore = await readDraftObject(target, docId, "index.html");
   precondition(draftBefore && String(draftBefore).includes("revision two of"), "the accepted change is in the draft");
   const held = await updateUpload(owner.http, docId, { body: r3, timeoutMs: HTTP_MS });
   assert.deepEqual({ status: held.status, json: held.json }, { status: 409, json: { error: ACCEPTED_ONE, acceptedInDraft: 1 } }, "/publish?update= over a draft holding an accepted change");
   const heldTool = await oMcp.call("update_document", { id: docId, content: r3, baseVersion: "v2" });
   assert.ok(heldTool.isError && heldTool.text.includes(ACCEPTED_ONE), `update_document over the accepted change: ${heldTool.text.slice(0, 300)}`);
   await nothingAt("the acceptedInDraft refusals", "v3", ["v1", "v2"]);
-  assert.equal(sha(await readObject(target, `docs/${docId}/draft/index.html`)), sha(draftBefore), "the refused updates left the draft as it was");
+  assert.equal(sha(await readDraftObject(target, docId, "index.html")), sha(draftBefore), "the refused updates left the draft as it was");
 
   ctx.step("the in-app commit is not held: it publishes the draft as v3, with the accepted change");
   const commit = await owner.http.postJson("/commit", { docId, baseVersion: "v2" });

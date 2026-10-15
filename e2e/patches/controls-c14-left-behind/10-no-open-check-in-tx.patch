@@ -1,14 +1,19 @@
-diff --git a/functions/src/lib/draft.ts b/functions/src/lib/draft.ts
-index 5a5aa24..ae126aa 100644
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -299,7 +299,9 @@ export async function commitDraft(args: {
-     await db.runTransaction(async (tx) => {
-       const cur = await tx.get(docRef);
+@@ -317,7 +317,7 @@
+         checkDraftBase(current, baseVersion);
+         await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+         checkDraftSnapshot(current, draft);
+-        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
++        void anyOpenThread;
+         tx.update(docRef, { draft: FieldValue.delete(), updatedAt: now() });
+       });
+     } catch (error) {
+@@ -363,7 +363,7 @@
        if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+       checkDraftSnapshot(cur.data(), draft);
 -      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-+      // e2e negative control (controls-c14-left-behind): the transaction no longer asks
-+      // again whether a thread was opened on the base while the bytes uploaded.
 +      void anyOpenThread;
        const vRef = versionsRef.doc(versionId);
        if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");

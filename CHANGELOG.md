@@ -18,6 +18,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Draft saves and publishes select immutable snapshots, recheck the current
+  version, permissions and expiry at commit time, and preserve later saves
+  during deduplication and cleanup. Concurrent suggestion accepts retry on
+  the latest draft, preserving every accepted change. Draft and expiry
+  conflicts retain their own message instead of claiming a newer version.
+
 - Account preferences restore analytics consent before collection, keep route
   names free of document identifiers, and apply the saved default marking to
   browser, MCP and CLI publications. Explicit off remains an override.
