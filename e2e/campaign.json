@@ -13230,6 +13230,54 @@
         "command": "node e2e/run.mjs run --suite concurrency --storage-shim --rtdb-proxy --n 20 --spec c17-identity.spec.mjs --patches amplify-c17-identity",
         "spec": "c17-identity.spec.mjs",
         "proofs": []
+      },
+      {
+        "id": "cli-uppercase-skill",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a20-cli.spec.mjs",
+        "capabilities": [
+          "patch:a20-cli-uppercase-skill"
+        ],
+        "options": {
+          "patches": [
+            "a20-cli-uppercase-skill"
+          ]
+        },
+        "command": "node e2e/run.mjs run --suite functional --spec a20-cli.spec.mjs --patches a20-cli-uppercase-skill",
+        "proofs": []
+      },
+      {
+        "id": "cli-underscore-skill",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a20-cli.spec.mjs",
+        "capabilities": [
+          "patch:a20-cli-underscore-skill"
+        ],
+        "options": {
+          "patches": [
+            "a20-cli-underscore-skill"
+          ]
+        },
+        "command": "node e2e/run.mjs run --suite functional --spec a20-cli.spec.mjs --patches a20-cli-underscore-skill",
+        "proofs": []
+      },
+      {
+        "id": "cli-interval-floor",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a20-cli.spec.mjs",
+        "capabilities": [
+          "patch:a20-cli-no-retry-delay"
+        ],
+        "options": {
+          "patches": [
+            "a20-cli-no-retry-delay"
+          ]
+        },
+        "command": "node e2e/run.mjs run --suite functional --spec a20-cli.spec.mjs --patches a20-cli-no-retry-delay",
+        "proofs": []
       }
     ],
     "exclusions": []

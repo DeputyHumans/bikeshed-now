@@ -45,9 +45,9 @@ npm run verify
 npm run test:rules:emulated
 ```
 
-The ledger's `acceptance.requirements` contains the 48 explicit command cells:
+The ledger's `acceptance.requirements` contains the 51 explicit command cells:
 three repository/harness checks, the complete control-set run, plain and capability-enabled smoke, plain
-functional, five functional build variants, and nine concurrency variants at
+functional, eight functional build variants, and nine concurrency variants at
 each of N=2,5,10,20. Print the executable matrix without starting anything:
 
 ```sh
@@ -66,8 +66,9 @@ node e2e/run.mjs stack down <runId>
 ```
 
 Build capability variants separately. A19 needs measurement, live-consent and
-default-marking variants; A20 needs the bad-skill-name patch; A23 needs email
-off. Concurrency requires both natural and applicable amplified runs, with the
+default-marking variants; A20 needs separate parent-directory, uppercase and
+underscore skill-name variants, plus the no-server-retry-delay interval probe;
+A23 needs email off. Concurrency requires both natural and applicable amplified runs, with the
 Storage precondition shim and RTDB proxy. `amplify-c13-feedback` and
 `amplify-mint-join` cannot share a stack. The ledger lists the compatible sets.
 For authoring use N=2 and `--trials 2`; final measurement omits `--trials` to use

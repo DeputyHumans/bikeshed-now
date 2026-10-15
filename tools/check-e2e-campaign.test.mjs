@@ -152,3 +152,16 @@ test("negative controls: a filtered matrix cell, shortened trials or mismatched 
   write(root, p.artifact, report);
   assert.equal(checkCampaign(c, { root }).complete, true);
 });
+
+
+test("all three additional CLI capability cells are mandatory and remain unproved until executed", () => {
+  assert.equal(imported.acceptance.requirements.length, 51, "48 original cells plus three CLI variants");
+  for (const id of ["cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor"]) {
+    const cell = imported.acceptance.requirements.find((r) => r.id === id);
+    assert.equal(cell.spec, "a20-cli.spec.mjs");
+    assert.deepEqual(cell.capabilities, cell.options.patches.map((p) => `patch:${p}`));
+    const c = structuredClone(imported);
+    c.acceptance.requirements = c.acceptance.requirements.filter((r) => r.id !== id);
+    assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `removing ${id} invalidates the matrix`);
+  }
+});
