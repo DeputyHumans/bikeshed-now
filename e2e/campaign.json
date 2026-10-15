@@ -14039,7 +14039,26 @@
       "relatedOriginalItems": [
         "S5"
       ],
-      "controls": [],
+      "controls": [
+        {
+          "set": "controls-a12-projection-refusal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes",
+            "suite": "functional"
+          },
+          "intendedFailure": "postcommit projection: a durable draft must still answer 200"
+        },
+        {
+          "set": "controls-a12-projection-pointer",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes",
+            "suite": "functional"
+          },
+          "intendedFailure": "postcommit projection: success names the exact persisted draft pointer"
+        }
+      ],
       "evidence": [
         "e2e/.out/campaign-discovery-evidence/soapbox-g05-projection-red.log",
         "e2e/.out/mechanism-proof-audit/restored-verify-b13.log",
@@ -14049,11 +14068,11 @@
           "test": "projection refresh failure cannot turn a committed external draft change into a refused write",
           "fileExists": true,
           "testNamePresent": true
-        }
+        },
+        "e2e/.out/controls-20261015-104425z/ledger.json"
       ],
       "remaining": [
-        "This dependency-failure mechanism has exact unit proof; decide whether final acceptance uses that structural/local witness or an added narrow E2E control.",
-        "Fresh same-revision clean/intended-red/restored execution and acceptance import remain required; no closure is proposed."
+        "The actual pre-scope control pairs passed at 21f5210. The fixture-scoped capability and final frozen-source whole-spec matrix/control pairs still require execution and import."
       ]
     },
     {
@@ -14267,10 +14286,176 @@
         "e2e/.out/thumb-authority-proof/manifest.json"
       ],
       "remaining": [
-        "Eight new and two refreshed actual control pairs are being evaluated at cb7839f; the three new clean cases pass.",
-        "Final frozen-source acceptance, default trials and controls remain required."
+        "Eight new and two refreshed actual control pairs passed at cb7839f, before the later acknowledgement-recovery fix.",
+        "Final frozen-source acceptance, default trials and refreshed controls remain required."
       ],
       "distinction": "Fresh thumbnail authorization is distinct from initial ACL refusal and competing thumbnail captures. No original finding or proof axis is replaced."
+    },
+    {
+      "id": "native-transaction-ack-loss-misclassifies-own-commit",
+      "state": "in-progress",
+      "claim": "A native transaction can durably commit, lose its acknowledgement, and retry the callback. Draft saves, draft/external publication, thumbnail writes and operator publish/withdraw treated their own committed pointer as a conflict, duplicate or losing upload; some cleanup then deleted bytes still referenced by immutable versions or draft metadata. Recognize the unique completed operation before fresh-write guards and finish its captured retirement; delete a known refused candidate only after proving no draft or version references it.",
+      "sourceCommits": [
+        "3838b31",
+        "0ce2f41",
+        "69e5b91",
+        "036908e"
+      ],
+      "relatedOriginalItems": [
+        "S5"
+      ],
+      "controls": [
+        {
+          "set": "controls-ack-external-refusal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9c external publication survives native commit acknowledgement loss without deleting the committed version",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK external-publish: its own durable commit is acknowledged with 200"
+        },
+        {
+          "set": "controls-ack-thumb-loser",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb cover: its own committed key reports stored true"
+        },
+        {
+          "set": "controls-ack-draft-refusal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK draft-publish: its own durable commit is acknowledged with 200"
+        },
+        {
+          "set": "controls-ack-external-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9c external publication survives native commit acknowledgement loss without deleting the committed version",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK external-publish: committed bytes remain readable"
+        },
+        {
+          "set": "controls-ack-dedup-cleanup",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK draft-dedup: success finishes retiring the old draft bytes"
+        },
+        {
+          "set": "controls-ack-thumb-slides-loser",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb slides: its own committed key reports stored true"
+        },
+        {
+          "set": "controls-ack-thumb-slides-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb slides: committed JPEG remains readable"
+        },
+        {
+          "set": "controls-ack-draft-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK draft-publish: committed bytes remain readable"
+        },
+        {
+          "set": "controls-operator-publish-ack",
+          "target": {
+            "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+            "case": "A12.10a an operator publish completes its exact retirement after native commit acknowledgement loss without reporting its own commit as a duplicate",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK operator publish: completed commit finishes its captured retirement"
+        },
+        {
+          "set": "controls-operator-withdraw-ack",
+          "target": {
+            "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+            "case": "A12.10b an operator withdrawal completes its exact retirement and removes only the withdrawn version after native commit acknowledgement loss",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK operator withdrawal: completed repoint finishes its captured retirement"
+        },
+        {
+          "set": "controls-ack-dedup-refusal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK draft-dedup: its own durable commit is acknowledged with 200"
+        },
+        {
+          "set": "controls-ack-thumb-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK thumb cover: committed JPEG remains readable"
+        },
+        {
+          "set": "controls-ack-link-bytes",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK link draft: committed bytes remain readable"
+        },
+        {
+          "set": "controls-ack-link-refusal",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK link draft: its own durable commit is acknowledged with 200"
+        },
+        {
+          "set": "controls-ack-dedup-mirror",
+          "target": {
+            "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+            "case": "A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement",
+            "suite": "functional"
+          },
+          "intendedFailure": "ACK draft-dedup: success refreshes the live epoch mirror"
+        }
+      ],
+      "evidence": [
+        "e2e/.out/transaction-ack-review/units-before.log",
+        "e2e/.out/transaction-ack-review/units-after.log",
+        "e2e/.out/transaction-ack-review/reference-mutants/proof.json",
+        "e2e/.out/transaction-ack-review/operator-before.log",
+        "e2e/.out/transaction-ack-review/operator-after.log",
+        "e2e/.out/transaction-ack-review/backend-final.log",
+        "e2e/.out/thumb-ack-controls-xa0L0R/proof.json",
+        "e2e/.out/native-ack-proof/helper-inverses/manifest.json"
+      ],
+      "remaining": [
+        "Five endpoint and two operator E2E cases plus 15 intended controls are authored; actual native emulator acknowledgement-loss runs and final same-revision acceptance remain required."
+      ],
+      "distinction": "This is a transport ambiguity after a real successful commit. It is distinct from ordinary transaction contention, refusal cleanup, thumbnail authority changes and projection maintenance failure. The scoped capability must prove durable state before faulting the native acknowledgement and observe the SDK retry.",
+      "testCommit": "32657505326bd26e00dbbd0e7667cc840191ef6a"
     }
   ],
   "acceptance": {
@@ -15156,6 +15341,57 @@
         },
         "command": "node e2e/run.mjs run --suite concurrency --storage-shim --rtdb-proxy --n 2 --spec c17-identity.spec.mjs --patches amplify-thumb-authority",
         "spec": "c17-identity.spec.mjs",
+        "proofs": []
+      },
+      {
+        "id": "postcommit-projection-failure",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a12-versions.spec.mjs",
+        "options": {
+          "patches": [
+            "a12-projection-unavailable"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:a12-projection-unavailable"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a12-versions.spec.mjs --patches a12-projection-unavailable",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-endpoints",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a12-versions.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a12-versions.spec.mjs --patches amplify-native-ack-loss",
+        "proofs": []
+      },
+      {
+        "id": "native-ack-operators",
+        "kind": "e2e-run",
+        "suite": "functional",
+        "spec": "a12-operator-ack.spec.mjs",
+        "options": {
+          "patches": [
+            "amplify-native-ack-loss"
+          ]
+        },
+        "capabilities": [
+          "gates",
+          "patch:amplify-native-ack-loss"
+        ],
+        "command": "node e2e/run.mjs run --suite functional --spec a12-operator-ack.spec.mjs --patches amplify-native-ack-loss",
         "proofs": []
       }
     ],
@@ -16155,6 +16391,22 @@
         "Full quiet selftest, full N20 and all original matrix axes/default trials.",
         "All actual controls at the final frozen source and local releases."
       ]
+    },
+    {
+      "date": "2026-10-15",
+      "scope": "Local source authoring, preserving all original51 acceptance cells",
+      "checks": [
+        "Native ACK endpoint/operator capability and15 controls committed3265750; global catalog676",
+        "Backend integration920/920PASS after retry/cleanup repairs",
+        "Matrix tooling40PASS; three missing-cell negatives plus18 isolated declaration/guard inverses fail as intended, restored3PASS",
+        "Canonical schema valid with55 cells and24 discoveries; no resolutions or acceptance proofs imported"
+      ],
+      "evidence": [
+        "e2e/.out/native-ack-proof/acceptance-catalog.json",
+        "e2e/.out/transaction-ack-review/backend-final.log",
+        "e2e/.out/ack-matrix-controls-loooLP/proof.json"
+      ],
+      "note": "Added whole-spec projection, endpoint acknowledgement and operator acknowledgement cells. Actual new ACK pairs, full selftest and final frozen acceptance remain outstanding. Broader retry audit has separately reproduced suggestion create/revise issues still under repair."
     }
   ]
 }

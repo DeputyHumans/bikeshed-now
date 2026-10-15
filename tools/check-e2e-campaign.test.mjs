@@ -182,7 +182,7 @@ test("negative controls: a filtered matrix cell, shortened trials or mismatched 
 
 
 test("all three additional CLI capability cells are mandatory and remain unproved until executed", () => {
-  assert.equal(imported.acceptance.requirements.filter(r => r.id !== "concurrency-thumb-authority-n2").length, 51, "all original cells remain beside the added thumbnail variant");
+  assert.equal(imported.acceptance.requirements.filter(r => !["concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators"].includes(r.id)).length, 51, "all original cells remain beside the added failure variants");
   for (const id of ["cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor"]) {
     const cell = imported.acceptance.requirements.find((r) => r.id === id);
     assert.equal(cell.spec, "a20-cli.spec.mjs");
@@ -481,4 +481,21 @@ test("the new thumbnail authority cell preserves its N2 default trials and canno
   const c = structuredClone(imported);
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), "removing thumbnail authority must invalidate the matrix");
+});
+
+for (const [id, spec, patch] of [
+  ["postcommit-projection-failure", "a12-versions.spec.mjs", "a12-projection-unavailable"],
+  ["native-ack-endpoints", "a12-versions.spec.mjs", "amplify-native-ack-loss"],
+  ["native-ack-operators", "a12-operator-ack.spec.mjs", "amplify-native-ack-loss"],
+]) test(`${id} keeps its complete spec and required fault capability`, () => {
+  const cell = imported.acceptance.requirements.find(r => r.id === id);
+  assert.ok(cell, `${id}: matrix cell is required`);
+  assert.equal(cell.suite, "functional");
+  assert.equal(cell.spec, spec);
+  assert.deepEqual(cell.options.patches, [patch]);
+  assert.deepEqual(cell.capabilities, ["gates", `patch:${patch}`]);
+  assert.equal(cell.command, `node e2e/run.mjs run --suite functional --spec ${spec} --patches ${patch}`);
+  const c = structuredClone(imported);
+  c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
+  assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `${id}: removing the variant must invalidate the matrix`);
 });
