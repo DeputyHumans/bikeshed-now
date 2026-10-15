@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Acknowledge an MCP comment already committed before a lost Firestore acknowledgement, and count each automated fetch once even when another fetch commits before its retry. Keep bounded per-operation receipts on existing records, with independent cleanup and age guards that prevent expired operations from replaying.
+
 - Recognize completed suggestion creations, revisions and thread decisions when the native Firestore SDK retries after losing a commit acknowledgement. Unique annotation/history/note receipts prevent false refusals, duplicate revision history and an old resolution overwriting a later reopen; retain focused native-retry regressions and gated E2E controls.
 
 - Register the native acknowledgement-loss pause at its actual helper source and named gate call, allowing the existing amplifier-composition checks to verify that controls preserve it.

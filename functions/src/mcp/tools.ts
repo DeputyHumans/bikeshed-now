@@ -35,6 +35,7 @@
  * both are decisions a person makes, and the guide says so in the same words.
  */
 
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
 import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -400,10 +401,13 @@ async function recordApiRead(
   versionId: string,
 ): Promise<void> {
   const sessionId = `api-${ctx.actor.tokenId ?? ctx.caller.uid}-${versionId}`;
+  const viewRef = docRef.collection("views").doc(sessionId);
+  const receipt = freshReceiptId();
   try {
     await ctx.db.runTransaction(async (tx) => {
-      const viewRef = docRef.collection("views").doc(sessionId);
       const before = await tx.get(viewRef);
+      if (readReceipt(before, receipt).found) return;
+      recordReceipt(tx, viewRef, before, receipt, true);
       const startedAt = before.data()?.startedAt;
       tx.set(viewRef, {
         sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
@@ -417,6 +421,7 @@ async function recordApiRead(
         "stats.lastViewedByEmail": FieldValue.delete(),
       });
     });
+    await clearReceipt(viewRef, receipt);
   } catch {
     /* statistics are best-effort and never fail the read */
   }
@@ -1641,7 +1646,15 @@ export const TOOLS: ToolDefinition[] = [
       // The anchor was found on the observed head. Recheck that head and the
       // reader's authority atomically with both writes, so a racing publish
       // either sees this open thread or makes this attempt retry and refuse.
+      let attempted = false;
       await ctx.db.runTransaction(async (tx) => {
+        // These two server-allocated IDs identify this call's atomic commit.
+        // Confirm it before applying new-write guards after an SDK retry.
+        if (attempted) {
+          const ownThread = await tx.get(annRef);
+          const ownComment = await tx.get(commentRef);
+          if (ownThread.exists && ownComment.exists) return;
+        }
         const current = await tx.get(ref);
         const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };
         let proof = { k: str(args, "k"), grantToken: null as string | null };
@@ -1655,6 +1668,7 @@ export const TOOLS: ToolDefinition[] = [
         }
         refuseIfExpired(currentData);
         if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
+        attempted = true;
         tx.create(annRef, {
           annId: annRef.id,
           anchor: { ...anchor, strict: true },
