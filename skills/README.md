@@ -1,6 +1,6 @@
 # Skills
 
-Three sets of instructions for an agent **using** a Bikeshed deployment: how to
+Four sets of instructions for an agent **using** a Bikeshed deployment: how to
 publish a document, how to read the feedback that comes back, and how to file
 things without accidentally changing who can read them.
 
@@ -13,6 +13,7 @@ so it says *when* to use the skill rather than what it contains.
 |---|---|
 | `bikeshed-publishing` | writing and publishing a document, or revising one; where it is filed, what id it gets, and handing back and opening its link; which formats it takes and what renders, runs and loads in one |
 | `bikeshed-feedback` | watching a published document for comments, reading anchored review comments and acting on them |
+| `bikeshed-permissions` | inspecting or changing permissions, visibility, open editing or expiry |
 | `bikeshed-folders` | choosing where a new document goes, organising a workspace, or moving a document |
 
 ## Installing them

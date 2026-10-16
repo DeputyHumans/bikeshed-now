@@ -1,12 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1811,7 +1811,8 @@
-   }
- 
-   const beforeMembers = asArray(data.members);
--  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-+  // e2e negative control (controls-c16-folder-lost-grant): each delta replaces the folder's grants instead of applying to them, so every folder grant but the latest is lost.
-+  const next = applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(data.ownerEmail), parsed.delta);
- 
-   await ref.set({ ...next, updatedAt: now() }, { merge: true });
-   await recomputeSubtree(db(), folderId);
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -75,7 +75,7 @@
+   if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
+   const before = membershipOf(data);
+   const oldGrants = grantsOf(data);
+-  const next = applyAccessDelta(oldGrants, String(data.ownerEmail), delta);
++  const next = applyAccessDelta(kind === "folder" ? { viewers: [], suggesters: [], editors: [], approvers: [] } : oldGrants, String(data.ownerEmail), delta);
+   const changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
+   if (kind === "document") {
+     await persistDocMembership(ctx.db, ref, {

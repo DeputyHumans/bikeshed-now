@@ -36,7 +36,7 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, type FolderAclData } from "./acl";
+import { canEditFolder, opensEditingToAnyAccount, type DocAclData, type FolderAclData } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -376,7 +376,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         ...docSnaps.docs.flatMap((d) => grantLists(grantsOf(d.data()))),
       );
       const batch = db.batch();
-      const touched: { id: string; membership: Membership }[] = [];
+      const touched: { id: string; membership: Membership; publicEdit: boolean }[] = [];
       for (const docSnap of docSnaps.docs) {
         const dd = docSnap.data() || {};
         const docMembership = computeMembership(
@@ -390,7 +390,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
           { ...docMembership, updatedAt: FieldValue.serverTimestamp() },
           { merge: true },
         );
-        touched.push({ id: docSnap.id, membership: docMembership });
+        touched.push({ id: docSnap.id, membership: docMembership, publicEdit: opensEditingToAnyAccount(dd as DocAclData) });
       }
       await batch.commit();
       // Presence is gated by a mirror of `members` in RTDB and shared document
@@ -399,7 +399,8 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       // else is in the document, and a revoked editor keeps typing into it
       // (SPEC §16).
       for (const t of touched) {
-        await syncPresenceAccess(t.id, t.membership.members, t.membership.editorMembers);
+        await syncPresenceAccess(t.id, t.membership.members, t.membership.editorMembers, t.publicEdit);
+        await syncPublicProjection(db, t.id);
       }
     }
 
@@ -450,7 +451,8 @@ export async function persistDocMembership(
   );
   for (const e of events(membership)) addEvent(batch, docRef, e);
   await batch.commit();
-  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
+  const fresh = (await docRef.get()).data() as DocAclData;
+  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
   await syncPublicProjection(db, docRef.id);
   return membership;
 }

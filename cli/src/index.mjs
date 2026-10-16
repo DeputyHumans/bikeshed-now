@@ -88,6 +88,17 @@ Organising
   bikeshed mv <id> <folder|root>       move a document
   bikeshed rename <id> <title>         change a document's title; its address stays
 
+Management
+  bikeshed access <document|folder> <id>  inspect direct and inherited permissions
+    --add <principals> --role <role>    grant/change roles (emails or team:<id>, comma-separated)
+    --remove <principals>              revoke direct grants; inherited access remains
+  bikeshed visibility <id> [private|unlisted|public]
+    --public-edit true|false            change open editing
+    --expires <ISO timestamp|none>      set or clear expiry; omitted settings stay unchanged
+  bikeshed rename-folder <id> <name>    rename a folder you can edit
+  bikeshed move-folder <id> <folder|root> move a folder and recompute inherited access
+  bikeshed delete-folder <id>           owner-only; reparent contents, retain documents
+
 Skills
   bikeshed skills                      skills this deployment publishes
   bikeshed skills install <dir>        write them into an agent's skills directory
@@ -788,6 +799,80 @@ async function folder(flags, [id]) {
   });
 }
 
+/** Complete owner-visible grants, including why a removed direct grant may still read. */
+function printManagedAccess(result) {
+  console.log(`${result.kind} ${result.id} — owner: ${result.owner}`);
+  for (const [role, people] of Object.entries(result.direct)) console.log(`${role}: ${people.join(", ") || "none"}`);
+  for (const grant of result.inherited) console.log(`inherited ${grant.role}: ${grant.principal} via ${grant.path}`);
+  for (const [role, people] of Object.entries(result.effective)) console.log(`${role}: ${people.join(", ") || "none"}`);
+  if (result.visibility !== undefined) printVisibility(result);
+}
+
+function printVisibility(result) {
+  console.log(`visibility: ${result.visibility}; open editing: ${result.publicEdit ? "on" : "off"}; expires: ${result.expiresAt === null ? "never" : new Date(result.expiresAt).toISOString()}`);
+  console.log(result.url);
+}
+
+async function access(flags, [kind, ref, ...rest]) {
+  if (!["document", "folder"].includes(kind) || !ref || rest.length) fail("usage: bikeshed access <document|folder> <id> [--add <principals> --role <role>] [--remove <principals>]");
+  const args = { id: kind === "document" ? docArgs(ref).id : ref };
+  const list = raw => {
+    if (typeof raw !== "string" || !raw.trim()) fail("principal list must not be empty");
+    const values = raw.split(",").map(p => p.trim());
+    if (values.some(p => !p)) fail("principal list contains an empty entry");
+    return values;
+  };
+  if (flags.add !== undefined) {
+    if (!["viewer", "suggester", "editor", "approver"].includes(flags.role)) fail("--add requires --role viewer|suggester|editor|approver");
+    args.add = list(flags.add).map(principal => ({ principal, role: flags.role }));
+  } else if (flags.role !== undefined) fail("--role requires --add");
+  if (flags.remove !== undefined) args.remove = list(flags.remove);
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, `${args.add || args.remove ? "set" : "get"}_${kind}_access`, args);
+  out(flags.json, result, () => printManagedAccess(result));
+}
+
+async function visibility(flags, [ref, level, ...rest]) {
+  if (!ref || rest.length || (level !== undefined && !["private", "unlisted", "public"].includes(level))) fail("usage: bikeshed visibility <id> [private|unlisted|public] [--public-edit true|false] [--expires <ISO timestamp|none>]");
+  const args = { id: docArgs(ref).id };
+  if (level !== undefined) args.visibility = level;
+  if (flags["public-edit"] !== undefined) {
+    if (!["true", "false"].includes(flags["public-edit"])) fail("--public-edit must be true or false");
+    args.publicEdit = flags["public-edit"] === "true";
+  }
+  if (flags.expires !== undefined) {
+    if (flags.expires === "none") args.expiresAt = null;
+    else {
+      if (typeof flags.expires !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(flags.expires) || !Number.isFinite(Date.parse(flags.expires))) fail("--expires must be an ISO-8601 timestamp with a timezone, or none");
+      args.expiresAt = Date.parse(flags.expires);
+    }
+  }
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, Object.keys(args).length > 1 ? "set_document_visibility" : "get_document_access", args);
+  out(flags.json, result, () => printVisibility(result));
+}
+
+async function renameFolder(flags, [id, name, ...rest]) {
+  if (!id || !name || rest.length) fail("usage: bikeshed rename-folder <id> <name>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "rename_folder", { id, name });
+  out(flags.json, result, () => console.log(`renamed ${id}: ${result.path}`));
+}
+
+async function moveFolder(flags, [id, parent, ...rest]) {
+  if (!id || !parent || rest.length) fail("usage: bikeshed move-folder <id> <folder|root>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "move_folder", { id, ...(parent === "root" ? {} : { parent }) });
+  out(flags.json, result, () => console.log(`moved ${id}: ${result.path}; ${result.access.readers} can read it`));
+}
+
+async function deleteFolder(flags, [id, ...rest]) {
+  if (!id || rest.length) fail("usage: bikeshed delete-folder <id>");
+  const { origin, token } = resolveAuth(flags);
+  const result = await callTool(origin, token, "delete_folder", { id });
+  out(flags.json, result, () => console.log(`deleted ${id}; moved ${result.reparented.folders} folders and ${result.reparented.documents} documents to ${result.parent ?? "root"}`));
+}
+
 /** Exit status when `changes --wait` gives up: distinct from 1, an error. */
 const WAIT_TIMED_OUT = 3;
 /** The shortest wait between checks: each one reads the log and the document. */
@@ -1062,6 +1147,11 @@ const COMMANDS = {
   reject,
   commit,
   open,
+  access,
+  visibility,
+  "rename-folder": renameFolder,
+  "move-folder": moveFolder,
+  "delete-folder": deleteFolder,
   folders,
   folder,
   mkdir,
@@ -1079,6 +1169,11 @@ async function main() {
     allowPositionals: true,
     strict: false,
     options: {
+      add: { type: "string" },
+      remove: { type: "string" },
+      role: { type: "string" },
+      "public-edit": { type: "string" },
+      expires: { type: "string" },
       json: { type: "boolean", default: false },
       watch: { type: "boolean", default: false },
       all: { type: "boolean", default: false },

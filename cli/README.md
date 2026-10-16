@@ -131,10 +131,26 @@ nearest has changed since you forked it. On a document you own it also counts
 its forks. The author of what you fork sees that it was forked — a count, never
 who.
 
-## Sharing is not automated
+## Manage access and folders
 
-There is no command that shares a document, changes who can read it, or sets an
-expiry. Those are decisions a person makes in the interface, deliberately.
+`bikeshed access document <id>` and `bikeshed access folder <id>` show the
+owner, direct grants, inherited grants and effective membership. Add or change
+a direct role with `--add email@example.com,team:design --role editor`; revoke
+with `--remove email@example.com`. All four roles are supported. The owner
+cannot be removed, and inherited grants must be changed at their source.
+Newly effective readers receive an invitation when email is enabled.
+
+`bikeshed visibility <id>` shows settings. Add `private`, `unlisted` or `public`
+to change visibility, `--public-edit true|false` to change open editing, or
+`--expires <ISO-8601 timestamp with timezone|none>` to set or clear expiry.
+Omitted settings stay unchanged. These commands are owner-only, including on
+expired documents; the returned URL includes an unlisted key when needed.
+
+`bikeshed rename-folder <id> <name>` and
+`bikeshed move-folder <id> <folder|root>` require edit rights.
+`bikeshed delete-folder <id>` is owner-only: contents move to its parent or the
+root, and access is recomputed. No documents are deleted. All commands support
+`--json`. Existing sign-ins work without reconnecting.
 
 ## For agents
 

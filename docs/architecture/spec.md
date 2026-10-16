@@ -1024,13 +1024,13 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
   lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
-  mcp/{server,tools}.ts
+  mcp/{server,tools,management}.ts
   oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token}.ts
 ```
 
@@ -2000,12 +2000,20 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — twenty-three tools
+### MCP — thirty-one tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
 | Tool | Purpose |
 |---|---|
+| `get_document_access` | owner-only complete direct, inherited and effective access; includes visibility, open editing, expiry and usable URL without source bytes |
+| `set_document_access` | owner-only grant/revoke/role delta; invitations to newly effective readers |
+| `get_folder_access` | owner-only complete direct, inherited and effective folder access |
+| `set_folder_access` | owner-only grant/revoke/role delta and subtree recomputation; invitations to newly effective folder readers |
+| `set_document_visibility` | owner-only sparse patch of visibility, publicEdit and expiresAt; null clears expiry, omissions stay unchanged |
+| `rename_folder` | rename a folder the caller can edit |
+| `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
+| `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
 | `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |
@@ -2122,13 +2130,14 @@ cut source whole through `/content`, behind the same read checks.
 There is no anonymous MCP access. Publishing always attributes to a real account
 and stamps `publishedVia: "mcp"`.
 
-`list_documents` and `get_document` **report** `expiresAt`; nothing on this
-surface sets it. Expiry decides who may read a document and until when, which is
-the same class of decision as sharing, and this surface does not make those. An
-expired document reads as absent to every caller but its owner, and every write
-tool refuses it. *What would change this:* narrowing a document's reach is
-safe to automate in a way widening it is not, so an agent setting — never
-clearing or extending — an expiry is the reversal worth arguing for first.
+`list_documents` and `get_document` report `expiresAt`. Owner management tools
+may inspect and change access/settings on expired documents, including clearing
+or extending expiry; content writes remain refused until expiry no longer holds.
+`set_document_visibility` requires at least one of `visibility`, `publicEdit`
+and `expiresAt`; omission preserves a field and null clears expiry. The CLI
+accepts ISO-8601 timestamps with a timezone or `none`. Private disables open
+editing; remaining unlisted preserves the key. This shared operation uses a
+transaction for settings so omitted values come from the current record.
 
 **The folder tools are an access surface, not a filing surface.** A document's
 effective members are its own grants unioned with its folder's (§13), so moving
@@ -2151,10 +2160,21 @@ and the public projection follows. Unlike the list it refuses an expired
 document, as every write tool does. A document's own `<title>` is content and
 is not rewritten, so a link preview still shows it (§17).
 
-Three things are deliberately **absent** from the surface, and each is a stated
-refusal rather than a gap: deleting a folder (it reparents everything beneath
-it), renaming one, and sharing anything. `functions/test/mcp.test.js` asserts no
-tool name matches `delete|remove|share|grant|access`.
+Management is available under the same identity and role checks as the web app
+(ADR 0017). Eight additional tools take `id`; access writes take
+`add: [{principal, role}]` and/or `remove: [principal]`. Emails and existing
+`team:<id>` principals use the four existing roles. Access reads/writes return
+`{id, kind, owner, direct, inherited, effective}` plus document visibility,
+publicEdit, expiresAt and its usable URL. They are owner-only; inherited rows
+retain the existing hidden-path and team naming policy. Removing a direct grant
+does not override inheritance. Newly effective readers receive invitations;
+repeating a grant or changing only its role does not send another invitation.
+
+Folder rename/move require edit rights, and moving requires destination rights.
+Deletion is owner-only, reparents immediate contents, and returns
+`{id, deleted, parent, reparented: {folders, documents}}`. Folder moves/deletion
+send no invitations. Documents cannot be deleted; team administration and script
+trust remain outside this surface. HTTP and MCP call the same implementation.
 
 **An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a
 reader sees it — no markup — and finds it in the current version's RENDERED
@@ -2287,11 +2307,21 @@ byte comparison and keeps a deployment binding out of the tree, where
 any other way cannot ship unresolved. `/.well-known/mcp.json` advertises the
 endpoint; every URL in it is relative and nothing stamps it.
 
+### Management commands
+
+`bikeshed access document <id>` and `bikeshed access folder <id>` inspect access;
+`--add <comma-separated principals> --role <role>` and/or `--remove <principals>`
+change it. Adding requires an explicit role. `bikeshed visibility <id>` reads
+settings; optional `private|unlisted|public`, `--public-edit true|false`, and
+`--expires <ISO timestamp|none>` patch them. `bikeshed rename-folder <id> <name>`,
+`bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
+the three folder tools. All support human-readable and `--json` output.
+
 ### Skills
 
 `skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter
-carrying `name` and `description`, then Markdown. Three of them —
-`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders` — one per job the
+carrying `name` and `description`, then Markdown. Four of them —
+`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`, `bikeshed-permissions` — one per job the
 surface exists for. `llms.txt` is the short form every agent reads; a skill is
 the long form, loaded for the task that needs it.
 
@@ -2315,8 +2345,8 @@ believes it.
 ### Not built
 
 Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
-endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
-deletion, folder renaming or sharing through the agent surface.
+endpoints · SDKs in other languages · rate limiting beyond CDN caching · document
+deletion, team administration or script trust through the agent surface.
 
 ---
 
@@ -2661,6 +2691,11 @@ to the next version · bulk accept · a per-document "require review" switch.
 ---
 
 ## 23. Connecting an app by signing in
+
+Existing connections gain management tools under their existing identity and
+ACL, without reconnection or new scopes. Consent copy must describe sharing,
+invitation emails, visibility/expiry, and folder operations; it must not claim
+these are unavailable. See ADR 0017.
 
 An app that speaks MCP connects by its address, `https://<deployment>/mcp`: the
 person pastes it, signs in if they need to, and approves. This deployment is

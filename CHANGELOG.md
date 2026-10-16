@@ -14,6 +14,19 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- Owner permission inspection and grant/revoke/role changes for documents and
+  folders through MCP and CLI; visibility, open editing and expiry controls;
+  folder rename, move and owner-only deletion retaining all contents.
+- A permissions skill, updated folder/publishing guidance and OAuth consent.
+  Existing connections gain these commands without reconnecting. Sharing sends
+  the same invitations as the web app, only to newly effective readers.
+- Shared HTTP/MCP management handlers, preserving inherited membership and
+  owner checks. Sparse settings changes preserve omitted values.
+
 ## 0.16.1 — 2026-10-13
 
 Tests and documentation only, so a patch release. The product is unchanged.

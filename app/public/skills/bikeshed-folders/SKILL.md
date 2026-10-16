@@ -101,17 +101,29 @@ So:
 
 You need edit rights on the document, not merely the ability to read it.
 
-## What you cannot do, and why
+## Rename, move, or delete a folder
 
-- **Delete a folder.** It reparents everything beneath it, and nothing here is
-  recoverable by an agent that got it wrong. Ask.
-- **Share a folder, or a document.** Deciding who can see something is not a
-  decision to automate.
-- **Delete a document.** Documents are permanent by design. A single version can
-  be withdrawn by whoever runs the deployment, through a guarded tool.
-- **Rename a folder.** What something is called is the workspace's language, not
-  a tidying job. A document you can edit is different: `rename_document` changes
-  its title, and its address stays.
+```bash
+bikeshed rename-folder folder-id "Reviews"
+bikeshed move-folder folder-id parent-id
+bikeshed move-folder folder-id root
+bikeshed delete-folder folder-id
+```
+
+Over MCP: `rename_folder` takes `id` and `name`; `move_folder` takes `id`
+and an optional `parent` (omit for root); `delete_folder` takes `id`.
+Rename and move require edit rights, and moving also requires edit rights on
+the destination. Cycles are refused. Moves recompute inherited access throughout
+the subtree and send no invitations.
+
+Deletion is owner-only. It deletes the folder, reparents its immediate contents
+to its parent or the root, and recomputes access. Documents remain intact.
+Report the returned destination and reparented counts. Use these operations
+when authorized; do not ask again for authorization already given.
+
+For sharing and role changes use `get_folder_access`, `set_folder_access`,
+`get_document_access` and `set_document_access`, described in the
+`bikeshed-permissions` skill. Documents cannot be deleted.
 
 If a listing is `truncated`, the workspace has more folders than one call
 returns. Say so rather than treating what you got as the whole tree.

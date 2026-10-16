@@ -73,7 +73,7 @@ Two exceptions, each with something you can check:
    `filedIn` and `access`, never from memory: "Filed at the root. Only you can
    read it." or "Filed in `Engineering/Reviews`. Seven people can read it: ana@,
    bo@, cy@ and the Platform team." When `access` says `alsoReadableBy`, say that
-   too. Ask them to share it further; there is no tool for that.
+   too. When further sharing is authorized, use the `bikeshed-permissions` skill.
 3. **Nothing else.** No second copy elsewhere, no pasted document.
 
 Then say you will watch it for comments, and do, if your harness can wait. Keep
@@ -320,8 +320,8 @@ bytes all survive, and the owner can move the date or clear it — so if you nee
 an expired document, ask, rather than republishing its content as a new one and
 leaving two documents where there was one.
 
-You cannot set an expiry. It decides who may read something and until when,
-which is the same kind of decision as sharing.
+Owners can set, extend or clear expiry with `set_document_visibility`; see
+`bikeshed-permissions`. Omitted settings stay unchanged.
 
 ## Scripts run only if somebody vouched for them
 
@@ -375,6 +375,6 @@ that builds them with JavaScript stays empty until somebody trusts it.
 
 ## What happens next
 
-Ask the person to share it if more people should read it. There is no tool for
-sharing, deliberately. Then watch for what comes back, and answer it: the
+Share with additional readers when authorized, using `bikeshed-permissions`.
+Then watch for what comes back, and answer it: the
 `bikeshed-feedback` skill.

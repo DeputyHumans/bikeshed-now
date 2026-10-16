@@ -1,19 +1,18 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -140,6 +140,7 @@
- import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
- import { renameDocument } from "./lib/rename";
- import { documentAudience, filedIn, inheritedGrants } from "./lib/audience";
-+import { e2eFolderAccessGate } from "./lib/e2eFolderAccessGate";
- import {
-   addEvent,
-   annotationEvents,
-@@ -1813,6 +1814,8 @@
-   const beforeMembers = asArray(data.members);
-   const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -14,6 +14,7 @@
+ import { syncPresenceAccess } from "./presence";
+ import { syncPublicProjection } from "./publicdoc";
+ import { safeSegment } from "./http";
++import { e2eFolderAccessGate } from "./e2eFolderAccessGate";
+ import { publicOrigin } from "../config";
  
-+  // e2e amplify (amplify-c16-folder-access): a pause point after the folder's grants are read and the delta applied to them, before they are written.
-+  await e2eFolderAccessGate("folder-access-before-write", folderId);
-   await ref.set({ ...next, updatedAt: now() }, { merge: true });
-   await recomputeSubtree(db(), folderId);
- 
+ export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
+@@ -85,6 +86,7 @@
+       data: { added: m.members.filter(e => !before.members.includes(e)), removed: before.members.filter(e => !m.members.includes(e)) },
+     }] : []);
+   } else {
++    await e2eFolderAccessGate("folder-access-before-write", id);
+     await ref.set({ ...next, updatedAt: stamp() }, { merge: true });
+     await recomputeSubtree(ctx.db, id);
+   }

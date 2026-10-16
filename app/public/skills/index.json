@@ -13,6 +13,12 @@
       "archive": "skills/bikeshed-folders.zip"
     },
     {
+      "name": "bikeshed-permissions",
+      "description": "Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document visibility, open editing or expiry; or explaining inherited and team access.",
+      "path": "skills/bikeshed-permissions/SKILL.md",
+      "archive": "skills/bikeshed-permissions.zip"
+    },
+    {
       "name": "bikeshed-publishing",
       "description": "Use when a finished write-up is meant for other people — a report for a team, a plan, a proposal, the case for a decision, an analysis a reviewer will act on, anything to be posted or presented — rather than a built-in artifact tool or a file left on disk; and when publishing or revising a document on a Bikeshed deployment, including which folder it goes in and who can read it there, its id, handing back and opening its link, which formats it takes (Markdown, HTML, a .zip bundle) and what renders, runs or loads in one (scripts, external images and fonts, Mermaid, math, front matter).",
       "path": "skills/bikeshed-publishing/SKILL.md",

@@ -30,7 +30,7 @@ import * as admin from "firebase-admin";
  * on the one line that set an expiry, found the same way; `wiring.test.js`
  * now pins the shape.
  */
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import * as cookie from "cookie";
 import * as mime from "mime-types";
 import { randomBytes, createHash } from "crypto";
@@ -51,39 +51,30 @@ import {
   signInHint,
 } from "./config";
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
+import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
   canEdit,
   canManageSharing,
   canManageTeam,
   canRead,
-  canEditFolder,
-  canManageFolder,
-  canReadFolder,
   canSuggest,
   expiredForReader,
   expiryMs,
   isDocApprover,
   isDocEditor,
   isExpired,
-  opensEditingToAnyAccount,
   readBasis,
   tokenMatches,
   visibilityOf,
   type DocAclData,
   type LinkProof,
-  type FolderAclData,
   type TeamAclData,
 } from "./lib/acl";
 import {
-  applyAccessDelta,
   grantsOf,
-  invalidPrincipals,
   normalizeEmail,
-  parseAccessDelta,
   parseExpiry,
-  type AccessState,
-  type Role,
 } from "./lib/access";
 import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import {
@@ -129,17 +120,13 @@ import {
   recomputeSubtree,
   resolveFolderTarget,
   slugify,
-  wouldCycle,
-  type FolderTarget,
-  type Membership,
 } from "./lib/folders";
 import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
-import { syncPresenceAccess } from "./lib/presence";
 import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
 import { renameDocument } from "./lib/rename";
-import { documentAudience, filedIn, inheritedGrants } from "./lib/audience";
+import { documentAudience, filedIn } from "./lib/audience";
 import {
   addEvent,
   annotationEvents,
@@ -745,282 +732,45 @@ function asArray(v: unknown): string[] {
   return Array.isArray(v) ? (v as string[]) : [];
 }
 
-/**
- * Record who changed access, from where.
- *
- * ACL changes were the one action with no provenance record at all: "who
- * granted this person access, and through what" simply had no answer. Append-only
- * and editor-readable, alongside the version and view records (SPEC §17).
- */
-async function logAclChange(
-  ref: admin.firestore.DocumentReference,
-  actor: Actor,
-  before: readonly string[],
-  after: readonly string[],
-  state: AccessState,
-): Promise<void> {
-  const beforeSet = new Set(before);
-  const afterSet = new Set(after);
-  const added = after.filter((e) => !beforeSet.has(e));
-  const removed = before.filter((e) => !afterSet.has(e));
-  if (added.length === 0 && removed.length === 0) return;
-  await ref.collection("acl").add({
-    at: now(),
-    actor,
-    added,
-    removed,
-    ...state,
-  });
+/** Errors shared by HTTP and MCP, with no resource existence disclosure. */
+function managementFailure(error: unknown, res: import("express").Response): void {
+  if (error instanceof ManagementError) { res.status(error.status).json({ error: error.message }); return; }
+  throw error;
 }
 
-/** The highest role an effective member holds, for the invitation copy. */
-function roleOf(email: string, membership: Membership): Role {
-  if (membership.approverMembers.includes(email)) return "approver";
-  if (membership.editorMembers.includes(email)) return "editor";
-  if (membership.suggesterMembers.includes(email)) return "suggester";
-  return "viewer";
-}
-
-/**
- * POST /access — owner-only sharing changes.
- *
- * `add` accepts a plain email or a `team:{id}` grant. Both are stored as grants
- * and expanded server-side into the flat `members` array, so the Firestore list
- * rule and the workspace query are untouched by teams existing at all (SPEC §18).
- *
- * GET /access?docId= — the grants the document inherits from its folders, for
- * the owner's share panel. The record holds only the flattened result, and
- * the folders above it may be ones the owner cannot read (SPEC §13).
- */
+/** GET inherited grants; POST a direct grant delta (SPEC §2, §13). */
 export const setAccess = onRequest(MAILING, async (req, res) => {
-  noStore(res); // before any branch can return — see noStore()
+  noStore(res);
   if (rejectMethod(req, res, ["GET", "POST"])) return;
   const caller = await resolveCaller(req);
-  if (!caller) {
-    res.status(401).end();
-    return;
-  }
-  if (req.method === "GET") {
-    await sendDocInheritance(req, res, caller);
-    return;
-  }
-
-  const body = jsonBody(req) as { docId?: unknown } | null;
-  const docId = typeof body?.docId === "string" ? body.docId : "";
-  if (!docId || !safeSegment(docId)) {
-    badRequest(res, "invalid or missing docId");
-    return;
-  }
-  const parsed = parseAccessDelta(body);
-  if ("error" in parsed) {
-    badRequest(res, parsed.error);
-    return;
-  }
-  const bad = invalidPrincipals(parsed.delta);
-  if (bad.length > 0) {
-    badRequest(res, `not a valid recipient: ${bad.join(", ")}`);
-    return;
-  }
-
-  const ref = db().collection("docs").doc(docId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as DocAclData & {
-    title?: string;
-    viewers?: unknown;
-    editors?: unknown;
-    folderId?: string | null;
-    members?: unknown;
-  };
-  if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
-    return;
-  }
-
-  const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-
-  // Recompute EFFECTIVE membership rather than just writing the new grants:
-  // otherwise a direct-sharing change silently drops every reader who had access
-  // through the parent folder. That was a real defect in the original CLI, and
-  // it is structurally impossible here because there is one function that
-  // computes membership and everything calls it.
-  const actor = actorFrom(caller, req);
-  const membership = await persistDocMembership(
-    db(),
-    ref,
-    {
-      ownerEmail: String(data.ownerEmail),
-      grants: next,
-      folderId: (data.folderId as string | null) ?? null,
-    },
-    {},
-    (m) => {
-      const was = new Set(beforeMembers);
-      const now = new Set(m.members);
-      const added = m.members.filter((e) => !was.has(e));
-      const removed = beforeMembers.filter((e) => !now.has(e));
-      return added.length || removed.length
-        ? [{ type: "access.changed", audience: "editors", actor: eventActor(actor), data: { added, removed } }]
-        : [];
-    },
-  );
-  await logAclChange(ref, actor, beforeMembers, membership.members, next);
-
-  // Invitations go to people who NEWLY gained access, computed from the
-  // effective set. That definition covers a team grant for free, and it can
-  // never fire on a re-save of the same list.
-  const beforeSet = new Set(beforeMembers);
-  const invitees: InviteTarget[] = membership.members
-    .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-    .map((email) => ({ email, role: roleOf(email, membership) }));
-  if (invitees.length > 0) {
-    await sendInvitations(caller.emailLower, invitees, {
-      title: typeof data.title === "string" ? data.title : docId,
-      kind: "document",
-      url: `${publicOrigin()}/d/${docId}`,
-    });
-  }
-
-  res.status(200).json({ ...next, members: membership.members });
+  if (!caller) { res.status(401).end(); return; }
+  const body = jsonBody(req) as Record<string, unknown> | null;
+  const id = req.method === "GET" ? strParam(req, "docId") : typeof body?.docId === "string" ? body.docId : "";
+  const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
+  try {
+    const result = req.method === "GET" ? await getAccess(ctx, "document", id) : await changeAccess(ctx, "document", id, body);
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : { ...result.direct, members: result.effective.members });
+  } catch (error) { managementFailure(error, res); }
 });
 
-/** GET /access: owner-only, as changing it is, and refused as a read is. */
-async function sendDocInheritance(
-  req: Request,
-  res: import("express").Response,
-  caller: Principal,
-): Promise<void> {
-  const docId = strParam(req, "docId");
-  if (!docId || !safeSegment(docId)) {
-    badRequest(res, "invalid or missing docId");
-    return;
-  }
-  const snap = await db().collection("docs").doc(docId).get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as DocAclData & { folderId?: unknown };
-  if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
-    return;
-  }
-  const folderId = typeof data.folderId === "string" ? data.folderId : null;
-  res.status(200).json({ inherited: await inheritedGrants(db(), caller, folderId) });
-}
-
-/**
- * POST /visibility — owner-only. `{ docId, visibility, publicEdit? }`.
- *
- * Changing to `unlisted` mints a link token; changing to `private` drops it and
- * deletes the public projection, which is the entire revocation path.
- */
+/** The web form remains a full replacement; MCP uses the shared sparse patch. */
 export const setVisibility = onRequest(PLAIN, async (req, res) => {
+  noStore(res);
   if (rejectMethod(req, res, ["POST"])) return;
   const caller = await resolveCaller(req);
-  if (!caller) {
-    res.status(401).end();
-    return;
-  }
-
-  const body = jsonBody(req) as {
-    docId?: unknown;
-    visibility?: unknown;
-    publicEdit?: unknown;
-    expiresAt?: unknown;
-  } | null;
-  const docId = typeof body?.docId === "string" ? body.docId : "";
-  if (!docId || !safeSegment(docId)) {
-    badRequest(res, "invalid or missing docId");
-    return;
-  }
-  const visibility = body?.visibility;
-  if (visibility !== "private" && visibility !== "unlisted" && visibility !== "public") {
-    badRequest(res, 'visibility must be "private", "unlisted" or "public"');
-    return;
-  }
+  if (!caller) { res.status(401).end(); return; }
+  const body = jsonBody(req) as Record<string, unknown> | null;
+  const id = typeof body?.docId === "string" ? body.docId : "";
   const expiry = parseExpiry(body?.expiresAt);
-  if ("error" in expiry) {
-    badRequest(res, expiry.error);
-    return;
-  }
-
-  const ref = db().collection("docs").doc(docId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as DocAclData & { linkToken?: string };
-  if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
-    return;
-  }
-
-  const update: Record<string, unknown> = {
-    visibility,
-    publicEdit: body?.publicEdit === true && visibility !== "private",
-    expiresAt:
-      expiry.value === null
-        ? FieldValue.delete()
-        : Timestamp.fromMillis(expiry.value),
-    updatedAt: now(),
-  };
-  if (visibility === "unlisted") {
-    // Reuse an existing token so an already-circulated link keeps working
-    // through an unrelated setting change.
-    update.linkToken =
-      typeof data.linkToken === "string" && data.linkToken.length >= 22
-        ? data.linkToken
-        : randomBytes(16).toString("base64url");
-  } else {
-    update.linkToken = FieldValue.delete();
-  }
-  // Visibility and expiry decide who may read the document and until when, so
-  // each is an event, written with the change. The link's key never is.
-  const batch = db().batch();
-  batch.set(ref, update, { merge: true });
-  const who = eventActor(actorFrom(caller, req));
-  const wasVisibility = visibilityOf(data);
-  const wasPublicEdit = (data as { publicEdit?: unknown }).publicEdit === true;
-  if (wasVisibility !== visibility || wasPublicEdit !== update.publicEdit) {
-    addEvent(batch, ref, {
-      type: "doc.visibility",
-      audience: "editors",
-      actor: who,
-      data: { from: wasVisibility, to: visibility, publicEdit: update.publicEdit },
+  if ("error" in expiry) { badRequest(res, expiry.error); return; }
+  try {
+    const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
+      visibility: body?.visibility, publicEdit: body?.publicEdit === true, expiresAt: expiry.value,
     });
-  }
-  const wasExpiry = expiryMs(data);
-  if (wasExpiry !== expiry.value) {
-    addEvent(batch, ref, { type: "doc.expiry", audience: "readers", actor: who, data: { from: wasExpiry, to: expiry.value } });
-  }
-  await batch.commit();
-  await syncPublicProjection(db(), docId);
-  // Open editing widens who may write the SHARED document too, and the RTDB
-  // gate is a mirror rather than a query, so it has to be told. Only a PUBLIC
-  // document opens it to any account: the realtime rules cannot see a link's
-  // key, so an unlisted document's link holders edit through /draft instead.
-  await syncPresenceAccess(
-    docId,
-    asArray(data.members),
-    asArray(data.editorMembers),
-    opensEditingToAnyAccount({ ...data, ...update } as DocAclData),
-  );
-
-  const fresh = await ref.get();
-  res.status(200).json({
-    visibility,
-    publicEdit: fresh.data()?.publicEdit === true,
-    linkToken: fresh.data()?.linkToken ?? null,
-    expiresAt: expiryMs(fresh.data() as DocAclData),
-  });
+    const { visibility, publicEdit, linkToken, expiresAt } = result;
+    res.status(200).json({ visibility, publicEdit, linkToken, expiresAt });
+  } catch (error) { managementFailure(error, res); }
 });
-
 
 /**
  * POST /trust — the owner lifts (or restores) the untrusted-content sandbox.
@@ -1753,108 +1503,20 @@ export const createFolder = onRequest(PLAIN, async (req, res) => {
   res.status(200).json(await createFolderRecord(db(), caller, name, parent));
 });
 
-/**
- * POST /folder-access — owner-only folder sharing, fanned out to the subtree.
- *
- * The cascade is the expensive part and it is deliberate: inheritance is
- * denormalized at write time so the read path stays one array-contains query
- * with a statically provable rule (SPEC §5, §13).
- *
- * GET /folder-access?folderId= — the grants the folder inherits from the
- * folders above it, for the owner's share panel, as GET /access does.
- */
+/** GET inherited grants; POST owner-only folder sharing and subtree recomputation. */
 export const setFolderAccess = onRequest(MAILING, async (req, res) => {
-  noStore(res); // before any branch can return — see noStore()
+  noStore(res);
   if (rejectMethod(req, res, ["GET", "POST"])) return;
   const caller = await resolveCaller(req);
-  if (!caller) {
-    res.status(401).end();
-    return;
-  }
-  if (req.method === "GET") {
-    await sendFolderInheritance(req, res, caller);
-    return;
-  }
-
-  const body = jsonBody(req) as { folderId?: unknown } | null;
-  const folderId = typeof body?.folderId === "string" ? body.folderId : "";
-  if (!folderId || !safeSegment(folderId)) {
-    badRequest(res, "invalid or missing folderId");
-    return;
-  }
-  const parsed = parseAccessDelta(body);
-  if ("error" in parsed) {
-    badRequest(res, parsed.error);
-    return;
-  }
-  const bad = invalidPrincipals(parsed.delta);
-  if (bad.length > 0) {
-    badRequest(res, `not a valid recipient: ${bad.join(", ")}`);
-    return;
-  }
-
-  const ref = db().collection("folders").doc(folderId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as FolderAclData & {
-    name?: string;
-    viewers?: unknown;
-    editors?: unknown;
-    members?: unknown;
-  };
-  if (!canManageFolder(data, caller.emailLower)) {
-    res.status(403).end();
-    return;
-  }
-
-  const beforeMembers = asArray(data.members);
-  const next = applyAccessDelta(grantsOf(data), String(data.ownerEmail), parsed.delta);
-
-  await ref.set({ ...next, updatedAt: now() }, { merge: true });
-  await recomputeSubtree(db(), folderId);
-
-  const fresh = await ref.get();
-  const after = membershipOf(fresh.data());
-  const beforeSet = new Set(beforeMembers);
-  const invitees: InviteTarget[] = after.members
-    .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-    .map((email) => ({ email, role: roleOf(email, after) }));
-  if (invitees.length > 0) {
-    await sendInvitations(caller.emailLower, invitees, {
-      title: typeof data.name === "string" ? data.name : "a folder",
-      kind: "folder",
-      url: `${publicOrigin()}/folder/${folderId}`,
-    });
-  }
-
-  res.status(200).json(next);
+  if (!caller) { res.status(401).end(); return; }
+  const body = jsonBody(req) as Record<string, unknown> | null;
+  const id = req.method === "GET" ? strParam(req, "folderId") : typeof body?.folderId === "string" ? body.folderId : "";
+  const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
+  try {
+    const result = req.method === "GET" ? await getAccess(ctx, "folder", id) : await changeAccess(ctx, "folder", id, body);
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : result.direct);
+  } catch (error) { managementFailure(error, res); }
 });
-
-/** GET /folder-access: a folder inherits from its parent up, never from itself. */
-async function sendFolderInheritance(
-  req: Request,
-  res: import("express").Response,
-  caller: Principal,
-): Promise<void> {
-  const folderId = strParam(req, "folderId");
-  if (!folderId || !safeSegment(folderId)) {
-    badRequest(res, "invalid or missing folderId");
-    return;
-  }
-  const snap = await db().collection("folders").doc(folderId).get();
-  const data = snap.exists ? (snap.data() as FolderAclData & { parentId?: unknown }) : null;
-  if (!data || !canManageFolder(data, caller.emailLower)) {
-    // A folder the caller cannot read is not there for them.
-    const reads = data !== null && canReadFolder(data, caller.uid, caller.emailLower);
-    res.status(reads ? 403 : 404).end();
-    return;
-  }
-  const parentId = typeof data.parentId === "string" ? data.parentId : null;
-  res.status(200).json({ inherited: await inheritedGrants(db(), caller, parentId) });
-}
 
 /**
  * POST /organize — move, rename or delete a document or folder.
@@ -1864,6 +1526,7 @@ async function sendFolderInheritance(
  * children to the folder's parent, so nothing is ever orphaned.
  */
 export const organize = onRequest(PLAIN, async (req, res) => {
+  noStore(res);
   if (rejectMethod(req, res, ["POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) {
@@ -1955,86 +1618,12 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const ref = db().collection("folders").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const data = snap.data() as FolderAclData & {
-    parentId?: string | null;
-    ownerEmail?: string;
-  };
-
-  if (op === "rename") {
-    if (!canEditFolder(data, uid, emailLower)) {
-      res.status(403).end();
-      return;
-    }
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-    if (!name || name.length > 120) {
-      badRequest(res, "folder name is required (up to 120 characters)");
-      return;
-    }
-    await ref.set({ name, slug: slugify(name), updatedAt: now() }, { merge: true });
+  try {
+    await organizeFolder({ db: db(), caller, actor: actorFrom(caller, req) }, id, op, {
+      name: body?.name, parent: body?.targetFolderId,
+    });
     res.status(200).json({ ok: true });
-    return;
-  }
-
-  if (op === "move") {
-    if (!canEditFolder(data, uid, emailLower)) {
-      res.status(403).end();
-      return;
-    }
-    const target: FolderTarget = await resolveFolderTarget(
-      db(),
-      body?.targetFolderId,
-      caller,
-    );
-    if (!target.ok) {
-      res.status(target.status).json({ error: target.error });
-      return;
-    }
-    if (target.id && (await wouldCycle(db(), id, target.id))) {
-      badRequest(res, "cannot move a folder into itself");
-      return;
-    }
-    await ref.set({ parentId: target.id, updatedAt: now() }, { merge: true });
-    await recomputeSubtree(db(), id);
-    res.status(200).json({ ok: true });
-    return;
-  }
-
-  // Delete: folder only, owner only, children reparented — never orphaned.
-  if (!canManageFolder(data, emailLower)) {
-    res.status(403).end();
-    return;
-  }
-  const newParent = data.parentId ?? null;
-  const childFolders = await db().collection("folders").where("parentId", "==", id).get();
-  const childDocs = await db().collection("docs").where("folderId", "==", id).get();
-
-  const rebatch = db().batch();
-  for (const c of childFolders.docs) rebatch.set(c.ref, { parentId: newParent }, { merge: true });
-  for (const d of childDocs.docs) rebatch.set(d.ref, { folderId: newParent }, { merge: true });
-  await rebatch.commit();
-
-  for (const c of childFolders.docs) await recomputeSubtree(db(), c.id);
-  if (!childDocs.empty && newParent) {
-    await recomputeSubtree(db(), newParent);
-  } else {
-    for (const d of childDocs.docs) {
-      const dd = d.data();
-      await persistDocMembership(db(), d.ref, {
-        ownerEmail: String(dd.ownerEmail || ""),
-        grants: grantsOf(dd),
-        folderId: null,
-      });
-    }
-  }
-
-  await ref.delete();
-  res.status(200).json({ ok: true });
+  } catch (error) { managementFailure(error, res); }
 });
 
 /**
@@ -3075,7 +2664,7 @@ export const recordCommentEvent = onDocumentCreated(
  * the credential is a Bearer token, never the session cookie, so there is no
  * cross-site request forgery surface to widen by allowing it.
  */
-export const mcp = onRequest({ ...PLAIN, cors: true }, async (req, res) => {
+export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
   // Before anything can answer: a GET's 405 and every 401 would otherwise
   // inherit Hosting's default max-age=600.
   noStore(res);

@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — sixteen records of about thirty lines each.
+[`adr/`](adr/) — seventeen records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -156,12 +156,11 @@ a written argument in a pull request, not a dependency.
   credential is exactly its owner, and it is revoked from one list by someone
   who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014
   records why that changed and what it cost.
-- **No destructive or sharing tools on the agent surface.** It can list, create,
-  fork, move, rename a document, comment, resolve, suggest, and, for an approver, accept or reject a suggestion and
-  publish the draft; it cannot delete a folder, rename one, or share anything. Each is a decision a person makes, and each is stated to the
-  agent in `docs/agents/agent-guide.md` rather than left to be discovered as a refusal.
-  An agent's resolve leaves a note in the thread, because it hides a point from
-  whoever raised it ([ADR 0015](adr/0015-agents-decide-as-approvers.md)).
+- **Agent management uses the person's role.** Owners can manage document and
+  folder grants, visibility and expiry. Folder editors can rename and move;
+  owners can delete folders, retaining and reparenting their contents.
+  Documents remain permanent. Shared HTTP/MCP handlers enforce these gates
+  ([ADR 0017](adr/0017-agent-management-with-owner-permissions.md)).
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are
   not.

@@ -127,8 +127,17 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly twenty-three tools, and they are the twenty-three in the spec", () => {
+test("there are exactly thirty-one tools, and they are the thirty-one in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
+    "get_document_access",
+    "set_document_access",
+    "get_folder_access",
+    "set_folder_access",
+    "set_document_visibility",
+    "rename_folder",
+    "move_folder",
+    "delete_folder",
+
     "list_documents",
     "get_document",
     "publish_document",
@@ -153,17 +162,11 @@ test("there are exactly twenty-three tools, and they are the twenty-three in the
     "resolve_thread",
     "reopen_thread",
   ]);
-  assert.equal(TOOLS.length, 23);
+  assert.equal(TOOLS.length, 31);
 });
 
-test("the surface has no tool that deletes or shares", () => {
-  // Both are stated refusals rather than gaps: deleting a folder reparents
-  // everything beneath it, and deciding who can read a document is not a
-  // decision to automate. docs/agents/agent-guide.md says so to the agent; this says
-  // so to whoever adds the tenth tool.
-  for (const name of TOOL_NAMES) {
-    assert.doesNotMatch(name, /delete|remove|share|grant|access/);
-  }
+test("documents remain permanent and team administration stays outside the surface", () => {
+  for (const name of TOOL_NAMES) assert.doesNotMatch(name, /^(delete_document|.*_team|.*_trust)$/);
 });
 
 test("fork_document needs only the document, and takes the same key the read tools do", () => {

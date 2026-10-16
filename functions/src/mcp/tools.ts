@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The twenty-three MCP tools (SPEC §19).
+// The thirty-one MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -30,12 +30,12 @@
  * that filed a document is the only one who can tell the person who can now
  * read it. `get_folder`, and the `access` a write returns, are how it knows.
  *
- * What they deliberately do NOT include is deleting or sharing a folder.
- * Deletion reparents everything beneath it, sharing decides who can read what;
- * both are decisions a person makes, and the guide says so in the same words.
+ * Management tools share the HTTP implementation and enforce the same owner
+ * and editor checks. Folder deletion reparents contents; documents remain.
  */
 
 import * as admin from "firebase-admin";
+import { MANAGEMENT_TOOLS } from "./management";
 import { FieldValue } from "firebase-admin/firestore";
 import { bucketName, publicOrigin } from "../config";
 import type { Actor } from "../lib/actor";
@@ -489,6 +489,7 @@ export function lineageForAgent(docId: string, lineage: Lineage) {
 }
 
 export const TOOLS: ToolDefinition[] = [
+  ...MANAGEMENT_TOOLS,
   {
     name: "list_documents",
     description:
@@ -1759,7 +1760,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is twenty-three tools, not "some tools". */
+/** Exported for the wiring test: the surface is thirty-one tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

@@ -143,7 +143,7 @@ nothing that runs.
 | `controls-bodyattr` | BODYATTR | the serializer keeps `contenteditable` on `<body>` |
 | `controls-i1-applyremote` | I1/I2 convergence | remote text is never applied |
 | `controls-rehash` | REHASH | a commit stores bytes appended after the hash |
-| `controls-mcp-tools` | exactly 23 MCP tools | a 24th tool |
+| `controls-mcp-tools` | exactly 23 MCP tools | a 32nd tool |
 | `controls-cli-list` | CLI `list --json` | the first document dropped |
 | `controls-mail-dup` | mail exactly once | every invitation sent twice |
 | `controls-annotations` | a comment reaches the other reader | the listener keeps only one's own threads |

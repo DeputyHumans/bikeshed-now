@@ -15,7 +15,7 @@
  *   2b BODYATTR on that version: known defect S3 (`spellcheck` on <body>).
  *      Only the BODYATTR assertion failing is "S3 as expected"; if scenario
  *      2 saved no version, 2b FAILS on its precondition instead
- *   3  MCP with a minted token: 23 tools, get_document returns the bytes
+ *   3  MCP with a minted token: 31 tools, get_document returns the bytes
  *   4  `bikeshed list --json` lists the owner's document
  *   5  sharing with a new address sends exactly one invitation, held 10 s
  *
@@ -227,7 +227,7 @@ scenario("smoke: the saved version's <html> and <body> attributes equal v1's (BO
 
 // --- 3 ----------------------------------------------------------------------
 
-scenario("smoke: MCP with a minted token: initialize, exactly 23 tools, get_document returns the stored source", { timeoutMs: 60_000 }, async (ctx) => {
+scenario("smoke: MCP with a minted token: initialize, exactly 31 tools, get_document returns the stored source", { timeoutMs: 60_000 }, async (ctx) => {
   const { owner } = await castWithOwner([]);
   const bytes = readFixture("foreign-marker.html", { raw: true });
   const title = "Smoke MCP read";
@@ -241,8 +241,8 @@ scenario("smoke: MCP with a minted token: initialize, exactly 23 tools, get_docu
   assert.equal(mcp.serverVersion, target.expectVersion, "serverInfo.version is the tree's");
   const tools = await mcp.listTools();
   const names = tools.map((t) => t.name);
-  assert.equal(names.length, 23, names.join(", "));
-  assert.equal(new Set(names).size, 23, "tool names are unique");
+  assert.equal(names.length, 31, names.join(", "));
+  assert.equal(new Set(names).size, 31, "tool names are unique");
   for (const n of names) assert.doesNotMatch(n, /delete|remove|share|grant|access/, "no destructive or sharing tool");
 
   ctx.step("get_document on the published document");

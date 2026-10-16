@@ -850,12 +850,20 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Twenty-three tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Thirty-one tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
       <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead>
       <tbody>
+        <tr><td><code>get_document_access</code></td><td>Inspect owner-visible direct, inherited and effective access and settings</td></tr>
+        <tr><td><code>set_document_access</code></td><td>Owner-only grant, revoke or change roles; invites new readers</td></tr>
+        <tr><td><code>get_folder_access</code></td><td>Inspect owner-visible folder access</td></tr>
+        <tr><td><code>set_folder_access</code></td><td>Owner-only folder grants, inherited by its subtree</td></tr>
+        <tr><td><code>set_document_visibility</code></td><td>Owner-only sparse visibility, open editing and expiry changes</td></tr>
+        <tr><td><code>rename_folder</code></td><td>Rename a folder you can edit</td></tr>
+        <tr><td><code>move_folder</code></td><td>Move a folder and recompute inherited access</td></tr>
+        <tr><td><code>delete_folder</code></td><td>Owner-only; reparent contents and retain all documents</td></tr>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>get_document</code></td><td>A document's metadata, address and current source; over 200,000 characters it is cut, and says so</td></tr>
         <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
@@ -913,12 +921,11 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="limits">
   <p class="eyebrow">06</p>
   <h2>What agents cannot do</h2>
-  <p class="answer">Anything that is a decision a person should make on purpose.</p>
+  <p class="answer">The same account permissions apply to connected agents.</p>
 
   <ul class="ticks">
-    <li>Share a document, or change who can see it.</li>
-    <li>Set or clear an expiry.</li>
-    <li>Rename or delete a folder.</li>
+    <li>Manage teams or trust document scripts.</li>
+    <li>Act with permissions its person does not have.</li>
     <li>Delete a document. Nobody can: a single version can be withdrawn only by whoever runs the deployment.</li>
   </ul>
   <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
@@ -954,6 +961,11 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed fork &lt;id&gt;</code></td><td>Your own copy, which remembers its original</td></tr>
         <tr><td><code>bikeshed lineage &lt;id&gt;</code></td><td>What it was forked from; for its owner, its forks</td></tr>
         <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
+        <tr><td><code>bikeshed access document|folder &lt;id&gt;</code></td><td>Inspect grants; --add principals --role role and --remove principals change direct grants</td></tr>
+        <tr><td><code>bikeshed visibility &lt;id&gt; [private|unlisted|public]</code></td><td>Read settings or patch with --public-edit true|false and --expires timestamp|none; omissions stay unchanged</td></tr>
+        <tr><td><code>bikeshed rename-folder &lt;id&gt; &lt;name&gt;</code></td><td>Rename a folder</td></tr>
+        <tr><td><code>bikeshed move-folder &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a folder; changes inherited access</td></tr>
+        <tr><td><code>bikeshed delete-folder &lt;id&gt;</code></td><td>Owner-only; reparent contents</td></tr>
         <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids and how many can read each</td></tr>
         <tr><td><code>bikeshed folder &lt;id&gt;</code></td><td>Who can read a folder, and so anything filed in it</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>

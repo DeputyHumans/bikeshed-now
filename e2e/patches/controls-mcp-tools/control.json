@@ -1,9 +1,9 @@
 {
-  "oracle": "MCP tool list (exactly 23)",
-  "what": "the server lists a 24th tool",
+  "oracle": "MCP tool list (exactly 31)",
+  "what": "the server lists a 32nd tool",
   "target": {
     "spec": "e2e/specs/functional/smoke.spec.mjs",
-    "case": "smoke: MCP with a minted token: initialize, exactly 23 tools, get_document returns the stored source"
+    "case": "smoke: MCP with a minted token: initialize, exactly 31 tools, get_document returns the stored source"
   },
   "expect": {
     "message": "e2e_control_extra"

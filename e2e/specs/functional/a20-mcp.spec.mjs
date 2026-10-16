@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// A20 MCP: the twenty-three tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
+// A20 MCP: the thirty-one tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
 
 /**
  * Catalogue A20.1–A20.6. The CLI's A20.7 is another unit's.
  *
- *   A20.1          tools/list is SPEC §19's twenty-three, and initialize says so
+ *   A20.1          tools/list is SPEC §19's thirty-one, and initialize says so
  *   A20.2.<tool>   one case per tool: what it does when it works, and each
  *                  way it is refused, with the server's exact words. The
  *                  plan's particulars live in their tool's case: idTaken
@@ -61,6 +61,8 @@ const BOTH = ["local", "prod"];
 
 /** SPEC §19's table, in its order. */
 const SPEC_TOOLS = Object.freeze([
+  "get_document_access", "set_document_access", "get_folder_access", "set_folder_access",
+  "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
   "list_documents", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
   "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "list_folders",
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
@@ -265,7 +267,7 @@ async function threadOf(who, docId, threadId, o = {}) {
 
 // --- A20.1 ---------------------------------------------------------------------------------
 
-scenario("A20.1 tools/list names exactly SPEC §19's twenty-three tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
+scenario("A20.1 tools/list names exactly SPEC §19's thirty-one tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
   timeoutMs: 240_000,
@@ -281,8 +283,8 @@ scenario("A20.1 tools/list names exactly SPEC §19's twenty-three tools, each de
   const tools = await o.mcp.listTools();
   const names = tools.map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
-  assert.equal(names.length, 23, `exactly 23 tools: ${names.join(", ")}`);
-  assert.equal(new Set(names).size, 23, "the names are unique");
+  assert.equal(names.length, 31, `exactly 31 tools: ${names.join(", ")}`);
+  assert.equal(new Set(names).size, 31, "the names are unique");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
   const bad = [];
   for (const t of tools) {
