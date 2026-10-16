@@ -16144,7 +16144,6 @@
           ]
         },
         "capabilities": [
-          "gates",
           "patch:a12-projection-unavailable"
         ],
         "command": "node e2e/run.mjs run --suite functional --spec a12-versions.spec.mjs --patches a12-projection-unavailable",

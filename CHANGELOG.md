@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep successful skill installation out of every deliberately invalid-name variant, and require only the projection-failure fixture's actual capabilities when importing its evidence.
+
 - Refresh watched-file metadata when a debounced publish starts, preventing a later fallback poll from publishing the same save twice; exercise the delayed-poll ordering in real CLI process tests.
 
 - Extend discovery-retention checks to the watch regression while keeping all original identities, claims and case obligations pinned.

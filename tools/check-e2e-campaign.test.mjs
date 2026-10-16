@@ -494,8 +494,8 @@ test("the new thumbnail authority cell preserves its N2 default trials and canno
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), "removing thumbnail authority must invalidate the matrix");
 });
 
-for (const [id, spec, patch, extraCapabilities = []] of [
-  ["postcommit-projection-failure", "a12-versions.spec.mjs", "a12-projection-unavailable"],
+for (const [id, spec, patch, extraCapabilities = [], gated = true] of [
+  ["postcommit-projection-failure", "a12-versions.spec.mjs", "a12-projection-unavailable", [], false],
   ["native-ack-endpoints", "a12-versions.spec.mjs", "amplify-native-ack-loss"],
   ["native-ack-operators", "a12-operator-ack.spec.mjs", "amplify-native-ack-loss"],
   ["native-ack-feedback-threads", "a07-thread-ack.spec.mjs", "amplify-native-ack-loss", []],
@@ -513,7 +513,7 @@ for (const [id, spec, patch, extraCapabilities = []] of [
   assert.equal(cell.suite, "functional");
   assert.equal(cell.spec, spec);
   assert.deepEqual(cell.options.patches, [patch]);
-  assert.deepEqual(cell.capabilities, ["gates", ...extraCapabilities, `patch:${patch}`]);
+  assert.deepEqual(cell.capabilities, [...(gated ? ["gates"] : []), ...extraCapabilities, `patch:${patch}`]);
   assert.equal(cell.command, `node e2e/run.mjs run --suite functional --spec ${spec} --patches ${patch}`);
   const c = structuredClone(imported);
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);

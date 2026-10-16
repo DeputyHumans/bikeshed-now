@@ -455,8 +455,8 @@ scenario(NAMES.a, { tiers: BOTH, timeoutMs: 60_000, inconclusiveOnStackTimeout: 
 
 scenario(NAMES.l, {
   tiers: BOTH,
-  // The a20-cli-bad-skill-name stack serves an unusable name on purpose, so a whole install there is A20.7m's refusal.
-  needs: [`!${BAD_SKILL}`],
+  // These stacks deliberately serve unusable names; their refusal cases own installation.
+  needs: [`!${BAD_SKILL}`, `!${patchCapability("a20-cli-uppercase-skill")}`, `!${patchCapability("a20-cli-underscore-skill")}`],
   timeoutMs: 180_000,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
