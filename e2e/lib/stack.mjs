@@ -125,7 +125,7 @@ import { E2E_DIR, STACKS_DIR, LOCKS_DIR, ensureDir, logsDir, newRunId, runDir as
 import { allocateBlock, isPidAlive, lockIsLive, updateLockFile, releaseLockFile } from "./ports.mjs";
 import { materializeTree, removeTree } from "./tree.mjs";
 import { BUCKET, PROJECT_ID, applyPatchSet, parseDotenv, patchAppConfig, patchFirebaseJson, writeFunctionsEnv } from "./patch.mjs";
-import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, processTable, processesUnder, requireTool, rssBytes, run, spawnDetached } from "./proc.mjs";
+import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, processStartSecs, processTable, processesUnder, requireTool, rssBytes, run, spawnDetached } from "./proc.mjs";
 import { firebaseTools, node24 } from "./prerequisites.mjs";
 import { captureRtdbRuntime, prepareRtdbRuntime } from "./rtdb-runtime.mjs";
 import { tailLog } from "./logs.mjs";
@@ -987,7 +987,12 @@ export async function stopStack(recOrRunId, { keepTree = false, log, graceMs } =
   table = processTable();
   mine = selfAndAncestors(table);
   const stillMarked = markedProcesses(rec.mark, table).filter((p) => !mine.has(p.pid));
+  // A leader born after this group was recorded proves its ID was recycled.
+  // Unknown start times and leaderless groups remain unverified; never signal
+  // an unrelated process just because its ID appears in an old stack record.
+  const leaderStarts = processStartSecs(procs.map(p => p.pgid));
   const unverified = procs
+    .filter(p => !(leaderStarts.get(p.pgid) * 1000 > Date.parse(p.startedAt) + 2000))
     .filter((p) => groupAlive(p.pgid) && !own.has(p.pgid) && !own.has(p.pid))
     .map((p) => ({ name: p.name, pgid: p.pgid, ...groupOwnership(p.pgid, rec.mark) }))
     .filter((g) => !g.owned)

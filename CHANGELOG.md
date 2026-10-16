@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Release expired E2E stack slots when an unrelated process has reused a recorded group ID; preserve conservative cleanup when process identity is unknown.
+
 - Keep successful skill installation out of every deliberately invalid-name variant, and require only the projection-failure fixture's actual capabilities when importing its evidence.
 
 - Refresh watched-file metadata when a debounced publish starts, preventing a later fallback poll from publishing the same save twice; exercise the delayed-poll ordering in real CLI process tests.
