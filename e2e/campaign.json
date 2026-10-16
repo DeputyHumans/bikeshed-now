@@ -15226,6 +15226,26 @@
           "caseId": "e2e/specs/functional/a23-cooldown-ack.spec.mjs::A23.8c a reader whose document expires while its committed cooldown ACK is held receives no comment bytes after retry"
         }
       ]
+    },
+    {
+      "id": "cli-watch-missed-notifications-and-replacement",
+      "state": "in-progress",
+      "claim": "CLI watch mode can announce readiness yet miss the next save, and an atomic editor save replaces the inode watched by native notifications. Metadata recovery must deliver each later save without duplicate publishes or non-JSON stdout.",
+      "sourceCommit": "e0ed683",
+      "evidence": [
+        "e2e/.out/final-acceptance-20261016T053723Z/product-baselines/verify/capture.log",
+        "e2e/.out/watch-output-reproduction/20.log",
+        "e2e/.out/watch-fallback-proof/proof.json",
+        "e2e/.out/watch-fallback-proof/atomic-e2e.json"
+      ],
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a20-cli.spec.mjs::A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each"
+        }
+      ],
+      "remaining": [
+        "Final frozen verify, functional watch case and complete control campaign; authoring evidence does not close this discovery."
+      ]
     }
   ],
   "acceptance": {
