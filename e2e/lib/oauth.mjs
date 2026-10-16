@@ -683,7 +683,8 @@ export async function readArming(host) {
 /**
  * Drive the consent page.
  *
- * Waits for the Approve button, brings the page to the front, then moves the
+ * Waits for the Approve button, brings the page to the front and scrolls the
+ * button into view, then moves the
  * pointer through the card every `stepMs` until Approve is enabled (or
  * `timeoutMs` passes), and clicks it. With approve:false it clicks Cancel,
  * which is never gated. Works with any Playwright Page; nothing here imports
@@ -705,6 +706,7 @@ export async function consent(page, { approve = true, timeoutMs = 15_000, stepMs
     await cancel.click();
     return { clicked: "cancel", armedAfterMs: 0, moves: 0, arming: record };
   }
+  await approveBtn.scrollIntoViewIfNeeded();
   const started = Date.now();
   const box = (await approveBtn.boundingBox()) ?? { x: 100, y: 100, width: 80, height: 30 };
   let moves = 0;

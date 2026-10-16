@@ -31,6 +31,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - Keep HTTP management refusals as identical empty 404 responses for unreadable
   and missing resources when delegating to the shared handlers.
+- Scroll the E2E consent driver to its approval controls before generating
+  pointer input, so longer permission disclosures remain testable.
 
 ## 0.16.1 — 2026-10-13
 
