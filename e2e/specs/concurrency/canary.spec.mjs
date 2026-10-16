@@ -322,8 +322,9 @@ scenario("canary I6: a commit paused before choosing its version id while anothe
     assert.equal((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: draftHtml("owner-draft") }, { timeoutMs: 60_000 })).status, 200);
     const first = owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: 120_000 });
     await requireHeld(ctx, g, "mint-before-id", 1, { key: docId, timeoutMs: 60_000 });
-    ctx.step("the editor saves another draft on v1 and commits it: held too, past the endpoint's base check");
-    assert.equal((await editor.http.postJson("/draft", { docId, baseVersion: "v1", html: draftHtml("editor-draft") }, { timeoutMs: 60_000 })).status, 200);
+    // Both commits capture the same saved draft: replacing it here correctly
+    // invalidates the first commit before the stale-base race can occur.
+    ctx.step("the editor commits the same saved draft on v1: held too, past the endpoint's base check");
     const second = editor.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: 120_000 });
     await requireHeld(ctx, g, "mint-before-id", 2, { key: docId, timeoutMs: 60_000 });
     ctx.step("release the owner's commit alone, and let it publish");
