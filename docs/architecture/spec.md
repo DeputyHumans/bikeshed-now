@@ -22,6 +22,11 @@ private bucket and is served only through an authorizing proxy. Publishing and
 infrastructure are driven by idempotent scripts, a terminal CLI and an MCP
 endpoint, so agents are first-class publishers alongside people.
 
+The optional landing-page explainer is operator-reviewed public marketing media,
+not a published document. It MAY be served directly from a separate public
+bucket, never the private document-content bucket. A media revision is immutable;
+its MP4, captions and poster MUST agree before the landing page references it.
+
 ---
 
 ## 1. Identity gate

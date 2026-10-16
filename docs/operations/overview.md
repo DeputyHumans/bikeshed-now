@@ -43,8 +43,8 @@ npm run test:rules:emulated # rules tests need the emulators; this starts them
 | Fact | File | Tracked example |
 |---|---|---|
 | Firebase project id | `.firebaserc` | `.firebaserc.example` |
-| Content bucket, public origin (stamped into `/llms.txt`) | `config/deploy.json` | `config/deploy.example.json` |
-| Web SDK config, measurement id | `app/.env.local` | `app/.env.example` |
+| Content bucket, optional public media bucket, public origin (stamped into `/llms.txt`) | `config/deploy.json` | `config/deploy.example.json` |
+| Web SDK config, measurement id, optional landing media base URL | `app/.env.local` | `app/.env.example` |
 | Bucket, origin, sign-in hint | `functions/.env` | `functions/.env.example` |
 | Console account | **nowhere** — passed as `--account` | — |
 | Resend API key | Firebase Secret Manager | `functions/.env.example` names it |
@@ -355,6 +355,61 @@ but it is a decision, which is why all three are pinned to exact versions and
 `rendererVersion` is recorded on each version record
 ([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
 
+### Optional landing-page explainer
+
+Landing media lives in its own **public** bucket. The document-content bucket
+remains private, with public-access prevention enforced. Set `mediaBucket` in
+gitignored `config/deploy.json` to the separate bucket's name. Ordinary setup can
+provision the bucket when configured; publication remains separate, and document
+teardown never deletes it. The dedicated `scripts/media.mjs` command uses the
+installed `gcloud` CLI without adding a runtime dependency to the app or functions.
+
+Review the exact MP4, VTT and poster before publication: this path makes them
+public as-is. The uploader preserves their bytes; it does not regenerate the
+story, re-encode the video, validate its claims or repair caption timing. Stage
+exactly `bikeshed-explainer.mp4`, `bikeshed-explainer.vtt` and `poster.webp` in a
+local directory, then preview the operations with emulator-only placeholders:
+
+```bash
+node scripts/media.mjs setup --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --origin https://example.com --dry-run
+node scripts/media.mjs publish --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --directory ./media-release --revision v1 --dry-run
+```
+
+Both previews are credential-free. For a real run, use the deployment's explicit
+account, project and media bucket, review the output, then remove `--dry-run`.
+Setup gives the separate bucket uniform access, public object reads and CORS for
+the exact landing-page origin. It must refuse to repurpose the content bucket;
+an organization policy that forbids public storage is an operator decision, not
+a reason to relax the private content policy.
+
+Publishing writes the three objects under `landing/<revision>`, with their
+content types, immutable cache policy and SHA-256 metadata. A revision is one
+short token of letters, digits, underscores or hyphens. Existing objects are
+checked against the source bytes and expected metadata; identical uploads are a
+no-op, and a conflict is refused. Choose a new revision for any change. Retain
+old revisions while an old app build or browser can still reference them.
+
+After publication, copy the emitted `VITE_LANDING_MEDIA_BASE_URL` into
+gitignored `app/.env.local`. It has the form
+`https://storage.googleapis.com/<media-bucket>/landing/<revision>` and names all
+three fixed files. Copy the corresponding updated configuration to the deploy
+secrets before the next build. Preflight rejects malformed URLs, credentials,
+queries, fragments, missing bucket configuration and a media bucket that differs
+from the URL or is the content bucket. Leave the variable empty to retain the
+written landing page without a player or media requests.
+
+Before pointing production at a revision, verify the three live objects'
+checksums, content types, cache policy and cross-origin access; verify that a
+byte-range request seeks within the MP4. Then verify the deployed page on desktop
+and a phone: poster-only initial loading, user-started playback, captions, seek,
+fullscreen and a useful error state. Local emulators cannot prove bucket IAM,
+production headers or browser cross-origin behavior.
+
+To roll back, rebuild with the previous immutable base URL, or clear the variable
+to hide the player. Removing media or its bucket is a separate, explicitly
+reviewed cloud operation after checking references; document teardown never
+performs it. Public caches may retain already-served media after removal.
+
 ### Continuous deployment
 
 `.github/workflows/deploy.yml` deploys production on every push to `main`
@@ -370,7 +425,7 @@ One run, in order:
 | Step | Why there |
 |---|---|
 | Write `app/.env.local`, `functions/.env` and `config/deploy.json` from secrets, then build | The same files a hand deploy reads; `--project` stands in for `.firebaserc` |
-| `tools/deploy-preflight.mjs` | Refuses a bundle built for another project or the emulators, a missing origin, an unstamped `app/dist`, and functions told a different origin. All of this happens before any credential exists |
+| `tools/deploy-preflight.mjs` | Refuses a bundle built for another project or the emulators, a missing origin, an unstamped `app/dist`, functions told a different origin, and invalid or mismatched optional landing media. All of this happens before any credential exists |
 | Functions, **by name**, with `--force` | First, as above. By name, so a function the release removed cannot abort a non-interactive deploy. `--force` because the change-log triggers retry on failure, and the CLI refuses a function with a failure policy without it; by name, it deletes nothing |
 | Firestore rules and indexes, Storage rules, RTDB rules if an instance exists | Before hosting, so no visitor loads an app newer than its rules |
 | Hosting | |
@@ -570,6 +625,8 @@ node scripts/teardown.mjs --yes --account you@example.com --project <id> --funct
 Deletes `docs/**`, `forks/**`, `folders/**`, `teams/**`, `tokens/**`,
 `public/**` and `users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths;
 optionally the deployed functions. **Never deletes the project.**
+The separate public landing-media bucket is not part of document teardown; its
+removal is an independent operation described above.
 
 The function list comes from `scripts/lib/endpoints.mjs`, the same table
 `firebase.json` and the dev proxy derive from, and a wiring test asserts all

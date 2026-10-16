@@ -9,6 +9,7 @@ import { App } from "../App";
 import { ToastProvider } from "../components/Toast";
 import { agentInstructions } from "./Landing";
 import type { AuthGate } from "../auth";
+import appPackage from "../../package.json";
 
 /**
  * The gate is the subject, so it is the thing driven directly. `vi.hoisted` is
@@ -289,5 +290,20 @@ describe("the agent instructions", () => {
     expect(text).toContain("as a connector");
     expect(text).not.toMatch(/mint/i);
     expect(text).not.toMatch(/access token/i);
+  });
+});
+
+describe("the landing entry points", () => {
+  it.each([0, 1])("Get started link %i reaches the sign-in flow", (index) => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    fireEvent.click(screen.getAllByRole("link", { name: "Get started" })[index]);
+    expect(screen.getByText("SIGN-IN SCREEN")).toBeDefined();
+  });
+
+  it("identifies the app release actually built", () => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    expect(screen.getByText(`Self-hosted. Apache-2.0. v${appPackage.version}.`)).toBeDefined();
   });
 });

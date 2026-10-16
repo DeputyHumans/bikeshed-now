@@ -119,10 +119,18 @@ jobs:
       - name: Operator scripts run without credentials
         run: |
           node scripts/setup.mjs --account you@example.com --project demo-bikeshed --dry-run
+          BIKESHED_PUBLIC_ORIGIN=https://example.com node scripts/setup.mjs --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --dry-run
           node scripts/teardown.mjs --yes --account you@example.com --project demo-bikeshed --dry-run
           node scripts/publish.mjs --doc bikeshed-tour --project demo-bikeshed --dry-run
           node scripts/publish.mjs --doc markdown-reference --project demo-bikeshed --dry-run
           node scripts/set-access.mjs --doc bikeshed-tour --add a@example.com --project demo-bikeshed --dry-run
+          node scripts/media.mjs setup --media-bucket demo-bikeshed-media --origin https://example.com --project demo-bikeshed --dry-run
+          MEDIA_FIXTURE=$(mktemp -d)
+          trap 'rm -rf "$MEDIA_FIXTURE"' EXIT
+          for name in bikeshed-explainer.mp4 bikeshed-explainer.vtt poster.webp; do
+            printf 'dry-run fixture\n' > "$MEDIA_FIXTURE/$name"
+          done
+          node scripts/media.mjs publish --directory "$MEDIA_FIXTURE" --revision v1 --media-bucket demo-bikeshed-media --project demo-bikeshed --dry-run
 
   rules:
     name: security rules

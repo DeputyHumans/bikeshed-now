@@ -17,7 +17,7 @@ const ORIGIN = "https://h.example";
  * deployer's machine it holds a real config/deploy.json, and the origin would
  * then come from whatever deployment happens to be configured there.
  */
-function fixture({ stamped = true } = {}) {
+function fixture({ stamped = true, deployConfig } = {}) {
   const base = mkdtempSync(join(tmpdir(), "bikeshed-preflight-"));
   const dist = join(base, "dist");
   for (const rel of servedDocuments()) {
@@ -28,6 +28,11 @@ function fixture({ stamped = true } = {}) {
   if (stamped) stampDist(dist, ORIGIN);
   const root = join(base, "root");
   mkdirSync(root);
+  if (deployConfig !== undefined) {
+    mkdirSync(join(root, "config"));
+    writeFileSync(join(root, "config", "deploy.json"),
+      typeof deployConfig === "string" ? deployConfig : JSON.stringify(deployConfig));
+  }
   return { base, dist, root };
 }
 
@@ -40,8 +45,8 @@ const GOOD_ENV = [
   "VITE_USE_EMULATORS=",
 ].join("\n");
 
-function check(overrides = {}, { stamped = true, env = { BIKESHED_PUBLIC_ORIGIN: ORIGIN } } = {}) {
-  const f = fixture({ stamped });
+function check(overrides = {}, { stamped = true, env = { BIKESHED_PUBLIC_ORIGIN: ORIGIN }, deployConfig } = {}) {
+  const f = fixture({ stamped, deployConfig });
   try {
     return refusals({
       project: "acme-prod",
@@ -61,6 +66,78 @@ test("a matching, stamped production build is cleared", () => {
   // The control every refusal below is measured against: if this ever refused,
   // the other tests would pass for the wrong reason.
   assert.deepEqual(check(), []);
+});
+
+const MEDIA_BASE = "https://storage.googleapis.com/demo-bikeshed-media/landing/v1";
+const MEDIA_ENV = `${GOOD_ENV}\nVITE_LANDING_MEDIA_BASE_URL=${MEDIA_BASE}`;
+const MEDIA_CONFIG = { bucket: "demo-bikeshed-content", mediaBucket: "demo-bikeshed-media" };
+
+test("landing media clears only a matching, separately configured public bucket", () => {
+  assert.deepEqual(check({ appEnv: MEDIA_ENV }, { deployConfig: MEDIA_CONFIG }), []);
+});
+
+test("unset landing media needs no media configuration", () => {
+  for (const value of ["", "   "]) {
+    assert.deepEqual(check({ appEnv: `${GOOD_ENV}\nVITE_LANDING_MEDIA_BASE_URL=${value}` }), []);
+  }
+  assert.deepEqual(check({}, { deployConfig: "not json" }), []);
+});
+
+test("landing media rejects non-direct or decorated URLs without leaking values", () => {
+  for (const value of [
+    MEDIA_BASE.replace("https:", "http:"),
+    MEDIA_BASE.replace("storage.googleapis.com", "media.example"),
+    MEDIA_BASE.replace("https://", "https://private-user:private-password@"),
+    `${MEDIA_BASE}?credential=private-token`,
+    `${MEDIA_BASE}#private-fragment`,
+    "https://storage.googleapis.com/demo-bikeshed-media",
+    "https://storage.googleapis.com/demo-bikeshed-media/landing/../v1",
+  ]) {
+    const out = check({ appEnv: `${GOOD_ENV}\nVITE_LANDING_MEDIA_BASE_URL=${value}` }, { deployConfig: MEDIA_CONFIG });
+    assert.equal(out.length, 1);
+    assert.match(out[0], /must name a direct HTTPS media revision/);
+    assert.doesNotMatch(out[0], /demo-bikeshed|private-user|private-password|private-token|private-fragment|media\.example/);
+  }
+});
+
+test("enabled landing media requires readable, complete bucket configuration", () => {
+  for (const deployConfig of [undefined, "not json"]) {
+    const out = check({ appEnv: MEDIA_ENV }, { deployConfig });
+    assert.equal(out.length, 1);
+    assert.match(out[0], /requires a readable config\/deploy.json/);
+  }
+  for (const deployConfig of [null, {}, { bucket: "demo-bikeshed-content" },
+    { mediaBucket: "demo-bikeshed-media" }, { ...MEDIA_CONFIG, mediaBucket: " " },
+    { ...MEDIA_CONFIG, bucket: 42 }]) {
+    const out = check({ appEnv: MEDIA_ENV }, { deployConfig });
+    assert.equal(out.length, 1);
+    assert.match(out[0], /requires both bucket and mediaBucket/);
+  }
+});
+
+test("landing media cannot point at the private content bucket", () => {
+  const out = check({ appEnv: MEDIA_ENV }, { deployConfig: { ...MEDIA_CONFIG, bucket: MEDIA_CONFIG.mediaBucket } });
+  assert.equal(out.length, 1);
+  assert.match(out[0], /separate bucket from private document content/);
+  assert.doesNotMatch(out[0], /demo-bikeshed/);
+});
+
+test("landing media must match the deployment's media bucket", () => {
+  const out = check({ appEnv: MEDIA_ENV }, { deployConfig: { ...MEDIA_CONFIG, mediaBucket: "demo-other-media" } });
+  assert.equal(out.length, 1);
+  assert.match(out[0], /different bucket/);
+  assert.doesNotMatch(out[0], /demo-bikeshed|demo-other-media/);
+});
+
+test("landing media follows Vite's shell-over-dotenv precedence", () => {
+  const options = { deployConfig: MEDIA_CONFIG, env: { BIKESHED_PUBLIC_ORIGIN: ORIGIN, VITE_LANDING_MEDIA_BASE_URL: MEDIA_BASE } };
+  assert.deepEqual(check({}, options), []);
+  const badEnv = `${GOOD_ENV}\nVITE_LANDING_MEDIA_BASE_URL=https://media.example/bad`;
+  assert.deepEqual(check({ appEnv: badEnv }, options), []);
+  const out = check({ appEnv: MEDIA_ENV }, { ...options, env: { ...options.env, VITE_LANDING_MEDIA_BASE_URL: "https://media.example/bad" } });
+  assert.equal(out.length, 1);
+  assert.match(out[0], /must name a direct HTTPS media revision/);
+  assert.deepEqual(check({ appEnv: MEDIA_ENV }, { env: { BIKESHED_PUBLIC_ORIGIN: ORIGIN, VITE_LANDING_MEDIA_BASE_URL: "" } }), []);
 });
 
 test("no target project is refused", () => {

@@ -39,6 +39,9 @@ const firebaseConfig = JSON.parse(
 const HOSTING_PORT = firebaseConfig.emulators?.hosting?.port ?? 5050;
 const FUNCTIONS_ORIGIN =
   process.env.BIKESHED_FUNCTIONS_ORIGIN || `http://127.0.0.1:${HOSTING_PORT}`;
+const { version: APP_VERSION } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 function devProxy(): Record<string, ProxyOptions> {
   const target: ProxyOptions = { target: FUNCTIONS_ORIGIN, changeOrigin: true };
@@ -79,6 +82,7 @@ export default defineConfig({
    * The tracked copies under `public/` always keep the placeholder.
    */
   plugins: [react(), utf8Text(), deploymentStamp()],
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: { port: 5173, proxy: devProxy() },
   build: { outDir: "dist", sourcemap: true },
   test: {
@@ -110,6 +114,7 @@ export default defineConfig({
       VITE_EXPORT_MARK_LABEL: "",
       VITE_EXPORT_MARK_FOOTER: "",
       VITE_LEGAL_CONTACT: "",
+      VITE_LANDING_MEDIA_BASE_URL: "",
     },
     coverage: {
       provider: "v8",
