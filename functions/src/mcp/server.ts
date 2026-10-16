@@ -70,7 +70,10 @@ export const INSTRUCTIONS =
   "until it is decided, revise_suggestion and withdraw_suggestion change or " +
   "take back your own. For an owner or approver, accept_suggestion makes " +
   "one's change in the draft, reject_suggestion declines it, and " +
-  "commit_draft publishes the draft.";
+  "commit_draft publishes the draft. list_versions discovers history; get_document " +
+  "and get_comments accept version. Older versions and their feedback are read-only. " +
+  "Pass version on feedback writes and baseVersion on update_document/commit_draft; " +
+  "if stale, read the latest and reassess, never silently retarget.";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

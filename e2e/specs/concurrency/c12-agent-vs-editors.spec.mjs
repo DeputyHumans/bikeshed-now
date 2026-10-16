@@ -591,7 +591,7 @@ async function serverState(docId) {
     currentVersion: d?.currentVersion ?? null,
     draft: d?.draft ? { baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null } : null,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${v.publishedVia}`),
-    draftObjects: await listObjects(target, `docs/${docId}/draft/`),
+    draftObjects: await listObjects(target, `docs/${docId}/draft`),
     yEntries: entriesOf(await readLog(docId)),
   };
 }
@@ -654,7 +654,7 @@ async function footprint(docId) {
   const [d, versions, objects, v2] = await Promise.all([
     readDoc(target, `docs/${docId}`),
     readVersions(target, docId),
-    listObjects(target, `docs/${docId}/draft/`, { meta: true }),
+    listObjects(target, `docs/${docId}/draft`, { meta: true }),
     listObjects(target, `docs/${docId}/v2/`),
   ]);
   return {
@@ -1243,7 +1243,7 @@ scenario("C12b curl-only drafts vs the agent's update (SYNC-T): N−1 editors' P
   ctx.ev.json("answers", { drafts, update: upd });
   ctx.step(`drafts: ${drafts.map((d) => `${d.name} ${d.status}`).join(", ")}; update_document: ${upd.kind}${upd.json?.versionId ? ` ${upd.json.versionId}` : ""}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b race", drafts: drafts.map((d) => d.status), update: upd.kind });
-  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && d.json?.error === DRAFT_STALE));
+  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && (d.json?.error === DRAFT_STALE || d.json?.error === `Historical versions are read-only. Read the latest version (${d.json?.currentVersion}) before making changes.`)));
   if (odd.length) {
     const err = new Error(`a curl draft was answered neither 200 nor the stale 409: ${JSON.stringify(odd)}`);
     err.code = "E2E_C12_DRAFT";
@@ -1481,7 +1481,7 @@ async function c12cRace(ctx, { gated }) {
   await own.check(() => judgeAgentView(view, { label, mark: markA, who: p1.name }));
   // Recorded, not judged: whether one keystroke of the next editor saves what it was shown as the draft of the new version.
   const probe = await p1.typeAndAutosave(idSelector(paragraph(0)), log.next(p1.name, paragraph(0)), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const saved = (await readObject(target, `docs/${docId}/draft/${await v1Entry(docId)}`))?.toString("utf8") ?? "";
+  const saved = (await readObject(target, `${(await readDoc(target, `docs/${docId}`)).draft?.storagePrefix ?? `docs/${docId}/draft`}/${await v1Entry(docId)}`))?.toString("utf8") ?? "";
   const savedIs = saved.includes(markA) ? "the agent's version" : saved.includes(`>${V1_HEADING}<`) ? "v1's content (the update reverted)" : saved ? "something else" : "absent";
   ctx.step(`OBSERVED: ${p1.name} types one token; its autosave answered ${probe.status} on ${probe.body?.draft?.baseVersion ?? "?"}, and the draft of ${v} now holds ${savedIs}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: `${label} keystroke`, status: probe.status, base: probe.body?.draft?.baseVersion ?? null, draftHolds: savedIs });

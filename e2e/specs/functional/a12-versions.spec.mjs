@@ -215,7 +215,16 @@ async function versionIds(docId) {
 }
 
 /** Object keys under docs/{docId}/{rel}. */
-const objectsUnder = (docId, rel) => listObjects(target, `docs/${docId}/${rel}`);
+const objectsUnder = async (docId, rel) => {
+  const match = /^(v[0-9]+)\/(.*)$/.exec(rel);
+  const record = match ? await versionRecord(docId, match[1]) : null;
+  return listObjects(target, record?.storagePrefix ? `${record.storagePrefix}/${match[2]}` : `docs/${docId}/${rel}`);
+};
+const versionObject = async (docId, version, rel) => readObject(target, `${(await versionRecord(docId, version))?.storagePrefix ?? `docs/${docId}/${version}`}/${rel}`);
+const draftObject = async (docId, rel) => {
+  const draft = (await docRecord(docId))?.draft;
+  return draft ? readObject(target, `${draft.storagePrefix ?? `docs/${docId}/draft`}/${rel}`) : null;
+};
 
 /** docs/{docId}/trust as sorted ids. */
 async function trustGrantIds(docId) {
@@ -696,8 +705,8 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   await autosave("", { thenBackspace: tokB.length });
   // The revert reaches S13's situation only if the editor serializes it to
   // exactly v2's bytes; if it does not, this part measured nothing.
-  const v2Bytes = await readObject(target, `docs/${appDoc}/v2/index.html`);
-  const draftBytes = await readObject(target, `docs/${appDoc}/draft/index.html`);
+  const v2Bytes = await versionObject(appDoc, "v2", "index.html");
+  const draftBytes = await draftObject(appDoc, "index.html");
   if (!draftBytes || sha(draftBytes) !== sha(v2Bytes)) {
     /*
      * Seen on a loaded l7wb, 3 of 4 diagnostic runs of this case: the draft
@@ -725,7 +734,7 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   }
   const inApp = await save();
   const appRecord = await docRecord(appDoc);
-  const v3Bytes = await readObject(target, `docs/${appDoc}/v3/index.html`);
+  const v3Bytes = await versionObject(appDoc, "v3", "index.html");
   observed.inApp = { toast: inApp.text, outcome: inApp.outcome, currentVersion: appRecord.currentVersion, draftEqualsV2: Boolean(draftBytes), currentHoldsB: String(v3Bytes).includes(tokB.trim()) };
   ctx.step(`in the app: toast "${inApp.text}", currentVersion ${appRecord.currentVersion}`);
   assert.deepEqual({ outcome: inApp.outcome, text: inApp.text }, { outcome: "nochange", text: DEDUP_TOAST }, "the commit deduplicated (SPEC §2) and the app said so");
@@ -785,7 +794,7 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   assert.deepEqual(pick(e.json, ["docId", "versionId", "deduped"]), { docId, versionId: "v2", deduped: false });
   const v2rec = await versionRecord(docId, "v2");
   assert.deepEqual(pick(v2rec, ["parentVersion", "publishedVia", "publishedByEmail", "contentHash"]), { parentVersion: "v1", publishedVia: "upload", publishedByEmail: editorAcct.email.toLowerCase(), contentHash: e.json.contentHash });
-  assert.equal(sha(await readObject(target, `docs/${docId}/v2/index.html`)), sha(Buffer.from(r2)), "v2's stored entry is the bytes sent");
+  assert.equal(sha(await versionObject(docId, "v2", "index.html")), sha(Buffer.from(r2)), "v2's stored entry is the bytes sent");
 
   ctx.step("id, folderId and title with update are each 400 with the product's reason");
   const r3 = docHtml(title, 3);
@@ -829,19 +838,19 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   ctx.step("the owner accepts it through accept_suggestion: the change is in the draft; an update is now 409 acceptedInDraft and leaves the draft");
   const acc = await oMcp.call("accept_suggestion", { id: docId, threadId: sug.json.threadId });
   precondition(!acc.isError && acc.json?.inDraft === true, `accept_suggestion: ${acc.text.slice(0, 300)}`);
-  const draftBefore = await readObject(target, `docs/${docId}/draft/index.html`);
+  const draftBefore = await draftObject(docId, "index.html");
   precondition(draftBefore && String(draftBefore).includes("revision two of"), "the accepted change is in the draft");
   const held = await updateUpload(owner.http, docId, { body: r3, timeoutMs: HTTP_MS });
   assert.deepEqual({ status: held.status, json: held.json }, { status: 409, json: { error: ACCEPTED_ONE, acceptedInDraft: 1 } }, "/publish?update= over a draft holding an accepted change");
   const heldTool = await oMcp.call("update_document", { id: docId, content: r3, baseVersion: "v2" });
   assert.ok(heldTool.isError && heldTool.text.includes(ACCEPTED_ONE), `update_document over the accepted change: ${heldTool.text.slice(0, 300)}`);
   await nothingAt("the acceptedInDraft refusals", "v3", ["v1", "v2"]);
-  assert.equal(sha(await readObject(target, `docs/${docId}/draft/index.html`)), sha(draftBefore), "the refused updates left the draft as it was");
+  assert.equal(sha(await draftObject(docId, "index.html")), sha(draftBefore), "the refused updates left the draft as it was");
 
   ctx.step("the in-app commit is not held: it publishes the draft as v3, with the accepted change");
   const commit = await owner.http.postJson("/commit", { docId, baseVersion: "v2" });
   assert.deepEqual({ status: commit.status, ...pick(commit.json, ["versionId", "deduped"]) }, { status: 200, versionId: "v3", deduped: false }, `/commit: ${commit.text.slice(0, 200)}`);
-  assert.ok(String(await readObject(target, `docs/${docId}/v3/index.html`)).includes("This is revision two of the versions document."), "v3 holds the accepted replacement");
+  assert.ok(String(await versionObject(docId, "v3", "index.html")).includes("This is revision two of the versions document."), "v3 holds the accepted replacement");
 });
 
 // --- A12.6 ----------------------------------------------------------------------
@@ -1078,7 +1087,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     `plan for ${docId}:`,
     "repoint currentVersion: v2 -> v1",
     "discard the draft (base=v2) and its objects",
-    `/docs/${docId}/v2/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
+    `/${(await versionRecord(docId, "v2")).storagePrefix}/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
     `/docs/${docId}/thumbs/v2/ (1 thumbnail(s))`,
     "clear thumb: it names v2",
     `delete Firestore: docs/${docId}/versions/v2 (+1 annotation(s), 1 comment(s))`,
@@ -1118,7 +1127,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const r3 = docHtml(title, 3);
   const re = await updateUpload(owner.http, docId, { body: r3, baseVersion: "v1", timeoutMs: HTTP_MS });
   assert.deepEqual({ status: re.status, ...pick(re.json, ["versionId", "deduped"]) }, { status: 200, versionId: "v2", deduped: false }, "the withdrawn id is re-used");
-  assert.equal(sha(await readObject(target, `docs/${docId}/v2/index.html`)), sha(Buffer.from(r3)), "the new v2 holds the new bytes");
+  assert.equal(sha(await versionObject(docId, "v2", "index.html")), sha(Buffer.from(r3)), "the new v2 holds the new bytes");
   assert.deepEqual({
     annotations: (await readCollection(target, `docs/${docId}/versions/v2/annotations`)).length,
     thumb: (await docRecord(docId)).thumb ?? null,

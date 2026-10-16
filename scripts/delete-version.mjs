@@ -274,6 +274,7 @@ async function main() {
 
   console.log("");
   console.log(`  repointing currentVersion -> ${repoint} ...`);
+  let removedDraftPrefix = null;
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
     if (!fresh.exists) throw new Error("the document disappeared mid-run");
@@ -290,7 +291,17 @@ async function main() {
       // target's publish time rather than forward to now.
       updatedAt: versions.find((v) => v.id === repoint).publishedAt,
     };
-    if (meta.draft) update.draft = FieldValue.delete();
+    const removedDraft = fresh.data().draft;
+    if (removedDraft) {
+      if (!values["drop-draft"]) throw new Error("A draft appeared mid-run; refused without --drop-draft.");
+      const prefix = removedDraft.storagePrefix ?? `docs/${docId}/draft`;
+      if (typeof prefix !== "string" || !(prefix === `docs/${docId}/draft` ||
+          prefix.startsWith(`docs/${docId}/drafts/`) && /^[a-zA-Z0-9-]+$/.test(prefix.slice(`docs/${docId}/drafts/`.length)))) {
+        throw new Error("Invalid draft storage prefix");
+      }
+      removedDraftPrefix = `${prefix}/`;
+      update.draft = FieldValue.delete();
+    }
     // Read fresh: a capture can land between the plan and this transaction.
     if (fresh.data().thumb?.versionId === doomed) update.thumb = FieldValue.delete();
     if (!values["keep-stats"]) {
@@ -304,9 +315,9 @@ async function main() {
   });
   console.log("    done.");
 
-  if (meta.draft) {
+  if (removedDraftPrefix) {
     console.log("  deleting draft objects ...");
-    await bucket.deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+    await bucket.deleteFiles({ prefix: removedDraftPrefix, force: true });
     console.log("    done.");
   }
   console.log(`  deleting gs://${bucketName}/${prefix} ...`);

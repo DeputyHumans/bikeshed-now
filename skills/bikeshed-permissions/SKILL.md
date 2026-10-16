@@ -70,3 +70,8 @@ separate from direct and inherited membership; making a document private does
 not revoke its explicit or inherited members.
 
 Folder rename, move and deletion are covered by `bikeshed-folders`.
+
+Version history is document-wide for access and filing: current permissions and
+expiry govern every version. Older content and feedback are a read-only archive.
+For version discovery and guarded writes use the publishing or feedback skill;
+changing access or moving a document does not make an older version editable.

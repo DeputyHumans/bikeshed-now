@@ -850,7 +850,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Thirty-one tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Thirty-two tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -865,7 +865,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>move_folder</code></td><td>Move a folder and recompute inherited access</td></tr>
         <tr><td><code>delete_folder</code></td><td>Owner-only; reparent contents and retain all documents</td></tr>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
-        <tr><td><code>get_document</code></td><td>A document's metadata, address and current source; over 200,000 characters it is cut, and says so</td></tr>
+        <tr><td><code>list_versions</code></td><td>Published history, newest first, with pagination and version-pinned links</td></tr>
+        <tr><td><code>get_document</code></td><td>A document's metadata, address and selected source (current by default); over 200,000 characters it is cut, and says so</td></tr>
         <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
         <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>commit_draft</code></td><td>Publish the draft as the next version, as Save as new version does</td></tr>
@@ -979,6 +980,22 @@ bikeshed update storage-migration proposal.md</code></pre>
 
 </div>
 
+<div class="chapter" id="version-history">
+<h2>Previous versions</h2>
+<p>Open an earlier version from the version menu. Its content and existing
+comments and suggestions are a read-only archive. Choose <strong>Open latest</strong>
+to edit or leave feedback. Access and expiry apply to every version.</p>
+<p>Discover history with <code>list_versions</code> or <code>bikeshed versions &lt;id&gt; --all --json</code>.
+Pages are newest first, default 20, maximum 50; continue with <code>cursor</code> from <code>nextCursor</code>.
+Use <code>version</code> with <code>get_document</code>, <code>get_comments</code> and <code>fork_document</code>;
+read results include <code>currentVersion</code> and <code>isCurrent</code>.</p>
+<p><code>bikeshed get</code>, <code>bikeshed comments</code>, <code>bikeshed fork</code> and <code>bikeshed open</code>
+accept <code>--version</code> and preserve versioned URLs and link keys. Conflicting selectors fail.
+Every feedback tool accepts a current <code>version</code> guard; CLI feedback commands accept <code>--version</code>.
+Use <code>baseVersion</code> on <code>update_document</code> and <code>commit_draft</code>, or <code>--base</code> on
+<code>bikeshed update</code> and <code>bikeshed commit</code>. On a stale-write error, read latest and reassess;
+never silently retarget historical feedback. Missing versions fail explicitly.</p>
+</div>
 </main>
 <footer>
   <p>Reading rather than building? <a href="/docs">How Bikeshed works</a> covers the product in plain words.</p>

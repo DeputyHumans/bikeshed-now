@@ -299,6 +299,7 @@ test("SPEC §19 names every tool the server serves", () => {
 // list, and no claimed phrase may appear on the "won't" list. A new tool fails
 // here until somebody decides how the page says it.
 const CONSENT_CLAIMS = {
+  list_versions: "read what you can read",
   get_document_access: "manage sharing",
   set_document_access: "manage sharing",
   get_folder_access: "manage sharing",

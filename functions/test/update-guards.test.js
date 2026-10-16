@@ -142,7 +142,7 @@ test("an update is refused while somebody has the editor open, through the tool 
   assert.ok(w.doc().draft, "their draft is kept");
   assert.ok(w.has("docs/d1/draft/index.html"), "with its files");
   assert.ok(live.status.d1.y, "and their log");
-  assert.equal(w.has("docs/d1/v2/index.html"), false, "and no bytes were uploaded for a version that is not minted");
+  assert.deepEqual([...w.objects.keys()].sort(), ["docs/d1/draft/index.html", "docs/d1/v1/index.html"], "and no bytes were uploaded for a version that is not minted");
 });
 
 test("an update that cannot tell whether anybody is editing is refused", async () => {

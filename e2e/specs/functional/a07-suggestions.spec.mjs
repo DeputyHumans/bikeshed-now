@@ -30,7 +30,7 @@
  *         open); another author is not held back; withdrawing frees a slot
  *   A7.7  a suggestion on a version that is no longer current is 409 with
  *         `currentVersion` and writes nothing; a reader of the old version is
- *         offered Comment only
+ *         offered no write actions
  *   A7.8  a suggestion quoting text only the draft holds is drawn for the
  *         editor reading the draft, and listed as stale, undrawn, for a reader
  *         of the published version
@@ -892,7 +892,7 @@ scenario("A7.6 twenty pending suggestions per author per version: the twenty-fir
 
 // --- A7.7 -------------------------------------------------------------------
 
-scenario("A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers Comment only, the head offers Suggest edit", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers no write actions, the head offers Suggest edit", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, owner, accounts, others } = await setup(ctx, { roles: [{ as: "suggester", role: "suggester" }], name: "a77-version", title: "A7.7 versions" });
   const [sugSession] = others;
   ctx.step("the owner publishes v2 over v1");
@@ -911,16 +911,22 @@ scenario("A7.7 a suggestion on a version that is no longer current is 409 with c
   const fresh = await create(sugSession, docId, { anchor, replacement: "truly", versionId: "v2" });
   assert.deepEqual({ status: fresh.status, versionId: fresh.json?.versionId }, { status: 200, versionId: "v2" });
 
-  ctx.step("in the app: reading v1 the toolbar offers Comment only; on the head it offers Suggest edit");
-  const [s] = await browsers(ctx, [accounts[1]], ["suggester"]);
+  ctx.step("in the app: reading v1 the toolbar offers no write actions; on the head it offers Suggest edit");
+  const [o, s] = await browsers(ctx, [accounts[0], accounts[1]], ["owner", "suggester"]);
+  await openDoc(o, docId, { v: "v1" });
+  assert.equal(await o.page.getByRole("button", { name: "Edit", exact: true }).count(), 0, "even the owner cannot edit the archive");
+  await openDoc(o, docId);
+  await o.page.getByRole("button", { name: "Edit", exact: true }).waitFor();
   await openDoc(s, docId, { v: "v1" });
-  await s.selectText("#sg-2", "harbour lights");
-  const onOld = await fabLabels(s);
+  await s.selectText("#sg-2", "harbour lights", { fab: false });
+  await s.page.getByRole("button", { name: "Open latest", exact: true }).waitFor();
+  assert.equal(await s.page.getByRole("button", { name: "Comment", exact: true }).count(), 0);
+  const onOld = [];
   await openDoc(s, docId);
   await s.selectText("#sg-2", "harbour lights");
   const onHead = await fabLabels(s);
-  assert.deepEqual({ onOld, onHead }, { onOld: ["Comment"], onHead: ["Comment", "Suggest edit"] });
-  noPageErrors([s]);
+  assert.deepEqual({ onOld, onHead }, { onOld: [], onHead: ["Comment", "Suggest edit"] });
+  noPageErrors([o, s]);
 });
 
 // --- A7.8 -------------------------------------------------------------------

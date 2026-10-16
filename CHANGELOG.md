@@ -14,6 +14,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- Discover and read published version history through MCP and the CLI, with pinned URLs and explicit version guards.
+- Historical content and feedback are a read-only archive across the UI, API and database rules.
+
+### Fixed
+
+- Isolate competing bundle uploads and draft saves so stale work cannot replace published bytes or delete a newer draft.
+- Document historical reads and stale-write recovery in all agent instructions and published guides.
+
 ## 0.18.0 — 2026-10-16
 
 ### Added
@@ -28,6 +40,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - Derive the landing footer version from the app package instead of displaying
   a hardcoded early release.
+
 
 ## 0.17.0 — 2026-10-16
 

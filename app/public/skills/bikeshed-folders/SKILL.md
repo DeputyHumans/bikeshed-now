@@ -127,3 +127,8 @@ For sharing and role changes use `get_folder_access`, `set_folder_access`,
 
 If a listing is `truncated`, the workspace has more folders than one call
 returns. Say so rather than treating what you got as the whole tree.
+
+Version history is document-wide for access and filing: current permissions and
+expiry govern every version. Older content and feedback are a read-only archive.
+For version discovery and guarded writes use the publishing or feedback skill;
+changing access or moving a document does not make an older version editable.

@@ -3,6 +3,8 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { newBundlePrefix, versionStoragePrefix, newDraftPrefix, draftStoragePrefix } from "./storage";
+import { StaleVersionError } from "./versions";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
@@ -31,6 +33,7 @@ export interface VersionMeta {
   entry: string;
   format: "html" | "markdown";
   sourceEntry?: string;
+  storagePrefix?: string;
 }
 
 export async function loadVersionMeta(docRef: DocRef, versionId: string): Promise<VersionMeta | null> {
@@ -41,6 +44,7 @@ export async function loadVersionMeta(docRef: DocRef, versionId: string): Promis
   if (!entry) return null;
   return {
     entry,
+    storagePrefix: versionStoragePrefix(docRef.id, versionId, v),
     format: v.format === "markdown" ? "markdown" : "html",
     sourceEntry: typeof v.sourceEntry === "string" ? (safeRelPath(v.sourceEntry) ?? undefined) : undefined,
   };
@@ -77,6 +81,7 @@ export type DraftContent = { html: string } | { markdown: string; html: string }
  * draft needs no special case (SPEC §11).
  */
 export async function writeDraft(args: {
+  db: Db;
   docRef: DocRef;
   baseVersion: string;
   version: VersionMeta;
@@ -86,7 +91,8 @@ export async function writeDraft(args: {
   actor: Actor;
 }): Promise<Record<string, unknown>> {
   const { docRef, baseVersion, version, content } = args;
-  const prefix = `docs/${docRef.id}/draft/`;
+  const storagePrefix = newDraftPrefix(docRef.id);
+  const prefix = `${storagePrefix}/`;
   let bytes = 0;
   let sourceEntry: string | undefined;
 
@@ -97,20 +103,22 @@ export async function writeDraft(args: {
       .save(Buffer.from(content.markdown, "utf8"), {
         contentType: "text/markdown; charset=utf-8",
         resumable: false,
+        preconditionOpts: { ifGenerationMatch: 0 },
       });
     await bucket()
       .file(`${prefix}${version.entry}`)
-      .save(Buffer.from(content.html, "utf8"), { contentType: "text/html; charset=utf-8", resumable: false });
+      .save(Buffer.from(content.html, "utf8"), { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
     bytes = Buffer.byteLength(content.markdown, "utf8");
   } else {
     const htmlBuf = Buffer.from(content.html, "utf8");
     await bucket()
       .file(`${prefix}${version.entry}`)
-      .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false });
+      .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
     bytes = htmlBuf.length;
   }
 
   const draft = {
+    storagePrefix,
     baseVersion,
     entry: version.entry,
     ...(sourceEntry ? { sourceEntry } : {}),
@@ -118,18 +126,36 @@ export async function writeDraft(args: {
     updatedByEmail: args.emailLower,
     editSessions: appendEditSession(args.existingSessions, args.actor),
   };
-  await docRef.set(
-    {
-      draft: { ...draft, updatedAt: now() },
-      updatedAt: now(),
-      // Edit provenance, folded into a write that was happening anyway. The
-      // draft is cleared on commit, so without this the "last edited by" signal
-      // would vanish the moment a version is published. A nested map under
-      // set/merge deep-merges, leaving the view counters alone.
-      stats: { lastEditedAt: now(), lastEditedByEmail: args.emailLower },
-    },
-    { merge: true },
-  );
+  let supersededPrefix: string | null = null;
+  try {
+    await args.db.runTransaction(async (tx) => {
+      const head = await tx.get(docRef);
+      if (head.data()?.currentVersion !== baseVersion) {
+        throw new StaleVersionError(String(head.data()?.currentVersion ?? ""));
+      }
+      const previous = head.data()?.draft;
+      supersededPrefix = previous ? draftStoragePrefix(docRef.id, previous) : null;
+      draft.editSessions = appendEditSession(previous?.editSessions, args.actor);
+      tx.set(docRef, {
+        draft: { ...draft, updatedAt: now() },
+        updatedAt: now(),
+        // Edit provenance, folded into a write that was happening anyway. The
+        // draft is cleared on commit, so without this the "last edited by" signal
+        // would vanish the moment a version is published. A nested map under
+        // set/merge deep-merges, leaving the view counters alone.
+        stats: { lastEditedAt: now(), lastEditedByEmail: args.emailLower },
+      },
+      { merge: true });
+    });
+  } catch (e) {
+    if (e instanceof StaleVersionError) {
+      await bucket().deleteFiles({ prefix, force: true }).catch(() => undefined);
+    }
+    throw e;
+  }
+  if (supersededPrefix) {
+    await bucket().deleteFiles({ prefix: `${supersededPrefix}/`, force: true }).catch(() => undefined);
+  }
   return draft;
 }
 
@@ -159,7 +185,7 @@ export type WorkingCopy = {
  */
 export async function readWorkingCopy(
   docRef: DocRef,
-  data: { currentVersion?: unknown; draft?: { baseVersion?: unknown } | null },
+  data: { currentVersion?: unknown; draft?: { baseVersion?: unknown; storagePrefix?: unknown } | null },
 ): Promise<WorkingCopy | null> {
   const baseVersion = String(data.currentVersion ?? "");
   const version = baseVersion ? await loadVersionMeta(docRef, baseVersion) : null;
@@ -168,8 +194,8 @@ export async function readWorkingCopy(
   const hasDraft = data.draft?.baseVersion === baseVersion;
   const read = (rel: string) =>
     readFirst([
-      ...(hasDraft ? [`docs/${docRef.id}/draft/${rel}`] : []),
-      `docs/${docRef.id}/${baseVersion}/${rel}`,
+      ...(hasDraft ? [`${draftStoragePrefix(docRef.id, data.draft!)}/${rel}`] : []),
+      `${version.storagePrefix}/${rel}`,
     ]);
   if (version.format === "markdown") {
     const markdown = await read(version.sourceEntry ?? "index.md");
@@ -222,7 +248,7 @@ export async function commitDraft(args: {
   db: Db;
   docRef: DocRef;
   baseVersion: string;
-  draft: { entry?: unknown; editSessions?: unknown } | null | undefined;
+  draft: { baseVersion?: unknown; storagePrefix?: unknown; entry?: unknown; editSessions?: unknown } | null | undefined;
   emailLower: string;
   actor: Actor;
 }): Promise<CommitOutcome> {
@@ -245,8 +271,8 @@ export async function commitDraft(args: {
   // Assemble: base assets, with anything the draft carries overriding it. That
   // one rule covers both formats — for Markdown the draft carries index.md and
   // index.html, for HTML just the entry — with no branch here.
-  const basePrefix = `docs/${docId}/${baseVersion}/`;
-  const draftPrefix = `docs/${docId}/draft/`;
+  const basePrefix = `${version.storagePrefix}/`;
+  const draftPrefix = `${draftStoragePrefix(docId, draft)}/`;
   const baseFiles = await readPrefix(basePrefix);
   const draftFiles = await readPrefix(draftPrefix);
   const byRel = new Map<string, Buffer>();
@@ -262,8 +288,14 @@ export async function commitDraft(args: {
 
   const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
   if (!dup.empty) {
-    await docRef.set({ draft: FieldValue.delete(), updatedAt: now() }, { merge: true });
-    await bucket().deleteFiles({ prefix: draftPrefix, force: true });
+    const refused = await db.runTransaction(async (tx) => {
+      const head = await tx.get(docRef);
+      if (head.data()?.currentVersion !== baseVersion || !sameDraft(head.data()?.draft)) return true;
+      tx.set(docRef, { draft: FieldValue.delete(), updatedAt: now() }, { merge: true });
+      return false;
+    });
+    if (refused) return { status: 409, body: { error: "The document or draft changed. Read it again before publishing." } };
+    await bucket().deleteFiles({ prefix: draftPrefix, force: true }).catch(() => undefined);
     return {
       status: 200,
       body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
@@ -280,12 +312,13 @@ export async function commitDraft(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docId}/${versionId}`;
+  const storagePrefix = newBundlePrefix(docId);
 
   for (const f of files) {
     await bucket().file(`${storagePrefix}/${f.rel}`).save(f.data, {
       contentType: mime.lookup(f.rel) || "application/octet-stream",
       resumable: false,
+      preconditionOpts: { ifGenerationMatch: 0 },
     });
   }
 
@@ -295,6 +328,7 @@ export async function commitDraft(args: {
     await db.runTransaction(async (tx) => {
       const cur = await tx.get(docRef);
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+      if (!sameDraft(cur.data()?.draft)) throw new Error("DRAFT_CHANGED");
       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       const vRef = versionsRef.doc(versionId);
       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
@@ -348,12 +382,12 @@ export async function commitDraft(args: {
       const open = await openThreadsRefusal(docRef, baseVersion);
       if (open) return { status: 409, body: open };
     }
-    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN") {
+    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN" || reason === "DRAFT_CHANGED") {
       const fresh = await docRef.get();
       return {
         status: 409,
         body: {
-          error: "Another editor just published. Reload before publishing.",
+          error: "The document or draft changed. Read it again before publishing.",
           currentVersion: fresh.data()?.currentVersion,
         },
       };
@@ -361,8 +395,13 @@ export async function commitDraft(args: {
     throw e;
   }
 
-  await bucket().deleteFiles({ prefix: draftPrefix, force: true });
+  await bucket().deleteFiles({ prefix: draftPrefix, force: true }).catch(() => undefined);
   await syncPublicProjection(db, docId);
 
   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
+
+  function sameDraft(current: { storagePrefix?: unknown; baseVersion?: unknown } | undefined): boolean {
+    return !!current && current.baseVersion === baseVersion &&
+      draftStoragePrefix(docId, current) === draftPrefix.slice(0, -1);
+  }
 }

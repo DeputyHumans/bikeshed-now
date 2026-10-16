@@ -297,3 +297,21 @@ describe("a suggestion's thread", () => {
     }
   });
 });
+
+
+it("an archive keeps feedback visible while removing every mutation, including an already open form", () => {
+  comments.current = [{ commentId: "c", authorEmail: "reader@example.com", body: "archived feedback" }];
+  const props = { docId: "d", versionId: "v1", annotations: [SUGGESTION], orphaned: [], selectedId: null,
+    canComment: true, signedIn: true, peers: [], uid: "u-sug", emailLower: "sug@example.com", isApprover: true,
+    onSelect: () => {}, onComposing: () => {}, onSignIn: () => {}, onClose: () => {}, onReview: () => {} };
+  const { rerender } = render(<ToastProvider><Sidebar {...props} /></ToastProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+  rerender(<ToastProvider><Sidebar {...props} readOnly /></ToastProvider>);
+  expect(screen.getByText("archived feedback")).toBeTruthy();
+  for (const name of ["Save", "Edit", "Withdraw", "Reject…", "Review", "Review all", "Reply"]) {
+    expect(screen.queryByRole("button", { name })).toBeNull();
+  }
+  expect(screen.queryByPlaceholderText("Reply")).toBeNull();
+  expect(addComment).not.toHaveBeenCalled();
+});

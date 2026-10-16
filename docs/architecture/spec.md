@@ -227,7 +227,7 @@ is unambiguous (`contentPath` in `lib/http.ts`).
    the query's `k` matches the document's token) or grant (a signed-in caller's
    current link grant). None → **`404`** (§1.4b).
 4. Version must exist → else `404`.
-5. Stream `gs://<bucket>/docs/{docId}/{versionId}/<relPath>` with the Admin SDK.
+5. Stream `<storagePrefix>/<relPath>` from the committed version record with the Admin SDK; legacy records use `docs/{docId}/{versionId}`.
 
 Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
 `Cache-Control: private, no-store` for a member's or a grant's read,
@@ -337,11 +337,12 @@ caller's link grant), Admin-SDK only, versions immutable — a commit always
 mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
 - **`POST /draft`** — `{ docId, baseVersion, entry?, html }`. `409 { currentVersion }`
-  when `baseVersion !== currentVersion`. Writes `docs/{docId}/draft/{entry}` and
-  `docs/{docId}.draft`. For a Markdown-sourced document the edited HTML is
+  when `baseVersion !== currentVersion`, checked again in the adopting transaction.
+  Writes create-only objects to a unique `docs/{docId}/drafts/{attempt}/` prefix
+  and records that prefix in `docs/{docId}.draft.storagePrefix`. For a Markdown-sourced document the edited HTML is
   converted to Markdown server-side and `index.md` is what is stored (§11).
 - **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
-  `docs/{docId}/{baseVersion}/<relPath>` for anything the draft does not carry,
+  the base version's committed storage prefix for anything the draft does not carry,
   so first-edit and non-entry assets render. `private, no-store`.
 - **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no
   draft, or if any annotation on the current version is unresolved
@@ -575,7 +576,8 @@ first), and under which keys (§2 `POST /thumb`). Storage holds
 them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the
 version's prefix, never under it, because everything that reads a version (the
 next commit's content hash, a fork, the download) takes every object under
-`docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
+`docs/{docId}/bundles/{attempt}/`, selected by `DocVersion.storagePrefix`;
+legacy records use `docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
 `updatedAt`: a captured image is not a publish. It may name an older version
 than `currentVersion` until an editor next opens the document, and the workspace
 shows that cover meanwhile.
@@ -1031,7 +1033,7 @@ functions/src/
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
-  lib/{publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{storage,versions,publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
@@ -2005,7 +2007,53 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens are unchanged and remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — thirty-one tools
+### Historical versions and immutability
+
+Published versions and their existing review threads form a read-only archive.
+Current document ACL and expiry apply to every historical read. The current
+version alone accepts comments, replies, comment edits/deletes, thread state
+changes and all suggestion actions, including claim/release and idempotent
+retries. The Firestore rules check the head for every annotation/comment write;
+Admin SDK operations check it inside the writing transaction. A request racing
+publication fails rather than writing to an archive or retargeting the new head.
+The UI offers no mutation controls on historical versions and links to latest.
+
+Each upload attempt writes create-only objects under a unique bundle prefix.
+`DocVersion.storagePrefix` selects its immutable bytes; old records retain the
+legacy version path. A draft save also owns a unique `draft.storagePrefix` and
+adopts it transactionally only while its base is current. Publishing verifies
+both the head and observed draft pointer; cleanup deletes only that draft.
+
+### Previous versions and write guards
+
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
+--all --json` to discover published history. Pages are newest first, default 20,
+maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
+History uses the document's current access rules and expiry. A missing or
+withdrawn version is an error, never a request for the latest version.
+
+Read a chosen version with `get_document({id, version:"v2"})` and
+`get_comments({id, version:"v2", includeResolved:true})`, or
+`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
+Read results name `currentVersion` and `isCurrent`; historical write capabilities
+are false. Existing comments and suggestions remain readable as an archive.
+Older versions cannot be edited or receive, revise, delete, reply to, resolve,
+reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
+independent document with `fork_document({id, version:"v2"})`.
+
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
+`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
+guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
+Document-wide sharing, folder and lineage operations still address the document.
+
+Before changing feedback, read the latest version and its feedback, then pass
+that `version` to every feedback tool (`--version` in the CLI). Pass
+`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
+update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
+If the head changes, the server refuses the write. Read the new head and
+reassess the request; never silently redirect a historical request to it.
+
+### MCP — thirty-two tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -2019,6 +2067,7 @@ scripts and anything that cannot open a browser.
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
+| `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
 | `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |

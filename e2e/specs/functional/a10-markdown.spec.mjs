@@ -628,7 +628,7 @@ scenario("A10.4 idempotence after the first pass: md' (the first in-app save of 
   // for anything the draft lacks, and would compare md' with itself.
   const doc = await readDoc(target, `docs/${second.docId}`);
   precondition(doc.draft?.baseVersion === "v1" && doc.draft?.sourceEntry === "index.md", `the autosave wrote a Markdown draft of md': ${JSON.stringify(doc.draft ?? null)}`);
-  const draftObject = await readObject(target, `docs/${second.docId}/draft/index.md`);
+  const draftObject = await readObject(target, `${doc.draft.storagePrefix ?? `docs/${second.docId}/draft`}/index.md`);
   precondition(draftObject !== null, "the draft holds its own index.md");
   const md2 = draftObject.toString("utf8");
   ctx.ev.text("md-second.md", md2);

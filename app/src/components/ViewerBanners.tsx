@@ -10,6 +10,7 @@ import { Icon } from "./Icon";
  */
 
 export function ViewerBanners(props: {
+  historical?: boolean;
   /**
    * What is on screen is the draft, not the published version its label
    * names. `when` is already phrased ("5m ago", "on 4 Oct 2026") or empty.
@@ -41,6 +42,15 @@ export function ViewerBanners(props: {
   onOpenTrust?: () => void;
 }) {
   const rows: React.ReactNode[] = [];
+
+  if (props.historical) {
+    rows.push(
+      <div key="historical" className="banner" role="status">
+        <span>This is an archived version. Its content and feedback are read-only.</span>
+        <button type="button" className="btn btn-sm" onClick={props.onOpenNewVersion}>Open latest</button>
+      </div>,
+    );
+  }
 
   if (props.draft) {
     const { byEmail, byYou, when, version } = props.draft;

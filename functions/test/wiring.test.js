@@ -359,7 +359,7 @@ test("every path that mints a version decides trust inside its transaction", () 
   assert.match(inUpload, /withdrawTrust\(tx, /, "a token update must withdraw trust in its transaction");
 
   const commit = slice(draft, "export async function commitDraft(", "\nexport ");
-  const inCommit = slice(commit, "runTransaction(", "\n    });\n");
+  const inCommit = slice(commit.slice(commit.indexOf("  const editSessions =")), "await db.runTransaction(", "\n    });\n");
   assert.match(inCommit, /keepsTrust\(/, "the in-app commit must ask who wrote the version");
   assert.match(inCommit, /readTrustGrants\(tx, /, "the in-app commit must read the trust grants in its transaction");
   assert.match(inCommit, /withdrawTrust\(tx, /, "the in-app commit must be able to withdraw trust");

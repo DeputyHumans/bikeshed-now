@@ -1,6 +1,6 @@
 ---
 name: bikeshed-feedback
-description: Use when a Bikeshed document has just been published, to watch it for comments and answer them, and when reading review comments on one and revising it, or raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way.
+description: Use when a Bikeshed document has just been published, to watch it for comments and answer them, and when reading review comments on one and revising it, or raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way. Includes discovering previous versions, reading their archived content and feedback, and guarding writes against a newer published version.
 ---
 
 # Reading feedback on Bikeshed
@@ -266,3 +266,32 @@ Send `X-Bikeshed-Client` and `X-Bikeshed-Agent` naming yourself — the CLI does
 it for you, and `BIKESHED_AGENT` sets the second. They are stored and shown as
 **self-reported**, and they are what makes an activity feed readable six months
 later.
+
+### Previous versions and write guards
+
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
+--all --json` to discover published history. Pages are newest first, default 20,
+maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
+History uses the document's current access rules and expiry. A missing or
+withdrawn version is an error, never a request for the latest version.
+
+Read a chosen version with `get_document({id, version:"v2"})` and
+`get_comments({id, version:"v2", includeResolved:true})`, or
+`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
+Read results name `currentVersion` and `isCurrent`; historical write capabilities
+are false. Existing comments and suggestions remain readable as an archive.
+Older versions cannot be edited or receive, revise, delete, reply to, resolve,
+reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
+independent document with `fork_document({id, version:"v2"})`.
+
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
+`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
+guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
+Document-wide sharing, folder and lineage operations still address the document.
+
+Before changing feedback, read the latest version and its feedback, then pass
+that `version` to every feedback tool (`--version` in the CLI). Pass
+`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
+update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
+If the head changes, the server refuses the write. Read the new head and
+reassess the request; never silently redirect a historical request to it.

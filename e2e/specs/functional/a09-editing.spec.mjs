@@ -365,7 +365,8 @@ const postRows = (rows, t0 = 0) =>
 
 /** The stored draft entry (Storage, docs/<doc>/draft/<entry>) as text, or null. */
 async function draftObject(docId, entry = "index.html") {
-  const b = await readObject(target, `docs/${docId}/draft/${entry}`);
+  const draft = (await readDoc(target, `docs/${docId}`))?.draft;
+  const b = draft ? await readObject(target, `${draft.storagePrefix ?? `docs/${docId}/draft`}/${entry}`) : null;
   return b ? b.toString("utf8") : null;
 }
 

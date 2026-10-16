@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The thirty-one MCP tools (SPEC §19).
+// The thirty-two MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -34,9 +34,11 @@
  * and editor checks. Folder deletion reparents contents; documents remain.
  */
 
+import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
+import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
 import { MANAGEMENT_TOOLS } from "./management";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { bucketName, publicOrigin } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
@@ -95,7 +97,7 @@ import {
   type DecisionOp,
 } from "../lib/suggestions";
 import { MAX_BUNDLE_BYTES } from "../config";
-import { safeSegment } from "../lib/http";
+import { safeRelPath, safeSegment } from "../lib/http";
 
 type Db = admin.firestore.Firestore;
 
@@ -300,7 +302,7 @@ async function locateInCurrentVersion(
   const entry = String(vSnap.data()?.entry ?? "index.html");
   let html = "";
   try {
-    const [bytes] = await admin.storage().bucket(bucketName()).file(`docs/${ref.id}/${versionId}/${entry}`).download();
+    const [bytes] = await admin.storage().bucket(bucketName()).file(`${versionStoragePrefix(ref.id, versionId, vSnap.data() ?? {})}/${entry}`).download();
     html = bytes.toString("utf8");
   } catch {
     throw new Error("could not read the current version");
@@ -339,7 +341,7 @@ async function changeOwnSuggestion(
   refuseIfExpired(data);
   const threadId = str(args, "threadId");
   if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
-  const versionId = String(data.currentVersion ?? "");
+  const versionId = mutationVersion(args.version, data);
   const changed = await changeSuggestion({
     db: ctx.db,
     docRef: ref,
@@ -365,7 +367,7 @@ async function changeThread(ctx: ToolContext, args: Record<string, unknown>, res
   refuseIfExpired(data);
   const threadId = str(args, "threadId");
   if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the thread, from get_comments");
-  const versionId = String(data.currentVersion ?? "");
+  const versionId = mutationVersion(args.version, data);
   const changed = await setThreadResolved({
     db: ctx.db,
     docRef: ref,
@@ -436,9 +438,9 @@ async function recordApiRead(
  * bare `/d/<id>` path looks like an address and is not one, and an agent that
  * pastes it has handed over something broken (SPEC §17).
  */
-export function withReaderAddress<T extends object>(result: T, docId: string): T {
+export function withReaderAddress<T extends object>(result: T, docId: string, version?: string, k?: string): T {
   const origin = publicOrigin();
-  return origin ? { ...result, url: `${origin}/d/${docId}` } : result;
+  return origin ? { ...result, url: `${origin}/d/${docId}${version ? `/${encodeURIComponent(version)}` : ""}${k ? `?k=${encodeURIComponent(k)}` : ""}` } : result;
 }
 
 /**
@@ -572,9 +574,55 @@ export const TOOLS: ToolDefinition[] = [
   },
 
   {
+    name: "list_versions",
+    description: "List a document's published versions, newest first. Historical content and feedback remain readable but cannot be changed. Use get_document or get_comments with a returned version.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string" },
+        k: { type: "string", description: LINK_KEY_DESCRIPTION },
+        limit: { type: "integer", description: "Maximum rows (default 20, max 50)." },
+        cursor: { type: "string", description: "The nextCursor from the preceding page." },
+      },
+    },
+    async run(ctx, args) {
+      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const limit = args.limit === undefined ? 20 : args.limit;
+      if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > LIST_LIMIT) {
+        throw new Error("limit must be an integer from 1 to 50");
+      }
+      let q = ref.collection("versions").orderBy("publishedAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(limit + 1);
+      if (args.cursor !== undefined) {
+        if (typeof args.cursor !== "string" || !safeSegment(args.cursor)) throw new Error("invalid version cursor");
+        const cursor = await ref.collection("versions").doc(args.cursor).get();
+        if (!cursor.exists || !cursor.data()?.publishedAt) throw new Error("version cursor no longer exists; list versions again");
+        q = q.startAfter(cursor.data()!.publishedAt, cursor.id);
+      }
+      const snap = await q.get();
+      return {
+        id: ref.id,
+        currentVersion: data.currentVersion,
+        versions: snap.docs.slice(0, limit).map((v) => {
+          const row = v.data();
+          return withReaderAddress({
+            version: v.id,
+            label: row.label ?? v.id,
+            publishedAt: row.publishedAt?.toDate?.().toISOString() ?? null,
+            format: row.format === "markdown" ? "markdown" : "html",
+            contentHash: row.contentHash ?? null,
+            isCurrent: v.id === data.currentVersion,
+          }, ref.id, v.id, str(args, "k") || undefined);
+        }),
+        nextCursor: snap.docs.length > limit ? snap.docs[limit - 1].id : null,
+      };
+    },
+  },
+
+  {
     name: "get_document",
     description:
-      "Fetch a document's metadata and its current SOURCE (Markdown when the document is Markdown-authored). " +
+      "Fetch a document's metadata and selected published SOURCE (Markdown when the document is Markdown-authored). " +
       `A source over ${SOURCE_LIMIT.toLocaleString("en-US")} characters is cut, and \`truncated\` says so. ` +
       "Never send a cut source back through update_document: the new version would lose everything after the cut. " +
       "`bikeshed get` prints the whole source.",
@@ -592,20 +640,22 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-      const versionId = str(args, "version") || String(data.currentVersion ?? "");
+      const versionId = selectedVersion(args.version, data.currentVersion);
+      const isCurrent = versionId === data.currentVersion;
       const vSnap = await ref.collection("versions").doc(versionId).get();
       if (!vSnap.exists) throw new Error(`no version "${versionId}"`);
       const v = vSnap.data() || {};
 
       const sourceRel =
         typeof v.sourceEntry === "string" ? v.sourceEntry : String(v.entry ?? "index.html");
-      const key = `docs/${ref.id}/${versionId}/${sourceRel}`;
+      if (!safeRelPath(sourceRel)) throw new Error("invalid source path");
+      const key = `${versionStoragePrefix(ref.id, versionId, v)}/${sourceRel}`;
       let source = "";
       try {
         const [bytes] = await admin.storage().bucket(bucketName()).file(key).download();
         source = bytes.toString("utf8");
       } catch {
-        source = "";
+        throw new Error(`could not read source for version "${versionId}"`);
       }
       const truncated = source.length > SOURCE_LIMIT;
 
@@ -616,15 +666,18 @@ export const TOOLS: ToolDefinition[] = [
       return {
         id: ref.id,
         // The address, ahead of the source for the same reason `truncated` is.
-        ...withReaderAddress({}, ref.id),
+        ...withReaderAddress({}, ref.id, args.version === undefined ? undefined : versionId, str(args, "k") || undefined),
         title: data.title,
         version: versionId,
+        currentVersion: data.currentVersion,
+        isCurrent,
         format: v.format ?? "html",
         sourceFile: sourceRel,
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
-        canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
-        canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canComment: isCurrent && !isExpired(data, Date.now()),
+        canEdit: isCurrent && canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canSuggest: isCurrent && canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
         forked: data.forked === true,
         filedIn: (folderId && paths.get(folderId)) || null,
         // Where get_changes starts, for watching a document you did not
@@ -822,7 +875,7 @@ export const TOOLS: ToolDefinition[] = [
       const baseVersion = String(data.currentVersion ?? "");
       // Optional, so an older client keeps working; absent, the update replaces
       // whatever is current, as it always has.
-      const revisedFrom = str(args, "baseVersion");
+      const revisedFrom = args.baseVersion === undefined ? null : selectedVersion(args.baseVersion, data.currentVersion);
       if (revisedFrom && revisedFrom !== baseVersion) {
         throw new Error(
           `the document is at ${baseVersion} now, not ${revisedFrom}: somebody published since you read it. ` +
@@ -874,6 +927,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id"],
       properties: {
+        baseVersion: { type: "string", description: "The current version on which the draft is based. Refuse if it changed." },
         id: { type: "string", description: "The document id." },
       },
     },
@@ -882,12 +936,13 @@ export const TOOLS: ToolDefinition[] = [
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
       if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot publish that document's draft");
       refuseIfExpired(data);
+      const baseVersion = mutationVersion(args.baseVersion, data);
       const editors = await editorsRefusal(ref.id, "published");
       if ("refusal" in editors) throw new Error(editors.refusal.error);
       const outcome = await commitDraft({
         db: ctx.db,
         docRef: ref,
-        baseVersion: String(data.currentVersion ?? ""),
+        baseVersion,
         draft: data.draft as { entry?: unknown; editSessions?: unknown } | undefined,
         emailLower: ctx.caller.emailLower,
         actor: ctx.actor,
@@ -914,6 +969,7 @@ export const TOOLS: ToolDefinition[] = [
       // is a deletion, and the protocol layer treats "" as a missing argument.
       required: ["id", "exact"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         exact: { type: "string", description: "The passage, as a reader sees it, within one paragraph." },
         replacement: { type: "string", description: "What it should say instead. Empty proposes deleting it." },
@@ -930,6 +986,7 @@ export const TOOLS: ToolDefinition[] = [
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       if (!canSuggest(data, ctx.caller, proof)) throw new Error("you cannot suggest edits to that document");
       refuseIfExpired(data);
+      mutationVersion(args.version, data);
       if (typeof args.replacement !== "string") {
         throw new Error("replacement is required: the new text, or an empty string to propose deleting the passage");
       }
@@ -969,6 +1026,7 @@ export const TOOLS: ToolDefinition[] = [
       // As with suggest_edit, `replacement` is required in practice: "" is a deletion.
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "The suggestion's thread, from suggest_edit or get_comments." },
         replacement: { type: "string", description: "What it should say instead now. Empty proposes deleting it." },
@@ -998,6 +1056,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "The suggestion's thread, from suggest_edit or get_comments." },
         k: {
@@ -1022,6 +1081,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "The suggestion's thread, from get_comments." },
       },
@@ -1032,6 +1092,7 @@ export const TOOLS: ToolDefinition[] = [
         throw new Error("only the owner or an approver can accept or reject a suggestion");
       }
       refuseIfExpired(data);
+      mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
       const accepted = await acceptSuggestion({
@@ -1060,6 +1121,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "The suggestion's thread, from get_comments." },
         reason: { type: "string", description: "Why, for its author. Optional, and worth giving." },
@@ -1073,6 +1135,7 @@ export const TOOLS: ToolDefinition[] = [
         throw new Error("only the owner or an approver can accept or reject a suggestion");
       }
       refuseIfExpired(data);
+      mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
       const reason = parseNote(args.reason);
@@ -1318,7 +1381,7 @@ export const TOOLS: ToolDefinition[] = [
       const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       // Reading an earlier version's threads is what a reader of /d/{id}/{v}
       // does in the app; access is the document's, as the rules have it.
-      const versionId = str(args, "version") || String(data.currentVersion ?? "");
+      const versionId = selectedVersion(args.version, data.currentVersion);
       if (!safeSegment(versionId) || !(await ref.collection("versions").doc(versionId).get()).exists) {
         throw new Error(`no version "${versionId}"`);
       }
@@ -1402,7 +1465,7 @@ export const TOOLS: ToolDefinition[] = [
           }),
         });
       }
-      return { id: ref.id, version: versionId, truncated, threads };
+      return withReaderAddress({ id: ref.id, version: versionId, currentVersion: data.currentVersion, isCurrent: answerable, canComment: answerable && !isExpired(data, Date.now()), truncated, threads }, ref.id, args.version === undefined ? undefined : versionId, str(args, "k") || undefined);
     },
   },
 
@@ -1611,6 +1674,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "exact", "body"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         exact: { type: "string", description: "The passage, as a reader sees it, within one paragraph." },
         body: { type: "string", description: "The comment." },
@@ -1623,8 +1687,9 @@ export const TOOLS: ToolDefinition[] = [
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       refuseIfExpired(data);
+      mutationVersion(args.version, data);
       const body = String(args.body ?? "").trim().slice(0, 5000);
       if (!body) throw new Error("body is empty");
 
@@ -1647,17 +1712,22 @@ export const TOOLS: ToolDefinition[] = [
         actor: ctx.actor,
         createdAt: FieldValue.serverTimestamp(),
       };
-      // One batch: a thread with no comment in it is a highlight that says nothing.
-      const batch = ctx.db.batch();
-      batch.create(annRef, {
-        annId: annRef.id,
-        anchor: { ...anchor, strict: true },
-        ...author,
-        color: ANNOTATION_COLOR,
-        resolved: false,
+      // The head read serializes this write with publication: no retired thread.
+      await ctx.db.runTransaction(async (tx) => {
+        const fresh = (await tx.get(ref)).data();
+        if (!fresh || !canRead(fresh, ctx.caller, proof)) throw new Error("no such document");
+        refuseIfExpired(fresh);
+        const refusal = currentVersionRefusal(fresh, versionId);
+        if (refusal) throw new Error(refusal.error);
+        tx.create(annRef, {
+          annId: annRef.id,
+          anchor: { ...anchor, strict: true },
+          ...author,
+          color: ANNOTATION_COLOR,
+          resolved: false,
+        });
+        tx.create(commentRef, { commentId: commentRef.id, body, ...author });
       });
-      batch.create(commentRef, { commentId: commentRef.id, body, ...author });
-      await batch.commit();
       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
     },
   },
@@ -1669,6 +1739,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId", "body"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "From get_comments." },
         body: { type: "string" },
@@ -1679,8 +1750,9 @@ export const TOOLS: ToolDefinition[] = [
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       refuseIfExpired(data);
+      mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       const body = String(args.body ?? "").slice(0, 5000);
       if (!body.trim()) throw new Error("body is empty");
@@ -1691,10 +1763,15 @@ export const TOOLS: ToolDefinition[] = [
         .doc(versionId)
         .collection("annotations")
         .doc(threadId);
-      if (!(await annRef.get()).exists) throw new Error("no such thread");
-
       const commentRef = annRef.collection("comments").doc();
-      await commentRef.set({
+      await ctx.db.runTransaction(async (tx) => {
+        const fresh = (await tx.get(ref)).data();
+        if (!fresh || !canRead(fresh, ctx.caller, proof)) throw new Error("no such document");
+        refuseIfExpired(fresh);
+        const refusal = currentVersionRefusal(fresh, versionId);
+        if (refusal) throw new Error(refusal.error);
+        if (!(await tx.get(annRef)).exists) throw new Error("no such thread");
+        tx.create(commentRef, {
         commentId: commentRef.id,
         body,
         authorUid: ctx.caller.uid,
@@ -1704,6 +1781,7 @@ export const TOOLS: ToolDefinition[] = [
         // whether feedback came from a person.
         actor: ctx.actor,
         createdAt: FieldValue.serverTimestamp(),
+      });
       });
       return { commentId: commentRef.id, threadId, documentId: ref.id };
     },
@@ -1719,6 +1797,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "From get_comments." },
         k: {
@@ -1741,6 +1820,7 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       required: ["id", "threadId"],
       properties: {
+        version: { type: "string", description: "The version you read. Must still be current; historical versions are read-only." },
         id: { type: "string" },
         threadId: { type: "string", description: "From get_comments with includeResolved." },
         k: {
@@ -1760,7 +1840,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is thirty-one tools, not "some tools". */
+/** Exported for the wiring test: the surface is thirty-two tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

@@ -93,6 +93,7 @@ export async function acceptSuggestion(args: {
     if (made.state === "applied") {
       if (editors.log) await clearEditLog(docRef.id);
       await writeDraft({
+        db,
         docRef,
         baseVersion: working.baseVersion,
         version: working.version,

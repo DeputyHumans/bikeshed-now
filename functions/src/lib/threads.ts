@@ -2,6 +2,7 @@
 // Resolving and reopening a comment thread through a token (SPEC §6, §19).
 
 import * as admin from "firebase-admin";
+import { currentVersionRefusal } from "./versions";
 import { FieldValue } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
 
@@ -31,6 +32,9 @@ export async function setThreadResolved(args: {
   const { db, docRef, versionId, annId, resolved, caller, actor } = args;
   const annRef = docRef.collection("versions").doc(versionId).collection("annotations").doc(annId);
   return db.runTransaction(async (tx) => {
+    const head = await tx.get(docRef);
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
     const snap = await tx.get(annRef);
     const ann = snap.data();
     if (!snap.exists || !ann) return { status: 404, error: "no such thread" };

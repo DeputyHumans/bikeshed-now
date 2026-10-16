@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // What the viewer says above a document: scripts blocked, a draft on screen (SPEC §6a, §6c).
 
-import { describe, expect, test } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ViewerBanners } from "./ViewerBanners";
 
 describe("the trust banner", () => {
@@ -42,4 +42,13 @@ describe("the draft banner", () => {
     const { container } = render(<ViewerBanners draft={null} />);
     expect(container.textContent).toBe("");
   });
+});
+
+
+test("an archive explains its read-only state and opens latest", () => {
+  const latest = vi.fn();
+  render(<ViewerBanners historical onOpenNewVersion={latest} />);
+  expect(screen.getByRole("status").textContent).toContain("read-only");
+  fireEvent.click(screen.getByRole("button", { name: "Open latest" }));
+  expect(latest).toHaveBeenCalledOnce();
 });

@@ -15,7 +15,7 @@
  *          card says where it sends you and that the name is the app's own
  *          claim → Approve arms only after a second of focus AND a pointer or
  *          key event → the redirect carries code, state and iss → a one-hour
- *          bsa_ and a bsr_; bsa_ sees the 31 tools at /mcp and nothing else.
+ *          bsa_ and a bsr_; bsa_ sees the 32 tools at /mcp and nothing else.
  *          Cancel sends access_denied with state and iss
  *   A22.3  refresh rotates both secrets; a replay of the spent bsr_, or of
  *          the code, within 60 s gets the identical pair; a wrong secret for
@@ -284,7 +284,7 @@ async function signInAtConnect(u, acct) {
   precondition(s.status === 200, `POST /session from /connect answered ${s.status}`);
 }
 
-scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 31 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
+scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 32 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
   timeoutMs: 360_000,
@@ -464,8 +464,8 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
-    assert.equal(viaGrant.length, 31, viaGrant.join(", "));
-    assert.deepEqual(viaGrant, viaPersonal, "the same 31 tools as a personal token");
+    assert.equal(viaGrant.length, 32, viaGrant.join(", "));
+    assert.deepEqual(viaGrant, viaPersonal, "the same 32 tools as a personal token");
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
   } finally {

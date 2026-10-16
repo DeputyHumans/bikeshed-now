@@ -117,12 +117,11 @@ test("the thread and its first comment land together or not at all", async () =>
   const w = world();
   const failing = {
     ...w.db,
-    batch() {
-      const b = w.db.batch();
-      b.commit = async () => {
+    async runTransaction(fn) {
+      return w.db.runTransaction(async (tx) => {
+        await fn(tx);
         throw new Error("unavailable");
-      };
-      return b;
+      });
     },
   };
   await assert.rejects(

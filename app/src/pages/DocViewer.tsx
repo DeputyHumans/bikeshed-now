@@ -145,7 +145,12 @@ export function DocViewer() {
   const [dialog, setDialog] = useState<Dialog>(null);
   // A file dropped onto the document, waiting in the upload dialog.
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
-  const [wantsEdit, setWantsEdit] = useState(false);
+  const [wantsEdit, setEditRequested] = useState(false);
+  const editingBase = useRef("");
+  const setWantsEdit = (value: boolean) => {
+    if (value) editingBase.current = doc.currentVersion;
+    setEditRequested(value);
+  };
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
   const [commenting, setCommenting] = useState(false);
@@ -161,7 +166,7 @@ export function DocViewer() {
   const [railOpen, setRailOpen] = useState(true);
   const [pendingComment, setPendingComment] = useState(false);
   // The suggestion being written: what it quotes, and where its form floats.
-  const [suggesting, setSuggesting] = useState<{ anchor: Anchor; position: PopoverPosition } | null>(null);
+  const [suggesting, setSuggesting] = useState<{ version: string; anchor: Anchor; position: PopoverPosition } | null>(null);
   // The approver's review pass, and which suggestion it is on (SPEC §22).
   const [review, setReview] = useState<{ currentId: string | null } | null>(null);
   const [deciding, setDeciding] = useState(false);
@@ -171,14 +176,16 @@ export function DocViewer() {
   const isDocEditor = isDocEditorOf(doc.meta, emailLower);
   // Open editing widens WHO, never to anyone: a signed-in account is still
   // required, on every document, whatever its owner chose.
-  const canEdit = isDocEditor || (signedIn && doc.publicEdit);
+  const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
+  const isCurrent = Boolean(headVersion) && doc.currentVersion === headVersion;
+  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt);
+  const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
   // The real editor set, as the server asks of an upload (SPEC §2).
-  const offersUpload = offersVersionUpload(doc.meta, emailLower);
+  const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);
 
   // The member record, or the projection a public or link reader gets: either
   // says whether this is a fork, and neither says of what (SPEC §21).
   const forked = doc.meta?.forked ?? doc.publicDoc?.forked ?? false;
-  const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
   // A reader on an old version forks THAT one: what they see is what they get.
   const forkVersion =
     doc.currentVersion && headVersion && doc.currentVersion !== headVersion
@@ -207,7 +214,7 @@ export function DocViewer() {
 
   const mode: FrameMode = useMemo(
     () =>
-      wantsEdit
+      wantsEdit && canEdit && editingBase.current === doc.currentVersion
         ? { kind: "editing", baseVersion: doc.currentVersion }
         : {
             kind: "reading",
@@ -471,7 +478,7 @@ export function DocViewer() {
 
   /** Turn the current selection into a thread. */
   const startComment = useCallback(async () => {
-    if (!frame.doc) return;
+    if (!canWrite || !frame.doc) return;
     if (!user) {
       // The selection survives the prompt, and the comment posts afterwards.
       // Losing it here is where this feature dies.
@@ -500,10 +507,11 @@ export function DocViewer() {
     } finally {
       setCommenting(false);
     }
-  }, [frame.doc, user, docId, doc.currentVersion, emailLower, toast]);
+  }, [canWrite, frame.doc, user, docId, doc.currentVersion, emailLower, toast]);
 
   /** Open the suggestion form on the current selection, trimmed to its text. */
   const startSuggest = useCallback(() => {
+    if (!canSuggest) return;
     const d = frame.doc;
     const sel = d?.getSelection();
     if (!d || !sel || sel.rangeCount === 0) return;
@@ -512,17 +520,18 @@ export function DocViewer() {
     if (!anchor) return;
     const view = d.defaultView;
     setSuggesting({
+      version: doc.currentVersion,
       anchor,
       position: popoverPosition(range.getBoundingClientRect(), {
         width: view?.innerWidth ?? 0,
         height: view?.innerHeight ?? 0,
       }),
     });
-  }, [frame.doc]);
+  }, [canSuggest, doc.currentVersion, frame.doc]);
 
   const submitSuggest = useCallback(
     async (replacement: string, note: string) => {
-      if (!suggesting) return;
+      if (!canSuggest || !suggesting || suggesting.version !== doc.currentVersion) return;
       try {
         const { annId } = await suggestEdit({
           docId,
@@ -543,7 +552,7 @@ export function DocViewer() {
         toast.error((e as Error).message);
       }
     },
-    [suggesting, docId, doc.currentVersion, linkKey, frame.doc, setCommentsOpen, toast],
+    [canSuggest, suggesting, docId, doc.currentVersion, linkKey, frame.doc, setCommentsOpen, toast],
   );
 
   /**
@@ -563,6 +572,7 @@ export function DocViewer() {
   }, [pendingComment, signedIn, user, doc.resolvedFor, startComment]);
 
   const commit = useCallback(async () => {
+    if (!canEdit || editingBase.current !== doc.currentVersion) return;
     setCommitting(true);
     try {
       // Saved first, every time, and published only if that save went
@@ -592,7 +602,7 @@ export function DocViewer() {
     } finally {
       setCommitting(false);
     }
-  }, [editor, docId, doc.currentVersion, doc.format, navigate, toast]);
+  }, [canEdit, editor, docId, doc.currentVersion, doc.format, navigate, toast]);
 
   /**
    * Leave the editor without publishing.
@@ -629,9 +639,10 @@ export function DocViewer() {
   // whoever may upload, while reading. Never while editing, where a drop
   // belongs to the editor, nor while presenting (SPEC §2).
   const openUpload = useCallback((file: File | null) => {
+    if (!offersUpload) return;
     setDroppedFile(file);
     setDialog("upload-version");
-  }, []);
+  }, [offersUpload]);
   const versionDrop = useVersionDrop({
     enabled: offersUpload && mode.kind === "reading" && !presenting && dialog === null,
     doc: frame.doc,
@@ -644,6 +655,18 @@ export function DocViewer() {
     setWantsEdit(false);
   }, [editor]);
 
+  const interactionVersion = useRef(doc.currentVersion);
+  useEffect(() => {
+    if (!canWrite || interactionVersion.current !== doc.currentVersion) {
+      setEditRequested(false);
+      setSuggesting(null);
+      setPendingComment(false);
+      setReview(null);
+      setDialog((value) => value === "upload-version" ? null : value);
+    }
+    interactionVersion.current = doc.currentVersion;
+  }, [canWrite, doc.currentVersion]);
+
   // Leaving the editor ends the review pass; it lives in the editing session.
   useEffect(() => {
     if (!wantsEdit) setReview(null);
@@ -655,11 +678,12 @@ export function DocViewer() {
   /** Open the review pass in the editor, on one suggestion or the first. */
   const startReview = useCallback(
     (annId?: string) => {
+      if (!canEdit) return;
       acceptedInPass.current = false;
       setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
       setWantsEdit(true);
     },
-    [pendingSuggestions],
+    [canEdit, pendingSuggestions],
   );
 
   // Somebody decided the one on screen — this browser, another approver, or
@@ -695,7 +719,7 @@ export function DocViewer() {
 
   const acceptCurrent = useCallback(
     async (a: Annotation) => {
-      if (deciding || !a.suggestion) return;
+      if (!canEdit || deciding || !a.suggestion) return;
       setDeciding(true);
       try {
         const outcome = await acceptInSession({
@@ -730,12 +754,12 @@ export function DocViewer() {
         setDeciding(false);
       }
     },
-    [deciding, suggestionWhere, frame.doc, editor, toast],
+    [canEdit, deciding, suggestionWhere, frame.doc, editor, toast],
   );
 
   const rejectCurrent = useCallback(
     async (a: Annotation, reason: string): Promise<boolean> => {
-      if (deciding) return false;
+      if (!canWrite || deciding) return false;
       setDeciding(true);
       try {
         await rejectSuggestion({ ...suggestionWhere(a.annId), ...(reason ? { reason } : {}) });
@@ -747,7 +771,7 @@ export function DocViewer() {
         setDeciding(false);
       }
     },
-    [deciding, suggestionWhere, toast],
+    [canWrite, deciding, suggestionWhere, toast],
   );
 
   const menuEntries: MenuEntry[] = useMemo(() => {
@@ -843,7 +867,7 @@ export function DocViewer() {
               ? `${v.versionId} — current`
               : v.versionId,
           disabled: v.versionId === doc.currentVersion,
-          onSelect: () => navigate(`/d/${docId}/${v.versionId}`),
+          onSelect: () => navigate(`/d/${docId}/${v.versionId}${linkKey ? `?k=${encodeURIComponent(linkKey)}` : ""}`),
         });
       }
     }
@@ -961,7 +985,7 @@ export function DocViewer() {
           lineage={lineage.lineage}
           onOpenForks={() => setDialog("forks")}
           editing={wantsEdit}
-          onToggleEdit={() => void (wantsEdit ? stopEditing() : setWantsEdit(true))}
+          onToggleEdit={() => void (wantsEdit ? stopEditing() : canEdit && setWantsEdit(true))}
           offerTrust={liveTrust.shouldOffer}
           onOpenTrust={() => setDialog("trust")}
           hasSlides={hasSlides}
@@ -978,9 +1002,10 @@ export function DocViewer() {
 
       <ViewerBanners
         draft={draftOnScreen}
-        onEdit={() => setWantsEdit(true)}
+        historical={!isCurrent && Boolean(doc.currentVersion)}
+        onEdit={() => canEdit && setWantsEdit(true)}
         newVersion={live.newVersion}
-        onOpenNewVersion={() => navigate(`/d/${docId}`)}
+        onOpenNewVersion={() => navigate(`/d/${docId}${linkKey ? `?k=${encodeURIComponent(linkKey)}` : ""}`)}
         onDismissNewVersion={live.dismissNewVersion}
         conflict={live.conflict}
         onTakeTheirs={() => {
@@ -1063,7 +1088,7 @@ export function DocViewer() {
             <SelectionFab
               doc={frame.doc}
               epoch={frame.epoch}
-              enabled={mode.kind === "reading" && !commenting && !suggesting}
+              enabled={canWrite && mode.kind === "reading" && !commenting && !suggesting}
               label={user ? "Comment" : "Sign in to comment"}
               onComment={() => void startComment()}
               suggest={
@@ -1112,6 +1137,8 @@ export function DocViewer() {
 
         {showComments ? (
           <Sidebar
+            key={`${docId}/${doc.currentVersion}`}
+            readOnly={!canWrite}
             docId={docId}
             versionId={doc.currentVersion}
             annotations={annotations}
@@ -1121,7 +1148,7 @@ export function DocViewer() {
             linkKey={linkKey || undefined}
             onReview={canEdit ? startReview : undefined}
             selectedId={selectedId}
-            canComment={signedIn}
+            canComment={canWrite && signedIn}
             signedIn={signedIn}
             peers={presence.peers}
             uid={user?.uid ?? null}
@@ -1195,7 +1222,7 @@ export function DocViewer() {
         />
       ) : null}
 
-      {dialog === "upload-version" && doc.meta ? (
+      {offersUpload && dialog === "upload-version" && doc.meta ? (
         <UploadVersionDialog
           docId={docId}
           title={doc.title}

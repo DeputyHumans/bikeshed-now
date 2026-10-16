@@ -51,7 +51,8 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed update <id> <file>          publish a new version
   bikeshed fork <id>                   your own copy, which remembers its original
   bikeshed lineage <id>                what it was forked from; for its owner, its forks
-  bikeshed get <id>                    print a document's source
+  bikeshed get <id> [--version <v>]    print a published version's source
+  bikeshed versions <id>               list published history (--all for every page)
   bikeshed comments <id>               unresolved feedback, with its anchored text
                                        (--version <v> for an earlier version's)
   bikeshed changes <id> --since <cursor|last|all>
@@ -122,9 +123,9 @@ Options
   --title <text>         title for publish or fork (fork default: the original's)
   --id <id>              with publish: the address, /d/<id> (default: from the title)
   --folder <id>          destination folder for publish or fork
-  --version <v>          with fork: the version to copy; with comments: the
-                         version to read (default: current); on its own,
-                         which version of bikeshed this is
+  --version <v>          get/comments/fork/open: the published version to read
+                         or copy; feedback commands: require that version to
+                         still be current. On its own: the CLI version
   --parent <id>          parent folder for mkdir
   --limit <n>            with list: rows per page (default 20, max 50)
   --cursor <id>          with list: the page after the one that printed it
@@ -136,7 +137,7 @@ Options
                          60, at least 30)
   --timeout <s>          with changes --wait: give up after this long (default
                          3600), exit 3, and print the cursor to resume from
-  --base <v>             with update: the version you revised; refused if
+  --base <v>             with update/commit: the version you revised; refused if
                          somebody has published since
   --all                  with list: every page; with comments: resolved too
   --with <text>          with suggest or revise: what the passage should say instead
@@ -175,18 +176,31 @@ function out(json, value, human) {
  * for both — `…/d/<id>[/<version>]?k=<key>` — and the key goes along as the
  * tools' `k` argument (SPEC §17).
  */
-function docArgs(ref) {
-  if (!/^https?:\/\//i.test(ref)) return { id: ref };
-  let url;
-  try {
-    url = new URL(ref);
-  } catch {
-    fail(`not a document link: ${ref}`);
+function docArgs(ref, flags) {
+  let id = ref;
+  let k;
+  let linkedVersion;
+  if (/^https?:\/\//i.test(ref)) {
+    let url;
+    try { url = new URL(ref); } catch { fail(`not a document link: ${ref}`); }
+    const match = url.pathname.match(/^\/d\/([^/]+)(?:\/([^/]+))?\/?$/);
+    if (!match) fail(`not a document link: ${ref}`);
+    id = decodeURIComponent(match[1]);
+    linkedVersion = match[2] ? decodeURIComponent(match[2]) : undefined;
+    k = url.searchParams.get("k");
   }
-  const match = url.pathname.match(/^\/d\/([^/]+)(?:\/[^/]+)?\/?$/);
-  if (!match) fail(`not a document link: ${ref}`);
-  const k = url.searchParams.get("k");
-  return { id: decodeURIComponent(match[1]), ...(k ? { k } : {}) };
+  // Document-wide operations deliberately use only the document id/key.
+  if (flags === undefined) return { id, ...(k ? { k } : {}) };
+  const explicit = flags.version;
+  if (explicit !== undefined && (typeof explicit !== "string" || !explicit || /[\/\\?#\s]/.test(explicit))) {
+    fail("invalid version");
+  }
+  if (explicit && linkedVersion && explicit !== linkedVersion) {
+    fail(`conflicting versions: the link names ${linkedVersion}, the flag names ${explicit}`);
+  }
+  const version = explicit ?? linkedVersion;
+  if (version && (version === "." || version === ".." || /[\/\\?#\s]/.test(version))) fail("invalid version");
+  return { id, ...(k ? { k } : {}), ...(version ? { version } : {}) };
 }
 
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
@@ -496,7 +510,7 @@ async function update(flags, [ref, path]) {
   if (!ref || !path) fail("usage: bikeshed update <id> <file>");
   const { origin, token } = resolveAuth(flags);
   const file = resolve(path);
-  const doc = docArgs(ref);
+  const { version: selectedBase, ...doc } = docArgs(ref, { version: flags.base });
   const { id } = doc;
 
   const once = async () => {
@@ -505,7 +519,7 @@ async function update(flags, [ref, path]) {
     // text, every byte above 0x7f in it would become U+FFFD on the way.
     // --base: the version this was revised from, so an update over somebody's
     // newer save is refused instead of replacing it (SPEC §19).
-    const base = typeof flags.base === "string" && flags.base ? flags.base : undefined;
+    const base = selectedBase;
     const result = isArchive(file, bytes)
       ? await uploadFile(origin, token, file, { update: id, k: doc.k, base })
       : await callTool(origin, token, "update_document", {
@@ -527,10 +541,30 @@ async function update(flags, [ref, path]) {
   if (flags.watch) await watchFile(file, once);
 }
 
+/** The published history, paged by the deployment rather than guessed from ids. */
+async function versions(flags, [ref, ...rest]) {
+  if (!ref || rest.length) fail("usage: bikeshed versions <id> [--limit N] [--cursor …] [--all] [--json]");
+  const { origin, token } = resolveAuth(flags);
+  const limit = flags.limit === undefined ? 20 : Number(flags.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) fail("--limit must be an integer from 1 to 50");
+  let cursor = flags.cursor;
+  const rows = [];
+  let result;
+  do {
+    result = await callTool(origin, token, "list_versions", { ...docArgs(ref), limit, ...(cursor ? { cursor } : {}) });
+    rows.push(...result.versions);
+    cursor = result.nextCursor;
+  } while (flags.all && cursor);
+  out(flags.json, { ...result, versions: rows }, () => {
+    for (const row of rows) console.log(`${row.isCurrent ? "*" : " "} ${row.version}  ${row.publishedAt ?? ""}  ${row.label}  ${row.url ?? ""}`);
+    if (cursor) console.log(`… more: bikeshed versions ${ref} --cursor ${cursor}`);
+  });
+}
+
 async function get(flags, [ref]) {
   if (!ref) fail("usage: bikeshed get <id>");
   const { origin, token } = resolveAuth(flags);
-  const doc = docArgs(ref);
+  const doc = docArgs(ref, flags);
   const result = await callTool(origin, token, "get_document", doc);
   // The tool cuts a long source at a fixed length. Printed as it came, the cut
   // copy exited 0 and looked complete, and `update` with an edit of it
@@ -555,9 +589,7 @@ async function comments(flags, [ref]) {
   if (!ref) fail("usage: bikeshed comments <id>");
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "get_comments", {
-    ...docArgs(ref),
-    // Threads belong to the version they were opened on; a version in a link
-    // is not taken as a request for one, only the flag is.
+    ...docArgs(ref, flags),
     ...(typeof flags.version === "string" ? { version: flags.version } : {}),
     includeResolved: Boolean(flags.all),
   });
@@ -603,7 +635,7 @@ async function comment(flags, [ref, ...rest]) {
   if (typeof flags.body !== "string" || !flags.body.trim()) fail(usage);
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "add_comment", {
-    ...docArgs(ref),
+    ...docArgs(ref, flags),
     exact,
     body: flags.body,
     ...(typeof flags.prefix === "string" ? { prefix: flags.prefix } : {}),
@@ -617,7 +649,7 @@ async function reply(flags, [ref, threadId, ...rest]) {
   if (!ref || !threadId || !body) fail("usage: bikeshed reply <id> <thread> <text>");
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "reply_to_comment", {
-    ...docArgs(ref),
+    ...docArgs(ref, flags),
     threadId,
     body,
   });
@@ -641,7 +673,7 @@ async function reopenThread(flags, args) {
 async function setResolved(flags, [ref, threadId, ...rest], verb) {
   if (!ref || !threadId || rest.length) fail(`usage: bikeshed ${verb} <id> <thread>`);
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, `${verb}_thread`, { ...docArgs(ref), threadId });
+  const result = await callTool(origin, token, `${verb}_thread`, { ...docArgs(ref, flags), threadId });
   out(flags.json, result, () => console.log(`${verb === "resolve" ? "resolved" : "reopened"} ${threadId}`));
 }
 
@@ -657,7 +689,7 @@ async function suggest(flags, [ref, ...rest]) {
   const replacement = replacementFrom(flags, usage);
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "suggest_edit", {
-    ...docArgs(ref),
+    ...docArgs(ref, flags),
     exact,
     replacement,
     ...(typeof flags.note === "string" ? { note: flags.note } : {}),
@@ -689,7 +721,7 @@ async function revise(flags, [ref, threadId, ...rest]) {
   const replacement = replacementFrom(flags, usage);
   const { origin, token } = resolveAuth(flags);
   const result = await callTool(origin, token, "revise_suggestion", {
-    ...docArgs(ref),
+    ...docArgs(ref, flags),
     threadId,
     replacement,
     ...(typeof flags.note === "string" ? { note: flags.note } : {}),
@@ -705,8 +737,9 @@ async function revise(flags, [ref, threadId, ...rest]) {
 async function accept(flags, [ref, threadId, ...rest]) {
   if (!ref || !threadId || rest.length) fail("usage: bikeshed accept <id> <thread>");
   const { origin, token } = resolveAuth(flags);
-  // Deciding takes a real role on the document, never a link, so only the id is sent.
-  const result = await callTool(origin, token, "accept_suggestion", { id: docArgs(ref).id, threadId });
+  const { id, version } = docArgs(ref, flags);
+  // Deciding still takes a real role; a version is only a precondition.
+  const result = await callTool(origin, token, "accept_suggestion", { id, ...(version ? { version } : {}), threadId });
   out(flags.json, result, () => console.log(`accepted ${threadId}; the change is in the draft — \`bikeshed commit\` publishes it`));
 }
 
@@ -714,7 +747,8 @@ async function accept(flags, [ref, threadId, ...rest]) {
 async function commit(flags, [ref, ...rest]) {
   if (!ref || rest.length) fail("usage: bikeshed commit <id>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "commit_draft", { id: docArgs(ref).id });
+  const { id, version } = docArgs(ref, { version: flags.base });
+  const result = await callTool(origin, token, "commit_draft", { id, ...(version ? { baseVersion: version } : {}) });
   out(flags.json, result, () =>
     console.log(result.deduped ? `nothing new: the draft is ${result.versionId} already` : `published ${result.versionId}`),
   );
@@ -728,9 +762,10 @@ async function commit(flags, [ref, ...rest]) {
 async function reject(flags, [ref, threadId, ...rest]) {
   if (!ref || !threadId || rest.length) fail("usage: bikeshed reject <id> <thread> [--reason <why>]");
   const { origin, token } = resolveAuth(flags);
-  // Deciding takes a real role on the document, never a link, so only the id is sent.
+  const { id, version } = docArgs(ref, flags);
+  // Deciding still takes a real role; a version is only a precondition.
   const result = await callTool(origin, token, "reject_suggestion", {
-    id: docArgs(ref).id,
+    id, ...(version ? { version } : {}),
     threadId,
     ...(typeof flags.reason === "string" ? { reason: flags.reason } : {}),
   });
@@ -741,7 +776,7 @@ async function reject(flags, [ref, threadId, ...rest]) {
 async function withdraw(flags, [ref, threadId, ...rest]) {
   if (!ref || !threadId || rest.length) fail("usage: bikeshed withdraw <id> <thread>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "withdraw_suggestion", { ...docArgs(ref), threadId });
+  const result = await callTool(origin, token, "withdraw_suggestion", { ...docArgs(ref, flags), threadId });
   out(flags.json, result, () => console.log(`withdrew ${threadId}`));
 }
 
@@ -942,7 +977,7 @@ function printChanges(flags, result) {
 async function fork(flags, [ref]) {
   if (!ref) fail("usage: bikeshed fork <id> [--version <v>] [--folder <id>] [--title <text>]");
   const { origin, token } = resolveAuth(flags);
-  const args = docArgs(ref);
+  const args = docArgs(ref, flags);
   if (typeof flags.version === "string") args.version = flags.version;
   if (typeof flags.folder === "string") args.folder = flags.folder;
   if (typeof flags.title === "string") args.title = flags.title;
@@ -1094,8 +1129,8 @@ async function open(flags, [ref]) {
   const { origin } = resolveAuth(flags);
   // An unlisted document opens only with its key, and the link is the one place
   // the key lives, so a link keeps it.
-  const { id, k } = docArgs(ref);
-  const url = `${origin}/d/${encodeURIComponent(id)}${k ? `?k=${encodeURIComponent(k)}` : ""}`;
+  const { id, k, version } = docArgs(ref, flags);
+  const url = `${origin}/d/${encodeURIComponent(id)}${version ? `/${encodeURIComponent(version)}` : ""}${k ? `?k=${encodeURIComponent(k)}` : ""}`;
   // Best effort, and the address is printed either way. This used to spawn
   // `start`, which is a cmd.exe builtin rather than a program, so on Windows
   // the spawn failed and, with nothing listening for the error, crashed.
@@ -1134,6 +1169,7 @@ const COMMANDS = {
   fork,
   lineage,
   get,
+  versions,
   comments,
   changes,
   comment,
@@ -1217,6 +1253,10 @@ async function main() {
     console.log(USAGE);
     return;
   }
+
+  const versionCommands = new Set(["get", "comments", "fork", "open", "comment", "reply", "resolve", "reopen", "suggest", "revise", "withdraw", "accept", "reject"]);
+  if (values.version !== undefined && !versionCommands.has(name)) fail(`--version is not supported by ${name}; update and commit use --base`);
+  if (values.base !== undefined && !["update", "commit"].includes(name)) fail(`--base is not supported by ${name}`);
 
   const command = COMMANDS[name];
   if (!command) fail(`unknown command: ${name}\n\n${USAGE}`);

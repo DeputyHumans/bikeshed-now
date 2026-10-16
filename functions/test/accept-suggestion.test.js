@@ -86,7 +86,10 @@ function world({ format = "html", doc = {}, anns = {}, files = {}, rtdb = false 
   });
   const call = (name, who, args) =>
     withFakes(objects, rtdb, () => tool(name).run(ctx(who), { id: "d1", ...args }));
-  const text = (key) => objects.get(key)?.toString("utf8");
+  const text = (key) => {
+    const prefix = store.get("docs/d1").draft?.storagePrefix;
+    return objects.get(prefix ? key.replace("docs/d1/draft/", `${prefix}/`) : key)?.toString("utf8");
+  };
   const notes = (annId) =>
     [...store.entries()].filter(([p]) => p.startsWith(`${V1}/${annId}/comments/`)).map(([, d]) => d);
   return { db, store, objects, call, text, notes, ann: (id) => store.get(`${V1}/${id}`), doc: () => store.get("docs/d1") };
@@ -187,7 +190,7 @@ test("an approver's agent accepts two, rejects one, closes the thread, and publi
   assert.equal(published.deduped, false);
   assert.equal(w.doc().currentVersion, "v2");
   assert.equal(w.doc().draft, undefined, "the draft became the version");
-  const v2 = w.text("docs/d1/v2/index.html");
+  const v2 = w.text(`${w.store.get("docs/d1/versions/v2").storagePrefix}/index.html`);
   assert.match(v2, /cut over in two weekends/);
   assert.match(v2, /Compare vs\. Codex/);
   assert.equal(w.text("docs/d1/draft/index.html"), undefined);

@@ -408,6 +408,33 @@ describe("firestore rules", () => {
     await assertFails(setDoc(doc(db, "somethingNew/x"), { a: 1 }));
   });
 
+  it("archived feedback is readable but every annotation and comment write is refused, even to its owner", async () => {
+    const root = "docs/archive-guard";
+    const ann = { annId: "a", anchor: { exact: "old text" }, authorUid: OWNER.uid,
+      authorEmail: OWNER.email, actor: actorFor(OWNER), color: "pink", resolved: false, createdAt: serverTimestamp() };
+    const comment = { commentId: "c", body: "archived feedback", authorUid: OWNER.uid,
+      authorEmail: OWNER.email, actor: actorFor(OWNER), createdAt: serverTimestamp() };
+    await seed(env, db => setDoc(doc(db, root), { ownerUid: OWNER.uid, ownerEmail: OWNER.email, currentVersion: "v1", visibility: "private" }));
+    const db = verified(env, OWNER).firestore();
+    const a = doc(db, `${root}/versions/v1/annotations/a`);
+    const c = doc(db, `${root}/versions/v1/annotations/a/comments/c`);
+    await assertSucceeds(setDoc(a, ann));
+    await assertSucceeds(setDoc(c, comment));
+    await assertSucceeds(updateDoc(a, { resolved: true, resolvedBy: actorFor(OWNER) }));
+    await assertSucceeds(updateDoc(c, { body: "edited on latest" }));
+    await seed(env, db => updateDoc(doc(db, root), { currentVersion: "v2" }));
+    assert.equal((await assertSucceeds(getDoc(c))).data().body, "edited on latest");
+    assert.equal((await assertSucceeds(getDoc(a))).data().resolved, true);
+    await assertFails(setDoc(doc(db, `${root}/versions/v1/annotations/new`), { ...ann, annId: "new" }));
+    await assertFails(setDoc(doc(db, `${root}/versions/v1/annotations/a/comments/new`), { ...comment, commentId: "new" }));
+    await assertFails(updateDoc(a, { resolved: false, resolvedBy: actorFor(OWNER) }));
+    await assertFails(updateDoc(c, { body: "late edit" }));
+    await assertFails(deleteDoc(c));
+    await assertFails(deleteDoc(a));
+    assert.equal((await getDoc(c)).data().body, "edited on latest");
+    assert.equal((await getDoc(a)).data().resolved, true);
+  });
+
   // --- Annotations and comments -------------------------------------------
 
   it("a member creates an annotation authored by themselves", async () => {

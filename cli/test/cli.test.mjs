@@ -520,15 +520,18 @@ test("a pasted link is read for its id and its unlisted key", async () => {
     await runAsync(["reply", link, "t1", "Agreed.", "--json"], env);
     assert.deepEqual(seen[0].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
     });
     assert.deepEqual(seen[1].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
       includeResolved: false,
     });
     assert.deepEqual(seen[2].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
       threadId: "t1",
       body: "Agreed.",
@@ -1394,5 +1397,25 @@ test("management human output explains inherited grants and returns the actual s
   await withServer(rpcOk(result), async origin => {
     const { stdout } = await runAsync(["access", "document", "d", "--origin", origin, "--token", "test"]);
     assert.equal(stdout, "document d — owner: owner@example.com\nviewers: none\ninherited viewer: reader@example.com via Team\nmembers: owner@example.com, reader@example.com\nvisibility: unlisted; open editing: off; expires: never\nhttps://example.test/d/d?k=actual\n");
+  });
+});
+
+test("versions follows every history page and preserves its current-version metadata", async () => {
+  let page = 0;
+  await withServer((req, res) => {
+    rpcOk({ currentVersion: "v3", versions: page++ ? [{ version: "v1" }] : [{ version: "v3" }, { version: "v2" }], nextCursor: page === 1 ? "v2" : null })(req, res);
+  }, async (origin, seen) => {
+    const result = await runAsync(["versions", "d1", "--all", "--limit", "2", "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.deepEqual(JSON.parse(result.stdout).versions.map(v => v.version), ["v3", "v2", "v1"]);
+    assert.equal(JSON.parse(result.stdout).currentVersion, "v3");
+    assert.deepEqual(seen.map(s => s.body.params.arguments.cursor), [undefined, "v2"]);
+  });
+});
+test("conflicting or unsupported version selectors fail before a request", async () => {
+  await withServer(rpcOk({}), async (origin, seen) => {
+    for (const args of [["get", "https://example.com/d/d1/v1", "--version", "v2"], ["reply", "https://example.com/d/d1/v1", "t1", "text", "--version", "v2"], ["lineage", "d1", "--version", "v1"], ["get", "d1", "--base", "v1"]]) {
+      await assert.rejects(runAsync(args, { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }));
+    }
+    assert.equal(seen.length, 0);
   });
 });

@@ -115,6 +115,7 @@ function Thread({
   annotation,
   selected,
   canComment,
+  readOnly = false,
   orphaned,
   stale,
   isApprover,
@@ -131,6 +132,7 @@ function Thread({
   annotation: Annotation;
   selected: boolean;
   canComment: boolean;
+  readOnly?: boolean;
   orphaned: boolean;
   stale: boolean;
   isApprover: boolean;
@@ -173,7 +175,7 @@ function Thread({
 
   /** One suggestion action at a time, with its failure said rather than swallowed. */
   const act = async (run: () => Promise<unknown>) => {
-    if (busy) return;
+    if (readOnly || busy) return;
     setBusy(true);
     try {
       await run();
@@ -200,7 +202,7 @@ function Thread({
     const body = reply.trim();
     // Enter reaches here without the button's `disabled`, so the guard is here:
     // a second Enter while the first is in flight would post the reply twice.
-    if (!body || !uid || busy) return;
+    if (readOnly || !canComment || !body || !uid || busy) return;
     setBusy(true);
     try {
       await addComment(docId, versionId, annotation.annId, body, uid, emailLower);
@@ -223,12 +225,13 @@ function Thread({
       style={{ ["--thread-color" as string]: peerColor(annotation.authorEmail) }}
       onClick={onSelect}
     >
-      {suggestion && editing && pending ? (
+      {!readOnly && suggestion && editing && pending ? (
         <SuggestForm
           exact={annotation.anchor.exact}
           initial={suggestion.replacement}
           submitLabel="Save"
           onSubmit={async (replacement, note) => {
+            if (readOnly) return;
             try {
               await reviseSuggestion({ ...where, replacement, ...(note ? { note } : {}) });
               setEditing(false);
@@ -258,7 +261,7 @@ function Thread({
           </div>
         ))}
 
-      {pending && !editing && (isApprover || mine) ? (
+      {!readOnly && pending && !editing && (isApprover || mine) ? (
         <div className="thread-actions suggestion-actions">
           {isApprover && rejecting ? (
             <>
@@ -376,7 +379,7 @@ function Thread({
         </p>
       ))}
 
-      {canComment ? (
+      {!readOnly && canComment ? (
         <>
           <textarea
             className="textarea"
@@ -440,6 +443,7 @@ export function Sidebar({
   linkKey,
   selectedId,
   canComment,
+  readOnly = false,
   signedIn,
   peers,
   uid,
@@ -460,6 +464,7 @@ export function Sidebar({
   linkKey?: string;
   selectedId: string | null;
   canComment: boolean;
+  readOnly?: boolean;
   signedIn: boolean;
   peers: Peer[];
   uid: string | null;
@@ -505,7 +510,7 @@ export function Sidebar({
           <span>
             {pendingCount === 1 ? "1 suggested edit is" : `${pendingCount} suggested edits are`} waiting
           </span>
-          {isApprover && onReview ? (
+          {!readOnly && isApprover && onReview ? (
             <button type="button" className="btn btn-sm btn-primary" onClick={() => onReview()}>
               Review all
             </button>
@@ -515,7 +520,7 @@ export function Sidebar({
 
       {visible.length === 0 ? (
         <p className="empty-state">
-          Select any passage in the document to comment on it.
+          {readOnly ? "No feedback to show on this archived version." : "Select any passage in the document to comment on it."}
         </p>
       ) : (
         <ul className="comments-list">
@@ -526,6 +531,7 @@ export function Sidebar({
               versionId={versionId}
               annotation={annotation}
               selected={selectedId === annotation.annId}
+              readOnly={readOnly}
               canComment={canComment}
               orphaned={orphanSet.has(annotation.annId)}
               stale={staleSet.has(annotation.annId)}
@@ -542,7 +548,7 @@ export function Sidebar({
         </ul>
       )}
 
-      {!signedIn ? (
+      {!readOnly && !signedIn ? (
         <div className="signin-to-comment">
           {/* The selection is preserved across this prompt, and the comment
               posts afterwards. A "sign in to comment" that loses what you

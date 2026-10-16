@@ -2,6 +2,7 @@
 // Suggested edits: what one is, and every change to its state (SPEC §22).
 
 import * as admin from "firebase-admin";
+import { currentVersionRefusal } from "./versions";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
 
@@ -329,6 +330,9 @@ export async function changeSuggestion(args: {
   const annRef = annotations(docRef, versionId).doc(annId);
 
   return db.runTransaction(async (tx) => {
+    const head = await tx.get(docRef);
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
     // Every read before any write, as a transaction requires: the record, and
     // for a revision the opening comment whose words may have to follow it.
     const snap = await tx.get(annRef);

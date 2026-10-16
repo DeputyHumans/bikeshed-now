@@ -24,6 +24,7 @@
  * teardown against production.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import mime from "mime";
@@ -264,13 +265,13 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docId}/${versionId}`;
+  const storagePrefix = `docs/${docId}/bundles/${randomUUID()}`;
 
   console.log(`  uploading ${fileCount} file(s) to gs://${bucketName}/${storagePrefix}/ ...`);
   for (const f of files) {
     const destination = `${storagePrefix}/${f.rel}`;
     const contentType = mime.getType(f.rel) || "application/octet-stream";
-    await bucket.file(destination).save(f.data, { contentType, resumable: false });
+    await bucket.file(destination).save(f.data, { contentType, resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
     console.log(`    + ${destination} (${contentType})`);
   }
 
@@ -301,45 +302,50 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     client: CLIENT,
   };
 
-  const batch = db.batch();
-  batch.set(
-    docRef,
-    {
-      docId,
-      title,
-      slug,
-      ...(snap.exists ? {} : { ownerUid: null, ownerEmail, createdAt: FieldValue.serverTimestamp() }),
-      ...(snap.exists ? {} : { visibility: "private", publicEdit: false, folderId: null }),
-      ...grants,
-      ...membership,
-      currentVersion: versionId,
-      // CLI provenance: the publisher is authenticated and deliberate, so the
-      // bundle's own scripts run un-sandboxed. Browser uploads are the opposite
-      // case and are created trusted:false (SPEC §6c).
-      trusted: true,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
-  batch.set(versionsRef.doc(versionId), {
-    versionId,
-    label: values.label ?? manifest.label ?? versionId,
-    entry: storedEntry,
-    format,
-    ...(sourceEntry ? { sourceEntry } : {}),
-    ...(rendererVersion ? { rendererVersion } : {}),
-    storagePrefix,
-    fileCount,
-    bytes,
-    contentHash,
-    files: files.map((f) => f.rel),
-    parentVersion: maxN > 0 ? `v${maxN}` : null,
-    publishedVia: "cli",
-    publishedByEmail: actor.email,
-    publishedBy: actor,
-    publishedAt: FieldValue.serverTimestamp(),
+  await db.runTransaction(async (batch) => {
+    const fresh = await batch.get(docRef);
+    if ((fresh.data()?.currentVersion ?? null) !== (behind ?? null)) {
+      throw new Error("A newer version was published. Read it before publishing again.");
+    }
+    if ((await batch.get(versionsRef.doc(versionId))).exists) throw new Error("Version already exists; retry from the latest head.");
+    batch.set(
+      docRef,
+      {
+        docId,
+        title,
+        slug,
+        ...(snap.exists ? {} : { ownerUid: null, ownerEmail, createdAt: FieldValue.serverTimestamp() }),
+        ...(snap.exists ? {} : { visibility: "private", publicEdit: false, folderId: null }),
+        ...grants,
+        ...membership,
+        currentVersion: versionId,
+        // CLI provenance: the publisher is authenticated and deliberate, so the
+        // bundle's own scripts run un-sandboxed. Browser uploads are the opposite
+        // case and are created trusted:false (SPEC §6c).
+        trusted: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    batch.create(versionsRef.doc(versionId), {
+      versionId,
+      label: values.label ?? manifest.label ?? versionId,
+      entry: storedEntry,
+      format,
+      ...(sourceEntry ? { sourceEntry } : {}),
+      ...(rendererVersion ? { rendererVersion } : {}),
+      storagePrefix,
+      fileCount,
+      bytes,
+      contentHash,
+      files: files.map((f) => f.rel),
+      parentVersion: maxN > 0 ? `v${maxN}` : null,
+      publishedVia: "cli",
+      publishedByEmail: actor.email,
+      publishedBy: actor,
+      publishedAt: FieldValue.serverTimestamp(),
+    });
   });
-  await batch.commit();
 
   // Presence reads are gated by a mirror of `members` in RTDB, so every path
   // that recomputes membership has to refresh it — including this one.

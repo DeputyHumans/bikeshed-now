@@ -20,6 +20,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { draftStoragePrefix, newBundlePrefix, versionStoragePrefix } from "./storage";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
@@ -218,7 +219,7 @@ export async function reviseDocument(args: {
     format: v.format === "markdown" ? "markdown" : "html",
     ...(sourceEntry ? { sourceEntry } : {}),
     // An archive replaces everything, so the base's bytes are not read for it.
-    files: extracted.archive ? [] : await readPrefix(`docs/${docRef.id}/${baseVersion}/`),
+    files: extracted.archive ? [] : await readPrefix(`${versionStoragePrefix(docRef.id, baseVersion, v)}/`),
   };
 
   const compiled = compileRevision(base, extracted, args.title, MAX_BUNDLE_BYTES);
@@ -499,10 +500,11 @@ export async function commitNewVersion(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = `docs/${docRef.id}/${versionId}`;
-  await uploadBundle(storagePrefix, compiled.files);
+  const storagePrefix = newBundlePrefix(docRef.id);
+  await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 
   const base = args.baseVersion ?? "";
+  let replacedDraftPrefix: string | null = null;
   try {
     await db.runTransaction(async (tx) => {
       // Both asked again here, where the version becomes current: the checks
@@ -511,6 +513,7 @@ export async function commitNewVersion(args: {
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
+      replacedDraftPrefix = cur.data()?.draft ? draftStoragePrefix(docRef.id, cur.data()!.draft) : null;
       await mintVersion(tx);
     });
   } catch (e) {
@@ -523,7 +526,7 @@ export async function commitNewVersion(args: {
       const held = await refuseIfAcceptedInDraft(docRef, base);
       if (held) return held;
     }
-    if (reason === "STALE" || reason === "PENDING" || reason === "ACCEPTED") {
+    if (reason === "STALE" || reason === "CONFLICT" || reason === "PENDING" || reason === "ACCEPTED") {
       const fresh = await docRef.get();
       return {
         error: "Somebody published a newer version while this one was uploading. Read it, then update it again.",
@@ -536,7 +539,7 @@ export async function commitNewVersion(args: {
 
   // Only once the version is current, so a refused or stale update leaves the
   // draft and its log to the people editing them.
-  await dropReplacedDraft(docRef.id, editing.log);
+  await dropReplacedDraft(docRef.id, editing.log, replacedDraftPrefix);
   await syncPublicProjection(db, docRef.id);
 
   return { versionId, contentHash, fileCount, bytes, deduped: false };
@@ -594,14 +597,14 @@ export async function commitNewVersion(args: {
  * Best effort, because the version is already current: failing the request now
  * would report as unpublished a version everybody can already see.
  */
-async function dropReplacedDraft(docId: string, log: boolean): Promise<void> {
+async function dropReplacedDraft(docId: string, log: boolean, prefix: string | null): Promise<void> {
   try {
     if (log) await clearEditLog(docId);
   } catch (e) {
     console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
   }
   try {
-    await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${docId}/draft/`, force: true });
+    if (prefix) await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `${prefix}/`, force: true });
   } catch (e) {
     console.error(`could not delete the draft files of ${docId}:`, (e as Error)?.message ?? e);
   }

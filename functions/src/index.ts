@@ -14,6 +14,8 @@
  * bypasses rules, and are therefore the only sanctioned write path.
  */
 
+import { StaleVersionError } from "./lib/versions";
+import { draftStoragePrefix, versionStoragePrefix } from "./lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
@@ -509,15 +511,6 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `docs/${docId}/${versionId}/`;
-  const objectKey = `${prefix}${relPath}`;
-  // Defence in depth: the resolved key must stay under the version prefix even
-  // if a segment check above were ever loosened.
-  if (!objectKey.startsWith(prefix) || objectKey.includes("..")) {
-    res.status(404).end();
-    return;
-  }
-
   const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
   if (!gate) {
     res.status(404).end();
@@ -526,6 +519,15 @@ export const contentProxy = onRequest(PLAIN, async (req, res) => {
 
   const versionSnap = await gate.docSnap.ref.collection("versions").doc(versionId).get();
   if (!versionSnap.exists) {
+    res.status(404).end();
+    return;
+  }
+
+  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
+  const objectKey = `${prefix}${relPath}`;
+  // Defence in depth: the resolved key must stay under the version prefix even
+  // if a segment check above were ever loosened.
+  if (!objectKey.startsWith(prefix) || objectKey.includes("..")) {
     res.status(404).end();
     return;
   }
@@ -690,7 +692,7 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `docs/${docId}/${versionId}/`;
+  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
   const [objects] = await bucket().getFiles({ prefix });
   const files: BundleEntry[] = [];
   let total = 0;
@@ -940,18 +942,24 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   // For Markdown the posted HTML is converted back to Markdown HERE, and its
   // rendering stored beside it (SPEC §11).
   const markdown = version.format === "markdown" ? htmlToMarkdown(html) : null;
-  const draft = await writeDraft({
-    docRef: ref,
-    baseVersion,
-    version,
-    content:
-      markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
-    existingSessions: data.draft?.editSessions,
-    emailLower: caller.emailLower,
-    actor: actorFrom(caller, req),
-  });
+  try {
+    const draft = await writeDraft({
+      db: db(),
+      docRef: ref,
+      baseVersion,
+      version,
+      content:
+        markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
+      existingSessions: data.draft?.editSessions,
+      emailLower: caller.emailLower,
+      actor: actorFrom(caller, req),
+    });
 
-  res.status(200).json({ draft: { ...draft, editSessions: undefined } });
+    res.status(200).json({ draft: { ...draft, editSessions: undefined } });
+  } catch (e) {
+    if (!(e instanceof StaleVersionError)) throw e;
+    res.status(409).json({ error: e.message, currentVersion: e.currentVersion });
+  }
 });
 
 /**
@@ -983,7 +991,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
   const docData = docSnap.data() as DocAclData & {
     currentVersion?: string;
-    draft?: { baseVersion?: string; entry?: string } | null;
+    draft?: { baseVersion?: string; entry?: string; storagePrefix?: string } | null;
   };
   const proof = await linkProofFor(docSnap.ref, docData, caller, null);
   if (!canEdit(docData, caller, proof)) {
@@ -995,7 +1003,8 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const baseVersion = docData.draft?.baseVersion ?? docData.currentVersion;
+  const baseVersion = docData.currentVersion;
+  const draft = docData.draft?.baseVersion === baseVersion ? docData.draft : null;
   if (typeof baseVersion !== "string" || !safeSegment(baseVersion)) {
     res.status(404).end();
     return;
@@ -1004,7 +1013,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   let relPath = segments.slice(1).join("/");
   if (relPath.length === 0) {
     const version = await loadVersionMeta(docSnap.ref, baseVersion);
-    const entry = docData.draft?.entry ?? version?.entry;
+    const entry = draft?.entry ?? version?.entry;
     if (typeof entry !== "string" || safeRelPath(entry) == null) {
       res.status(404).end();
       return;
@@ -1012,10 +1021,12 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     relPath = entry;
   }
 
-  const draftKey = `docs/${docId}/draft/${relPath}`;
-  const baseKey = `docs/${docId}/${baseVersion}/${relPath}`;
-  let objectKey = draftKey;
-  const [draftExists] = await bucket().file(draftKey).exists();
+  const draftKey = draft ? `${draftStoragePrefix(docId, draft)}/${relPath}` : null;
+  const version = await loadVersionMeta(docSnap.ref, baseVersion);
+  if (!version) { res.status(404).end(); return; }
+  const baseKey = `${version.storagePrefix}/${relPath}`;
+  let objectKey = draftKey ?? baseKey;
+  const [draftExists] = draftKey ? await bucket().file(draftKey).exists() : [false];
   if (!draftExists) {
     objectKey = baseKey;
     const [baseExists] = await bucket().file(baseKey).exists();
@@ -1241,7 +1252,7 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
     res.status(403).json({ error: "Only the owner or an approver can accept or reject a suggestion." });
     return;
   }
-  if ((op === "claim" || op === "accept") && data.currentVersion !== versionId) {
+  if (data.currentVersion !== versionId) {
     res.status(409).json({
       error: "This document has a newer version, so this suggestion can no longer be applied.",
       currentVersion: data.currentVersion,
@@ -2461,7 +2472,7 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
     // even where the range is ignored.
     stage = "stream";
     const stream = bucket()
-      .file(`docs/${docId}/${decision.versionId}/${entry}`)
+      .file(`${versionStoragePrefix(docId, decision.versionId, data)}/${entry}`)
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
     stage = "scan";
