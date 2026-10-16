@@ -12,13 +12,21 @@
   gap: var(--s-7);
 }
 
-/* The story gets the whole container: small UI details need the width. */
+/* The pitch and agent setup share the hero; the story below keeps full width. */
 .landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-6);
+  padding-top: var(--s-4);
+}
+
+.landing-hero-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--s-3);
-  padding-top: var(--s-4);
+  min-width: 0;
 }
 
 .landing-hero h1 {
@@ -61,8 +69,7 @@
   font-size: var(--fs-lead);
 }
 
-.landing-fine,
-.landing-duration {
+.landing-fine {
   font-size: var(--fs-small);
   color: var(--color-ink-muted);
   margin: 0;
@@ -72,14 +79,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
-}
-
-.landing-story-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-2) var(--s-4);
 }
 
 .landing-video {
@@ -112,28 +111,6 @@
   color: var(--color-ink-muted);
 }
 
-.landing-transcript {
-  border-bottom: 1px solid var(--color-line);
-  font-size: var(--fs-small);
-}
-
-.landing-transcript summary {
-  min-height: var(--tap);
-  padding: var(--s-2) 0;
-  cursor: pointer;
-  color: var(--color-accent-strong);
-}
-
-.landing-transcript-body {
-  max-width: 72ch;
-  padding: var(--s-2) 0 var(--s-4);
-  color: var(--color-ink-muted);
-}
-
-.landing-transcript-body .btn {
-  min-height: var(--tap);
-}
-
 /* Three outcomes remain readable without playing the story. */
 .landing-points {
   list-style: none;
@@ -163,10 +140,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
-  padding: var(--s-5);
+  min-width: 0;
+  padding: var(--s-4);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.landing-agents h2 {
+  font-size: var(--fs-h3);
 }
 
 .landing-agent-row {
@@ -256,6 +238,10 @@
 }
 
 @media (max-width: 860px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .landing-points {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--s-4);

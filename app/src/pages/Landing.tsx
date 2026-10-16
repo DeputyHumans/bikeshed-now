@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { APP_VERSION } from "../config";
+import { useIsSingleColumn } from "../hooks/useMediaQuery";
 import { LandingVideo } from "./LandingVideo";
 
 /**
@@ -38,8 +39,38 @@ export function agentInstructions(origin: string): string {
   ].join("\n");
 }
 
+function AgentCard({ origin, copyForAgent, copyGuideUrl }: {
+  origin: string;
+  copyForAgent: () => void;
+  copyGuideUrl: () => void;
+}) {
+  return (
+    <aside className="landing-agents" aria-labelledby="landing-agents-title">
+      <h2 id="landing-agents-title">Put your agent to work</h2>
+      <p className="landing-body">
+        Give it these instructions to publish a draft, read your team’s feedback, and help revise.
+      </p>
+      <p className="landing-agent-row">
+        <span className="landing-guide">
+          <a className="mono landing-guide-link" href="/llms.txt">{origin}/llms.txt</a>
+          <button type="button" className="icon-btn landing-guide-copy" onClick={copyGuideUrl}>
+            <Icon name="copy" title="Copy the address" />
+          </button>
+        </span>
+        <button type="button" className="btn landing-copy" onClick={copyForAgent}>
+          Copy instructions
+        </button>
+      </p>
+      <p className="landing-body landing-manual">
+        You can also upload HTML, Markdown, or a ZIP bundle yourself after signing in.
+      </p>
+    </aside>
+  );
+}
+
 export function Landing() {
   const toast = useToast();
+  const singleColumn = useIsSingleColumn();
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   function copyForAgent() {
@@ -55,25 +86,34 @@ export function Landing() {
     toast.show("Address copied");
   }
 
+  const agentCard = <AgentCard origin={origin} copyForAgent={copyForAgent} copyGuideUrl={copyGuideUrl} />;
+
   return (
     <div className="landing">
       <section className="landing-hero">
-        <h1>
-          Everyone has an opinion<span className="landing-stop">.</span>
-          <span className="landing-agent-line">Including your agent<span className="landing-stop">.</span></span>
-        </h1>
-        <p className="landing-lead">
-          Publish a document. Review it with your team and your agent.
-          Keep feedback with the words it’s about.
-        </p>
-        <p className="landing-formats">Bring your HTML or Markdown. Share it with your team.</p>
-        <div className="landing-cta">
-          <Link className="btn btn-primary landing-start" to="/signup">Get started</Link>
-          <span className="landing-fine">Sign in or create an account</span>
+        <div className="landing-hero-main">
+          <h1>
+            Everyone has an opinion<span className="landing-stop">.</span>
+            <span className="landing-agent-line">Including your agent<span className="landing-stop">.</span></span>
+          </h1>
+          <p className="landing-lead">
+            Publish a document. Review it with your team and your agent.
+            Keep feedback with the words it’s about.
+          </p>
+          <p className="landing-formats">Bring your HTML or Markdown. Share it with your team.</p>
+          <div className="landing-cta">
+            <Link className="btn btn-primary landing-start" to="/signup">Get started</Link>
+            <span className="landing-fine">Sign in or create an account</span>
+          </div>
         </div>
+        {!singleColumn && agentCard}
       </section>
 
+      {/* Keep the player in this sibling slot across breakpoint changes so a
+          resize moves only the card, without interrupting playback. */}
       <LandingVideo />
+
+      {singleColumn && agentCard}
 
       <section className="landing-section" aria-label="Why Bikeshed">
         <ul className="landing-points">
@@ -90,27 +130,6 @@ export function Landing() {
             <p>Your team reviews. Your agent reads the feedback, revises, and replies. Agent comments are labelled.</p>
           </li>
         </ul>
-      </section>
-
-      <section className="landing-agents" aria-labelledby="landing-agents-title">
-        <h2 id="landing-agents-title">Bring your own agent</h2>
-        <p className="landing-body">
-          Give your agent these instructions to publish here and work through your team’s feedback.
-        </p>
-        <p className="landing-agent-row">
-          <span className="landing-guide">
-            <a className="mono landing-guide-link" href="/llms.txt">{origin}/llms.txt</a>
-            <button type="button" className="icon-btn landing-guide-copy" onClick={copyGuideUrl}>
-              <Icon name="copy" title="Copy the address" />
-            </button>
-          </span>
-          <button type="button" className="btn landing-copy" onClick={copyForAgent}>
-            Copy instructions
-          </button>
-        </p>
-        <p className="landing-body landing-manual">
-          You can also upload HTML, Markdown, or a ZIP bundle yourself after signing in.
-        </p>
       </section>
 
       <section className="landing-bottom-cta" aria-label="Get started with Bikeshed">
