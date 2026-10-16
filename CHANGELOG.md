@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep mobile viewer controls and presence chips reachable by constraining the viewer grid column to the viewport.
+
 - Keep the stale-base commit canary on one saved draft so draft-snapshot protection does not mask the version-minting race it measures.
 
 - Avoid a circular wait in forced first-join E2E scenarios: observe the loaded draft while the join gate holds, then require editable shared state after release.

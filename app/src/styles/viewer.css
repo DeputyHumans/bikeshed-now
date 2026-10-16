@@ -20,6 +20,7 @@
  */
 .viewer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   height: calc(100vh - var(--header-h));
   height: calc(100dvh - var(--header-h));
