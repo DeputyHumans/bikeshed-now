@@ -874,6 +874,10 @@ scenario("A20.2.get_comments returns each unresolved thread with its quote and c
     {
       id: d.id,
       version: "v1",
+      currentVersion: "v1",
+      isCurrent: true,
+      canComment: true,
+      url: url(d.id),
       truncated: false,
       threads: [{ threadId: first.threadId, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, via: "mcp", body: "First thread." }] }],
     },

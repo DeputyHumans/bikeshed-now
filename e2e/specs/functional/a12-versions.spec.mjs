@@ -81,8 +81,7 @@
  * since the unit's three control sets are spent. 12.1's trust reads are
  * proven live inside the case: the changed update at its end must, and does,
  * show both scopes withdrawn. Each defect case's oracle has been seen to pass
- * with its fix: e2e/patches/a12-fix-draft-race (X-a12-versions-2) and
- * a12-fix-stale-banner (X-a12-versions-3) as stack patches, and
+ * with its fix: a12-fix-stale-banner (X-a12-versions-3) as a stack patch, and
  * X-a12-versions-1 by a spec mutation that re-syncs the projection after the
  * withdrawal.
  *
@@ -216,6 +215,8 @@ async function versionIds(docId) {
 
 /** Object keys under docs/{docId}/{rel}. */
 const objectsUnder = async (docId, rel) => {
+  // Cover both legacy draft/ and isolated drafts/ prefixes, even after metadata is cleared.
+  if (rel === "draft/") return listObjects(target, `docs/${docId}/draft`);
   const match = /^(v[0-9]+)\/(.*)$/.exec(rel);
   const record = match ? await versionRecord(docId, match[1]) : null;
   return listObjects(target, record?.storagePrefix ? `${record.storagePrefix}/${match[2]}` : `docs/${docId}/${rel}`);
@@ -942,7 +943,7 @@ const RACE_ATTEMPTS = 5;
 /** An HTML comment of about `n` bytes. */
 const padding = (n) => `<!-- ${"a late autosave, padded ".repeat(Math.ceil(n / 24)).slice(0, n)} -->`;
 
-scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit is superseding is refused or lands first: it never leaves a draft on the superseded version, which GET /draft would serve to every editor (SPEC §2)", { tiers: BOTH, defect: "X-a12-versions-2", timeoutMs: 480_000, ...STALLS }, async (ctx) => {
+scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit is superseding is refused or lands first: it never leaves a draft on the superseded version, which GET /draft would serve to every editor (SPEC §2)", { tiers: BOTH, timeoutMs: 480_000, ...STALLS }, async (ctx) => {
   ctx.step(`cast an owner; per attempt (at most ${RACE_ATTEMPTS}): publish revision 1, save revision 2 as the draft of v1, then a late POST /draft on v1 padded to ${RACE_PAD_BYTES} bytes and, ${RACE_LEAD_MS} ms after it, POST /commit`);
   const { owner } = await castWithOwner(ctx, []);
   const rows = [];

@@ -950,9 +950,15 @@ function judgeAgentView(view, { label, mark, forbidden = [], noTokens = false, w
   assert.ok(f.length === 0, `${label} next editor: ${who} opens the editor after the update and sees the agent's version — ${f.join("; ")}`);
 }
 
+/** Read through the immutable version's committed storage pointer. */
+async function publishedEntry(docId, versionId, entry) {
+  const version = await readDoc(target, `docs/${docId}/versions/${versionId}`);
+  return readObject(target, `${version?.storagePrefix ?? `docs/${docId}/${versionId}`}/${entry}`);
+}
+
 /** An editor's GET /draft serves `versionId`'s stored entry. */
 async function judgeDraftServed({ label, http, docId, entry, versionId, forbidden = [] }) {
-  const stored = await readObject(target, `docs/${docId}/${versionId}/${entry}`);
+  const stored = await publishedEntry(docId, versionId, entry);
   const got = await draftServed(http, docId, entry);
   const whose = stored && got.sha === sha(stored) ? `${versionId}'s entry` : forbidden.find((m) => got.text.includes(m)) ? `a replaced draft (${forbidden.find((m) => got.text.includes(m))})` : got.text.includes(`>${V1_HEADING}<`) ? "v1's content" : "something else";
   assert.ok(got.status === 200 && stored && got.sha === sha(stored), `${label} GET /draft: an editor's GET /draft serves the agent's version (${versionId}'s stored entry) — it answered ${got.status} with ${whose}`);
@@ -1298,7 +1304,6 @@ scenario("C12b straddle (SYNC-P, amplify-c12-update): every curl draft is held a
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c12-update"],
   n: [2, 5, 10, 20],
-  defect: "S14",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1307,14 +1312,13 @@ scenario("C12b straddle (SYNC-P, amplify-c12-update): every curl draft is held a
   // What POST /draft left is "C12b straddle draft write"'s oracle (X-a12-versions-2), recorded here and judged there.
   ctx.step(`RECORDED, judged by the draft-write case (X-a12-versions-2): ${dropped.failed.length ? dropped.failed.join(" | ") : "nothing of the drafts was left"}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b straddle", drafts: answers.map((a) => a.status), draftRecord: state.draft, draftObjects: state.draftObjects.length, ownFailed: served.failed.length });
-  verdict({ defect: "S14", others: current, own: served });
+  verdict({ others: current, own: served });
 }));
 
 scenario("C12b straddle draft write (SYNC-P, amplify-c12-update): every curl draft is held after POST /draft's base check while the agent's update publishes v2 and drops the draft, then lets go; once the server holds still nothing of a draft of v1 is left: no docs/{d}.draft on v1 and no object under docs/{d}/draft/", {
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c12-update"],
   n: [2, 5, 10, 20],
-  defect: "X-a12-versions-2",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1323,7 +1327,7 @@ scenario("C12b straddle draft write (SYNC-P, amplify-c12-update): every curl dra
   // What GET /draft serves from it is "C12b straddle"'s oracle (S14), recorded here and judged there.
   ctx.step(`RECORDED, judged by the straddle case (S14): ${served.failed.length ? served.failed.join(" | ") : "GET /draft serves the agent's version"}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b straddle draft write", drafts: answers.map((a) => a.status), draftRecord: state.draft, draftObjects: state.draftObjects.length, ownFailed: dropped.failed.length });
-  verdict({ defect: "X-a12-versions-2", others: current, own: dropped });
+  verdict({ others: current, own: dropped });
 }));
 
 scenario("C12b straddle serial positive control: the same curl drafts and update one after another — each draft saved on v1, then the agent's update, then each draft again on v1, refused as stale — leave no draft of v1, GET /draft serves the agent's version and the next editor sees it", {
@@ -1587,7 +1591,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(state.currentVersion === "v2" && state.versions.includes("v2<v1:editor"), `C12d version: v2 is current, minted on v1 by the editor (${JSON.stringify(state.versions)}, current ${state.currentVersion})`));
   await o.check(() => judgeDraftDropped(state, { label: "C12d", versionId: "v2" }));
   const parser = await ctx.users.parser();
-  const v2html = (await readObject(target, `docs/${docId}/v2/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await publishedEntry(docId, "v2", entry))?.toString("utf8") ?? "";
   await o.check(async () => assertInvariant(checkI2({ peers: { v2: await segmentsOfHtml(parser, v2html, ids) }, typed: log.typed })));
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1709,7 +1713,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   await nobodyEditing(ctx, docId, `${p1.name} published and ${p2.name} pressed Done`);
   const yLeft = entriesOf(await readLog(docId));
 
-  const v2html = (await readObject(target, `docs/${docId}/v2/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await publishedEntry(docId, "v2", entry))?.toString("utf8") ?? "";
   const parser = await ctx.users.parser();
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1719,7 +1723,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const view = await editorView(ctx, next, docId);
   await o.check(() => assert.ok(view.i3.sentinels === 1 && view.i3.children === baseline.children, `C12d co-editor next editor: ${next.name} sees the sentinel once and v2's ${baseline.children} top-level elements (sentinel ${view.i3.sentinels} time(s), ${view.i3.children} element(s))`));
   const probe = await next.typeAndAutosave(idSelector(paragraph(users.indexOf(next))), log.next(next.name, paragraph(users.indexOf(next))), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const draftNow = (await readObject(target, `docs/${docId}/draft/${entry}`))?.toString("utf8") ?? "";
+  const draftNow = (await readObject(target, `${(await readDoc(target, `docs/${docId}`)).draft?.storagePrefix ?? `docs/${docId}/draft`}/${entry}`))?.toString("utf8") ?? "";
 
   const count = (text) => (text == null ? null : late.filter((r) => text.includes(r.token)).length);
   const where = {

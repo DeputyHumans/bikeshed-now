@@ -214,7 +214,12 @@ async function main() {
     }
   }
 
-  const prefix = `docs/${docId}/${doomed}/`;
+  const storedPrefix = target.storagePrefix ?? `docs/${docId}/${doomed}`;
+  if (typeof storedPrefix !== "string" || !storedPrefix.startsWith(`docs/${docId}/`) ||
+      storedPrefix.split("/").some((part) => !part || part === "." || part === "..") || storedPrefix.includes("\\")) {
+    fail("invalid version storage prefix");
+  }
+  const prefix = `${storedPrefix}/`;
   const [objects] = await bucket.getFiles({ prefix });
   const files = objects.filter((o) => !o.name.endsWith("/"));
   const totalBytes = files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);

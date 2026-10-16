@@ -9,4 +9,4 @@
 +    if (made.state === "applied" && made.html === "") {
        if (editors.log) await clearEditLog(docRef.id);
        await writeDraft({
-         docRef,
+         db,

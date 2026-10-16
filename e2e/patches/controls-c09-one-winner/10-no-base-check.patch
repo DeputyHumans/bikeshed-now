@@ -1,9 +1,9 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -822,7 +822,8 @@ export const TOOLS: ToolDefinition[] = [
+@@ -876,7 +876,8 @@
        // Optional, so an older client keeps working; absent, the update replaces
        // whatever is current, as it always has.
-       const revisedFrom = str(args, "baseVersion");
+       const revisedFrom = args.baseVersion === undefined ? null : selectedVersion(args.baseVersion, data.currentVersion);
 -      if (revisedFrom && revisedFrom !== baseVersion) {
 +      // controls-c09-one-winner: the base the caller revised from is never compared.
 +      if (revisedFrom === "e2e-control-never") {

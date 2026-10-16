@@ -19,7 +19,7 @@
    // one rule covers both formats — for Markdown the draft carries index.md and
    // index.html, for HTML just the entry — with no branch here.
 @@ -249,6 +253,8 @@ export async function commitDraft(args: {
-   const draftPrefix = `docs/${docId}/draft/`;
+   const draftPrefix = `${draftStoragePrefix(docId, draft)}/`;
    const baseFiles = await readPrefix(basePrefix);
    const draftFiles = await readPrefix(draftPrefix);
 +  // e2e amplify (amplify-c08-mint-races): a pause point after the draft is read, before it is hashed and deduplicated.

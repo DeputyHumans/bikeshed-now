@@ -9,5 +9,5 @@
 +      // accept writes the draft and keeps the live log it should drop.
 +      if (editors.log) void clearEditLog;
        await writeDraft({
+         db,
          docRef,
-         baseVersion: working.baseVersion,

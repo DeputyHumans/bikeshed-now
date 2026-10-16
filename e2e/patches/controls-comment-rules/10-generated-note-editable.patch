@@ -2,7 +2,7 @@
 +++ b/config/templates/firestore.rules.tmpl
 @@ -248,7 +248,6 @@
              // and by whom, stay as they were.
-             allow update: if canRead(docId, docData(docId))
+             allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
                && resource.data.authorUid == request.auth.uid
 -              && !('generated' in resource.data)
                && !('opensSuggestion' in resource.data)
@@ -12,7 +12,7 @@
 +++ b/firestore.rules
 @@ -251,7 +251,6 @@
              // and by whom, stay as they were.
-             allow update: if canRead(docId, docData(docId))
+             allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
                && resource.data.authorUid == request.auth.uid
 -              && !('generated' in resource.data)
                && !('opensSuggestion' in resource.data)

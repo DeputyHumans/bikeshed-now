@@ -4,8 +4,8 @@
          match /annotations/{annId} {
            allow read: if canRead(docId, docData(docId));
            // The key list keeps `suggestion` out as well.
--          allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-+          allow create: if isVerifiedUser() && authoredBySelf()
+-          allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
++          allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
              && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
              && request.resource.data.anchor is map
              && request.resource.data.resolved == false
@@ -15,8 +15,8 @@
          match /annotations/{annId} {
            allow read: if canRead(docId, docData(docId));
            // The key list keeps `suggestion` out as well.
--          allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-+          allow create: if isVerifiedUser() && authoredBySelf()
+-          allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
++          allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
              && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
              && request.resource.data.anchor is map
              && request.resource.data.resolved == false

@@ -1,6 +1,6 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -24,6 +24,7 @@ import * as mime from "mime-types";
+@@ -25,6 +25,7 @@
  import { MAX_BUNDLE_BYTES, bucketName } from "../config";
  import { emptyGrants } from "./access";
  import type { Actor } from "./actor";
@@ -8,23 +8,23 @@
  import { hashBundleFiles, type BundleFile } from "./hash";
  import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
  import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
-@@ -492,6 +493,9 @@ export async function commitNewVersion(args: {
+@@ -493,6 +494,9 @@
    const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");
    if (held) return held;
  
-+  // e2e amplify (amplify-c08-mint-races): a pause point after every refusal, before the version id is chosen.
++  // e2e amplify: all refusals have run; no version id has been chosen.
 +  await e2eRaceGate("update-before-id", docRef.id);
 +
    const allVersions = await versionsRef.get();
    let maxN = 0;
    for (const d of allVersions.docs) {
-@@ -502,6 +506,9 @@ export async function commitNewVersion(args: {
-   const storagePrefix = `docs/${docRef.id}/${versionId}`;
-   await uploadBundle(storagePrefix, compiled.files);
- 
-+  // e2e amplify (amplify-c08-mint-races): a pause point between the upload of v(N+1)/ and the transaction.
-+  await e2eRaceGate("update-after-upload", docRef.id);
+@@ -502,6 +506,9 @@
+   const versionId = `v${maxN + 1}`;
+   const storagePrefix = newBundlePrefix(docRef.id);
+   await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 +
++  // e2e amplify: the isolated bundle is ready, before its record is committed.
++  await e2eRaceGate("update-after-upload", docRef.id);
+ 
    const base = args.baseVersion ?? "";
-   try {
-     await db.runTransaction(async (tx) => {
+   let replacedDraftPrefix: string | null = null;

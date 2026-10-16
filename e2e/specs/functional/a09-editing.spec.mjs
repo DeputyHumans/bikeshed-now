@@ -1090,7 +1090,7 @@ async function commitV2(ctx, owner, docId, html) {
  * page is pinned to /d/<doc>/v1, so it stays on v1 as a page whose author
  * has not reloaded does, and its autosave still names v1.
  */
-scenario("A9.10 an autosave against a superseded base answers 409 and the editor shows \"Somebody published a newer version. Reload to continue.\"", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A9.10 a superseded base closes the editor and delayed saves are refused", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { owner, accounts, docId } = await stage(ctx, { name: "a910-stale", title: "A9.10 stale", readers: [{ label: "editor", role: "editor" }] });
   ctx.step("the editor opens /d/<doc>/v1 (v1 is the head) and starts editing it");
   const e = await signedIn(ctx, "editor", accounts[1], docId, { v: "v1" });
@@ -1100,21 +1100,12 @@ scenario("A9.10 an autosave against a superseded base answers 409 and the editor
   await commitV2(ctx, owner, docId, FIXTURE_HTML.replace("Paragraph 39.", "Paragraph 39 (v2)."));
   await eventually(async () => (await readDoc(target, `docs/${docId}`)).currentVersion === "v2", { timeout: LATENCY_MS, message: "v2 is current" });
 
-  const t = tok("s");
-  ctx.step(`the editor, still on v1, types ${t}; the autosave posts baseVersion v1`);
-  const since = e.toastMark();
-  // Any status: the refusal is the oracle, asserted below. Hosting's cut-off is the stack not answering (answered()).
-  const save = await e.typeAndAutosave("#e2e-7", t, { delay: 15, timeout: SAVE_MS, expectStatus: null });
-  answered(save.entry, "the editor's autosave, POST /draft");
-  const posted = save.entry.postJson ?? {};
-  ctx.ev.json("stale", { status: save.status, body: save.body, baseVersion: posted.baseVersion, saveState: save.saveState });
-  precondition(posted.baseVersion === "v1", `the autosave posted baseVersion ${posted.baseVersion}`);
-  assert.equal(save.status, 409, "the stale autosave is refused");
-  assert.equal(save.body?.currentVersion, "v2", "the refusal names the current version");
-  const toast = await e.waitForToast((x) => x.kind === "error", { since, timeout: LATENCY_MS });
-  assert.equal(toast.text, COPY.stale);
-  await eventually(async () => (await e.saveState()) === "error", { timeout: LATENCY_MS, message: "save state error" });
-  assert.equal((await e.page.locator(".save-state").textContent()).trim(), COPY.staleSaveState, "the save state says why");
+  ctx.step("the pinned version becomes an archive: editing closes and delayed saves cannot mutate it");
+  await leftEditor(e);
+  await e.page.getByText("This is an archived version. Its content and feedback are read-only.", { exact: true }).waitFor();
+  const refused = await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: FIXTURE_HTML });
+  assert.equal(refused.status, 409, "a delayed save is refused");
+  assert.equal(refused.json?.currentVersion, "v2", "the refusal names the current version");
   assert.equal("draft" in (await readDoc(target, `docs/${docId}`)), false, "no draft was written on the superseded base");
   noPageErrors([e]);
 });

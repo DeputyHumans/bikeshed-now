@@ -1,11 +1,9 @@
-diff --git a/functions/src/lib/draft.ts b/functions/src/lib/draft.ts
-index 5a5aa24..ae126aa 100644
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -299,7 +299,9 @@ export async function commitDraft(args: {
-     await db.runTransaction(async (tx) => {
+@@ -329,7 +329,9 @@
        const cur = await tx.get(docRef);
        if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+       if (!sameDraft(cur.data()?.draft)) throw new Error("DRAFT_CHANGED");
 -      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
 +      // e2e negative control (controls-c14-left-behind): the transaction no longer asks
 +      // again whether a thread was opened on the base while the bytes uploaded.

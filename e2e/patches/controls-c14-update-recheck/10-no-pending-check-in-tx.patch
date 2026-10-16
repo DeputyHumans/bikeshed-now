@@ -1,8 +1,6 @@
-diff --git a/functions/src/lib/publish.ts b/functions/src/lib/publish.ts
-index a4df836..205c7f2 100644
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -509,7 +509,9 @@ export async function commitNewVersion(args: {
+@@ -511,7 +511,9 @@
        // above ran before the upload, and either may have changed during it.
        const cur = await tx.get(docRef);
        if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
@@ -11,5 +9,5 @@ index a4df836..205c7f2 100644
 +      // again whether a suggestion was made on the base while the bytes uploaded.
 +      void anyOpenThread;
        if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
+       replacedDraftPrefix = cur.data()?.draft ? draftStoragePrefix(docRef.id, cur.data()!.draft) : null;
        await mintVersion(tx);
-     });

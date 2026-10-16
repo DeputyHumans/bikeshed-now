@@ -1,6 +1,6 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -485,7 +485,8 @@
+@@ -486,7 +486,8 @@
    // Whoever is in the editor would lose their typing to this version, and the
    // next save of theirs would be refused as stale.
    const editing = await editorsRefusal(docRef.id, "published");
@@ -10,7 +10,7 @@
    const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
    if (refused) return refused;
    // This path deletes the draft; changes accepted into it would go with it.
-@@ -514,6 +515,7 @@
+@@ -517,6 +518,7 @@
        await mintVersion(tx);
      });
    } catch (e) {
@@ -18,11 +18,11 @@
      const reason = (e as Error).message;
      if (reason === "PENDING") {
        const pending = await refuseIfPending(docRef, base);
-@@ -534,6 +536,7 @@
+@@ -537,6 +539,7 @@
      throw e;
    }
  
 +  if ("refusal" in editing) return editing.refusal;
    // Only once the version is current, so a refused or stale update leaves the
    // draft and its log to the people editing them.
-   await dropReplacedDraft(docRef.id, editing.log);
+   await dropReplacedDraft(docRef.id, editing.log, replacedDraftPrefix);
