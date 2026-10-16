@@ -417,6 +417,15 @@ const expected = [
         "caseId": "e2e/specs/functional/a23-cooldown-ack.spec.mjs::A23.8c a reader whose document expires while its committed cooldown ACK is held receives no comment bytes after retry"
       }
     ]
+  },
+  {
+    "id": "cli-watch-missed-notifications-and-replacement",
+    "claim": "CLI watch mode can announce readiness yet miss the next save, and an atomic editor save replaces the inode watched by native notifications. Metadata recovery must deliver each later save without duplicate publishes or non-JSON stdout.",
+    "requiredCases": [
+      {
+        "caseId": "e2e/specs/functional/a20-cli.spec.mjs::A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each"
+      }
+    ]
   }
 ];
 const candidateProvenance = {
@@ -1008,11 +1017,11 @@ const nativeCells = [
 const nativeId = "native-transaction-ack-loss-misclassifies-own-commit";
 const commandIds = ["rtdb-rule-coverage-retains-live-payloads", "early-e2e-report-accepted-as-completed-run"];
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 24 discoveries retain their identities and original claims", () => {
+test("all 25 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
-test("21 non-native discoveries retain every exact affected case and N-axis cell", () => {
+test("22 non-native discoveries retain every exact affected case and N-axis cell", () => {
   const cases = expected.filter(r => r.id !== nativeId && !commandIds.includes(r.id));
   for (const original of cases) assert.deepEqual(row(original.id).requiredCases, original.requiredCases, `${original.id}: exact affected case and N-axis retention`);
 });

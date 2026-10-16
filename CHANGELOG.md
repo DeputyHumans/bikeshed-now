@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Extend discovery-retention checks to the watch regression while keeping all original identities, claims and case obligations pinned.
+
 - Track the reproduced watch-delivery regression as an open campaign finding until final frozen acceptance, preserving its native failure and recovery evidence.
 
 - Keep CLI watch mode publishing after missed native file notifications or atomic file replacement. A single-file metadata fallback shares the existing debounce and preserves JSON-only output.
