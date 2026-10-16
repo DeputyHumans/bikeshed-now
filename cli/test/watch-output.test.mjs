@@ -5,20 +5,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../src/index.mjs", import.meta.url));
 
-for (const command of ["publish", "update"]) for (const notifications of ["native", "dropped"]) {
+for (const command of ["publish", "update"]) for (const notifications of ["native", "dropped", "delayed-poll"]) {
   test(`${command} --watch --json survives ${notifications} notifications and atomic saves with JSON-only stdout`, { timeout: 20_000 }, async () => {
     const dir = mkdtempSync(join(tmpdir(), "bikeshed-watch-output-"));
     const file = join(dir, "watched.html");
     writeFileSync(file, "<p>First bytes</p>");
+    const marker = join(dir, "polled.txt");
     const hook = join(dir, "drop-watch.mjs");
-    writeFileSync(hook, `import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const nativeWatch = fs.watch; fs.watch = (file) => nativeWatch(file, () => {}); syncBuiltinESMExports();`);
+    writeFileSync(hook, `import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const nativeWatch = fs.watch; fs.watch = (file) => nativeWatch(file, () => {}); syncBuiltinESMExports();
+      ${notifications === "delayed-poll" ? `const interval = globalThis.setInterval; globalThis.setInterval = (fn, ms, ...args) => {
+        if (ms !== 250) return interval(fn, ms, ...args);
+        let tick = 0;
+        return interval(() => { if (++tick % 2 === 0) return; const seen = fs.readFileSync(${JSON.stringify(file)}, "utf8"); fn(...args); fs.writeFileSync(${JSON.stringify(marker)}, seen); }, ms);
+      };` : ""}`);
     const requests = [];
     const server = createServer((req, res) => {
       let raw = "";
@@ -34,7 +40,7 @@ for (const command of ["publish", "update"]) for (const notifications of ["nativ
     });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const args = command === "publish" ? [command, file] : [command, "watched", file];
-    const child = spawn(process.execPath, [...(notifications === "dropped" ? ["--import", hook] : []), CLI, ...args, "--watch", "--json"], {
+    const child = spawn(process.execPath, [...(notifications !== "native" ? ["--import", hook] : []), CLI, ...args, "--watch", "--json"], {
       env: { ...process.env, XDG_CONFIG_HOME: dir, BIKESHED_ORIGIN: `http://127.0.0.1:${server.address().port}`, BIKESHED_TOKEN: "bsk_test.token" },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -57,8 +63,17 @@ for (const command of ["publish", "update"]) for (const notifications of ["nativ
       // the JSON assertion instead of passing because no watch ever started.
       await until(() => /watching watched\.html/.test(stdout + stderr), "watch readiness");
       assert.equal(exited, false, "the watch remains active after its first result");
+      if (notifications === "delayed-poll") {
+        writeFileSync(file, "<p>Partial bytes</p>");
+        await until(() => existsSync(marker) && readFileSync(marker, "utf8") === "<p>Partial bytes</p>", "the poll that queues a partial save");
+      }
       writeFileSync(file, "<p>Changed bytes</p>");
       await until(() => /"versionId": "v2"/.test(stdout), "the changed file's result");
+      if (notifications === "delayed-poll") {
+        // The queued publish sees the final bytes before the next metadata poll.
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        assert.equal(requests.length, 2, "a later metadata poll must not republish bytes the pending save already read");
+      }
       const replacement = join(dir, "replacement.html");
       writeFileSync(replacement, "<p>Atomic replacement</p>");
       renameSync(replacement, file);

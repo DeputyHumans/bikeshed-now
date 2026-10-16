@@ -1047,6 +1047,8 @@ async function watchFile(file, run) {
     last = next;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
+      // The debounced read includes saves since the notification that queued it.
+      last = stamp();
       run().catch((e) => console.error(`error: ${e.message}`));
     }, 250);
   };

@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Refresh watched-file metadata when a debounced publish starts, preventing a later fallback poll from publishing the same save twice; exercise the delayed-poll ordering in real CLI process tests.
+
 - Extend discovery-retention checks to the watch regression while keeping all original identities, claims and case obligations pinned.
 
 - Track the reproduced watch-delivery regression as an open campaign finding until final frozen acceptance, preserving its native failure and recovery evidence.
