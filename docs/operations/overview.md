@@ -247,10 +247,11 @@ bikeshed publish content/docs-developers/bundle/index.html --id docs-developers 
 ```
 
 Each `url` it returns must end in the id you asked for. A taken id gets a
-suffix instead, and the redirect would point at nothing. Then, in the app,
-Share → Who can see it → **Public** on each: no tool can make that change,
-deliberately. A public document takes comments from anyone signed in, so the
-guides collect their own corrections.
+suffix instead, and the redirect would point at nothing. Then, as their owner,
+run `bikeshed visibility docs public` and
+`bikeshed visibility docs-developers public`, or use Share → Who can see it →
+**Public** in the app. A public document takes comments from anyone signed in,
+so the guides collect their own corrections.
 
 To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or
 the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and
