@@ -876,9 +876,14 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
 
   const poller = ctx.mcp({ token: o.tokens[3].token, actor: "poller", timeoutMs: REQUEST_MS });
   await poller.initialize();
+  let recorded;
   const [noSince] = await Promise.all([
     cli(ctx, watcher, ["changes", up.docId, "--json"]),
-    eventually(async () => (await poller.ok("get_changes", { id: up.docId, since: "all" })).events.some((e) => e.type === "comment.added" && e.threadId === made.threadId), { timeout: 240_000, interval: 500, message: "the comment's events in the log (recorded by triggers)" }),
+    eventually(async () => {
+      recorded = await poller.ok("get_changes", { id: up.docId, since: "all" });
+      const types = recorded.events.filter((e) => e.threadId === made.threadId).map((e) => e.type);
+      return types.includes("thread.opened") && types.includes("comment.added");
+    }, { timeout: 240_000, interval: 500, message: "both thread and comment events in the log (recorded by independent triggers)" }),
   ]);
   refused(noSince, "changes without --since", /--since is required/);
 
@@ -890,13 +895,14 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   const all = okJson(allR, "changes --since all");
   const seen = all.events.filter((e) => e.threadId === made.threadId).map((e) => ({ type: e.type, by: e.by, channel: e.channel, quote: e.quote }));
   assert.deepEqual(
-    seen,
+    seen.toSorted((a, b) => a.type.localeCompare(b.type)),
     [
-      { type: "thread.opened", by: o.email, channel: "mcp", quote: Q.j },
       { type: "comment.added", by: o.email, channel: "mcp", quote: Q.j },
+      { type: "thread.opened", by: o.email, channel: "mcp", quote: Q.j },
     ],
     "another credential's thread and comment, each with its quote (SPEC §19)",
   );
+  assert.deepEqual(seen.map((e) => e.type), recorded.events.filter((e) => e.threadId === made.threadId).map((e) => e.type), "the CLI preserves recorded order, not trigger occurrence order (SPEC §19, ADR 0016)");
   assert.equal(all.events.find((e) => e.type === "comment.added" && e.threadId === made.threadId)?.body, body, "the comment carries its body");
   assert.deepEqual({ cursor: typeof all.cursor, more: all.more }, { cursor: "string", more: false }, "the small feed is complete, with the cursor to pass next");
   assert.deepEqual(okJson(mineR, "the writer's own changes").events.filter((e) => e.threadId === made.threadId), [], "what the caller caused is left out (SPEC §19)");
@@ -917,7 +923,12 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   const r = await bg.waiting;
   ctx.step(`  → the wait ended after ${r.ms} ms (first check ${bg.firstCheckMs} ms in)`);
   const j = okJson(r, "changes --wait");
-  assert.deepEqual(j.events.map((e) => [e.type, e.threadId]), [["thread.opened", made.threadId], ["comment.added", made.threadId]], "the wait returned with what happened");
+  const ordered = all.events.filter((e) => e.threadId === made.threadId).map((e) => [e.type, e.threadId]);
+  const waited = j.events.map((e) => [e.type, e.threadId]);
+  assert.ok(waited.length > 0 && waited.length <= ordered.length, "the wait returns a nonempty recorded prefix");
+  assert.deepEqual(waited, ordered.slice(0, waited.length), "the wait preserves recorded order");
+  const resumed = okJson(await cli(ctx, watcher, ["changes", up.docId, "--since", j.cursor, "--json"]), "resuming after the wait");
+  assert.deepEqual([...waited, ...resumed.events.map((e) => [e.type, e.threadId])], ordered, "wait and resume deliver both events once, in recorded order");
   assert.equal(j.timedOut, undefined, "it did not time out");
   if (target.kind === "local") {
     const firstBody = r.calls.find((e) => e.phase === "body" && e.tool === "get_changes");

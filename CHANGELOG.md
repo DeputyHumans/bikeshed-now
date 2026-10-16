@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Check CLI change events in their recorded order rather than assuming thread and comment triggers run in causal order; require wait and resume to deliver both events exactly once.
+
 - Pin the synthetic send interval in the cut-look budget selftest while retaining a real unanswered-read deadline, preventing timer rounding from invalidating its exact retry diagnostic.
 
 - Wait for the saved account preference and checkbox state in the analytics E2E flow, so asynchronous record delivery cannot turn a successful toggle into a false failure.
