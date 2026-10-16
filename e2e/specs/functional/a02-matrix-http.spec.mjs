@@ -849,7 +849,7 @@ scenario("A2.mcp-expired on an expired document MCP answers its editor as for an
   assert.equal(bad.length, 0, `MCP on an expired document: ${bad.length} differ\n  ${bad.join("\n  ")}`);
 });
 
-scenario("A2.mcp-names no MCP tool name matches delete|remove|share|grant|access, and the tools are exactly SPEC §19's twenty-three", {
+scenario("A2.mcp-names document deletion, team administration and trust stay absent; the tools are exactly SPEC §19's thirty-one", {
   tiers: ["local", "prod"],
   ...STALLS,
   timeoutMs: 120_000,
