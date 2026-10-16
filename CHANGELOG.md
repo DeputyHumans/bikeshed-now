@@ -23,6 +23,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Keep the request-stall harness fixture deterministic under concurrent test load.
+
 - Isolate competing bundle uploads and draft saves so stale work cannot replace published bytes or delete a newer draft.
 - Document historical reads and stale-write recovery in all agent instructions and published guides.
 

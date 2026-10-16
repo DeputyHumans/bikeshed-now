@@ -155,14 +155,23 @@ import { caseBudget, onAnsweringStack, pageStall, scenario } from ${JSON.stringi
 // The fixture's clock: the stand-in fetch moves it past Hosting's cut-off as it answers.
 const realNow = Date.now;
 let skew = 0;
-Date.now = () => realNow() + skew;
+let requestNow = null;
+Date.now = () => requestNow ?? realNow() + skew;
 const allow = { check: () => ({ allow: true }) };
-const cutoff = async () => { skew += 60005; return new Response("Timed out waiting for function to respond.", { status: 504, headers: { "content-type": "text/plain" } }); };
+const cutoff = async () => { requestNow += 60005; return new Response("Timed out waiting for function to respond.", { status: 504, headers: { "content-type": "text/plain" } }); };
 const quick504 = async () => new Response("Timed out waiting for function to respond.", { status: 504, headers: { "content-type": "text/plain" } });
 const never = () => new Promise(() => {});
-async function cut(ctx) {
-  const r = await ctx.http({ actor: "owner", fetch: cutoff, guard: allow }).post("/publish", { json: { title: "t" } });
-  assert.equal(r.status, 504);
+async function cut(ctx, path = "/publish") {
+  // One request owns the artificial interval; real scheduling cannot add
+  // arbitrary milliseconds to the synthetic 60005 ms cutoff.
+  requestNow = realNow() + skew;
+  try {
+    const r = await ctx.http({ actor: "owner", fetch: cutoff, guard: allow }).post(path, { json: { title: "t" } });
+    assert.equal(r.status, 504);
+  } finally {
+    skew = requestNow - realNow();
+    requestNow = null;
+  }
 }
 scenario("budget, its own request cut off, inconclusiveOnRequestStall", { timeoutMs: ${T}, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true }, async (ctx) => { await cut(ctx); await never(); });
 scenario("budget, its own request cut off, inconclusiveOnCaseTimeout only", { timeoutMs: ${T}, inconclusiveOnCaseTimeout: true }, async (ctx) => { await cut(ctx); await never(); });
@@ -172,7 +181,7 @@ scenario("an assertion after its own request was cut off, inconclusiveOnRequestS
 scenario("by hand, onAnsweringStack(caseBudget(fn), {also: pageStall with requests})", { timeoutMs: ${T} }, onAnsweringStack(caseBudget(async (ctx) => { await cut(ctx); await never(); }, ${T}), { also: (err, ctx) => pageStall(err, ctx, { requests: true }) }));
 scenario("ctx.requests() gives the case's own requests as rows", {}, async (ctx) => {
   await ctx.http({ actor: "reader", guard: allow }).get("/plain");
-  await ctx.http({ actor: "owner", fetch: cutoff, guard: allow }).post("/publish?k=abcdefgh12345678");
+  await cut(ctx, "/publish?k=abcdefgh12345678");
   await createHttp(ctx.target, { actor: "ambient", guard: allow }).get("/plain"); // no evidence option: the case's sink all the same
   await ctx.http({ actor: "broken", fetch: async () => { throw new Error("socket hang up"); }, guard: allow }).get("/x").catch(() => undefined);
   await createHttp(ctx.target, { actor: "elsewhere", evidence: false, guard: allow }).get("/plain"); // evidence: false logs nowhere
@@ -226,7 +235,7 @@ test("through node --test and the reporter: opted in, a case whose own request H
   const scenarioLine = (name) => line(`scenario(${JSON.stringify(name)}`);
   const libLine = (file, needle) => readFileSync(join(E2E_DIR, "lib", file), "utf8").split("\n").findIndex((l) => l.includes(needle)) + 1;
   const budgetMessage = `the case's budget ran out: not done within ${BUDGET} ms (its timeoutMs ${T} less ${T - BUDGET} ms, kept to judge and record it)`;
-  const ownCut = "a request this case made got Hosting's cut-off 504 \\(owner: POST /publish 504 after 6000\\d ms\\)";
+  const ownCut = "a request this case made got Hosting's cut-off 504 \\(owner: POST /publish 504 after 60005 ms\\)";
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   const opted = "budget, its own request cut off, inconclusiveOnRequestStall";
@@ -262,7 +271,7 @@ test("through node --test and the reporter: opted in, a case whose own request H
     assert.ok(Number.isFinite(r.t) && Number.isFinite(r.ms) && r.at === r.t + r.ms, JSON.stringify(r));
     assert.ok(r.url.startsWith(`${target.origin}/`), r.url);
   }
-  assert.ok(rows[1].ms >= 60_005 && rows[1].ms < 61_000, `the cut-off's measured wait: ${rows[1].ms}`);
+  assert.equal(rows[1].ms, 60_005, "the cut-off row retains the exact request-scoped artificial interval");
   assert.match(rows[1].url, /\/publish\?k=‹redacted›$/, "redacted, as http.jsonl holds it");
   assert.ok(!JSON.stringify(rows).includes("abcdefgh12345678"), "a link key never reaches a row");
   assert.equal(records.length, 7, `one record per case: ${records.map((r) => r.name).join(" | ")}`);
