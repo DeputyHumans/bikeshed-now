@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "^POST /publish with the cli token"
+    "message": "^POST https?://[^ /]+/publish\\?filename=a22\\.html[^ ]*: expected 200, got 401"
   }
 }

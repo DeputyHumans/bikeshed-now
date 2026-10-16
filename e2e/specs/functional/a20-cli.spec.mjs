@@ -1047,11 +1047,9 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
 
   ctx.step("the saved sign-in works; a token presenting itself may not revoke another one (403), and both still work");
   const asSaved = bearerHttp(target, config.token, { actor: "saved-token", timeoutMs: REQUEST_MS });
-  const [listR, cross] = await Promise.all([
-    cli(ctx, null, ["list", "--limit", "1", "--json"], { home, token: null }),
-    asSaved.postJson("/tokens", { op: "revoke", tokenId: o.tokens[0].tokenId }),
-  ]);
+  const listR = await cli(ctx, null, ["list", "--limit", "1", "--json"], { home, token: null });
   okJson(listR, "list with the saved sign-in");
+  const cross = await asSaved.postJson("/tokens", { op: "revoke", tokenId: o.tokens[0].tokenId });
   answered(cross, "POST /tokens revoke (another token's id)");
   assert.deepEqual({ status: cross.status, error: cross.json?.error }, { status: 403, error: "A token can revoke only itself." }, "a token cannot revoke another token id");
   for (const [label, tok] of [["the bystander", o.token], ["the saved token", config.token]]) {

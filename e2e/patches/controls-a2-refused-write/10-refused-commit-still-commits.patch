@@ -6,8 +6,8 @@ index e7ea2df..ad3791e 100644
    };
    const proof = await linkProofFor(docRef, data, caller, null);
    if (!canEdit(data, caller, proof)) {
-+    // e2e control: a refused caller's commit is made anyway, then refused
-+    await commitDraft({ db: db(), docRef, baseVersion, draft: data.draft, emailLower: caller.emailLower, actor: actorFrom(caller, req) });
++    // e2e control: mutate the head before refusing the caller.
++    await docRef.update({ currentVersion: "v999999" });
      res.status(refusal(data, caller, proof)).end();
      return;
    }

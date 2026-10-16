@@ -1512,7 +1512,7 @@ async function revisionRefusals(ctx, entrance) {
       assert.equal(toast.text, REVISION_REFUSALS[reason], `${entrance} ${reason}: the revision refusal explains the current obstacle`);
       assert.equal(await dlg.isVisible(), true, `${entrance} ${reason}: a refusal keeps the selected file and dialog available`);
       assert.equal(await dlg.locator(".upload-dropzone strong").textContent(), next.name, `${entrance} ${reason}: the refused file remains selected`);
-      assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).getAttribute("aria-busy"), "false", `${entrance} ${reason}: a refusal releases progress`);
+      assert.deepEqual(await dlg.locator("button[aria-busy]").evaluateAll((buttons) => buttons.map((button) => ({ busy: button.getAttribute("aria-busy"), label: button.textContent.trim() }))), [{ busy: "false", label: "Publish" }], `${entrance} ${reason}: a refusal releases progress`);
       await dismissToasts(actor);
     }
     assert.deepEqual(await revisionRefusalState(doc.docId), before, `${entrance} ${reason}: a refused revision changes no head, version, draft or stored bytes`);

@@ -402,7 +402,7 @@ scenario("A10.1b the constrained palette is in place from the editor's first ren
     gate.release();
     if (!offered) await u.enterEdit();
     else await u.awaitEdit();
-    await waitDisabled(u, Object.keys(PRESENTATION), { timeout: 20_000 });
+    await eventually(() => u.page.evaluate(() => window.__a10Palette.records.length > 0), { timeout: 20_000, interval: 100, message: "the first Formatting palette is recorded" });
     const renders = await u.page.evaluate(() => { const x = window.__a10Palette; x.stop(); delete window.__a10Palette; return x.records; });
     precondition(renders.length > 0, "a Formatting palette was actually rendered");
     ctx.ev.json("palette-renders", renders);

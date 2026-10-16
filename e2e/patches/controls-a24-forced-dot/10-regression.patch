@@ -3,5 +3,5 @@
 @@ -240,3 +240,3 @@
  @media (forced-colors: active) {
 -  .presence-dot { background: CanvasText; forced-color-adjust: none; }
-+  .presence-dot { background: CanvasText; forced-color-adjust: auto; }
++  .presence-dot { background: Canvas; forced-color-adjust: none; }
  }

@@ -1188,6 +1188,7 @@ async function c10cInApp(ctx, mode) {
         const heldAt = heldAcc.rows[0].heldAt;
         const early = pressers.filter((u, j) => !(claims[first + j].sentAt > heldAt));
         if (early.length) ctx.inconclusive(`the sync precondition did not hold: ${early.map((u) => u.name).join(", ")} sent a claim before ${users[0].name}'s accept was held`);
+        assert.deepEqual(pressers.map((u, j) => ({ status: claims[first + j].status, claimedBy: claims[first + j].json?.claimedBy })), pressers.map(() => ({ status: 409, claimedBy: live.accounts[0].email.toLowerCase() })), "I9: a held claim refuses every other approver and names its holder");
       }
       const took = users.map((u, i) => i).filter((i) => i >= (mode === "held-accept" ? 1 : 0) && claims[i].status === 200);
       await Promise.all(took.map((i) => acceptAnswered(users[i], posts[i], marks[i], s.annId)));

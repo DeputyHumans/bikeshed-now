@@ -1,11 +1,14 @@
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -80,3 +80,3 @@
-           connected.current = connection;
--          await log.ready();
-+          void log.ready();
-           if (cancelled || !doc.body) return;
-@@ -86,2 +86,3 @@
-               seedFragment(proposal.getXmlFragment("body"), doc.body);
-+              seedFragment(ydoc.getXmlFragment("body"), doc.body);
-               await connection.initialize(Y.encodeStateAsUpdate(proposal));
+@@ -91,6 +91,11 @@
+             // Existing logs need the same elected seed hash before save stamps
+             // become synchronously available to the editor.
+             await connection.initialize();
++            const duplicate = new Y.Doc();
++            try {
++              seedFragment(duplicate.getXmlFragment("body"), doc.body);
++              Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(duplicate));
++            } finally { duplicate.destroy(); }
+           }
+           if (expectedCausal) {
+             const order = causalOrder(connection.causalStamp(), expectedCausal);

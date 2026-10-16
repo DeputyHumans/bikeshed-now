@@ -840,7 +840,7 @@ async function cmdControls(argv) {
   ledger.endedAt = new Date().toISOString();
   ledger.ok = allOk;
   save();
-  process.stdout.write(`${JSON.stringify({ ok: allOk, ledger: join(dir, "ledger.json"), controls: ledger.controls.map((c) => ({ set: c.set, oracle: c.oracle, ok: c.ok, red: c.red.case?.status ?? null, green: c.green?.status ?? null, problems: c.problems })) }, null, 2)}\n`);
+  await new Promise((resolve, reject) => process.stdout.write(`${JSON.stringify({ ok: allOk, ledger: join(dir, "ledger.json"), controls: ledger.controls.map((c) => ({ set: c.set, oracle: c.oracle, ok: c.ok, red: c.red.case?.status ?? null, green: c.green?.status ?? null, problems: c.problems })) }, null, 2)}\n`, (error) => error ? reject(error) : resolve()));
   process.exit(allOk ? 0 : 1);
 }
 

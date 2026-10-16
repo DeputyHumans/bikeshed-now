@@ -3,11 +3,11 @@
   "what": "The authoritative presence mirror marks directly granted editors with control-only __e2eDenyRead_ keys. The /y read rule denies that direction only; the owner, opposite direction, epoch fence, expiry and peer presence remain intact.",
   "target": {
     "spec": "e2e/specs/concurrency/c04-first-join.spec.mjs",
-    "case": "C4b positive control: an account granted editor joins N−1 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
+    "case": "C4b positive control: an account granted editor joins N\u22121 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
     "suite": "concurrency"
   },
   "stack": [],
   "expect": {
-    "message": "^C4b: the joiner can read the shared live log$"
+    "message": "^C4b: the joiner can read the shared live log(?=\\n|$)"
   }
 }

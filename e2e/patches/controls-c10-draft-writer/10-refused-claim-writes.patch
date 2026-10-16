@@ -1,11 +1,9 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -90,7 +90,7 @@
-     });
-
-   const claimed = await change("claim");
--  if ("status" in claimed) return claimed;
-+  if ("status" in claimed && claimed.status === 404) return claimed;
-   try {
-     // A different suggestion can replace the shared draft after this request
-     // reads it. Keep our claim, reread and reapply on that newer snapshot.
+@@ -125,5 +125,6 @@
+   }
+   const recorded = await change("accept");
+   if ("status" in recorded) return recorded;
++  await docRef.update({ "draft.updatedByEmail": "wrong-writer@example.com" });
+   return { state: "accepted", changed: made.state === "applied" };
+ }

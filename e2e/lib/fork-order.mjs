@@ -3,7 +3,7 @@
 
 export async function observeForkOrder(page, { origin, docId, key, delayMs = 1000, now = Date.now, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   const expectedOrigin = new URL(origin).origin;
-  const creates = [], unlocks = new Set();
+  const creates = [], unlocks = new Set(), active = new Set();
   let signingIn = false, answered = false;
   const request = (req) => {
     const url = new URL(req.url());
@@ -14,7 +14,7 @@ export async function observeForkOrder(page, { origin, docId, key, delayMs = 100
   };
   const response = (res) => { if (unlocks.has(res.request()) && res.status() === 200) answered = true; };
   const matches = (url) => url.origin === expectedOrigin && url.pathname === '/unlock';
-  const handle = async (route) => {
+  const handleRoute = async (route) => {
     const req = route.request();
     let body; try { body = req.postDataJSON(); } catch { return route.fallback(); }
     if (!key || !signingIn || req.method() !== 'POST' || body?.docId !== docId || body?.k !== key) return route.fallback();
@@ -25,9 +25,17 @@ export async function observeForkOrder(page, { origin, docId, key, delayMs = 100
     try { await sleep(delayMs); await route.fulfill({ response: reply }); }
     finally { await reply.dispose(); }
   };
+  const handle = (route) => {
+    const pending = handleRoute(route); active.add(pending);
+    pending.then(() => active.delete(pending), () => active.delete(pending));
+    return pending;
+  };
   page.on('request', request); page.on('response', response);
   await page.route(matches, handle);
   return { creates, beginSignIn() { signingIn = true; }, async restore() {
-    await page.unroute(matches, handle); page.off('request', request); page.off('response', response);
+    signingIn = false;
+    await Promise.all([...active]);
+    await page.unroute(matches, handle);
+    page.off('request', request); page.off('response', response);
   } };
 }

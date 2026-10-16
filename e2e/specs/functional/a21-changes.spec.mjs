@@ -320,6 +320,11 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   await fork(viewer.http, { docId, title: `A21.3 fork ${tag()}`, ownerEmail: viewerAcct.email, expect: 200 });
   const ALL = { "version.published": 1, "access.changed": 2 * SHARE_EVENTS, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
   await settle(docId, ALL, "every change is recorded");
+  ctx.step("append an editor-only trust change after every reader event, so filtering cannot leave the cursor behind");
+  await owner.http.postJson("/trust", { docId, trusted: false }, { expect: 200 });
+  ALL["doc.trust"] += 1;
+  const tailed = await settle(docId, ALL, "the hidden tail event is recorded");
+  precondition(tailed.at(-1)?.data.type === "doc.trust", "the last stored event is hidden from viewers");
   ctx.step("the editor saves a real unpublished draft, with their identity in its metadata");
   const secretDraft = `A21 private draft ${tag()}`;
   const savedDraft = await editor.http.postJson("/draft", { docId, baseVersion: "v1", html: FIXTURE_HTML.replace("</body>", `<p>${secretDraft}</p></body>`) });

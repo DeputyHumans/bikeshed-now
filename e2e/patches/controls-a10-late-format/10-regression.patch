@@ -4,6 +4,6 @@
        {editingNow ? (
          <EditToolbar
 -          format={doc.formatReady ? doc.format : null}
-+          format={doc.format}
++          format="html"
            doc={frame.doc}
            saveState={editor.saveState}

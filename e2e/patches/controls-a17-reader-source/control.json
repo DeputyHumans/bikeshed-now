@@ -6,6 +6,6 @@
     "case": "A17.4b an anonymous holder of an unlisted link is offered the Markdown source and the .zip in the More menu, as a member is"
   },
   "expect": {
-    "message": "link holder is offered the Markdown source"
+    "message": "link-holder's More menu did not offer \"Download the Markdown source\""
   }
 }

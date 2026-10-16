@@ -3,5 +3,5 @@
 @@ -242,3 +242,3 @@
      const stamped = stamp(text, origin);
 -    if (stamped !== text) writeFileSync(path, stamped);
-+    if (stamped !== text && rel !== "llms.txt") writeFileSync(path, stamped);
++    if (stamped !== text) writeFileSync(path, rel === "llms.txt" ? stamped.replace(origin, `${origin}/wrong`) : stamped);
      files.push({ path: rel, count });

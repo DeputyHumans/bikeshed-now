@@ -1,7 +1,10 @@
 --- a/functions/src/oauth/grants.ts
 +++ b/functions/src/oauth/grants.ts
-@@ -259,3 +259,3 @@
+@@ -255,6 +255,7 @@
+     return "unknown";
+   }
+   if (user.disabled) return "closed";
++  if (user.email && user.email.toLowerCase() !== emailLower) return "ok";
+   if (user.emailVerified !== true) return "closed";
    const email = typeof user.email === "string" ? user.email.toLowerCase() : "";
--  if (!email || email !== emailLower) return "closed";
-+  if (!email || emailLower.length < 0) return "closed";
-   if (!isAllowedEmail(email)) return "closed";
+   if (!email || email !== emailLower) return "closed";

@@ -314,6 +314,7 @@ async function signedOutFork(ctx, visibility) {
     // so a missing resolvedFor guard cannot win a fast local response race.
     const order = await observeForkOrder(u.page, { origin: target.origin, docId: S.docId, key: k });
     const creates = order.creates;
+    try {
 
     ctx.step(`signed out, the reader opens the ${visibility} document${k ? " with its key" : ""} and presses Fork in the toolbar`);
     await u.goto(`/d/${encodeURIComponent(S.docId)}${k ? `?k=${encodeURIComponent(k)}` : ""}`);
@@ -371,7 +372,9 @@ async function signedOutFork(ctx, visibility) {
       { intentAtSend: null, backEntry: { path: `/d/${S.docId}`, fork: null }, createsAfterReload: 1, forks: [forkId], statsForks: 1 },
       `the signed-out fork, once: ${JSON.stringify(cells)}`,
     );
-    await order.restore();
+    } finally {
+      await order.restore();
+    }
   });
 }
 

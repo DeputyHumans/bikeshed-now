@@ -1217,7 +1217,7 @@ async function bodyOuter(user) {
     const outlined = [...document.body.querySelectorAll("[data-bshd-empty]")].map((el) => el.id);
     const clone = document.body.cloneNode(true);
     for (const el of clone.querySelectorAll("[data-bshd-empty]")) el.removeAttribute("data-bshd-empty");
-    return { document: clone.outerHTML, outlined };
+    return { document: clone.outerHTML, outlined, svgNamespaces: [...clone.querySelectorAll("svg")].map((el) => el.namespaceURI) };
   });
 }
 
@@ -1263,6 +1263,9 @@ scenario("A11.12 joining a live session with no edits rebuilds the body byte-ide
     for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `${letter}: decoded live log never carries ${attribute}`);
     const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
     const [ob, eb] = [os.document, es.document];
+    for (const [who, snapshot] of [["seeder", os], ["joiner", es]]) {
+      assert.ok(snapshot.svgNamespaces.every((ns) => ns === "http://www.w3.org/2000/svg"), `${letter}: ${who} SVG roots retain the SVG namespace through the wire round trip`);
+    }
     const r = { letter, sample, docId: up.docId, seedEntries: seeded.length, entriesAfterJoin: joined.length, equal: ob === eb, ownerBytes: ob.length, editorBytes: eb.length, outlined: { owner: os.outlined, editor: es.outlined } };
     if (!r.equal) {
       r.diff = firstDiff(ob, eb);

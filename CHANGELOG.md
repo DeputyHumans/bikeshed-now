@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Repair 33 E2E negative controls against current policy generation, live-session guards and assertion messages; independently check SVG namespaces, hidden-event cursors and held claims, drain fork-route cleanup, and flush complete control summaries before worker exit.
+
 - Isolate the phone toolbar negative control from presence-chip clipping so it proves the primary-action reachability assertion directly.
 
 - Keep mobile viewer controls and presence chips reachable by constraining the viewer grid column to the viewport.
