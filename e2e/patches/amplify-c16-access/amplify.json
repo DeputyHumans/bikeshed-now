@@ -34,7 +34,7 @@
     {
       "name": "visibility-before-mirror",
       "side": "server",
-      "where": "functions/src/index.ts setVisibility: after the record and the public projection are written, before syncPresenceAccess rewrites the mirrors from the members read at the start of the request",
+      "where": "functions/src/lib/management.ts setVisibility: after the record and the public projection are written, before syncPresenceAccess rewrites the mirrors from the members read after the transaction",
       "key": "docId"
     }
   ]

@@ -76,7 +76,7 @@ function readerOf(rec = record(), extra = {}) {
 const findings = (target) => (existsSync(join(target.runDir, "findings.jsonl")) ? readFileSync(join(target.runDir, "findings.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 const key = (e) => e.toLowerCase().split(".").join(",");
 
-test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writes on a grant: one update, both nodes, keys lower-cased with dots as commas, no open-edit key", () => {
+test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writes on a private grant: one update, both nodes, keys lower-cased with dots as commas, no open-edit key", () => {
   assert.deepEqual(mirrorUpdate(DOC, { members: ["Owner-MW@Example.test", P2, ""], editorMembers: [OWNER_EMAIL] }), {
     [`presenceAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true, [key(P2)]: true },
     [`editAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true },
@@ -92,7 +92,7 @@ test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writ
   assert.ok(/await db\.ref\(\)\.update\(\{\s*\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: edit,\s*\}\);/.test(presence), "presence.ts: ONE multi-path update of the two nodes");
   assert.ok(presence.includes("if (publicEdit) edit[OPEN_EDIT_KEY] = true;"), "the open-edit key only with publicEdit");
   const folders = readFileSync(repo("functions/src/lib/folders.ts"), "utf8");
-  assert.ok(folders.includes("await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);"), "the grant path (persistDocMembership) passes no publicEdit, so no open-edit key");
+  assert.ok(folders.includes("await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));"), "the grant path preserves open editing; the private run documents mirrored here have no open-edit key");
   const twin = readFileSync(repo("scripts/lib/presence.mjs"), "utf8");
   assert.ok(/\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: keyed\(editorMembers\),/.test(twin), "set-access.mjs's twin writes the same two nodes, when it can");
   const setAccess = readFileSync(repo("scripts/set-access.mjs"), "utf8");

@@ -29,7 +29,7 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "get_folder_access",
-    description: "Owner-only: inspect this folder's complete direct and inherited grants and effective membership. Document results include visibility, open editing, expiry and sharing URL; no source bytes.",
+    description: "Owner-only: inspect this folder's complete direct and inherited grants and effective membership.",
     inputSchema: { type: "object", required: ["id"], properties: { id } },
     run: (ctx, args) => getAccess(ctx, "folder", value(args, "id")),
   },

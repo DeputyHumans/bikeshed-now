@@ -1,13 +1,9 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -51,6 +51,7 @@
-   signInHint,
- } from "./config";
- import { verifyIdToken, verifySessionCookie } from "./lib/auth";
-+import { e2eIdentityGate } from "./lib/e2eIdentityGate";
+@@ -55,2 +55,3 @@
  import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
++import { e2eIdentityGate } from "./lib/e2eIdentityGate";
  import {
-   canEdit,
 @@ -2398,6 +2399,8 @@
        return;
      }

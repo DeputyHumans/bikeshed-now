@@ -4,7 +4,7 @@
     {
       "name": "folder-access-before-write",
       "side": "server",
-      "where": "functions/src/index.ts setFolderAccess: after the folder is read, the caller authorized and the delta applied to the grants read, before ref.set writes them and recomputeSubtree runs",
+      "where": "functions/src/lib/management.ts setAccess: after the folder is read, the caller authorized and the delta applied to the grants read, before ref.set writes them and recomputeSubtree runs",
       "key": "folderId"
     }
   ]
