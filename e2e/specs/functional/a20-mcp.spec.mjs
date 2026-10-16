@@ -1077,7 +1077,7 @@ scenario("A20.3 a missing or empty required argument is a tool error naming exac
   const unprobed = requiring.filter((n) => !sent.some((x) => x.startsWith(`${n} `)));
   if (target.kind === "local") assert.deepEqual(unprobed, [], "every tool that requires an argument was probed");
   else ctx.step(`not probed on ${target.kind} (the guard needs a run document's id): ${unprobed.join(", ")}`);
-  assert.equal(requiring.length, 21, `tools that require an argument: ${requiring.join(", ")}`);
+  assert.equal(requiring.length, 29, `tools that require an argument: ${requiring.join(", ")}`);
   const doc = await record(d.id);
   assert.deepEqual({ version: doc?.currentVersion, title: doc?.title }, { version: "v1", title: d.title }, "no probe changed the document");
 
