@@ -101,16 +101,28 @@ test("NEGATIVE: the same call with stopAt the budget's own time (a number, as be
   assert.ok(send.count >= 4, `sent ${send.count} times`);
 });
 
-test("stopAt \"budget\": the look is cut to end inside the budget, each read raced, so a read the stack never answers cannot hold it", { timeout: 15_000 }, async () => {
+test("stopAt \"budget\": the look is cut to end inside the budget, each read raced, so a read the stack never answers cannot hold it", { timeout: 15_000 }, async (t) => {
+  const realNow = Date.now.bind(Date);
+  let now = realNow();
+  let readStartedAt = null;
+  t.mock.method(Date, "now", () => readStartedAt === null ? now : now + realNow() - readStartedAt);
   const ctx = budgetCtx(1_500);
-  const send = unansweredSend(100);
+  const send = async () => {
+    send.count += 1;
+    now += 99; // A requested 100 ms timer can be observed as 99 ms.
+    throw new Error("timeout after 100 ms");
+  };
+  send.count = 0;
   const t0 = Date.now();
-  const err = await untilLanded(ctx, "POST /trust d8", send, () => new Promise(() => {}), { lookupMs: 60_000, intervalMs: 50, stopAt: "budget" }).then(() => null, (e) => e);
+  const err = await untilLanded(ctx, "POST /trust d8", send, () => {
+    readStartedAt = realNow(); // Resume real elapsed time for the unanswered read.
+    return new Promise(() => {});
+  }, { lookupMs: 60_000, intervalMs: 50, stopAt: "budget" }).then(() => null, (e) => e);
   const took = Date.now() - t0;
   assert.equal(err?.code, "E2E_INCONCLUSIVE", String(err?.stack ?? err));
   assert.ok(took >= 1_400 && took < 1_500 + SLACK_MS, `ended ${took} ms in: at the cut look's end, before the budget`);
   assert.equal(send.count, 1);
-  assert.match(err.reason, new RegExp(`^${LEAD}POST /trust d8 got no answer 1 time\\(s\\) \\(the last: a request to the stack got no answer: timeout after 100 ms\\), and it had not taken effect 1[34]\\d\\d ms after it, all the case's budget left \\(the last look: the read had not answered when the look's time ran out\\); it was not sent again: one more send and its look, about 601\\d\\d ms, would not end within the case's budget \\(\\d+ ms left\\)$`));
+  assert.match(err.reason, new RegExp(`^${LEAD}POST /trust d8 got no answer 1 time\\(s\\) \\(the last: a request to the stack got no answer: timeout after 100 ms\\), and it had not taken effect 1[34]\\d\\d ms after it, all the case's budget left \\(the last look: the read had not answered when the look's time ran out\\); it was not sent again: one more send and its look, about 60099 ms, would not end within the case's budget \\(\\d+ ms left\\)$`));
   assert.match(ctx.steps[0], /; looking for its effect for up to 1[34]\d\d ms, all the case's budget leaves \(attempt 1 of 3\)$/);
 });
 
