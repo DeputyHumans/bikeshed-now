@@ -734,6 +734,7 @@ function asArray(v: unknown): string[] {
 
 /** Errors shared by HTTP and MCP, with no resource existence disclosure. */
 function managementFailure(error: unknown, res: import("express").Response): void {
+  if (error instanceof ManagementError && error.status === 404) { res.status(404).end(); return; }
   if (error instanceof ManagementError) { res.status(error.status).json({ error: error.message }); return; }
   throw error;
 }

@@ -27,6 +27,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - Shared HTTP/MCP management handlers, preserving inherited membership and
   owner checks. Sparse settings changes preserve omitted values.
 
+### Fixed
+
+- Keep HTTP management refusals as identical empty 404 responses for unreadable
+  and missing resources when delegating to the shared handlers.
+
 ## 0.16.1 — 2026-10-13
 
 Tests and documentation only, so a patch release. The product is unchanged.

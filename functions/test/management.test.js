@@ -139,3 +139,24 @@ test("HTTP preserves full-form settings and access response contracts through sh
     grant: 200, editors: [editor, "new@example.com"], visibility: { visibility: "public", publicEdit: false, expiresAt: null, linkToken: null }, folder: { ok: true }, name: "From web",
   });
 });
+
+test("HTTP management refusals use identical empty 404s for unreadable and absent resources", async () => {
+  const w = world();
+  const sessions = { stranger: { uid: "u-stranger", email: "stranger@example.com", email_verified: true } };
+  const results = [];
+  for (const missing of [false, true]) {
+    const docId = missing ? "absent" : "doc", folderId = missing ? "absent-folder" : "child";
+    for (const [handler, options] of [
+      [http.setAccess, { body: { docId, remove: [viewer] } }],
+      [http.setAccess, { method: "GET", query: { docId } }],
+      [http.setVisibility, { body: { docId, visibility: "private" } }],
+      [http.setFolderAccess, { body: { folderId, remove: [viewer] } }],
+      [http.setFolderAccess, { method: "GET", query: { folderId } }],
+      [http.organize, { body: { kind: "folder", id: folderId, op: "delete" } }],
+    ]) {
+      const res = await withFakeAdmin({ db: w.db, sessions }, () => invoke(handler, { ...options, headers: { cookie: "__session=stranger" } }));
+      results.push({ status: res.status, body: res.body });
+    }
+  }
+  assert.deepEqual(results, Array.from({ length: 12 }, () => ({ status: 404, body: undefined })));
+});
