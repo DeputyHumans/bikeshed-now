@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep CLI watch mode publishing after missed native file notifications or atomic file replacement. A single-file metadata fallback shares the existing debounce and preserves JSON-only output.
+
 - Check CLI change events in their recorded order rather than assuming thread and comment triggers run in causal order; require wait and resume to deliver both events exactly once.
 
 - Pin the synthetic send interval in the cut-look budget selftest while retaining a real unanswered-read deadline, preventing timer rounding from invalidating its exact retry diagnostic.

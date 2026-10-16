@@ -49,7 +49,7 @@
 import assert from "node:assert/strict";
 import { after, before } from "node:test";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { answered, currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
@@ -1146,7 +1146,7 @@ async function watchBursts(o) {
    * each is its own event and only the 250 ms debounce makes them one
    * publish. Returns the largest gap the writes actually had.
    */
-  const burst = async (n) => {
+  const burst = async (n, replace = false) => {
     const at = [];
     writeFileSync(file, page(title, ["partial"]));
     at.push(performance.now());
@@ -1154,7 +1154,11 @@ async function watchBursts(o) {
     appendFileSync(file, "<!-- more -->\n");
     at.push(performance.now());
     await new Promise((r) => setTimeout(r, BURST_GAP_MS));
-    writeFileSync(file, text(n));
+    if (replace) {
+      const replacement = `${file}.save`;
+      writeFileSync(replacement, text(n));
+      renameSync(replacement, file);
+    } else writeFileSync(file, text(n));
     at.push(performance.now());
     return Math.max(at[1] - at[0], at[2] - at[1]);
   };
@@ -1172,10 +1176,10 @@ async function watchBursts(o) {
     watching = w.exited === null;
     if (watching) {
       ledgerDoc(id, o);
-      for (const [n, expected] of [[2, 2], [3, 3], [3, 4]]) {
-        log.step(`burst writing revision ${n}`);
+      for (const [n, expected, replace] of [[2, 2, false], [3, 3, true], [3, 4, false]]) {
+        log.step(`burst writing revision ${n}${replace ? " by atomic replacement" : ""}`);
         w.mark(`the burst writing revision ${n}`);
-        gaps.push(await burst(n));
+        gaps.push(await burst(n, replace));
         await eventually(() => jsonStream(w.stdout).docs.length >= expected || w.exited !== null, { timeout: 180_000, interval: 100, message: `result ${expected} of the watch` });
       }
       // The product debounces saves by 250 ms (cli/src/index.mjs watchFile), a

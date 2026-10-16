@@ -3,7 +3,7 @@
 // `bikeshed` — publish and revise documents from the terminal (SPEC §19).
 
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
@@ -1030,15 +1030,35 @@ async function open(flags, [ref]) {
  * still be three round trips per keystroke-pause.
  */
 async function watchFile(file, run) {
+  const stamp = () => {
+    try {
+      const s = statSync(file, { bigint: true });
+      return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+    } catch (error) {
+      if (error.code === "ENOENT") return null; // An editor may replace the file.
+      throw error;
+    }
+  };
+  let last = stamp();
   let timer = null;
-  watch(file, () => {
+  const changed = () => {
+    const next = stamp();
+    if (next === null || next === last) return;
+    last = next;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       run().catch((e) => console.error(`error: ${e.message}`));
     }, 250);
-  });
+  };
+  watch(file, changed);
+  // Native notifications can be lost, and an atomic save replaces the watched
+  // inode. Poll this one file's metadata as a fallback, sharing the debounce.
+  setInterval(() => {
+    const next = stamp();
+    if (next !== null && next !== last) changed();
+  }, 250);
   // Status belongs on stderr; stdout may be a stream of --json results.
-  // Announce readiness after registering the watcher so the next save is seen.
+  // Announce readiness only after both change detectors are registered.
   console.error(`watching ${basename(file)} — ctrl-C to stop`);
   await new Promise(() => {}); // until interrupted
 }

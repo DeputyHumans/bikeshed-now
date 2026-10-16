@@ -5,18 +5,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../src/index.mjs", import.meta.url));
 
-for (const command of ["publish", "update"]) {
-  test(`${command} --watch --json emits only JSON results and keeps its notice on stderr`, { timeout: 20_000 }, async () => {
+for (const command of ["publish", "update"]) for (const notifications of ["native", "dropped"]) {
+  test(`${command} --watch --json survives ${notifications} notifications and atomic saves with JSON-only stdout`, { timeout: 20_000 }, async () => {
     const dir = mkdtempSync(join(tmpdir(), "bikeshed-watch-output-"));
     const file = join(dir, "watched.html");
     writeFileSync(file, "<p>First bytes</p>");
+    const hook = join(dir, "drop-watch.mjs");
+    writeFileSync(hook, `import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const nativeWatch = fs.watch; fs.watch = (file) => nativeWatch(file, () => {}); syncBuiltinESMExports();`);
     const requests = [];
     const server = createServer((req, res) => {
       let raw = "";
@@ -32,7 +34,7 @@ for (const command of ["publish", "update"]) {
     });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const args = command === "publish" ? [command, file] : [command, "watched", file];
-    const child = spawn(process.execPath, [CLI, ...args, "--watch", "--json"], {
+    const child = spawn(process.execPath, [...(notifications === "dropped" ? ["--import", hook] : []), CLI, ...args, "--watch", "--json"], {
       env: { ...process.env, XDG_CONFIG_HOME: dir, BIKESHED_ORIGIN: `http://127.0.0.1:${server.address().port}`, BIKESHED_TOKEN: "bsk_test.token" },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -57,14 +59,20 @@ for (const command of ["publish", "update"]) {
       assert.equal(exited, false, "the watch remains active after its first result");
       writeFileSync(file, "<p>Changed bytes</p>");
       await until(() => /"versionId": "v2"/.test(stdout), "the changed file's result");
+      const replacement = join(dir, "replacement.html");
+      writeFileSync(replacement, "<p>Atomic replacement</p>");
+      renameSync(replacement, file);
+      await until(() => /"versionId": "v3"/.test(stdout), "the atomic replacement's result");
+      writeFileSync(file, "<p>Changed replacement</p>");
+      await until(() => /"versionId": "v4"/.test(stdout), "the replacement file's next save");
       child.kill("SIGTERM");
       await closed;
       const values = stdout.trim().split(/\n(?=\{)/).map((value) => JSON.parse(value));
-      assert.deepEqual(values.map((value) => value.versionId), ["v1", "v2"], "stdout is exactly the initial and changed-file JSON results");
+      assert.deepEqual(values.map((value) => value.versionId), ["v1", "v2", "v3", "v4"], "stdout is exactly one JSON result per save, including replacement saves");
       assert.match(stderr, /^watching watched\.html — ctrl-C to stop\n$/, "the human watch notice is on stderr");
-      assert.equal(requests.length, 2, "the live watch sends one changed-file update");
-      assert.deepEqual(requests.map((request) => request.path), command === "publish" ? ["/publish", "/mcp"] : ["/mcp", "/mcp"]);
-      assert.equal(JSON.parse(requests[1].body).params.arguments.content, "<p>Changed bytes</p>");
+      assert.equal(requests.length, 4, "the live watch sends one update per save");
+      assert.deepEqual(requests.map((request) => request.path), command === "publish" ? ["/publish", "/mcp", "/mcp", "/mcp"] : ["/mcp", "/mcp", "/mcp", "/mcp"]);
+      assert.deepEqual(requests.slice(1).map((request) => JSON.parse(request.body).params.arguments.content), ["<p>Changed bytes</p>", "<p>Atomic replacement</p>", "<p>Changed replacement</p>"]);
     } finally {
       if (!exited) { child.kill("SIGKILL"); await closed; }
       server.closeAllConnections();
