@@ -73,7 +73,11 @@ async function audience(kind, corrupt = () => {}) {
   const counts = (types) => Object.fromEntries(Object.entries(types.reduce((m, t) => ({ ...m, [t]: (m[t] ?? 0) + 1 }), {})).sort());
   const draft = { updatedByEmail: accounts[2].email, updatedAt: { toDate: () => new Date(at) } };
   const expectedDraft = { exists: true, lastEditedBy: accounts[2].email, lastEditedAt: at };
-  const http = { postJson: async (path) => { assert.ok(["/trust", "/draft"].includes(path), "no direct mail-sending grant bypass"); return { status: 200 }; } };
+  const http = { postJson: async (path, payload) => {
+    assert.ok(["/trust", "/draft"].includes(path), "no direct mail-sending grant bypass");
+    if (path === "/trust" && payload.trusted === false) events.push({ type: "doc.trust", at: "2026-10-15T00:00:01.000Z" });
+    return { status: 200 };
+  } };
   let run;
   const target = { kind };
   const context = {
@@ -88,6 +92,7 @@ async function audience(kind, corrupt = () => {}) {
     sessionOf: async (account) => ({ role: account.role, http }), fork: async () => ({}),
     settle: async (_id, want) => {
       assert.deepEqual(Object.fromEntries(Object.entries(want).filter(([, n]) => n)), counts(events.map((e) => e.type)), `${kind}: only the local grant path records access events`);
+      return events.map((data, i) => ({ id: String(i), data }));
     },
     readDoc: async () => ({ draft }), agentOf: async (_ctx, session) => session,
     changes: async (agent) => ({
