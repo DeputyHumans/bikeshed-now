@@ -783,9 +783,9 @@ export async function addMember(ctx, { owner = null, docId, name, role = "editor
  * released, returns as cancelled, and only the second binds. On a live stack
  * the second call came 13 ms and 616 ms after the first, so "N distinct
  * callers held" alone can be met before the run that matters has arrived.
- * So: N distinct callers held, then every joiner's editable /draft/ frame
- * (whose load re-runs the effect, in the same commit that makes the body
- * editable), then N distinct callers each with its LATEST run held again.
+ * So: N distinct callers held, then every joiner's loaded /draft/ frame
+ * (whose load re-runs the effect; input stays disabled until binding), then
+ * N distinct callers each with its LATEST run held again.
  * Any step that never holds ends the case INCONCLUSIVE. Resolves {first,
  * held} (requireHeld's results; `held.callers[i].latest` marks the binding
  * runs). Release with `g.release(gate)` as usual.
@@ -796,9 +796,10 @@ export async function requireJoinersHeld(ctx, g, users, { key, gate = "join-befo
   const n = users.length;
   const first = await requireHeld(ctx, g, gate, n, { key, timeoutMs, distinct: "caller" });
   try {
-    await Promise.all(users.map((u) => u.waitForFrame({ match: /\/draft\//, editable: true, timeout: timeoutMs })));
+    // Input is disabled until binding, which this gate deliberately blocks.
+    await Promise.all(users.map((u) => u.waitForFrame({ match: /\/draft\//, timeout: timeoutMs })));
   } catch (err) {
-    ctx.inconclusive(`the sync precondition did not hold: a joiner's editable draft frame never loaded while it was held at ${gate} (${err?.message ?? err})`);
+    ctx.inconclusive(`the sync precondition did not hold: a joiner's draft frame never loaded while it was held at ${gate} (${err?.message ?? err})`);
   }
   const held = await requireHeld(ctx, g, gate, n, { key, timeoutMs, distinct: "caller" });
   return { first, held };

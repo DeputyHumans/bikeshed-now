@@ -4871,12 +4871,14 @@ out throws `E2E_GATE_TIMEOUT`.
   without it, and a distinct wait throws `E2E_GATE` (restart the stack).
 - **A forced simultaneous join** (S1, C4) needs more than that: a joiner's
   first held run is not the one that binds. The join effect runs when edit
-  mode starts and again when the editable draft frame loads, and only the
+  mode starts and again when the draft frame loads, and only the
   second binds; live, the second call came 13 ms and 616 ms after the
   first. `requireJoinersHeld(ctx, g, users, {key})` (`lib/live.mjs`) waits
-  for the distinct callers, then every joiner's editable `/draft/` frame,
+  for the distinct callers, then every joiner's loaded `/draft/` frame,
   then the distinct callers again, so each is held by its binding run;
-  then `g.release("join-before-bind")`. Start the joiners with
+  then `g.release("join-before-bind")`. Input stays disabled until binding,
+  so this precondition must not wait for `contenteditable=true`. Start the
+  joiners with
   `u.enterEdit({waitShared: true})` without awaiting it first, as the
   canary's gate case does.
 - **One joiner at a time** (a serial control at a client gate):
