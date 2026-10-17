@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Align the browser consent regression with the current owner-management disclosure while retaining exact allowed and excluded capability assertions.
+
 - Keep all 724 negative-control targets selectable after the tool catalog and skill inventory expanded; preserve amplifier composition across the merged sharing and retry paths.
 
 - Preserve current archive read-only behavior in E2E feedback checks, update management fault injection to the shared implementation, and retain all existing control identities through integration.

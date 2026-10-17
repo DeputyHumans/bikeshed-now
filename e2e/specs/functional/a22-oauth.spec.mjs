@@ -357,9 +357,12 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     assert.deepEqual(await card.locator(".connect-list:not(.connect-list-not) li").allTextContents(), [
       "Read what you can read", "Publish, revise and rename documents", "Comment, reply, suggest edits and resolve threads",
       "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
+      "Manage sharing on documents and folders you own, sending invitations to new readers",
+      "Change visibility, open editing and expiry on documents you own",
+      "Rename and move folders you can edit; delete folders you own while keeping their contents",
     ], "consent discloses every allowed capability");
     assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
-      "Share anything, or change who can read it", "Delete anything, or rename a folder", "Set or clear an expiry",
+      "Delete documents or manage teams", "Trust document scripts or act with permissions you do not have",
     ], "consent discloses the forbidden capabilities");
 
     ctx.step("arming, phase 1: with no input at all for 2.5 s Approve stays disabled (the product's one-second delay, waited out with margin)");
@@ -423,7 +426,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const listed = ((await listTokens(session)).json?.tokens ?? []).filter((x2) => x2.tokenId === tokenId);
     assert.deepEqual(listed.map((l) => ({ kind: l.kind, name: l.name, channel: l.channel, clientHost: l.clientHost, registration: l.registration, revoked: l.revoked })), [{ kind: "oauth", name: cleanName, channel: "mcp", clientHost: null, registration: "dcr", revoked: false }], "the account's token list carries the grant");
 
-    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (23); at /publish it is not a credential");
+    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (32); at /publish it is not a credential");
     const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
