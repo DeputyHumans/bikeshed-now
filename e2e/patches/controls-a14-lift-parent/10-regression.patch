@@ -1,10 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2017,6 +2017,6 @@
-     res.status(403).end();
-     return;
-   }
--  const newParent = data.parentId ?? null;
-+  const newParent = null;
-   const childFolders = await db().collection("folders").where("parentId", "==", id).get();
-   const childDocs = await db().collection("docs").where("folderId", "==", id).get();
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -168,7 +168,7 @@
+     await ref.set({ parentId: target.id, updatedAt: stamp() }, { merge: true });
+     await recomputeSubtree(ctx.db, id);
+   } else {
+-    const parent = data.parentId ?? null;
++    const parent = null;
+     const folders = await ctx.db.collection("folders").where("parentId", "==", id).get();
+     const docs = await ctx.db.collection("docs").where("folderId", "==", id).get();
+     // Chunk the writes so a folder containing more than one Firestore batch still works.

@@ -1,11 +1,11 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -858,7 +858,7 @@
+@@ -890,7 +890,7 @@
              v.versionId === doc.meta?.currentVersion
                ? `${v.versionId} — current`
                : v.versionId,
 -          disabled: v.versionId === doc.currentVersion,
 +          disabled: v.versionId === doc.meta?.currentVersion,
-           onSelect: () => navigate(`/d/${docId}/${v.versionId}`),
+           onSelect: () => navigate(`/d/${docId}/${v.versionId}${linkKey ? `?k=${encodeURIComponent(linkKey)}` : ""}`),
          });
        }

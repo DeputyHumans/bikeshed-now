@@ -1,18 +1,11 @@
---- a/config/templates/firestore.rules.tmpl
-+++ b/config/templates/firestore.rules.tmpl
-@@ -219,4 +219,5 @@
-           // The key list keeps `suggestion` out as well.
-           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-+            && versionId == docData(docId).currentVersion
-             && feedbackWritable(docData(docId))
-             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
---- a/firestore.rules
-+++ b/firestore.rules
-@@ -221,6 +221,7 @@
-           allow read: if canRead(docId, docData(docId));
-           // The key list keeps `suggestion` out as well.
-           allow create: if canRead(docId, docData(docId)) && authoredBySelf()
-+            && versionId == docData(docId).currentVersion
-             && feedbackWritable(docData(docId))
-             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
-             && request.resource.data.anchor is map
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -175,7 +175,7 @@
+   // required, on every document, whatever its owner chose.
+   const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
+   const isCurrent = Boolean(headVersion) && doc.currentVersion === headVersion;
+-  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt);
++  const canWrite = !isExpired(doc.meta?.expiresAt);
+   const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
+   // The real editor set, as the server asks of an upload (SPEC §2).
+   const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);

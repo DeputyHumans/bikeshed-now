@@ -1,6 +1,6 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -605,7 +605,7 @@
+@@ -595,7 +595,7 @@
    }
    const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
    if (!isDocEditor(data, caller.uid, caller.emailLower)) {
@@ -9,34 +9,7 @@
      return;
    }
    // Expired as a reader meets it: an editor cannot read an expired document,
-@@ -839,7 +839,7 @@
-     members?: unknown;
-   };
-   if (!canManageSharing(data, caller.emailLower)) {
--    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
-+    res.status(refusal(data, caller)).end();
-     return;
-   }
-
-@@ -910,7 +910,7 @@
-   }
-   const data = snap.data() as DocAclData & { folderId?: unknown };
-   if (!canManageSharing(data, caller.emailLower)) {
--    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
-+    res.status(refusal(data, caller)).end();
-     return;
-   }
-   const folderId = typeof data.folderId === "string" ? data.folderId : null;
-@@ -962,7 +962,7 @@
-   }
-   const data = snap.data() as DocAclData & { linkToken?: string };
-   if (!canManageSharing(data, caller.emailLower)) {
--    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
-+    res.status(refusal(data, caller)).end();
-     return;
-   }
-
-@@ -1059,7 +1059,7 @@
+@@ -827,7 +827,7 @@
    }
    const data = snap.data() as DocAclData;
    if (!canManageSharing(data, caller.emailLower)) {
@@ -44,8 +17,8 @@
 +    res.status(refusal(data, caller)).end();
      return;
    }
-
-@@ -1103,6 +1103,6 @@
+ 
+@@ -871,7 +871,7 @@
    }
    const data = snap.data() as DocAclData;
    if (!canManageSharing(data, caller.emailLower)) {
@@ -53,3 +26,23 @@
 +    res.status(refusal(data, caller)).end();
      return;
    }
+ 
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -13,7 +13,6 @@
+ import { addEvent, eventActor } from "./events";
+ import { syncPresenceAccess } from "./presence";
+ import { syncPublicProjection } from "./publicdoc";
+-import { linkProofFor } from "./linkgrant";
+ import { safeSegment } from "./http";
+ import { publicOrigin } from "../config";
+ 
+@@ -35,7 +34,7 @@
+     ? canManageSharing(data as DocAclData, ctx.caller.emailLower)
+     : canManageFolder(data as FolderAclData, ctx.caller.emailLower);
+   const reads = kind === "document"
+-    ? canRead(data as DocAclData, ctx.caller, await linkProofFor(ref, data as DocAclData, ctx.caller, null))
++    ? canRead(data as DocAclData, ctx.caller)
+     : canReadFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower);
+   if (!owner && !reads) throw new ManagementError(404, `no ${kind} with id "${id}"`);
+   if (ownerOnly && !owner) throw new ManagementError(403, `only the owner can manage this ${kind}`);

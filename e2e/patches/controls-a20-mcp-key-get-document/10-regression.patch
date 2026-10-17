@@ -1,8 +1,10 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -588,4 +588,5 @@
+@@ -640,6 +640,7 @@
+       },
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-       const versionId = str(args, "version") || String(data.currentVersion ?? "");
+       const versionId = selectedVersion(args.version, data.currentVersion);
+       const isCurrent = versionId === data.currentVersion;

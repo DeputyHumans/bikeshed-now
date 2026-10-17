@@ -101,10 +101,10 @@ function measurement(row, n, kind) {
       const thread = state.threads.find(t => t.annId === answer.json?.threadId);
       need(thread && thread.version === answer.json.version, "feedback was not stored where its response said");
       need(won || answer.json.version === "v1", "a refused publication invented a newer feedback version");
-    } else need(won && answer.what !== "web thread" && /newer version/i.test(answer.text), "feedback refusal is unrelated to a published newer version");
+    } else need(won && (answer.what === "web thread" ? /PERMISSION_DENIED/.test(answer.text) : /newer version/i.test(answer.text)), "feedback refusal is unrelated to a published newer version");
   }
-  need(!state.threads.some(t => t.open && t.version !== state.current && (t.kind === "suggestion" || t.channel === "mcp")), "open current-only feedback was left behind");
-  if (kind === "natural" || kind === "commit-held-web") assertBrowserFeedback(state, answers);
+  need(!state.threads.some(t => t.open && t.version !== state.current), "open current-only feedback was left behind");
+  if (kind === "natural" || kind === "commit-held-web") assertBrowserFeedback(state, answers, { allowRefused: won });
   if (kind === "natural") {
     need(row.race?.kind === "sync-t" && Number.isFinite(row.race.spreadMs) && row.race.spreadMs >= 0 && row.race.spreadMs <= 15 && Number.isFinite(row.race.overlapMarginMs) && row.race.overlapMarginMs >= 0, "natural requests did not actually overlap");
     need(won || state.threads.some(t => t.version === "v1" && t.open), "review refusal had no open feedback");

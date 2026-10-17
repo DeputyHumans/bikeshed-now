@@ -1,13 +1,13 @@
 {
-  "oracle": "historical browser feedback and version clarity",
-  "what": "controls-a07-historical-comment",
+  "oracle": "archived browser feedback is read-only",
+  "what": "offer editing and feedback actions on an archived version",
   "target": {
     "spec": "e2e/specs/functional/a07-suggestions.spec.mjs",
-    "case": "A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers Comment only, the head offers Suggest edit",
+    "case": "A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers no write actions, the head offers Suggest edit",
     "suite": "functional"
   },
   "stack": [],
   "expect": {
-    "message": "historical browser comment is accepted:"
+    "message": "even the owner cannot edit the archive"
   }
 }

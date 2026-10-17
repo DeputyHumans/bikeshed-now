@@ -1,15 +1,15 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -38,7 +38,7 @@
+@@ -37,7 +37,7 @@
  import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
  import { versionStoragePrefix } from "../lib/storage";
  import * as admin from "firebase-admin";
--import { FieldValue, Timestamp } from "firebase-admin/firestore";
-+import { FieldValue } from "firebase-admin/firestore";
+-import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
++import { FieldPath, FieldValue } from "firebase-admin/firestore";
+ import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
+ import { MANAGEMENT_TOOLS } from "./management";
  import { bucketName, publicOrigin } from "../config";
- import type { Actor } from "../lib/actor";
- import type { Principal } from "../lib/auth";
-@@ -408,12 +408,10 @@
+@@ -409,12 +409,10 @@
        const before = await tx.get(viewRef);
        if (readReceipt(before, receipt).found) return;
        recordReceipt(tx, viewRef, before, receipt, true);

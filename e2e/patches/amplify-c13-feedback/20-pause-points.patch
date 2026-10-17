@@ -1,48 +1,55 @@
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -7,2 +7,3 @@
+@@ -6,6 +6,7 @@
+ import { currentVersionRefusal } from "./versions";
+ import { FieldValue, Timestamp } from "firebase-admin/firestore";
  import type { Actor } from "./actor";
 +import { e2eGate } from "./e2eGate";
  import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
-@@ -194,4 +195,8 @@
-
+ 
+ /**
+@@ -198,6 +199,8 @@
+   if (problem) return { status: 400, error: problem };
+ 
    const anns = annotations(docRef, versionId);
-+  // e2e amplify: all callers observe the same pre-admission count before release.
 +  await anns.where("authorUid", "==", author.uid).where("suggestion.state", "==", "pending").count().get();
 +  await e2eGate("suggest-after-count", docRef.id);
-+
-+  // e2e amplify: pause after the pending count, before the transaction.
-+  await e2eGate("suggest-after-count", docRef.id);
- 
    const annRef = anns.doc();
    const commentRef = annRef.collection("comments").doc();
+   let attempted = false;
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -84,4 +84,5 @@
+@@ -85,6 +85,7 @@
+ import { locateQuote } from "../lib/quote";
  import { renameDocument } from "../lib/rename";
  import { setThreadResolved } from "../lib/threads";
 +import { e2eGate } from "../lib/e2eGate";
  import { acceptSuggestion } from "../lib/accept";
  import { commitDraft } from "../lib/draft";
-@@ -1635,4 +1636,7 @@
+ import { editorsRefusal } from "../lib/presence";
+@@ -1708,6 +1709,7 @@
+         actor: ctx.actor,
          createdAt: FieldValue.serverTimestamp(),
        };
-+      // e2e amplify: pause after reading the head and anchor, before writing the thread.
 +      await e2eGate("comment-before-write", ref.id);
-+
        // The anchor was found on the observed head. Recheck that head and the
        // reader's authority atomically with both writes, so a racing publish
+       // either sees this open thread or makes this attempt retry and refuse.
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -21,2 +21,3 @@
+@@ -19,6 +19,7 @@
+ import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
+ import { syncPublicProjection } from "./publicdoc";
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
  import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
-@@ -407,4 +408,7 @@
+ 
+ /**
+@@ -538,6 +539,7 @@
      });
    }
-+
-+  // e2e amplify: pause after the open-thread check and upload, before the transaction rechecks them.
+ 
 +  await e2eGate("commit-before-tx", docId);
-
    const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
+   let candidateMayHaveCommitted = false;
+ 

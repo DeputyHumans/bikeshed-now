@@ -4,8 +4,8 @@
     {
       "name": "folder-access-before-write",
       "side": "server",
-      "where": "functions/src/index.ts setFolderAccess: after ownership check, before persistFolderMembership starts its transaction",
-      "key": "folderId"
+      "where": "functions/src/lib/management.ts setAccess: before persistFolderMembership starts its transaction",
+      "key": "id"
     }
   ]
 }

@@ -1,16 +1,20 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -266,5 +266,4 @@
+@@ -265,7 +265,6 @@
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
                && request.resource.data.body is string;
-             allow delete: if isVerifiedUser()
+             allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
 -              && feedbackWritable(docData(docId))
                && resource.data.authorUid == request.auth.uid
                && !('generated' in resource.data)
+               && !('opensSuggestion' in resource.data);
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -269,5 +269,4 @@
+@@ -268,7 +268,6 @@
+               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
                && request.resource.data.body is string;
-             allow delete: if isVerifiedUser()
+             allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
 -              && feedbackWritable(docData(docId))
                && resource.data.authorUid == request.auth.uid
                && !('generated' in resource.data)
+               && !('opensSuggestion' in resource.data);

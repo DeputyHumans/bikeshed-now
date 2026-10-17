@@ -1,6 +1,10 @@
 --- a/app/src/pages/Connect.tsx
 +++ b/app/src/pages/Connect.tsx
-@@ -229,3 +229,2 @@
-             <li>Delete anything, or rename a folder</li>
--            <li>Set or clear an expiry</li>
+@@ -228,7 +228,6 @@
+         <div>
+           <h2 className="connect-subhead">It won't be able to</h2>
+           <ul className="connect-list connect-list-not">
+-            <li>Delete documents or manage teams</li>
+             <li>Trust document scripts or act with permissions you do not have</li>
            </ul>
+         </div>

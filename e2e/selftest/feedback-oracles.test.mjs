@@ -16,3 +16,11 @@ for (const [name, corrupt] of [
   ["lost body", x => { x.state.threads[0].bodies = []; }],
   ["rewritten body", x => { x.state.threads[0].bodies = ["rewritten"]; }],
 ]) test(`historical oracle rejects ${name}`, () => { const x = sample(); corrupt(x); assert.throws(() => assertBrowserFeedback(x.state, x.answers), assert.AssertionError); });
+
+test("publication can refuse a browser write only with a rules denial", () => {
+  const x = sample(); x.state.threads = [];
+  x.answers = [{ what: "web thread", isError: true, text: "PERMISSION_DENIED" }];
+  assertBrowserFeedback(x.state, x.answers, { allowRefused: true });
+  x.answers[0].text = "service unavailable";
+  assert.throws(() => assertBrowserFeedback(x.state, x.answers, { allowRefused: true }), /retired-version write is refused/);
+});

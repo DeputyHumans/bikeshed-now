@@ -34,8 +34,8 @@
     {
       "name": "visibility-before-mirror",
       "side": "server",
-      "where": "functions/src/index.ts setVisibility: after record/projection writes, before rereading current membership for the realtime mirror",
-      "key": "docId"
+      "where": "functions/src/lib/management.ts setVisibility: after record/projection writes, before rereading current membership for the realtime mirror",
+      "key": "id"
     }
   ]
 }

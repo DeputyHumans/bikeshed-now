@@ -1,13 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -975,9 +975,7 @@
-     updatedAt: now(),
-   };
-   // Omission is not a request to unfreeze the document. Explicit null clears.
--  if (changesExpiry) update.expiresAt = expiry.value === null
--    ? FieldValue.delete()
--    : Timestamp.fromMillis(expiry.value);
-+  if (changesExpiry && expiry.value !== null) update.expiresAt = Timestamp.fromMillis(expiry.value);
-   if (visibility === "unlisted") {
-     // Reuse an existing token so an already-circulated link keeps working
-     // through an unrelated setting change.
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -132,7 +132,7 @@
+     const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
+     const publicEdit = visibility !== "private" && (patch.publicEdit ?? data.publicEdit) === true;
+     const update: Record<string, unknown> = { visibility, publicEdit, updatedAt: stamp() };
+-    if (expiry && "value" in expiry) update.expiresAt = expiry.value === null ? FieldValue.delete() : Timestamp.fromMillis(expiry.value);
++    if (expiry && "value" in expiry && expiry.value !== null) update.expiresAt = Timestamp.fromMillis(expiry.value);
+     update.linkToken = visibility === "unlisted"
+       ? (typeof data.linkToken === "string" && data.linkToken.length >= 22 ? data.linkToken : randomBytes(16).toString("base64url"))
+       : FieldValue.delete();

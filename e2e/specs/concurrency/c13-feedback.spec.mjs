@@ -769,7 +769,8 @@ async function c14SyncAttempt(ctx) {
     assertNoneLeftBehind(state, { pick: SUGGESTION, what: "suggestions, SPEC §22: never left behind on a version nobody reads" });
     // Judge every attempt before another may replace its observation.
     if (published) assertNoneLeftBehind(state, { pick: AGENT_COMMENT, what: "add_comment threads (S12)" });
-    assertBrowserFeedback(state, feedback);
+    assertBrowserFeedback(state, feedback, { allowRefused: published });
+    if (published) assertNoneLeftBehind(state, { pick: thread => thread.kind === "comment" && thread.channel === "web", what: "browser threads on a retired version" });
     const after = await publicationSnapshot(target, s.docId);
     ctx.ev.json("publication-state", { before, after });
     if (!published) assertPublicationPreserved(before, after);
@@ -807,8 +808,8 @@ scenario("C14 judge (SYNC-T, web threads): browser feedback stays on its selecte
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
   if (!observed.has(keyOf("C14 SYNC-T", ctx))) await c14SyncWork(ctx);
-  const { state, answers } = observation(ctx, "C14 SYNC-T", "state");
-  assertBrowserFeedback(state, answers);
+  const { state, answers, published } = observation(ctx, "C14 SYNC-T", "state");
+  assertBrowserFeedback(state, answers, { allowRefused: published });
 });
 
 /** C14 comment held: the work (S12's judge reads it). */
@@ -1026,7 +1027,8 @@ scenario("C14 judge (stale tab): historical feedback keeps its selected version,
   if (!observed.has(keyOf("C14 stale tab", ctx))) await c14StaleTabWork(ctx);
   const { state, answers } = observation(ctx, "C14 stale tab", "state");
   ctx.step(`${stateLine(state)}; the tabs were told: ${answers.map((a) => (a.isError ? "refused" : a.json?.version)).join(", ")}`);
-  assertBrowserFeedback(state, answers);
+  assert.deepEqual(answers.filter(a => !a.isError || !DENIED_RE.test(a.text)), [], "historical browser feedback is refused on the selected archive");
+  assert.deepEqual(state.threads.filter(t => t.version === "v1"), [], "a stale tab creates no archived thread");
 });
 
 // --- C14 against the update mint path (reviseDocument) ------------------------------------------

@@ -1,11 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2013,7 +2013,7 @@
-   }
-
-   // Delete: folder only, owner only, children reparented — never orphaned.
--  if (!canManageFolder(data, emailLower)) {
-+  if (false && !canManageFolder(data, emailLower)) {
-     res.status(403).end();
-     return;
-   }
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -155,7 +155,7 @@
+ }
+ 
+ export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move" | "delete", args: Record<string, unknown> = {}) {
+-  const { ref, data } = await load(ctx, "folder", id, op === "delete");
++  const { ref, data } = await load(ctx, "folder", id, false);
+   if (op !== "delete" && !canEditFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) throw new ManagementError(403, "you cannot edit that folder");
+   if (op === "rename") {
+     const name = typeof args.name === "string" ? args.name.trim() : "";

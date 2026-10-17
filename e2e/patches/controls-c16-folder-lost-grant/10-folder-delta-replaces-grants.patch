@@ -1,11 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1803,7 +1803,7 @@
-   if (!initial.exists) { res.status(404).end(); return; }
-   if (!canManageFolder(initial.data() as FolderAclData, caller.emailLower)) { res.status(403).end(); return; }
-   const result = await persistFolderMembership(db(), ref, (current) => ({
--    ...applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta),
-+    ...applyAccessDelta({ viewers: [], suggesters: [], editors: [], approvers: [] }, String(current.ownerEmail), parsed.delta),
-   }));
-   if (!result) { res.status(404).end(); return; }
-   const { data, grants: next, membership: after, before } = result;
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -79,7 +79,7 @@
+   let changed = false;
+   const apply = (current: DocumentData) => {
+     const oldGrants = grantsOf(current);
+-    next = applyAccessDelta(oldGrants, String(current.ownerEmail), delta);
++    next = applyAccessDelta(kind === "folder" ? { viewers: [], suggesters: [], editors: [], approvers: [] } : oldGrants, String(current.ownerEmail), delta);
+     changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
+     return { ...next };
+   };

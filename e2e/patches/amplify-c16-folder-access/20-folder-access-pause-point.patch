@@ -1,18 +1,18 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -142,6 +142,7 @@
- import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
- import { renameDocument } from "./lib/rename";
- import { documentAudience, filedIn, inheritedGrants } from "./lib/audience";
-+import { e2eFolderAccessGate } from "./lib/e2eFolderAccessGate";
- import {
-   addEvent,
-   annotationEvents,
-@@ -1802,6 +1803,7 @@
-   const initial = await ref.get();
-   if (!initial.exists) { res.status(404).end(); return; }
-   if (!canManageFolder(initial.data() as FolderAclData, caller.emailLower)) { res.status(403).end(); return; }
-+  await e2eFolderAccessGate("folder-access-before-write", folderId);
-   const result = await persistFolderMembership(db(), ref, (current) => ({
-     ...applyAccessDelta(grantsOf(current), String(current.ownerEmail), parsed.delta),
-   }));
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -16,6 +16,7 @@
+ import { linkProofFor } from "./linkgrant";
+ import { safeSegment } from "./http";
+ import { publicOrigin } from "../config";
++import { e2eFolderAccessGate } from "./e2eFolderAccessGate";
+ 
+ export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
+ export type ResourceKind = "document" | "folder";
+@@ -93,6 +94,7 @@
+       }] : [];
+     });
+   } else {
++    await e2eFolderAccessGate("folder-access-before-write", id);
+     const result = await persistFolderMembership(ctx.db, ref, apply);
+     if (!result) throw new ManagementError(404, `no folder with id "${id}"`);
+     before = result.before;

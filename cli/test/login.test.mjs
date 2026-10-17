@@ -1093,7 +1093,7 @@ test("`bikeshed open --json` returns its complete keyed URL when no opener exist
     const code = await new Promise((resolve) => child.on("close", resolve));
     assert.equal(code, 0, stderr);
     assert.doesNotThrow(() => JSON.parse(stdout), "--json emits one JSON value");
-    assert.deepEqual(JSON.parse(stdout), { url: "http://127.0.0.1:9/d/plan?k=test-key" });
+    assert.deepEqual(JSON.parse(stdout), { url: "http://127.0.0.1:9/d/plan/v2?k=test-key" });
   } finally { rmSync(empty, { recursive: true, force: true }); }
 });
 

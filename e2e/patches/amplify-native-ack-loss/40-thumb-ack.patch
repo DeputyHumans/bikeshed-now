@@ -1,11 +1,19 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -56,2 +56,3 @@
- import { verifyIdToken, verifySessionCookie } from "./lib/auth";
+@@ -15,6 +15,7 @@
+  */
+ 
+ import { versionStoragePrefix } from "./lib/storage";
 +import { e2eAckTransaction } from "./lib/e2eAckTransaction";
- import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
-@@ -643,3 +644,3 @@
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+ import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+ import * as admin from "firebase-admin";
+@@ -626,7 +627,7 @@
+   );
+ 
    const receipt = freshReceiptId();
 -  const outcome = await db().runTransaction(async (tx) => {
 +  const outcome = await e2eAckTransaction(db(), docId, `thumb-${kind}`, async (tx) => {
      const fresh = await tx.get(docRef);
+     // A later publication may replace this upload's current key before the
+     // native SDK retries. Keep its bounded result, including original cleanup.

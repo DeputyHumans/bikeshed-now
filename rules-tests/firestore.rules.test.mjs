@@ -635,7 +635,7 @@ describe("firestore rules", () => {
     const base = `docs/${id}/versions/v1/annotations`;
     await seed(env, async (db) => {
       await setDoc(doc(db, `docs/${id}`), {
-        ownerUid: OWNER.uid, ownerEmail: OWNER.email, visibility: "private",
+        ownerUid: OWNER.uid, ownerEmail: OWNER.email, visibility: "private", currentVersion: "v1",
         members: [OWNER.email, VIEWER.email],
         ...(expiresAt === undefined ? {} : { expiresAt }),
       });

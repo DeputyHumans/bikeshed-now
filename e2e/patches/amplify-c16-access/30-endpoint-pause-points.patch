@@ -1,10 +1,14 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -16,2 +16,3 @@
+@@ -16,6 +16,7 @@
+ import { linkProofFor } from "./linkgrant";
  import { safeSegment } from "./http";
-+import { e2eAccessGate } from "./e2eAccessGate";
  import { publicOrigin } from "../config";
-@@ -141,6 +142,7 @@
++import { e2eAccessGate } from "./e2eAccessGate";
+ 
+ export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
+ export type ResourceKind = "document" | "folder";
+@@ -150,6 +151,7 @@
    await syncPublicProjection(ctx.db, id);
    const data = (await ref.get()).data()!;
    const m = membershipOf(data);
@@ -14,16 +18,19 @@
  }
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -142,2 +142,3 @@
- import { syncPresenceAccess } from "./lib/presence";
+@@ -15,6 +15,7 @@
+  */
+ 
+ import { versionStoragePrefix } from "./lib/storage";
 +import { e2eAccessGate } from "./lib/e2eAccessGate";
- import { forkDocument, lineageFor } from "./lib/fork";
-@@ -1034,2 +1035,3 @@
-   // key, so an unlisted document's link holders edit through /draft instead.
-+  await e2eAccessGate("visibility-before-mirror", docId);
-   await syncPresenceAccess(
-@@ -2781,2 +2783,4 @@
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+ import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+ import * as admin from "firebase-admin";
+@@ -2381,6 +2382,7 @@
+   }
+ 
    const ref = db().collection("teams").doc(teamId);
-+  // Pause before the transaction: no request holds a team lock while another waits.
 +  await e2eAccessGate("team-members-after-read", teamId);
    const receipt = freshReceiptId();
+   type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
+   const result = await db().runTransaction(async (tx) => {

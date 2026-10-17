@@ -1,9 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -972,5 +972,5 @@
-   const update: Record<string, unknown> = {
-     visibility,
--    publicEdit: body?.publicEdit === true && visibility !== "private",
-+    publicEdit: body?.publicEdit === true,
-     updatedAt: now(),
-   };
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -130,7 +130,7 @@
+     const data = (await tx.get(ref)).data()!;
+     if (!canManageSharing(data as DocAclData, ctx.caller.emailLower)) throw new ManagementError(403, "only the owner can manage this document");
+     const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
+-    const publicEdit = visibility !== "private" && (patch.publicEdit ?? data.publicEdit) === true;
++    const publicEdit = (patch.publicEdit ?? data.publicEdit) === true;
+     const update: Record<string, unknown> = { visibility, publicEdit, updatedAt: stamp() };
+     if (expiry && "value" in expiry) update.expiresAt = expiry.value === null ? FieldValue.delete() : Timestamp.fromMillis(expiry.value);
+     update.linkToken = visibility === "unlisted"

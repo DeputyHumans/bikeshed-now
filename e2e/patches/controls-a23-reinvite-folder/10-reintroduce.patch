@@ -1,11 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1824,7 +1824,7 @@
-   const beforeMembers = before.members;
-   await recomputeSubtree(db(), folderId);
-
--  const beforeSet = new Set(beforeMembers);
-+  const beforeSet = new Set(beforeMembers.filter(() => false));
-   const invitees: InviteTarget[] = after.members
-     .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-     .map((email) => ({ email, role: roleOf(email, after) }));
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -104,7 +104,7 @@
+     added: after.members.filter(e => !before.members.includes(e)),
+     removed: before.members.filter(e => !after.members.includes(e)), ...next,
+   });
+-  const invitees = after.members.filter(e => !before.members.includes(e) && e !== ctx.caller.emailLower)
++  const invitees = after.members.filter(e => (kind === "folder" || !before.members.includes(e)) && e !== ctx.caller.emailLower)
+     .map(email => ({ email, role: roleOf(email, after) }));
+   if (invitees.length) {
+     const { sendInvitations } = await import("../email/notify");
