@@ -85,7 +85,11 @@ export const COMMENT_ROUTES = Object.freeze([
 
 /** MCP tools, every one classified. An unclassified name is refused on production. */
 export const READ_TOOLS = Object.freeze(new Set([
-  "list_documents", "get_document", "get_lineage", "list_folders", "get_folder", "get_comments", "get_changes",
+  "list_documents", "list_versions", "get_document", "get_lineage", "list_folders", "get_folder", "get_comments", "get_changes", "get_document_access", "get_folder_access",
+]));
+/** Management mutations run only on isolated stacks: grants send invitations. */
+export const MANAGEMENT_TOOLS = Object.freeze(new Set([
+  "set_document_access", "set_folder_access", "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
 ]));
 export const CREATE_TOOLS = Object.freeze(new Set(["publish_document", "create_folder"]));
 export const ACT_TOOLS = Object.freeze(new Set([
@@ -147,6 +151,7 @@ export const CLI_COMMANDS = Object.freeze({
   act: new Set(["update", "commit", "mv", "rename", "fork"]),
   create: new Set(["publish", "mkdir"]),
   auth: new Set(["login", "logout"]),
+  management: new Set(["access", "visibility", "rename-folder", "move-folder", "delete-folder"]),
 });
 
 export const DEFAULT_POLICY = Object.freeze({
@@ -155,6 +160,7 @@ export const DEFAULT_POLICY = Object.freeze({
   gaHosts: GA_HOSTS,
   commentRoutes: COMMENT_ROUTES,
   readTools: READ_TOOLS,
+  managementTools: MANAGEMENT_TOOLS,
   createTools: CREATE_TOOLS,
   actTools: ACT_TOOLS,
   commentTools: COMMENT_TOOLS,
@@ -318,6 +324,7 @@ export function evaluate(req, ctx) {
       const args = m.params?.arguments ?? {};
       const id = typeof args.id === "string" ? args.id : null;
       const folder = typeof args.folder === "string" && args.folder && args.folder !== "root" ? args.folder : null;
+      if (policy.managementTools.has(name)) return { allow: false, rule: "management", reason: `${name} is tested on an isolated stack only; sharing may send invitations` };
       if (policy.readTools.has(name)) continue;
       if (name.startsWith(UNKNOWN_TOOL_PREFIX)) continue;
       if (policy.createTools.has(name)) {
@@ -602,7 +609,8 @@ export function createGuard(target, o = {}) {
     const intent = cliIntent(args);
     const l = ledger();
     let verdict = { allow: true, rule: `cli-${intent.kind}` };
-    if (intent.kind === "unknown") verdict = { allow: false, rule: "cli-unclassified", reason: `CLI command ${intent.command} is not classified by the e2e guard` };
+    if (intent.kind === "management") verdict = { allow: false, rule: "management", reason: "management CLI commands are tested on isolated stacks only" };
+    else if (intent.kind === "unknown") verdict = { allow: false, rule: "cli-unclassified", reason: `CLI command ${intent.command} is not classified by the e2e guard` };
     else if (["act", "comment"].includes(intent.kind) && (!intent.docId || !l.docs.has(intent.docId))) {
       verdict = { allow: false, rule: "ledger", reason: `bikeshed ${intent.command} on ${intent.docId ?? "(no id)"}, a document this run did not create` };
     } else {

@@ -217,7 +217,7 @@ service cloud.firestore {
         match /annotations/{annId} {
           allow read: if canRead(docId, docData(docId));
           // The key list keeps `suggestion` out as well.
-          allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+          allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
             && feedbackWritable(docData(docId))
             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
             && request.resource.data.anchor is map
@@ -227,7 +227,7 @@ service cloud.firestore {
           // `resolvedBy`, which is what the change log reports; nothing else
           // changes with it: not the author, anchor, colour, actor or
           // createdAt, and no field added on the side.
-          allow update: if canRead(docId, docData(docId))
+          allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
             && feedbackWritable(docData(docId))
             && !('suggestion' in resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
@@ -236,7 +236,7 @@ service cloud.firestore {
             && request.resource.data.resolvedBy.uid == request.auth.uid
             && request.resource.data.resolvedBy.email == myEmail()
             && request.resource.data.resolvedBy.channel == 'web';
-          allow delete: if isVerifiedUser()
+          allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
             && feedbackWritable(docData(docId))
             && resource.data.authorUid == request.auth.uid
             && !('suggestion' in resource.data);
@@ -250,21 +250,21 @@ service cloud.firestore {
           match /comments/{commentId} {
             allow read: if canRead(docId, docData(docId));
             // The key list is what keeps `generated` and `opensSuggestion` out.
-            allow create: if canRead(docId, docData(docId)) && authoredBySelf()
+            allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
               && feedbackWritable(docData(docId))
               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
               && request.resource.data.body is string
               && request.resource.data.createdAt == request.time;
             // Its author may reword it, and that is all: when it was written,
             // and by whom, stay as they were.
-            allow update: if canRead(docId, docData(docId))
+            allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
               && feedbackWritable(docData(docId))
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)
               && !('opensSuggestion' in resource.data)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
               && request.resource.data.body is string;
-            allow delete: if isVerifiedUser()
+            allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
               && feedbackWritable(docData(docId))
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)

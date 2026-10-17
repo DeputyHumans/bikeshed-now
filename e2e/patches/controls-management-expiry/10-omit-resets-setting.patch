@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -117,3 +117,3 @@
+   if (Object.hasOwn(patch, "expiresAt") && patch.expiresAt !== null && typeof patch.expiresAt !== "number") bad("expiresAt must be epoch milliseconds or null");
+-  const expiry = Object.hasOwn(patch, "expiresAt") ? parseExpiry(patch.expiresAt) : undefined;
++  const expiry = Object.hasOwn(patch, "expiresAt") ? parseExpiry(patch.expiresAt) : { value: null };
+   if (expiry && "error" in expiry) bad(expiry.error);

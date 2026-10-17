@@ -220,14 +220,16 @@ function Ready({
             <li>Comment, reply, suggest edits and resolve threads</li>
             <li>Accept or reject suggested edits where you can, and save them as a new version</li>
             <li>Create folders and file documents in them</li>
+            <li>Manage sharing on documents and folders you own, sending invitations to new readers</li>
+            <li>Change visibility, open editing and expiry on documents you own</li>
+            <li>Rename and move folders you can edit; delete folders you own while keeping their contents</li>
           </ul>
         </div>
         <div>
           <h2 className="connect-subhead">It won't be able to</h2>
           <ul className="connect-list connect-list-not">
-            <li>Share anything, or change who can read it</li>
-            <li>Delete anything, or rename a folder</li>
-            <li>Set or clear an expiry</li>
+            <li>Delete documents or manage teams</li>
+            <li>Trust document scripts or act with permissions you do not have</li>
           </ul>
         </div>
 

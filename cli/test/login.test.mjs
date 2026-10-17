@@ -1076,7 +1076,7 @@ test("`bikeshed open` keeps an unlisted link's key", { skip: process.platform ==
     });
     const code = await new Promise((resolve) => child.on("close", resolve));
     assert.equal(code, 0, stderr);
-    assert.equal(stdout, "http://127.0.0.1:9/d/plan?k=tok_0123456789abcdefghijk\n");
+    assert.equal(stdout, "http://127.0.0.1:9/d/plan/v2?k=tok_0123456789abcdefghijk\n");
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }

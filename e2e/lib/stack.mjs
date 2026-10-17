@@ -1217,7 +1217,7 @@ export async function reap({ all = false, runIds = [], auto = false, log, now = 
       rec.state = "reaped";
       rec.reapedAt = new Date().toISOString();
       try {
-        writeFileSync(join(rec.runDir, "stack.json"), JSON.stringify(rec, null, 2) + "\n");
+        writeAtomic(join(rec.runDir, "stack.json"), JSON.stringify(rec, null, 2) + "\n");
       } catch {}
       // An automatic reap keeps a failed stack's tree: somebody may be reading it.
       if (!(auto && r.state === "failed") && existsSync(rec.stackDir)) removeTree(rec.stackDir);

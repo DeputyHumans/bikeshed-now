@@ -32,6 +32,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { checkDist, normalizeOrigin } from "./stamp-deployment.mjs";
+import { parseMediaBaseUrl } from "../scripts/lib/media.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -58,6 +59,38 @@ export function parseEnv(text) {
 function flag(value) {
   const v = (value ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+/** Optional landing media is public, and must never name the content bucket. */
+function landingMediaRefusals(value, root) {
+  if (value === undefined || value.trim() === "") return [];
+
+  let media;
+  try {
+    media = parseMediaBaseUrl(value);
+  } catch {
+    return ["VITE_LANDING_MEDIA_BASE_URL must name a direct HTTPS media revision without credentials, query or fragment"];
+  }
+
+  let deploy;
+  try {
+    deploy = JSON.parse(readFileSync(join(root, "config", "deploy.json"), "utf8"));
+  } catch {
+    return ["landing media requires a readable config/deploy.json with separate content and media buckets"];
+  }
+  if (
+    typeof deploy?.bucket !== "string" || deploy.bucket.trim() === "" ||
+    typeof deploy?.mediaBucket !== "string" || deploy.mediaBucket.trim() === ""
+  ) {
+    return ["landing media requires both bucket and mediaBucket in config/deploy.json"];
+  }
+  if (deploy.mediaBucket === deploy.bucket) {
+    return ["landing media must use a separate bucket from private document content"];
+  }
+  if (media.bucket !== deploy.mediaBucket) {
+    return ["VITE_LANDING_MEDIA_BASE_URL names a different bucket than config/deploy.json mediaBucket"];
+  }
+  return [];
 }
 
 /**
@@ -88,6 +121,13 @@ export function refusals({ project, appEnv, functionsEnv, dist, env = process.en
       out.push("app/.env.local names a different Firebase project than the deploy targets");
     }
   }
+
+  // Vite gives the build's shell precedence over dotenv, including an explicit
+  // empty value. Compare the URL actually selected by that same precedence.
+  out.push(...landingMediaRefusals(
+    env.VITE_LANDING_MEDIA_BASE_URL ?? parseEnv(appEnv ?? "").VITE_LANDING_MEDIA_BASE_URL,
+    root,
+  ));
 
   const { origin, unstamped, archives } = checkDist(dist, env, root);
   if (!origin) {

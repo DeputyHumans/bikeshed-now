@@ -25,6 +25,7 @@
 
 import { addEvent, type EventInput } from "./events";
 import { randomBytes } from "crypto";
+import { opensEditingToAnyAccount, type DocAclData } from "./acl";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -435,7 +436,8 @@ export async function persistDocMembership(
     return next;
   });
   if (receipt) await clearReceipt(docRef, receipt);
-  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
+  const fresh = (await docRef.get()).data() as DocAclData;
+  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
   await syncPublicProjection(db, docRef.id);
   return membership;
 }

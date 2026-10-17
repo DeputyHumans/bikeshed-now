@@ -107,6 +107,17 @@ var(--x)            must resolve to a token a stylesheet defines
 var(--x, fallback)  may be injected at runtime from JS
 ```
 
+## Version history is a read-only archive
+
+Use `docs/agents/agent-guide.md` for the CLI/MCP history workflow (SPEC §19).
+Historical content and existing feedback remain readable under current access
+rules; only the current version accepts version-scoped writes (SPEC §4, §22).
+Enforce this in Firestore rules and in the transaction that writes through the
+Admin SDK, including idempotent actions. A stale base must never silently become
+the latest version. Upload attempts own unique, create-only object prefixes;
+readers follow the committed pointer, and cleanup touches only the observed
+superseded draft. Test head changes during saves, feedback writes and publishing.
+
 ## Every file needs a two-line header
 
 ```
@@ -189,7 +200,7 @@ anything outside the permissive allowlist.
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | sixteen decisions, each with its reversal condition |
+| `docs/architecture/adr/` | seventeen decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 
 ## Looks like a bug, is not

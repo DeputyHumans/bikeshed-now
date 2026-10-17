@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import { parse, fail } from "./lib/args.mjs";
 import { REPO_ROOT, getBucketName, getProjectId } from "./lib/firebase.mjs";
 import { TRIGGERS, functionNames } from "./lib/endpoints.mjs";
+import { ensureMediaBucket, resolveMediaBucket, resolveMediaOrigin } from "./lib/media.mjs";
 
 const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempotently
 
@@ -33,6 +34,8 @@ const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempoten
   --bucket <name>      content bucket (default: config/deploy.json, then a
                        derived \${projectId}-content)
   --location <region>  default us-central1
+  --media-bucket <name> optional dedicated PUBLIC landing-media bucket (then
+                       BIKESHED_MEDIA_BUCKET, config/deploy.json mediaBucket)
   --dry-run            print the intended commands, run nothing, need no
                        credentials
   --help
@@ -45,6 +48,7 @@ const { values } = parse({
   project: { type: "string" },
   bucket: { type: "string" },
   location: { type: "string", default: "us-central1" },
+  "media-bucket": { type: "string" },
   "dry-run": { type: "boolean", default: false },
 }, { usage: USAGE });
 
@@ -126,6 +130,7 @@ function requireBin(name) {
 function main() {
   const projectId = getProjectId(values.project);
   const bucket = getBucketName(values.project, values.bucket);
+  const mediaBucket = resolveMediaBucket({ override: values["media-bucket"] });
 
   if (!DRY && !ACCOUNT) {
     fail(
@@ -195,6 +200,14 @@ function main() {
       ...gcloudAcct,
     ],
   );
+
+  if (mediaBucket) {
+    console.log("\n[optional] Ensure the dedicated public landing-media bucket");
+    ensureMediaBucket({
+      project: projectId, contentBucket: bucket, mediaBucket,
+      account: ACCOUNT, dryRun: DRY, location: LOCATION, origin: resolveMediaOrigin(),
+    });
+  }
 
   /**
    * RTDB rules are deployed only if an instance EXISTS.

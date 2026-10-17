@@ -295,11 +295,13 @@ describe("approving", () => {
       "Comment, reply, suggest edits and resolve threads",
       "Accept or reject suggested edits where you can, and save them as a new version",
       "Create folders and file documents in them",
+      "Manage sharing on documents and folders you own, sending invitations to new readers",
+      "Change visibility, open editing and expiry on documents you own",
+      "Rename and move folders you can edit; delete folders you own while keeping their contents",
     ]);
     expect(items(".connect-list-not li")).toEqual([
-      "Share anything, or change who can read it",
-      "Delete anything, or rename a folder",
-      "Set or clear an expiry",
+      "Delete documents or manage teams",
+      "Trust document scripts or act with permissions you do not have",
     ]);
   });
 

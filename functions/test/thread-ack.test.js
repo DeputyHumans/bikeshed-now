@@ -7,9 +7,12 @@ const { loseFirstTransactionAcknowledgement } = require("./transaction-ack.js");
 const { setThreadResolved } = require("../lib/lib/threads.js");
 const path = "docs/d/versions/v1/annotations/a";
 for (const resolved of [false, true]) for (const later of [false, true]) test(`thread resolution acknowledges one committed note, resolved=${resolved}, later opposite=${later}`, async () => {
-  const { db, store } = fakeFirestore({ [path]: { resolved: !resolved } });
+  const { db, store } = fakeFirestore({ "docs/d": { currentVersion: "v1" }, [path]: { resolved: !resolved } });
   const count = loseFirstTransactionAcknowledgement(db, { afterCommit: async () => {
-    if (later) await db.doc(path).update({ resolved: !resolved, resolvedBy: { uid: "later" } });
+    if (later) {
+      await db.doc(path).update({ resolved: !resolved, resolvedBy: { uid: "later" } });
+      await db.doc("docs/d").update({ currentVersion: "v2" });
+    }
   } });
   const result = await setThreadResolved({ db, docRef: db.doc("docs/d"), versionId: "v1", annId: "a", resolved, caller: { uid: "owner", emailLower: "owner@example.com" }, actor: { uid: "owner", channel: "mcp" } });
   assert.deepEqual(result, { resolved, changed: true }, "the native retry acknowledges its original successful decision");

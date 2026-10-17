@@ -30,7 +30,7 @@ import { allowedResources, challenge } from "../oauth/metadata";
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 
 export const PROTOCOL_VERSION = "2025-06-18";
-export const SERVER_INFO = { name: "bikeshed", version: "0.16.1" };
+export const SERVER_INFO = { name: "bikeshed", version: "0.19.1" };
 
 /**
  * What a client injects into the model's context on connect.
@@ -63,13 +63,17 @@ export const INSTRUCTIONS =
   "new document is readable by its owner and by the members of any folder it is " +
   "filed in, until a person shares it. Nobody is emailed when it is filed, so " +
   "say where it went and who can read it there: get_folder and the result's " +
-  "access name them. Nothing here shares, deletes or sets an " +
-  "expiry, and a document's own scripts stay sandboxed until its owner trusts it. " +
+  "access name them. Owners can manage grants, visibility and expiry; folder " +
+  "editors can rename and move folders, and owners can delete them, retaining " +
+  "their contents. New grants email new readers. Document scripts stay sandboxed. " +
   "Where you may suggest but not edit, propose a change with suggest_edit; " +
   "until it is decided, revise_suggestion and withdraw_suggestion change or " +
   "take back your own. For an owner or approver, accept_suggestion makes " +
   "one's change in the draft, reject_suggestion declines it, and " +
-  "commit_draft publishes the draft.";
+  "commit_draft publishes the draft. list_versions discovers history; get_document " +
+  "and get_comments accept version. Older versions and their feedback are read-only. " +
+  "Pass version on feedback writes and baseVersion on update_document/commit_draft; " +
+  "if stale, read the latest and reassess, never silently retarget.";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

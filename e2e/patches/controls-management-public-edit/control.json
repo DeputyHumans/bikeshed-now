@@ -1,0 +1,12 @@
+{
+  "oracle": "management preserves omitted settings",
+  "what": "management-public-edit resets an omitted setting",
+  "target": {
+    "spec": "e2e/specs/functional/a20-management.spec.mjs",
+    "case": "A20 management: CLI permissions, visibility and folder commands reach the shared handlers",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "Expected values to be strictly deep-equal"
+  }
+}

@@ -19,3 +19,19 @@ export function versionStoragePrefix(docId: string, versionId: string, record: {
   }
   return prefix;
 }
+
+/** Saves never share an object path, even when their base version is the same. */
+export function newDraftPrefix(docId: string): string {
+  if (!safeSegment(docId)) throw new Error("invalid document storage id");
+  return `docs/${docId}/drafts/${randomUUID()}`;
+}
+
+/** Legacy drafts have a fixed prefix; new saves carry their own pointer. */
+export function draftStoragePrefix(docId: string, draft: { storagePrefix?: unknown }): string {
+  const prefix = draft.storagePrefix ?? `docs/${docId}/draft`;
+  if (!safeSegment(docId) || typeof prefix !== "string" || safeRelPath(prefix) !== prefix ||
+      !(prefix === `docs/${docId}/draft` || prefix.startsWith(`docs/${docId}/drafts/`))) {
+    throw new Error("invalid draft storage prefix");
+  }
+  return prefix;
+}

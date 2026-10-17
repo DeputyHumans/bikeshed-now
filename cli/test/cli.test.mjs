@@ -239,7 +239,7 @@ test("--help advertises exactly the commands the CLI runs", () => {
   const source = readFileSync(join(SRC, "index.mjs"), "utf8");
   const table = source.match(/^const COMMANDS = \{\n([\s\S]*?)^\};/m);
   assert.ok(table, "the COMMANDS table was not found");
-  const runs = [...table[1].matchAll(/^ {2}([a-z][a-z-]*)\b/gm)].map((m) => m[1]).sort();
+  const runs = [...table[1].matchAll(/^ {2}"?([a-z][a-z-]*)\b/gm)].map((m) => m[1]).sort();
   const advertised = [...new Set([...run(["--help"]).matchAll(/^ {2}bikeshed ([a-z][a-z-]*)/gm)].map((m) => m[1]))].sort();
   assert.ok(runs.length > 10, "the COMMANDS table did not parse");
   assert.deepEqual(advertised, runs);
@@ -520,15 +520,18 @@ test("a pasted link is read for its id and its unlisted key", async () => {
     await runAsync(["reply", link, "t1", "Agreed.", "--json"], env);
     assert.deepEqual(seen[0].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
     });
     assert.deepEqual(seen[1].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
       includeResolved: false,
     });
     assert.deepEqual(seen[2].body.params.arguments, {
       id: "build-estimate",
+      version: "v2",
       k: "tok_0123456789abcdefghijk",
       threadId: "t1",
       body: "Agreed.",
@@ -1378,4 +1381,72 @@ test("publish says where it filed the document and who can read it there", async
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("management commands preserve sparse patches and map explicit folder destinations", async () => {
+  const cases = [
+    [["access", "document", "https://example.test/d/doc?k=secret"], "get_document_access", { id: "doc" }],
+    [["access", "folder", "f", "--add", "a@example.com,team:design", "--role", "approver", "--remove", "old@example.com"], "set_folder_access", { id: "f", add: [{ principal: "a@example.com", role: "approver" }, { principal: "team:design", role: "approver" }], remove: ["old@example.com"] }],
+    [["access", "folder", "f"], "get_folder_access", { id: "f" }],
+    [["access", "document", "doc", "--remove", "a@example.com"], "set_document_access", { id: "doc", remove: ["a@example.com"] }],
+    [["visibility", "doc"], "get_document_access", { id: "doc" }],
+    [["visibility", "doc", "unlisted"], "set_document_visibility", { id: "doc", visibility: "unlisted" }],
+    [["visibility", "doc", "--expires", "none", "--public-edit", "false"], "set_document_visibility", { id: "doc", publicEdit: false, expiresAt: null }],
+    [["visibility", "doc", "--expires", "2027-01-01T00:00:00Z"], "set_document_visibility", { id: "doc", expiresAt: Date.UTC(2027, 0, 1) }],
+    [["rename-folder", "f", "Reviews"], "rename_folder", { id: "f", name: "Reviews" }],
+    [["move-folder", "f", "root"], "move_folder", { id: "f" }],
+    [["move-folder", "f", "parent"], "move_folder", { id: "f", parent: "parent" }],
+    [["delete-folder", "f"], "delete_folder", { id: "f" }],
+  ];
+  await withServer(rpcOk({ ok: true }), async (origin, seen) => {
+    for (const [args] of cases) await runAsync([...args, "--json", "--origin", origin, "--token", "test"]);
+    assert.deepEqual(seen.map(r => r.body.params), cases.map(([, name, args]) => ({ name, arguments: args })));
+  });
+});
+
+test("invalid management commands fail before reaching the server", async () => {
+  await withServer(rpcOk({}), async (origin, seen) => {
+    const cases = [
+      ["access", "document", "d", "--add", "a@example.com"],
+      ["access", "folder", "f", "--add", "a@example.com", "--role", "owner"],
+      ["access", "document", "d", "--remove", "a@example.com,"],
+      ["visibility", "d", "--public-edit", "yes"],
+      ["visibility", "d", "--expires", "2027-01-01"],
+      ["move-folder", "f"], ["delete-folder", "f", "extra"],
+    ];
+    const failed = [];
+    for (const args of cases) {
+      try { await runAsync([...args, "--json", "--origin", origin, "--token", "test"]); failed.push(false); }
+      catch (error) { failed.push(error.code === 1); }
+    }
+    assert.deepEqual({ failed, seen }, { failed: cases.map(() => true), seen: [] });
+  });
+});
+
+test("management human output explains inherited grants and returns the actual sharing URL", async () => {
+  const result = { id: "d", kind: "document", owner: "owner@example.com", direct: { viewers: [] }, inherited: [{ principal: "reader@example.com", role: "viewer", path: "Team" }], effective: { members: ["owner@example.com", "reader@example.com"] }, visibility: "unlisted", publicEdit: false, expiresAt: null, url: "https://example.test/d/d?k=actual" };
+  await withServer(rpcOk(result), async origin => {
+    const { stdout } = await runAsync(["access", "document", "d", "--origin", origin, "--token", "test"]);
+    assert.equal(stdout, "document d — owner: owner@example.com\nviewers: none\ninherited viewer: reader@example.com via Team\nmembers: owner@example.com, reader@example.com\nvisibility: unlisted; open editing: off; expires: never\nhttps://example.test/d/d?k=actual\n");
+  });
+});
+
+test("versions follows every history page and preserves its current-version metadata", async () => {
+  let page = 0;
+  await withServer((req, res) => {
+    rpcOk({ currentVersion: "v3", versions: page++ ? [{ version: "v1" }] : [{ version: "v3" }, { version: "v2" }], nextCursor: page === 1 ? "v2" : null })(req, res);
+  }, async (origin, seen) => {
+    const result = await runAsync(["versions", "d1", "--all", "--limit", "2", "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.deepEqual(JSON.parse(result.stdout).versions.map(v => v.version), ["v3", "v2", "v1"]);
+    assert.equal(JSON.parse(result.stdout).currentVersion, "v3");
+    assert.deepEqual(seen.map(s => s.body.params.arguments.cursor), [undefined, "v2"]);
+  });
+});
+test("conflicting or unsupported version selectors fail before a request", async () => {
+  await withServer(rpcOk({}), async (origin, seen) => {
+    for (const args of [["get", "https://example.com/d/d1/v1", "--version", "v2"], ["reply", "https://example.com/d/d1/v1", "t1", "text", "--version", "v2"], ["lineage", "d1", "--version", "v1"], ["get", "d1", "--base", "v1"]]) {
+      await assert.rejects(runAsync(args, { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }));
+    }
+    assert.equal(seen.length, 0);
+  });
 });

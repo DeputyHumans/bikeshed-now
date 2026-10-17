@@ -187,16 +187,17 @@ export async function writeDraft(args: {
       .save(Buffer.from(content.markdown, "utf8"), {
         contentType: "text/markdown; charset=utf-8",
         resumable: false,
+        preconditionOpts: { ifGenerationMatch: 0 },
       });
     await bucket()
       .file(`${prefix}${version.entry}`)
-      .save(Buffer.from(content.html, "utf8"), { contentType: "text/html; charset=utf-8", resumable: false });
+      .save(Buffer.from(content.html, "utf8"), { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
     bytes = Buffer.byteLength(content.markdown, "utf8");
   } else {
     const htmlBuf = Buffer.from(content.html, "utf8");
     await bucket()
       .file(`${prefix}${version.entry}`)
-      .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false });
+      .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
     bytes = htmlBuf.length;
   }
 
@@ -614,12 +615,12 @@ export async function commitDraft(args: {
       const open = await openThreadsRefusal(docRef, baseVersion);
       if (open) return { status: 409, body: open };
     }
-    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN") {
+    if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN" || reason === "DRAFT_CHANGED") {
       const fresh = await docRef.get();
       return {
         status: 409,
         body: {
-          error: "Another editor just published. Reload before publishing.",
+          error: "The document or draft changed. Read it again before publishing.",
           currentVersion: fresh.data()?.currentVersion,
         },
       };
@@ -631,4 +632,5 @@ export async function commitDraft(args: {
   await retireLiveSession(db, docId, retiredEpoch);
 
   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
+
 }

@@ -51,14 +51,14 @@ test("clients: the owner mints a cli token, sees it listed, and it authenticates
   assert.ok(listed.json.tokens.some((t) => t.tokenId === ctx.token.tokenId && t.channel === "cli"));
 });
 
-test("clients: MCP initialize reports the tree's version and tools/list has exactly 23 tools", async () => {
+test("clients: MCP initialize reports the tree's version and tools/list has exactly 32 tools", async () => {
   const mcp = mcpClient(target, { token: ctx.token.token, actor: "owner-mcp" });
   const init = await mcp.initialize();
   assert.equal(init.protocolVersion, "2025-06-18");
   assert.equal(mcp.serverVersion, target.expectVersion);
   const tools = await mcp.listTools();
-  assert.equal(tools.length, 23, tools.map((t) => t.name).join(", "));
-  for (const t of tools) assert.doesNotMatch(t.name, /delete|remove|share|grant|access/);
+  assert.equal(tools.length, 32, tools.map((t) => t.name).join(", "));
+  for (const t of tools) assert.doesNotMatch(t.name, /^(delete_document|.*_team|.*_trust)$/);
   ctx.mcp = mcp;
 });
 
@@ -121,7 +121,7 @@ test("clients: the operator script publishes a sample into this stack", async ()
   assert.equal(c.status, 200);
 });
 
-test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair that lists 23 tools", async () => {
+test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair that lists 32 tools", async () => {
   const anon = createHttp(target, { actor: "oauth-app" });
   const d = await discover(anon);
   assert.equal(d.responses.prm.status, 200);
@@ -144,7 +144,7 @@ test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair th
     assert.match(pair.json.refresh_token, /^bsr_[0-9a-f]{32}\./);
     const mcp = mcpClient(target, { token: pair.json.access_token, actor: "oauth-mcp" });
     await mcp.initialize();
-    assert.equal((await mcp.listTools()).length, 23);
+    assert.equal((await mcp.listTools()).length, 32);
     const rotated = await refresh(anon, { refreshToken: pair.json.refresh_token, clientId: reg.clientId });
     assert.equal(rotated.status, 200, JSON.stringify(rotated.json));
     assert.notEqual(rotated.json.refresh_token, pair.json.refresh_token, "refresh rotates");

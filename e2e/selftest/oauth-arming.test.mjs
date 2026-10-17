@@ -26,6 +26,7 @@ const bug = q.get("bug");
 const root = document.getElementById("root");
 setTimeout(() => {
   root.innerHTML = '<div class="connect-card"><h1>Connect a program?</h1><div class="connect-actions"><button type="button" id="cancel">Cancel</button> <button type="button" id="approve" disabled>Approve</button></div></div>';
+  if (q.has("tall")) root.querySelector(".connect-actions").style.marginTop = "1200px";
   const approve = document.getElementById("approve");
   approve.onclick = () => location.assign(q.get("back") || "/done");
   document.getElementById("cancel").onclick = () => location.assign(q.get("back") || "/cancelled");
@@ -205,4 +206,10 @@ test("consent() reports the arming record it read just before the click, when th
   await plain.goto("/connect?render=0&back=/cancelled-here");
   const c = await consent(plain.page, { approve: false, timeoutMs: 10_000 });
   assert.deepEqual([c.clicked, c.arming], ["cancel", null], "no probe, no record");
+});
+
+test("consent() arms and approves when the disclosure puts its buttons below the viewport", async () => {
+  const u = await opened("tall", "?render=0&tall&back=/approved-tall");
+  const result = await consent(u.page, { timeoutMs: 4_000, stepMs: 50 }).catch(e => ({ error: e.code }));
+  assert.deepEqual({ clicked: result.clicked, error: result.error }, { clicked: "approve", error: undefined });
 });

@@ -30,7 +30,7 @@ import { runCli } from "../lib/cli.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
 
 const INDEX_TS = readFileSync(join(REPO_ROOT, "functions", "src", "index.ts"), "utf8");
-const TOOLS_TS = readFileSync(join(REPO_ROOT, "functions", "src", "mcp", "tools.ts"), "utf8");
+const TOOLS_TS = ["tools.ts", "management.ts"].map(name => readFileSync(join(REPO_ROOT, "functions", "src", "mcp", name), "utf8")).join("\n");
 const FIREBASE_JSON = JSON.parse(readFileSync(join(REPO_ROOT, "firebase.json"), "utf8"));
 
 const EMAIL_HELPERS = ["sendInvitations", "sendCommentNotice", "sendVerificationCode", "sendEmail"];
@@ -123,6 +123,15 @@ async function parity(policy) {
       if (!TRIGGER_COVERAGE[fn.document]) gaps.push(`trigger ${fn.name} (${fn.document}) has no coverage`);
       continue;
     }
+    if (fn.name === "mcp") {
+      // MCP contains both read and write tools. Every invitation-capable tool
+      // is refused explicitly; the rest retain their existing classifications.
+      for (const name of ["set_document_access", "set_folder_access"]) {
+        const verdict = evaluate(mcpCall(name, { id: "ledger-doc", add: [{ principal: "a@example.com", role: "viewer" }] }), { target: PROD, policy, ...LEDGER });
+        if (verdict.allow || verdict.rule !== "management") gaps.push(`${name} is not covered by the management email gate`);
+      }
+      continue;
+    }
     const sources = rewritePaths(fn.name);
     if (sources.length === 0) gaps.push(`${fn.name} sends email but has no Hosting rewrite to guard`);
     for (const source of sources) {
@@ -147,7 +156,7 @@ async function parity(policy) {
       }
     }
   }
-  const classified = new Set([...policy.readTools, ...policy.createTools, ...policy.actTools, ...policy.commentTools]);
+  const classified = new Set([...policy.readTools, ...policy.managementTools, ...policy.createTools, ...policy.actTools, ...policy.commentTools]);
   const names = toolBlocks().map((t) => t.name);
   for (const n of names) if (!classified.has(n)) gaps.push(`tool ${n} is not classified`);
   for (const n of classified) if (!names.includes(n)) gaps.push(`classified tool ${n} no longer exists`);
@@ -159,7 +168,7 @@ test("the parsers find what is really there (a parser that finds nothing would p
   for (const known of ["setAccess", "setFolderAccess", "verifyEmail", "manageTeamMembers", "onCommentCreated"]) {
     assert.ok(mailing.includes(known), `${known} found as email-capable (found: ${mailing.join(", ")})`);
   }
-  assert.equal(toolBlocks().length, 23, "23 tool blocks in tools.ts");
+  assert.equal(toolBlocks().length, 32, "32 tool blocks across the MCP modules");
   const writers = commentWritingTools().sort();
   for (const known of ["add_comment", "reply_to_comment", "resolve_thread", "reopen_thread", "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion"]) {
     assert.ok(writers.includes(known), `${known} found as comment-writing (found: ${writers.join(", ")})`);

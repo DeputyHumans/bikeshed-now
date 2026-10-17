@@ -24,6 +24,7 @@
  * teardown against production.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import mime from "mime";

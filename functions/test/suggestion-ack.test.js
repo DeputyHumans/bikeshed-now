@@ -39,10 +39,11 @@ for (const aftermath of ["none", "new-head", "pending-limit"]) test(`a suggestio
   assert.deepEqual(count(), { callbackCalls: 2, failures: 1 });
 });
 
-for (const aftermath of ["none", "accepted", "later-revision", "revision-limit"]) test(`a suggestion revision records exactly one change after native retry, aftermath=${aftermath}`, async () => {
+for (const aftermath of ["none", "accepted", "later-revision", "revision-limit", "new-head"]) test(`a suggestion revision records exactly one change after native retry, aftermath=${aftermath}`, async () => {
   const w = world(), made = await w.create(), ref = w.db.doc(annPath(made.annId));
   if (aftermath === "revision-limit") await ref.update({ "suggestion.revisions": Array.from({ length: 19 }, (_, i) => ({ replacement: `old-${i}`, actor })) });
   const count = loseFirstTransactionAcknowledgement(w.db, { afterCommit: async () => {
+    if (aftermath === "new-head") await w.docRef.update({ currentVersion: "v2" });
     if (aftermath === "accepted") await ref.update({ "suggestion.state": "accepted", resolved: true });
     if (aftermath === "later-revision") {
       const suggestion = w.store.get(annPath(made.annId)).suggestion;

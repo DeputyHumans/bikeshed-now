@@ -1,38 +1,24 @@
 /* SPDX-License-Identifier: Apache-2.0
- * The public landing page (SPEC §7).
- *
- * Owns its own breakpoints, per the rule in index.css. The four tiers are the
- * ones in hooks/breakpoints.ts and brand/tokens.test.ts asserts no fifth
- * appears here.
- *
- * Every var() below resolves to a token tokens.css defines. The one exception
- * is --bar on the committee bars, which React sets per row and which therefore
- * carries a fallback — the only legal form for a runtime-injected value.
+ * The public landing page and its optional narrated story (SPEC §7).
+ * Uses the shared tokens and established responsive tiers.
  */
 
 .landing {
   max-width: 66rem;
   margin: 0 auto;
-  padding: var(--s-6) var(--s-4) var(--s-8);
+  padding: var(--s-6) var(--s-4) var(--s-7);
   display: flex;
   flex-direction: column;
-  gap: var(--s-8);
+  gap: var(--s-7);
 }
 
-/* Hero
-   ------------------------------------------------------------------------- */
-
-/* Two columns: the pitch, and the way in for somebody who brought an agent.
-   The aside still takes the narrower column, but with a FLOOR rather than a pure
-   fraction: the address has to sit on one line, and a proportional column stops
-   being wide enough for that as the viewport shrinks. Below the one-column tier
-   it spans the full width, where there is more room than it needs. */
+/* The pitch and agent setup share the hero; the story below keeps full width. */
 .landing-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 0.85fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   align-items: start;
   gap: var(--s-6);
-  padding-top: var(--s-5);
+  padding-top: var(--s-4);
 }
 
 .landing-hero-main {
@@ -40,43 +26,44 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--s-3);
+  min-width: 0;
 }
 
 .landing-hero h1 {
-  max-width: 24ch;
+  max-width: 28ch;
   margin: 0;
 }
 
-/* Same treatment as .wordmark-tld: the accent lands on the last character
-   rather than on a word, so the emphasis reads as punctuation, not a highlight. */
+.landing-agent-line {
+  display: block;
+}
+
 .landing-stop {
   color: var(--color-accent);
 }
 
 .landing-lead {
   font-size: var(--fs-h3);
-  color: var(--color-accent);
-  margin: 0;
-}
-
-.landing-say {
-  font-size: var(--fs-lead);
-  max-width: 46ch;
+  max-width: 54ch;
   margin: 0;
 }
 
 .landing-formats,
 .landing-body {
   color: var(--color-ink-muted);
-  max-width: 62ch;
+  max-width: 65ch;
   margin: 0;
 }
 
 .landing-cta {
-  margin: var(--s-2) 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
 }
 
-.landing-signin {
+.landing-start {
   min-height: var(--tap);
   padding: 0 var(--s-5);
   font-size: var(--fs-lead);
@@ -85,12 +72,8 @@
 .landing-fine {
   font-size: var(--fs-small);
   color: var(--color-ink-muted);
-  max-width: 56ch;
   margin: 0;
 }
-
-/* Sections
-   ------------------------------------------------------------------------- */
 
 .landing-section {
   display: flex;
@@ -98,30 +81,43 @@
   gap: var(--s-3);
 }
 
-.landing-section h2 {
+.landing-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* Native defaults scale captions down with the player, below readable phone
+   text. Keep a body-size floor; fullscreen may use the larger heading scale. */
+.landing-video::cue {
+  font-size: clamp(var(--fs-body), 1.5vw, var(--fs-h3));
+}
+
+.landing-video:fullscreen::cue {
+  font-size: clamp(var(--fs-body), 2.5vw, var(--fs-h1));
+}
+
+.landing-video:-webkit-full-screen::cue {
+  font-size: clamp(var(--fs-body), 2.5vw, var(--fs-h1));
+}
+
+.landing-media-notice {
   margin: 0;
-  max-width: 24ch;
+  color: var(--color-ink-muted);
 }
 
-.landing-steps {
-  font-size: var(--fs-h2);
-  margin: 0;
-}
-
-.landing-loop {
-  border-left: 3px solid var(--color-accent);
-  padding-left: var(--s-4);
-}
-
-/* The four points
-   ------------------------------------------------------------------------- */
-
+/* Three outcomes remain readable without playing the story. */
 .landing-points {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--s-5);
 }
 
@@ -131,8 +127,8 @@
   gap: var(--s-2);
 }
 
-.landing-points h3 {
-  margin: 0;
+.landing-points h2 {
+  font-size: var(--fs-h3);
 }
 
 .landing-points p {
@@ -140,136 +136,11 @@
   color: var(--color-ink-muted);
 }
 
-.landing-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
-/* Figures
-   ------------------------------------------------------------------------- */
-
-.landing-figure {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-}
-
-.landing-figure figcaption {
-  font-size: var(--fs-small);
-  color: var(--color-ink-muted);
-}
-
-/* The anchored-comment still.
-   The highlight is an OUTLINE over a transparent background, exactly as
-   annotation/highlighter.ts draws the real one. A fill would misrepresent it. */
-
-.mock {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: var(--s-4);
-  padding: var(--s-4);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg);
-  box-shadow: var(--shadow-sm);
-}
-
-.mock-prose {
-  margin: 0;
-  line-height: 1.7;
-}
-
-.mock-hl {
-  background: transparent;
-  color: inherit;
-  border: 1px solid var(--color-annotation);
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.mock-thread {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-}
-
-.mock-comment {
-  padding: var(--s-3);
-  border-left: 3px solid var(--color-annotation);
-  font-size: var(--fs-small);
-}
-
-.mock-comment p {
-  margin: 0;
-}
-
-.mock-author {
-  font-weight: 650;
-  margin-bottom: var(--s-1);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  flex-wrap: wrap;
-}
-
-/* The committee table — Parkinson's example.
-   Cost descends while the bars grow. Both columns have to stay visible
-   together, because that inversion is the whole joke. */
-
-.committee {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: var(--fs-small);
-}
-
-.committee th,
-.committee td {
-  text-align: left;
-  padding: var(--s-2) var(--s-3) var(--s-2) 0;
-  border-bottom: 1px solid var(--color-line);
-  vertical-align: baseline;
-}
-
-.committee thead th {
-  font-size: var(--fs-caption);
-  color: var(--color-ink-muted);
-  font-weight: 650;
-}
-
-.committee tbody th {
-  font-weight: 400;
-}
-
-.committee td.numeric {
-  white-space: nowrap;
-}
-
-.committee-time {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-}
-
-.committee-bar {
-  flex: 0 0 auto;
-  width: var(--bar, 0%);
-  min-width: 2px;
-  height: 10px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-}
-
-/* Agents
-   ------------------------------------------------------------------------- */
-
 .landing-agents {
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
+  min-width: 0;
   padding: var(--s-4);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
@@ -278,13 +149,6 @@
 
 .landing-agents h2 {
   font-size: var(--fs-h3);
-  margin: 0;
-}
-
-/* Beside a hero this column is support, not the headline, so it steps down a
-   size rather than competing with the h1 next to it. */
-.landing-agents .landing-body {
-  font-size: var(--fs-small);
 }
 
 .landing-agent-row {
@@ -295,8 +159,7 @@
   margin: 0;
 }
 
-/* The address and its copy glyph are one control, so the border encloses the
-   pair. The glyph keeps its width while the address is what gives way. */
+/* The address gives way before the copy control does. */
 .landing-guide {
   display: inline-flex;
   align-items: center;
@@ -310,6 +173,9 @@
 }
 
 .landing-guide-link {
+  display: block;
+  min-height: var(--tap);
+  line-height: var(--tap);
   font-size: var(--fs-small);
   min-width: 0;
   white-space: nowrap;
@@ -319,14 +185,30 @@
 
 .landing-guide-copy {
   flex: 0 0 auto;
+  width: var(--tap);
+  height: var(--tap);
 }
 
 .landing-copy {
   min-height: var(--tap);
 }
 
-/* Footer
-   ------------------------------------------------------------------------- */
+.landing-manual {
+  font-size: var(--fs-small);
+}
+
+.landing-bottom-cta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.landing-bottom-cta p {
+  font-size: var(--fs-h2);
+  margin: 0;
+}
 
 .landing-footer {
   border-top: 1px solid var(--color-line);
@@ -349,41 +231,34 @@
   gap: var(--s-4);
 }
 
-/* Narrow
-   ------------------------------------------------------------------------- */
+.landing-footer-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
 
 @media (max-width: 860px) {
   .landing-hero {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--s-5);
   }
 
   .landing-points {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .mock {
-    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
   }
 }
 
 @media (max-width: 600px) {
-  .landing-lead br {
-    display: none;
+  .landing {
+    gap: var(--s-6);
+    padding: var(--s-5) var(--s-3) var(--s-6);
   }
 
-  .landing {
-    gap: var(--s-7);
-    padding: var(--s-5) var(--s-3) var(--s-7);
+  .landing-hero {
+    padding-top: 0;
   }
 
   .landing-agents {
     padding: var(--s-4);
-  }
-
-  /* The bar is decoration and the duration is the signal, so at this width the
-     bar gives up its space rather than squeezing the number it labels. */
-  .committee-bar {
-    display: none;
   }
 }

@@ -476,7 +476,7 @@ const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 scre
   let stopped = null;
   try {
     await anon.goto("/");
-    await visit(anon, "landing", { ready: { label: "the heading", loc: anon.page.locator("main h1") }, primary: [{ label: 'link "Sign in"', loc: anon.page.getByRole("link", { name: "Sign in", exact: true }) }] });
+    await visit(anon, "landing", { ready: { label: "the heading", loc: anon.page.locator("main h1") }, primary: [{ label: 'link "Get started"', loc: anon.page.getByRole("link", { name: "Get started", exact: true }) }] });
     await anon.goto("/signup");
     await visit(anon, "sign-in", { ready: css(anon, "#auth-email"), primary: [css(anon, "#auth-email"), css(anon, "#auth-password"), btn(anon, "Sign in")] });
     await anon.goto("/privacy");

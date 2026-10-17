@@ -11,6 +11,9 @@
 +  await anns.where("authorUid", "==", author.uid).where("suggestion.state", "==", "pending").count().get();
 +  await e2eGate("suggest-after-count", docRef.id);
 +
++  // e2e amplify: pause after the pending count, before the transaction.
++  await e2eGate("suggest-after-count", docRef.id);
+ 
    const annRef = anns.doc();
    const commentRef = annRef.collection("comments").doc();
 --- a/functions/src/mcp/tools.ts

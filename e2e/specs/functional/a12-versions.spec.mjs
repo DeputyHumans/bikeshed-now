@@ -80,8 +80,7 @@
  * since the unit's three control sets are spent. 12.1's trust reads are
  * proven live inside the case: the changed update at its end must, and does,
  * show both scopes withdrawn. Each defect case's oracle has been seen to pass
- * with its fix: e2e/patches/a12-fix-draft-race (X-a12-versions-2) and
- * a12-fix-stale-banner (X-a12-versions-3) as stack patches, and
+ * with its fix: a12-fix-stale-banner (X-a12-versions-3) as a stack patch, and
  * X-a12-versions-1 by a spec mutation that re-syncs the projection after the
  * withdrawal.
  *

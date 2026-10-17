@@ -22,6 +22,11 @@ private bucket and is served only through an authorizing proxy. Publishing and
 infrastructure are driven by idempotent scripts, a terminal CLI and an MCP
 endpoint, so agents are first-class publishers alongside people.
 
+The optional landing-page explainer is operator-reviewed public marketing media,
+not a published document. It MAY be served directly from a separate public
+bucket, never the private document-content bucket. A media revision is immutable;
+its MP4, captions and poster MUST agree before the landing page references it.
+
 ---
 
 ## 1. Identity gate
@@ -227,7 +232,7 @@ is unambiguous (`contentPath` in `lib/http.ts`).
    the query's `k` matches the document's token) or grant (a signed-in caller's
    current link grant). None → **`404`** (§1.4b).
 4. Version must exist → else `404`.
-5. Stream `gs://<bucket>/docs/{docId}/{versionId}/<relPath>` with the Admin SDK.
+5. Stream `<storagePrefix>/<relPath>` from the committed version record with the Admin SDK; legacy records use `docs/{docId}/{versionId}`.
 
 Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
 `Cache-Control: private, no-store` for a member's or a grant's read,
@@ -608,7 +613,8 @@ first), and under which keys (§2 `POST /thumb`). Storage holds
 them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the
 version's prefix, never under it, because everything that reads a version (the
 next commit's content hash, a fork, the download) takes every object under
-`docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
+`docs/{docId}/bundles/{attempt}/`, selected by `DocVersion.storagePrefix`;
+legacy records use `docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
 `updatedAt`: a captured image is not a publish. It may name an older version
 than `currentVersion` until an editor next opens the document, and the workspace
 shows that cover meanwhile.
@@ -688,12 +694,11 @@ The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`.
 Because it is same-origin, the parent app drives annotation directly on
 `iframe.contentDocument`. **The proxy injects nothing.**
 
-A browser comment belongs to the version the frame displays, including an
-explicitly selected historical version. Its passage and body stay there when
-a newer version is published; historical feedback does not rewrite current
-content or retroactively veto a completed publication. A pinned reader sees
-the newer-version notice and may stay to comment on the version shown.
-MCP `add_comment` selects the current head and rechecks it atomically (§19).
+A browser comment belongs to the current version the frame displays. Existing
+feedback stays on its original version after publication; historical versions
+are read-only archives (§24). A pinned reader can open the latest version to
+comment. MCP `add_comment` selects the current head and rechecks it atomically
+(§19).
 
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
@@ -1155,13 +1160,13 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
   lib/{head,html,htmltext,http,marking,thumbs,shell,transaction-receipts}.ts
-  lib/{publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
-  mcp/{server,tools}.ts
+  mcp/{server,tools,management}.ts
   oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token}.ts
 ```
 
@@ -2385,12 +2390,67 @@ client onboarding is ever wanted.
 §23 specifies. Personal tokens remain the credential for CI,
 scripts and anything that cannot open a browser.
 
-### MCP — twenty-three tools
+### Historical versions and immutability
+
+Published versions and their existing review threads form a read-only archive.
+Current document ACL and expiry apply to every historical read. The current
+version alone accepts comments, replies, comment edits/deletes, thread state
+changes and all suggestion actions, including claim/release and idempotent
+retries. The Firestore rules check the head for every annotation/comment write;
+Admin SDK operations check it inside the writing transaction. A request racing
+publication fails rather than writing to an archive or retargeting the new head.
+The UI offers no mutation controls on historical versions and links to latest.
+
+Each upload attempt writes create-only objects under a unique bundle prefix.
+`DocVersion.storagePrefix` selects its immutable bytes; old records retain the
+legacy version path. A draft save also owns a unique `draft.storagePrefix` and
+adopts it transactionally only while its base is current. Publishing verifies
+both the head and observed draft pointer; cleanup deletes only that draft.
+
+### Previous versions and write guards
+
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
+--all --json` to discover published history. Pages are newest first, default 20,
+maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
+History uses the document's current access rules and expiry. A missing or
+withdrawn version is an error, never a request for the latest version.
+
+Read a chosen version with `get_document({id, version:"v2"})` and
+`get_comments({id, version:"v2", includeResolved:true})`, or
+`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
+Read results name `currentVersion` and `isCurrent`; historical write capabilities
+are false. Existing comments and suggestions remain readable as an archive.
+Older versions cannot be edited or receive, revise, delete, reply to, resolve,
+reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
+independent document with `fork_document({id, version:"v2"})`.
+
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
+`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
+guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
+Document-wide sharing, folder and lineage operations still address the document.
+
+Before changing feedback, read the latest version and its feedback, then pass
+that `version` to every feedback tool (`--version` in the CLI). Pass
+`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
+update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
+If the head changes, the server refuses the write. Read the new head and
+reassess the request; never silently redirect a historical request to it.
+
+### MCP — thirty-two tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
 | Tool | Purpose |
 |---|---|
+| `get_document_access` | owner-only complete direct, inherited and effective access; includes visibility, open editing, expiry and usable URL without source bytes |
+| `set_document_access` | owner-only grant/revoke/role delta; invitations to newly effective readers |
+| `get_folder_access` | owner-only complete direct, inherited and effective folder access |
+| `set_folder_access` | owner-only grant/revoke/role delta and subtree recomputation; invitations to newly effective folder readers |
+| `set_document_visibility` | owner-only sparse patch of visibility, publicEdit and expiresAt; null clears expiry, omissions stay unchanged |
+| `rename_folder` | rename a folder the caller can edit |
+| `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
+| `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
+| `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
 | `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |
@@ -2517,13 +2577,14 @@ cut source whole through `/content`, behind the same read checks.
 There is no anonymous MCP access. Publishing always attributes to a real account
 and stamps `publishedVia: "mcp"`.
 
-`list_documents` and `get_document` **report** `expiresAt`; nothing on this
-surface sets it. Expiry decides who may read a document and until when, which is
-the same class of decision as sharing, and this surface does not make those. An
-expired document reads as absent to every caller but its owner, and every write
-tool refuses it. *What would change this:* narrowing a document's reach is
-safe to automate in a way widening it is not, so an agent setting — never
-clearing or extending — an expiry is the reversal worth arguing for first.
+`list_documents` and `get_document` report `expiresAt`. Owner management tools
+may inspect and change access/settings on expired documents, including clearing
+or extending expiry; content writes remain refused until expiry no longer holds.
+`set_document_visibility` requires at least one of `visibility`, `publicEdit`
+and `expiresAt`; omission preserves a field and null clears expiry. The CLI
+accepts ISO-8601 timestamps with a timezone or `none`. Private disables open
+editing; remaining unlisted preserves the key. This shared operation uses a
+transaction for settings so omitted values come from the current record.
 
 **The folder tools are an access surface, not a filing surface.** A document's
 effective members are its own grants unioned with its folder's (§13), so moving
@@ -2546,10 +2607,21 @@ and the public projection follows. Unlike the list it refuses an expired
 document, as every write tool does. A document's own `<title>` is content and
 is not rewritten, so a link preview still shows it (§17).
 
-Three things are deliberately **absent** from the surface, and each is a stated
-refusal rather than a gap: deleting a folder (it reparents everything beneath
-it), renaming one, and sharing anything. `functions/test/mcp.test.js` asserts no
-tool name matches `delete|remove|share|grant|access`.
+Management is available under the same identity and role checks as the web app
+(ADR 0017). Eight additional tools take `id`; access writes take
+`add: [{principal, role}]` and/or `remove: [principal]`. Emails and existing
+`team:<id>` principals use the four existing roles. Access reads/writes return
+`{id, kind, owner, direct, inherited, effective}` plus document visibility,
+publicEdit, expiresAt and its usable URL. They are owner-only; inherited rows
+retain the existing hidden-path and team naming policy. Removing a direct grant
+does not override inheritance. Newly effective readers receive invitations;
+repeating a grant or changing only its role does not send another invitation.
+
+Folder rename/move require edit rights, and moving requires destination rights.
+Deletion is owner-only, reparents immediate contents, and returns
+`{id, deleted, parent, reparented: {folders, documents}}`. Folder moves/deletion
+send no invitations. Documents cannot be deleted; team administration and script
+trust remain outside this surface. HTTP and MCP call the same implementation.
 
 **An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a
 reader sees it — no markup — and finds it in the current version's RENDERED
@@ -2691,11 +2763,21 @@ byte comparison and keeps a deployment binding out of the tree, where
 any other way cannot ship unresolved. `/.well-known/mcp.json` advertises the
 endpoint; every URL in it is relative and nothing stamps it.
 
+### Management commands
+
+`bikeshed access document <id>` and `bikeshed access folder <id>` inspect access;
+`--add <comma-separated principals> --role <role>` and/or `--remove <principals>`
+change it. Adding requires an explicit role. `bikeshed visibility <id>` reads
+settings; optional `private|unlisted|public`, `--public-edit true|false`, and
+`--expires <ISO timestamp|none>` patch them. `bikeshed rename-folder <id> <name>`,
+`bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
+the three folder tools. All support human-readable and `--json` output.
+
 ### Skills
 
 `skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter
-carrying `name` and `description`, then Markdown. Three of them —
-`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders` — one per job the
+carrying `name` and `description`, then Markdown. Four of them —
+`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`, `bikeshed-permissions` — one per job the
 surface exists for. `llms.txt` is the short form every agent reads; a skill is
 the long form, loaded for the task that needs it.
 
@@ -2719,8 +2801,8 @@ believes it.
 ### Not built
 
 Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
-endpoints · SDKs in other languages · rate limiting beyond CDN caching · folder
-deletion, folder renaming or sharing through the agent surface.
+endpoints · SDKs in other languages · rate limiting beyond CDN caching · document
+deletion, team administration or script trust through the agent surface.
 
 ---
 
@@ -3088,6 +3170,11 @@ to the next version · bulk accept · a per-document "require review" switch.
 ---
 
 ## 23. Connecting an app by signing in
+
+Existing connections gain management tools under their existing identity and
+ACL, without reconnection or new scopes. Consent copy must describe sharing,
+invitation emails, visibility/expiry, and folder operations; it must not claim
+these are unavailable. See ADR 0017.
 
 An app that speaks MCP connects by its address, `https://<deployment>/mcp`: the
 person pastes it, signs in if they need to, and approves. This deployment is

@@ -134,10 +134,26 @@ nearest has changed since you forked it. On a document you own it also counts
 its forks. The author of what you fork sees that it was forked — a count, never
 who.
 
-## Sharing is not automated
+## Manage access and folders
 
-There is no command that shares a document, changes who can read it, or sets an
-expiry. Those are decisions a person makes in the interface, deliberately.
+`bikeshed access document <id>` and `bikeshed access folder <id>` show the
+owner, direct grants, inherited grants and effective membership. Add or change
+a direct role with `--add email@example.com,team:design --role editor`; revoke
+with `--remove email@example.com`. All four roles are supported. The owner
+cannot be removed, and inherited grants must be changed at their source.
+Newly effective readers receive an invitation when email is enabled.
+
+`bikeshed visibility <id>` shows settings. Add `private`, `unlisted` or `public`
+to change visibility, `--public-edit true|false` to change open editing, or
+`--expires <ISO-8601 timestamp with timezone|none>` to set or clear expiry.
+Omitted settings stay unchanged. These commands are owner-only, including on
+expired documents; the returned URL includes an unlisted key when needed.
+
+`bikeshed rename-folder <id> <name>` and
+`bikeshed move-folder <id> <folder|root>` require edit rights.
+`bikeshed delete-folder <id>` is owner-only: contents move to its parent or the
+root, and access is recomputed. No documents are deleted. All commands support
+`--json`. Existing sign-ins work without reconnecting.
 
 ## For agents
 
@@ -153,3 +169,32 @@ reviewer can always tell which feedback came from a person.
 
 Apache-2.0. The deployment it talks to is the same repository:
 [DeputyHumans/bikeshed-now](https://github.com/DeputyHumans/bikeshed-now).
+
+### Previous versions and write guards
+
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
+--all --json` to discover published history. Pages are newest first, default 20,
+maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
+History uses the document's current access rules and expiry. A missing or
+withdrawn version is an error, never a request for the latest version.
+
+Read a chosen version with `get_document({id, version:"v2"})` and
+`get_comments({id, version:"v2", includeResolved:true})`, or
+`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
+Read results name `currentVersion` and `isCurrent`; historical write capabilities
+are false. Existing comments and suggestions remain readable as an archive.
+Older versions cannot be edited or receive, revise, delete, reply to, resolve,
+reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
+independent document with `fork_document({id, version:"v2"})`.
+
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
+`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
+guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
+Document-wide sharing, folder and lineage operations still address the document.
+
+Before changing feedback, read the latest version and its feedback, then pass
+that `version` to every feedback tool (`--version` in the CLI). Pass
+`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
+update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
+If the head changes, the server refuses the write. Read the new head and
+reassess the request; never silently redirect a historical request to it.

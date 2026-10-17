@@ -511,9 +511,9 @@ scenario(NAMES.n, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout:
     cli(ctx, null, ["open", `${target.origin}/d/${id}/v1?k=${k}`], { home: h2, token: null }),
   ]);
   const want1 = `${target.origin}/d/${id}`;
-  const want2 = `${target.origin}/d/${id}?k=${k}`;
+  const want2 = `${target.origin}/d/${id}/v1?k=${k}`;
   assert.deepEqual({ code: r.code, stdout: r.stdout }, { code: 0, stdout: `${want1}\n` });
-  assert.deepEqual({ code: r2.code, stdout: r2.stdout }, { code: 0, stdout: `${want2}\n` }, "a link's key stays with it, a version in it does not");
+  assert.deepEqual({ code: r2.code, stdout: r2.stdout }, { code: 0, stdout: `${want2}\n` }, "a link's key and version stay with it");
   // The CLI starts the opener detached and exits; the stub writes its line on its own time.
   await eventually(() => openedIn(h1).length > 0 && openedIn(h2).length > 0, { timeout: 15_000, interval: 100, message: "the stub opener ran for both" });
   assert.deepEqual([openedIn(h1), openedIn(h2)], [[want1], [want2]], "the opener got exactly the printed address");

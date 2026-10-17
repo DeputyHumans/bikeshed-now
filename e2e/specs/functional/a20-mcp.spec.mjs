@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// A20 MCP: the twenty-three tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
+// A20 MCP: the thirty-two tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
 
 /**
  * Catalogue A20.1–A20.6. The CLI's A20.7 is another unit's.
  *
- *   A20.1          tools/list is SPEC §19's twenty-three, and initialize says so
+ *   A20.1          tools/list is SPEC §19's thirty-two, and initialize says so
  *   A20.2.<tool>   one case per tool: what it does when it works, and each
  *                  way it is refused, with the server's exact words. The
  *                  plan's particulars live in their tool's case: idTaken
@@ -61,7 +61,9 @@ const BOTH = ["local", "prod"];
 
 /** SPEC §19's table, in its order. */
 const SPEC_TOOLS = Object.freeze([
-  "list_documents", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
+  "get_document_access", "set_document_access", "get_folder_access", "set_folder_access",
+  "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
+  "list_documents", "list_versions", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
   "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "list_folders",
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
   "reply_to_comment", "resolve_thread", "reopen_thread",
@@ -350,7 +352,7 @@ async function threadOf(who, docId, threadId, o = {}) {
 
 // --- A20.1 ---------------------------------------------------------------------------------
 
-scenario("A20.1 tools/list names exactly SPEC §19's twenty-three tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
+scenario("A20.1 tools/list names exactly SPEC §19's thirty-two tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
   timeoutMs: 240_000,
@@ -366,8 +368,8 @@ scenario("A20.1 tools/list names exactly SPEC §19's twenty-three tools, each de
   const tools = await o.mcp.listTools();
   const names = tools.map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
-  assert.equal(names.length, 23, `exactly 23 tools: ${names.join(", ")}`);
-  assert.equal(new Set(names).size, 23, "the names are unique");
+  assert.equal(names.length, 32, `exactly 32 tools: ${names.join(", ")}`);
+  assert.equal(new Set(names).size, 32, "the names are unique");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
   const bad = [];
   for (const t of tools) {
@@ -430,6 +432,29 @@ scenario("A20.2.list_documents lists the caller's documents newest first as meta
   assert.deepEqual(xs.documents.map((r) => r.id), [xd.id], "a stranger lists none of the owner's documents");
 });
 
+scenario("A20.2.list_versions pages history, reads archived feedback and refuses every stale feedback action", {
+  tiers: BOTH, inconclusiveOnStackTimeout: true, timeoutMs: 420_000,
+}, async ctx => {
+  const [o, x] = await crew(ctx, ["owner", "stranger"]);
+  const d = await publishDoc(o, "history");
+  const comment = await ok(o, "add_comment", { id: d.id, version: "v1", exact: PARAS[0], body: "Keep this archive" });
+  await ok(o, "update_document", { id: d.id, baseVersion: "v1", content: page(`${d.title} second`) });
+  await ok(o, "update_document", { id: d.id, baseVersion: "v2", content: page(`${d.title} third`) });
+  const first = await ok(o, "list_versions", { id: d.id, limit: 2 });
+  const last = await ok(o, "list_versions", { id: d.id, limit: 2, cursor: first.nextCursor });
+  assert.deepEqual(first.versions.map(v => [v.version, v.isCurrent]), [["v3", true], ["v2", false]]);
+  assert.deepEqual(last.versions.map(v => v.version), ["v1"]);
+  assert.equal(last.nextCursor, null);
+  assert.equal(first.versions[1].url, `${url(d.id)}/v2`);
+  const archived = await ok(o, "get_comments", { id: d.id, version: "v1", includeResolved: true });
+  assert.deepEqual([archived.currentVersion, archived.isCurrent, archived.canComment, archived.threads[0].comments[0].body], ["v3", false, false, "Keep this archive"]);
+  for (const name of ["add_comment", "reply_to_comment", "resolve_thread", "reopen_thread", "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "commit_draft"]) {
+    await refused(o, name, { id: d.id, version: "v1", baseVersion: "v1", threadId: comment.threadId, body: "late", exact: PARAS[0], replacement: "late" }, "Historical versions are read-only. Read the latest version (v3) before making changes.");
+  }
+  assert.deepEqual(await ok(o, "get_comments", { id: d.id, version: "v1", includeResolved: true }), archived);
+  await refused(x, "list_versions", { id: d.id }, `no document with id "${d.id}"`);
+});
+
 scenario("A20.2.get_document returns the stored source with its metadata and an earlier version on request, cuts a source over 200,000 characters at exactly 200,000 and says truncated; a stranger and an absent id get the same refusal, an unknown version its own", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
@@ -438,10 +463,10 @@ scenario("A20.2.get_document returns the stored source with its metadata and an 
   const [o, x] = await crew(ctx, ["owner", "stranger"]);
   const d = await publishDoc(o, "get");
   const g1 = await ok(o, "get_document", { id: d.id });
-  assert.deepEqual(Object.keys(g1).sort(), ["canEdit", "canSuggest", "cursor", "expiresAt", "filedIn", "format", "forked", "id", "source", "sourceFile", "title", "truncated", "url", "version", "visibility"].sort(), "the result's keys");
+  assert.deepEqual(Object.keys(g1).sort(), ["canComment", "currentVersion", "isCurrent", "canEdit", "canSuggest", "cursor", "expiresAt", "filedIn", "format", "forked", "id", "source", "sourceFile", "title", "truncated", "url", "version", "visibility"].sort(), "the result's keys");
   assert.deepEqual(
     { ...g1, cursor: typeof g1.cursor },
-    { id: d.id, url: url(d.id), title: d.title, version: "v1", format: "html", sourceFile: "index.html", visibility: "private", expiresAt: null, canEdit: true, canSuggest: true, forked: false, filedIn: null, cursor: "string", truncated: false, source: d.content },
+    { id: d.id, url: url(d.id), title: d.title, version: "v1", currentVersion: "v1", isCurrent: true, canComment: true, format: "html", sourceFile: "index.html", visibility: "private", expiresAt: null, canEdit: true, canSuggest: true, forked: false, filedIn: null, cursor: "string", truncated: false, source: d.content },
     "get_document of v1",
   );
 
@@ -947,6 +972,10 @@ scenario("A20.2.get_comments returns each unresolved thread with its quote and c
     {
       id: d.id,
       version: "v1",
+      currentVersion: "v1",
+      isCurrent: true,
+      canComment: true,
+      url: url(d.id),
       truncated: false,
       threads: [{ threadId: first.threadId, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, via: "mcp", body: "First thread." }] }],
     },
@@ -1173,7 +1202,7 @@ scenario("A20.3 a missing or empty required argument is a tool error naming exac
   const unprobed = requiring.filter((n) => !sent.some((x) => x.startsWith(`${n} `)));
   if (target.kind === "local") assert.deepEqual(unprobed, [], "every tool that requires an argument was probed");
   else ctx.step(`not probed on ${target.kind} (the guard needs a run document's id): ${unprobed.join(", ")}`);
-  assert.equal(requiring.length, 21, `tools that require an argument: ${requiring.join(", ")}`);
+  assert.equal(requiring.length, 30, `tools that require an argument: ${requiring.join(", ")}`);
   const doc = await record(d.id);
   assert.deepEqual({ version: doc?.currentVersion, title: doc?.title }, { version: "v1", title: d.title }, "no probe changed the document");
 

@@ -3,6 +3,7 @@
 
 import * as admin from "firebase-admin";
 import { randomUUID } from "node:crypto";
+import { currentVersionRefusal } from "./versions";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
 import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
@@ -344,6 +345,7 @@ export async function changeSuggestion(args: {
   let leaseRecorded = false;
 
   const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
+    const head = await tx.get(docRef);
     // Every read before any write, as a transaction requires: the record, and
     // for a revision the opening comment whose words may have to follow it.
     const snap = await tx.get(annRef);
@@ -356,10 +358,12 @@ export async function changeSuggestion(args: {
         ? await tx.get(annRef.collection("comments").where("opensSuggestion", "==", true).limit(1))
         : null;
     const s = snap.data() as StoredSuggestion | undefined;
-    if (!snap.exists || !s?.suggestion) return { status: 404, error: "no such suggestion" };
     // Revision receipts stay in history, so a later revision or decision
     // cannot turn our completed change into another write or a false refusal.
-    if (op === "revise" && revisionAttempted && s.suggestion.revisions?.some(revision => revision.operationId === revisionOperationId)) return { state: "pending" as SuggestionState };
+    if (op === "revise" && revisionAttempted && s?.suggestion?.revisions?.some(revision => revision.operationId === revisionOperationId)) return { state: "pending" as SuggestionState };
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
+    if (!snap.exists || !s?.suggestion) return { status: 404, error: "no such suggestion" };
     const state = s.suggestion.state ?? "pending";
 
     // Idempotent outcomes first, so a retried decision is not a conflict.

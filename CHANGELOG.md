@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Integrate the E2E repairs with the current agent-management and immutable-history features; preserve remembered-link refusals, transaction retry receipts and read-only archives. Replace reaped stack records atomically to prevent concurrent cleanup from corrupting retained evidence.
+
 - Keep the audience self-test adapters synchronized with the explicit hidden trust event used to prove cursor advancement.
 
 - Repair 33 E2E negative controls against current policy generation, live-session guards and assertion messages; independently check SVG namespaces, hidden-event cursors and held claims, drain fork-route cleanup, and flush complete control summaries before worker exit.
@@ -529,6 +531,65 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   executable, reporting both versions. Installed-tool probes check environment
   precedence and watcher behavior without depending on source formatting.
   Mail settling and log-rotation tests wait for the conditions they measure.
+
+## 0.19.1 — 2026-10-16
+
+### Changed
+
+- Place the agent instructions beside the hero on desktop and after the video
+  on smaller screens, with a clearer action: “Put your agent to work.”
+- Simplify the story player by removing its transcript disclosure and duration
+  line while retaining native captions.
+
+## 0.19.0 — 2026-10-16
+
+### Added
+
+- Discover and read published version history through MCP and the CLI, with pinned URLs and explicit version guards.
+- Historical content and feedback are a read-only archive across the UI, API and database rules.
+
+### Fixed
+
+- Keep the request-stall harness fixture deterministic under concurrent test load.
+- Update end-to-end controls and operator withdrawal for isolated version and draft storage.
+- Isolate competing bundle uploads and draft saves so stale work cannot replace published bytes or delete a newer draft.
+- Document historical reads and stale-write recovery in all agent instructions and published guides.
+
+## 0.18.0 — 2026-10-16
+
+### Added
+
+- A narrated landing-page story with native playback, captions and a readable
+  transcript, alongside a shorter explanation and clearer getting-started path.
+- Optional dedicated public media hosting on Google Cloud Storage, with
+  credential-free operator dry runs, isolated bucket permissions and immutable
+  publication of video, captions and poster revisions.
+
+### Fixed
+
+- Derive the landing footer version from the app package instead of displaying
+  a hardcoded early release.
+
+
+## 0.17.0 — 2026-10-16
+
+### Added
+
+- Owner permission inspection and grant/revoke/role changes for documents and
+  folders through MCP and CLI; visibility, open editing and expiry controls;
+  folder rename, move and owner-only deletion retaining all contents.
+- A permissions skill, updated folder/publishing guidance and OAuth consent.
+  Existing connections gain these commands without reconnecting. Sharing sends
+  the same invitations as the web app, only to newly effective readers.
+- Shared HTTP/MCP management handlers, preserving inherited membership and
+  owner checks. Sparse settings changes preserve omitted values.
+
+### Fixed
+
+- Keep HTTP management refusals as identical empty 404 responses for unreadable
+  and missing resources when delegating to the shared handlers.
+- Scroll the E2E consent driver to its approval controls before generating
+  pointer input, so longer permission disclosures remain testable.
 
 ## 0.16.1 — 2026-10-13
 

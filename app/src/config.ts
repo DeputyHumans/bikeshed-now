@@ -78,5 +78,11 @@ export const DEPLOYMENT_MARKING: Marking = {
  */
 export const LEGAL_CONTACT = env("VITE_LEGAL_CONTACT");
 
+/** Optional public landing media. No deployment is contacted unless configured. */
+export const LANDING_MEDIA_BASE_URL = env("VITE_LANDING_MEDIA_BASE_URL").replace(/\/+$/, "");
+
+/** The release built into this app, rather than a second manually kept version. */
+export const APP_VERSION = __APP_VERSION__;
+
 /** True when the app is talking to a real backend rather than the emulators. */
 export const IS_LIVE = !USE_EMULATORS && firebaseConfig.projectId.length > 0;

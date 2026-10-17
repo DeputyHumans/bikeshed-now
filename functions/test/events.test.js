@@ -365,14 +365,17 @@ test("every way to change a document records an event, or says why it need not",
     oauth: "credentials", oauthConsent: "credentials", sitemap: "reads", verifyEmail: "an account",
     downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads",
     // Tools
-    list_documents: "reads", get_document: "reads", get_lineage: "reads", list_folders: "reads", get_folder: "reads",
+    get_document_access: "reads", get_folder_access: "reads",
+    set_folder_access: "a cascade; get_changes reports state.readers",
+    rename_folder: "folder metadata", move_folder: "a cascade; state.readers", delete_folder: "reparenting; state.readers",
+    list_versions: "reads", list_documents: "reads", get_document: "reads", get_lineage: "reads", list_folders: "reads", get_folder: "reads",
     get_comments: "reads", get_changes: "reads", create_folder: "a folder, no document",
     publish_document: "recordVersionEvent", update_document: "recordVersionEvent", commit_draft: "recordVersionEvent",
     suggest_edit: "recordThreadEvent", revise_suggestion: "recordThreadEvent", withdraw_suggestion: "recordThreadEvent",
     accept_suggestion: "recordThreadEvent", reject_suggestion: "recordThreadEvent", resolve_thread: "recordThreadEvent",
     reopen_thread: "recordThreadEvent", add_comment: "recordCommentEvent", reply_to_comment: "recordCommentEvent",
   };
-  const RECORDS = { setAccess: "access.changed", organize: "doc.renamed, doc.moved", forkDoc: "fork.created", trustDoc: "doc.trust",
+  const RECORDS = { set_document_access: "access.changed", set_document_visibility: "doc.visibility, doc.expiry", setAccess: "access.changed", organize: "doc.renamed, doc.moved", forkDoc: "fork.created", trustDoc: "doc.trust",
     setVisibility: "doc.visibility, doc.expiry", fork_document: "fork.created", move_document: "doc.moved", rename_document: "doc.renamed" };
   return import("../../scripts/lib/endpoints.mjs").then(({ ENDPOINTS: rows }) => {
     for (const name of [...new Set(rows.map((r) => r.fn)), ...TOOL_NAMES]) {

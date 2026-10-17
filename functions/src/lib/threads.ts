@@ -2,6 +2,7 @@
 // Resolving and reopening a comment thread through a token (SPEC §6, §19).
 
 import * as admin from "firebase-admin";
+import { currentVersionRefusal } from "./versions";
 import { FieldValue } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
 
@@ -33,12 +34,15 @@ export async function setThreadResolved(args: {
   const noteRef = annRef.collection("comments").doc();
   let attempted = false;
   return db.runTransaction(async (tx) => {
+    const head = await tx.get(docRef);
     const snap = await tx.get(annRef);
     const ann = snap.data();
     // The note's preallocated id proves this operation committed already.
     // A retry after acknowledgement loss must not undo a later reopen/resolve.
     const note = attempted ? await tx.get(noteRef) : null;
     if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) return { resolved, changed: true };
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
     if (!snap.exists || !ann) return { status: 404, error: "no such thread" };
     if (ann.suggestion) {
       return {

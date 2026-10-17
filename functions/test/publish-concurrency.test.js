@@ -15,6 +15,15 @@ test("concurrent uploads cannot replace the winning version's bytes", async () =
     "docs/d": { currentVersion: "v1", ownerEmail: actor.email, visibility: "private" },
     "docs/d/versions/v1": { entry: "index.html", contentHash: "old" },
   });
+  // Serialize transaction callbacks like Firestore's exclusive document locks.
+  // Uploads still overlap, so a shared object prefix corrupts the winner.
+  const transaction = db.runTransaction.bind(db);
+  let tail = Promise.resolve();
+  db.runTransaction = (fn) => {
+    const result = tail.then(() => transaction(fn));
+    tail = result.catch(() => {});
+    return result;
+  };
   const objects = new Map();
   const saved = ["storage", "database"].map((key) => [key, Object.getOwnPropertyDescriptor(admin, key)]);
   const before = process.env.BIKESHED_BUCKET;

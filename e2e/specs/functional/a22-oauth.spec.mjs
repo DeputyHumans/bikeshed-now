@@ -15,7 +15,7 @@
  *          card says where it sends you and that the name is the app's own
  *          claim → Approve arms only after a second of focus AND a pointer or
  *          key event → the redirect carries code, state and iss → a one-hour
- *          bsa_ and a bsr_; bsa_ sees the 23 tools at /mcp and nothing else.
+ *          bsa_ and a bsr_; bsa_ sees the 32 tools at /mcp and nothing else.
  *          Cancel sends access_denied with state and iss
  *   A22.2b real tab focus loss disarms the consent card; returning focus
  *          requires a fresh second before approval can arm again
@@ -108,7 +108,7 @@ const ACCESS_RE = /^bsa_([0-9a-f]{32})\.[A-Za-z0-9_-]{43}$/;
 const REFRESH_RE = /^bsr_([0-9a-f]{32})\.[A-Za-z0-9_-]{43}$/;
 const PERSONAL_RE = /^bsk_([0-9a-f]{32})\.[A-Za-z0-9_-]{20,64}$/;
 /** SPEC §19 "Skills": three of them, one per job. */
-const SPEC_SKILLS = ["bikeshed-feedback", "bikeshed-folders", "bikeshed-publishing"];
+const SPEC_SKILLS = ["bikeshed-feedback", "bikeshed-folders", "bikeshed-permissions", "bikeshed-publishing"];
 /** tools/stamp-deployment.mjs TOKEN: the placeholder the build replaces with the deployment's origin. */
 const STAMP_TOKEN = "https://<deployment>";
 /**
@@ -165,7 +165,7 @@ async function mcpInit(ctx, token, actor) {
   return { status: r.status, challenge: r.headers.get("www-authenticate"), cacheControl: r.headers.get("cache-control") };
 }
 
-/** The 23 tool names a token sees. */
+/** The 31 tool names a token sees. */
 async function toolNames(ctx, token, actor) {
   const m = ctx.mcp({ token, actor, cutoffError: true });
   await m.initialize();
@@ -288,7 +288,7 @@ async function signInAtConnect(u, acct) {
   precondition(s.status === 200, `POST /session from /connect answered ${s.status}`);
 }
 
-scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 23 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
+scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 32 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
   tiers: BOTH,
   inconclusiveOnCaseTimeout: true,
   timeoutMs: 360_000,
@@ -427,8 +427,8 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
-    assert.equal(viaGrant.length, 23, viaGrant.join(", "));
-    assert.deepEqual(viaGrant, viaPersonal, "the same 23 tools as a personal token");
+    assert.equal(viaGrant.length, 32, viaGrant.join(", "));
+    assert.deepEqual(viaGrant, viaPersonal, "the same 32 tools as a personal token");
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
 
@@ -990,7 +990,7 @@ function stamp(buf) {
   return Buffer.from(buf.toString("utf8").split(STAMP_TOKEN).join(target.origin), "utf8");
 }
 
-scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /skills/index.json lists SPEC §19's three skills, each served stamped; /.well-known/mcp.json is served as written, every URL in it relative and answering here; /docs and /docs/ 302 to /d/docs and /docs/developers to /d/docs-developers; /terms and /privacy render for an anonymous visitor", {
+scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /skills/index.json lists SPEC §19's four skills, each served stamped; /.well-known/mcp.json is served as written, every URL in it relative and answering here; /docs and /docs/ 302 to /d/docs and /docs/developers to /d/docs-developers; /terms and /privacy render for an anonymous visitor", {
   tiers: BOTH,
   inconclusiveOnCaseTimeout: true,
   timeoutMs: 180_000,
@@ -1007,7 +1007,7 @@ scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /s
   assert.ok(llms.buffer.equals(stamp(guide)), `GET /llms.txt is the stamped guide (${llms.buffer.length} vs ${stamp(guide).length} bytes)`);
   assert.equal(llms.text.includes("<deployment>"), false, "no placeholder survives");
 
-  ctx.step("/skills/index.json: exactly SPEC §19's three skills, each one's SKILL.md and archive served");
+  ctx.step("/skills/index.json: exactly SPEC §19's four skills, each one's SKILL.md and archive served");
   const index = await http.get("/skills/index.json");
   assert.equal(index.status, 200);
   assert.ok(index.buffer.equals(stamp(treeFile("app/public/skills/index.json"))), "the served index is the tree's");

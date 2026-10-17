@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import { ToastProvider } from "../components/Toast";
-import { agentInstructions } from "./Landing";
+import { Landing, agentInstructions } from "./Landing";
 import type { AuthGate } from "../auth";
+import appPackage from "../../package.json";
 
 /**
  * The gate is the subject, so it is the thing driven directly. `vi.hoisted` is
@@ -16,6 +17,17 @@ import type { AuthGate } from "../auth";
  * file, and a plain const would still be in the temporal dead zone.
  */
 const auth = vi.hoisted(() => ({ gate: "loading" as AuthGate, user: null as { uid: string } | null }));
+const layout = vi.hoisted(() => ({ singleColumn: false, mediaBase: "" }));
+
+vi.mock("../hooks/useMediaQuery", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../hooks/useMediaQuery")>(),
+  useIsSingleColumn: () => layout.singleColumn,
+}));
+
+vi.mock("../config", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../config")>(),
+  get LANDING_MEDIA_BASE_URL() { return layout.mediaBase; },
+}));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -66,6 +78,28 @@ const hero = () =>
 beforeEach(() => {
   auth.gate = "loading";
   auth.user = null;
+  layout.singleColumn = false;
+  layout.mediaBase = "";
+});
+
+it("moves one agent card around the same video without losing its position across desktop, mobile, and desktop", () => {
+  layout.mediaBase = "https://storage.googleapis.com/demo-bikeshed-media/landing/v1";
+  const page = () => <MemoryRouter><ToastProvider><Landing /></ToastProvider></MemoryRouter>;
+  const { container, rerender } = render(page());
+  const video = container.querySelector("video")!;
+  video.currentTime = 27;
+
+  for (const singleColumn of [false, true, false]) {
+    layout.singleColumn = singleColumn;
+    rerender(page());
+    expect(container.querySelector("video")).toBe(video);
+    expect(video.currentTime).toBe(27);
+    const cards = screen.getAllByRole("complementary", { name: "Put your agent to work" });
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    expect(hero()!.closest("section")!.contains(card)).toBe(!singleColumn);
+    expect(Boolean(card.compareDocumentPosition(video) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(!singleColumn);
+  }
 });
 
 describe("who gets the landing page", () => {
@@ -292,5 +326,20 @@ describe("the agent instructions", () => {
     expect(text).toContain("as a connector");
     expect(text).not.toMatch(/mint/i);
     expect(text).not.toMatch(/access token/i);
+  });
+});
+
+describe("the landing entry points", () => {
+  it.each([0, 1])("Get started link %i reaches the sign-in flow", (index) => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    fireEvent.click(screen.getAllByRole("link", { name: "Get started" })[index]);
+    expect(screen.getByText("SIGN-IN SCREEN")).toBeDefined();
+  });
+
+  it("identifies the app release actually built", () => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    expect(screen.getByText(`Self-hosted. Apache-2.0. v${appPackage.version}.`)).toBeDefined();
   });
 });

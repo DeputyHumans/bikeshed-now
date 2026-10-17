@@ -233,7 +233,7 @@ test("get_comments reads an earlier version's threads when asked, and only a ver
 
   for (const version of ["v9", "v1/annotations/old", ".."]) {
     await assert.rejects(tool("get_comments").run(w.ctx(OWNER), { id: "d1", version }), {
-      message: `no version "${version}"`,
+      message: version === "v9" ? `no version "${version}"` : "invalid or missing version",
     });
   }
   // Access is the document's, whichever version is asked for.

@@ -703,14 +703,16 @@ scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only en
 
 // --- MCP --------------------------------------------------------------------------
 
-/** The twenty-three tools of SPEC §19's table, in its order. */
+/** The thirty-two tools of SPEC §19's table, in its order. */
 const SPEC_TOOLS = Object.freeze([
-  "list_documents", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
+  "get_document_access", "set_document_access", "get_folder_access", "set_folder_access",
+  "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
+  "list_documents", "list_versions", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
   "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "list_folders",
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
   "reply_to_comment", "resolve_thread", "reopen_thread",
 ]);
-const DESTRUCTIVE = /delete|remove|share|grant|access/;
+const DESTRUCTIVE = /^(delete_document|.*_team|.*_trust)$/;
 
 async function mcpFor(ctx, session, actor) {
   const { token } = await mintToken(session, { name: `e2e a2 ${actor}`, channel: "mcp" });
@@ -847,7 +849,7 @@ scenario("A2.mcp-expired on an expired document MCP answers its editor as for an
   assert.equal(bad.length, 0, `MCP on an expired document: ${bad.length} differ\n  ${bad.join("\n  ")}`);
 });
 
-scenario("A2.mcp-names no MCP tool name matches delete|remove|share|grant|access, and the tools are exactly SPEC §19's twenty-three", {
+scenario("A2.mcp-names document deletion, team administration and trust stay absent; the tools are exactly SPEC §19's thirty-two", {
   tiers: ["local", "prod"],
   ...STALLS,
   timeoutMs: 120_000,
@@ -856,6 +858,6 @@ scenario("A2.mcp-names no MCP tool name matches delete|remove|share|grant|access
   const mcp = await mcpFor(ctx, await signIn(acct), "owner");
   const names = (await mcp.listTools()).map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
-  assert.deepEqual(names.filter((n) => DESTRUCTIVE.test(n)), [], "destructive or sharing tool names");
+  assert.deepEqual(names.filter((n) => DESTRUCTIVE.test(n)), [], "document deletion, team administration and trust tools stay absent");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
 });

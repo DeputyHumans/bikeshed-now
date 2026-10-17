@@ -1,13 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -874,8 +874,9 @@
-   // effective set. That definition covers a team grant for free, and it can
-   // never fire on a re-save of the same list.
-   const beforeSet = new Set(beforeMembers);
-+  const named = new Set(parsed.delta.add.map((a) => a.principal.trim().toLowerCase()));
-   const invitees: InviteTarget[] = membership.members
--    .filter((e) => !beforeSet.has(e) && e !== caller.emailLower)
-+    .filter((e) => (!beforeSet.has(e) || named.has(e)) && e !== caller.emailLower)
-     .map((email) => ({ email, role: roleOf(email, membership) }));
-   if (invitees.length > 0) {
-     await sendInvitations(caller.emailLower, invitees, {
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -95,7 +95,7 @@
+     added: after.members.filter(e => !before.members.includes(e)),
+     removed: before.members.filter(e => !after.members.includes(e)), ...next,
+   });
+-  const invitees = after.members.filter(e => !before.members.includes(e) && e !== ctx.caller.emailLower)
++  const invitees = after.members.filter(e => (!before.members.includes(e) || delta.add.some(a => a.principal.toLowerCase() === e)) && e !== ctx.caller.emailLower)
+     .map(email => ({ email, role: roleOf(email, after) }));
+   if (invitees.length) {
+     const { sendInvitations } = await import("../email/notify");

@@ -55,6 +55,7 @@ function armingPage({ attachDelayMs = 300 } = {}) {
   const enabled = () => touched && Date.now() - t0 >= attachDelayMs + ARM_DELAY_MS;
   const button = (name) => ({
     waitFor: async () => {},
+    scrollIntoViewIfNeeded: async () => {},
     isEnabled: async () => (name === "Approve" ? enabled() : true),
     boundingBox: async () => ({ x: 400, y: 300, width: 90, height: 36 }),
     click: async () => {
