@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve an open revision upload and its selected file after edit access is revoked, so the server refusal explains the change without discarding the work. Align CLI pinned-link and MCP required-argument checks with the released history and management contracts.
+
 - Align the browser consent regression with the current owner-management disclosure while retaining exact allowed and excluded capability assertions.
 
 - Keep all 724 negative-control targets selectable after the tool catalog and skill inventory expanded; preserve amplifier composition across the merged sharing and retry paths.

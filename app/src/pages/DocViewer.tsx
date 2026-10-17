@@ -1258,7 +1258,7 @@ export function DocViewer() {
         />
       ) : null}
 
-      {offersUpload && dialog === "upload-version" && doc.meta ? (
+      {dialog === "upload-version" && doc.meta ? (
         <UploadVersionDialog
           docId={docId}
           title={doc.title}

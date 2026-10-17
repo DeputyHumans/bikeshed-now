@@ -70,6 +70,15 @@ const SPEC_TOOLS = Object.freeze([
 ]);
 /** Required argument names are the public protocol, independent of tools/list's own declarations. */
 const REQUIRED_ARGS = Object.freeze({
+  get_document_access: ["id"],
+  set_document_access: ["id"],
+  get_folder_access: ["id"],
+  set_folder_access: ["id"],
+  set_document_visibility: ["id"],
+  rename_folder: ["id", "name"],
+  move_folder: ["id"],
+  delete_folder: ["id"],
+  list_versions: ["id"],
   "list_documents": [],
   "get_document": [
     "id"

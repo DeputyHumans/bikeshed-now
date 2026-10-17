@@ -522,7 +522,7 @@ scenario(NAMES.n, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout:
 scenario(NAMES.o, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const id = docIdFor(target, "cli-open-json");
   const home = cliHome(target);
-  const url = `${target.origin}/d/${id}?k=e2e-json-key`;
+  const url = `${target.origin}/d/${id}/v1?k=e2e-json-key`;
   const r = await cli(ctx, null, ["open", `${target.origin}/d/${id}/v1?k=e2e-json-key`, "--json"], { home, token: null });
   assert.deepEqual(okJson(r, "open --json"), { url }, "open --json reports the complete document URL");
   await eventually(() => openedIn(home).length > 0, { timeout: 15_000, interval: 100, message: "the JSON open invoked the opener" });
