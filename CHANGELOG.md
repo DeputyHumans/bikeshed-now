@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep all 724 negative-control targets selectable after the tool catalog and skill inventory expanded; preserve amplifier composition across the merged sharing and retry paths.
+
 - Preserve current archive read-only behavior in E2E feedback checks, update management fault injection to the shared implementation, and retain all existing control identities through integration.
 
 - Integrate the E2E repairs with the current agent-management and immutable-history features; preserve remembered-link refusals, transaction retry receipts and read-only archives. Replace reaped stack records atomically to prevent concurrent cleanup from corrupting retained evidence.

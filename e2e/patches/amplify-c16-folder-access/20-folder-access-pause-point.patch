@@ -1,18 +1,10 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -16,6 +16,7 @@
- import { linkProofFor } from "./linkgrant";
- import { safeSegment } from "./http";
- import { publicOrigin } from "../config";
+@@ -7,2 +7,3 @@
+ import type { Principal } from "./auth";
 +import { e2eFolderAccessGate } from "./e2eFolderAccessGate";
- 
- export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
- export type ResourceKind = "document" | "folder";
-@@ -93,6 +94,7 @@
-       }] : [];
-     });
+ import type { Actor } from "./actor";
+@@ -95,2 +96,3 @@
    } else {
 +    await e2eFolderAccessGate("folder-access-before-write", id);
      const result = await persistFolderMembership(ctx.db, ref, apply);
-     if (!result) throw new ManagementError(404, `no folder with id "${id}"`);
-     before = result.before;

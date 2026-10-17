@@ -3,7 +3,7 @@
   "what": "Omit one disclosure-allowed capability from the consent card.",
   "target": {
     "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
-    "case": "A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 23 tools at /mcp and nothing else; Cancel sends access_denied with state and iss",
+    "case": "A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 32 tools at /mcp and nothing else; Cancel sends access_denied with state and iss",
     "suite": "functional"
   },
   "stack": [],

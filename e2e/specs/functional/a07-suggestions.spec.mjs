@@ -915,6 +915,8 @@ scenario("A7.7 a suggestion on a version that is no longer current is 409 with c
   assert.deepEqual({ status: fresh.status, versionId: fresh.json?.versionId }, { status: 200, versionId: "v2" });
 
   ctx.step("in the app: reading v1 the toolbar offers no write actions; on the head it offers Suggest edit");
+  await eventually(() => s.page.getByText("A newer version has been published.", { exact: true }).isVisible(), { timeout: SLOW, message: "pinned historical reader sees the newer-version notice" });
+  assert.equal(await s.page.getByRole("button", { name: "Open v2", exact: true }).isVisible(), true, "the historical reader is offered the new version");
   const [o] = await browsers(ctx, [accounts[0]], ["owner"]);
   await openDoc(o, docId, { v: "v1" });
   assert.equal(await o.page.getByRole("button", { name: "Edit", exact: true }).count(), 0, "even the owner cannot edit the archive");

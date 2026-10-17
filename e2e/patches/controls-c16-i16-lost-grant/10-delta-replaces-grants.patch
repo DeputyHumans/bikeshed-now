@@ -1,11 +1,7 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -79,7 +79,7 @@
-   let changed = false;
-   const apply = (current: DocumentData) => {
+@@ -81,3 +81,3 @@
      const oldGrants = grantsOf(current);
 -    next = applyAccessDelta(oldGrants, String(current.ownerEmail), delta);
 +    next = applyAccessDelta(kind === "document" ? { viewers: [], suggesters: [], editors: [], approvers: [] } : oldGrants, String(current.ownerEmail), delta);
      changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
-     return { ...next };
-   };

@@ -1,11 +1,11 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -73,7 +73,7 @@
-   if ("error" in parsed) throw new ManagementError(400, parsed.error);
-   const { delta } = parsed;
+@@ -75,3 +75,3 @@
    const invalid = invalidPrincipals(delta);
 -  if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
 +  delta.add = delta.add.filter(a => !invalid.includes(a.principal));
    let before = membershipOf(data);
-   let next = grantsOf(data);
-   let changed = false;
+@@ -115,2 +115,3 @@
+   }
++  if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
+   return getAccess(ctx, kind, id);

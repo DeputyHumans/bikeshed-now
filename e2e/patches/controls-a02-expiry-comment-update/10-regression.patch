@@ -1,20 +1,12 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -258,7 +258,6 @@
-             // Its author may reword it, and that is all: when it was written,
-             // and by whom, stay as they were.
+@@ -260,3 +260,2 @@
              allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
 -              && feedbackWritable(docData(docId))
                && resource.data.authorUid == request.auth.uid
-               && !('generated' in resource.data)
-               && !('opensSuggestion' in resource.data)
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -261,7 +261,6 @@
-             // Its author may reword it, and that is all: when it was written,
-             // and by whom, stay as they were.
+@@ -263,3 +263,2 @@
              allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
 -              && feedbackWritable(docData(docId))
                && resource.data.authorUid == request.auth.uid
-               && !('generated' in resource.data)
-               && !('opensSuggestion' in resource.data)

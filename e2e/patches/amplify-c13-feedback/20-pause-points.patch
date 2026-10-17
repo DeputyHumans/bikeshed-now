@@ -1,55 +1,31 @@
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -6,6 +6,7 @@
- import { currentVersionRefusal } from "./versions";
- import { FieldValue, Timestamp } from "firebase-admin/firestore";
+@@ -8,2 +8,3 @@
  import type { Actor } from "./actor";
 +import { e2eGate } from "./e2eGate";
  import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
- 
- /**
-@@ -198,6 +199,8 @@
-   if (problem) return { status: 400, error: problem };
- 
+@@ -200,2 +201,4 @@
    const anns = annotations(docRef, versionId);
 +  await anns.where("authorUid", "==", author.uid).where("suggestion.state", "==", "pending").count().get();
 +  await e2eGate("suggest-after-count", docRef.id);
    const annRef = anns.doc();
-   const commentRef = annRef.collection("comments").doc();
-   let attempted = false;
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -85,6 +85,7 @@
- import { locateQuote } from "../lib/quote";
- import { renameDocument } from "../lib/rename";
+@@ -87,2 +87,3 @@
  import { setThreadResolved } from "../lib/threads";
 +import { e2eGate } from "../lib/e2eGate";
  import { acceptSuggestion } from "../lib/accept";
- import { commitDraft } from "../lib/draft";
- import { editorsRefusal } from "../lib/presence";
-@@ -1708,6 +1709,7 @@
-         actor: ctx.actor,
-         createdAt: FieldValue.serverTimestamp(),
+@@ -1710,2 +1711,3 @@
        };
 +      await e2eGate("comment-before-write", ref.id);
        // The anchor was found on the observed head. Recheck that head and the
-       // reader's authority atomically with both writes, so a racing publish
-       // either sees this open thread or makes this attempt retry and refuse.
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -19,6 +19,7 @@
- import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
- import { syncPublicProjection } from "./publicdoc";
+@@ -21,2 +21,3 @@
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
  import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
- 
- /**
-@@ -538,6 +539,7 @@
-     });
-   }
+@@ -540,2 +541,3 @@
  
 +  await e2eGate("commit-before-tx", docId);
    const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
-   let candidateMayHaveCommitted = false;
- 

@@ -1,11 +1,7 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2783,7 +2783,7 @@
-  * the credential is a Bearer token, never the session cookie, so there is no
-  * cross-site request forgery surface to widen by allowing it.
+@@ -2785,3 +2785,3 @@
   */
 -export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
 +export const mcp = onRequest({ ...MAILING, cors: false }, async (req, res) => {
    // Before anything can answer: a GET's 405 and every 401 would otherwise
-   // inherit Hosting's default max-age=600.
-   noStore(res);

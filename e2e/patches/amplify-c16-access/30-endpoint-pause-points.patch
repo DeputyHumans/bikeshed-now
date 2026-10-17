@@ -1,36 +1,20 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -16,6 +16,7 @@
- import { linkProofFor } from "./linkgrant";
- import { safeSegment } from "./http";
+@@ -18,2 +18,3 @@
  import { publicOrigin } from "../config";
 +import { e2eAccessGate } from "./e2eAccessGate";
  
- export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
- export type ResourceKind = "document" | "folder";
-@@ -150,6 +151,7 @@
-   await syncPublicProjection(ctx.db, id);
-   const data = (await ref.get()).data()!;
+@@ -152,2 +153,3 @@
    const m = membershipOf(data);
 +  await e2eAccessGate("visibility-before-mirror", id);
    await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
-   return { id, ...settings(id, data), linkToken: data.linkToken ?? null };
- }
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -15,6 +15,7 @@
-  */
- 
+@@ -17,2 +17,3 @@
  import { versionStoragePrefix } from "./lib/storage";
 +import { e2eAccessGate } from "./lib/e2eAccessGate";
  import { onRequest, type Request } from "firebase-functions/v2/https";
- import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
- import * as admin from "firebase-admin";
-@@ -2381,6 +2382,7 @@
-   }
- 
+@@ -2383,2 +2384,3 @@
    const ref = db().collection("teams").doc(teamId);
 +  await e2eAccessGate("team-members-after-read", teamId);
    const receipt = freshReceiptId();
-   type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
-   const result = await db().runTransaction(async (tx) => {

@@ -1,40 +1,24 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -217,7 +217,7 @@
-         match /annotations/{annId} {
-           allow read: if canRead(docId, docData(docId));
+@@ -219,3 +219,3 @@
            // The key list keeps `suggestion` out as well.
 -          allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
 +          allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
              && feedbackWritable(docData(docId))
-             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
-             && request.resource.data.anchor is map
-@@ -250,7 +250,7 @@
-           match /comments/{commentId} {
-             allow read: if canRead(docId, docData(docId));
+@@ -252,3 +252,3 @@
              // The key list is what keeps `generated` and `opensSuggestion` out.
 -            allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
 +            allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
                && feedbackWritable(docData(docId))
-               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
-               && request.resource.data.body is string
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -220,7 +220,7 @@
-         match /annotations/{annId} {
-           allow read: if canRead(docId, docData(docId));
+@@ -222,3 +222,3 @@
            // The key list keeps `suggestion` out as well.
 -          allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
 +          allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
              && feedbackWritable(docData(docId))
-             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
-             && request.resource.data.anchor is map
-@@ -253,7 +253,7 @@
-           match /comments/{commentId} {
-             allow read: if canRead(docId, docData(docId));
+@@ -255,3 +255,3 @@
              // The key list is what keeps `generated` and `opensSuggestion` out.
 -            allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
 +            allow create: if docData(docId).currentVersion == versionId && isVerifiedUser() && authoredBySelf()
                && feedbackWritable(docData(docId))
-               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
-               && request.resource.data.body is string

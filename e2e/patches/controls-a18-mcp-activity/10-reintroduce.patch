@@ -1,24 +1,15 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -37,7 +37,7 @@
- import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
- import { versionStoragePrefix } from "../lib/storage";
+@@ -39,3 +39,3 @@
  import * as admin from "firebase-admin";
 -import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 +import { FieldPath, FieldValue } from "firebase-admin/firestore";
  import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
- import { MANAGEMENT_TOOLS } from "./management";
- import { bucketName, publicOrigin } from "../config";
-@@ -409,12 +409,10 @@
-       const before = await tx.get(viewRef);
-       if (readReceipt(before, receipt).found) return;
+@@ -411,3 +411,2 @@
        recordReceipt(tx, viewRef, before, receipt, true);
 -      const startedAt = before.data()?.startedAt;
        tx.set(viewRef, {
-         sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
-         ms: 0, via: "app", automated: true, actor: ctx.actor,
+@@ -416,3 +415,2 @@
          reads: FieldValue.increment(1),
 -        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
          lastBeatAt: FieldValue.serverTimestamp(),
-       }, { merge: true });
-       tx.update(docRef, {

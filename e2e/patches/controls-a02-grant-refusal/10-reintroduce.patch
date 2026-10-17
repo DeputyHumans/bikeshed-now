@@ -1,48 +1,28 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -595,7 +595,7 @@
-   }
-   const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
+@@ -597,3 +597,3 @@
    if (!isDocEditor(data, caller.uid, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
-   // Expired as a reader meets it: an editor cannot read an expired document,
-@@ -827,7 +827,7 @@
-   }
-   const data = snap.data() as DocAclData;
+@@ -829,3 +829,3 @@
    if (!canManageSharing(data, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
- 
-@@ -871,7 +871,7 @@
-   }
-   const data = snap.data() as DocAclData;
+@@ -873,3 +873,3 @@
    if (!canManageSharing(data, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
- 
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -13,7 +13,6 @@
- import { addEvent, eventActor } from "./events";
- import { syncPresenceAccess } from "./presence";
+@@ -15,3 +15,2 @@
  import { syncPublicProjection } from "./publicdoc";
 -import { linkProofFor } from "./linkgrant";
  import { safeSegment } from "./http";
- import { publicOrigin } from "../config";
- 
-@@ -35,7 +34,7 @@
-     ? canManageSharing(data as DocAclData, ctx.caller.emailLower)
-     : canManageFolder(data as FolderAclData, ctx.caller.emailLower);
+@@ -37,3 +36,3 @@
    const reads = kind === "document"
 -    ? canRead(data as DocAclData, ctx.caller, await linkProofFor(ref, data as DocAclData, ctx.caller, null))
 +    ? canRead(data as DocAclData, ctx.caller)
      : canReadFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower);
-   if (!owner && !reads) throw new ManagementError(404, `no ${kind} with id "${id}"`);
-   if (ownerOnly && !owner) throw new ManagementError(403, `only the owner can manage this ${kind}`);

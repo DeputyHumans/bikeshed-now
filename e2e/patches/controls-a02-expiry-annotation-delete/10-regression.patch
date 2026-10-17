@@ -1,20 +1,12 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -237,7 +237,6 @@
-             && request.resource.data.resolvedBy.email == myEmail()
-             && request.resource.data.resolvedBy.channel == 'web';
+@@ -239,3 +239,2 @@
            allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
 -            && feedbackWritable(docData(docId))
              && resource.data.authorUid == request.auth.uid
-             && !('suggestion' in resource.data);
- 
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -240,7 +240,6 @@
-             && request.resource.data.resolvedBy.email == myEmail()
-             && request.resource.data.resolvedBy.channel == 'web';
+@@ -242,3 +242,2 @@
            allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
 -            && feedbackWritable(docData(docId))
              && resource.data.authorUid == request.auth.uid
-             && !('suggestion' in resource.data);
- 

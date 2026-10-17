@@ -1,11 +1,7 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -182,6 +182,8 @@
-     for (const child of docs.docs) {
-       await persistDocMembership(ctx.db, child.ref);
+@@ -184,2 +184,4 @@
      }
 +    const { sendInvitations } = await import("../email/notify");
 +    await sendInvitations(ctx.caller.emailLower, membershipOf(data).members.filter(email => email !== ctx.caller.emailLower).map(email => ({ email, role: "viewer" })), { title: "Deleted folder", kind: "folder", url: `${publicOrigin()}/folder/${id}` });
      await ref.delete();
-     return { id, deleted: true, parent, reparented: { folders: folders.size, documents: docs.size } };
-   }

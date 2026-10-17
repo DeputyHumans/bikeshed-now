@@ -1,20 +1,12 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -228,7 +228,6 @@
-           // changes with it: not the author, anchor, colour, actor or
-           // createdAt, and no field added on the side.
+@@ -230,3 +230,2 @@
            allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
 -            && feedbackWritable(docData(docId))
              && !('suggestion' in resource.data)
-             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
-             && request.resource.data.resolved is bool
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -231,7 +231,6 @@
-           // changes with it: not the author, anchor, colour, actor or
-           // createdAt, and no field added on the side.
+@@ -233,3 +233,2 @@
            allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
 -            && feedbackWritable(docData(docId))
              && !('suggestion' in resource.data)
-             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
-             && request.resource.data.resolved is bool

@@ -1,28 +1,16 @@
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -6,6 +6,7 @@
- import { currentVersionRefusal } from "./versions";
- import { FieldValue, Timestamp } from "firebase-admin/firestore";
- import type { Actor } from "./actor";
+@@ -5,2 +5,3 @@
+ import { randomUUID } from "node:crypto";
 +import { e2eAckTransaction } from "./e2eAckTransaction";
- import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
- 
- /**
-@@ -205,7 +206,7 @@
-   // ordered: either the publish's own check sees this suggestion and refuses,
-   // or this sees the newer version and refuses. Checked only before writing,
+ import { currentVersionRefusal } from "./versions";
+@@ -207,3 +208,3 @@
    // a publish landing in between left it pending on a version nobody reads.
 -  return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
 +  return e2eAckTransaction(db, docRef.id, "suggestion-create", async (tx): Promise<{ annId: string } | Refusal> => {
      const doc = await tx.get(docRef);
-     // This preallocated random id belongs only to this operation. A native
-     // retry may follow a completed commit whose acknowledgement was lost;
-@@ -344,7 +345,7 @@
-   const leaseReceipt = op === "claim" || op === "release" ? freshReceiptId() : null;
-   let leaseRecorded = false;
+@@ -346,3 +347,3 @@
  
 -  const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
 +  const result = await e2eAckTransaction(db, docRef.id, `suggestion-${op}`, async (tx): Promise<{ state: SuggestionState } | Refusal> => {
      const head = await tx.get(docRef);
-     // Every read before any write, as a transaction requires: the record, and
-     // for a revision the opening comment whose words may have to follow it.
