@@ -156,6 +156,31 @@ const S2 = suggestion("s2", "OpenAI", "Compare vs. ", " Codex", "");
 const S3 = suggestion("s3", "a single fortnight", "cut over in ", ", and", "a month");
 const C1 = { annId: "c1", anchor: { exact: "Ship it" }, authorEmail: OWNER.emailLower, resolved: false };
 
+for (const moved of [false, true]) test(`accept rereads a retired draft only when its metadata moved: ${moved}`, async () => {
+  const oldPrefix = "docs/d1/drafts/old";
+  const nextPrefix = "docs/d1/drafts/next";
+  const w = world({ anns: { s1: S1 }, doc: { draft: { baseVersion: "v1", storagePrefix: oldPrefix } },
+    files: { [`${oldPrefix}/index.html`]: HTML, [`${nextPrefix}/index.html`]: HTML.replace("Ship it with", "Keep the other edit and ship it with") } });
+  const has = w.objects.has.bind(w.objects);
+  w.objects.has = (key) => {
+    if (key === `${oldPrefix}/index.html`) {
+      w.objects.delete(key);
+      if (moved) w.doc().draft = { baseVersion: "v1", storagePrefix: nextPrefix };
+    }
+    return has(key);
+  };
+  if (moved) {
+    let result;
+    await assert.doesNotReject(async () => { result = await w.call("accept_suggestion", APPROVER, { threadId: "s1" }); }, "a retired draft read retries against current metadata");
+    assert.equal(result.state, "accepted", "a retired draft read retries against current metadata");
+    assert.match(w.draftText(), /two weekends/, "the requested replacement is saved");
+    assert.match(w.draftText(), /Keep the other edit/, "the concurrent replacement survives");
+  } else {
+    await assert.rejects(w.call("accept_suggestion", APPROVER, { threadId: "s1" }), /Could not read the document/);
+    assert.equal(w.ann("s1").suggestion.state, "pending", "missing bytes never record acceptance");
+  }
+});
+
 test("concurrent accepts keep both changes in the shared draft with one decision each", async () => {
   const w = world({ anns: { s1: S1, s2: S2 } });
   const results = await w.together(["s1", "s2"].map((threadId) => ({ name: "accept_suggestion", who: APPROVER, args: { threadId } })));

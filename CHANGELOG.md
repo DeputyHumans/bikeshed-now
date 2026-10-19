@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Retry suggestion acceptance when a concurrent save retires the draft object between metadata lookup and download. Read the replacement snapshot without discarding concurrent edits; continue to refuse missing objects whose draft identity has not changed.
+
 - Preserve an open revision upload and its selected file after edit access is revoked, so the server refusal explains the change without discarding the work. Align CLI pinned-link and MCP required-argument checks with the released history and management contracts.
 
 - Align the browser consent regression with the current owner-management disclosure while retaining exact allowed and excluded capability assertions.

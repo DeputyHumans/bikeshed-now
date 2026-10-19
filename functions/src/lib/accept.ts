@@ -4,7 +4,7 @@
 import * as admin from "firebase-admin";
 import type { Actor } from "./actor";
 import { applyToHtml, applyToMarkdown, type ApplyRefusal } from "./apply";
-import { DraftConflict, readWorkingCopy, writeDraft } from "./draft";
+import { DraftConflict, draftRevision, readWorkingCopy, writeDraft } from "./draft";
 import { WriteAuthorityError } from "./writeAuthority";
 import { renderMarkdown } from "./markdown/render";
 import { editorsRefusal } from "./presence";
@@ -66,7 +66,19 @@ export async function acceptSuggestion(args: {
   if ("refusal" in editors) return editors.refusal;
 
   let draftData = data;
-  let working = await readWorkingCopy(docRef, draftData as Parameters<typeof readWorkingCopy>[1]);
+  // A completed save may retire the object between our metadata read and
+  // download. Retry only a proven snapshot move; never fall back to v1 bytes.
+  const readCurrent = async () => {
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const copy = await readWorkingCopy(docRef, draftData as Parameters<typeof readWorkingCopy>[1]);
+      if (copy) return copy;
+      const fresh = (await docRef.get()).data() ?? {};
+      if (fresh.currentVersion !== versionId || draftRevision(fresh) === draftRevision(draftData)) return null;
+      draftData = fresh;
+    }
+    return null;
+  };
+  let working = await readCurrent();
   if (!working) return { status: 409, error: "Could not read the document to make the change in it." };
   const title = typeof data.title === "string" ? data.title : undefined;
   let made =
@@ -106,7 +118,7 @@ export async function acceptSuggestion(args: {
       } catch (error) {
         if (!(error instanceof DraftConflict) || error.detail.draftChanged !== true || attempt >= 24) throw error;
         draftData = (await docRef.get()).data() ?? {};
-        working = await readWorkingCopy(docRef, draftData as Parameters<typeof readWorkingCopy>[1]);
+        working = await readCurrent();
         if (!working) throw new DraftConflict({ error: "The draft changed. Retry accepting this suggestion.", draftChanged: true });
         made = working.format === "html"
           ? applyToHtml(working.html, anchor, replacement)
