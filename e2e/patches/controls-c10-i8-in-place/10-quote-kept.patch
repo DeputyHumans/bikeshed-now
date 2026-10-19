@@ -10,7 +10,7 @@
    if (made.state === "refused") return { status: 409, error: REFUSALS[made.reason], refused: made.reason };
 
 @@ -110,7 +110,7 @@
-         working = await readWorkingCopy(docRef, draftData as Parameters<typeof readWorkingCopy>[1]);
+         working = await readCurrent();
          if (!working) throw new DraftConflict({ error: "The draft changed. Retry accepting this suggestion.", draftChanged: true });
          made = working.format === "html"
 -          ? applyToHtml(working.html, anchor, replacement)

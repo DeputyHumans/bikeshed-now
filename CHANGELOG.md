@@ -16,7 +16,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
-- Retry suggestion acceptance when a concurrent save retires the draft object between metadata lookup and download. Read the replacement snapshot without discarding concurrent edits; continue to refuse missing objects whose draft identity has not changed.
+- Retry suggestion acceptance when a concurrent save retires the draft object between metadata lookup and download. Read the replacement snapshot without discarding concurrent edits; continue to refuse missing objects whose draft identity has not changed. Refresh the existing misplaced-replacement control for the read helper.
 - Repair three integration-stale E2E negative controls: exercise public editing through folder sharing, expect the current 32-tool MCP catalog, and remove reply credentials from the reply handler itself. Each restored control fails its intended assertion and passes against the clean source.
 
 - Preserve an open revision upload and its selected file after edit access is revoked, so the server refusal explains the change without discarding the work. Align CLI pinned-link and MCP required-argument checks with the released history and management contracts.
