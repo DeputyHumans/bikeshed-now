@@ -156,14 +156,26 @@ const S2 = suggestion("s2", "OpenAI", "Compare vs. ", " Codex", "");
 const S3 = suggestion("s3", "a single fortnight", "cut over in ", ", and", "a month");
 const C1 = { annId: "c1", anchor: { exact: "Ship it" }, authorEmail: OWNER.emailLower, resolved: false };
 
-for (const moved of [false, true]) test(`accept rereads a retired draft only when its metadata moved: ${moved}`, async () => {
+for (const { moved, conflict = false } of [{ moved: false }, { moved: true }, { moved: true, conflict: true }]) test(`accept rereads a retired draft only when its metadata moved: ${moved}, after conflict: ${conflict}`, async () => {
   const oldPrefix = "docs/d1/drafts/old";
   const nextPrefix = "docs/d1/drafts/next";
+  const conflictedPrefix = "docs/d1/drafts/conflicted";
   const w = world({ anns: { s1: S1 }, doc: { draft: { baseVersion: "v1", storagePrefix: oldPrefix } },
-    files: { [`${oldPrefix}/index.html`]: HTML, [`${nextPrefix}/index.html`]: HTML.replace("Ship it with", "Keep the other edit and ship it with") } });
+    files: { [`${oldPrefix}/index.html`]: HTML, [`${conflictedPrefix}/index.html`]: HTML, [`${nextPrefix}/index.html`]: HTML.replace("Ship it with", "Keep the other edit and ship it with") } });
+  if (conflict) {
+    const set = w.objects.set.bind(w.objects);
+    let first = true;
+    w.objects.set = (key, value) => {
+      if (first) {
+        first = false;
+        w.doc().draft = { baseVersion: "v1", storagePrefix: conflictedPrefix };
+      }
+      return set(key, value);
+    };
+  }
   const has = w.objects.has.bind(w.objects);
   w.objects.has = (key) => {
-    if (key === `${oldPrefix}/index.html`) {
+    if (key === `${conflict ? conflictedPrefix : oldPrefix}/index.html`) {
       w.objects.delete(key);
       if (moved) w.doc().draft = { baseVersion: "v1", storagePrefix: nextPrefix };
     }
