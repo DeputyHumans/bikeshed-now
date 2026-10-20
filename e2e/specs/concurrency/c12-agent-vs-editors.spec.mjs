@@ -1278,9 +1278,12 @@ scenario("C12b curl-only drafts vs the agent's update (SYNC-T): N−1 editors' P
   ctx.ev.json("answers", { drafts, update: upd });
   ctx.step(`drafts: ${drafts.map((d) => `${d.name} ${d.status}`).join(", ")}; update_document: ${upd.kind}${upd.json?.versionId ? ` ${upd.json.versionId}` : ""}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b race", drafts: drafts.map((d) => d.status), update: upd.kind });
-  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && (d.json?.error === DRAFT_STALE || d.json?.error === `Historical versions are read-only. Read the latest version (${d.json?.currentVersion}) before making changes.`)));
+  // Non-causal saves also refuse when another editor replaces the snapshot
+  // before this save commits. This is a safe refusal, not a successful save;
+  // the published version, retired files and next-reader checks still run.
+  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && (d.json?.error === DRAFT_STALE || d.json?.error === `Historical versions are read-only. Read the latest version (${d.json?.currentVersion}) before making changes.` || (d.json?.draftChanged === true && d.json?.error === "The draft changed while this request was running. Retry with the current draft."))));
   if (odd.length) {
-    const err = new Error(`a curl draft was answered neither 200 nor the stale 409: ${JSON.stringify(odd)}`);
+    const err = new Error(`a curl draft was answered neither 200 nor a recognized stale-version or concurrent-snapshot 409: ${JSON.stringify(odd)}`);
     err.code = "E2E_C12_DRAFT";
     throw err;
   }
