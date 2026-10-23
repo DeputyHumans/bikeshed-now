@@ -11,6 +11,7 @@
     "rewrites": [
       { "source": "/session", "function": "session" },
       { "source": "/config", "function": "appConfig" },
+      { "source": "/healthz", "function": "health" },
       { "source": "/access", "function": "setAccess" },
       { "source": "/publish", "function": "createDoc" },
       { "source": "/folder", "function": "createFolder" },

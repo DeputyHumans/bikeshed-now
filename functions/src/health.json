@@ -1,0 +1,5 @@
+{
+  "firestorePath": "_ops/health",
+  "storagePath": "_ops/healthcheck.txt",
+  "marker": "bikeshed-health-v1\n"
+}

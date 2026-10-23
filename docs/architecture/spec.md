@@ -124,6 +124,7 @@ which also holds this table to them.
 |---|---|
 | `/session` | `session` |
 | `/config` | `appConfig` |
+| `/healthz` | `health` |
 | `/access` | `setAccess` |
 | `/publish` | `createDoc` |
 | `/folder` | `createFolder` |
@@ -205,6 +206,17 @@ rejection as a *state* rather than a failure.
 
 ### `DELETE /session`
 Clears `__session` (Max-Age=0). `204`.
+
+### `GET /healthz`, `HEAD /healthz`
+
+Public operational status, never user data: read an operational Firestore path
+(absence is acceptable) and validate the private Storage health marker. Perform
+no writes and bound the dependency checks to five seconds. Return `200` with
+`{"status":"ok"}` or `503` with `{"status":"degraded"}`; HEAD has no body.
+All responses, including method refusals, MUST be `private, no-store`. Dependency
+identities and errors MUST NOT appear in the response. An operator provisions
+the marker before deploying the endpoint. This is dependency availability, not
+proof of private sign-in or document writes.
 
 ### `GET /config`
 Public. Returns `{ signInHint?: string }` — a deployment-authored sentence for
@@ -1028,11 +1040,12 @@ contrast. Brand chrome only — **never restyle embedded document content.**
 
 ```
 functions/src/
+  health.json                          operational marker contract
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
-  lib/{head,html,htmltext,http,marking,thumbs,shell}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell}.ts
   lib/{storage,versions,publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts

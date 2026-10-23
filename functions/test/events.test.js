@@ -356,7 +356,7 @@ test("every way to change a document records an event, or says why it need not",
   // watcher. A new endpoint or tool fails here until somebody decides.
   const EXEMPT = {
     // Endpoints
-    session: "signs in", appConfig: "reads", createDoc: "a new version: recordVersionEvent", createFolder: "a folder, no document",
+    session: "signs in", appConfig: "reads", health: "operational dependency reads only", createDoc: "a new version: recordVersionEvent", createFolder: "a folder, no document",
     setFolderAccess: "a cascade; get_changes reports state.readers", setMarking: "export marking, not who reads",
     manageTeam: "a cascade", manageTeamMembers: "a cascade", manageTokens: "credentials", recordView: "statistics",
     unlockDoc: "a reader's own grant", saveDraft: "state.draft", commitVersion: "a new version: recordVersionEvent",

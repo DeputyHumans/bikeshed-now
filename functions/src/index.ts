@@ -15,6 +15,9 @@
  */
 
 import { StaleVersionError } from "./lib/versions";
+import { healthHandler } from "./lib/health";
+import healthConfig from "./health.json";
+import { setGlobalOptions } from "firebase-functions/v2/options";
 import { draftStoragePrefix, versionStoragePrefix } from "./lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -184,6 +187,9 @@ import {
   type InviteTarget,
 } from "./email/notify";
 
+// Runtime update policy is managed by the operator API until the SDK exposes it.
+setGlobalOptions({ preserveExternalChanges: true });
+
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
@@ -216,6 +222,16 @@ const EXPIRED_WRITE = "this document has expired — change or clear its expiry 
 /** Functions that may send email declare the secret; the rest never load it. */
 const MAILING = { region: REGION, secrets: [RESEND_API_KEY] };
 const PLAIN = { region: REGION };
+
+/** Public operational health; never reads user documents or writes state. */
+export const health = onRequest({ ...PLAIN, timeoutSeconds: 10 }, healthHandler({
+  firestore: () => db().doc(healthConfig.firestorePath).get(),
+  storage: async () => {
+    const [bytes] = await bucket().file(healthConfig.storagePath).download({ start: 0, end: 63, validation: false });
+    if (bytes.toString("utf8") !== healthConfig.marker) throw new Error("health marker mismatch");
+  },
+  report: (dependency) => console.error(JSON.stringify({ severity: "ERROR", event: "dependency_health_failed", dependency })),
+}));
 
 // ---------------------------------------------------------------------------
 // Session

@@ -1,5 +1,8 @@
 # Operations
 
+[Monitoring and manual recovery](monitoring.md) covers dependency health,
+email alerts, hourly audits, runtime maintenance and incident response.
+
 Deploying a Bikeshed, running it, and taking it down. Every command here is
 copy-pasteable; the ones that can run without a deployment are run by CI.
 

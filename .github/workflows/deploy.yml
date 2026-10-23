@@ -109,6 +109,11 @@ jobs:
           workload_identity_provider: ${{ secrets.PRODUCTION_WIF_PROVIDER }}
           service_account: ${{ secrets.PRODUCTION_DEPLOY_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Preserve deployment evidence
+        run: node scripts/ops.mjs snapshot --project "$PROJECT" --output /tmp/bikeshed-ops/before.json
+
       - name: Install the Firebase CLI
         run: npm install --global "firebase-tools@$FIREBASE_TOOLS_VERSION"
 
@@ -122,6 +127,9 @@ jobs:
         run: |
           only=$(node --input-type=module -e 'import { functionNames } from "./scripts/lib/endpoints.mjs"; process.stdout.write(functionNames().map((n) => "functions:" + n).join(","))')
           firebase deploy --only "$only" --force --project "$PROJECT" --non-interactive
+
+      - name: Enforce runtime updates on deployment
+        run: node scripts/ops.mjs runtime-policy --project "$PROJECT" --apply
 
       # Before hosting, so no visitor ever loads an app newer than the rules it
       # is written against. RTDB rules only where an instance exists, as
@@ -164,3 +172,41 @@ jobs:
           status=$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/unlock")
           [ "$status" = "405" ] || { echo "GET /unlock answered $status, not 405"; exit 1; }
           echo "live index is this build; functions are invokable"
+
+      - name: Verify dependencies, revisions and runtime policy
+        run: node scripts/ops.mjs audit --project "$PROJECT" --origin "$ORIGIN" --output /tmp/bikeshed-ops/after.json
+
+      - name: Capture final revision metadata
+        if: always()
+        run: node scripts/ops.mjs snapshot --project "$PROJECT" --output /tmp/bikeshed-ops/final.json
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: deployment-evidence
+          path: /tmp/bikeshed-ops/*.json
+          retention-days: 30
+
+  report:
+    name: report production outcome
+    needs: [ci, production]
+    if: always() && github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.PRODUCTION_WIF_PROVIDER }}
+          service_account: ${{ secrets.PRODUCTION_OPS_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Report outcome independently of the deployment job
+        env:
+          PROJECT: ${{ secrets.PRODUCTION_FIREBASE_PROJECT }}
+          DEPLOY_RESULT: ${{ needs.production.result }}
+        run: node scripts/ops.mjs report --project "$PROJECT" --result "$DEPLOY_RESULT"
