@@ -92,6 +92,25 @@ test("runtime maintenance patches only the policy and skips functions already us
   assert.deepEqual(calls[0].body, { name: "projects/demo-bikeshed/locations/region/functions/health", buildConfig: { onDeployUpdatePolicy: {} } });
 });
 
+test("audit scheduling gaps warn after six hours and do not repeat every thirty minutes", () => {
+  const policy = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks: [] }).find((x) => x.userLabels.ops_key === "audit_missing");
+  assert.equal(policy.conditions[0].conditionAbsent.duration, "21600s");
+  assert.equal(policy.alertStrategy.notificationChannelStrategy[0].renotifyInterval, "21600s");
+  assert.equal(policy.severity, "WARNING");
+  assert.match(policy.documentation.content, /not evidence of an application outage/);
+});
+
+test("provider notifications exclude resolutions, unrelated incidents and routine description updates", () => {
+  const policy = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks: [] }).find((x) => x.userLabels.ops_key === "provider_incident");
+  // Pin the API filter, rather than a local reimplementation of Cloud Logging matching.
+  assert.equal(policy.conditions[0].conditionMatchedLog.filter,
+    'log_id("servicehealth.googleapis.com/activity") AND jsonPayload.category="INCIDENT"' +
+    ' AND jsonPayload.state="ACTIVE" AND jsonPayload.detailedState="CONFIRMED"' +
+    ' AND jsonPayload.relevance=("IMPACTED" OR "RELATED")' +
+    ' AND (labels.new_event="true" OR labels.updated_fields:("state" OR "relevance"))');
+  assert.equal(policy.severity, "WARNING");
+});
+
 test("dashboard reconciliation tolerates the API omitting default empty scalar fields", () => {
   const desired = dashboardDefinition("demo-bikeshed");
   const api = JSON.parse(JSON.stringify(desired, (_key, value) => value === "" ? undefined : value));

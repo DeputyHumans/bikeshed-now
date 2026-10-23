@@ -50,12 +50,23 @@ export function alertDefinitions({ project, channel, checks }) {
     base("operations_attention", [{ displayName: "Deployment, audit or runtime maintenance needs attention", conditionMatchedLog: {
       filter: 'log_id("bikeshed-ops") AND (jsonPayload.event="deployment_failed" OR (jsonPayload.event="ops_audit" AND jsonPayload.result="failed") OR jsonPayload.event="runtime_patch_due")',
     } }], true),
-    base("provider_incident", [{ displayName: "Project-relevant provider incident", conditionMatchedLog: {
-      filter: 'log_id("servicehealth.googleapis.com/activity") AND jsonPayload.category="INCIDENT"',
-    } }], true),
-    base("audit_missing", [{ displayName: "No audit heartbeat for two hours", conditionAbsent: {
-      filter: metric(`logging.googleapis.com/user/${HEARTBEAT}`, "global"), duration: "7200s", trigger: { count: 1 }, aggregations: sum(60),
-    } }]),
+    { ...base("provider_incident", [{ displayName: "Active confirmed provider incident affecting this project", conditionMatchedLog: {
+      // Service Health emits description updates and resolutions as INCIDENT logs too.
+      filter: 'log_id("servicehealth.googleapis.com/activity") AND jsonPayload.category="INCIDENT"' +
+        ' AND jsonPayload.state="ACTIVE" AND jsonPayload.detailedState="CONFIRMED"' +
+        ' AND jsonPayload.relevance=("IMPACTED" OR "RELATED")' +
+        ' AND (labels.new_event="true" OR labels.updated_fields:("state" OR "relevance"))',
+    } }], true), severity: "WARNING",
+      documentation: { mimeType: "text/markdown", content: `Google reports a new or materially changed, active confirmed incident affecting this project or a product and location it uses. Check Service Health for the affected product, location, and mitigation. A provider warning alone does not establish a Bikeshed outage.\n\n` +
+        `Description-only updates, resolved incidents, and unrelated locations do not send new alerts. Follow the existing provider incident for progress; use fresh availability checks to establish application impact.\n\n${docs}` },
+    },
+    { ...base("audit_missing", [{ displayName: "Operations audit has not completed for six hours", conditionAbsent: {
+      filter: metric(`logging.googleapis.com/user/${HEARTBEAT}`, "global"), duration: "21600s", trigger: { count: 1 }, aggregations: sum(60),
+    } }]), severity: "WARNING",
+      documentation: { mimeType: "text/markdown", content: `The scheduled metadata audit has not completed for six hours. This is a monitoring gap, not evidence of an application outage.\n\n` +
+        `Check the latest operations workflow, its schedule, and authentication. Dispatch it manually if needed. GitHub schedules can be delayed; successful runs have arrived more than five hours apart. The independent minute-by-minute availability checks remain active.\n\n${docs}` },
+      alertStrategy: { autoClose: "86400s", notificationPrompts: ["OPENED", "CLOSED"], notificationChannelStrategy: [{ notificationChannelNames: [channel], renotifyInterval: "21600s" }] },
+    },
   ];
 }
 

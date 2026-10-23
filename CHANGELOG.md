@@ -14,6 +14,15 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Treat delayed operations audits as six-hour monitoring warnings with fewer
+  reminders; retain fast independent availability alerts.
+- Notify on active, confirmed, relevant provider incident transitions instead
+  of routine updates and resolutions, with clearer investigation guidance.
+
 ## 0.20.1 — 2026-10-22
 
 ### Fixed

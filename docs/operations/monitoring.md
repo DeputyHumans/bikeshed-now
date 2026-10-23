@@ -43,8 +43,10 @@ the deployer needs no new private-bucket write access.
 
 Enable GitHub notification settings → Actions → Email → failed workflows only
 for the operator as a separate path when Google authentication or Logging fails.
-GitHub schedules can be delayed; the independent two-hour missing-heartbeat
-alert detects a stopped audit after its first successful heartbeat.
+GitHub schedules can be delayed by hours; the independent six-hour missing-heartbeat
+warning detects a stopped audit after its first successful heartbeat. The audit
+is requested hourly, not guaranteed hourly. Minute-by-minute uptime checks run
+independently in Cloud Monitoring and remain the application availability signal.
 
 ## Signals
 
@@ -55,12 +57,18 @@ alert detects a stopped audit after its first successful heartbeat.
 | Startup/readiness | Ready condition changes to false in Cloud Run system-event logs |
 | Event delivery | Eventarc subscription oldest unacknowledged message over five minutes for two minutes |
 | Deployment/audit | Failed production workflow or failed/drifting audit |
-| Provider | Project-relevant Personalized Service Health incident |
-| Audit missing | No audit log heartbeat for two hours |
+| Provider | New or materially changed, active confirmed incident with `IMPACTED` or `RELATED` relevance |
+| Audit missing | No audit log heartbeat for six hours; warning about monitoring coverage |
 | Runtime maintenance | Monday 16 UTC: actual function build older than fourteen days |
 
 All notifications go to the configured email. Availability incidents send
 recovery notifications and repeat after thirty minutes while unresolved.
+Missing-audit warnings repeat only every six hours and send a recovery notice.
+Provider warnings exclude resolved/emerging incidents, unrelated locations and
+description-only updates. They alert on a new event or a state/relevance change;
+follow the provider incident for subsequent updates. These two warnings do not
+by themselves establish an application outage. The provider filter uses the
+[documented Service Health log fields](https://docs.cloud.google.com/service-health/docs/logs).
 Log-based alerts throttle to thirty minutes; their automatic closure is **not**
 evidence of recovery. The dashboard shows uptime, backend errors, p95 latency
 and event backlog. The audit checks the desired monitoring definitions, enabled
@@ -73,6 +81,12 @@ deployment/operator identity runs it. The audit never does. A Firebase
 "Skipped (No changes detected)" is not a runtime refresh. When reminded, plan
 and execute an actual rebuild, verify its Cloud Build completion time, and
 observe production. No scheduled production refresh is enabled.
+
+The six-hour audit threshold accommodates observed successful scheduled runs
+more than five hours apart. If gaps exceed it, inspect GitHub schedule delivery
+and the audit's authentication, then dispatch a manual run. If reliably hourly
+metadata inspection becomes necessary, move the trigger to a scheduler with a
+delivery guarantee instead of treating GitHub scheduling delays as app outages.
 
 ## Incident response
 
