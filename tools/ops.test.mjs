@@ -107,7 +107,7 @@ test("provider notifications exclude resolutions, unrelated incidents and routin
     'log_id("servicehealth.googleapis.com/activity") AND jsonPayload.category="INCIDENT"' +
     ' AND jsonPayload.state="ACTIVE" AND jsonPayload.detailedState="CONFIRMED"' +
     ' AND jsonPayload.relevance=("IMPACTED" OR "RELATED")' +
-    ' AND (labels.new_event="true" OR labels.updated_fields:("state" OR "relevance"))');
+    ' AND (labels."servicehealth.googleapis.com/new_event"="true" OR labels."servicehealth.googleapis.com/updated_fields":("state" OR "relevance"))');
   assert.equal(policy.severity, "WARNING");
 });
 

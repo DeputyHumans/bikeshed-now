@@ -55,7 +55,7 @@ export function alertDefinitions({ project, channel, checks }) {
       filter: 'log_id("servicehealth.googleapis.com/activity") AND jsonPayload.category="INCIDENT"' +
         ' AND jsonPayload.state="ACTIVE" AND jsonPayload.detailedState="CONFIRMED"' +
         ' AND jsonPayload.relevance=("IMPACTED" OR "RELATED")' +
-        ' AND (labels.new_event="true" OR labels.updated_fields:("state" OR "relevance"))',
+        ' AND (labels."servicehealth.googleapis.com/new_event"="true" OR labels."servicehealth.googleapis.com/updated_fields":("state" OR "relevance"))',
     } }], true), severity: "WARNING",
       documentation: { mimeType: "text/markdown", content: `Google reports a new or materially changed, active confirmed incident affecting this project or a product and location it uses. Check Service Health for the affected product, location, and mitigation. A provider warning alone does not establish a Bikeshed outage.\n\n` +
         `Description-only updates, resolved incidents, and unrelated locations do not send new alerts. Follow the existing provider incident for progress; use fresh availability checks to establish application impact.\n\n${docs}` },

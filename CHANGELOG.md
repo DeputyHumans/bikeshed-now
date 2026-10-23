@@ -14,6 +14,13 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Match the fully qualified Service Health label names emitted by Google so
+  initial relevant incidents remain detectable while routine updates are filtered.
+
 ## 0.20.2 — 2026-10-23
 
 ### Fixed
