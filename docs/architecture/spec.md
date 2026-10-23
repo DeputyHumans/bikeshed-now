@@ -124,7 +124,7 @@ which also holds this table to them.
 |---|---|
 | `/session` | `session` |
 | `/config` | `appConfig` |
-| `/healthz` | `health` |
+| `/health` | `health` |
 | `/access` | `setAccess` |
 | `/publish` | `createDoc` |
 | `/folder` | `createFolder` |
@@ -207,7 +207,7 @@ rejection as a *state* rather than a failure.
 ### `DELETE /session`
 Clears `__session` (Max-Age=0). `204`.
 
-### `GET /healthz`, `HEAD /healthz`
+### `GET /health`, `HEAD /health`
 
 Public operational status, never user data: read an operational Firestore path
 (absence is acceptable) and validate the private Storage health marker. Perform

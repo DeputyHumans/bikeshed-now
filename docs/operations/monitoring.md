@@ -2,7 +2,9 @@
 
 The hourly audit and Cloud Monitoring report problems; neither pauses, rolls
 back nor redeploys production. The normal all-functions deployment remains.
-`/healthz` reads Firestore and a fixed private Storage marker on every request.
+`/health` reads Firestore and a fixed private Storage marker on every request.
+The exact path `/healthz` returned a front-end 404 on the real deployment,
+while `/health` reached the handler; the production route is therefore `/health`.
 It returns only a status, within five seconds, with `private, no-store` on
 success, failure, HEAD and unsupported methods (SPEC §2). A missing Firestore
 operational document is acceptable; a missing or different Storage marker is

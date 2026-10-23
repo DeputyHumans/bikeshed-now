@@ -14,8 +14,8 @@ const threshold = (filter, value, duration = "0s", aggregations = sum()) => ({ f
 export function uptimeDefinitions({ origin, directOrigin }) {
   return [
     ["landing", origin, "/", 'id="root"'],
-    ["health_hosted", origin, "/healthz", '"status":"ok"'],
-    ["health_direct", directOrigin, "/healthz", '"status":"ok"'],
+    ["health_hosted", origin, "/health", '"status":"ok"'],
+    ["health_direct", directOrigin, "/health", '"status":"ok"'],
   ].map(([key, base, path, content]) => ({
     displayName: title(key), userLabels: labels(key), disabled: false,
     monitoredResource: { type: "uptime_url", labels: { host: new URL(base).hostname, project_id: "" } },
@@ -61,7 +61,7 @@ export function alertDefinitions({ project, channel, checks }) {
 
 export function dashboardDefinition(project) {
   const chart = (heading, filter, aligner, reducer, groupByFields = []) => ({ title: heading, xyChart: { dataSets: [{ timeSeriesQuery: {
-    timeSeriesFilter: { filter, aggregation: { alignmentPeriod: "60s", perSeriesAligner: aligner, crossSeriesReducer: reducer, groupByFields } }, unitOverride: "",
+    timeSeriesFilter: { filter, aggregation: { alignmentPeriod: "60s", perSeriesAligner: aligner, crossSeriesReducer: reducer, groupByFields } },
   }, plotType: "LINE" }] } });
   const widgets = [
     { title: "Manual recovery", text: { format: "MARKDOWN", content: `Project: ${project}. Alerts do not trigger deployments or rollbacks. [Runbook](https://github.com/DeputyHumans/bikeshed-now/blob/main/docs/operations/monitoring.md)` } },

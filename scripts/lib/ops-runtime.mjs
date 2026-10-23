@@ -90,7 +90,7 @@ export async function ensureMarker(client, bucket) {
 export async function probe(origin, fetcher = fetch) {
   if (new URL(origin).protocol !== "https:") throw new Error("Health probes require HTTPS");
   try {
-    const response = await fetcher(new URL("/healthz", origin), { signal: AbortSignal.timeout(10_000), redirect: "error" });
+    const response = await fetcher(new URL("/health", origin), { signal: AbortSignal.timeout(10_000), redirect: "error" });
     return response.status === 200 && response.headers.get("cache-control") === "private, no-store" && (await response.text()).trim() === '{"status":"ok"}';
   } catch { return false; }
 }

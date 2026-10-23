@@ -3,7 +3,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cloudClient } from "../scripts/lib/ops-cloud.mjs";
-import { alertDefinitions, reconcileResource, uptimeDefinitions, OWNER } from "../scripts/lib/ops-monitoring.mjs";
+import { alertDefinitions, dashboardDefinition, reconcileResource, uptimeDefinitions, OWNER } from "../scripts/lib/ops-monitoring.mjs";
+import { matchesShape } from "../scripts/lib/ops-cloud.mjs";
+import { ENDPOINTS } from "../scripts/lib/endpoints.mjs";
 import { fleetFindings, snapshot, probe, ensureMarker, ensureRuntimePolicy, healthConfig } from "../scripts/lib/ops-runtime.mjs";
 
 test("refresh an expired credential once and refuse non-Google forwarding", async () => {
@@ -45,7 +47,10 @@ test("fleet audit rejects policy, readiness, missing-function and traffic drift;
 test("a cached response, wrong body, error status or network failure cannot satisfy health", async () => {
   const origin = "https://example.invalid";
   const good = () => new Response('{"status":"ok"}', { headers: { "cache-control": "private, no-store" } });
-  assert.equal(await probe(origin, async () => good()), true);
+  assert.equal(await probe(origin, async (url) => {
+    assert.equal(url.pathname, ENDPOINTS.find((x) => x.fn === "health").path);
+    return good();
+  }), true);
   for (const response of [new Response('{"status":"ok"}'), new Response('{}', { headers: { "cache-control": "private, no-store" } }), new Response('{"status":"ok"}', { status: 503, headers: { "cache-control": "private, no-store" } })]) {
     assert.equal(await probe(origin, async () => response), false);
   }
@@ -63,6 +68,7 @@ test("marker provisioning is create-only, verifies existing bytes and refuses mi
 test("availability requires two failing regions for two minutes and includes repeat notifications", () => {
   const checks = uptimeDefinitions({ origin: "https://example.invalid", directOrigin: "https://direct.invalid" }).map((x, i) => ({ ...x, name: `projects/demo-bikeshed/uptimeCheckConfigs/${i}` }));
   assert.equal(checks.length, 3);
+  for (const check of checks.slice(1)) assert.equal(check.httpCheck.path, ENDPOINTS.find((x) => x.fn === "health").path);
   for (const check of checks) { assert.equal(check.disabled, false); assert.equal(check.period, "60s"); assert.equal(check.selectedRegions.length, 3); assert.equal(check.timeout, "10s"); }
   const policies = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks });
   assert.equal(policies.length, 9);
@@ -84,4 +90,12 @@ test("runtime maintenance patches only the policy and skips functions already us
   assert.equal(calls.length, 1);
   assert.equal(new URL(calls[0].url).searchParams.get("updateMask"), "buildConfig.automaticUpdatePolicy,buildConfig.onDeployUpdatePolicy");
   assert.deepEqual(calls[0].body, { name: "projects/demo-bikeshed/locations/region/functions/health", buildConfig: { onDeployUpdatePolicy: {} } });
+});
+
+test("dashboard reconciliation tolerates the API omitting default empty scalar fields", () => {
+  const desired = dashboardDefinition("demo-bikeshed");
+  const api = JSON.parse(JSON.stringify(desired, (_key, value) => value === "" ? undefined : value));
+  assert.ok(matchesShape(api, desired));
+  api.gridLayout.widgets[1].xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter.filter = "wrong metric";
+  assert.equal(matchesShape(api, desired), false);
 });

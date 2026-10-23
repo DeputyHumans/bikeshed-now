@@ -37,7 +37,7 @@
 export const ENDPOINTS = [
   { path: "/session", fn: "session", match: "exact" },
   { path: "/config", fn: "appConfig", match: "exact" },
-  { path: "/healthz", fn: "health", match: "exact" },
+  { path: "/health", fn: "health", match: "exact" },
   { path: "/access", fn: "setAccess", match: "exact" },
   { path: "/publish", fn: "createDoc", match: "exact" },
   { path: "/folder", fn: "createFolder", match: "exact" },

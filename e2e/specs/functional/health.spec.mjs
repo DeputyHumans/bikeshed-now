@@ -13,15 +13,15 @@ scenario("health: valid → corrupt → missing → valid reads recover without 
   try {
     for (const state of ["valid", "corrupt", "missing", "valid"]) {
       await healthMarker(target, state);
-      const res = await http.get("/healthz");
+      const res = await http.get("/health");
       assert.equal(res.status, state === "valid" ? 200 : 503);
       assert.deepEqual(res.json, { status: state === "valid" ? "ok" : "degraded" });
       assert.equal(res.headers.get("cache-control"), "private, no-store");
     }
-    const head = await http.head("/healthz");
+    const head = await http.head("/health");
     assert.equal(head.status, 200); assert.equal(head.text, "");
     assert.equal(head.headers.get("cache-control"), "private, no-store");
-    const post = await http.post("/healthz");
+    const post = await http.post("/health");
     assert.equal(post.status, 405); assert.equal(post.headers.get("cache-control"), "private, no-store");
   } finally { await healthMarker(target, "valid"); }
 });
