@@ -111,6 +111,21 @@ findings automatically.
 
 ## Updating evidence and closing items
 
+For the real-cloud notification witness, `tools/e2e-cloud-cooldown.mjs` judges
+retained automatic-trigger and cooldown-call logs against stored synthetic
+comments, recipient receipts and captured provider requests. It binds log rows
+to the deployed service, revision and function hash. Only intervals on the same
+instance establish overlap; overlapping trigger lifetimes alone do not prove
+overlapping cooldown calls. Both comment and suggestion calls must overlap,
+with exactly one grant and one captured notice for each kind.
+
+This measurement judge does not close a campaign item or admit a matrix cell.
+The deployment source, observation-only changes, complete participant/trial
+matrix and red/restored product controls must also be retained and reviewed.
+Hosting preview channels share their project's backends: use dedicated test
+function names, a named test database and test bucket, with an identity denied
+access to the production database. A preview URL alone provides no isolation.
+
 `state` is `open`, `in-progress`, `historical-closed` (imported coverage only),
 or `resolved`. Keep the original observation and defect IDs. New findings go
 in `discoveries`; do not overwrite the baseline. To resolve an item, add a

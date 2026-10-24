@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Check real-cloud notification evidence against automatic trigger identities, deployed function hashes, overlapping cooldown calls on the same instance, committed receipts and captured recipient/kind counts.
+
 - Verify concurrency partitions against executable case, participant and trial inventories, retaining each original completed invocation rather than manufacturing a full-suite result. Reject incomplete partitions and stale source or capability evidence.
 
 - Bound harness self-test file concurrency and use independent user contexts for simultaneous browser actors; retain the measured timing limits and negative controls. Refresh access-race patch context after health integration.
