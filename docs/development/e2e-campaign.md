@@ -85,6 +85,22 @@ the plan defaults (10,5,3,3 for N=2,5,10,20). Run measurement cells sequentially
 under the exclusive tier lock. Keep the load and memory admission gates and
 JVM caps intact; an interrupted or refused cell remains incomplete.
 
+## Partitioned concurrency evidence
+
+A full natural concurrency cell can be measured one complete spec file per fresh
+stack. `tools/e2e-partitions.mjs` obtains its census by executing declarations
+without a target: every case must be skipped with the exact no-target reason.
+The manifest binds that executable census, source digests and original matrix
+requirement to every constituent report. Each report retains its real invocation,
+completion metadata, reporter records, runtime attestation and stack identity.
+
+Import a completed manifest with `node tools/e2e-campaign-evidence.mjs
+import-partitions --campaign <proposal> --artifact <manifest> --out
+<new-proposal>`. A partial file, trial override, missing/duplicate partition,
+changed capability, stale source, failure or unjudged case is refused. Importing
+never resolves a finding. Capability skips still require the usual complementary
+passing evidence; partitioning does not excuse them.
+
 ## Updating evidence and closing items
 
 `state` is `open`, `in-progress`, `historical-closed` (imported coverage only),

@@ -16,6 +16,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Verify concurrency partitions against executable case, participant and trial inventories, retaining each original completed invocation rather than manufacturing a full-suite result. Reject incomplete partitions and stale source or capability evidence.
+
+- Bound harness self-test file concurrency so independent Chrome timing probes do not flood the same machine; retain the measured timing limits and negative controls. Refresh access-race patch context after health integration.
+
 - Integrate the E2E campaign repairs with production health monitoring and refreshed landing media.
 
 - Recognize the exact concurrent-snapshot draft refusal in the C12 publication race test, retaining all final-state and next-reader checks instead of rejecting safe concurrent saves before those checks run.

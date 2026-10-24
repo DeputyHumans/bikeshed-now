@@ -14,6 +14,7 @@ import { localLimitReference, verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { captureComposite, compositeReference, verifyComposite } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { verifyPartitions, partitionDigest } from "./e2e-partitions.mjs";
 import { APPROVED_RTDB_DERIVATION, createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged, assertSameRtdbControlEngine } from "./e2e-rtdb-attestation.mjs";
 
 import { RTDB_STOCK_PIN } from "../e2e/lib/rtdb-runtime.mjs";
@@ -134,6 +135,26 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
   artifacts.assertUnchanged();
   assertRtdbAttestationCacheUnchanged(runtimeCache);
   return { candidate, importedCases: loaded.report.cases.filter((c) => pass(c) || fail(c)).length, unfinished: unfinished.map((c) => ({ id: c.id, status: c.status })) };
+}
+
+/** Import complete file partitions without inventing a whole-suite invocation. */
+export function importPartitions(campaign, manifestPath, { root = ROOT, inventory } = {}) {
+  const rel = localPath(root, manifestPath), bytes = readFileSync(resolve(root, rel)), manifest = JSON.parse(bytes);
+  const cell = campaign.acceptance.requirements.find(r => r.id === manifest.cell);
+  const rows = verifyPartitions(campaign, cell, manifest, { root, inventory });
+  let candidate = structuredClone(campaign);
+  const ids = [];
+  for (const { id, ref, report } of rows) {
+    candidate = importRun(candidate, ref.artifact, { root }).candidate;
+    upsert(candidate.proofs, { id, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version,
+      fingerprint: candidate.acceptance.fingerprint, artifact: ref.artifact, runId: report.runId, invocation: report.invocation.id,
+      outcome: "PASS", partition: { artifact: rel, sha256: partitionDigest(bytes) } });
+    ids.push(id);
+  }
+  const target = candidate.acceptance.requirements.find(r => r.id === cell.id);
+  need(target.proofs.length === 0 || JSON.stringify([...target.proofs].sort()) === JSON.stringify(ids.toSorted()), "partition import would replace different matrix evidence");
+  target.proofs = ids;
+  return { candidate, importedPartitions: ids.length };
 }
 
 /** Capture an actual pinned probe after the matrix runs, bound to unchanged frozen source. */
@@ -278,8 +299,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   else if (command === "capture-composite") { need(values.manifest, "--manifest is required"); captureCompositeEvidence(c, json(resolve(ROOT, localPath(ROOT, values.manifest))), values.out); }
   else {
     need(values.artifact, "--artifact is required");
-    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell, localLimitArtifact: values["local-limit"], compositeArtifact: values.composite }) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
-    need(result, "expected plan, capture, capture-local-limit, capture-composite, import-run, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
-    process.stdout.write(JSON.stringify({ imported: result.imported ?? result.importedCases ?? null, refused: result.refused ?? [], unfinished: result.unfinished ?? [] }) + "\n");
+    const result = command === "import-run" ? importRun(c, values.artifact, { cellId: values.cell, localLimitArtifact: values["local-limit"], compositeArtifact: values.composite }) : command === "import-partitions" ? importPartitions(c, values.artifact) : command === "import-controls" ? importControls(c, values.artifact) : command === "import-command" ? importCommand(c, values.artifact, { cellId: values.cell }) : null;
+    need(result, "expected plan, capture, capture-local-limit, capture-composite, import-run, import-partitions, import-controls or import-command"); writeProposal(ROOT, values.out, result.candidate);
+    process.stdout.write(JSON.stringify({ imported: result.imported ?? result.importedCases ?? result.importedPartitions ?? null, refused: result.refused ?? [], unfinished: result.unfinished ?? [] }) + "\n");
   }
 }

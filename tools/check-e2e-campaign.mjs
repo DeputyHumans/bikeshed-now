@@ -10,6 +10,7 @@ import { verifyLocalLimit } from "./e2e-local-limit.mjs";
 import { verifyComposite, COMPOSITE_ITEM } from "./e2e-c14-composite.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
+import { verifyPartitions, partitionDigest, concurrencyInventory } from "./e2e-partitions.mjs";
 import { createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged, assertSameRtdbControlEngine } from "./e2e-rtdb-attestation.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -136,6 +137,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   if (!validateOnly) {
     if (!SHA.test(acceptance.revision) || !text(acceptance.version)) pending.push("acceptance: pin the exact tested revision and version");
     const loaded = new Map(), artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache();
+    const partitionSets = new Map();
+    let partitionInventory;
     for (const p of proofs.values()) {
       try {
         need(p.revision === acceptance.revision && p.version === acceptance.version, `${p.id}: evidence differs from the acceptance revision/version`);
@@ -243,10 +246,26 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         continue;
       }
       const { report, stack } = got;
+      let partitioned = false;
+      if (proofs.get(id)?.partition) {
+        try {
+          const ref = proofs.get(id).partition, path = artifact(ref.artifact);
+          need(artifacts.digest(path) === ref.sha256, `matrix:${r.id}: partition manifest digest differs`);
+          const cacheKey = `${r.id}:${ref.artifact}`;
+          if (!partitionSets.has(cacheKey)) {
+            partitionInventory ??= concurrencyInventory(root);
+            partitionSets.set(cacheKey, verifyPartitions(campaign, r, artifacts.json(path), { root, inventory: partitionInventory }));
+          }
+          const parts = partitionSets.get(cacheKey);
+          need(JSON.stringify(parts.map(p => p.id).sort()) === JSON.stringify([...r.proofs].sort()), `matrix:${r.id}: partition proof set differs`);
+          partitioned = parts.some(p => p.id === id && p.ref.artifact === proofs.get(id).artifact);
+          need(partitioned, `matrix:${r.id}: proof is not in its partition manifest`);
+        } catch (error) { errors.push(`matrix:${r.id}: ${error.message}`); }
+      }
       need(report.invocation?.suite === r.suite, `matrix:${r.id}: wrong suite`);
       need(!report.invocation?.grep, `matrix:${r.id}: a full matrix cell may not use --grep`);
       if (r.spec) need(array(report.cases).some((c) => basename(c.file ?? "") === r.spec), `matrix:${r.id}: required spec was not executed`);
-      else need(array(report.invocation?.spec).length === 0 && !report.invocation?.grep, `matrix:${r.id}: full suite may not be filtered`);
+      else need(partitioned || array(report.invocation?.spec).length === 0 && !report.invocation?.grep, `matrix:${r.id}: full suite may not be filtered`);
       if (r.n) need(report.invocation?.n?.length === 1 && report.invocation.n[0] === r.n && array(report.cases).some((c) => c.n === r.n), `matrix:${r.id}: N=${r.n} was not executed`);
       if (r.planTrials) need(report.invocation?.trials === null, `matrix:${r.id}: use plan-default trial counts`);
       for (const cap of array(r.capabilities)) need(report.invocation?.capabilities?.includes(cap), `matrix:${r.id}: missing capability ${cap}`);
