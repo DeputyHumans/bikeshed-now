@@ -192,7 +192,7 @@ async function selfTest() {
   log(`self-test toolchain: ${JSON.stringify({ node: toolchain.node, firebase: toolchain.firebase })}`);
   const files = readdirSync(SELFTEST_DIR).filter((n) => n.endsWith(".test.mjs")).sort().map((n) => join(SELFTEST_DIR, n));
   if (files.length === 0) fail("no self-tests found");
-  const child = spawn(toolchain.node.executable, ["--test", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit" });
+  const child = spawn(toolchain.node.executable, ["--test", "--test-concurrency=2", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit" });
   const code = await new Promise((r) => child.on("close", (c) => r(c ?? 1)));
   process.exit(code);
 }

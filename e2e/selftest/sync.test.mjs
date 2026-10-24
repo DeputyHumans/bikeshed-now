@@ -113,8 +113,10 @@ test("NEGATIVE: the same requests sent one after another fail the overlap proof"
 test("syncPages fires three pages within the browser limit, and holdRequests releases N held requests together", async () => {
   const { browser } = await launchChrome();
   try {
-    const ctx = await browser.newContext();
-    const pages = await Promise.all([0, 1, 2].map(() => ctx.newPage()));
+    // Match the user pool: independent people have independent contexts.
+    // Background tabs sharing a context can have their timers coalesced.
+    const contexts = await Promise.all([0, 1, 2].map(() => browser.newContext()));
+    const pages = await Promise.all(contexts.map((context) => context.newPage()));
     await Promise.all(pages.map((p) => p.goto(`${srv.url}/warm/page`)));
     // Best of three measurements. What this proves is that the barrier CAN
     // fire three pages within the browser limit; one slow measurement on a
@@ -138,7 +140,7 @@ test("syncPages fires three pages within the browser limit, and holdRequests rel
 
     // SYNC-H: three pages each fetch; nothing reaches the server until release.
     const base = srv.arrivals.length;
-    const hold = holdRequests(ctx, "**/held/**", 3);
+    const hold = holdRequests(contexts, "**/held/**", 3);
     await hold.installed;
     const fetches = pages.map((p, i) => p.evaluate((u) => fetch(u).then((r) => r.text()), `${srv.url}/held/${i}`));
     const recs = await hold.held;
@@ -153,8 +155,8 @@ test("syncPages fires three pages within the browser limit, and holdRequests rel
     assert.equal(released.overlap.ok, true, JSON.stringify(released));
 
     // NEGATIVE: one held request answered before the second is released.
-    const first = holdRequests(ctx, "**/one/**", 1);
-    const second = holdRequests(ctx, "**/two/**", 1);
+    const first = holdRequests(contexts, "**/one/**", 1);
+    const second = holdRequests(contexts, "**/two/**", 1);
     await Promise.all([first.installed, second.installed]);
     const f1 = pages[0].evaluate((u) => fetch(u).then((r) => r.text()), `${srv.url}/one/0`);
     const f2 = pages[1].evaluate((u) => fetch(u).then((r) => r.text()), `${srv.url}/two/0`);
@@ -168,7 +170,7 @@ test("syncPages fires three pages within the browser limit, and holdRequests rel
     assert.equal(sequential.reason, "no-overlap");
 
     // NEGATIVE: waiting for 3 when only 2 come is a timeout, not a silent pass.
-    const short = holdRequests(ctx, "**/short/**", 3, { timeoutMs: 800 });
+    const short = holdRequests(contexts, "**/short/**", 3, { timeoutMs: 800 });
     await short.installed;
     const two = pages.slice(0, 2).map((p, i) => p.evaluate((u) => fetch(u).then((r) => r.text()), `${srv.url}/short/${i}`));
     await assert.rejects(short.held, (e) => e.code === "E2E_SYNC_TIMEOUT" && e.held === 2);

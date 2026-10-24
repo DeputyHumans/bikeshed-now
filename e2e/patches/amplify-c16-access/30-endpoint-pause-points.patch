@@ -10,10 +10,10 @@
    await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -17,2 +17,3 @@
- import { versionStoragePrefix } from "./lib/storage";
+@@ -22,2 +22,3 @@
 +import { e2eAccessGate } from "./lib/e2eAccessGate";
  import { onRequest, type Request } from "firebase-functions/v2/https";
+ import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 @@ -2383,2 +2384,3 @@
    const ref = db().collection("teams").doc(teamId);
 +  await e2eAccessGate("team-members-after-read", teamId);

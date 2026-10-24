@@ -18,7 +18,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - Verify concurrency partitions against executable case, participant and trial inventories, retaining each original completed invocation rather than manufacturing a full-suite result. Reject incomplete partitions and stale source or capability evidence.
 
-- Bound harness self-test file concurrency so independent Chrome timing probes do not flood the same machine; retain the measured timing limits and negative controls. Refresh access-race patch context after health integration.
+- Bound harness self-test file concurrency and use independent user contexts for simultaneous browser actors; retain the measured timing limits and negative controls. Refresh access-race patch context after health integration.
+
+- Collect concurrency partitions on resumable fresh stacks, retaining inconclusive measurements without admitting them as passing matrix evidence.
 
 - Integrate the E2E campaign repairs with production health monitoring and refreshed landing media.
 

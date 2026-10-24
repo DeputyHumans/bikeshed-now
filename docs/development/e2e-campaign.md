@@ -101,6 +101,14 @@ changed capability, stale source, failure or unjudged case is refused. Importing
 never resolves a finding. Capability skips still require the usual complementary
 passing evidence; partitioning does not excuse them.
 
+Collect a cell with `node tools/e2e-partitions-run.mjs --campaign <proposal>
+--cell <cell-id> --out e2e/.out/<collection>`. Each file gets a fresh stack and
+immutable attempt directory. Repeating the command resumes completed files only
+when the source and plan are identical. A lock prevents concurrent writers.
+Exit 3 means measurements were collected but remain inconclusive; only a fully
+passing collection produces `accepted-campaign.json`. Neither result closes
+findings automatically.
+
 ## Updating evidence and closing items
 
 `state` is `open`, `in-progress`, `historical-closed` (imported coverage only),
