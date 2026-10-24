@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -435,7 +435,7 @@
+         // is a review tool, and a version can be withdrawn through the admin
+         // CLI with seven guards rather than by one misclick.
+         reason:
+-          "A document is permanent by design. A single version can be withdrawn by a deployment operator.",
++          "Delete this document.",
+       },
+     ];
+   };

@@ -1,0 +1,21 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -4,2 +4,3 @@
+ import * as admin from "firebase-admin";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { createHash, randomUUID } from "node:crypto";
+@@ -284,3 +285,3 @@
+         // Its existing SDK retry duration is separate from the CAS deadline.
+-        await args.db.runTransaction(async (tx) => {
++        await e2eAckTransaction(args.db, docRef.id, "draft-link", async (tx) => {
+           const fresh = await tx.get(docRef);
+@@ -481,3 +482,3 @@
+     try {
+-      await db.runTransaction(async (tx) => {
++      await e2eAckTransaction(db, docId, "draft-dedup", async (tx) => {
+         const snapshot = await tx.get(docRef);
+@@ -532,3 +533,3 @@
+   try {
+-    await db.runTransaction(async (tx) => {
++    await e2eAckTransaction(db, docId, "draft-publish", async (tx) => {
+       const cur = await tx.get(docRef);

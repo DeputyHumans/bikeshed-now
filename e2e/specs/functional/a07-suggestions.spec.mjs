@@ -680,7 +680,7 @@ const NOT_ONE_LINE_MORE = Object.freeze([
   ["next line U+0085 (a C1 control)", "two\u0085weekends"],
 ]);
 
-scenario("A7.3b a replacement holding a line separator, a paragraph separator or a C1 control (NEL) answers 400 like any other line break or control character, on create and on revise", { tiers: BOTH, defect: "X-a07-suggestions-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A7.3b a replacement holding a line separator, a paragraph separator or a C1 control (NEL) answers 400 like any other line break or control character, on create and on revise", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, others } = await setup(ctx, { roles: [{ as: "suggester", role: "suggester" }], name: "a73b-seps", title: "A7.3b separators" });
   const [sugSession] = others;
   const anchor = anchorIn(TEXT["sg-4"], "sg-4", "kept short");
@@ -895,7 +895,10 @@ scenario("A7.6 twenty pending suggestions per author per version: the twenty-fir
 scenario("A7.7 a suggestion on a version that is no longer current is 409 with currentVersion and writes nothing; reading the old version offers no write actions, the head offers Suggest edit", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, owner, accounts, others } = await setup(ctx, { roles: [{ as: "suggester", role: "suggester" }], name: "a77-version", title: "A7.7 versions" });
   const [sugSession] = others;
-  ctx.step("the owner publishes v2 over v1");
+  const [s] = await browsers(ctx, [accounts[1]], ["suggester"]);
+  await openDoc(s, docId, { v: "v1" });
+  await s.selectText("#sg-2", "harbour lights");
+  ctx.step("the owner publishes v2 while the reader is selecting a passage on pinned v1");
   const body = suggestionDoc({ title: "A7.7 versions", sg1: "The quick <em>brown</em> fox jumps over the lazy dog near the old riverbank." });
   const { out: v2, landed: v2Landed } = await untilLanded(ctx, "POST /publish?update (v2)", () => updateUpload(owner.http, docId, { body, baseVersion: "v1", timeoutMs: HTTP_MS }), async () => {
     const d = await readDoc(target, `docs/${docId}`);
@@ -912,7 +915,9 @@ scenario("A7.7 a suggestion on a version that is no longer current is 409 with c
   assert.deepEqual({ status: fresh.status, versionId: fresh.json?.versionId }, { status: 200, versionId: "v2" });
 
   ctx.step("in the app: reading v1 the toolbar offers no write actions; on the head it offers Suggest edit");
-  const [o, s] = await browsers(ctx, [accounts[0], accounts[1]], ["owner", "suggester"]);
+  await eventually(() => s.page.getByText("A newer version has been published.", { exact: true }).isVisible(), { timeout: SLOW, message: "pinned historical reader sees the newer-version notice" });
+  assert.equal(await s.page.getByRole("button", { name: "Open v2", exact: true }).isVisible(), true, "the historical reader is offered the new version");
+  const [o] = await browsers(ctx, [accounts[0]], ["owner"]);
   await openDoc(o, docId, { v: "v1" });
   assert.equal(await o.page.getByRole("button", { name: "Edit", exact: true }).count(), 0, "even the owner cannot edit the archive");
   await openDoc(o, docId);

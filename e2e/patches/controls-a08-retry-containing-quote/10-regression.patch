@@ -1,0 +1,7 @@
+--- a/app/src/annotation/exact.ts
++++ b/app/src/annotation/exact.ts
+@@ -189,3 +189,3 @@
+     const within = (a: Match, b: Match) => a.start >= b.start && a.end <= b.end;
+-    if (within(quote, made)) return { state: "applied" };
++    if (within(quote, made)) return pending();
+     if (within(made, quote)) return pending();

@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.5c an Upload dialog opened before the workspace has the account record still seeds Stamp exports from the account default once the record arrives",
+  "what": "a14 explicit choice",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.5c an Upload dialog opened before the workspace has the account record still seeds Stamp exports from the account default once the record arrives"
+  },
+  "expect": {
+    "message": "a later account snapshot preserves the person's explicit unchecked choice"
+  }
+}

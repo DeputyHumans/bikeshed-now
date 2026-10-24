@@ -1,0 +1,18 @@
+{
+  "oracle": "later route changes still fetch the measurement script only once",
+  "what": "repeat-script",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.2 with analytics live, declining fetches nothing and is remembered, and \"unanswered \u2192 Allow\" in one page fetches the measurement script once, with page views off; every analytics request is fulfilled locally",
+    "suite": "functional"
+  },
+  "stack": [
+    "--app-env",
+    "VITE_FIREBASE_MEASUREMENT_ID=dummy",
+    "--patches",
+    "a19-analytics-live"
+  ],
+  "expect": {
+    "message": "later route changes still fetch the measurement script only once"
+  }
+}

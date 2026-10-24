@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK thumb slides: its own committed key reports stored true",
+  "what": "Preserve cover acknowledgement but misclassify the committed slides key as a losing upload.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK thumb slides: its own committed key reports stored true"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "accepted version preserves authored root attributes",
+  "what": "controls-a08-bodyattr",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.9 (BODYATTR) the version committed after the accept has <html> and <body> attributes equal to v1's",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^BODYATTR:"
+  }
+}

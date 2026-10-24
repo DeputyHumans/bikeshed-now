@@ -68,9 +68,21 @@ describe("local edits reach the CRDT", () => {
   it("ignores the editing host's own attributes", async () => {
     const a = peer(`<p>t</p>`);
     a.body.setAttribute("contenteditable", "true");
-    a.body.querySelector("p")!.setAttribute("contenteditable", "true");
+    a.body.setAttribute("spellcheck", "true");
     await flush();
     expect(a.sync.html()).toBe(`<p>t</p>`);
+  });
+
+  it("replicates authored descendant editing attributes on existing and inserted elements", async () => {
+    const a = peer(`<p>t</p>`);
+    a.body.querySelector("p")!.setAttribute("contenteditable", "false");
+    a.body.querySelector("p")!.setAttribute("spellcheck", "false");
+    const inserted = a.doc.createElement("div");
+    inserted.setAttribute("contenteditable", "plaintext-only");
+    inserted.textContent = "new";
+    a.body.appendChild(inserted);
+    await flush();
+    expect(a.sync.html()).toBe(`<p contenteditable="false" spellcheck="false">t</p><div contenteditable="plaintext-only">new</div>`);
   });
 
   it("never lets a highlight into the shared document", async () => {
@@ -270,5 +282,209 @@ describe("joining", () => {
     a.body.querySelector("p")!.firstChild!.nodeValue = "changed";
     await flush();
     expect(a.sync.html()).toBe(`<p>x</p>`);
+  });
+});
+
+describe("the real selection during remote changes", () => {
+  it("keeps a collapsed caret after preceding remote text and before a concurrent insertion at the caret", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = '<p id="p">hello world</p>';
+    doc.body.contentEditable = "true";
+    const y = new Y.Doc();
+    const binding = bindSync(y.getXmlFragment("body"), doc.body);
+    const remote = peer("", y);
+    const node = doc.querySelector("p")!.firstChild!;
+    const selection = doc.getSelection()!;
+    selection.setBaseAndExtent(node, 5, node, 5);
+    try {
+      remote.body.querySelector("p")!.firstChild!.nodeValue = "REMOTE hello world";
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorNode).toBe(node);
+      expect(selection.anchorOffset).toBe(12);
+      expect(selection.isCollapsed).toBe(true);
+      // The caret stays with this writer's word, rather than jumping after a
+      // peer's insertion and splitting the writer's next keystroke from it.
+      remote.body.querySelector("p")!.firstChild!.nodeValue = "REMOTE helloPEER world";
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorOffset).toBe(12);
+      expect(node.textContent).toBe("REMOTE helloPEER world");
+    } finally { binding.destroy(); remote.sync.destroy(); y.destroy(); remote.y.destroy(); iframe.remove(); }
+  });
+
+  it("retains a backwards selection when a remote sibling insertion moves the selected nodes", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = '<p id="p">selected text</p>';
+    const y = new Y.Doc();
+    const binding = bindSync(y.getXmlFragment("body"), doc.body);
+    const remote = peer("", y);
+    const node = doc.querySelector("p")!.firstChild!;
+    const selection = doc.getSelection()!;
+    selection.setBaseAndExtent(node, 8, node, 2);
+    try {
+      remote.body.insertBefore(Object.assign(remote.doc.createElement("p"), { textContent: "before" }), remote.body.firstChild);
+      await flush();
+      Y.applyUpdate(y, Y.encodeStateAsUpdate(remote.y));
+      expect(selection.anchorNode).toBe(node);
+      expect(selection.focusNode).toBe(node);
+      expect([selection.anchorOffset, selection.focusOffset]).toEqual([8, 2]);
+    } finally { binding.destroy(); remote.sync.destroy(); y.destroy(); remote.y.destroy(); iframe.remove(); }
+  });
+});
+
+describe("browser edit intent preserves text item identity", () => {
+  function writer(html: string) {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML = html;
+    const y = new Y.Doc();
+    const sync = bindSync(y.getXmlFragment("body"), doc.body);
+    return { doc, y, sync, body: doc.body, destroy() { sync.destroy(); y.destroy(); iframe.remove(); } };
+  }
+
+  async function input(w: ReturnType<typeof writer>, at: number, remove: number, text: string, type = "insertText", selectionEnd = at) {
+    const node = w.body.querySelector("p")!.firstChild as Text;
+    w.doc.getSelection()!.setBaseAndExtent(node, at, node, selectionEnd);
+    node.parentElement!.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: type, data: text || null }));
+    const start = type === "deleteContentBackward" && at === selectionEnd ? at - remove : at;
+    node.replaceData(start, remove, text);
+    w.doc.getSelection()!.collapse(node, start + text.length);
+    node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: type, data: text || null }));
+    await flush();
+  }
+
+  it("keeps a repeated typed letter in its token when a peer deletes the original word", async () => {
+    const a = writer("<p>russet Umber</p>");
+    const b = peer("", a.y);
+    try {
+      await input(a, 0, 0, "r");
+      await input(a, 1, 0, "X");
+      b.body.querySelector("p")!.firstChild!.nodeValue = "Umber";
+      await flush();
+      exchange(a, b);
+      expect(a.body.textContent).toBe("rXUmber");
+      expect(b.body.textContent).toBe("rXUmber");
+    } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+  });
+
+  for (const type of ["deleteContentBackward", "deleteContentForward"] as const) {
+    it(`deletes the intended repeated letter with ${type} while a peer types beside it`, async () => {
+      const a = writer("<p>aaa</p>");
+      const b = peer("", a.y);
+      try {
+        await input(a, type === "deleteContentBackward" ? 1 : 0, 1, "", type);
+        b.body.querySelector("p")!.firstChild!.nodeValue = "aXaa";
+        await flush();
+        exchange(a, b);
+        expect(a.body.textContent).toBe("Xaa");
+        expect(b.body.textContent).toBe("Xaa");
+      } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+    });
+  }
+
+  it("uses the browser target range for an equal-text replacement, even when the selection differs", async () => {
+    const a = writer("<p>aaa</p>");
+    const b = peer("", a.y);
+    try {
+      const node = a.body.querySelector("p")!.firstChild as Text;
+      a.doc.getSelection()!.collapse(node, 3);
+      const event = new InputEvent("beforeinput", { bubbles: true, inputType: "insertReplacementText", data: "a" });
+      Object.defineProperty(event, "getTargetRanges", { value: () => [{ startContainer: node, startOffset: 0, endContainer: node, endOffset: 1 }] });
+      node.parentElement!.dispatchEvent(event);
+      node.replaceData(0, 1, "a");
+      node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText", data: "a" }));
+      await flush();
+      // The other writer deletes the original first item. The new replacement
+      // has equal bytes but a different identity, so it must survive.
+      const text = (b.y.getXmlFragment("body").get(0) as Y.XmlElement).get(0) as Y.XmlText;
+      text.delete(0, 1);
+      exchange(a, b);
+      expect(a.body.textContent).toBe("aaa");
+      expect(b.body.textContent).toBe("aaa");
+    } finally { a.destroy(); b.sync.destroy(); b.y.destroy(); }
+  });
+
+  it("falls back to the text diff when a mutation does not match the captured input range", async () => {
+    const a = writer("<p>one two</p>");
+    try {
+      const node = a.body.querySelector("p")!.firstChild as Text;
+      a.doc.getSelection()!.collapse(node, 0);
+      node.parentElement!.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: "x" }));
+      node.data = "one TWO";
+      node.parentElement!.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "x" }));
+      await flush();
+      expect(a.sync.html()).toBe("<p>one TWO</p>");
+    } finally { a.destroy(); }
+  });
+});
+
+it("notifies autosave once after a changed remote transaction is applied, without echoing it", async () => {
+  const a = peer("<p>one</p>");
+  const doc = document.implementation.createHTMLDocument("");
+  const y = new Y.Doc();
+  Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+  const seen: string[] = [];
+  const binding = bindSync(y.getXmlFragment("body"), doc.body, () => { seen.push(doc.body.innerHTML); });
+  try {
+    expect(seen).toEqual([]);
+    a.body.querySelector("p")!.firstChild!.nodeValue = "two";
+    await flush();
+    Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+    expect(seen).toEqual(["<p>two</p>"]);
+    const vector = [...Y.encodeStateVector(y)];
+    await flush();
+    Y.applyUpdate(y, Y.encodeStateAsUpdate(a.y));
+    expect([...Y.encodeStateVector(y)]).toEqual(vector);
+    expect(seen).toEqual(["<p>two</p>"]);
+    doc.body.querySelector("p")!.firstChild!.nodeValue = "local";
+    await flush();
+    expect(seen).toEqual(["<p>two</p>"]);
+  } finally { binding.destroy(); y.destroy(); a.sync.destroy(); a.y.destroy(); }
+});
+
+
+describe("text-range and parent deletion", () => {
+  it("preserves an unseen insertion once at a deleted text range's cut", async () => {
+    const a = peer('<p id="p">left DELETE THIS right</p>');
+    const b = peer('', a.y);
+    try {
+      a.body.querySelector('p')!.firstChild!.nodeValue = 'left right';
+      b.body.querySelector('p')!.firstChild!.nodeValue = 'left DELETE INSERTTHIS right';
+      await flush();
+      exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="p">left INSERTright</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
+  });
+
+  it("deletes inserted text once the deleting writer has observed it", async () => {
+    const a = peer('<p id="p">left DELETE THIS right</p>');
+    const b = peer('', a.y);
+    try {
+      b.body.querySelector('p')!.firstChild!.nodeValue = 'left DELETE INSERTTHIS right';
+      await flush(); exchange(a, b);
+      a.body.querySelector('p')!.firstChild!.nodeValue = 'left right';
+      await flush(); exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="p">left right</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
+  });
+
+  it("removes unseen edits when their whole parent is deleted", async () => {
+    const a = peer('<p id="p">delete me</p><p id="q">kept</p>');
+    const b = peer('', a.y);
+    try {
+      a.body.querySelector('#p')!.remove();
+      b.body.querySelector('#p')!.firstChild!.nodeValue = 'delete INSERTme';
+      await flush(); exchange(a, b);
+      expect(a.sync.html()).toBe('<p id="q">kept</p>');
+      expect(b.sync.html()).toBe(a.sync.html());
+    } finally { a.sync.destroy(); b.sync.destroy(); a.y.destroy(); b.y.destroy(); }
   });
 });

@@ -1,0 +1,10 @@
+--- a/app/src/viewer/frameMode.ts
++++ b/app/src/viewer/frameMode.ts
+@@ -109,7 +109,6 @@
+     if (mode.draftRevision) {
+       query.set("baseVersion", mode.baseVersion);
+       query.set("liveEpoch", mode.liveEpoch ?? "initial");
+-      query.set("draftRevision", mode.draftRevision);
+     }
+     return `/draft/${docId}/${entry}?${query}`;
+   }

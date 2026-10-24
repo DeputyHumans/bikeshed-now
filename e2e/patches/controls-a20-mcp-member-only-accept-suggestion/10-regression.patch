@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1024,5 +1024,5 @@
+     },
+     async run(ctx, args) {
+-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
++      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+       if (!isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower)) {
+         throw new Error("only the owner or an approver can accept or reject a suggestion");

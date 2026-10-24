@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only",
+  "what": "Expose existing draft metadata and the editor identity to viewers.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the viewer's state says nothing about a draft"
+  }
+}

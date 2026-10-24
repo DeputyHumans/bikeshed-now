@@ -1,11 +1,13 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2433,7 +2433,7 @@
-     res.status(409).json({ error: "that code has expired" });
-     return;
-   }
--  if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
-+  if (Number(verification.attempts ?? 0) > VERIFY_MAX_ATTEMPTS) {
-     await ref.set({ verification: FieldValue.delete() }, { merge: true });
-     res.status(429).json({ error: "too many attempts; request a new code" });
-     return;
+@@ -2461,9 +2461,9 @@
+     if (Number(verification.expiresAt ?? 0) < Date.now()) {
+       tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+       return { status: 409, error: "that code has expired" };
+     }
+-    if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
++    if (Number(verification.attempts ?? 0) > VERIFY_MAX_ATTEMPTS) {
+       tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+       return { status: 429, error: "too many attempts; request a new code" };
+     }
+     if (expected !== verification.hash) {

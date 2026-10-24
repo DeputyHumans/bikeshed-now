@@ -1,0 +1,16 @@
+{
+  "oracle": "A20.7m skills install refuses a bare parent-directory name first in the index and writes nothing",
+  "what": "controls-a20-cli-skill-parent",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7m skills install refuses a bare parent-directory name first in the index and writes nothing",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "a20-cli-bad-skill-name"
+  ],
+  "expect": {
+    "message": "skills install with an unusable name"
+  }
+}

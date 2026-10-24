@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7w list --all reads both default-sized pages: all 51 documents exactly once in newest-first order",
+  "what": "controls-a20-cli-list-pages",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7w list --all reads both default-sized pages: all 51 documents exactly once in newest-first order",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "--all returns all 51 documents"
+  }
+}

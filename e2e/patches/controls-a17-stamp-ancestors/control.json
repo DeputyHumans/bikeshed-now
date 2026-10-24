@@ -1,0 +1,13 @@
+{
+  "oracle": "A17.2c authored html and body containing blocks cannot move or clip the print stamps while the document's own content still paints",
+  "what": "stamp ancestors",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.2c authored html and body containing blocks cannot move or clip the print stamps while the document's own content still paints",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "visible authored content must retain both page-fixed export stamps"
+  }
+}

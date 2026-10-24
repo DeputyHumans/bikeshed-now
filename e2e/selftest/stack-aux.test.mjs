@@ -15,7 +15,7 @@ import { materializeTree } from "../lib/tree.mjs";
 import { installEgressGuard } from "../lib/egress.mjs";
 import { applyPatchSet, patchAppConfig, patchFirebaseJson, writeFunctionsEnv } from "../lib/patch.mjs";
 import { AUX_ROLES, verifyBuild, withAuxPorts } from "../lib/stack.mjs";
-import { capabilitiesFor, parseStackOptionArgs, stackGates, stackOptionArgs, viteEnvFor } from "../lib/options.mjs";
+import { CONTROL_CAPABILITY_PATCHES, capabilitiesFor, parseStackOptionArgs, stackGates, stackOptionArgs, viteEnvFor } from "../lib/options.mjs";
 import { listControlSets, readControl } from "../lib/controls.mjs";
 import { gateClient, isAmplifySet, readAmplify } from "../lib/gates.mjs";
 import { rtdbLatency } from "../lib/proxy.mjs";
@@ -44,12 +44,12 @@ test("withAuxPorts takes spare8 (gate) and, with the proxy, spare9 (rtdbProxy) o
   assert.deepEqual(AUX_ROLES, { gate: "spare8", rtdbProxy: "spare9" });
 });
 
-test("stack options: --rtdb-proxy, --gates and an amplify set parse, round-trip and imply gates; other sets are refused", () => {
+test("stack options: --rtdb-proxy, --gates and an amplify set parse, round-trip and imply gates; product mutants are refused", () => {
   assert.deepEqual(parseStackOptionArgs(["--rtdb-proxy", "--gates", "--patches", "amplify-mint-join"]), { emailOff: false, appEnv: {}, rtdbProxy: true, gates: true, patches: ["amplify-mint-join"] });
   assert.deepEqual(parseStackOptionArgs(["--email-off"]), { emailOff: true, appEnv: {} }, "a list without them parses as it always did");
   const parsed = parseStackOptionArgs(["--rtdb-proxy", "--patches", "amplify-mint-join"]);
   assert.deepEqual(parseStackOptionArgs(stackOptionArgs(parsed)), parsed);
-  assert.throws(() => parseStackOptionArgs(["--patches", "controls-decor"]), /not a stack option: --patches controls-decor \(only an amplify-\* set/);
+  assert.throws(() => parseStackOptionArgs(["--patches", "controls-decor"]), /not a stack option: --patches controls-decor/);
   assert.equal(stackGates({ patchSets: ["amplify-mint-join"] }), true);
   assert.equal(stackGates({ patchSets: ["controls-decor", "amplify"] }), false);
   assert.equal(stackGates({ gates: true }), true);
@@ -226,7 +226,7 @@ test("stackaux.mjs as a process: answers /health with its proxy, and exits on SI
   }
 });
 
-test("a control built on an amplify set applies on top of it, staged as startStack stages a gated, proxied copy", async () => {
+test("a control applies after its amplifier or capability setup, preserving every amplifier gate", async () => {
   const stacked = listControlSets().map((set) => readControl(set)).filter((c) => c.stack.includes("--patches"));
   assert.ok(stacked.some((c) => c.set === "controls-i6-stale-removed"), stacked.map((c) => c.set).join(", "));
   for (const c of stacked) {
@@ -242,7 +242,7 @@ test("a control built on an amplify set applies on top of it, staged as startSta
       for (const set of [...opts.patches, c.set]) applyPatchSet(treeDir, set);
       // Every gate of every amplify set the control stacks on is still called, in the file its amplify.json names, once the control's own patch is on top (a set calls its gates through its own helper: e2eGate, e2eRaceGate, …).
       const sets = opts.patches.filter((set) => isAmplifySet(set));
-      assert.ok(sets.length > 0, `${c.set}: stacks on an amplify set (${opts.patches.join(", ")})`);
+      assert.ok(opts.patches.every((set) => isAmplifySet(set) || CONTROL_CAPABILITY_PATCHES.includes(set)), `${c.set}: every setup patch is an amplifier or named capability`);
       for (const set of sets) {
         for (const g of readAmplify(set).gates) {
           const file = g.where.split(/[\s:]/)[0];

@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only",
+  "what": "Compute the cursor from visible events, leaving viewers behind editor-only and owner-only changes.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^every reader's cursor is the position after the last event read"
+  }
+}

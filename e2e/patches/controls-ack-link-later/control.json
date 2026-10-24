@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK later link: the original committed save is acknowledged",
+  "what": "Recognize a committed remembered-link save only while its draft pointer is still current.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9h a remembered-link save acknowledges its commit after a later editor saves another draft",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK later link: the original committed save is acknowledged"
+  }
+}

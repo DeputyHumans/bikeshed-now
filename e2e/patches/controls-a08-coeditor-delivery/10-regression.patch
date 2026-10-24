@@ -1,0 +1,8 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -388,4 +388,5 @@
+   const onDeep = (events: Y.YEvent<any>[], tx: Y.Transaction) => {
+     if (tx.origin === ORIGIN) return;
++    if (events.length) return; // control: skip remote delivery after initial adoption
+     // Anything the observer has queued but not delivered describes the DOM as
+     // it was BEFORE this remote patch, so acting on it afterwards would replay

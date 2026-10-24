@@ -1,0 +1,6 @@
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -250,2 +250,3 @@
+       actor: eventActor(after.actor as Actor | undefined),
++      data: { authorEmail: after.authorEmail },
+     },

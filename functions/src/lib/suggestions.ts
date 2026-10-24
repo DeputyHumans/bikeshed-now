@@ -2,9 +2,11 @@
 // Suggested edits: what one is, and every change to its state (SPEC §22).
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 import { currentVersionRefusal } from "./versions";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
 
 /**
  * A suggestion is an ANNOTATION with one more field, so it inherits anchoring,
@@ -58,6 +60,8 @@ export type SuggestionState = "pending" | "accepted" | "rejected" | "withdrawn";
  * its own.
  */
 export interface SuggestionRevision {
+  /** Internal receipt for one committed revision across native SDK retries. */
+  operationId?: string;
   replacement: string;
   note?: string;
   at: Timestamp;
@@ -80,7 +84,7 @@ export interface SuggestionAnchor {
  * overrides change what a reader sees without changing what they read.
  */
 // eslint-disable-next-line no-control-regex
-const FORBIDDEN = /[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/;
+const FORBIDDEN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029‎‏‪-‮⁦-⁩]/;
 
 /** Why `text` may not be a replacement, or null when it may. */
 export function replacementProblem(text: string, exact: string): string | null {
@@ -194,34 +198,40 @@ export async function createSuggestion(args: {
   if (problem) return { status: 400, error: problem };
 
   const anns = annotations(docRef, versionId);
-  const open = await anns
-    .where("authorUid", "==", author.uid)
-    .where("suggestion.state", "==", "pending")
-    .count()
-    .get();
-  if (open.data().count >= SUGGESTION_LIMITS.pendingPerAuthor) {
-    return {
-      status: 409,
-      error:
-        `You already have ${SUGGESTION_LIMITS.pendingPerAuthor} suggestions waiting on this version. ` +
-        "Wait for some to be decided, or withdraw one.",
-    };
-  }
-
   const annRef = anns.doc();
   const commentRef = annRef.collection("comments").doc();
+  let attempted = false;
   // In a transaction that reads the document, so this and a publish are
   // ordered: either the publish's own check sees this suggestion and refuses,
   // or this sees the newer version and refuses. Checked only before writing,
   // a publish landing in between left it pending on a version nobody reads.
   return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
     const doc = await tx.get(docRef);
+    // This preallocated random id belongs only to this operation. A native
+    // retry may follow a completed commit whose acknowledgement was lost;
+    // acknowledge that annotation before applying guards for a new write.
+    const own = attempted ? await tx.get(annRef) : null;
+    if (own?.exists && own.data()?.annId === annRef.id && own.data()?.authorUid === author.uid) return { annId: annRef.id };
     const current = String(doc.data()?.currentVersion ?? "");
     if (current !== versionId) {
       return {
         status: 409,
         error: "This document has a newer version. Reload, then suggest the edit on it.",
         currentVersion: current,
+      };
+    }
+    // Count inside the same transaction as creation. Two requests competing
+    // for the last slot must not both admit themselves from an earlier read.
+    const open = await tx.get(anns
+      .where("authorUid", "==", author.uid)
+      .where("suggestion.state", "==", "pending")
+      .limit(SUGGESTION_LIMITS.pendingPerAuthor));
+    if (open.docs.length >= SUGGESTION_LIMITS.pendingPerAuthor) {
+      return {
+        status: 409,
+        error:
+          `You already have ${SUGGESTION_LIMITS.pendingPerAuthor} suggestions waiting on this version. ` +
+          "Wait for some to be decided, or withdraw one.",
       };
     }
     tx.create(annRef, {
@@ -239,6 +249,7 @@ export async function createSuggestion(args: {
       opensSuggestion: true,
       ...(note ? {} : { generated: true }),
     });
+    attempted = true;
     return { annId: annRef.id };
   });
 }
@@ -328,19 +339,30 @@ export async function changeSuggestion(args: {
   const { db, docRef, versionId, annId, op, caller, actor } = args;
   const nowMs = args.nowMs ?? Date.now();
   const annRef = annotations(docRef, versionId).doc(annId);
+  const revisionOperationId = randomUUID();
+  let revisionAttempted = false;
+  const leaseReceipt = op === "claim" || op === "release" ? freshReceiptId() : null;
+  let leaseRecorded = false;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
     const head = await tx.get(docRef);
-    const refusal = currentVersionRefusal(head.data(), versionId);
-    if (refusal) return refusal;
     // Every read before any write, as a transaction requires: the record, and
     // for a revision the opening comment whose words may have to follow it.
     const snap = await tx.get(annRef);
+    if (leaseReceipt) {
+      const committed = readReceipt<{ state: SuggestionState }>(snap, leaseReceipt);
+      if (committed.found) return committed.result;
+    }
     const opener =
       op === "revise"
         ? await tx.get(annRef.collection("comments").where("opensSuggestion", "==", true).limit(1))
         : null;
     const s = snap.data() as StoredSuggestion | undefined;
+    // Revision receipts stay in history, so a later revision or decision
+    // cannot turn our completed change into another write or a false refusal.
+    if (op === "revise" && revisionAttempted && s?.suggestion?.revisions?.some(revision => revision.operationId === revisionOperationId)) return { state: "pending" as SuggestionState };
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
     if (!snap.exists || !s?.suggestion) return { status: 404, error: "no such suggestion" };
     const state = s.suggestion.state ?? "pending";
 
@@ -384,6 +406,7 @@ export async function changeSuggestion(args: {
         // only restated the old text, which the entry already holds.
         const replacedNote = note && first && first.data().generated !== true ? String(first.data().body ?? "") : "";
         const revision: SuggestionRevision = {
+          operationId: revisionOperationId,
           replacement: String(s.suggestion.replacement ?? ""),
           ...(replacedNote ? { note: replacedNote } : {}),
           // A server timestamp may not sit inside an array.
@@ -403,6 +426,7 @@ export async function changeSuggestion(args: {
             tx.update(first.ref, { body: describeChange(String(s.anchor?.exact ?? ""), replacement) });
           }
         }
+        revisionAttempted = true;
         return { state: "pending" };
       }
       case "withdraw": {
@@ -437,11 +461,17 @@ export async function changeSuggestion(args: {
             until: Timestamp.fromMillis(nowMs + SUGGESTION_LIMITS.claimMs),
           },
         });
+        recordReceipt(tx, annRef, snap, leaseReceipt!, { state: "pending" });
+        leaseRecorded = true;
         return { state: "pending" };
       }
       case "release": {
         // `claimedByOther` above has refused anybody else's live claim.
-        if (s.suggestion.claim) tx.update(annRef, { "suggestion.claim": FieldValue.delete() });
+        if (s.suggestion.claim) {
+          tx.update(annRef, { "suggestion.claim": FieldValue.delete() });
+          recordReceipt(tx, annRef, snap, leaseReceipt!, { state: "pending" });
+          leaseRecorded = true;
+        }
         return { state: "pending" };
       }
       case "accept":
@@ -472,4 +502,6 @@ export async function changeSuggestion(args: {
         return { status: 400, error: "unknown op" };
     }
   });
+  if (leaseReceipt && leaseRecorded && "state" in result && result.state === "pending") await clearReceipt(annRef, leaseReceipt);
+  return result;
 }

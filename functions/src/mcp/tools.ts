@@ -34,11 +34,12 @@
  * and editor checks. Folder deletion reparents contents; documents remain.
  */
 
-import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
 import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
+import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
 import { MANAGEMENT_TOOLS } from "./management";
-import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { bucketName, publicOrigin } from "../config";
 import type { Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
@@ -57,7 +58,6 @@ import {
   type DocAclData,
   type FolderAclData,
 } from "../lib/acl";
-import { grantsOf } from "../lib/access";
 import { documentAudience, filedIn, firstPeople, folderAudience } from "../lib/audience";
 import {
   decodeCursor,
@@ -71,7 +71,7 @@ import {
   type EventActor,
 } from "../lib/events";
 import { extractBundle } from "../lib/bundle";
-import { linkProofFor } from "../lib/linkgrant";
+import { grantTokenOf, linkGrantRef, linkProofFor } from "../lib/linkgrant";
 import {
   BAD_DOC_ID,
   createFolderRecord,
@@ -87,7 +87,7 @@ import { renameDocument } from "../lib/rename";
 import { setThreadResolved } from "../lib/threads";
 import { acceptSuggestion } from "../lib/accept";
 import { commitDraft } from "../lib/draft";
-import { clearEditLog, editorsRefusal } from "../lib/presence";
+import { editorsRefusal } from "../lib/presence";
 import {
   ANNOTATION_COLOR,
   SUGGESTION_COLOR,
@@ -402,26 +402,27 @@ async function recordApiRead(
   versionId: string,
 ): Promise<void> {
   const sessionId = `api-${ctx.actor.tokenId ?? ctx.caller.uid}-${versionId}`;
+  const viewRef = docRef.collection("views").doc(sessionId);
+  const receipt = freshReceiptId();
   try {
-    await docRef.collection("views").doc(sessionId).set(
-      {
-        sessionId,
-        uid: ctx.caller.uid,
-        email: ctx.caller.emailLower,
-        versionId,
-        ms: 0,
-        via: "app",
-        automated: true,
-        actor: ctx.actor,
+    await ctx.db.runTransaction(async (tx) => {
+      const before = await tx.get(viewRef);
+      if (readReceipt(before, receipt).found) return;
+      recordReceipt(tx, viewRef, before, receipt, true);
+      const startedAt = before.data()?.startedAt;
+      tx.set(viewRef, {
+        sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
+        ms: 0, via: "app", automated: true, actor: ctx.actor,
         reads: FieldValue.increment(1),
+        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
         lastBeatAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    await docRef.set(
-      { stats: { apiReads: FieldValue.increment(1) } },
-      { merge: true },
-    );
+      }, { merge: true });
+      tx.update(docRef, {
+        "stats.apiReads": FieldValue.increment(1),
+        "stats.lastViewedByEmail": FieldValue.delete(),
+      });
+    });
+    await clearReceipt(viewRef, receipt);
   } catch {
     /* statistics are best-effort and never fail the read */
   }
@@ -900,6 +901,7 @@ export const TOOLS: ToolDefinition[] = [
         actor: ctx.actor,
         authorEmail: ctx.caller.emailLower,
         via: "mcp",
+        k: proof.k,
       });
       if ("error" in committed) throw new Error(committed.error);
       // A comment thread stays on the version it was opened on, and this path
@@ -950,7 +952,6 @@ export const TOOLS: ToolDefinition[] = [
       if (outcome.status !== 200) throw new Error(String(outcome.body.error));
       // As the app does once it has published: the log was the draft's, and
       // the next editor seeds from the new version.
-      if (editors.log) await clearEditLog(ref.id);
       return withReaderAddress(outcome.body, ref.id);
     },
   },
@@ -1307,12 +1308,7 @@ export const TOOLS: ToolDefinition[] = [
       await persistDocMembership(
         ctx.db,
         ref,
-        {
-          ownerEmail: String(data.ownerEmail ?? ""),
-          grants: grantsOf(data),
-          folderId: target.id,
-        },
-        { folderId: target.id },
+        () => ({ folderId: target.id }),
         () =>
           fromFolder === target.id
             ? []
@@ -1687,7 +1683,7 @@ export const TOOLS: ToolDefinition[] = [
       },
     },
     async run(ctx, args) {
-      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       refuseIfExpired(data);
       mutationVersion(args.version, data);
       const body = String(args.body ?? "").trim().slice(0, 5000);
@@ -1712,13 +1708,28 @@ export const TOOLS: ToolDefinition[] = [
         actor: ctx.actor,
         createdAt: FieldValue.serverTimestamp(),
       };
-      // The head read serializes this write with publication: no retired thread.
+      // The anchor was found on the observed head. Recheck that head and the
+      // reader's authority atomically with both writes, so a racing publish
+      // either sees this open thread or makes this attempt retry and refuse.
+      const receipt = freshReceiptId();
       await ctx.db.runTransaction(async (tx) => {
-        const fresh = (await tx.get(ref)).data();
-        if (!fresh || !canRead(fresh, ctx.caller, proof)) throw new Error("no such document");
-        refuseIfExpired(fresh);
-        const refusal = currentVersionRefusal(fresh, versionId);
-        if (refusal) throw new Error(refusal.error);
+        const current = await tx.get(ref);
+        // Feedback rows remain author-deletable. Their later deletion cannot
+        // erase this operation's acknowledgement or make its retry recreate them.
+        if (readReceipt(current, receipt).found) return;
+        const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };
+        let proof = { k: str(args, "k"), grantToken: null as string | null };
+        if (current.exists && !canRead(currentData, ctx.caller, proof)
+          && visibilityOf(currentData) === "unlisted" && ctx.caller.uid) {
+          proof = { ...proof, grantToken: grantTokenOf(await tx.get(linkGrantRef(ref, ctx.caller.uid))) };
+        }
+        if (!current.exists || !canRead(currentData, ctx.caller, proof)
+          || (isExpired(currentData, Date.now()) && !canManageSharing(currentData, ctx.caller.emailLower))) {
+          throw new Error(`no document with id "${ref.id}"`);
+        }
+        refuseIfExpired(currentData);
+        if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
+        recordReceipt(tx, ref, current, receipt, true);
         tx.create(annRef, {
           annId: annRef.id,
           anchor: { ...anchor, strict: true },
@@ -1728,6 +1739,7 @@ export const TOOLS: ToolDefinition[] = [
         });
         tx.create(commentRef, { commentId: commentRef.id, body, ...author });
       });
+      await clearReceipt(ref, receipt);
       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
     },
   },

@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.2 a fork of a trusted public document is private, trusted:false, forked:true and marked by the forker's default, with nothing naming its parent; v1 is publishedVia fork with the source's bytes (REHASH); forks/{id} is server-only; stats.forks counts each fork once and nothing else moves",
+  "what": "Copy the server-only parent identifier into the unlock answer.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.2 a fork of a trusted public document is private, trusted:false, forked:true and marked by the forker's default, with nothing naming its parent; v1 is publishedVia fork with the source's bytes (REHASH); forks/{id} is server-only; stats.forks counts each fork once and nothing else moves",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the unlock answer never names the parent"
+  }
+}

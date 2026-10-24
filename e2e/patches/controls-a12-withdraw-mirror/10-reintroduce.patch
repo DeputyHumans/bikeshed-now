@@ -1,0 +1,11 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -103,7 +103,7 @@
+   if (result.duplicate) return;
+   const { retiredEpoch, draftPrefix } = result;
+   if (typeof retiredEpoch !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(retiredEpoch)) throw new Error('invalid retired live editing epoch');
+-  await mirror(docId, result.membership?.members ?? [], result.membership?.editorMembers ?? [], project);
++  void mirror;
+   const rtdb = database();
+   if (rtdb) {
+     await rtdb.ref(`status/${docId}/y/${retiredEpoch}`).remove();

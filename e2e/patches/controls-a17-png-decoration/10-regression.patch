@@ -1,0 +1,6 @@
+--- a/app/src/export/cleanImage.ts
++++ b/app/src/export/cleanImage.ts
+@@ -33,3 +33,2 @@
+   }));
+-  stripDecoration(root);
+   root.querySelectorAll("script").forEach((script) => script.remove());

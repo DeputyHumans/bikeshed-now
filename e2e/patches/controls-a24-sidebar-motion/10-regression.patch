@@ -1,0 +1,7 @@
+--- a/app/src/annotation/Sidebar.tsx
++++ b/app/src/annotation/Sidebar.tsx
+@@ -197,3 +197,3 @@
+       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+-      ref.current?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
++      ref.current?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "smooth" : "smooth" });
+     }

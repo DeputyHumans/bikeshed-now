@@ -1,0 +1,16 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -130,11 +130,12 @@
+       role: target.role,
+       url: subject.url,
+     };
+-    await sendEmail({
++    const result = await sendEmail({
+       to: target.email,
+       subject: `${inviterEmail} shared “${subject.title}” with you`,
+       body: React.createElement(Invite, props),
+       text: inviteText(props),
+     });
++    if (!result.sent) return;
+   }
+ }

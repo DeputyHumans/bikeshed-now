@@ -1,0 +1,13 @@
+{
+  "oracle": "Closing Share must return focus to its opener.",
+  "what": "Closing Share must return focus to its opener.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2e share by keyboard: the dialog takes focus, Tab and Shift+Tab never leave it, Escape closes it with focus back on Share, and a person is added by keys",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^focus returned to the button"
+  }
+}

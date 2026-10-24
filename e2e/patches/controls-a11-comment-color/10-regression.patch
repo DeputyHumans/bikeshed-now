@@ -1,0 +1,11 @@
+--- a/app/src/annotation/Sidebar.tsx
++++ b/app/src/annotation/Sidebar.tsx
+@@ -225,7 +225,7 @@
+       className="thread"
+       aria-selected={selected}
+       data-resolved={annotation.resolved}
+-      style={{ ["--thread-color" as string]: peerColor(annotation.authorEmail) }}
++      style={{ ["--thread-color" as string]: peerColor(annotation.authorEmail).slice(0, 0) + "rgb(1, 2, 3)" }}
+       onClick={onSelect}
+     >
+       {!readOnly && suggestion && editing && pending ? (

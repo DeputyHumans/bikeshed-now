@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publicdoc.ts
++++ b/functions/src/lib/publicdoc.ts
+@@ -139,3 +139,3 @@
+       trusted: data.trusted !== false,
+-      marking: resolveMarking(data.marking),
++      marking: resolveMarking(undefined),
+       expiresAt: expiryMs(data as DocAclData),

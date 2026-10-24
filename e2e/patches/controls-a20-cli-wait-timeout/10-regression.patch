@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -793,5 +793,5 @@
+
+ /** Exit status when `changes --wait` gives up: distinct from 1, an error. */
+-const WAIT_TIMED_OUT = 3;
++const WAIT_TIMED_OUT = 0;
+ /** The shortest wait between checks: each one reads the log and the document. */
+ const MIN_INTERVAL_S = 30;

@@ -39,7 +39,7 @@ export function uploadDoc(file: File, opts: UploadOptions = {}): Promise<UploadR
   if (opts.title) params.set("title", opts.title);
   if (opts.id) params.set("id", opts.id);
   if (opts.folderId) params.set("folderId", opts.folderId);
-  if (opts.marking?.enabled) params.set("marking", JSON.stringify(opts.marking));
+  if (opts.marking !== undefined) params.set("marking", JSON.stringify(opts.marking));
   return send<UploadResult>(file, params, {
     forbidden: "You cannot upload to that folder.",
     onProgress: opts.onProgress,

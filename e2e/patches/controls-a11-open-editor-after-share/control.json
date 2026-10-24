@@ -1,0 +1,13 @@
+{
+  "oracle": "A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log",
+  "what": "controls-a11-open-editor-after-share",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a share leaves a public open-editing document open"
+  }
+}

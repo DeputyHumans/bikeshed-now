@@ -1,0 +1,19 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -276,2 +276,16 @@
+           const removed = was.length - start - end;
++          if (removed > 0 && now.length < was.length) {
++            // Control: replace the entire text identity, losing unseen inserts.
++            const parent = parentOf(record.target);
++            const at = parent?.toArray().indexOf(y) ?? -1;
++            if (parent && at >= 0) {
++              const next = new Y.XmlText(now);
++              parent.delete(at, 1);
++              parent.insert(at, [next]);
++              domOf.delete(y);
++              domOf.set(next, record.target);
++              yOf.set(record.target, next);
++              continue;
++            }
++          }
+           if (removed > 0) y.delete(start, removed);

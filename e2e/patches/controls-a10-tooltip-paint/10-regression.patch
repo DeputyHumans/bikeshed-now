@@ -1,0 +1,9 @@
+--- a/app/src/styles/editor.css
++++ b/app/src/styles/editor.css
+@@ -75,5 +75,5 @@
+ }
+ .toolbar-unavailable::after {
+-  content: attr(data-reason);
++  content: "";
+   position: absolute;
+   left: 50%;

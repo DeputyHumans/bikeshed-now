@@ -114,7 +114,9 @@ export function ViewerBanners(props: {
         <Icon name="comment" size={15} />
         <span>
           {props.orphanedCount} comment{props.orphanedCount === 1 ? "" : "s"} no longer
-          match the text they were written about. They are still in the panel.
+          {props.orphanedCount === 1
+            ? " matches the text it was written about. It is still in the panel."
+            : " match the text they were written about. They are still in the panel."}
         </span>
       </div>,
     );

@@ -1,0 +1,13 @@
+{
+  "oracle": "Expired realtime writes are refused by the database server clock",
+  "what": "Expired realtime writes are refused by the database server clock",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c17.Exp-E an editor may not write to the live log of an expired document: DENY",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "c17 Exp-E: expected DENY"
+  }
+}

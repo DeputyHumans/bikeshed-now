@@ -1,0 +1,12 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -253,3 +253,2 @@
+             allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
+-              && feedbackWritable(docData(docId))
+               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -256,3 +256,2 @@
+             allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
+-              && feedbackWritable(docData(docId))
+               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])

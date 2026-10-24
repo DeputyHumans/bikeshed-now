@@ -1,0 +1,13 @@
+{
+  "oracle": "^a live log entry above 2 MiB must be refused",
+  "what": "Allow encoded live-log entries above the documented 2 MiB transport boundary",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.11 with a live session running, the rules reject lock and requests nodes, unknown keys and fields, another account's peer key, a client lastChanged, an out-of-range viewport and a non-string or oversized log entry",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a live log entry above 2 MiB must be refused"
+  }
+}

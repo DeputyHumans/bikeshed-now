@@ -1,0 +1,13 @@
+{
+  "oracle": "Disabled Add loses focus to body unless the modal repairs its focus boundary.",
+  "what": "Disabled Add loses focus to body unless the modal repairs its focus boundary.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2e2 after a person is added from the Share dialog by keyboard, focus stays inside the dialog, so Escape still closes it",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^once Add has worked"
+  }
+}

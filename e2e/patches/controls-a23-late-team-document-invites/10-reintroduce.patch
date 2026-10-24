@@ -1,0 +1,14 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2735,5 +2735,11 @@
+     });
+   }
+
++  for (const id of (await findGrantsForTeam(db(), teamId)).docIds) {
++    const document = await db().collection("docs").doc(id).get();
++    await sendInvitations(caller.emailLower, invitees, {
++      title: String(document.get("title")), kind: "document", url: `${publicOrigin()}/d/${id}`,
++    });
++  }
+   res.status(200).json({ members, admins, affected });
+ });

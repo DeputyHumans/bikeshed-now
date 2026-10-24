@@ -1,0 +1,12 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -230,3 +230,2 @@
+           allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+-            && feedbackWritable(docData(docId))
+             && !('suggestion' in resource.data)
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -233,3 +233,2 @@
+           allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+-            && feedbackWritable(docData(docId))
+             && !('suggestion' in resource.data)

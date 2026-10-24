@@ -1,0 +1,17 @@
+{
+  "oracle": "I1/I2: a refused live update remains queued until peers receive it",
+  "what": "Drop the refused update and its dependent bytes instead of retrying them",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C1 refused append: one editor's live-log append is refused as the Database refused one in X-c01-typing-1, and it types on; the session is let settle and every peer is read [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c01-append-refused"
+  ],
+  "expect": {
+    "message": "^I[12]:"
+  }
+}

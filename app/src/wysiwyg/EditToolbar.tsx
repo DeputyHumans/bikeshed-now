@@ -22,6 +22,7 @@ import type { SourceFormat } from "../types";
  */
 
 export type Command =
+  | { kind: "inline-code" }
   | { kind: "block"; value: string }
   | { kind: "exec"; command: string; value?: string };
 
@@ -66,7 +67,7 @@ const INLINE_CONTROLS: Control[] = [
     id: "code",
     icon: "code",
     title: "Inline code",
-    command: { kind: "exec", command: "formatBlock", value: "code" },
+    command: { kind: "inline-code" },
   },
 ];
 
@@ -119,7 +120,7 @@ const MARKDOWN_UNAVAILABLE =
 
 export interface EditToolbarProps {
   /** Which palette to offer. The only difference between the two modes. */
-  format: SourceFormat;
+  format: SourceFormat | null;
   /** The document being edited. Commands are dispatched against it. */
   doc: Document | null;
   saveState: "idle" | "dirty" | "saving" | "saved" | "error";
@@ -188,19 +189,42 @@ export function EditToolbar({
   sharing,
 }: EditToolbarProps) {
   const [active, setActive] = useState<Set<string>>(new Set());
-  const markdown = format === "markdown";
+  const presentationUnavailable = format !== "html";
+  const unavailableReason = format === null ? "Loading document format…" : MARKDOWN_UNAVAILABLE;
 
   const run = useCallback(
     (command: Command) => {
-      if (!doc) return;
+      if (!doc || sharing === "joining") return;
       doc.defaultView?.focus();
-      if (command.kind === "block") {
+      if (command.kind === "inline-code") {
+        const selection = doc.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+        const code = doc.createElement("code");
+        const range = selection.getRangeAt(0);
+        code.append(range.cloneContents());
+        // insertHTML keeps native undo and preserves selected inline markup.
+        // formatBlock cannot create an inline code element in Chromium.
+        // Native replacement otherwise rebalances adjacent ordinary spaces
+        // into nonbreaking spaces. Preserve the author's whitespace and style.
+        const host = (range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement) as HTMLElement | null;
+        const styleHost = host ?? doc.body;
+        const authoredStyle = styleHost.getAttribute("style");
+        styleHost.style.setProperty("white-space", "pre-wrap", "important");
+        // At a block start Chromium merges away the leading inline wrapper.
+        // Treat the insertion host as inline for this synchronous command only.
+        styleHost.style.setProperty("display", "inline", "important");
+        try { doc.execCommand("insertHTML", false, code.outerHTML); }
+        finally {
+          if (authoredStyle === null) styleHost.removeAttribute("style");
+          else styleHost.setAttribute("style", authoredStyle);
+        }
+      } else if (command.kind === "block") {
         doc.execCommand("formatBlock", false, command.value);
       } else {
         doc.execCommand(command.command, false, command.value);
       }
     },
-    [doc],
+    [doc, sharing],
   );
 
   /** Reflect the caret's current formatting, so the toolbar is not lying. */
@@ -223,21 +247,21 @@ export function EditToolbar({
   }, [doc]);
 
   const renderControl = (control: Control) => {
-    const unavailable = control.formats && !control.formats.includes(format);
+    const unavailable = control.formats && (format === null || !control.formats.includes(format));
     return (
       <span
         key={control.id}
         className={unavailable ? "toolbar-unavailable" : undefined}
-        data-reason={unavailable ? MARKDOWN_UNAVAILABLE : undefined}
+        data-reason={unavailable ? unavailableReason : undefined}
       >
         <button
           type="button"
           className="icon-btn toolbar-btn"
           data-control={control.id}
-          title={unavailable ? MARKDOWN_UNAVAILABLE : control.title}
+          title={unavailable ? unavailableReason : control.title}
           aria-label={control.title}
           aria-pressed={active.has(control.id)}
-          disabled={unavailable}
+          disabled={unavailable || sharing === "joining"}
           onClick={() => run(control.command)}
         >
           {control.icon ? <Icon name={control.icon} size={16} /> : control.label}
@@ -277,11 +301,15 @@ export function EditToolbar({
           aria-label="Link"
           onClick={() => {
             if (!doc) return;
-            // A prompt, not a popover: the browser's own dialog keeps focus and
-            // the selection intact, and a custom one in the parent frame would
-            // lose the selection inside the iframe the moment it opened.
-            const url = doc.defaultView?.prompt("Link to");
-            if (url) run({ kind: "exec", command: "createLink", value: url });
+            // The editor frame deliberately forbids modals. Ask from the app
+            // window and restore the selection before the native edit command.
+            const selection = doc.getSelection();
+            const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+            const url = window.prompt("Link to");
+            if (url) {
+              if (selection && range) { selection.removeAllRanges(); selection.addRange(range); }
+              run({ kind: "exec", command: "createLink", value: url });
+            }
           }}
         >
           <Icon name="link" size={16} />
@@ -292,14 +320,14 @@ export function EditToolbar({
           these are unavailable there rather than silently discarded on save. */}
       <div className="toolbar-group" data-overflow="true">
         <span
-          className={markdown ? "toolbar-unavailable" : undefined}
-          data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+          className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+          data-reason={presentationUnavailable ? unavailableReason : undefined}
         >
           <select
             className="toolbar-select"
             aria-label="Font"
-            title={markdown ? MARKDOWN_UNAVAILABLE : "Font"}
-            disabled={markdown}
+            title={presentationUnavailable ? unavailableReason : "Font"}
+            disabled={presentationUnavailable || sharing === "joining"}
             onChange={(e) => run({ kind: "exec", command: "fontName", value: e.target.value })}
             defaultValue={EDITOR_FONT_CHOICES[0].value}
           >
@@ -311,15 +339,15 @@ export function EditToolbar({
           </select>
         </span>
         <span
-          className={markdown ? "toolbar-unavailable" : undefined}
-          data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+          className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+          data-reason={presentationUnavailable ? unavailableReason : undefined}
         >
           <input
             type="color"
             className="toolbar-select"
             aria-label="Text colour"
-            title={markdown ? MARKDOWN_UNAVAILABLE : "Text colour"}
-            disabled={markdown}
+            title={presentationUnavailable ? unavailableReason : "Text colour"}
+            disabled={presentationUnavailable || sharing === "joining"}
             defaultValue={TOKENS.ink}
             onChange={(e) => run({ kind: "exec", command: "foreColor", value: e.target.value })}
           />
@@ -327,15 +355,15 @@ export function EditToolbar({
         {(["justifyLeft", "justifyCenter"] as const).map((command) => (
           <span
             key={command}
-            className={markdown ? "toolbar-unavailable" : undefined}
-            data-reason={markdown ? MARKDOWN_UNAVAILABLE : undefined}
+            className={presentationUnavailable ? "toolbar-unavailable" : undefined}
+            data-reason={presentationUnavailable ? unavailableReason : undefined}
           >
             <button
               type="button"
               className="icon-btn toolbar-btn"
               aria-label={command === "justifyLeft" ? "Align left" : "Align centre"}
-              title={markdown ? MARKDOWN_UNAVAILABLE : "Alignment"}
-              disabled={markdown}
+              title={presentationUnavailable ? unavailableReason : "Alignment"}
+              disabled={presentationUnavailable || sharing === "joining"}
               onClick={() => run({ kind: "exec", command })}
             >
               <Icon

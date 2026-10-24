@@ -1,0 +1,13 @@
+{
+  "oracle": "a download declares a zip, never active HTML",
+  "what": "a03 download type",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.1q download, unlock and access keep their declared types, attachment disposition and no-store policy",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a download declares a zip, never active HTML"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "oracle": "postcommit projection: a durable draft must still answer 200",
+  "what": "Propagate a postcommit projection error after the draft and epoch have committed, misreporting the durable save as failed.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "a12-projection-unavailable"
+  ],
+  "expect": {
+    "message": "postcommit projection: a durable draft must still answer 200"
+  }
+}

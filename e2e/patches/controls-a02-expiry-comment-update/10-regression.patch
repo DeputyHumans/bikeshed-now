@@ -1,0 +1,12 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -260,3 +260,2 @@
+             allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -263,3 +263,2 @@
+             allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid

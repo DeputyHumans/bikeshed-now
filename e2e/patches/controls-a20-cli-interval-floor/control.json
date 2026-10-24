@@ -1,0 +1,16 @@
+{
+  "oracle": "A20.7y changes --interval 1 respects the 30-second floor when the server requests no additional delay",
+  "what": "controls-a20-cli-interval-floor",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7y changes --interval 1 respects the 30-second floor when the server requests no additional delay",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "a20-cli-no-retry-delay"
+  ],
+  "expect": {
+    "message": "--interval 1 never starts a second check"
+  }
+}

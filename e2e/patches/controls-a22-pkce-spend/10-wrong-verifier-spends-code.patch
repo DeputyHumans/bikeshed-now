@@ -1,7 +1,6 @@
 --- a/functions/src/oauth/token.ts
 +++ b/functions/src/oauth/token.ts
-@@ -137,7 +137,10 @@
-     if (resource && resource !== stored.resource) {
+@@ -142,5 +142,8 @@
        return { kind: "error", status: 400, code: "invalid_target", description: "resource does not match the authorization request" };
      }
 -    if (!pkceMatches(verifier, stored.codeChallenge)) return mismatch("code_verifier does not match");
@@ -9,6 +8,5 @@
 +      tx.set(ref, { usedAt: Timestamp.fromMillis(Date.now()) }, { merge: true });
 +      return mismatch("code_verifier does not match");
 +    }
- 
+
      if (stored.usedAt) {
-       // Possession is proven twice over by now — the code hashed to this

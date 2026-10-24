@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.2b independent transforms, masks, blending and motion paths cannot hide the stamps: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs",
+  "what": "The print stamp leaves mix-blend-mode under author CSS control",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.2b independent transforms, masks, blending and motion paths cannot hide the stamps: with scale, translate, mask-image, mix-blend-mode or offset-path set !important on them, the label and footer still paint readable glyphs"
+  },
+  "expect": {
+    "message": "vectors that hide the stamp"
+  }
+}

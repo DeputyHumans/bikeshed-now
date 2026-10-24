@@ -1,16 +1,25 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -485,7 +485,14 @@
+@@ -38,7 +38,7 @@
+   uniqueDocId,
+   type Membership,
+ } from "./folders";
+-import { editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
++import { clearEditLog, editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
+ import {
+   anyAcceptedInDraft,
+   anyOpenThread,
+@@ -500,7 +500,14 @@
    // Whoever is in the editor would lose their typing to this version, and the
    // next save of theirs would be refused as stale.
    const editing = await editorsRefusal(docRef.id, "published");
 -  if ("refusal" in editing) return editing.refusal;
 +  if ("refusal" in editing) {
-+    // controls-c09b-refusal-drops-draft: a refused update uploads its bytes to
-+    // the next version prefix and drops the draft and its live log anyway.
 +    const all = await versionsRef.get();
 +    await uploadBundle(`docs/${docRef.id}/v${all.size + 1}`, compiled.files);
-+    await dropReplacedDraft(docRef.id, true);
++    const refusedSnapshot = (await docRef.get()).data();
++    await removeDraftSnapshot(docRef.id, refusedSnapshot?.draft);
++    await clearEditLog(docRef.id, String(refusedSnapshot?.liveEpoch ?? "initial"));
 +    return editing.refusal;
 +  }
    const refused = await refuseIfPending(docRef, args.baseVersion ?? "");

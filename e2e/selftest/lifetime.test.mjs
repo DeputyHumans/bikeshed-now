@@ -199,3 +199,33 @@ test("an owner is a pid and its start second: the same pid with another start is
   assert.ok(reapDecision({ rec: { state: "ready", keep: false, owner: me }, lease: null, ownerIsAlive: false }).reap);
   assert.equal(ownerIdentity().pid, process.pid);
 });
+
+
+test("teardown releases a reused group ID but retains unknown or same-process identities", async () => {
+  const child = spawn(process.execPath, ["-e", KEEP], { detached: true, stdio: "ignore", env: { PATH: process.env.PATH } });
+  try {
+    await until(() => processStartSecs([child.pid]).has(child.pid), 5000, "unrelated process starts");
+    const started = processStartSecs([child.pid]).get(child.pid);
+    for (const [label, startedAt, expected] of [
+      ["unknown", undefined, "stop-incomplete"],
+      ["same", new Date(started * 1000).toISOString(), "stop-incomplete"],
+      ["reused", new Date((started - 60) * 1000).toISOString(), "stopped"],
+    ]) {
+      const { rec } = fakeStack({ watchdog: false });
+      rec.processes.push({ name: "emulators-child", pid: child.pid, pgid: child.pid, startedAt });
+      saveRecord(rec);
+      const result = await stopStack(rec, { log: () => {}, graceMs: 500 });
+      assert.equal(result.state, expected, `${label} process identity determines slot retention`);
+      await sleep(100); // Let child exit notifications settle before checking preservation.
+      assert.equal(isPidAlive(child.pid), true, `${label} unrelated process is never signalled`);
+      rec.processes = rec.processes.filter(p => p.pid !== child.pid);
+      saveRecord(rec);
+    }
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const closed = new Promise(resolve => child.once("close", resolve));
+      child.kill("SIGKILL");
+      await closed;
+    }
+  }
+});

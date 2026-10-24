@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -192,3 +192,3 @@
+     // cannot record that edit and may be stale; do not promise a retry will work.
+-    if (error instanceof ConflictError && error.detail.changed === true) return "changed-after-apply";
++    if (false && error instanceof ConflictError) return "changed-after-apply";
+     // The change is in the saved draft whatever the server said. Reporting

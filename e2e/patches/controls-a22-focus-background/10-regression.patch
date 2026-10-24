@@ -1,0 +1,7 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -76,3 +76,3 @@
+       update();
+-      if (document.visibilityState === "visible" && document.hasFocus()) {
++      if (document.visibilityState === "visible") {
+         timer = setTimeout(() => {

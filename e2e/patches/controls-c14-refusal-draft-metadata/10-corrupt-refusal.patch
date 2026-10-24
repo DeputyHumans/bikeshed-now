@@ -1,0 +1,20 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -457,7 +457,7 @@
+   // is reading any more. Asked here, before any bytes are uploaded, and again
+   // inside the transaction that makes the new version current.
+   const open = await openThreadsRefusal(docRef, baseVersion);
+-  if (open) return { status: 409, body: open };
++  if (open) { await docRef.update({ draft: FieldValue.delete() }); return { status: 409, body: open }; }
+ 
+   const version = await loadVersionMeta(docRef, baseVersion);
+   if (!version) return { status: 409, body: { error: "the base version is missing" } };
+@@ -613,7 +613,7 @@
+     if (reason === "OPEN") {
+       // Opened while the bytes were uploading: refused as it would have been before.
+       const open = await openThreadsRefusal(docRef, baseVersion);
+-      if (open) return { status: 409, body: open };
++      if (open) { await docRef.update({ draft: FieldValue.delete() }); return { status: 409, body: open }; }
+     }
+     if (reason === "STALE" || reason === "CONFLICT" || reason === "OPEN" || reason === "DRAFT_CHANGED") {
+       const fresh = await docRef.get();

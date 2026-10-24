@@ -1,0 +1,13 @@
+{
+  "oracle": "A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains",
+  "what": "controls-a12-withdraw-projection",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "public/\\{docId\\} follows the repoint"
+  }
+}

@@ -1,0 +1,9 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -1040,5 +1040,5 @@
+               baseHref={baseHref}
+               stage={deck.stage}
+-              images={railImages}
++              images={null}
+               onGoTo={deck.goTo}
+               onChanged={onSlidesChanged}

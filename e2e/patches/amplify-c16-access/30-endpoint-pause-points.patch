@@ -1,32 +1,20 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -16,2 +16,3 @@
- import { safeSegment } from "./http";
-+import { e2eAccessGate } from "./e2eAccessGate";
+@@ -18,2 +18,3 @@
  import { publicOrigin } from "../config";
-@@ -141,6 +142,7 @@
-   await syncPublicProjection(ctx.db, id);
-   const data = (await ref.get()).data()!;
++import { e2eAccessGate } from "./e2eAccessGate";
+ 
+@@ -152,2 +153,3 @@
    const m = membershipOf(data);
 +  await e2eAccessGate("visibility-before-mirror", id);
    await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
-   return { id, ...settings(id, data), linkToken: data.linkToken ?? null };
- }
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -122,6 +122,7 @@
-   slugify,
- } from "./lib/folders";
- import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
+@@ -17,2 +17,3 @@
+ import { versionStoragePrefix } from "./lib/storage";
 +import { e2eAccessGate } from "./lib/e2eAccessGate";
- import { forkDocument, lineageFor } from "./lib/fork";
- import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
- import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
-@@ -2304,6 +2305,7 @@
-     }
-   }
- 
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+@@ -2383,2 +2384,3 @@
+   const ref = db().collection("teams").doc(teamId);
 +  await e2eAccessGate("team-members-after-read", teamId);
-   await ref.set({ members, admins, updatedAt: now() }, { merge: true });
- 
-   // Removing someone from a team must revoke their access everywhere the team
+   const receipt = freshReceiptId();

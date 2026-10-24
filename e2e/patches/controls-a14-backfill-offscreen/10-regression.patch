@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -341,7 +341,7 @@
+   // Covers nobody has captured yet are filled in here, for the cards on
+   // screen, by an editor's browser. The viewer captures on open; this is for
+   // every document nobody has opened since (SPEC §6d).
+-  useCoverBackfill(visibleDocs, emailLower ?? "");
++  useCoverBackfill(docs, emailLower ?? "");
+
+   const currentFolderName = useMemo(
+     () => folders.find((f) => f.folderId === folderId)?.name ?? "Everything",

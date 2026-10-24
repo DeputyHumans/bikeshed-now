@@ -1,0 +1,13 @@
+{
+  "oracle": "chip uses the email's expected palette colour",
+  "what": "palette",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.2 a peer's presence chip shows data-mode=edit while they edit, in one colour that survives a mode change, a reload and the caret overlay",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "chip uses the email's expected palette colour"
+  }
+}

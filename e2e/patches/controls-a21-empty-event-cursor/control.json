@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start",
+  "what": "controls-a21-empty-event-cursor",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a cursor with an empty event id was not refused"
+  }
+}

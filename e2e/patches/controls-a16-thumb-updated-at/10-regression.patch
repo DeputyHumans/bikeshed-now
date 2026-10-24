@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -662,3 +662,3 @@
+     recordReceipt(tx, docRef, fresh, receipt, result);
+-    tx.update(docRef, { thumb: decision.thumb });
++    tx.update(docRef, { thumb: decision.thumb, updatedAt: now() });
+     return result;

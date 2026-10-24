@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -222,3 +222,3 @@
+     if (args.causal && currentCausal) {
+-      const order = causalOrder(args.causal, currentCausal);
++      const order = causalOrder(args.causal, args.causal) === "same" ? "ahead" : causalOrder(args.causal, currentCausal);
+       if (order === "generation") throw new DraftConflict({

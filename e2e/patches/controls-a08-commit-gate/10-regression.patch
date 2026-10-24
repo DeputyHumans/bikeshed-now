@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -930,3 +930,3 @@
+           committing={committing}
+-          commitDisabled={!reviewReady || annotations.some((a) => !a.resolved)}
++          commitDisabled={!reviewReady || annotations.some((a) => !a.resolved && (!a.suggestion || !doc.meta?.draft))}
+           commitDisabledReason={!reviewReady ? "Wait for the shared document to join." : publishBlockedReason({

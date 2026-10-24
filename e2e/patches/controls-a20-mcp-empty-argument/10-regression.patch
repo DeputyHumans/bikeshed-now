@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -113,5 +113,5 @@
+   const required = (tool.inputSchema.required as string[] | undefined) ?? [];
+   const missing = required.filter(
+-    (key) => args[key] === undefined || args[key] === null || args[key] === "",
++    (key) => args[key] === undefined || args[key] === null,
+   );
+   if (missing.length === 0) return null;

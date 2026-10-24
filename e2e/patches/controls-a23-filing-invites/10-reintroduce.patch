@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1627,6 +1627,9 @@
+     res.status(500).json({ error: "could not create the document" });
+     return;
+   }
++  if (target.id) await sendInvitations(caller.emailLower,
++    (target.membership?.members ?? []).filter((email) => email !== caller.emailLower).map((email) => ({ email, role: "viewer" })),
++    { title: strParam(req, "title") || compiled.title, kind: "document", url: `${publicOrigin()}/d/${result.docId}` });
+   // Where it landed and who can read it there, as publish_document says it, so
+   // `bikeshed publish --json` can tell a person the same thing. The document
+   // exists by now: a failed read here costs the description, never the publish.

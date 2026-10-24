@@ -82,6 +82,8 @@ test("viteEnvFor: .env.example's VITE_ values, the database moved onto the stack
 test("capabilities follow the record: email off swaps email for email-off; options and harness features add theirs; an old record gets only the base", () => {
   const caps = (over) => [...capabilitiesFor(record(over))].sort();
   assert.deepEqual(caps({}), [...LOCAL_CAPABILITIES, "egress-guard", "mail-fail-recipient", "operator-scripts", "spare-pool"].sort());
+  assert.ok(caps({ shim: { failRecipient: true, features: ["hold-recipient"] } }).includes("mail-hold-recipient"));
+  assert.ok(!caps({}).includes("mail-hold-recipient"), "older shims do not claim hold support");
   const off = caps({ options: { emailOff: true, appEnv: {} } });
   assert.ok(off.includes("email-off") && !off.includes("email"));
   assert.ok(caps({ options: { emailOff: false, appEnv: { [M]: dummyMeasurementId() } } }).includes("measurement-id"));
@@ -141,6 +143,13 @@ test("operatorEnv: the stack's HOME (never the user's), its emulators, a dummy A
   for (const k of Object.keys(env)) assert.ok(!/^(BIKESHED_ORIGIN|BIKESHED_TOKEN|RESEND_|VITE_)/.test(k), `${k} must not be there`);
   assert.throws(() => operatorEnv(t, { extra: { HOME: "/elsewhere" } }), /cannot be overridden/);
   assert.throws(() => operatorEnv({ ...t, kind: "prod" }), /local stack only/);
+});
+
+test("operatorEnv forwards only its stack gate and refuses gate overrides", () => {
+  const t = localTarget(record({ options: { gates: true }, ports: { ...PORTS, gate: 36123 }, aux: { gates: true }, processes: [{ name: "aux" }] }));
+  assert.equal(operatorEnv(t).E2E_GATE_URL, "http://127.0.0.1:36123");
+  assert.equal(operatorEnv(localTarget(record())).E2E_GATE_URL, undefined);
+  assert.throws(() => operatorEnv(t, { extra: { E2E_GATE_URL: "http://127.0.0.1:36124" } }), /cannot be overridden/);
 });
 
 test("verifyBuild refuses a build an --app-env value never reached", () => {

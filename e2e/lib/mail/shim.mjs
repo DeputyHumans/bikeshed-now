@@ -92,7 +92,7 @@ export function isLoopbackAddress(addr) {
 }
 
 /** The features a client can rely on (lib/mail/shimctl.mjs checks for them). */
-export const SHIM_FEATURES = Object.freeze(["fail-next", "fail-recipient", "requests-by-recipient", "loopback-control"]);
+export const SHIM_FEATURES = Object.freeze(["fail-next", "fail-recipient", "requests-by-recipient", "loopback-control", "hold-recipient"]);
 
 function readBody(req, limit = 40 * 1024 * 1024) {
   return new Promise((resolveBody, rejectBody) => {
@@ -124,6 +124,15 @@ export async function startShim({ host = "127.0.0.1", port = 0, mailpitUrl, logF
   const failures = [];
   /** address (lowercased) → queued {status, body} failures for sends naming it */
   const byRecipient = new Map();
+  const holds = new Map();
+  const releaseHolds = (to) => {
+    const hold = holds.get(to);
+    if (!hold) return 0;
+    holds.delete(to);
+    const released = hold.waiters.size;
+    for (const release of hold.waiters) release();
+    return released;
+  };
   const record = (entry) => {
     const line = { at: new Date().toISOString(), ...entry };
     requests.push(line);
@@ -158,7 +167,26 @@ export async function startShim({ host = "127.0.0.1", port = 0, mailpitUrl, logF
         requests.length = 0;
         failures.length = 0;
         byRecipient.clear();
+        for (const to of holds.keys()) releaseHolds(to);
         return send(res, 200, { ok: true });
+      }
+      if (path === "/__e2e/hold-recipient") {
+        const spec = req.method === "POST" ? JSON.parse((await readBody(req)) || "{}") : {};
+        const to = String(spec.to ?? url.searchParams.get("to") ?? "").trim().toLowerCase();
+        if (!/^[^@\s<>]+@[^@\s<>]+$/.test(to)) return send(res, 400, { error: "`to` must be one exact email address" });
+        if (req.method === "POST") {
+          const stage = spec.stage ?? "headers";
+          if (!["headers", "body"].includes(stage)) return send(res, 400, { error: "stage must be headers or body" });
+          if (holds.has(to)) return send(res, 409, { error: "recipient is already held" });
+          holds.set(to, { stage, received: 0, closed: 0, waiters: new Set() });
+          return send(res, 200, { to, stage, armed: true });
+        }
+        if (req.method === "GET") {
+          const hold = holds.get(to);
+          return send(res, 200, { to, armed: !!hold, stage: hold?.stage ?? null, received: hold?.received ?? 0, closed: hold?.closed ?? 0, pending: hold?.waiters.size ?? 0 });
+        }
+        if (req.method === "DELETE") return send(res, 200, { to, released: releaseHolds(to) });
+        return send(res, 405, { error: "GET, POST or DELETE" });
       }
       if (path === "/__e2e/fail-recipient") {
         if (req.method === "POST") {
@@ -223,6 +251,25 @@ export async function startShim({ host = "127.0.0.1", port = 0, mailpitUrl, logF
           record({ route: path, status: 422, auth: "ok", ...summary, error: "missing field" });
           return send(res, 422, resendError(422, "validation_error", "Missing `from`, `to` or `subject` field."));
         }
+        const heldFor = recipients.find((recipient) => holds.has(recipient));
+        if (heldFor) {
+          const hold = holds.get(heldFor);
+          hold.received++;
+          if (hold.stage === "body") {
+            res.writeHead(200, { "content-type": "application/json" });
+            res.write('{"id":');
+          }
+          record({ route: path, status: hold.stage === "body" ? 200 : null, auth: "ok", ...summary, held: true, heldFor, stage: hold.stage });
+          await new Promise((resolve) => {
+            const release = () => {
+              if (hold.stage === "body") res.end('"released-without-delivery"}');
+              else send(res, 503, resendError(503, "application_error", "held request released by the e2e shim"));
+            };
+            hold.waiters.add(release);
+            res.once("close", () => { hold.waiters.delete(release); hold.closed++; resolve(); });
+          });
+          return;
+        }
         const target = recipients.find((r) => (byRecipient.get(r)?.length ?? 0) > 0);
         if (target) {
           const queue = byRecipient.get(target);
@@ -271,7 +318,10 @@ export async function startShim({ host = "127.0.0.1", port = 0, mailpitUrl, logF
     url: `http://${host}:${actual}`,
     port: actual,
     requests,
-    close: () => new Promise((r) => server.close(() => r())),
+    close: () => {
+      for (const to of holds.keys()) releaseHolds(to);
+      return new Promise((r) => server.close(() => r()));
+    },
   };
 }
 

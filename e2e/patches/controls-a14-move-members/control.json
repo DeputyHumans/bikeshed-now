@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.5b Move\u2026 into a shared folder makes its readers the document's members, Move\u2026 out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach",
+  "what": "move members",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5b Move\u2026 into a shared folder makes its readers the document's members, Move\u2026 out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach"
+  },
+  "expect": {
+    "message": "filed: the folder's reader is a member"
+  }
+}

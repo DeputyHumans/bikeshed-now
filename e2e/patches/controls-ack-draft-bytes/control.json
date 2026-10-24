@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK draft-publish: committed bytes remain readable",
+  "what": "Delete the minted version candidate after acknowledging its native retry.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK draft-publish: committed bytes remain readable"
+  }
+}

@@ -1,0 +1,8 @@
+--- a/app/src/stats.ts
++++ b/app/src/stats.ts
+@@ -48,4 +48,5 @@
+   // An unlisted document's key rides along: without it, the server answers a
+   // link holder's view exactly as an id that does not exist (SPEC §17).
++  if (final) return;
+   const payload = JSON.stringify({ docId, versionId, sessionId, ms, ...(k ? { k } : {}) });
+ 

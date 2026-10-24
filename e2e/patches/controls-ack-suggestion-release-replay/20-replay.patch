@@ -1,0 +1,7 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -350,3 +350,3 @@
+       const committed = readReceipt<{ state: SuggestionState }>(snap, leaseReceipt);
+-      if (committed.found) return committed.result;
++      if (committed.found && op !== "release") return committed.result;
+     }

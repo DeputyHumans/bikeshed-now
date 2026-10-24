@@ -3,7 +3,7 @@
 // `bikeshed` — publish and revise documents from the terminal (SPEC §19).
 
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
@@ -348,10 +348,11 @@ async function browserLogin(flags) {
  */
 async function pasteLogin(flags) {
   const { origin: where } = resolveAuth(flags);
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const rl = createInterface({ input: process.stdin, output: flags.json ? process.stderr : process.stdout });
+  const notice = flags.json ? console.error : console.log;
   try {
-    console.log(`Create a token at ${where}/account — choose "Command line".`);
-    console.log("It is shown once, so copy it now.\n");
+    notice(`Create a token at ${where}/account — choose "Command line".`);
+    notice("It is shown once, so copy it now.\n");
     const token = (await rl.question("Token: ")).trim();
     if (!token) fail("no token given");
 
@@ -359,7 +360,9 @@ async function pasteLogin(flags) {
     // next command with a confusing message.
     await whoami(where, token);
     writeConfig({ ...readConfig(), origin: where, token, via: "paste" });
-    console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`);
+    out(flags.json, { origin: where, saved: CONFIG_PATH, via: "paste" }, () =>
+      console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`),
+    );
   } finally {
     rl.close();
   }
@@ -1135,7 +1138,7 @@ async function open(flags, [ref]) {
   // `start`, which is a cmd.exe builtin rather than a program, so on Windows
   // the spawn failed and, with nothing listening for the error, crashed.
   openBrowser(url);
-  console.log(url);
+  out(flags.json, { url }, () => console.log(url));
 }
 
 /**
@@ -1147,14 +1150,38 @@ async function open(flags, [ref]) {
  * still be three round trips per keystroke-pause.
  */
 async function watchFile(file, run) {
-  console.log(`watching ${basename(file)} — ctrl-C to stop`);
+  const stamp = () => {
+    try {
+      const s = statSync(file, { bigint: true });
+      return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+    } catch (error) {
+      if (error.code === "ENOENT") return null; // An editor may replace the file.
+      throw error;
+    }
+  };
+  let last = stamp();
   let timer = null;
-  watch(file, () => {
+  const changed = () => {
+    const next = stamp();
+    if (next === null || next === last) return;
+    last = next;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
+      // The debounced read includes saves since the notification that queued it.
+      last = stamp();
       run().catch((e) => console.error(`error: ${e.message}`));
     }, 250);
-  });
+  };
+  watch(file, changed);
+  // Native notifications can be lost, and an atomic save replaces the watched
+  // inode. Poll this one file's metadata as a fallback, sharing the debounce.
+  setInterval(() => {
+    const next = stamp();
+    if (next !== null && next !== last) changed();
+  }, 250);
+  // Status belongs on stderr; stdout may be a stream of --json results.
+  // Announce readiness only after both change detectors are registered.
+  console.error(`watching ${basename(file)} — ctrl-C to stop`);
   await new Promise(() => {}); // until interrupted
 }
 

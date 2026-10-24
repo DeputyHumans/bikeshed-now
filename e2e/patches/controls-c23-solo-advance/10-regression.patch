@@ -1,0 +1,8 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -133,4 +133,3 @@
+           if (session.current !== currentSession) return false;
+-          if (saved.draftRevision) writeSession.current.draftRevision = saved.draftRevision;
+-          if (saved.liveEpoch) writeSession.current.liveEpoch = saved.liveEpoch;
++          void saved;
+           lastSaveFailed.current = false;

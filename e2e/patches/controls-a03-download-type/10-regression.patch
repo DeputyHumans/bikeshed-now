@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -728,7 +728,7 @@
+   }
+
+   const base = typeof docData.slug === "string" && docData.slug ? docData.slug : docId;
+-  res.setHeader("Content-Type", "application/zip");
++  res.setHeader("Content-Type", "text/html");
+   res.setHeader("Cache-Control", "private, no-store");
+   res.setHeader(
+     "Content-Disposition",

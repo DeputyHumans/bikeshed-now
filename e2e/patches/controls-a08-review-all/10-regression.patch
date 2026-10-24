@@ -1,0 +1,7 @@
+--- a/app/src/annotation/Sidebar.tsx
++++ b/app/src/annotation/Sidebar.tsx
+@@ -516,3 +516,3 @@
+           {!readOnly && isApprover && onReview ? (
+-            <button type="button" className="btn btn-sm btn-primary" onClick={() => onReview()}>
++            <button type="button" className="btn btn-sm btn-primary" onClick={() => { void onReview; }}>
+               Review all

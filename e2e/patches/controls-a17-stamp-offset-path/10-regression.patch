@@ -1,0 +1,6 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -46,3 +46,2 @@
+   translate: "none",
+-  "offset-path": "none",
+   "mask-image": "none",

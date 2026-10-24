@@ -1,0 +1,13 @@
+{
+  "oracle": "editor: the panel lists readers",
+  "what": "Regress A18 editor detail",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.4 the Activity panel's per-person detail is for the owner and editors only: rules refuse viewers, views and acl to a viewer, a suggester, an open editor and anonymous; the panel lists readers for the owner and an editor, only the aggregate for a viewer, and nothing for an open editor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "editor: the panel lists readers"
+  }
+}

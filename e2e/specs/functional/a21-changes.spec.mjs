@@ -18,9 +18,9 @@
  *   A21.2  a quiet poll returns the cursor it was given and writes nothing; a
  *          page of only the caller's own events still moves the cursor; the
  *          next event is reported once from it
- *   A21.3  audience (LOCAL: access.changed is written only by POST /access,
- *          which sends invitations and which the production guard refuses;
- *          the operator script it uses there records no event): a viewer gets
+ *   A21.3  audience on both tiers (access.changed assertions are LOCAL:
+ *          share() uses POST /access locally and the email-free operator
+ *          path on production, which records no access event): a viewer gets
  *          reader events only, never access.changed or another editors' event,
  *          yet its cursor moves past them; an editor gets those; only the
  *          owner gets fork.created, dated to the day and by nobody; the draft
@@ -36,8 +36,7 @@
  *          saved cursor
  *   A21.5b a cursor of the server's own shape whose event id is empty: SPEC
  *          §19 says a malformed cursor is refused, never read as "start over".
- *          It probes A21.5's document (whose log is its publish) rather than
- *          staging its own, so run alone it fails its precondition
+ *          It stages its own one-publish document, including when selected alone
  *   A21.6  needsReply: open threads on the current version whose latest
  *          comment a person wrote in the browser; never an agent's thread or
  *          an agent's reply, a resolved thread, or an older version's
@@ -71,8 +70,9 @@
  *
  * EMAIL. Every account is cast with notifications off, so no comment, reply or
  * resolve sends a notice on either tier, and production's quietDoc() holds.
- * Sharing goes through share() (on production the operator script). Only
- * A21.3 needs POST /access itself; it is LOCAL and declares that effect.
+ * Sharing goes through share() (on production the operator script). A21.3
+ * checks access.changed only locally; its other audience assertions run on
+ * both tiers without bypassing that helper or the production guard.
  */
 
 import assert from "node:assert/strict";
@@ -80,11 +80,11 @@ import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, mintToken, openSession } from "../../lib/session.mjs";
-import { createFolderMcp, docIdFor, fork, publishMcp, readFixture } from "../../lib/seed.mjs";
+import { createFolderMcp, docIdFor, fork, forkMcp, publishMcp, readFixture } from "../../lib/seed.mjs";
 import { setVisibility, share } from "../../lib/grant.mjs";
 import { closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
-import { changeLog, eventAt, settleLog } from "../../lib/changes.mjs";
+import { changeLog, eventAt, logAfter, settleLog } from "../../lib/changes.mjs";
 import { anchorIn, commentPath, webAnnotationWrite, webReply, webResolve, webThread } from "../../lib/web.mjs";
 import { treeConstant } from "../../lib/target.mjs";
 
@@ -152,12 +152,12 @@ const settle = (docId, want, message, o = {}) => settleLog(target, docId, want, 
 // --- agents and people ----------------------------------------------------------
 
 /** A signed-in session of `acct`; its client (and so share, fork, mintToken on it) waits REQUEST_MS. */
-const sessionOf = (acct) => openSession(target, acct, { timeoutMs: REQUEST_MS });
+const sessionOf = (acct) => openSession(target, acct, { timeoutMs: REQUEST_MS, cutoffError: true });
 
 /** A personal token of `session`'s account on the mcp channel, initialized. */
 async function agentOf(ctx, session, label) {
   const { token, tokenId } = await mintToken(session, { name: `e2e a21 ${label}`, channel: "mcp" });
-  const mcp = ctx.mcp({ token, actor: `${session.account.role}-${label}`, timeoutMs: REQUEST_MS });
+  const mcp = ctx.mcp({ token, actor: `${session.account.role}-${label}`, timeoutMs: REQUEST_MS, cutoffError: true });
   await mcp.initialize();
   return { mcp, token, tokenId, uid: session.uid, email: session.account.email, label };
 }
@@ -179,19 +179,20 @@ async function changes(agent, docId, since, extra = {}) {
  * session and MCP agent "a", which publishes the paragraphs fixture.
  */
 async function stage(ctx, roles, name, title) {
-  const accounts = await cast(target, ["owner", ...roles], { notifications: false, http: ctx.http({ actor: "harness", timeoutMs: REQUEST_MS }) });
+  const accounts = await cast(target, ["owner", ...roles], { notifications: false, http: ctx.http({ actor: "harness", timeoutMs: REQUEST_MS, cutoffError: true }) });
   const owner = await sessionOf(accounts[0]);
   const agent = await agentOf(ctx, owner, "a");
   const pub = await publishMcp(agent.mcp, { title, content: FIXTURE_HTML, format: "html", id: docIdFor(target, name) });
   precondition(!pub.isError && pub.docId, `publish_document: ${pub.text?.slice(0, 300)}`);
   precondition(typeof pub.json.cursor === "string", "publish_document hands back a cursor");
+  assert.equal((await savedCursor(agent, pub.docId))?.cursor, pub.json.cursor, "publish_document saves its returned cursor as this credential’s last");
   ctx.step(`the owner's agent published ${pub.docId}`);
   return { accounts, owner, agent, docId: pub.docId, cursor: pub.json.cursor, title };
 }
 
 /** A browser of `acct`: a clientFirestore with its own ID token, for the app's writes (lib/web.mjs). */
 async function browserOf(ctx, acct) {
-  const fs = clientFirestore(target, { idToken: await idToken(target, acct, { timeoutMs: REQUEST_MS }), http: ctx.http({ actor: `${acct.role}-web`, timeoutMs: REQUEST_MS }) });
+  const fs = clientFirestore(target, { idToken: await idToken(target, acct, { timeoutMs: REQUEST_MS, cutoffError: true }), http: ctx.http({ actor: `${acct.role}-web`, timeoutMs: REQUEST_MS, cutoffError: true }) });
   return { acct, fs };
 }
 
@@ -204,7 +205,7 @@ const resolveIn = (w, docId, versionId, annId, resolved = true) => webResolve(w.
 
 // --- A21.1 ----------------------------------------------------------------------
 
-scenario("A21.1 a browser thread, comment and resolve reach the owner's agent as thread.opened, comment.added (body and quote read from the source) and thread.resolved (by the resolver), once each, in recorded order; the log stores no body or address; an edited body reads edited, a deleted comment drops out", { timeoutMs: 600_000 }, async (ctx) => {
+scenario("A21.1 a browser thread, comment and resolve reach the owner's agent as thread.opened, comment.added (body and quote read from the source) and thread.resolved (by the resolver), once each, in recorded order; the log stores no body or address; an edited body reads edited, a deleted comment drops out", { inconclusiveOnFunctionKill: true, timeoutMs: 600_000 }, async (ctx) => {
   const { owner, accounts, agent, docId, cursor: c0 } = await stage(ctx, ["viewer"], "a211-kinds", "A21.1 event kinds");
   const [ownerAcct, viewerAcct] = accounts;
   await share(target, { owner, doc: docId, account: viewerAcct, role: "viewer" });
@@ -261,7 +262,7 @@ scenario("A21.1 a browser thread, comment and resolve reach the owner's agent as
 
 // --- A21.2 ----------------------------------------------------------------------
 
-scenario("A21.2 a quiet poll returns the same cursor and writes nothing; a page of only the caller's own events still moves the cursor; the next event is reported once from it", { timeoutMs: 480_000 }, async (ctx) => {
+scenario("A21.2 a quiet poll returns the same cursor and writes nothing; a page of only the caller's own events still moves the cursor; the next event is reported once from it", { inconclusiveOnFunctionKill: true, timeoutMs: 480_000 }, async (ctx) => {
   const { owner, accounts, agent, docId } = await stage(ctx, [], "a212-quiet", "A21.2 quiet poll");
   const START = b64({ v: 1, d: docId });
   await settle(docId, { "version.published": 1 }, "the publish is recorded");
@@ -296,14 +297,14 @@ scenario("A21.2 a quiet poll returns the same cursor and writes nothing; a page 
 // --- A21.3 ----------------------------------------------------------------------
 
 scenario("A21.3 audience: a viewer never receives access.changed or another editors' event (trust, visibility, move) yet its cursor moves past them; an editor receives them; only the owner receives fork.created, dated to the day; the draft is in state for editors only", {
-  tiers: ["local"],
-  effects: ["email:POST /access"],
+  tiers: ["local", "prod"],
+  inconclusiveOnFunctionKill: true,
   timeoutMs: 600_000,
 }, async (ctx) => {
   const { owner, accounts, agent, docId } = await stage(ctx, ["viewer", "editor"], "a213-audience", "A21.3 audience");
   const [ownerAcct, viewerAcct, editorAcct] = accounts;
 
-  ctx.step("the owner shares with a viewer and an editor (POST /access, two access.changed), trusts the document (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
+  ctx.step("the owner shares with a viewer and an editor (two access.changed locally; email-free operator grants on production), trusts the document (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
   await share(target, { owner, doc: docId, account: viewerAcct, role: "viewer" });
   await share(target, { owner, doc: docId, account: editorAcct, role: "editor" });
   await owner.http.postJson("/trust", { docId, trusted: true }, { expect: 200 });
@@ -317,8 +318,19 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   await thread(await browserOf(ctx, viewerAcct), docId, "v1", "e2e-6", `A21.3 ${tag()}`);
   const [viewer, editor] = [await sessionOf(viewerAcct), await sessionOf(editorAcct)];
   await fork(viewer.http, { docId, title: `A21.3 fork ${tag()}`, ownerEmail: viewerAcct.email, expect: 200 });
-  const ALL = { "version.published": 1, "access.changed": 2, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
+  const ALL = { "version.published": 1, "access.changed": 2 * SHARE_EVENTS, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
   await settle(docId, ALL, "every change is recorded");
+  ctx.step("append an editor-only trust change after every reader event, so filtering cannot leave the cursor behind");
+  await owner.http.postJson("/trust", { docId, trusted: false }, { expect: 200 });
+  ALL["doc.trust"] += 1;
+  const tailed = await settle(docId, ALL, "the hidden tail event is recorded");
+  precondition(tailed.at(-1)?.data.type === "doc.trust", "the last stored event is hidden from viewers");
+  ctx.step("the editor saves a real unpublished draft, with their identity in its metadata");
+  const secretDraft = `A21 private draft ${tag()}`;
+  const savedDraft = await editor.http.postJson("/draft", { docId, baseVersion: "v1", html: FIXTURE_HTML.replace("</body>", `<p>${secretDraft}</p></body>`) });
+  assert.equal(savedDraft.status, 200, "the editor's draft is saved before the audience probe");
+  const draft = (await readDoc(target, `docs/${docId}`))?.draft;
+  precondition(draft?.updatedByEmail === editorAcct.email, "the stored draft records the editor identity");
 
   ctx.step('each reads "all" with includeMine: the viewer, the editor, the owner');
   const [va, ea] = [await agentOf(ctx, viewer, "v"), await agentOf(ctx, editor, "e")];
@@ -331,15 +343,18 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   assert.deepEqual(typesOf(ro), counts(Object.entries(ALL).flatMap(([t, n]) => Array(n).fill(t))), "the owner receives every event, fork.created included");
   assert.deepEqual([rv.cursor, re.cursor], [ro.cursor, ro.cursor], "every reader's cursor is the position after the last event read, whoever may see it");
 
-  ctx.step("what an editor learns from access.changed, and what the owner learns of the fork");
-  assert.deepEqual(
-    re.events.filter((e) => e.type === "access.changed").map(stripAt),
-    [
-      { type: "access.changed", channel: "web", added: [viewerAcct.email], removed: [], by: ownerAcct.email },
-      { type: "access.changed", channel: "web", added: [editorAcct.email], removed: [], by: ownerAcct.email },
-    ],
-    "access.changed: who was added and removed, and by whom",
-  );
+  if (SHARE_EVENTS) {
+    ctx.step("locally, the editor receives both access.changed payloads");
+    assert.deepEqual(
+      re.events.filter((e) => e.type === "access.changed").map(stripAt),
+      [
+        { type: "access.changed", channel: "web", added: [viewerAcct.email], removed: [], by: ownerAcct.email },
+        { type: "access.changed", channel: "web", added: [editorAcct.email], removed: [], by: ownerAcct.email },
+      ],
+      "access.changed: who was added and removed, and by whom",
+    );
+  }
+  ctx.step("the owner receives the anonymous fork event on either tier");
   const forked = ro.events.filter((e) => e.type === "fork.created");
   assert.equal(forked.length, 1);
   assert.match(forked[0].at, DAY, "a fork is dated to the day (SPEC §21)");
@@ -347,13 +362,33 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
 
   ctx.step("state: whether a draft exists is the editors' business");
   assert.equal("draft" in rv.state, false, "the viewer's state says nothing about a draft");
-  assert.deepEqual([re.state.draft, ro.state.draft], [{ exists: false }, { exists: false }], "the editor's and the owner's do");
+  const expectedDraft = { exists: true, lastEditedBy: editorAcct.email, lastEditedAt: draft.updatedAt.toDate().toISOString() };
+  assert.deepEqual([re.state.draft, ro.state.draft], [expectedDraft, expectedDraft], "the editor and owner see the actual draft and its editor");
+  assert.ok(!JSON.stringify(rv.state).includes(editorAcct.email), "the viewer's state never exposes the draft editor's email");
+  assert.ok(!JSON.stringify(rv).includes(secretDraft), "the viewer's feed never exposes unpublished draft bytes");
 });
 
 // --- A21.4 ----------------------------------------------------------------------
 
-scenario("A21.4 \"last\" with nothing saved answers from the start with resumedFrom:\"start\", then resumes exactly where the credential left off; a write moves no cursor; get_document starts one only when none is saved; \"all\" returns the whole log", { timeoutMs: 900_000 }, async (ctx) => {
+scenario("A21.4 \"last\" with nothing saved answers from the start with resumedFrom:\"start\", then resumes exactly where the credential left off; a write moves no cursor; get_document starts one only when none is saved; \"all\" returns the whole log", { inconclusiveOnFunctionKill: true, timeoutMs: 900_000 }, async (ctx) => {
   const { owner, agent, docId } = await stage(ctx, [], "a214-last", "A21.4 last and all");
+  await settle(docId, { "version.published": 1 }, "the published document's initial log is settled");
+  const seeded = (await savedCursor(agent, docId)).cursor;
+  const firstLast = await changes(agent, docId, "last", { includeMine: true });
+  assert.equal("resumedFrom" in firstLast, false, "the publishing credential resumes its saved cursor immediately");
+  const afterPublish = await logAfter(target, docId, seeded);
+  assert.deepEqual(firstLast.events.map((e) => [e.type, e.at]), afterPublish.map((r) => [r.data.type, eventAt(r)]), "first last resumes exactly after the cursor handed back by publish");
+
+  const forkSource = await stage(ctx, [], "a214-fork", "A21.4 fork source");
+  const copied = await forkMcp(forkSource.agent.mcp, { id: forkSource.docId, title: `A21.4 copied ${tag()}` });
+  precondition(!copied.isError && copied.docId, `fork_document: ${copied.text?.slice(0, 200)}`);
+  assert.equal((await savedCursor(forkSource.agent, copied.docId))?.cursor, copied.json.cursor, "fork_document saves its returned cursor as this credential's last");
+  await settle(copied.docId, { "version.published": 1 }, "the fork's own publish is recorded");
+  const forkLast = await changes(forkSource.agent, copied.docId, "last", { includeMine: true });
+  assert.equal("resumedFrom" in forkLast, false, "the forking credential resumes its saved cursor immediately");
+  const afterFork = await logAfter(target, copied.docId, copied.json.cursor);
+  assert.deepEqual(forkLast.events.map((e) => [e.type, e.at]), afterFork.map((r) => [r.data.type, eventAt(r)]), "first last resumes exactly after the cursor handed back by fork");
+
   const T = await agent.mcp.ok("add_comment", { id: docId, exact: quote("e2e-4"), body: `A21.4 opening ${tag()}` });
   const log = await settle(docId, { "version.published": 1, "thread.opened": 1, "comment.added": 1 }, "the publish and agent a's thread are recorded");
   let comments = 1;
@@ -390,11 +425,12 @@ scenario("A21.4 \"last\" with nothing saved answers from the start with resumedF
   ctx.step('the token\'s own write hands back no cursor and moves none: its "last" with includeMine then reports that write');
   const before = (await savedCursor(fresh, docId))?.cursor;
   assert.equal(before, next.cursor, "the poll saved its cursor");
+  const unseen = await reply(agent, "A21.4 unseen before the fresh token writes");
   const own = await reply(fresh, "A21.4 the fresh token writes");
   assert.equal("cursor" in own, false, "a write hands back no cursor (SPEC §19)");
   assert.equal((await savedCursor(fresh, docId))?.cursor, before, "and moves none");
   const mine = await changes(fresh, docId, "last", { includeMine: true });
-  assert.deepEqual(added(mine), [["comment.added", own.commentId]], "the write is still ahead of this credential's cursor");
+  assert.deepEqual(added(mine), [["comment.added", unseen.commentId], ["comment.added", own.commentId]], "both the unseen event and the own write remain ahead of this credential’s cursor");
 
   ctx.step("get_document starts a cursor for a credential with none, and never overwrites one");
   const reader = await agentOf(ctx, owner, "c");
@@ -412,10 +448,7 @@ scenario("A21.4 \"last\" with nothing saved answers from the start with resumedF
 
 // --- A21.5 and A21.5b --------------------------------------------------------------
 
-/** What A21.5 leaves for A21.5b: its document A, whose log is its publish, and the agent's token. */
-const refused = { docId: null, token: null };
-
-scenario("A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor", { timeoutMs: 420_000 }, async (ctx) => {
+scenario("A21.5 a cursor from another document, a malformed one, one of an unknown version, \"now\", \"start\" and a missing since are each a tool error, never read as start or now, and move no saved cursor", { inconclusiveOnFunctionKill: true, timeoutMs: 420_000 }, async (ctx) => {
   const { agent, docId: A, cursor: cA } = await stage(ctx, [], "a215-a", "A21.5 cursor A");
   const pubB = await publishMcp(agent.mcp, { title: "A21.5 cursor B", content: FIXTURE_HTML, format: "html", id: docIdFor(target, "a215-b") });
   precondition(!pubB.isError && pubB.docId, `publish_document B: ${pubB.text?.slice(0, 200)}`);
@@ -441,6 +474,11 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
     ['"start" is refused, never read as the start', "start", MALFORMED],
     ["a cursor of an unknown version is refused", b64({ v: 2, d: A }), MALFORMED],
     ["a cursor whose position is not numbers is refused", b64({ v: 1, d: A, s: "1", n: 0, e: "x" }), MALFORMED],
+    ["a partial position is refused", b64({ v: 1, d: A, n: 0, e: "x" }), MALFORMED],
+    ["negative nanoseconds are refused", b64({ v: 1, d: A, s: 1, n: -1, e: "x" }), MALFORMED],
+    ["overflowing nanoseconds are refused", b64({ v: 1, d: A, s: 1, n: 1e9, e: "x" }), MALFORMED],
+    ["overflowing seconds are refused", b64({ v: 1, d: A, s: 253402300800, n: 0, e: "x" }), MALFORMED],
+    ["an event path is refused", b64({ v: 1, d: A, s: 1, n: 0, e: "a/b" }), MALFORMED],
   ];
   for (const [what, since, re] of refusals) {
     ctx.step(what);
@@ -449,8 +487,6 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
     assert.match(out.text, re, `${what}: the reason`);
     if (re === FOREIGN) assert.ok(out.text.includes(`not "${A}"`), `${what}: it names the document asked about`);
   }
-  refused.docId = A;
-  refused.token = agent.token;
   ctx.step("since left out: the schema's required argument");
   const missing = await agent.mcp.call("get_changes", { id: A });
   assert.equal(missing.isError, true, "a get_changes without since is refused");
@@ -460,14 +496,12 @@ scenario("A21.5 a cursor from another document, a malformed one, one of an unkno
   assert.ok(after?.cursor === savedA.cursor && after.updatedAt.isEqual(savedA.updatedAt), "no refusal moved or rewrote the saved cursor");
 });
 
-scenario("A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start", { defect: "X-a21-changes-1", timeoutMs: 180_000 }, async (ctx) => {
-  precondition(refused.docId && refused.token, "A21.5 did not stage its document, so there is nothing to probe");
-  const docId = refused.docId;
-  const mcp = ctx.mcp({ token: refused.token, actor: "owner-a", timeoutMs: REQUEST_MS });
-  await mcp.initialize();
-  const agent = { mcp, label: "a" };
+scenario("A21.5b a cursor of the server's own shape whose event id is empty is refused, never read as the log's start", { inconclusiveOnFunctionKill: true, timeoutMs: 180_000 }, async (ctx) => {
+  const { agent, docId } = await stage(ctx, [], "a215b-empty", "A21.5b malformed cursor");
+  const mcp = agent.mcp;
+  await settle(docId, { "version.published": 1 }, "the publish is recorded");
   const head = await changes(agent, docId, "all", { includeMine: true });
-  precondition(head.events.length === 1 && head.events[0].type === "version.published" && head.more === false, "A21.5's document A: the whole log is its publish");
+  precondition(head.events.length === 1 && head.events[0].type === "version.published" && head.more === false, "the whole log is this document's publish");
   const real = unb64(head.cursor);
   precondition(typeof real.s === "number" && typeof real.n === "number" && typeof real.e === "string" && real.e.length > 0, `a server cursor is {v, d, s, n, e}: ${JSON.stringify(Object.keys(real))}`);
 
@@ -484,7 +518,7 @@ scenario("A21.5b a cursor of the server's own shape whose event id is empty is r
 
 // --- A21.6 ----------------------------------------------------------------------
 
-scenario("A21.6 needsReply names only open threads on the current version whose latest comment a person wrote in the browser: never an agent's thread or reply, a resolved thread, or an older version's", { timeoutMs: 1_200_000 }, async (ctx) => {
+scenario("A21.6 needsReply names only open threads on the current version whose latest comment a person wrote in the browser: never an agent's thread or reply, a resolved thread, or an older version's", { inconclusiveOnFunctionKill: true, timeoutMs: 1_200_000 }, async (ctx) => {
   const { owner, accounts, agent, docId } = await stage(ctx, ["viewer"], "a216-needs-reply", "A21.6 needsReply");
   const viewerAcct = accounts[1];
   await share(target, { owner, doc: docId, account: viewerAcct, role: "viewer" });
@@ -503,6 +537,10 @@ scenario("A21.6 needsReply names only open threads on the current version whose 
   assert.ok(r0.events.some((e) => e.type === "comment.added" && e.threadId === T2.threadId && e.channel === "mcp"), "the agent's thread is in the page: its exclusion below is needsReply's doing");
   assert.deepEqual([...r0.needsReply].sort(), sorted(T1.annId, T3.annId, T4.annId), "needsReply names the people's threads, never the agent-opened T2");
 
+  const quietHead = await changes(agent, docId, r0.cursor, { includeMine: true });
+  assert.deepEqual(quietHead.events, [], "the head page is empty while three human threads still wait");
+  assert.deepEqual(quietHead.needsReply, [], "needsReply includes only threads represented in this page, not every waiting thread");
+
   ctx.step("the owner's agent replies on T3; the viewer resolves T4 in the browser");
   await agent.mcp.ok("reply_to_comment", { id: docId, threadId: T3.annId, body: `A21.6 the agent answers ${tag()}` });
   await resolveIn(vw, docId, "v1", T4.annId, true);
@@ -515,21 +553,33 @@ scenario("A21.6 needsReply names only open threads on the current version whose 
   await settle(docId, { "version.published": 1, "access.changed": SHARE_EVENTS, "thread.opened": 4, "comment.added": 6, "thread.resolved": 1 }, "the viewer's answer is recorded");
   assert.deepEqual(await needs(), sorted(T1.annId, T3.annId), "T3 is back: its latest comment is the person's");
 
+  ctx.step("agent resolve and reopen add server notes after the person's reply; those notes do not answer them");
+  await agent.mcp.ok("resolve_thread", { id: docId, threadId: T3.annId });
+  await agent.mcp.ok("reopen_thread", { id: docId, threadId: T3.annId });
+  await settle(docId, { "version.published": 1, "access.changed": SHARE_EVENTS, "thread.opened": 4, "comment.added": 6, "thread.resolved": 2, "thread.reopened": 1 }, "the generated notes' resolve and reopen events are recorded");
+  assert.deepEqual(await needs(), sorted(T1.annId, T3.annId), "generated resolve/reopen notes do not hide the latest human comment from needsReply");
+
   ctx.step("the owner's agent publishes v2: v1's threads are no longer the current version's");
+  const beforeUpdate = await savedCursor(agent, docId);
+  await answer(vw, docId, "v1", T1.annId, `A21.6 unseen before update ${tag()}`);
+  await settle(docId, { "version.published": 1, "access.changed": SHARE_EVENTS, "thread.opened": 4, "comment.added": 7, "thread.resolved": 2, "thread.reopened": 1 }, "an unseen human reply precedes update, so advancing to the head would skip it");
   const v2 = await agent.mcp.ok("update_document", { id: docId, baseVersion: "v1", content: FIXTURE_HTML.replace("</body>", `<p id="e2e-a21-v2">A21.6 second version.</p>\n</body>`) });
+  assert.equal("cursor" in v2, false, "update_document returns no cursor");
+  const afterUpdate = await savedCursor(agent, docId);
+  assert.ok(afterUpdate?.cursor === beforeUpdate.cursor && afterUpdate.updatedAt.isEqual(beforeUpdate.updatedAt), "update_document never advances or rewrites the saved cursor");
   precondition(v2.versionId === "v2", `update_document made v2: ${JSON.stringify(v2).slice(0, 200)}`);
-  await settle(docId, { "version.published": 2, "access.changed": SHARE_EVENTS, "thread.opened": 4, "comment.added": 6, "thread.resolved": 1 }, "v2 is recorded");
+  await settle(docId, { "version.published": 2, "access.changed": SHARE_EVENTS, "thread.opened": 4, "comment.added": 7, "thread.resolved": 2, "thread.reopened": 1 }, "v2 is recorded");
   assert.deepEqual(await needs(), [], "nothing on v1 needs a reply once v2 is current");
 
   ctx.step("the viewer opens T5 on v2 in the browser");
   const T5 = await thread(vw, docId, "v2", "e2e-5", `A21.6 T5 on v2 ${tag()}`);
-  await settle(docId, { "version.published": 2, "access.changed": SHARE_EVENTS, "thread.opened": 5, "comment.added": 7, "thread.resolved": 1 }, "T5 is recorded");
+  await settle(docId, { "version.published": 2, "access.changed": SHARE_EVENTS, "thread.opened": 5, "comment.added": 8, "thread.resolved": 2, "thread.reopened": 1 }, "T5 is recorded");
   assert.deepEqual(await needs(), [T5.annId], "needsReply: the open person's thread on the current version");
 });
 
 // --- A21.7 ----------------------------------------------------------------------
 
-scenario("A21.7 includeMine leaves out only this token's agent events (another token of the account and the browser are reported); pages hold 100, cut on (at, id), more exactly when a page follows; every response carries more and retryAfter", { timeoutMs: 900_000 }, async (ctx) => {
+scenario("A21.7 includeMine leaves out only this token's agent events (another token of the account and the browser are reported); pages hold 100, cut on (at, id), more exactly when a page follows; every response carries more and retryAfter", { inconclusiveOnFunctionKill: true, timeoutMs: 900_000 }, async (ctx) => {
   const { owner, accounts, agent: ta, docId } = await stage(ctx, [], "a217-mine", "A21.7 includeMine");
   const ownerAcct = accounts[0];
   const RETRY_AFTER = Number(treeConstant(target, "functions/src/mcp/tools.ts", "RETRY_AFTER_SECONDS"));
@@ -597,4 +647,24 @@ scenario("A21.7 includeMine leaves out only this token's agent events (another t
   const ownInPage1 = page1.events.filter((e) => e.type === "version.published" || e.threadId === T1.threadId).length;
   precondition(ownInPage1 === 3, `token A's publish and thread are in page 1 (${ownInPage1})`);
   assert.deepEqual({ n: hidden.events.length, more: hidden.more, cursor: hidden.cursor }, { n: PAGE - ownInPage1, more: true, cursor: page1.cursor }, "97 shown of the 100 read, more, and the cursor after the 100th");
+});
+
+
+scenario("A21.7b equal-timestamp events straddling the 100-event boundary are returned once each in event-id order", { tiers: ["local"], inconclusiveOnFunctionKill: true, timeoutMs: 900_000 }, async (ctx) => {
+  const { owner, accounts, agent, docId } = await stage(ctx, [], "a217b-tie", "A21.7b tied event boundary");
+  const ob = await browserOf(ctx, accounts[0]);
+  const writes = Array.from({ length: PAGE - 2 }, () => webAnnotationWrite(ob.fs, accounts[0], { docId, versionId: "v1", anchor: anchorOf("e2e-1") }).write);
+  const committed = await ob.fs.commit(writes);
+  precondition(committed.ok, `the browser's 98 annotations: ${committed.status} ${committed.code}`);
+  await settle(docId, { "version.published": 1, "thread.opened": 98 }, "99 events before the tied batch", { timeout: PAGE_SETTLE_MS });
+  await setVisibility(target, { owner, doc: docId, visibility: "unlisted", expiresAt: Date.now() + 86_400_000 });
+  const log = await settle(docId, { "version.published": 1, "thread.opened": 98, "doc.visibility": 1, "doc.expiry": 1 }, "the visibility transaction's tied pair is recorded");
+  const pair = log.slice(99);
+  precondition(pair.length === 2 && pair[0].data.at.isEqual(pair[1].data.at), "the pair shares the exact server timestamp");
+  assert.deepEqual(pair.map((r) => r.data.type).sort(), ["doc.expiry", "doc.visibility"], "the tied transaction occupies events 100 and 101");
+  const page1 = await changes(agent, docId, "all", { includeMine: true });
+  const page2 = await changes(agent, docId, page1.cursor, { includeMine: true });
+  assert.deepEqual([page1.events.length, page1.more, page2.events.length, page2.more], [100, true, 1, false], "the equal-timestamp boundary returns 100 then 1, with no lost sibling");
+  assert.deepEqual([unb64(page1.cursor).e, unb64(page2.cursor).e], pair.map((r) => r.id), "each tied event advances to its own id exactly once");
+  assert.deepEqual([page1.events.at(-1).type, page2.events[0].type], pair.map((r) => r.data.type), "both tied events are returned in stored event-id order");
 });

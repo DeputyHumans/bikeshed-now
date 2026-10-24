@@ -1,0 +1,12 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -400,3 +400,3 @@
+   // record behind them changes every minute somebody reads (SPEC §2, §6d).
+-  const isDeck = deck.slides.length > 1 && deck.paged;
++  const isDeck = deck.slides.length > 2 && deck.paged;
+   const thumb = doc.meta?.thumb;
+@@ -895,3 +895,3 @@
+    */
+-  const hasSlides = deck.slides.length > 1 && deck.paged;
++  const hasSlides = deck.slides.length > 2 && deck.paged;
+   // The published deck's stored rail, when this is exactly what was captured:

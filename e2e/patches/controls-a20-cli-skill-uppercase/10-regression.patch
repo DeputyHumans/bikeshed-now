@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -994,5 +994,5 @@
+     // than trusted from the response. A deployment is not an adversary, but a
+     // name is still the wrong place to find out it could have been one.
+-    if (!/^[a-z0-9][a-z0-9-]*$/.test(skill.name)) {
++    if (!/^[a-z0-9][a-z0-9-]*$/i.test(skill.name)) {
+       fail(`refusing a skill with an unusable name: ${skill.name}`);
+     }

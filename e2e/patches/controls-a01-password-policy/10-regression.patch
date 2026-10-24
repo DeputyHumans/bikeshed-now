@@ -1,0 +1,11 @@
+--- a/app/src/components/PasswordForm.tsx
++++ b/app/src/components/PasswordForm.tsx
+@@ -58,7 +58,7 @@
+       .catch(() => {
+         // A missing advisory policy must not disable account creation forever.
+         // Auth still validates the password when creating the account.
+-        if (live) setPolicy({ password, state: "unavailable" });
++        if (live) setPolicy({ password, state: "invalid" });
+       });
+     return () => {
+       live = false;

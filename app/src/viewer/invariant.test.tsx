@@ -353,7 +353,7 @@ describe("the decoration invariant", () => {
 
     expect(saveDraft).toHaveBeenCalled();
     const html = saveDraft.mock.calls[0][2];
-    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, SUG_ATTR, INS_ATTR, REPLACEMENT, "contenteditable"]) {
+    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, SUG_ATTR, INS_ATTR, REPLACEMENT, "contenteditable", "spellcheck"]) {
       expect(html, `the draft payload contains ${artifact}`).not.toContain(artifact);
     }
     // The text the suggestion would replace is the author's, and stays.

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -144,7 +144,7 @@
+  * Content-Disposition filename. Nothing here needs escaping in any of them.
+  */
+ export function isValidDocId(id: string): boolean {
+-  return id.length <= 60 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
++  return id.length <= 61 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
+ }
+
+ /** What a publisher is told when `isValidDocId` refuses their id. */

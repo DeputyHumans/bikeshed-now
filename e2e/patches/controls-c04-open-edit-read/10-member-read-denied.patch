@@ -1,8 +1,27 @@
---- a/functions/src/lib/folders.ts
-+++ b/functions/src/lib/folders.ts
-@@ -454,3 +454,4 @@
-   const fresh = (await docRef.get()).data() as DocAclData;
--  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
-+  const grantedEditors = new Set(fields.grants.editors ?? []);
-+  await syncPresenceAccess(docRef.id, membership.members.filter(m => !grantedEditors.has(m)), membership.editorMembers, opensEditingToAnyAccount(fresh));
-   await syncPublicProjection(db, docRef.id);
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -110,2 +110,6 @@
+     const edit = keyed(data.editorMembers);
++    // Control-only: mark direct editors in the authoritative mirror.
++    for (const email of Array.isArray(data.editors) ? data.editors : []) {
++      if (typeof email === "string" && email !== data.ownerEmail) edit[`__e2eDenyRead_${emailKey(email)}`] = true;
++    }
+     if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
+--- a/config/templates/database.rules.json.tmpl
++++ b/config/templates/database.rules.json.tmpl
+@@ -102,3 +102,3 @@
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && root.child('editAccess').child($docId).child('__e2eDenyRead_' + auth.token.email.toLowerCase().replace('.', ',')).val() != true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
+           "$epoch": {
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -103,7 +103,7 @@
+         // merged. Deleting a log entry cannot lose a document: every peer has
+         // already applied it, and the durable copy is the saved draft.
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && root.child('editAccess').child($docId).child('__e2eDenyRead_' + auth.token.email.toLowerCase().replace('.', ',')).val() != true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
+           "$epoch": {
+             // Only this epoch is retired; a newer publication has its own tree.
+             ".write": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && (!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) && !newData.exists()",

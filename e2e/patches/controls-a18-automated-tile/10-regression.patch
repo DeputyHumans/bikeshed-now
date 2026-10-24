@@ -1,0 +1,9 @@
+--- a/app/src/components/StatsPanel.tsx
++++ b/app/src/components/StatsPanel.tsx
+@@ -105,5 +105,5 @@
+         {stats?.apiReads ? (
+           <div className="stat-tile">
+-            <div className="stat-value">{stats.apiReads}</div>
++            <div className="stat-value">{0}</div>
+             {/* Counted separately and never folded into the human numbers: an
+                 agent fetching a document forty times would otherwise make both

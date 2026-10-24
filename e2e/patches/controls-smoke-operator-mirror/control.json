@@ -1,0 +1,13 @@
+{
+  "oracle": "operator presence/edit mirrors after a real publish",
+  "what": "Omit the explicit emulator database URL so installed Admin returns no database handle and skips mirror writes",
+  "target": {
+    "spec": "e2e/specs/smoke/clients.spec.mjs",
+    "case": "clients: the operator script publishes a sample into this stack",
+    "suite": "smoke"
+  },
+  "stack": [],
+  "expect": {
+    "message": "operator publish installs the owner's presence and edit mirrors"
+  }
+}

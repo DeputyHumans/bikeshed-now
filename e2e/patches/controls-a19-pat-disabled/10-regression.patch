@@ -1,0 +1,7 @@
+--- a/functions/src/lib/tokens.ts
++++ b/functions/src/lib/tokens.ts
+@@ -252,3 +252,3 @@
+   const email = typeof user.email === "string" ? user.email.toLowerCase() : "";
+-  if (user.disabled || user.emailVerified !== true || !email || email !== record.email || !isAllowedEmail(email)) {
++  if (user.emailVerified !== true || !email || email !== record.email || !isAllowedEmail(email)) {
+     return null;

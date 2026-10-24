@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -665,5 +665,5 @@
+ function replacementFrom(flags, usage) {
+   const replacing = typeof flags.with === "string";
+-  if (replacing === Boolean(flags.delete)) fail(usage);
++  if (!replacing && !flags.delete) fail(usage);
+   // An empty --with is what an unset shell variable sends; deleting a passage
+   // has to be asked for by name.

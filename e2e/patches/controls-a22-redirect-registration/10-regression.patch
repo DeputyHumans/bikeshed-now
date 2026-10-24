@@ -1,0 +1,12 @@
+--- a/functions/src/oauth/clients.ts
++++ b/functions/src/oauth/clients.ts
+@@ -118,3 +118,3 @@
+   for (const uri of b.redirect_uris) {
+-    if (!parseRedirectUri(uri)) {
++    if (!parseRedirectUri(uri) && typeof uri !== "string") {
+       return refuse(
+@@ -126,3 +126,3 @@
+   const redirectUris = b.redirect_uris as string[];
+-  const fallback = redirectHost(parseRedirectUri(redirectUris[0])!);
++  const fallback = parseRedirectUri(redirectUris[0]) ? redirectHost(parseRedirectUri(redirectUris[0])!) : "Unchecked";
+   const name = cleanClientName(b.client_name, fallback);

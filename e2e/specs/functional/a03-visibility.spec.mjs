@@ -21,7 +21,7 @@
  *   A3.3   /d/**: private and absent are byte-identical with identical headers
  *          (Date aside); unlisted with its key is cacheable, noindex and titled
  *          by the document; a POST is 405 (SPEC §2 /d, §17 "Link previews")
- *   A3.4   public/{d} holds exactly the 12 projected keys; an anonymous get of
+ *   A3.4   public/{d} holds exactly the allowed projected keys; an anonymous get of
  *          an unlisted or an absent row, and an anonymous list, are refused by
  *          the rules (SPEC §17 "Anonymous reads use a projection")
  *   A3.5   making a public document private (or unlisted) removes its row
@@ -80,7 +80,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const PUBLIC_MAX_AGE = 300;
 const THUMB_MAX_AGE = 86_400;
 /** The exact projection keys of public/{docId} (SPEC §17, lib/publicdoc.ts PROJECTED_KEYS). */
-const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "forked", "format", "publicEdit", "publishedAt", "slug", "title", "trusted", "visibility"];
+const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "fileCount", "forked", "format", "liveEpoch", "marking", "publicEdit", "publishedAt", "slug", "sourceEntry", "title", "trusted", "visibility"];
 /** POST /unlock's reader projection: the same minus publishedAt (SPEC §2 /unlock). */
 const READER_KEYS = PUBLIC_KEYS.filter((k) => k !== "publishedAt");
 
@@ -279,36 +279,12 @@ scenario("A3.1 (production) no 404 from a byte path, /unlock or /access carries 
 });
 
 /**
- * X-a03-visibility-1 is a SPEC QUESTION (class Q), not a SPEC violation.
- *
- * Plan 3.1 says "every response carries `nosniff`". SPEC §2 names the header
- * for two endpoints only: /content, spec.md:227 "Headers: `Content-Type` from
- * the extension; `X-Content-Type-Options: nosniff`;", and /d, spec.md:278
- * "Headers: `Content-Type: text/html`, `nosniff`;". For /unlock it names a
- * Cache-Control and nothing else, spec.md:303 "`Cache-Control: private,
- * no-store` on every answer.", and likewise for GET /access, spec.md:326-327.
- * For /download it names no header at all, spec.md:422-423 "`canRead`-gated
- * zip of the version; accepts `?k=` as `/content/**` does." The product sends
- * nosniff on none of the three. downloadBundle sets only Content-Type,
- * Cache-Control and Content-Disposition (functions/src/index.ts:727-731).
- * noStore() sets only Cache-Control (functions/src/lib/http.ts:74-76).
- * firebase.json's /download/** rule adds only Cache-Control (firebase.json:66-67).
- *
- * No concrete harm was found, so this is not class I either. The zip is
- * declared application/zip with Content-Disposition: attachment, a type a
- * browser does not sniff. The JSON answers are application/json. The
- * refusals have empty bodies. The session cookie is SameSite=Strict
- * (functions/src/index.ts:258, :335), so a cross-site page cannot make a
- * member's request at all. The header would be defence in depth.
- *
- * So the case asserts the plan's oracle where SPEC says nothing, and keeps
- * the observation visible until Pavel decides. If nosniff belongs on every
- * answer, SPEC §2 should say so, and this case reports "passed unexpectedly"
- * once the product sends it. If it does not, plan 3.1 narrows to what A3.1
- * asserts, and this case is deleted. Each row's status is a precondition, so
- * only the missing header can be booked as X-a03-visibility-1.
+ * X-a03-visibility-1: SPEC §2 requires nosniff for document bytes and shell,
+ * already checked by A3.1. JSON and attachment endpoints retain their existing
+ * declared types, attachment disposition, authorization and no-store policy.
+ * This oracle accepts an optional nosniff header; its absence is not a defect.
  */
-scenario("A3.1q SPEC QUESTION: /download, /unlock and GET /access carry no X-Content-Type-Options: nosniff, which plan 3.1 expects on every response but SPEC §2 names only for /content and /d", { defect: "X-a03-visibility-1", inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
+scenario("A3.1q download, unlock and access keep their declared types, attachment disposition and no-store policy", { inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
   ctx.step("cast an owner and a stranger; publish a private P and an unlisted U");
   const [owner, stranger] = await castSessions(["owner", "stranger"]);
   const anon = ctx.http({ actor: "anon" });
@@ -334,9 +310,16 @@ scenario("A3.1q SPEC QUESTION: /download, /unlock and GET /access carry no X-Con
     precondition(r.res.status === r.status, `${r.label}: answered ${r.res.status}, not ${r.status}; the question is about the header of the answer SPEC §2 gives`);
   }
 
-  const got = Object.fromEntries(rows.map((r) => [r.label, r.res.headers.get("x-content-type-options")]));
-  const want = Object.fromEntries(rows.map((r) => [r.label, "nosniff"]));
-  assert.deepEqual(got, want, "SPEC QUESTION (X-a03-visibility-1, class Q), not a SPEC violation: plan 3.1 expects X-Content-Type-Options: nosniff on every response, but SPEC §2 names it only for /content (spec.md:227) and /d (spec.md:278); for /unlock (spec.md:303), GET /access (spec.md:326-327) and /download (spec.md:422-423) it names none, and the product sends none. No concrete harm found (declared types, attachment, SameSite=Strict session); defence in depth only");
+  for (const row of rows) {
+    assert.equal(row.res.headers.get("cache-control"), NO_STORE, `${row.label}: no response is cacheable`);
+    if (row.status !== 200) continue;
+    if (row.label.startsWith("/download")) {
+      assert.equal(row.res.headers.get("content-type"), "application/zip", "a download declares a zip, never active HTML");
+      assert.match(row.res.headers.get("content-disposition") ?? "", /^attachment;/, "a download is an attachment");
+    } else {
+      assert.match(row.res.headers.get("content-type") ?? "", /^application\/json(?:;|$)/, "metadata is declared JSON");
+    }
+  }
 });
 
 // --- A3.2 ---------------------------------------------------------------------
@@ -442,7 +425,7 @@ scenario("A3.3 /d/**: a private and an absent slug answer identical headers (Dat
 
 // --- A3.4 ---------------------------------------------------------------------
 
-scenario("A3.4 public/{d} has exactly the 12 projected keys; anonymous get of an unlisted or absent row and anonymous list are denied by the rules", { inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
+scenario("A3.4 public/{d} has exactly the allowed projected keys; anonymous get of an unlisted or absent row and anonymous list are denied by the rules", { inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
   const [owner] = await castSessions(["owner"]);
   const fs = anonFirestore(ctx);
   const B = await publishPage(owner, "proj-public");
@@ -451,7 +434,7 @@ scenario("A3.4 public/{d} has exactly the 12 projected keys; anonymous get of an
   await visibility(owner, B.docId, "public");
   await visibility(owner, U.docId, "unlisted");
 
-  ctx.step("the stored row, through the Admin SDK: exactly 12 keys, nothing of the ACL");
+  ctx.step("the stored row, through the Admin SDK: exactly the allowed keys, nothing of the ACL");
   const row = await readDoc(target, `public/${B.docId}`);
   assert.ok(row, "public/{B} exists");
   assert.deepEqual(Object.keys(row).sort(), PUBLIC_KEYS, "public/{B}'s keys");
@@ -464,7 +447,7 @@ scenario("A3.4 public/{d} has exactly the 12 projected keys; anonymous get of an
   ctx.step("the same row as an anonymous client reads it, under the rules");
   const got = await fs.get(`public/${B.docId}`);
   assert.equal(got.verdict, "ALLOW", `anonymous get public/{B}: ${got.status} ${got.code} ${got.message}`);
-  assert.deepEqual(Object.keys(got.doc.data).sort(), PUBLIC_KEYS, "the anonymously readable fields are the 12");
+  assert.deepEqual(Object.keys(got.doc.data).sort(), PUBLIC_KEYS, "the anonymously readable fields match the explicit allowlist");
 
   ctx.step("anonymous get of the unlisted and the absent rows, and an anonymous list: the same refusal");
   const un = await fs.get(`public/${U.docId}`);

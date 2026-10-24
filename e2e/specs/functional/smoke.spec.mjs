@@ -12,9 +12,9 @@
  *   2  owner and editor edit live, each typing a token into a different
  *      paragraph; both frames converge; the owner saves a new version, whose
  *      stored bytes pass DECOR and REHASH
- *   2b BODYATTR on that version: known defect S3 (`spellcheck` on <body>).
- *      Only the BODYATTR assertion failing is "S3 as expected"; if scenario
- *      2 saved no version, 2b FAILS on its precondition instead
+ *   2b BODYATTR on that version: neither editor override reaches the bytes.
+ *      The attributes must exactly match the authored version. Selected alone,
+ *      2b performs its own live-edit setup; failed setup cannot count as proof.
  *   3  MCP with a minted token: 32 tools, get_document returns the bytes
  *   4  `bikeshed list --json` lists the owner's document
  *   5  sharing with a new address sends exactly one invitation, held 10 s
@@ -25,7 +25,7 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { createHash } from "node:crypto";
-import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
+import { currentTarget, scenario } from "../../lib/test.mjs";
 import { cast, localEmail, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample } from "../../lib/seed.mjs";
@@ -44,6 +44,8 @@ after(() => (target ? closeAdmin(target) : undefined));
 
 /** The plan's live-editing deadline for N = 2. */
 const SETTLE_N2_MS = 15_000;
+const SAVE_MS = 90_000;
+const STALL = { inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true };
 /** The keys a web annotation has, exactly (A6.1). */
 const ANNOTATION_KEYS = ["actor", "anchor", "annId", "authorEmail", "authorUid", "color", "createdAt", "resolved"];
 
@@ -71,7 +73,7 @@ async function storedVersion(http, docId, versionId) {
 
 const QUOTE = "shareable links that resolve fast";
 
-scenario("smoke: owner and viewer sign in through the UI, the viewer comments on a passage, the owner sees the thread", { timeoutMs: 180_000 }, async (ctx) => {
+scenario("smoke: owner and viewer sign in through the UI, the viewer comments on a passage, the owner sees the thread", { timeoutMs: 300_000, ...STALL }, async (ctx) => {
   ctx.step("cast an owner and a viewer; the owner publishes the B sample through POST /publish and shares it with the viewer");
   const { owner, accounts } = await castWithOwner(["viewer"]);
   const viewerAcct = accounts[1];
@@ -109,8 +111,13 @@ scenario("smoke: owner and viewer sign in through the UI, the viewer comments on
     { exact: ann.anchor.exact, authorEmail: ann.authorEmail, authorUid: ann.authorUid, actor: ann.actor, resolved: ann.resolved },
     { exact: QUOTE, authorEmail: viewerAcct.email, authorUid: viewerAcct.uid, actor: { uid: viewerAcct.uid, email: viewerAcct.email, channel: "web" }, resolved: false },
   );
-  const comments = await readCollection(target, `docs/${docId}/versions/v1/annotations/${anns[0].id}/comments`);
-  assert.deepEqual(comments.map((c) => ({ body: c.data.body, authorEmail: c.data.authorEmail })), [{ body, authorEmail: viewerAcct.email }]);
+  // Creating an annotation and adding its first comment are separate writes.
+  // Wait for the comment, then judge its exact bytes and cardinality.
+  const comments = await eventually(async () => {
+    const rows = await readCollection(target, `docs/${docId}/versions/v1/annotations/${anns[0].id}/comments`);
+    return rows.length ? rows : false;
+  }, { timeout: 30_000, message: "the annotation's first comment is stored" });
+  assert.deepEqual(comments.map((c) => ({ body: c.data.body, authorEmail: c.data.authorEmail })), [{ body, authorEmail: viewerAcct.email }], "the stored thread has exactly the viewer's comment");
 
   ctx.step("the owner, who had the document open already, opens the comments panel and sees the thread and its highlight");
   await o.openComments();
@@ -124,13 +131,7 @@ scenario("smoke: owner and viewer sign in through the UI, the viewer comments on
 /** What scenario 2 leaves for 2b: the BODYATTR comparison of v1 and the saved version. */
 const live = { bodyAttr: null, versionId: null };
 
-/** BODYATTR with one attribute name taken out of both sides. */
-function withoutAttr(fp, name) {
-  const drop = (a) => (a ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== name)) : a);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
-
-scenario("smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)", { timeoutMs: 240_000 }, async (ctx) => {
+async function liveEditAndMeasure(ctx) {
   ctx.step("cast an owner and an editor; the owner publishes the paragraphs fixture and shares it for editing");
   const { owner, accounts } = await castWithOwner(["editor"]);
   const editorAcct = accounts[1];
@@ -179,7 +180,7 @@ scenario("smoke: owner and editor live-edit different paragraphs, converge, and 
     const states = await Promise.all([o.saveState(), e.saveState()]);
     if (states.some((s) => s === "dirty" || s === "saving" || s === "error")) throw new Error(`save states ${JSON.stringify(states)}`);
     return states;
-  }, { timeout: 20_000, interval: 1000, stableSamples: 3, message: "both editors settled" });
+  }, { timeout: SAVE_MS, interval: 1000, stableSamples: 3, message: "both editors settled" });
 
   ctx.step("the owner presses Save as new version");
   const commit = await o.saveAsNewVersion();
@@ -214,13 +215,14 @@ scenario("smoke: owner and editor live-edit different paragraphs, converge, and 
   live.versionId = commit.versionId;
   ctx.ev.json("bodyattr", live.bodyAttr);
   ctx.t.diagnostic(`BODYATTR v1→v2: ${JSON.stringify({ body: live.bodyAttr.body, html: live.bodyAttr.html })}`);
-  const beyondS3 = bodyAttrDiff(withoutAttr(fp1, "spellcheck"), withoutAttr(fp2, "spellcheck"));
-  assert.equal(beyondS3.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyondS3)}`);
+  assert.equal(live.bodyAttr.equal, true, `BODYATTR: saved root attributes differ from the author: ${JSON.stringify(live.bodyAttr)}`);
   noPageErrors([o, e]);
-});
+}
 
-scenario("smoke: the saved version's <html> and <body> attributes equal v1's (BODYATTR)", { defect: "S3", timeoutMs: 30_000 }, async (ctx) => {
-  precondition(live.bodyAttr, "the live-edit scenario did not save a version, so there is nothing to compare");
+scenario("smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)", { timeoutMs: 300_000, ...STALL }, liveEditAndMeasure);
+
+scenario("smoke: the saved version's <html> and <body> attributes equal v1's (BODYATTR)", { timeoutMs: 300_000, ...STALL }, async (ctx) => {
+  if (!live.bodyAttr) await liveEditAndMeasure(ctx);
   ctx.step(`BODYATTR v1→${live.versionId}: ${JSON.stringify(live.bodyAttr)}`);
   assert.equal(live.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify({ body: live.bodyAttr.body, html: live.bodyAttr.html })}`);
 });

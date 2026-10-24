@@ -1,0 +1,11 @@
+{
+  "oracle": "placeholder hints after shared-body adoption",
+  "what": "disable the observer that restores generated-container hints after shared-body adoption",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does"
+  },
+  "expect": {
+    "message": "the seeder's edit frame outlines the container"
+  }
+}

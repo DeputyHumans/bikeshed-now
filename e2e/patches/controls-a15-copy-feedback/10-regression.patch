@@ -1,0 +1,10 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -239,4 +239,7 @@
+     publishedAt: now(),
+   });
++  for (const annotation of (await srcRef.collection("versions").doc(versionId).collection("annotations").get()).docs) {
++    batch.create(forkRef.collection("versions").doc("v1").collection("annotations").doc(annotation.id), annotation.data());
++  }
+   batch.create(db.collection(FORKS).doc(docId), {
+     parentId: input.sourceId,

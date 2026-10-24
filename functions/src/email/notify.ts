@@ -2,9 +2,12 @@
 // Who gets told what, and how often (SPEC §14).
 
 import * as admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 import * as React from "react";
 import { COMMENT_EMAIL_COOLDOWN_MS, publicOrigin } from "../config";
 import type { Role } from "../lib/access";
+import { canRead, canManageSharing, isExpired, isMember, visibilityOf } from "../lib/acl";
+import { grantTokenOf, linkGrantRef } from "../lib/linkgrant";
 import { documentUrl, sendEmail } from "./send";
 import { Invite, inviteText, type InviteProps } from "./templates/Invite";
 import { Verify, verifyText } from "./templates/Verify";
@@ -48,26 +51,50 @@ export async function claimCommentCooldown(
 ): Promise<boolean> {
   const ref = db.collection("users").doc(uid);
   const own = cooldownKey(docId, kind);
+  const claimId = randomUUID();
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return false;
     const data = snap.data() || {};
     if (data.emailNotifications === false) return false;
 
+    // A comment contains document bytes and reviewer identities. Check the
+    // current read boundary with the cooldown, not the trigger's earlier
+    // recipient snapshot: revocation or link rotation must also stop email.
+    const emailLower = typeof data.email === "string" ? data.email.toLowerCase() : "";
+    if (!emailLower) return false;
+    const docRef = db.collection("docs").doc(docId);
+    const docSnap = await tx.get(docRef);
+    if (!docSnap.exists) return false;
+    const doc = docSnap.data() || {};
+    const caller = { uid, emailLower };
+    const grant = visibilityOf(doc) === "unlisted" && !isMember(doc, uid, emailLower)
+      ? await tx.get(linkGrantRef(docRef, uid))
+      : null;
+    if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) })) return false;
+    if (isExpired(doc, Date.now()) && !canManageSharing(doc, emailLower)) return false;
+
     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+    const claims = (data.emailCooldownClaims as Record<string, string>) || {};
+    // A numeric timestamp alone is not a receipt: two different trigger calls
+    // may start in the same millisecond. Keep each winning claim unique while
+    // retaining the existing numeric cooldown format and current read checks.
+    if (claims[own] === claimId && cooldowns[own] === now) return true;
     const last = Number(cooldowns[own] ?? 0);
     if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
 
     const pruned: Record<string, number> = { [own]: now };
+    const retainedClaims: Record<string, string> = { [own]: claimId };
     for (const [key, at] of Object.entries(cooldowns)) {
       if (key !== own && now - Number(at) < COMMENT_EMAIL_COOLDOWN_MS) {
         pruned[key] = Number(at);
+        if (typeof claims[key] === "string") retainedClaims[key] = claims[key];
       }
     }
     // `update`, not a merging `set`: a merge combines maps key by key, so the
     // expired keys this just dropped would survive the write, and the map would
     // only ever grow. The record exists; `snap.exists` was checked above.
-    tx.update(ref, { emailCooldowns: pruned });
+    tx.update(ref, { emailCooldowns: pruned, emailCooldownClaims: retainedClaims });
     return true;
   });
 }

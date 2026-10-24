@@ -68,8 +68,8 @@ This has happened repeatedly here, so assume it until disproven.
 `config/policy.mjs`. Edit the source or `config/templates/`, then
 `npm run build:policy`. `check:policy` byte-compares and runs as `pretest`.
 
-**2. Three module pairs are duplicated on purpose.** `hash`, `membership`,
-`policy` exist in ESM (`scripts/`) and CommonJS (`functions/`) because the
+**2. Four module pairs are duplicated on purpose.** `hash`, `membership`,
+`policy`, `transaction-receipts` exist in ESM (`scripts/`) and CommonJS (`functions/`) because the
 runtimes differ. Parity tests hold them together, and the hash pair is pinned by
 a **shared golden vector** — never by comparing the two implementations, which
 lets them drift together. Change one, change both.

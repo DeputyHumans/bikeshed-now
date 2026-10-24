@@ -1,0 +1,13 @@
+{
+  "oracle": "stacked navigation dispatches the exact synthetic deck keys",
+  "what": "Regress stacked authored classes",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.2 keys scroll a flat deck and the rail follows; on a stacked trusted deck they go into the deck through its own keys without scrolling it; the deck's own preventDefault wins inside the frame, stacked or flat",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "stacked navigation dispatches the exact synthetic deck keys"
+  }
+}

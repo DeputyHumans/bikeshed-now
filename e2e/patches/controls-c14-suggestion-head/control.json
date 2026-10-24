@@ -1,0 +1,16 @@
+{
+  "oracle": "A suggestion cannot commit against the head retired while it waited",
+  "what": "controls-c14-suggestion-head",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 suggestion held: N suggest_edit calls held after their pending count, while the owner's agent's commit_draft publishes v2, then released; each is refused for the newer version and none is left pending on v1 [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c13-feedback"
+  ],
+  "expect": {
+    "message": "^C14 left behind:"
+  }
+}

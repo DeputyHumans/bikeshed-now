@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK draft-dedup: success refreshes the live epoch mirror",
+  "what": "Skip postcommit mirror/log retirement after acknowledged dedup.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK draft-dedup: success refreshes the live epoch mirror"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "oracle": "Visibility requests that omit expiresAt preserve the stored expiry",
+  "what": "Visibility requests that omit expiresAt preserve the stored expiry",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.3 POST /visibility with the body SPEC \u00a72 documents (no expiresAt) keeps the expiry the owner set",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "an expiry is lifted only"
+  }
+}

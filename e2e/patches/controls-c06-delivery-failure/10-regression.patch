@@ -1,0 +1,9 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -269,5 +269,5 @@
+             setSaveError((error as Error).message);
+             setSaveState("error");
+-            return false;
++            return true;
+           }
+           // Remote updates can arrive while the local queue drains. Save that

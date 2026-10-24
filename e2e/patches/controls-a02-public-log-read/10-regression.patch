@@ -1,0 +1,14 @@
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -105,3 +105,3 @@
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && true && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
+           "$epoch": {
+--- a/config/templates/database.rules.json.tmpl
++++ b/config/templates/database.rules.json.tmpl
+@@ -102,3 +102,3 @@
+         "y": {
+-          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true || root.child('editAccess').child($docId).child('*').val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
++          ".read": "auth != null && auth.token.email_verified == true && auth.token.email != null && @@POLICY@@ && (root.child('editAccess').child($docId).child(auth.token.email.toLowerCase().replace('.', ',')).val() == true) && ((!root.child('editAccess').child($docId).child('__expiresAt').exists() || (root.child('editAccess').child($docId).child('__expiresAt').isNumber() && (root.child('editAccess').child($docId).child('__expiresAt').val() == 0 || root.child('editAccess').child($docId).child('__expiresAt').val() > now))) || root.child('editAccess').child($docId).child('__owner').val() == auth.token.email.toLowerCase())",
+           "$epoch": {

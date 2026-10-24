@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -738,3 +738,3 @@
+         } else if (outcome === "changed-after-apply") {
+-          toast.error("The suggestion changed after its previous text was saved in the draft. Nothing was accepted. Review that change and undo it if needed before deciding the revised suggestion.");
++          toast.error("The change is in the draft, but accepting it wasn’t recorded. Accept it again to record it.");
+         } else if (outcome === "unrecorded") {

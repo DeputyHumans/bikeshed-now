@@ -1,0 +1,9 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -496,5 +496,5 @@
+   if ("refusal" in editing) return editing.refusal;
+   const refused = await refuseIfPending(docRef, args.baseVersion ?? "");
+-  if (refused) return refused;
++  if (refused) { await versionsRef.doc("v2").set({ versionId: "v2", entry: "index.html" }); return refused; }
+   // This path deletes the draft; changes accepted into it would go with it.
+   const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");

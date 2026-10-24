@@ -1,0 +1,7 @@
+--- a/app/src/annotation/highlighter.ts
++++ b/app/src/annotation/highlighter.ts
+@@ -323,3 +323,3 @@
+   if (body && opts.authoredBodyAttributes) {
+-    restoreEditingBodyAttributes(body, opts.authoredBodyAttributes);
++    // Control: retain temporary editing body attributes.
+   }

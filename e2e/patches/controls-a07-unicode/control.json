@@ -1,0 +1,11 @@
+{
+  "oracle": "Unicode separators and C1 controls cannot reach a one-line suggestion (SPEC \u00a72, \u00a722)",
+  "what": "Restore the incomplete forbidden-character range, allowing Unicode line and paragraph separators and C1 controls",
+  "target": {
+    "spec": "e2e/specs/functional/a07-suggestions.spec.mjs",
+    "case": "A7.3b a replacement holding a line separator, a paragraph separator or a C1 control (NEL) answers 400 like any other line break or control character, on create and on revise"
+  },
+  "expect": {
+    "message": "each refused with 400 and the one-line reason"
+  }
+}

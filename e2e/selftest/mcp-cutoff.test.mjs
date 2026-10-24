@@ -20,6 +20,7 @@ const CUT = "Hosting's cut-off for a function that has not answered";
 const allow = { check: () => ({ allow: true }) };
 const realNow = Date.now;
 let skew = 0;
+let requestNow = null;
 let mode = "cut";
 let server;
 let target;
@@ -35,7 +36,7 @@ async function rejection(p) {
 }
 
 before(async () => {
-  Date.now = () => realNow() + skew;
+  Date.now = () => requestNow ?? realNow() + skew;
   server = http.createServer((req, res) => {
     req.resume();
     req.on("end", () => {
@@ -43,7 +44,7 @@ before(async () => {
         res.setHeader("content-type", "application/json");
         return res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18", serverInfo: { name: "stand-in", version: "0" }, capabilities: {} } }));
       }
-      if (mode === "cut") skew += 60_005;
+      if (mode === "cut") requestNow += 60_005;
       res.statusCode = 504;
       res.setHeader("content-type", "text/plain");
       res.end("Timed out waiting for function to respond.");
@@ -62,18 +63,29 @@ after(async () => {
 
 const client = (o = {}) => mcpClient(target, { token: "bsk_" + "0".repeat(32) + ".abcdefgh", evidence: false, guard: allow, ...o });
 
+/** Keep each artificial cutoff exact while restoring real time before the next call. */
+async function cutClock(run) {
+  requestNow = realNow() + skew;
+  try {
+    return await run();
+  } finally {
+    skew = requestNow - realNow();
+    requestNow = null;
+  }
+}
+
 test("mcpClient({cutoffError: true}): Hosting's cut-off on POST /mcp throws E2E_STACK_CUTOFF, from raw() and initialize() alike", async () => {
   mode = "cut";
   const c = client({ cutoffError: true, timeoutMs: 150_000 });
   assert.equal(c.http.cutoffError, true, "passed to the client it makes");
   assert.equal(c.http.timeoutMs, 150_000, "beside timeoutMs, as before");
-  const raw = await rejection(c.raw({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
+  const raw = await rejection(cutClock(() => c.raw({ jsonrpc: "2.0", id: 1, method: "tools/list" })));
   assert.equal(raw.code, "E2E_STACK_CUTOFF");
-  assert.match(raw.message, new RegExp(`^POST /mcp answered 504 after 60\\d{3} ms, ${CUT}$`));
+  assert.equal(raw.message, `POST /mcp answered 504 after 60005 ms, ${CUT}`);
   assert.equal(raw.stackCut, raw.message);
   assert.equal(raw.response?.status, 504, "the answer rides along");
   assert.equal(stackDidNotAnswer(raw), raw.message, "the stack not answering, as every client's cut-off is");
-  const init = await rejection(c.initialize());
+  const init = await rejection(cutClock(() => c.initialize()));
   assert.equal(init.code, "E2E_STACK_CUTOFF", "initialize goes the same way, not E2E_MCP_HTTP");
 });
 
@@ -81,11 +93,11 @@ test("NEGATIVE: without the option, as before: raw() returns Hosting's 504 as an
   mode = "cut";
   const plain = client();
   assert.equal(plain.http.cutoffError, false, "off by default");
-  const r = await plain.raw({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+  const r = await cutClock(() => plain.raw({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
   assert.equal(r.status, 504, "returned, not thrown: the old behaviour");
-  const init = await rejection(plain.initialize());
+  const init = await rejection(cutClock(() => plain.initialize()));
   assert.equal(init.code, "E2E_MCP_HTTP");
-  assert.match(stackDidNotAnswer(init) ?? "", new RegExp(`^MCP initialize answered 504 after 60\\d{3} ms, ${CUT}$`), "still judged through res.response, as it always was");
+  assert.equal(stackDidNotAnswer(init), `MCP initialize answered 504 after 60005 ms, ${CUT}`, "still judged through res.response, as it always was");
 
   mode = "quick";
   const quick = await client({ cutoffError: true }).raw({ jsonrpc: "2.0", id: 1, method: "tools/list" });

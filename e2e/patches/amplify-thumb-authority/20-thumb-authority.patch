@@ -1,0 +1,10 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -126,2 +126,3 @@
+ import type { Principal } from "./lib/auth";
++import { e2eThumbGate } from "./lib/e2eThumbGate";
+ import {
+@@ -642,2 +643,3 @@
+
++  await e2eThumbGate("thumb-after-upload", docId);
+   const receipt = freshReceiptId();

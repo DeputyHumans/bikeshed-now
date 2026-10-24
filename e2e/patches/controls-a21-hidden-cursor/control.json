@@ -1,0 +1,13 @@
+{
+  "oracle": "A21.2 a quiet poll returns the same cursor and writes nothing; a page of only the caller's own events still moves the cursor; the next event is reported once from it",
+  "what": "Advance only past visible events, leaving a page of the credential’s own events unread forever.",
+  "target": {
+    "spec": "e2e/specs/functional/a21-changes.spec.mjs",
+    "case": "A21.2 a quiet poll returns the same cursor and writes nothing; a page of only the caller's own events still moves the cursor; the next event is reported once from it",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a page of only the caller's own events still moves"
+  }
+}

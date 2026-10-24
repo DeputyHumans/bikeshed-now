@@ -181,6 +181,10 @@ export function useDeck({
     measure();
     view.addEventListener("scroll", measure, { passive: true });
     view.addEventListener("resize", measure);
+    // Attributes change when motion starts, while the outgoing slide can
+    // still paint. Completion changes computed styles without DOM mutation.
+    const motionEvents = ["transitionend", "transitioncancel", "animationend", "animationcancel"];
+    if (stacked) for (const event of motionEvents) doc.addEventListener(event, measure, true);
     const observer = stacked && doc.body ? new view.MutationObserver(measure) : null;
     observer?.observe(doc.body, {
       attributes: true,
@@ -190,6 +194,7 @@ export function useDeck({
     return () => {
       view.removeEventListener("scroll", measure);
       view.removeEventListener("resize", measure);
+      if (stacked) for (const event of motionEvents) doc.removeEventListener(event, measure, true);
       observer?.disconnect();
     };
   }, [doc, epoch, slides, stacked]);
@@ -290,16 +295,13 @@ export function useDeck({
         return;
       }
 
+      // Overview and paging belong only to measured pages. Prose keeps its keys.
+      if (!paged) return;
       if (e.key === "o" || e.key === "O") {
         e.preventDefault();
         setOverviewOpen((open) => !open);
         return;
       }
-
-      // Paging is gated on measurement: on a document whose sections are taller
-      // than the viewport, taking the arrow keys would leave the reader unable
-      // to scroll within a section at all.
-      if (!paged) return;
 
       switch (e.key) {
         case "ArrowRight":

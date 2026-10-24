@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.2b a participant whose access to the document was removed is told nothing of later comments in their thread (a notice carries the passage and the comment)",
+  "what": "removed reader",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.2b a participant whose access to the document was removed is told nothing of later comments in their thread (a notice carries the passage and the comment)"
+  },
+  "expect": {
+    "message": "a removed reader receives no later comments or quoted document bytes"
+  }
+}

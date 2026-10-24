@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -314,3 +314,3 @@
+   if (g.revokedAt != null) return invalidGrant("this connection was disconnected");
+-  if (opts.clientId && opts.clientId !== g.client?.id) return invalidGrant("refresh token was issued to another client");
++  // The presented client is no longer bound to this refresh token.
+   if (opts.resource && opts.resource !== g.resource) {

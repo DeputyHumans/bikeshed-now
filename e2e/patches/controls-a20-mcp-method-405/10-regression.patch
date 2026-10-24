@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -207,5 +207,5 @@
+     // Streamable HTTP allows a server to decline the SSE channel. Saying so
+     // explicitly is friendlier than a 404, which reads as "wrong URL".
+-    res.status(405).json(rpcError(null, INVALID_REQUEST, "this server is POST-only"));
++    res.status(404).json(rpcError(null, INVALID_REQUEST, "this server is POST-only"));
+     return;
+   }

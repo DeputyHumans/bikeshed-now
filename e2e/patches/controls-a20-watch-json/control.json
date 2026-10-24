@@ -1,0 +1,11 @@
+{
+  "oracle": "A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC \u00a719 says every command takes --json",
+  "what": "the live watch puts its human readiness notice on stdout between JSON results",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC \u00a719 says every command takes --json"
+  },
+  "expect": {
+    "message": "X-a20-cli-3: publish --watch --json wrote"
+  }
+}

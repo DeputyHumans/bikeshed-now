@@ -1,0 +1,13 @@
+{
+  "oracle": "a lower \\(reordered\\) claim leaves the session",
+  "what": "Regress A18 reordered beat",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.5 POST /view on an unlisted document without its key is the absent id's 404 and counts nothing; a beat adds at most 5 min, and a lower, negative or non-numeric claim changes nothing",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a lower \\(reordered\\) claim leaves the session"
+  }
+}

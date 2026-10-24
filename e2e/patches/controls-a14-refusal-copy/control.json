@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.7b workspace revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors",
+  "what": "hide the actionable revision refusal behind a generic message",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.7b workspace revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors"
+  },
+  "expect": {
+    "message": "revision refusal explains the current obstacle"
+  }
+}

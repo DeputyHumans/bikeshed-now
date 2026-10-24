@@ -1,0 +1,13 @@
+{
+  "oracle": "Bulleted list: live frame has the requested semantic element",
+  "what": "Bulleted list performs the requested native editing action",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.3b Bulleted list changes the selected content and survives autosave",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Bulleted list: live frame has the requested semantic element"
+  }
+}

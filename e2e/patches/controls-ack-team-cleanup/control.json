@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK team: completed request clears its temporary receipt",
+  "what": "Reintroduce the team-cleanup acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11e an administrator acknowledges self-removal after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK team: completed request clears its temporary receipt"
+  }
+}

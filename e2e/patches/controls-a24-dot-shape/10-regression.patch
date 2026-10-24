@@ -1,0 +1,9 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -243,4 +243,4 @@
+ .presence-dot[data-mode="edit"] {
+-  border-radius: 2px;
+-  transform: rotate(45deg);
++  border-radius: 50%;
++  transform: none;
+ }

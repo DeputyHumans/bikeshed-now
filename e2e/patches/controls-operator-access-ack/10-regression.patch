@@ -1,0 +1,7 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -30,3 +30,3 @@
+     const committed = receipt ? readReceipt(snap, receipt) : null;
+-    if (committed?.found) return committed.result;
++    if (false && committed?.found) return committed.result;
+     const current = snap.data() || {};

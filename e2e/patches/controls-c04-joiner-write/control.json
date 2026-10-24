@@ -1,13 +1,13 @@
 {
-  "oracle": "C4b, the joiner-to-members leg: the joiner's own probe keystroke reaches every member within 2 s (I13)",
-  "what": "persistDocMembership (functions/src/lib/folders.ts) mirrors a directly granted editor to presenceAccess but leaves it out of editAccess (and writes no open-edit `*`), so that editor may read the live log but not write it: it adopts the log without seeding, keeps I3 and receives the owner's keys, while every keystroke it makes is refused (the shape README's S16 paragraph measured for a missing editAccess mirror)",
+  "oracle": "C4b: authenticated joiner live-log append permission before browser I3/I13",
+  "what": "The authoritative presence mirror marks directly granted editors with control-only __e2eDenyWrite_ keys. The /y append rule denies that direction only; the owner, opposite direction, epoch fence, expiry and peer presence remain intact.",
   "target": {
     "spec": "e2e/specs/concurrency/c04-first-join.spec.mjs",
-    "case": "C4b positive control: an account granted editor joins N−1 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
+    "case": "C4b positive control: an account granted editor joins N\u22121 members editing a public open-editing document live: every peer's v1 body is once (I3), the joiner shares the live log, and a probe keystroke crosses each way between a member and the joiner within 2 s (I13) [N=2]",
     "suite": "concurrency"
   },
   "stack": [],
   "expect": {
-    "message": "^C4b: (?![\\s\\S]*(?:I3 |editing alone|p1 → pj))not merged \\(I13, pj → the members\\): p1: the probe never arrived"
+    "message": "^C4b: the joiner can append to the shared live log(?=\\n|$)"
   }
 }

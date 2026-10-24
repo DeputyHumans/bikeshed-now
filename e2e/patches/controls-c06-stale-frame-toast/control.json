@@ -1,0 +1,13 @@
+{
+  "oracle": "Replacing the frame within the same viewer cancels the older Done completion and its error toast.",
+  "what": "Keep the unmount guard but ignore editing-origin and frame identity when Done completes.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 a timed-out Done from a replaced frame cannot change its new editing session [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C6 stale Done: a replaced frame's completion must not report its old error"
+  }
+}

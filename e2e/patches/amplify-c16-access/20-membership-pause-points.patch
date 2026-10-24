@@ -1,20 +1,26 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
 @@ -43,2 +43,3 @@
- import { syncPublicProjection } from "./publicdoc";
+ import { syncPresenceAccess } from "./presence";
 +import { e2eAccessGate } from "./e2eAccessGate";
- 
-@@ -364,2 +365,3 @@
- 
+ import { syncPublicProjection } from "./publicdoc";
+@@ -384,2 +385,3 @@
+     if (!result) continue;
 +    await e2eAccessGate("subtree-before-docs-read", folderId);
-     // Documents directly in this folder inherit its fresh membership.
-@@ -394,2 +396,3 @@
-       }
-+      await e2eAccessGate("subtree-docs-before-write", folderId);
-       await batch.commit();
-@@ -452,3 +455,5 @@
-   for (const e of events(membership)) addEvent(batch, docRef, e);
-+  await e2eAccessGate("doc-membership-before-write", docRef.id);
-   await batch.commit();
-+  await e2eAccessGate("doc-mirror-before-write", docRef.id);
+     // The traversal only discovers ids. Each write rereads its current node,
+@@ -387,3 +389,4 @@
+     const docs = await db.collection("docs").where("folderId", "==", folderId).get();
+-    for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
++    await e2eAccessGate("subtree-docs-before-write", folderId);
++    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, true);
+     const children = await db.collection("folders").where("parentId", "==", folderId).get();
+@@ -406,3 +409,5 @@
+   events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
++  e2eFromCascade = false,
+ ): Promise<Membership> {
++  if (!e2eFromCascade) await e2eAccessGate("doc-membership-before-write", docRef.id);
+   const receipt = change ? freshReceiptId() : null;
+@@ -438,2 +443,3 @@
+   if (receipt) await clearReceipt(docRef, receipt);
++  if (!e2eFromCascade) await e2eAccessGate("doc-mirror-before-write", docRef.id);
    const fresh = (await docRef.get()).data() as DocAclData;

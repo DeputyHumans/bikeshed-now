@@ -1,0 +1,10 @@
+--- a/functions/src/lib/audience.ts
++++ b/functions/src/lib/audience.ts
+@@ -197,7 +197,6 @@
+     const grants = grantsOf(s.data());
+     const path = paths.get(s.id)?.path ?? "…";
+     return [...ROLES]
+-      .reverse()
+       .flatMap((role) =>
+         grants[GRANT_LIST[role]].map((principal) => ({ folderId: s.id, path, principal, role })),
+       );

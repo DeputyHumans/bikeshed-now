@@ -1,0 +1,16 @@
+{
+  "oracle": "A20.7m3 skills install refuses an underscore name first in the index and writes nothing",
+  "what": "controls-a20-cli-skill-underscore",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7m3 skills install refuses an underscore name first in the index and writes nothing",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "a20-cli-underscore-skill"
+  ],
+  "expect": {
+    "message": "skills install with an unusable name"
+  }
+}

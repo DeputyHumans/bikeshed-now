@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // An unlisted document tells a reader without its key nothing (SPEC §17).
 
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PublicDoc } from "../types";
+import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 // Every read the hook makes is stubbed here, never through the environment:
 // Vitest loads app/.env.local, and ambient config must not decide a test.
@@ -28,6 +28,10 @@ const MEMO: PublicDoc = {
   title: "Build estimate",
   slug: "memo",
   currentVersion: "v1",
+  liveEpoch: "initial",
+  marking: { enabled: false, label: "", footer: "" },
+  sourceEntry: null,
+  fileCount: 1,
   entry: "index.html",
   format: "html",
   visibility: "unlisted",
@@ -82,6 +86,43 @@ describe("useDocument for a reader who is not a member", () => {
     expect(result.current.title).toBe("Build estimate");
     expect(result.current.currentVersion).toBe("v1");
     expect(visibility.unlockDoc).toHaveBeenCalledWith("memo", KEY);
+  });
+
+  it.each(["unlisted", "public"] as const)("carries the owner's marking for an anonymous %s reader", async (kind) => {
+    const marking = { enabled: true, label: "OWNER", footer: "Owner footer" };
+    const projection = { ...MEMO, visibility: kind, marking, sourceEntry: "index.md", fileCount: 2 };
+    if (kind === "unlisted") visibility.unlockDoc.mockResolvedValue(projection);
+    else firestore.getPublicDoc.mockResolvedValue(projection);
+    const { result } = open({ k: kind === "unlisted" ? KEY : "", uid: null, settled: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.meta).toBeNull();
+    expect(result.current.marking).toEqual(marking);
+    expect(result.current.sourceEntry).toBe("index.md");
+    expect(result.current.fileCount).toBe(2);
+  });
+
+  it.each(["marking", "sourceEntry", "fileCount", "liveEpoch"] as const)("refreshes an older public mirror missing %s through the gated reader endpoint", async (field) => {
+    const stale: PublicDoc = { ...MEMO, visibility: "public" };
+    delete stale[field];
+    const fresh: PublicDoc = { ...MEMO, visibility: "public", marking: { enabled: true, label: "Current policy", footer: "" }, sourceEntry: "index.md", fileCount: 2, liveEpoch: "current-generation" };
+    firestore.getPublicDoc.mockResolvedValue(stale);
+    visibility.unlockDoc.mockResolvedValue(fresh);
+    const { result } = open({ k: "", uid: null, settled: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(visibility.unlockDoc).toHaveBeenCalledWith("memo", null);
+    expect(result.current.publicDoc).toEqual(fresh);
+    expect(result.current.marking).toEqual(fresh.marking);
+    expect(result.current.sourceEntry).toBe("index.md");
+    expect(result.current.fileCount).toBe(2);
+  });
+
+  it("does not reuse an older public mirror after the gated refresh refuses it", async () => {
+    firestore.getPublicDoc.mockResolvedValue({ ...MEMO, visibility: "public", marking: undefined });
+    visibility.unlockDoc.mockResolvedValue(null);
+    const { result } = open({ k: "", uid: null, settled: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.notFound).toBe(true);
+    expect(result.current.publicDoc).toBeNull();
   });
 
   it("shows nothing for a wrong key, exactly as for no key", async () => {
@@ -233,5 +274,59 @@ describe("useDocument for a member following a link with a key", () => {
 
     expect(result.current.publicDoc).toBeNull();
     expect(result.current.meta?.title).toBe("Build estimate (member record)");
+  });
+});
+
+
+describe("useDocument version selection", () => {
+  let publish: (data: DocMeta) => void;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    firestore.watchDoc.mockImplementation((_id: string, onData: (data: DocMeta) => void) => { publish = onData; return () => {}; });
+    firestore.listVersions.mockResolvedValue([]);
+    firestore.getPublicDoc.mockResolvedValue(null);
+    visibility.unlockDoc.mockResolvedValue(null);
+  });
+  const revision = (versionId: string, format: "html" | "markdown") => ({ versionId, format, entry: `${versionId}.html` }) as DocVersion;
+  const documentAt = (version: string) => ({ docId: "memo", currentVersion: version, title: "Memo" }) as DocMeta;
+
+  it("does not claim a known format before the version is read, then enables the correct palette", async () => {
+    let resolve!: (value: DocVersion) => void;
+    firestore.getVersion.mockImplementation(() => new Promise<DocVersion>((done) => { resolve = done; }));
+    const view = open({ k: "", uid: "owner", settled: true });
+    act(() => publish(documentAt("v1")));
+    expect(view.result.current.formatReady).toBe(false);
+    await act(async () => resolve(revision("v1", "markdown")));
+    expect(view.result.current.formatReady).toBe(true);
+    expect(view.result.current.format).toBe("markdown");
+  });
+
+  it("ignores old version replies after the head advances, including an old failure", async () => {
+    const replies = new Map<string, { resolve: (value: DocVersion) => void; reject: (error: Error) => void }>();
+    firestore.getVersion.mockImplementation((_doc: string, v: string) => new Promise<DocVersion>((resolve, reject) => { replies.set(v, { resolve, reject }); }));
+    const view = open({ k: "", uid: "owner", settled: true });
+    act(() => publish(documentAt("v1")));
+    act(() => publish(documentAt("v2")));
+    await act(async () => replies.get("v2")!.resolve(revision("v2", "markdown")));
+    await act(async () => replies.get("v1")!.resolve(revision("v1", "html")));
+    expect(view.result.current.version?.versionId).toBe("v2");
+    expect(view.result.current.entry).toBe("v2.html");
+    expect(view.result.current.format).toBe("markdown");
+    act(() => publish(documentAt("v3")));
+    act(() => publish(documentAt("v4")));
+    await act(async () => replies.get("v4")!.resolve(revision("v4", "html")));
+    await act(async () => replies.get("v3")!.reject(new Error("old read failed")));
+    expect(view.result.current.version?.versionId).toBe("v4");
+  });
+
+  it("does not render previous-version fields for even one render while the next read is pending", async () => {
+    firestore.getVersion.mockResolvedValueOnce(revision("v1", "html")).mockImplementation(() => new Promise(() => {}));
+    const seen: Array<{ version: string | undefined; ready: boolean }> = [];
+    renderHook(() => { const result = useDocument("memo", undefined, { k: "", uid: "owner", settled: true }); seen.push({ version: result.version?.versionId, ready: result.formatReady }); return result; });
+    act(() => publish(documentAt("v1")));
+    await waitFor(() => expect(seen.at(-1)?.version).toBe("v1"));
+    seen.length = 0;
+    act(() => publish(documentAt("v2")));
+    expect(seen.every((value) => value.version === undefined && value.ready === false)).toBe(true);
   });
 });

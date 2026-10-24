@@ -46,6 +46,7 @@ function fakeDb(initial = {}) {
     const depth = path.split("/").length + 1;
     return {
       doc: (id) => ref(`${path}/${id}`),
+      get: async () => ({ docs: [...store.keys()].filter((p) => p.startsWith(`${path}/`) && p.split("/").length === depth).map(snap) }),
       where: (field, op, value) => {
         assert.equal(op, "==");
         return {
@@ -539,4 +540,21 @@ test("nobody but the owner gets the inventory", async () => {
   // beta's owner gets beta's: gamma exists, and is the reader's private fork.
   const owner = await lineage(chain(), B, "beta");
   assert.deepEqual(owner.forks, { total: 1, hidden: 1, visible: [] });
+});
+
+
+test("forking one older version copies neither feedback nor other version records or objects", async () => {
+  const w = world({ extra: { [`docs/${SRC}/versions/v2/annotations/thread`]: { body: "source feedback" } } });
+  const out = await fork(w, READER, { versionId: "v2" });
+  assert.equal(out.ok, true);
+  const prefix = `docs/${out.docId}/`;
+  assert.deepEqual([...w.store.keys()].filter((p) => p.startsWith(prefix)).sort(), [`${prefix}versions/v1`], "only the selected version record, with no feedback");
+  assert.deepEqual([...w.bucket.store.keys()].filter((p) => p.startsWith(prefix)).sort(), [`${prefix}v1/index.html`], "only the selected bundle objects");
+});
+
+test("editors and approvers do not receive the owner's descendant inventory", async () => {
+  for (const role of ["editors", "approvers"]) {
+    const member = chain({ alpha: { members: [A.emailLower, READER.emailLower], [role]: [READER.emailLower], editorMembers: [READER.emailLower], approverMembers: [READER.emailLower] } });
+    assert.ok(!("forks" in await lineage(member, READER, "alpha")), `${role}: no owner inventory`);
+  }
 });

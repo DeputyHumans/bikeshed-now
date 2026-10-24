@@ -1,0 +1,6 @@
+--- a/functions/src/oauth/redirect.ts
++++ b/functions/src/oauth/redirect.ts
+@@ -95,2 +95,3 @@
+   if (a.raw === b.raw) return true;
++  if (a.kind === "web" && b.kind === "web") return a.url.hostname === b.url.hostname;
+   if (a.kind !== "loopback" || b.kind !== "loopback") return false;

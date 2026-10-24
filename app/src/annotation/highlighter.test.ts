@@ -93,9 +93,11 @@ describe("serializeCleanHtml", () => {
     expect(out).toContain('<div id="chart"></div>');
   });
 
-  it("removes contenteditable, which is an affordance and not content", () => {
-    const doc = makeDoc('<body><p contenteditable="true">x</p>');
-    expect(serializeCleanHtml(doc)).not.toContain("contenteditable");
+  it("keeps authored editing attributes when no editor overrides are supplied", () => {
+    const doc = makeDoc('<p contenteditable="false" spellcheck="false">x</p>');
+    doc.body.setAttribute("contenteditable", "plaintext-only");
+    doc.body.setAttribute("spellcheck", "false");
+    expect(serializeCleanHtml(doc)).toContain('<body contenteditable="plaintext-only" spellcheck="false"><p contenteditable="false" spellcheck="false">x</p>');
   });
 
   it("does not mutate the live document", () => {

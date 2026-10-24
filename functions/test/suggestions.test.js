@@ -53,9 +53,12 @@ function world(overrides = {}) {
   const sessions = Object.fromEntries(
     PEOPLE.map((p) => [`s-${p.uid}`, { uid: p.uid, email: p.email, email_verified: true }]),
   );
+  const users = Object.fromEntries(
+    PEOPLE.map((p) => [p.uid, { ...p, emailVerified: true, disabled: false }]),
+  );
   const as = (p) => ({ cookie: `__session=s-${p.uid}` });
   const call = (headers, body) =>
-    withFakeAdmin({ db, sessions }, () =>
+    withFakeAdmin({ db, sessions, users }, () =>
       invoke(manageSuggestion, { headers, body: { docId: "d1", versionId: "v1", ...body } }),
     );
   const ann = (annId) => store.get(`docs/d1/versions/v1/annotations/${annId}`);
@@ -155,6 +158,23 @@ test("a replacement is text on one line, and different from what it replaces", a
   }
   assert.equal((await w.call(w.as(SUGGESTER), { op: "create", anchor: ANCHOR })).status, 400, "no replacement at all");
   assert.equal((await create(w, w.as(SUGGESTER), { anchor: { ...ANCHOR, exact: "" } })).status, 400);
+});
+
+test("Unicode separators and every C1 control are refused on create and revise without storing anything", async () => {
+  const w = world();
+  const good = await create(w, w.as(SUGGESTER), { replacement: "caf\u00e9 \u00a0 weekends \u{1f334}" });
+  assert.equal(good.status, 200, "ordinary Unicode text, nonbreaking space and emoji remain valid");
+  const annId = good.body.annId;
+  const before = JSON.stringify(w.ann(annId));
+  for (const code of [0x2028, 0x2029, ...Array.from({ length: 32 }, (_, i) => 0x80 + i)]) {
+    const replacement = `two${String.fromCodePoint(code)}weekends`;
+    const label = `U+${code.toString(16).toUpperCase()}`;
+    const made = await create(w, w.as(SUGGESTER), { replacement });
+    assert.equal(made.status, 400, `${label}: create refuses the control or line separator`);
+    const revised = await w.call(w.as(SUGGESTER), { op: "revise", annId, replacement });
+    assert.equal(revised.status, 400, `${label}: revise refuses the control or line separator`);
+  }
+  assert.equal(JSON.stringify(w.ann(annId)), before, "refused revisions leave the suggestion unchanged");
 });
 
 test("an agent proposes through its person's role, stamped as the agent", async () => {

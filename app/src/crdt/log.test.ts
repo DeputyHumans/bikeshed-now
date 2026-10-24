@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Two peers on one log converge, and the log does not grow forever (SPEC §6b).
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { seedFragment } from "./binding";
+import { createHash, webcrypto } from "node:crypto";
 import * as Y from "yjs";
-import { COMPACT_AFTER, connect, fromBase64, toBase64, type UpdateLog } from "./log";
+import { bindSync } from "./sync";
+import { COMPACT_AFTER, DELIVERY_TIMEOUT_MS, LOG_ENTRY_MAX, connect, fromBase64, toBase64, type UpdateLog } from "./log";
+
+beforeAll(() => vi.stubGlobal("crypto", webcrypto));
+afterAll(() => vi.unstubAllGlobals());
 
 /**
  * An in-memory log shared by every peer in a test, standing in for the RTDB
@@ -27,6 +35,13 @@ function makeLog() {
       for (const l of listeners) for (const [k, p] of entries) l(k, p);
     },
     async ready() {},
+    async initialize(payload) {
+      if (!entries.has("_seed")) {
+        entries.set("_seed", payload);
+        if (online) for (const receive of listeners) receive("_seed", payload);
+      }
+      return entries.get("_seed")!;
+    },
     subscribe(onEntry) {
       listeners.add(onEntry);
       for (const [k, p] of entries) onEntry(k, p);
@@ -160,4 +175,259 @@ describe("two peers on one log", () => {
     // Still readable, still converged with what came before it.
     expect(text(a)).toBe("good");
   });
+});
+
+
+it("flushes a queued local DOM edit before applying a peer update", async () => {
+  const log = makeLog();
+  const a = new Y.Doc();
+  const da = document.implementation.createHTMLDocument("");
+  da.body.innerHTML = "<p>shared</p>";
+  const sa = bindSync(a.getXmlFragment("body"), da.body);
+  const b = new Y.Doc();
+  Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+  const db = document.implementation.createHTMLDocument("");
+  const sb = bindSync(b.getXmlFragment("body"), db.body);
+  const ca = connect(a, log, () => sa.flush());
+  const cb = connect(b, log, () => sb.flush());
+  try {
+    // No event-loop turn between the DOM edit and the arriving wire update:
+    // this is the MutationObserver queue the old binding simply discarded.
+    (da.body.querySelector("p")!.firstChild as Text).appendData(" LOCAL");
+    const text = (b.getXmlFragment("body").get(0) as Y.XmlElement).get(0) as Y.XmlText;
+    text.insert(text.length, " REMOTE");
+    await settle();
+    expect(da.body.textContent).toContain("LOCAL");
+    expect(da.body.textContent).toContain("REMOTE");
+    expect(da.body.textContent).toBe(db.body.textContent);
+  } finally { ca.destroy(); cb.destroy(); sa.destroy(); sb.destroy(); a.destroy(); b.destroy(); }
+});
+
+it("retains the elected seed through compaction so another empty snapshot cannot elect a second identity", async () => {
+  const log = makeLog();
+  const a = new Y.Doc();
+  const proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "seed");
+  const connection = connect(a, log);
+  await connection.initialize(Y.encodeStateAsUpdate(proposal));
+  for (let i = 0; i < COMPACT_AFTER + 2; i += 1) {
+    a.getText("t").insert(a.getText("t").length, "x");
+    await settle();
+  }
+  expect(log.entries.has("_seed")).toBe(true);
+  expect(log.entries.size).toBeLessThan(COMPACT_AFTER);
+  const b = new Y.Doc();
+  const second = connect(b, log);
+  await second.initialize(Y.encodeStateAsUpdate(proposal));
+  expect(text(b)).toBe(text(a));
+  connection.destroy(); second.destroy(); a.destroy(); b.destroy(); proposal.destroy();
+});
+
+
+it("causal stamps use the elected seed identity for first and already-populated joins", async () => {
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "authored");
+  const seed = Y.encodeStateAsUpdate(proposal);
+  const ca = connect(a, log);
+  await ca.initialize(seed);
+  const cb = connect(b, log);
+  await cb.initialize();
+  expect(ca.causalStamp().generation).toBe(createHash("sha256").update(seed).digest("hex"));
+  expect(cb.causalStamp()).toEqual(ca.causalStamp());
+  ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); proposal.destroy();
+});
+
+it("causal stamps include deletion ranges even when the insertion vector did not advance", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "abc");
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(proposal));
+  const before = conn.causalStamp();
+  doc.getText("t").delete(1, 1);
+  const after = conn.causalStamp();
+  expect(after.vector).toEqual(before.vector);
+  expect(after.deletes).toEqual({ [proposal.clientID]: [[1, 1]] });
+  expect(before.deletes).toEqual({});
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("causal stamps are synchronous snapshots and later insertions cannot mutate a prior stamp", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "a");
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(proposal));
+  const before = conn.causalStamp();
+  doc.getText("t").insert(1, "b");
+  const after = conn.causalStamp();
+  expect(after).not.toBeInstanceOf(Promise);
+  expect(after.vector[doc.clientID]).toBe(1);
+  expect(before.vector[doc.clientID]).toBeUndefined();
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("a populated log whose seed was lost cannot elect a fresh identity over orphaned deltas", async () => {
+  const log = makeLog(), doc = new Y.Doc(), proposal = new Y.Doc();
+  proposal.getText("t").insert(0, "old identity");
+  await log.append(toBase64(Y.encodeStateAsUpdate(proposal)));
+  const conn = connect(doc, log);
+  await expect(conn.initialize(Y.encodeStateAsUpdate(proposal))).rejects.toThrow(/seed/);
+  conn.destroy(); doc.destroy(); proposal.destroy();
+});
+
+it("retries a refused update with its dependents, reports interruption, then restores delivery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc(), status = vi.fn();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockRejectedValueOnce(new Error("permission_denied")).mockImplementation(append);
+  const ca = connect(a, log, () => {}, status), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status).toHaveBeenLastCalledWith(false);
+    a.getText("t").insert(5, " second");
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(text(b)).toBe("first second");
+    expect(status).toHaveBeenLastCalledWith(true);
+    expect(log.append).toHaveBeenCalledTimes(2);
+  } finally { ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+it("leaving cancels a refused append retry and never claims recovery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), doc = new Y.Doc(), status = vi.fn();
+  const append = vi.spyOn(log, "append").mockRejectedValue(new Error("permission_denied"));
+  const conn = connect(doc, log, () => {}, status);
+  try {
+    doc.getText("t").insert(0, "not delivered");
+    await vi.advanceTimersByTimeAsync(0);
+    conn.destroy();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(status).toHaveBeenLastCalledWith(false);
+  } finally { conn.destroy(); doc.destroy(); vi.useRealTimers(); }
+});
+
+it("retains the complete log when compaction receives no append acknowledgement", async () => {
+  const log = makeLog(), doc = new Y.Doc();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockImplementation((payload) => log.entries.size >= COMPACT_AFTER ? Promise.resolve(null) : append(payload));
+  const remove = vi.spyOn(log, "remove");
+  const conn = connect(doc, log);
+  try {
+    for (let i = 0; i < COMPACT_AFTER; i++) { doc.getText("t").insert(i, "x"); await settle(); }
+    expect(remove).not.toHaveBeenCalled();
+    expect(log.entries.size).toBe(COMPACT_AFTER);
+    const late = new Y.Doc(), joined = connect(late, log);
+    expect(text(late)).toBe(text(doc));
+    joined.destroy(); late.destroy();
+  } finally { conn.destroy(); doc.destroy(); }
+});
+
+it("the large-document regression seed and a 20-editor compaction fit the bounded transport", () => {
+  const html = readFileSync(join(__dirname, "../../../e2e/fixtures/large-doc.html"), "utf8");
+  const dom = new DOMParser().parseFromString(html, "text/html"), doc = new Y.Doc();
+  // Use a five-byte Yjs client ID so the regression payload has a stable size.
+  doc.clientID = 0xffff_ffff;
+  seedFragment(doc.getXmlFragment("body"), dom.body);
+  const seed = toBase64(Y.encodeStateAsUpdate(doc));
+  expect(seed.length).toBeGreaterThan(470_000);
+  expect(seed.length).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+  for (let i = 0; i < 20; i++) doc.getText("size-probe").insert(0, `editor-${i} changes`);
+  expect(toBase64(Y.encodeStateAsUpdate(doc)).length).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+  doc.destroy();
+});
+it("the client bound matches the generated security rule's accepted payload length", () => {
+  const rules = readFileSync(join(__dirname, "../../../database.rules.json"), "utf8");
+  expect(rules).toContain(`newData.val().length <= ${LOG_ENTRY_MAX}`);
+});
+it("skips oversized compaction without dropping any seed or deltas, so late joiners still converge", async () => {
+  const log = makeLog(), doc = new Y.Doc(), seed = new Y.Doc();
+  seed.getText("t").insert(0, "s".repeat(1_400_000));
+  const conn = connect(doc, log); await conn.initialize(Y.encodeStateAsUpdate(seed));
+  const append = vi.spyOn(log, "append"), remove = vi.spyOn(log, "remove");
+  try {
+    doc.getText("t").insert(doc.getText("t").length, "d".repeat(300_000)); await settle();
+    for (let i = 0; i < COMPACT_AFTER; i++) { doc.getText("t").insert(doc.getText("t").length, "x"); await settle(); }
+    expect(toBase64(Y.encodeStateAsUpdate(doc)).length).toBeGreaterThan(LOG_ENTRY_MAX);
+    expect(Math.max(...append.mock.calls.map(([payload]) => payload.length))).toBeLessThanOrEqual(LOG_ENTRY_MAX);
+    expect(remove).not.toHaveBeenCalled();
+    expect(log.entries.has("_seed")).toBe(true);
+    const late = new Y.Doc(), joined = connect(late, log); await joined.initialize();
+    expect(text(late)).toBe(text(doc));
+    joined.destroy(); late.destroy();
+  } finally { conn.destroy(); doc.destroy(); seed.destroy(); }
+});
+
+it("waits for the in-flight append and its queued dependents before Done destroys the connection", async () => {
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  let release!: () => void;
+  vi.spyOn(log, "append").mockImplementationOnce(async (payload) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return append(payload);
+  });
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    a.getText("t").insert(5, " second");
+    let left = false;
+    const done = Promise.resolve(ca.flush()).then(() => { ca.destroy(); left = true; });
+    await settle();
+    expect(left, "Done must retain the connection while transport acknowledgement is pending").toBe(false);
+    release();
+    await done;
+    expect(text(b)).toBe("first second");
+  } finally { release?.(); ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); }
+});
+
+it("a refused append refuses Done while keeping the update available for recovery", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  vi.spyOn(log, "append").mockRejectedValueOnce(new Error("permission_denied")).mockImplementation(append);
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "retained");
+    const flushing = Promise.resolve(ca.flush());
+    await expect(flushing).rejects.toThrow(/acknowledged|sharing/i);
+    await vi.advanceTimersByTimeAsync(2_500);
+    await ca.flush();
+    expect(text(b)).toBe("retained");
+  } finally { ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+
+it("a transport that never acknowledges bounds Done without dropping queued edits", async () => {
+  vi.useFakeTimers();
+  const log = makeLog(), a = new Y.Doc(), b = new Y.Doc();
+  const append = log.append.bind(log);
+  let release!: () => void;
+  vi.spyOn(log, "append").mockImplementationOnce(async (payload) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return append(payload);
+  });
+  const ca = connect(a, log), cb = connect(b, log);
+  try {
+    a.getText("t").insert(0, "first");
+    a.getText("t").insert(5, " retained");
+    const refused = expect(ca.flush()).rejects.toThrow(/not acknowledged/);
+    await vi.advanceTimersByTimeAsync(DELIVERY_TIMEOUT_MS);
+    await refused;
+    expect(text(a)).toBe("first retained");
+    expect(text(b)).toBe("");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await ca.flush();
+    expect(text(b)).toBe("first retained");
+  } finally { release?.(); ca.destroy(); cb.destroy(); a.destroy(); b.destroy(); vi.useRealTimers(); }
+});
+
+it("destroy rejects a waiting drain instead of reporting success or leaving it pending", async () => {
+  const log = makeLog(), doc = new Y.Doc();
+  vi.spyOn(log, "append").mockImplementation(() => new Promise(() => {}));
+  const conn = connect(doc, log);
+  doc.getText("t").insert(0, "pending");
+  const refused = expect(conn.flush()).rejects.toThrow(/not acknowledged/);
+  conn.destroy();
+  await refused;
+  await expect(conn.flush()).rejects.toThrow(/not acknowledged/);
+  doc.destroy();
 });

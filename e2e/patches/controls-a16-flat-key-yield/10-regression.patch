@@ -1,0 +1,9 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -280,5 +280,5 @@
+       // the case this hook exists to cover.
+       if (driving.current) return;
+-      if (e.defaultPrevented) return;
++      if (e.defaultPrevented && stacked) return;
+       if (e.metaKey || e.ctrlKey || e.altKey) return;
+       if (isTypingTarget(e.target)) return;

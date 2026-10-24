@@ -1,0 +1,11 @@
+{
+  "oracle": "an unpinned reader never gets the newer-version banner, not for one render",
+  "what": "controls-a12-stale-banner",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.3 (a second new version) an unpinned reader who followed one new version never sees the banner for the next one either, not even on a slower CPU"
+  },
+  "expect": {
+    "message": "an unpinned reader never gets the newer-version banner, not for one render"
+  }
+}

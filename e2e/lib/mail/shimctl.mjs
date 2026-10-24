@@ -46,6 +46,17 @@ export function shimControl(target, o = {}) {
       const r = await http.postJson(`${base}/__e2e/fail-recipient`, { to: one(to), status, count, ...(body !== undefined ? { body } : {}) }, { expect: 200 });
       return r.json;
     },
+    /** Hold this recipient's sends before headers or during the JSON body, until released or aborted. */
+    async holdRecipient(to, { stage = "headers" } = {}) {
+      requireCapability(target, "mail-hold-recipient");
+      return (await http.postJson(`${base}/__e2e/hold-recipient`, { to: one(to), stage }, { expect: 200 })).json;
+    },
+    async held(to) {
+      return (await http.get(`${base}/__e2e/hold-recipient`, { query: { to: one(to) }, expect: 200 })).json;
+    },
+    async release(to) {
+      return (await http.delete(`${base}/__e2e/hold-recipient`, { query: { to: one(to) }, expect: 200 })).json;
+    },
     /** How many injected failures are still queued for `to`. */
     async pending(to) {
       return (await http.get(`${base}/__e2e/fail-recipient`, { query: { to: one(to) }, expect: 200 })).json.pending;

@@ -1,0 +1,11 @@
+--- a/app/src/analytics.ts
++++ b/app/src/analytics.ts
+@@ -166,7 +166,7 @@
+     // gtag's defaults re-introduces the full URL.
+     return {
+       name: "page_view",
+-      params: { page_path: pattern, page_location: pattern, page_title: pattern },
++      params: { page_path: pattern, page_location: window.location.pathname, page_title: pattern },
+     };
+   }
+   // GA4 attaches page_title from document.title automatically, and the

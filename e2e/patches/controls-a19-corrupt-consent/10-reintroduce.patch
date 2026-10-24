@@ -1,0 +1,11 @@
+--- a/app/src/consent.ts
++++ b/app/src/consent.ts
+@@ -35,7 +35,7 @@
+ export function readConsent(): Consent {
+   try {
+     const value = window.localStorage.getItem(KEY);
+-    return value === "granted" || value === "denied" ? value : "unset";
++    return value === "GRANTED" ? "granted" : value === "granted" || value === "denied" ? value : "unset";
+   } catch {
+     return "unset";
+   }

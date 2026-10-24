@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -182,3 +182,3 @@
+     // Best effort: a claim that is not let go of lapses on its own.
+-    await steps.release().catch(() => {});
++    void steps.release;
+     return applied;

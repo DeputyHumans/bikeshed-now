@@ -1,12 +1,7 @@
 --- a/functions/src/lib/suggestions.ts
 +++ b/functions/src/lib/suggestions.ts
-@@ -198,7 +198,8 @@
-     .where("suggestion.state", "==", "pending")
-     .count()
-     .get();
--  if (open.data().count >= SUGGESTION_LIMITS.pendingPerAuthor) {
-+  // e2e control: off by one, so a twenty-first pending suggestion is taken.
-+  if (open.data().count > SUGGESTION_LIMITS.pendingPerAuthor) {
-     return {
-       status: 409,
-       error:
+@@ -217,3 +217,3 @@
+       .limit(SUGGESTION_LIMITS.pendingPerAuthor));
+-    if (open.docs.length >= SUGGESTION_LIMITS.pendingPerAuthor) {
++    if (open.docs.length > SUGGESTION_LIMITS.pendingPerAuthor) {
+       return {

@@ -38,7 +38,7 @@ export function assertPath(p, label = "path") {
   if (resolve(p) !== p) throw new Error(`${label}: not resolved (has . or .. or a trailing slash): ${p}`);
   const segments = p.split(sep);
   for (const bad of ["undefined", "null", "NaN", "[object Object]"]) {
-    if (segments.includes(bad) || p.includes(`${bad}-`) || p.includes(`-${bad}`)) {
+    if (segments.some((segment) => segment.split("-").includes(bad))) {
       throw new Error(`${label}: contains a "${bad}" segment, a value is missing: ${p}`);
     }
   }

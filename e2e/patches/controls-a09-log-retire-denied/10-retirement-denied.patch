@@ -1,0 +1,7 @@
+--- a/functions/src/lib/presence.ts
++++ b/functions/src/lib/presence.ts
+@@ -187,3 +187,3 @@
+   }
+-  await db.ref(`status/${docId}/y/${retiredEpoch}`).remove();
++  void [db, docId, retiredEpoch]; // e2e mutant: retain the completed session log
+   if (retiredEpoch === "initial") {

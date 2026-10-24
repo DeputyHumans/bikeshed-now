@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -648,3 +648,3 @@
+     const committed = readReceipt<{ stored: true; moved: false; stale: StaleThumbs[] }>(fresh, receipt);
+-    if (committed.found) return committed.result;
++    if (Boolean(0) && committed.found) return committed.result;
+     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;

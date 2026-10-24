@@ -1,0 +1,9 @@
+--- a/app/src/styles/comments.css
++++ b/app/src/styles/comments.css
+@@ -169,5 +169,5 @@
+ }
+
+-@media screen and (max-width: 860px) {
++@media (max-width: 860px) {
+   .comments-panel {
+     border-left: 0;

@@ -1,0 +1,15 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -39,3 +39,3 @@
+ import * as admin from "firebase-admin";
+-import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
++import { FieldPath, FieldValue } from "firebase-admin/firestore";
+ import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
+@@ -411,3 +411,2 @@
+       recordReceipt(tx, viewRef, before, receipt, true);
+-      const startedAt = before.data()?.startedAt;
+       tx.set(viewRef, {
+@@ -416,3 +415,2 @@
+         reads: FieldValue.increment(1),
+-        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
+         lastBeatAt: FieldValue.serverTimestamp(),

@@ -1,0 +1,7 @@
+--- a/app/src/components/Modal.tsx
++++ b/app/src/components/Modal.tsx
+@@ -43,3 +43,3 @@
+       release();
+-      (opener.current as HTMLElement | null)?.focus?.();
++      // Regression: do not return focus to the opener.
+     };

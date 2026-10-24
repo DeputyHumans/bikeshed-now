@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -415,4 +415,5 @@
+       tx.update(docRef, {
+         "stats.apiReads": FieldValue.increment(1),
++        "stats.views": FieldValue.increment(1),
+         "stats.lastViewedByEmail": FieldValue.delete(),
+       });

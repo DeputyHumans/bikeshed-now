@@ -1,0 +1,7 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -211,3 +211,3 @@
+     const own = attempted ? await tx.get(annRef) : null;
+-    if (own?.exists && own.data()?.annId === annRef.id && own.data()?.authorUid === author.uid) return { annId: annRef.id };
++    if (own?.exists && own.data()?.annId === annRef.id && own.data()?.authorUid === author.uid) void 0;
+     const current = String(doc.data()?.currentVersion ?? "");

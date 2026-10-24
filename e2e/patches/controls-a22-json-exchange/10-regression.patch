@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -35,3 +35,3 @@
+   const type = String(req.headers["content-type"] ?? "").toLowerCase();
+-  if (type.startsWith("application/json")) {
++  if (type.startsWith("application/json-broken")) {
+     const body = jsonBody(req);

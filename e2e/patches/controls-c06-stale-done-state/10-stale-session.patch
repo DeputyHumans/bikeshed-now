@@ -1,0 +1,13 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -282,8 +282,6 @@
+         timeout = setTimeout(() => {
+           expired = true;
+-          if (session.current === currentSession) {
+-            setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
+-            setSaveState("error");
+-          }
++          setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
++          setSaveState("error");
+           resolve(false);
+         }, DONE_TIMEOUT_MS);

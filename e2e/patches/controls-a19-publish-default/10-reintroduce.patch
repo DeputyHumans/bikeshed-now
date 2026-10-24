@@ -1,0 +1,13 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -381,9 +381,7 @@
+     emptyGrants(),
+     input.parentMembership,
+   );
+-  const account = input.marking === undefined && input.ownerUid
+-    ? await db.collection("users").doc(input.ownerUid).get() : null;
+-  const marking: Marking = resolveMarking(input.marking === undefined ? account?.get("defaultMarking") : input.marking);
++  const marking: Marking = resolveMarking(input.marking);
+   const docRef = db.collection("docs").doc(docId);
+
+   const batch = db.batch();

@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/clients.ts
++++ b/functions/src/oauth/clients.ts
+@@ -208,3 +208,3 @@
+       verified: true,
+-      redirectUris: CLI_REDIRECTS,
++      redirectUris: [...CLI_REDIRECTS, "http://localhost/callback"],
+       registration: "builtin",

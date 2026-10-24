@@ -1,0 +1,11 @@
+{
+  "oracle": "A19.3 the account default marking seeds new documents only: turned on it stores the suggested marking, reads back after a reload and checks the Upload dialog; turned off it stores none, unchecks the dialog, and leaves the document marked while it was on as it was",
+  "what": "a19 publish default",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.3 the account default marking seeds new documents only: turned on it stores the suggested marking, reads back after a reload and checks the Upload dialog; turned off it stores none, unchecks the dialog, and leaves the document marked while it was on as it was"
+  },
+  "expect": {
+    "message": "MCP publish inherits the owner's account default"
+  }
+}

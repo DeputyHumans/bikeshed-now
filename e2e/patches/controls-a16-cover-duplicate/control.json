@@ -1,0 +1,13 @@
+{
+  "oracle": "the cover first, then the slides, once each",
+  "what": "Regress cover duplicate",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.4 the owner's browser posts Q's cover, then its slides, once each; the record is {versionId, rev, cover, slides:{key, count}} with updatedAt untouched; a viewer who opened first posts nothing, then reads the rail and overview as <img src=/thumb/\u2026>; a stranger and an anonymous reader get the absent id's 404",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the cover first, then the slides, once each"
+  }
+}

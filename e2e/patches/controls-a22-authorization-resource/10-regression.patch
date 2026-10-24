@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/consent.ts
++++ b/functions/src/oauth/consent.ts
+@@ -113,3 +113,3 @@
+     const canonical = canonicalResource(params.resource);
+-    if (!canonical || !allowedResources(req).includes(canonical)) {
++    if (!canonical || allowedResources(req).length < 0) {
+       return fail("invalid_target", "The app asked for access to something this server doesn't host.", "resource is not this server's MCP endpoint");

@@ -104,7 +104,8 @@ describe("SlideThumb", () => {
     expect(out.querySelector("mark")).toBeNull();
     expect(out.querySelector("section.slide p")?.textContent).toBe("A commented passage.");
     expect(html).not.toContain("peer cursor");
-    expect(out.querySelector("[contenteditable]")).toBeNull();
+    // The app edits the body; this descendant attribute belongs to the author.
+    expect(out.querySelector("section.slide")?.getAttribute("contenteditable")).toBe("true");
     // Stripped by VALUE: an author who happens to use the attribute keeps it.
     expect(out.querySelector(`[${OWN_ATTR}="whatever"]`)?.textContent).toBe("the author's own");
     // And the reader's frame still has its highlight; only the copy lost it.

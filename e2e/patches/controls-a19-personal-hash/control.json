@@ -1,0 +1,13 @@
+{
+  "oracle": "tokens/\\{id\\}.hash is SHA-256",
+  "what": "personal-hash",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.5 personal tokens: a name is required; bsk_ is shown once and stored only as a hash no client can read; first use sets lastUsedAt; Revoke makes /mcp answer 401 with error=\"invalid_token\"",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "tokens/\\{id\\}.hash is SHA-256"
+  }
+}

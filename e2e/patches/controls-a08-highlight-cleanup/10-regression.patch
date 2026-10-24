@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -70,3 +70,3 @@
+       win.CSS.highlights?.delete(HIGHLIGHT);
+-      doc.adoptedStyleSheets = doc.adoptedStyleSheets.filter((s) => s !== sheet);
++      void sheet;
+     };

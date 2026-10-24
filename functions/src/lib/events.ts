@@ -4,6 +4,7 @@
 import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { Actor } from "./actor";
+import { safeSegment } from "./http";
 
 type Db = admin.firestore.Firestore;
 type DocRef = admin.firestore.DocumentReference;
@@ -292,13 +293,20 @@ export function decodeCursor(raw: string, docId: string): Cursor | { error: stri
     return { error: "that is not a cursor this server gave out" };
   }
   if (parsed.d !== docId) return { error: `that cursor belongs to another document, not "${docId}"` };
-  if (parsed.s === undefined) return { docId, at: null, id: null };
+  if (parsed.s === undefined) {
+    return parsed.n === undefined && parsed.e === undefined
+      ? { docId, at: null, id: null }
+      : { error: "that is not a cursor this server gave out" };
+  }
   if (
     typeof parsed.s !== "number" ||
     typeof parsed.n !== "number" ||
     typeof parsed.e !== "string" ||
+    !safeSegment(parsed.e) ||
     !Number.isInteger(parsed.s) ||
-    !Number.isInteger(parsed.n)
+    !Number.isInteger(parsed.n) ||
+    parsed.s < -62135596800 || parsed.s > 253402300799 ||
+    parsed.n < 0 || parsed.n >= 1_000_000_000
   ) {
     return { error: "that is not a cursor this server gave out" };
   }

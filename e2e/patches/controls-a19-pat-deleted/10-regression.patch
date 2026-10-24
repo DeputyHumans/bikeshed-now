@@ -1,0 +1,8 @@
+--- a/functions/src/lib/tokens.ts
++++ b/functions/src/lib/tokens.ts
+@@ -249,3 +249,4 @@
+     }
+-    return null;
++    if ((err as { code?: string })?.code !== "auth/user-not-found") return null;
++    user = { uid: record.uid, email: record.email, emailVerified: true, disabled: false } as admin.auth.UserRecord;
+   }

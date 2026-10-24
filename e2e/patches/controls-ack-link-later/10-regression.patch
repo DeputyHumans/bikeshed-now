@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -288,3 +288,3 @@
+           const fresh = await tx.get(docRef);
+-          if (readReceipt<boolean>(fresh, linkSave).found) return;
++          if (readReceipt<boolean>(fresh, linkSave).found && fresh.data()?.draft?.storagePrefix === storagePrefix) return;
+           const data = fresh.data();

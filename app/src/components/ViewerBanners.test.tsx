@@ -45,6 +45,13 @@ describe("the draft banner", () => {
 });
 
 
+test("one orphan uses singular grammar and two use plural grammar", () => {
+  const view = render(<ViewerBanners orphanedCount={1} />);
+  expect(screen.getByRole("status").textContent).toContain("1 comment no longer matches the text it was written about. It is still in the panel.");
+  view.rerender(<ViewerBanners orphanedCount={2} />);
+  expect(screen.getByRole("status").textContent).toContain("2 comments no longer match the text they were written about. They are still in the panel.");
+});
+
 test("an archive explains its read-only state and opens latest", () => {
   const latest = vi.fn();
   render(<ViewerBanners historical onOpenNewVersion={latest} />);

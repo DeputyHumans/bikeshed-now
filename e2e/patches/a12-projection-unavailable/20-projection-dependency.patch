@@ -1,0 +1,11 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -20,2 +20,3 @@
+ import { syncPublicProjection } from "./publicdoc";
++import { e2eProjectionUnavailable } from "./e2eProjectionUnavailable";
+ import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
+@@ -145,3 +146,3 @@
+   await syncPresenceAccess(docId, [], []);
+-  try { await syncPublicProjection(db, docId); }
++  try { await syncPublicProjection(e2eProjectionUnavailable(db, docId), docId); }
+   catch {

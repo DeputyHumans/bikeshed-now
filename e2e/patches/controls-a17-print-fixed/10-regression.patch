@@ -1,0 +1,11 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -55,7 +55,7 @@
+   "clip-path": "none",
+   clip: "auto",
+   "content-visibility": "visible",
+-  position: "fixed",
++  position: "absolute",
+   "z-index": "2147483647",
+   margin: "0",
+   border: "0",

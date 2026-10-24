@@ -1,0 +1,11 @@
+{
+  "oracle": "complete parsed HTML DOM identity",
+  "what": "the serializer adds an unauthored body attribute to the saved document",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.3b an in-app HTML commit preserves the complete parsed authored DOM plus the edit, including attributes and element whitespace"
+  },
+  "expect": {
+    "message": "v2 preserves the complete parsed authored DOM plus the edit"
+  }
+}

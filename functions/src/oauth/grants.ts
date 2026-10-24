@@ -232,7 +232,7 @@ export async function verifyAccessToken(
 /**
  * Is the person behind a grant still someone this deployment admits?
  *
- * A personal token never asks this again after it is minted. A grant asks at
+ * A personal token asks on every use (lib/tokens.ts). An OAuth grant asks at
  * every refresh, so a disabled account, an unverified or changed address, a
  * narrowed allowlist, or "sign out everywhere" ends the connection within an
  * hour.

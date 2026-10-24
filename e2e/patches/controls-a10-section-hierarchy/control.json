@@ -1,0 +1,13 @@
+{
+  "oracle": "section order, heading levels and nesting match the Markdown hierarchy",
+  "what": "Regress section hierarchy",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.2 a .md upload records format markdown, entry index.html, sourceEntry index.md and the pinned rendererVersion; Storage and the zip hold exactly both files, index.md as uploaded; headings are sections with GitHub slugs and no URL is external",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "section order, heading levels and nesting match the Markdown hierarchy"
+  }
+}

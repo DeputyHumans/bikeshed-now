@@ -20,15 +20,8 @@
  *   A11.4   usePeerPresence.ts follow mode: scroll bound to a peer's
  *           `viewport`, released by any deliberate gesture.
  *   A11.5   SPEC §16 "A suggester is not in it, and never joins the shared log".
- *   A11.6   Suspect S26, CLASS I (the SPEC allows it; the harm is concrete):
- *           no SPEC sentence gates READS of the live log. SPEC §16 spec.md:1565
- *           gates only "Writes to the shared log", and status/{doc} is
- *           presence, which SPEC §1.4a spec.md:95 gates by the mirror of
- *           `members` (§16 spec.md:1529-1533), every reader included. The
- *           harm: a viewer decodes an editor's unsaved keystrokes,
- *           which GET /draft refuses them (SPEC §2 spec.md:329-330) and whose
- *           very existence SPEC §19 spec.md:2076 shows "to editors only". A fix
- *           needs a new SPEC §16 sentence on reads, so it is asked at G1.
+ *   A11.6   SPEC §16 shared draft reads require editAccess. A viewer must
+ *           not decode an editor's unpublished keystrokes (S26 regression).
  *   A11.7   SPEC §16 "A public open-editing document also carries the key `*`";
  *           SPEC §6b joining waits for the log (suspect S27: a `*` editor can
  *           write `y` but not read it, so it seeds a second copy).
@@ -54,7 +47,7 @@
  *           when the selection is collapsed, and usePeerPresence.ts:95-96 sends
  *           that null), so a reader never sees where an editor is typing
  *           (X-a11-live-1, class P).
- *   A11.7b  SPEC §16 `*` on a public open-editing document: a share drops it,
+ *   A11.7b  SPEC §16 `*` on a public open-editing document survives a share,
  *           because persistDocMembership (folders.ts) refreshes the mirror
  *           without the open-editing flag (X-a11-live-3).
  *   A11.12b SPEC §6a spec.md:732-733 "Containers the author left empty for
@@ -62,7 +55,7 @@
  *           re-marks after the adopt. useInlineEditor.ts:136 marks the loaded
  *           body once; sync.ts:272-281 then replaces it from the wire, which
  *           rightly never carries data-bshd-empty (binding.ts:108, ADR 0010),
- *           so the joiner's outlines are gone (X-a11-live-2).
+ *           and local marking must be restored after the adopt (regression X-a11-live-2).
  *
  * Harness facts this spec relies on:
  *  - The RTDB emulator treats ANY `Authorization: Bearer …` as the admin, so a
@@ -86,6 +79,8 @@
  * Only e2e/lib/ talks to the stack.
  */
 
+import { flattenLiveLogs, liveLogPath, readLiveLogs } from "../../lib/live-log.mjs";
+import { presenceModes, presenceFor } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { isDeepStrictEqual } from "node:util";
@@ -146,6 +141,25 @@ let tokenSeq = 0;
 /** A checksummed token (lib/tokens.mjs) for this run, `peer` and a fresh sequence number. */
 const token = (peer) => makeToken(target.runId, peer, (tokenSeq += 1));
 
+scenario("A11.14 an untouched empty shared body can save its empty causal history before publication", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  const [account] = await cast(target, ["owner"], { notifications: false });
+  const owner = await openSession(target, account);
+  const up = await publish(owner.http, { body: "<!doctype html><html><head><title>Empty shared body</title></head><body></body></html>", name: "empty-shared", title: "Empty shared body" });
+  precondition(up.status === 200, "the empty authored body was published");
+  const user = await browserUser(ctx, "owner", account);
+  await user.open(up.docId);
+  await bothShared(user);
+  const draftResponse = user.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/draft", { timeout: AUTOSAVE_MS });
+  const commitResponse = user.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/commit", { timeout: AUTOSAVE_MS }).catch(() => null);
+  await user.page.getByRole("button", { name: "Save as new version", exact: true }).click();
+  const response = await draftResponse;
+  const posted = response.request().postDataJSON();
+  precondition(posted.causal && Object.keys(posted.causal.vector).length === 0 && Object.keys(posted.causal.deletes).length === 0, "the real shared editor sent an untouched empty insertion/deletion history");
+  assert.equal(response.status(), 200, "A11 empty history: the real editor's empty causal history must be accepted");
+  const committed = await commitResponse;
+  precondition(committed?.status() === 200, "the accepted draft's publication request completed");
+});
+
 // --- Setup -------------------------------------------------------------------
 
 /**
@@ -156,10 +170,23 @@ const token = (peer) => makeToken(target.runId, peer, (tokenSeq += 1));
  * through the UI, WHILE the document is set up: the two are independent, and
  * on a loaded shared stack each takes tens of seconds.
  */
-async function world(ctx, { roles = {}, sessions = [], browsers = [], title = "A11 live", fixture = FIXTURE, visibility = null, publicEdit = false } = {}) {
+// Independent palette expectation: presence, thread and overlay must all map
+// each email through the same stable ten-hue palette, never a constant colour.
+function expectedPeerHsl(email) {
+  let hash = 0;
+  for (const char of email.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return `hsl(${[262, 200, 338, 152, 28, 286, 176, 8, 224, 62][hash % 10]} 62% 42%)`;
+}
+async function world(ctx, { roles = {}, sessions = [], browsers = [], title = "A11 live", fixture = FIXTURE, visibility = null, publicEdit = false, distinctPeerColors = false } = {}) {
   const names = Object.keys(roles);
   // Opted out of notices before any session, as production's accounts are.
   const accounts = await cast(target, ["owner", ...names], { notifications: false });
+  if (distinctPeerColors) {
+    for (let tries = 0; tries < 32 && expectedPeerHsl(accounts[0].email) === expectedPeerHsl(accounts[1].email); tries++) {
+      accounts[1] = (await cast(target, [names[0]], { notifications: false }))[0];
+    }
+    precondition(expectedPeerHsl(accounts[0].email) !== expectedPeerHsl(accounts[1].email), "the two seeded authors have distinct expected palette colours");
+  }
   const byRole = { owner: accounts[0], ...Object.fromEntries(names.map((n, i) => [n, accounts[i + 1]])) };
   const signingIn = Promise.all(browsers.map(([name, role]) => browserUser(ctx, name, byRole[role])));
   const setup = (async () => {
@@ -282,7 +309,7 @@ async function rulesEnforced(ctx) {
 
 /** The live log's entries as the admin sees them: {key: base64}. */
 async function logEntries(docId) {
-  return (await rtdbGet(target, `status/${docId}/y`)) ?? {};
+  return (await readLiveLogs(target, docId)) ?? {};
 }
 
 /** Wait until the live log has at least `min` entries and holds still for 2 s (the plan's `y` settle). */
@@ -362,9 +389,14 @@ async function selectIn(user, id, exact) {
   return r;
 }
 
+/** Read one person explicitly from their raw, independently owned session records. */
+async function serverPeer(docId, uid) {
+  return presenceFor(await rtdbGet(target, `status/${docId}/peers`), uid);
+}
+
 /** The focus a peer has broadcast, as the server holds it (null when none). */
 async function serverFocus(docId, uid) {
-  return rtdbGet(target, `status/${docId}/peers/${uid}/focus`);
+  return (await serverPeer(docId, uid))?.focus ?? null;
 }
 
 /** The frame's scroll fraction, computed as the product computes it (peers.ts scrollFraction). */
@@ -439,24 +471,44 @@ scenario("A11.1 two editors both show Shared, and a token typed by either reache
 // --- A11.2 ---------------------------------------------------------------------
 
 scenario("A11.2 a peer's presence chip shows data-mode=edit while they edit, in one colour that survives a mode change, a reload and the caret overlay", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2 chip" });
+  const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2 chip", distinctPeerColors: true });
   const ownerEmail = w.ownerAcct.email.toLowerCase();
   const editorEmail = w.people.editor.account.email.toLowerCase();
   const { owner: o, editor: e } = w.users;
   await Promise.all([o.open(w.docId), e.open(w.docId)]);
 
-  const chipNow = (u, email, mode) =>
-    eventually(async () => {
-      const c = await chipFor(u, email);
-      if (!c || c.mode !== mode) throw new Error(`${u.name}'s chip for ${email}: ${JSON.stringify(c)}`);
-      return c;
-    }, { timeout: 10_000, interval: 200, stableSamples: 2, message: `${u.name} shows ${email} as ${mode}` });
+  const chipNow = async (u, email, mode) => {
+    let observed = null;
+    await eventually(async () => {
+      observed = await chipFor(u, email);
+      return observed?.mode === mode && observed;
+    }, { timeout: 10_000, interval: 200, stableSamples: 2, message: `${u.name} shows ${email} as ${mode}` }).catch((error) => {
+      // A missing chip is a measured product state. Browser/runtime errors
+      // still propagate, rather than being relabelled as a presence defect.
+      if (error.cause) throw error;
+    });
+    assert.equal(observed?.mode, mode, `${u.name} sees ${email}'s announced ${mode} presence`);
+    return observed;
+  };
 
   ctx.step("both reading: each sees the other's chip with data-mode=view and a round dot");
   const viewE = await chipNow(o, editorEmail, "view");
   const viewO = await chipNow(e, ownerEmail, "view");
   ctx.step(`owner sees the editor ${JSON.stringify(viewE)}; editor sees the owner ${JSON.stringify(viewO)}`);
   assert.equal(viewE.editingIcon, false, "a reader's chip carries no Editing icon");
+  const expected = await o.page.evaluate((colors) => colors.map(color => { const probe = document.createElement("span"); probe.style.color = color; return probe.style.color; }), [expectedPeerHsl(ownerEmail), expectedPeerHsl(editorEmail)]);
+  assert.equal(viewO.color, expected[0], "the owner's chip uses the email's expected palette colour");
+  assert.equal(viewE.color, expected[1], "the editor's chip uses the email's expected palette colour");
+  assert.notEqual(viewO.color, viewE.color, "two authors with distinct expected colours have distinct chips");
+  for (const [user, paragraphId, text, color] of [[o, "e2e-2", "Paragraph 2", expected[0]], [e, "e2e-3", "Paragraph 3", expected[1]]]) {
+    const note = `Palette check ${user.name}`;
+    await user.selectText(`#${paragraphId}`, text);
+    await user.comment(note);
+    const thread = user.page.locator(".thread").filter({ hasText: note });
+    const threadColor = await thread.evaluate(el => { const probe = document.createElement("span"); probe.style.color = getComputedStyle(el).getPropertyValue("--thread-color"); return probe.style.color; });
+    assert.equal(threadColor, color, "the independent comment accent uses its author's expected colour");
+  }
+
 
   ctx.step("the editor presses Edit: the owner's chip for them turns data-mode=edit, square dot, Editing icon, the same colour");
   await bothShared(e);
@@ -557,7 +609,7 @@ async function caretsOver(user, id) {
  * travelling the same path to the same reader first. The oracle alone (the
  * focus on the server, the caret in the reader's overlay) is the defect's.
  */
-scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the server as their focus, and a reader's frame draws it there, labelled", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-1", ...ON_STACK }, async (ctx) => {
+scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the server as their focus, and a reader's frame draws it there, labelled", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   ctx.step("SPEC §16 spec.md:1516: \"`focus` — selection or caret, as an ephemeral `Anchor`\" (selectionchange, 200 ms); spec.md:1575: \"Peer carets and selections update at 200 ms\"; spec.md:1480: \"carets carry name labels\"");
   const w = await world(ctx, { roles: { editor: "editor" }, browsers: [["owner", "owner"], ["editor", "editor"]], title: "A11.2b caret" });
   const editorEmail = w.people.editor.account.email.toLowerCase();
@@ -723,7 +775,7 @@ scenario("A11.4 follow keeps the reader within 0.02 of the leader's scroll fract
   const leadTop = await scrollFrac(l);
   const leaderUid = w.owner.uid;
   await eventually(async () => {
-    const v = await rtdbGet(target, `status/${w.docId}/peers/${leaderUid}/viewport`);
+    const v = (await serverPeer(w.docId, leaderUid))?.viewport;
     if (typeof v !== "number" || Math.abs(v - leadTop.frac) > 0.005) throw new Error(`viewport ${v}`);
     return v;
   }, { timeout: 10_000, interval: 200, message: "the leader's new viewport reached the server" });
@@ -760,11 +812,11 @@ scenario("A11.5 a suggester gets no Edit button, never touches the live log from
 
   ctx.step("the suggester's own ID token writes an entry to status/{doc}/y (REST, ?auth=); the owner's identical write is the control");
   const entry = newEntry("s");
-  const r = await rtdbFor(ctx, "suggester", sug.session.idToken).put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await rtdbFor(ctx, "suggester", sug.session.idToken).put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = rtdbVerdict(r, "the suggester's write");
-  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`status/${w.docId}/y/${newEntry("o")}`, EMPTY_UPDATE);
+  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`${await liveLogPath(target, w.docId)}/${newEntry("o")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(ctl, "the owner's control") === "ALLOW", "control: the owner's identical write is allowed");
-  const stored = await rtdbGet(target, `status/${w.docId}/y/${entry}`);
+  const stored = await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`);
 
   // User.log.wsFrames: every frame each context sent, from its creation (lib/browser.mjs).
   const sFrames = s.log.wsFrames;
@@ -784,31 +836,8 @@ scenario("A11.5 a suggester gets no Edit button, never touches the live log from
 
 // --- A11.6 ---------------------------------------------------------------------
 
-/**
- * Suspect S26, CLASS I: the SPEC allows this, and the harm is concrete. Ask at
- * G1; it is not a restoration of anything the SPEC says.
- *
- * No SPEC sentence gates READS of the live log. SPEC §16 spec.md:1565 gates
- * writes only: "Writes to the shared log are gated by `editAccess/{docId}`, a
- * second mirror, of `editorMembers`". The log lives under status/{docId}, which
- * is presence, and SPEC §1.4a spec.md:95 gates presence by "a server-maintained
- * mirror", the mirror of `members` (§16 spec.md:1529-1533): every reader is in
- * it. SPEC §2 spec.md:329-330 ("Editor-gated (`canEdit`, …)") gates the HTTP
- * draft endpoints, not this path. The nearest statement of the principle is not
- * the SPEC's but the rules file's own (database.rules.json:42-43, from
- * config/templates/database.rules.json.tmpl:39-40): `Presence is gated on "may
- * read"; document state is gated on "may edit".`
- *
- * The harm: the log holds an editor's keystrokes before any autosave, text they
- * may delete unsaved. A viewer decodes it with their own ID token, while GET
- * /draft refuses them the same content (SPEC §2 spec.md:329-332) and SPEC §19
- * spec.md:2076 shows even whether a draft exists "to editors only". SPEC §16
- * spec.md:1556 says "The log belongs to the draft." A fix needs a new SPEC §16
- * sentence gating reads of `y` on `editAccess`.
- *
- * Setup is precondition() throughout; the one assertion is S26's own oracle.
- */
-scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds an editor's unsaved keystrokes: DENY", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "S26", ...ON_STACK }, async (ctx) => {
+/** A viewer may see peers but not an editor's unsaved draft bytes (SPEC §16). */
+scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds an editor's unsaved keystrokes: DENY", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   const w = await world(ctx, { roles: { viewer: "viewer", stranger: null }, sessions: ["viewer", "stranger"], browsers: [["owner", "owner"]], title: "A11.6 viewer" });
   const viewer = w.people.viewer;
@@ -828,19 +857,19 @@ scenario("A11.6 a viewer may not read the live log status/{doc}/y, which holds a
 
   ctx.step("controls: the owner reads the log and sees the secret; a signed-in stranger is refused");
   const own = await rtdbFor(ctx, "owner", w.owner.idToken).get(`status/${w.docId}/y`);
-  precondition(rtdbVerdict(own, "the owner's read") === "ALLOW" && logContains(own.json ?? {}, secret), "control: the owner's read returns the secret");
+  precondition(rtdbVerdict(own, "the owner's read") === "ALLOW" && logContains(flattenLiveLogs(own.json), secret), "control: the owner's read returns the secret");
   const str = await rtdbFor(ctx, "stranger", w.people.stranger.session.idToken).get(`status/${w.docId}/y`);
   precondition(rtdbVerdict(str, "the stranger's read") === "DENY", "control: the rules are enforced (a stranger's read is refused)");
 
   ctx.step("the viewer reads status/{doc}/y with their own ID token");
   const r = await rtdbFor(ctx, "viewer", viewer.session.idToken).get(`status/${w.docId}/y`);
   const verdict = rtdbVerdict(r, "the viewer's read");
-  const sees = verdict === "ALLOW" && logContains(r.json ?? {}, secret);
+  const sees = verdict === "ALLOW" && logContains(flattenLiveLogs(r.json), secret);
   const draft = await viewer.session.http.get(`/draft/${encodeURIComponent(w.docId)}/index.html`);
   ctx.step(`viewer: ${r.status} → ${verdict}; decodes the editor's secret from it: ${sees}. For contrast GET /draft as the viewer: ${draft.status} (SPEC §2 spec.md:329-332: editor-gated, a refused reader gets 404)`);
   ctx.ev.json("viewer-read", { verdict, entries: Object.keys(r.json ?? {}).length, seesSecret: sees, draftStatus: draft.status });
   precondition(draft.status === 403 || draft.status === 404, `GET /draft refuses the viewer (got ${draft.status})`);
-  assert.equal(verdict, "DENY", `S26, CLASS I (the SPEC allows it; ask at G1): a viewer read the live log${sees ? ", the editor's unsaved typed secret included" : ""}. No SPEC sentence gates reads of y: SPEC §16 spec.md:1565 gates only "Writes to the shared log". The harm: GET /draft refuses this viewer the same content (SPEC §2 spec.md:329-332), and the rules file's own principle is "document state is gated on \"may edit\"" (database.rules.json:42-43)`);
+  assert.equal(verdict, "DENY", `a viewer read the live log${sees ? ", the editor's unsaved typed secret included" : ""}; shared draft reads require editAccess (SPEC §16)`);
 });
 
 // --- A11.7 ---------------------------------------------------------------------
@@ -853,7 +882,7 @@ async function i3(user) {
   }));
 }
 
-scenario("A11.7 a non-member joining a public open-editing document while a member edits leaves one sentinel and receives the member's keys", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "S27", ...ON_STACK }, async (ctx) => {
+scenario("A11.7 a non-member joining a public open-editing document while a member edits leaves one sentinel and receives the member's keys", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   const w = await world(ctx, { roles: { openeditor: null }, browsers: [["owner", "owner"], ["openeditor", "openeditor"]], title: "A11.7 open editing", visibility: "public", publicEdit: true });
   const pe = w.people.openeditor;
@@ -911,7 +940,7 @@ scenario("A11.7 a non-member joining a public open-editing document while a memb
 
 // --- A11.7b (found by A11.7's positive control) -------------------------------------
 
-scenario("A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-3", ...ON_STACK }, async (ctx) => {
+scenario("A11.7b sharing a public open-editing document with someone keeps editAccess/*, so open editors may still write the live log", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   await rulesEnforced(ctx);
   ctx.step("SPEC §16: \"A public open-editing document also carries the key `*`: any verified account.\" presence.ts: the mirror is refreshed by every path that recomputes members");
   const w = await world(ctx, { roles: { openeditor: null, colleague: null }, sessions: ["openeditor"], title: "A11.7b open editing after a share", visibility: "public", publicEdit: true });
@@ -919,7 +948,7 @@ scenario("A11.7b sharing a public open-editing document with someone keeps editA
   const db = rtdbFor(ctx, "openeditor", pe.session.idToken);
   const star = async () => ((await rtdbGet(target, `editAccess/${w.docId}`)) ?? {})["*"] === true;
   precondition(await star(), "before the share, editAccess/* is set (POST /visibility wrote it)");
-  const before = rtdbVerdict(await db.put(`status/${w.docId}/y/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write before the share");
+  const before = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write before the share");
   precondition(before === "ALLOW", "control: before the share, the open editor's own ID token writes the live log");
 
   ctx.step("the owner shares the document with a colleague as a viewer (a membership change, nothing about visibility)");
@@ -929,7 +958,7 @@ scenario("A11.7b sharing a public open-editing document with someone keeps editA
   precondition(rec?.visibility === "public" && rec?.publicEdit === true, `the document is still public with open editing (${rec?.visibility}, publicEdit ${rec?.publicEdit})`);
 
   const after = await star();
-  const write = rtdbVerdict(await db.put(`status/${w.docId}/y/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write after the share");
+  const write = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("pe")}`, EMPTY_UPDATE), "the open editor's write after the share");
   ctx.step(`after the share: editAccess/* ${after}; the open editor's log write ${write}; editAccess = ${JSON.stringify(Object.keys((await rtdbGet(target, `editAccess/${w.docId}`)) ?? {}))}`);
   assert.deepEqual({ star: after, write }, { star: true, write: "ALLOW" }, "a share leaves a public open-editing document open to every verified account in the live log");
 });
@@ -970,10 +999,11 @@ scenario("A11.8 an unlisted open-editing link holder in the editor is not shown 
   await armArrival(p, "e2e-10", probe);
   const t0 = Date.now();
   await o.typeInFrame("#e2e-10", probe);
+  const typingEnd = Date.now();
   // 2 s from the end of the typing; the time is taken in the link holder's page.
   let received = null;
   try {
-    received = (await waitForArrival(p, probe, { timeout: 2_000 + (Date.now() - t0) })).at;
+    received = (await waitForArrival(p, probe, { timeout: 2_000 })).at;
   } catch (err) {
     // Only "it did not come" is an answer; an unarmed or replaced probe measured nothing.
     if (err.code !== "E2E_ARRIVAL" || err.reason !== "timeout") throw err;
@@ -981,7 +1011,7 @@ scenario("A11.8 an unlisted open-editing link holder in the editor is not shown 
   }
   const shownShared = joined.share === "shared" || badge?.state === "shared";
   ctx.step(`shown as Shared: ${shownShared}; probe received: ${received ? `${received - t0} ms after typing began` : "no"}`);
-  assert.ok(!shownShared || received !== null, "the link holder is shown as Shared but does not receive the member's keystrokes (S24: not merged live)");
+  assert.ok(!shownShared || (received !== null && received - typingEnd <= 2_000), "the link holder is shown as Shared but does not receive the member's keystrokes within 2 s after typing ends (S24: not merged live)");
   assert.notEqual(badge?.state, "joining", "the link holder's editor is not stuck joining");
 });
 
@@ -1004,7 +1034,7 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
 
   ctx.step("control: before the revocation the editor's own ID token may write a log entry (the same request as after it)");
   const db = rtdbFor(ctx, "revoked", ed.session.idToken);
-  const pre = await db.put(`status/${w.docId}/y/${newEntry("e")}`, EMPTY_UPDATE);
+  const pre = await db.put(`${await liveLogPath(target, w.docId)}/${newEntry("e")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(pre, "the editor's write before the revocation") === "ALLOW", "control: the editor's token writes the log before the revocation");
 
   ctx.step("the owner removes the editor (POST /access remove); both mirrors drop them");
@@ -1019,9 +1049,9 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
 
   ctx.step("REST: the revoked editor's own ID token writes a log entry; the owner's identical write is the control");
   const entry = newEntry("e");
-  const r = await db.put(`status/${w.docId}/y/${entry}`, EMPTY_UPDATE);
+  const r = await db.put(`${await liveLogPath(target, w.docId)}/${entry}`, EMPTY_UPDATE);
   const verdict = rtdbVerdict(r, "the revoked editor's write");
-  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`status/${w.docId}/y/${newEntry("o")}`, EMPTY_UPDATE);
+  const ctl = await rtdbFor(ctx, "owner", w.owner.idToken).put(`${await liveLogPath(target, w.docId)}/${newEntry("o")}`, EMPTY_UPDATE);
   precondition(rtdbVerdict(ctl, "the owner's control") === "ALLOW", "control: the owner's identical write is allowed");
 
   ctx.step("HTTP: the revoked editor's session posts /draft; the owner's identical post is the control");
@@ -1042,7 +1072,7 @@ scenario("A11.9 an editor revoked mid-edit can no longer write the live log, and
   ctx.step(`REST write ${verdict}; POST /draft ${d.status}; browser autosave ${save.status}; log entries added while the revoked editor typed: ${grew.length}; the owner sees the token: ${ownerSees}`);
 
   assert.equal(verdict, "DENY", "the revoked editor's log write is refused");
-  assert.equal(await rtdbGet(target, `status/${w.docId}/y/${entry}`), null, "nothing was written");
+  assert.equal(await rtdbGet(target, `${await liveLogPath(target, w.docId)}/${entry}`), null, "nothing was written");
   assert.equal(d.status, 404, "POST /draft refuses the revoked editor with 404");
   assert.equal(save.status, 404, "the revoked editor's own browser autosave gets 404");
   assert.deepEqual(grew, [], "none of the revoked editor's keystrokes entered the live log");
@@ -1063,7 +1093,7 @@ scenario("A11.10 closing an editor's tab removes their peer node and their chip 
   ctx.step("both peer nodes exist (the editor's in edit mode), and the reading owner shows the editor's chip");
   const nodes = await eventually(async () => {
     const peers = (await rtdbGet(target, `status/${w.docId}/peers`)) ?? {};
-    const modes = Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode]));
+    const modes = presenceModes(peers);
     if (modes[w.owner.uid] !== "view" || modes[ed.account.uid] !== "edit") throw new Error(JSON.stringify(modes));
     return modes;
   }, { timeout: 10_000, message: "both peers present" });
@@ -1076,11 +1106,11 @@ scenario("A11.10 closing an editor's tab removes their peer node and their chip 
   let goneAt = null;
   let chipGoneAt = null;
   await eventually(async () => {
-    if (goneAt === null && (await rtdbGet(target, `status/${w.docId}/peers/${ed.account.uid}`)) === null) goneAt = Date.now() - t0;
+    if (goneAt === null && (await serverPeer(w.docId, ed.account.uid)) === null) goneAt = Date.now() - t0;
     if (chipGoneAt === null && (await chipFor(o, ed.account.email)) === null) chipGoneAt = Date.now() - t0;
     return goneAt !== null && chipGoneAt !== null;
   }, { timeout: 15_000, interval: 100, message: "the peer node and the chip are gone" }).catch(() => undefined);
-  const ownerNode = await rtdbGet(target, `status/${w.docId}/peers/${w.owner.uid}`);
+  const ownerNode = await serverPeer(w.docId, w.owner.uid);
   ctx.step(`peer node gone after ${goneAt ?? "never (15 s)"} ms; chip gone after ${chipGoneAt ?? "never (15 s)"} ms; the owner's own node: ${ownerNode?.mode}`);
   assert.equal(ownerNode?.mode, "view", "the owner's node is untouched");
   assert.ok(goneAt !== null && goneAt <= 5_000, `the closed tab's peer node is removed within 5 s (took ${goneAt ?? "more than 15 000"} ms)`);
@@ -1099,7 +1129,7 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
   const o = w.users.owner;
   await o.open(w.docId);
   await bothShared(o);
-  const ownerNode = await eventually(async () => (await rtdbGet(target, `status/${w.docId}/peers/${w.owner.uid}`)) ?? false, { timeout: 10_000, message: "the owner's peer node" });
+  const ownerNode = await eventually(async () => (await serverPeer(w.docId, w.owner.uid)) ?? false, { timeout: 10_000, message: "the owner's peer node" });
   const logBefore = Object.keys(await logEntries(w.docId)).sort();
 
   const db = rtdbFor(ctx, "editor", ed.session.idToken);
@@ -1115,10 +1145,10 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
     ["a client-chosen lastChanged", mine, { ...peer, lastChanged: Date.now() - 60_000 }],
     ["a mode that is neither view nor edit", mine, { ...peer, mode: "lock" }],
     ["an email that is not the caller's", mine, { ...peer, email: w.ownerAcct.email.toLowerCase() }],
-    ["another account's peer key", `status/${w.docId}/peers/${w.owner.uid}`, { ...peer }],
+    ["another account's peer key", `status/${w.docId}/peers/${ownerNode.key}`, { ...peer, uid: ed.session.uid }],
     ["a viewport outside 0..1", mine, { ...peer, viewport: 1.5 }],
-    ["a log entry that is not a string", `status/${w.docId}/y/${newEntry("n")}`, 12345],
-    ["a log entry over 200 000 characters", `status/${w.docId}/y/${newEntry("big")}`, "A".repeat(200_004)],
+    ["a log entry that is not a string", `${await liveLogPath(target, w.docId)}/${newEntry("n")}`, 12345],
+    ["a log entry above the 2 MiB encoded limit", `${await liveLogPath(target, w.docId)}/${newEntry("big")}`, "A".repeat(2 * 1024 * 1024 + 4)],
   ];
   const got = [];
   for (const [what, path, value] of cells) {
@@ -1129,26 +1159,44 @@ scenario("A11.11 with a live session running, the rules reject lock and requests
   ctx.step("controls: a well-formed peer node with the server's timestamp, and a string log entry, both allowed");
   const okPeer = rtdbVerdict(await db.put(mine, peer), "the well-formed peer");
   const okEntry = newEntry("ok");
-  const okLog = rtdbVerdict(await db.put(`status/${w.docId}/y/${okEntry}`, EMPTY_UPDATE), "the well-formed entry");
+  const okLog = rtdbVerdict(await db.put(`${await liveLogPath(target, w.docId)}/${okEntry}`, EMPTY_UPDATE), "the well-formed entry");
   const stored = (await rtdbGet(target, `status/${w.docId}`)) ?? {};
-  const logAfter = Object.keys(stored.y ?? {}).sort();
+  const logAfter = Object.keys(flattenLiveLogs(stored.y)).sort();
   const badge = await shareBadge(o);
   ctx.ev.json("verdicts", { got, okPeer, okLog });
   ctx.step(`well-formed peer ${okPeer}, entry ${okLog}; status keys ${JSON.stringify(Object.keys(stored).sort())}; owner badge ${JSON.stringify(badge)}`);
 
   assert.equal(okPeer, "ALLOW", "control: a well-formed peer node is allowed");
   assert.equal(okLog, "ALLOW", "control: a string log entry is allowed");
+  assert.equal(got.find((g) => g.what === "a log entry above the 2 MiB encoded limit")?.verdict, "DENY", "a live log entry above 2 MiB must be refused");
   assert.deepEqual(got.filter((g) => g.verdict !== "DENY").map((g) => g.what), [], "every malformed write is rejected");
   assert.deepEqual(Object.keys(stored).sort(), ["peers", "y"], "nothing but peers and y exists under status/{doc}");
-  assert.deepEqual(Object.keys(stored.peers).sort(), [w.owner.uid, ed.session.uid].sort(), "only the two callers' own peer nodes exist");
+  assert.deepEqual(Object.keys(stored.peers).sort(), [ownerNode.key, ed.session.uid].sort(), "only the two callers' own peer nodes exist");
   assert.deepEqual(
-    { email: stored.peers[w.owner.uid].email, mode: stored.peers[w.owner.uid].mode },
+    { email: stored.peers[ownerNode.key].email, mode: stored.peers[ownerNode.key].mode },
     { email: ownerNode.email, mode: "edit" },
     "nobody overwrote the owner's live node",
   );
   assert.deepEqual(Object.keys(stored.peers[ed.session.uid]).sort(), ["email", "lastChanged", "mode"], "the editor's node holds exactly the fields written");
-  assert.deepEqual(logAfter.filter((k) => !logBefore.includes(k)), [okEntry], "the only entry added to the log is the well-formed one");
+  assert.deepEqual(logAfter.filter((k) => !logBefore.includes(k)), [`${(await liveLogPath(target, w.docId)).split("/").at(-1)}/${okEntry}`], "the only entry added to the log is the well-formed one");
   assert.deepEqual(badge, { state: "shared", text: "Shared" }, "the live session is still Shared");
+});
+
+scenario("A11.11b a reader can announce view but cannot claim editing or remove another session", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  await rulesEnforced(ctx);
+  const w = await world(ctx, { roles: { editor: "editor", reader: "viewer" }, sessions: ["editor", "reader"], title: "A11.11b presence authority" });
+  const editor = w.people.editor.session, reader = w.people.reader.session;
+  const editDb = rtdbFor(ctx, "editor", editor.idToken), readDb = rtdbFor(ctx, "reader", reader.idToken);
+  const body = (person, email, mode) => ({ uid: person.uid, email: email.toLowerCase(), mode, lastChanged: { ".sv": "timestamp" } });
+  const own = `status/${w.docId}/peers/reader-session`, other = `status/${w.docId}/peers/editor-session`;
+  const view = body(reader, w.people.reader.account.email, "view");
+  const edit = body(editor, w.people.editor.account.email, "edit");
+  assert.equal(rtdbVerdict(await readDb.put(own, view), "reader view"), "ALLOW", "reader view presence remains allowed");
+  assert.equal(rtdbVerdict(await editDb.put(other, edit), "editor edit"), "ALLOW", "editor edit presence remains allowed");
+  assert.equal(rtdbVerdict(await readDb.put(own, { ...view, mode: "edit" }), "reader edit"), "DENY", "a reader cannot claim editing to veto publishing");
+  assert.equal(rtdbVerdict(await readDb.delete(other), "another session delete"), "DENY", "a reader cannot remove another session");
+  assert.equal(rtdbVerdict(await readDb.delete(own), "own session delete"), "ALLOW", "a reader can remove its own session");
+  assert.deepEqual(await rtdbGet(target, `status/${w.docId}/peers`), { "editor-session": { ...edit, lastChanged: (await rtdbGet(target, other)).lastChanged } }, "only the editor's untouched session remains");
 });
 
 // --- A11.12 --------------------------------------------------------------------
@@ -1169,7 +1217,7 @@ async function bodyOuter(user) {
     const outlined = [...document.body.querySelectorAll("[data-bshd-empty]")].map((el) => el.id);
     const clone = document.body.cloneNode(true);
     for (const el of clone.querySelectorAll("[data-bshd-empty]")) el.removeAttribute("data-bshd-empty");
-    return { document: clone.outerHTML, outlined };
+    return { document: clone.outerHTML, outlined, svgNamespaces: [...clone.querySelectorAll("svg")].map((el) => el.namespaceURI) };
   });
 }
 
@@ -1211,8 +1259,13 @@ scenario("A11.12 joining a live session with no edits rebuilds the body byte-ide
     ctx.step(`${letter}: the editor joins with no edits, so its body is rebuilt from the wire`);
     await bothShared(e);
     const joined = await logSettled(up.docId, { min: 1 });
+    const wire = await logEntries(up.docId);
+    for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `${letter}: decoded live log never carries ${attribute}`);
     const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
     const [ob, eb] = [os.document, es.document];
+    for (const [who, snapshot] of [["seeder", os], ["joiner", es]]) {
+      assert.ok(snapshot.svgNamespaces.every((ns) => ns === "http://www.w3.org/2000/svg"), `${letter}: ${who} SVG roots retain the SVG namespace through the wire round trip`);
+    }
     const r = { letter, sample, docId: up.docId, seedEntries: seeded.length, entriesAfterJoin: joined.length, equal: ob === eb, ownerBytes: ob.length, editorBytes: eb.length, outlined: { owner: os.outlined, editor: es.outlined } };
     if (!r.equal) {
       r.diff = firstDiff(ob, eb);
@@ -1259,8 +1312,8 @@ const OUTLINE_DOC = `<!DOCTYPE html>
  * rebuilt containers. The fix re-marks the joiner's body after the adopt; it
  * must never put the attribute on the wire.
  */
-scenario("A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does", { tiers: ["local", "prod"], timeoutMs: CASE_MS, defect: "X-a11-live-2", ...ON_STACK }, async (ctx) => {
-  ctx.step("SPEC §6a spec.md:732-733: \"Containers the author left empty for their script to fill are outlined in edit mode.\" The joiner never re-marks after the adopt: useInlineEditor.ts:136 marks the loaded body once, then sync.ts:272-281 replaces it from the wire, which never carries data-bshd-empty (binding.ts:108)");
+scenario("A11.12b a joiner's edit frame outlines the containers the document's script fills, as the seeder's does", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  ctx.step("SPEC §6a: generated containers remain outlined after shared-body adoption; the wire carries no placeholder marker");
   const accounts = await cast(target, ["owner", "editor"], { notifications: false });
   const owner = await openSession(target, accounts[0]);
   const [o, e, docId] = await Promise.all([
@@ -1277,11 +1330,13 @@ scenario("A11.12b a joiner's edit frame outlines the containers the document's s
   await bothShared(e);
   const joined = await logSettled(up.docId, { min: 1 });
   precondition(joined.length === seeded.length, `the joiner adopted the log (${seeded.length} → ${joined.length} entries)`);
+  const wire = await logEntries(up.docId);
+  for (const attribute of ["data-bshd-empty", "contenteditable"]) assert.equal(logContains(wire, attribute), false, `outline fixture: decoded live log never carries ${attribute}`);
   const [os, es] = await Promise.all([bodyOuter(o), bodyOuter(e)]);
   precondition(os.document === es.document, "the document itself round-tripped identical (A11.12)");
-  precondition(os.outlined.join() === "a11-filled-by-script", `the seeder's edit frame outlines the container the script fills (${JSON.stringify(os.outlined)})`);
+  assert.deepEqual(os.outlined, ["a11-filled-by-script"], "the seeder's edit frame outlines the container the script fills");
   const styled = await (await e.frame()).evaluate(() => Boolean(document.getElementById("bshd-edit-placeholders")));
   ctx.step(`outlined: seeder ${JSON.stringify(os.outlined)}; joiner ${JSON.stringify(es.outlined)} (the joiner's frame still has the outline stylesheet: ${styled})`);
   ctx.ev.json("outlined", { seeder: os.outlined, joiner: es.outlined, joinerHasStylesheet: styled });
-  assert.deepEqual(es.outlined, os.outlined, "X-a11-live-2: the joiner's edit frame does not outline the script-filled containers the seeder's does (SPEC §6a spec.md:732-733 \"outlined in edit mode\"): the joiner never re-marks after the adopt replaces its body (useInlineEditor.ts:136 marks once; sync.ts:272-281 adopts)");
+  assert.deepEqual(es.outlined, ["a11-filled-by-script"], "X-a11-live-2: the joiner's edit frame does not outline the script-filled containers the seeder's does (SPEC §6a spec.md:732-733 \"outlined in edit mode\"): the joiner never re-marks after the adopt replaces its body (useInlineEditor.ts:136 marks once; sync.ts:272-281 adopts)");
 });

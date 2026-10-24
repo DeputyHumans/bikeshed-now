@@ -1,0 +1,13 @@
+{
+  "oracle": "the first pass keeps each raw block and comment byte for byte|md'' === md'",
+  "what": "Regress second textarea",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.4 idempotence after the first pass: md' (the first in-app save of the markdown-reference sample) equals md'' (the draft the editor writes from md' published and saved unchanged)",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the first pass keeps each raw block and comment byte for byte|md'' === md'"
+  }
+}

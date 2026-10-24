@@ -1,0 +1,9 @@
+--- a/app/src/styles/slides.css
++++ b/app/src/styles/slides.css
+@@ -171,4 +171,4 @@
+   .slide-rail {
+-    position: absolute;
+-    inset: 0 auto 0 0;
++    position: fixed;
++    inset: var(--header-h) auto 0 0;
+     z-index: 45;

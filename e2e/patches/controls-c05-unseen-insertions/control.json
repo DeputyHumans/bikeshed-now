@@ -1,0 +1,15 @@
+{
+  "oracle": "unseen concurrent insertions survive text-range deletion in a retained parent",
+  "what": "Replace the whole CRDT text node on local deletion, discarding remote unseen insertions",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "I4"
+  }
+}

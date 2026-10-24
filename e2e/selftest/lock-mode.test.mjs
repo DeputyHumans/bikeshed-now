@@ -97,7 +97,7 @@ test("run.mjs takes each tier's lock as tierLockMode chose it from the run's own
   assert.match(code, /env\.E2E_N\s*=\s*values\.n\b/, "the spec process selects by the same --n");
   assert.match(code, /env\.E2E_TRIALS\s*=\s*values\.trials\b/, "and runs the same --trials");
   assert.match(code, /locks\[tier\]\s*=\s*\{\s*\.\.\.tierLock\s*,\s*acquiredAt:/, "the lock taken is recorded");
-  assert.match(code, /updateInvocationMeta\(\s*inv\.dir\s*,\s*\{\s*locks\s*\}\s*\)/, "into invocation.json");
+  assert.match(code, /updateInvocationMeta\(\s*inv\.dir\s*,\s*\{\s*locks\s*(?:,|\})/, "into invocation.json");
   assert.doesNotMatch(code, /\.authoring\b|mode\s*===|===\s*mode\b/, "nothing else depends on the mode: the gates apply whatever it is");
   assert.match(src, /if \(tier === "concurrency"\) \{\s*const max = Number\(values\["max-load"\] \?\? DEFAULT_MAX_LOAD\);\s*const gate = await waitForLoad\(/, "the load gate applies to every concurrency run, shared or exclusive");
 });

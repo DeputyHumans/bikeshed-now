@@ -1,21 +1,13 @@
 --- a/app/src/viewer/useSuggestionReview.ts
 +++ b/app/src/viewer/useSuggestionReview.ts
-@@ -180,15 +180,14 @@
-     await steps.release().catch(() => {});
-     return applied;
+@@ -185,4 +185,3 @@
    }
 -  await steps.flush();
 -  if (steps.saveFailed()) return "unsaved";
-+  // e2e control: the decision is recorded before the draft is saved.
++  // e2e control: record the decision before the draft is saved.
    try {
-     await steps.record();
-   } catch {
--    // The change is in the saved draft whatever the server said. Reporting
--    // only the error would read as "nothing happened".
-     return "unrecorded";
+@@ -197,2 +196,4 @@
    }
 +  await steps.flush();
 +  if (steps.saveFailed()) return "unsaved";
    return applied;
- }
- 

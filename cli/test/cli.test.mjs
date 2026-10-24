@@ -23,7 +23,7 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -611,11 +611,12 @@ test("the rest is read from the source file the tool named, with the link's key"
 });
 
 test("--json carries the whole source, and no longer says it was cut", async () => {
-  const { stdout } = await getAgainst(["big-deck", "--json"]);
+  const { stdout } = await getAgainst(["big-deck", "--json"], { result: { cursor: "after-big-deck" } });
   const result = JSON.parse(stdout.toString("utf8"));
   assert.equal(result.truncated, false);
   assert.equal(result.source, WHOLE);
   assert.equal(result.version, "v3", "the rest of the result survives");
+  assert.equal(result.cursor, "after-big-deck", "whole-source JSON retains the change cursor");
 });
 
 test("when the rest cannot be read, nothing is printed and the command fails", async () => {
@@ -930,6 +931,25 @@ test("a skill name that is a path is refused before anything is written", async 
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+for (const [kind, name] of [["parent", ".."], ["uppercase", "Bikeshed"], ["underscore", "bikeshed_skill"]]) {
+  test(`skills whitelist refuses the ${kind} name before writing its first entry`, async () => {
+    const index = { skills: [{ name, description: "d", path: "skills/x/SKILL.md" }] };
+    await withServer(skillsHost(index), async (origin) => {
+      const parent = mkdtempSync(join(tmpdir(), "bshd-skills-rule-"));
+      const dir = join(parent, "installed");
+      mkdirSync(dir);
+      try {
+        await assert.rejects(
+          runAsync(["skills", "install", dir, "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "" }),
+          (e) => e.code === 1 && /unusable name/.test(e.stderr),
+        );
+        assert.deepEqual(readdirSync(dir), [], "the first rejected entry writes nothing");
+        assert.deepEqual(readdirSync(parent), ["installed"], "no parent-directory file is written");
+      } finally { rmSync(parent, { recursive: true, force: true }); }
+    });
+  });
+}
 
 test("a skill index that is really the SPA's index.html is rejected", async () => {
   // Hosting answers an unknown path with the single-page app and a 200, so a
@@ -1266,6 +1286,7 @@ test("changes prints what happened and the cursor to pass next, reading every pa
     const { stdout } = await runAsync(["changes", "https://bikeshed.example/d/plan?k=tok_0123456789abcdefghijk", "--since", "c0"], env);
     assert.equal(seen[0].body.params.name, "get_changes");
     assert.deepEqual(seen[0].body.params.arguments, { id: "plan", k: "tok_0123456789abcdefghijk", since: "c0" });
+    assert.equal(seen.length, 2, "changes reads every page before printing");
     assert.equal(seen[1].body.params.arguments.since, "c1", "the next page starts where the last ended");
     assert.match(stdout, /comment\.added {2}ana@example\.com {2}\(t1\) “a single weekend”: Is the fortnight in this\?/);
     assert.match(stdout, /And egress\?/);
@@ -1294,6 +1315,16 @@ test("changes --wait gives up with exit 3, and prints the cursor to resume from"
       runAsync(["changes", "plan", "--since", "c8", "--wait", "--timeout", "0"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }),
       (e) => e.code === 3 && /nothing new before the timeout/.test(e.stdout) && /next: --since c9/.test(e.stdout),
     );
+  });
+});
+
+test("changes interval floor refuses a wait whose remaining deadline is shorter, without another check", async () => {
+  await withServer(rpcSeq([{ cursor: "c9", more: false, events: [], needsReply: [], retryAfter: 0, state: {} }]), async (origin, seen) => {
+    await assert.rejects(
+      runAsync(["changes", "plan", "--since", "c8", "--wait", "--interval", "1", "--timeout", "1.5", "--json"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }),
+      (e) => e.code === 3 && JSON.parse(e.stdout).cursor === "c9",
+    );
+    assert.equal(seen.length, 1, "the 30-second floor cannot fit: no second check");
   });
 });
 

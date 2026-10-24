@@ -93,9 +93,9 @@ export function which(name, pathVar = process.env.PATH || "") {
   return null;
 }
 
-export function requireTool(name, envOverride) {
-  const fromEnv = envOverride ? process.env[envOverride] : undefined;
-  const p = fromEnv || which(name);
+export function requireTool(name, envOverride, env = process.env) {
+  const fromEnv = envOverride ? env[envOverride] : undefined;
+  const p = fromEnv || which(name, env.PATH ?? "");
   if (!p) throw new Error(`${name} is not on PATH${envOverride ? ` (or set ${envOverride})` : ""}`);
   return assertPath(p, name);
 }

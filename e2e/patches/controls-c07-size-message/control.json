@@ -1,0 +1,13 @@
+{
+  "oracle": "^C7 unsupported size:.*needs an actionable",
+  "what": "Replace the actionable size-limit error with a generic message",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C7 unsupported size: an encoded seed above 2MiB keeps editing disabled and explains recovery [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C7 unsupported size:.*needs an actionable"
+  }
+}

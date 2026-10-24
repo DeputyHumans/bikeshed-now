@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1065,5 +1065,5 @@
+       // Only the owner or an approver, never open editing or a link, exactly
+       // as in the app; so no link key is taken either (SPEC §22).
+-      const { ref, data } = await loadDoc(ctx, str(args, "id"));
++      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+       if (!isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower)) {
+         throw new Error("only the owner or an approver can accept or reject a suggestion");

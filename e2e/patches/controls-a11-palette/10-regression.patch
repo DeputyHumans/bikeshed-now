@@ -1,0 +1,11 @@
+--- a/app/src/brand/tokens.ts
++++ b/app/src/brand/tokens.ts
+@@ -142,7 +142,7 @@
+   for (let i = 0; i < emailLower.length; i++) {
+     hash = (hash * 31 + emailLower.charCodeAt(i)) >>> 0;
+   }
+-  const hue = PEER_HUES[hash % PEER_HUES.length];
++  const hue = PEER_HUES[0];
+   // Held at one saturation and lightness so no peer is louder than another, and
+   // so every one of them stays legible against both bg and surface.
+   return `hsl(${hue} 62% 42%)`;

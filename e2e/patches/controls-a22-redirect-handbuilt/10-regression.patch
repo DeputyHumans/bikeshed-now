@@ -1,0 +1,9 @@
+--- a/functions/src/oauth/clients.ts
++++ b/functions/src/oauth/clients.ts
+@@ -168,4 +168,4 @@
+   if (!Array.isArray(r) || r.length === 0 || r.length > MAX_REDIRECTS) return null;
+-  if (!r.every((u) => typeof u === "string" && parseRedirectUri(u) !== null)) return null;
+-  const fallback = redirectHost(parseRedirectUri(r[0])!);
++  if (!r.every((u) => typeof u === "string")) return null;
++  const fallback = parseRedirectUri(r[0]) ? redirectHost(parseRedirectUri(r[0])!) : "Unchecked";
+   return {

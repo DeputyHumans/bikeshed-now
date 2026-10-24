@@ -1,0 +1,13 @@
+{
+  "oracle": "member-readable stats never reveal the last reader's email",
+  "what": "a18 reader privacy",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.4 (who read it last) the document record a viewer may read names none of its readers: stats.lastViewedByEmail is the per-person detail the Activity panel withholds from a viewer",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "member-readable stats never reveal the last reader's email"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK team: the winning addition sends exactly one invitation",
+  "what": "Reintroduce the team-invitation acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11f a committed team addition keeps its invitation delta through native acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK team: the winning addition sends exactly one invitation"
+  }
+}

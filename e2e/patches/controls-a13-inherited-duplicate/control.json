@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.4 inherited grants: listed after the document's own, nearest folder first and highest role first, each with its folder's path and no controls; a person granted directly and through a folder has both rows",
+  "what": "Hide a person’s inherited grant when the same person has a direct grant.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.4 inherited grants: listed after the document's own, nearest folder first and highest role first, each with its folder's path and no controls; a person granted directly and through a folder has both rows",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "share dialog: .* inherited rows|the person granted directly and through the folder has both rows"
+  }
+}

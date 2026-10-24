@@ -1,0 +1,13 @@
+{
+  "oracle": "a late save never leaves a draft on a superseded base",
+  "what": "Remove the final writeDraft base check and ignore the old draft snapshot only after the publication changed the head, recreating an unconditional stale save.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.6 (racing a commit) a POST /draft on the base a concurrent commit is superseding is refused or lands first: it never leaves a draft on the superseded version, which GET /draft would serve to every editor (SPEC \u00a72)",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no draft is left on a superseded base"
+  }
+}

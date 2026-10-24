@@ -1,0 +1,13 @@
+{
+  "oracle": "navigator follows settled animated slides",
+  "what": "controls-a16-motion-completion",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.2b on the animated deck, trusted (stacked), four ArrowRight presses on the parent show slides 2 to 5 and the rail marks each",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the settled animated deck and its navigator advance once per ArrowRight"
+  }
+}

@@ -1,12 +1,9 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -327,7 +327,8 @@
-   try {
-     await db.runTransaction(async (tx) => {
-       const cur = await tx.get(docRef);
+@@ -517,5 +517,4 @@
+       if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
 -      if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
-+      // e2e negative control (controls-i6-stale-removed): the transaction no
-+      // longer checks that the base is still current.
-       if (!sameDraft(cur.data()?.draft)) throw new Error("DRAFT_CHANGED");
-       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-       const vRef = versionsRef.doc(versionId);
+       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+-      checkDraftSnapshot(cur.data(), draft);
++      // e2e control: ignore the current base and draft snapshot.
+       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");

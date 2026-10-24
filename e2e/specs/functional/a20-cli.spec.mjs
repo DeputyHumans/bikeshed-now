@@ -27,16 +27,9 @@
  * are known, so a later act on them passes the production guard and
  * quarantine finds them.
  *
- * Three cases are known to fail today, each with its own defect id, and each
- * prints human text on stdout under --json. They do not rest on the same text:
- *   - X-a20-cli-3, `publish --watch --json` (class P): SPEC §19 spec.md:2257-2260
- *     has publish send its notices to stderr, "which keeps `--json` output
- *     parseable", and the watch's notice goes to stdout between its results.
- *   - X-a20-cli-1, `open --json`, and X-a20-cli-2, `login --paste --json`
- *     (class Q, a SPEC QUESTION): SPEC §19 spec.md:2231 says only "Every
- *     command takes `--json`." It never says what either prints under it, and
- *     both accept the flag and exit 0. Each case keeps its defect tag so the
- *     observation stays pinned, and its comment names the harm.
+ * Every --json command keeps human prompts and notices on stderr. Open
+ * returns its complete URL; both login flows identify the saved deployment
+ * and credential source without returning the token.
  *
  * Load. On the long-lived shared stack one function call has taken 15 to 60
  * seconds (measured 2026-10-11, its Firestore emulator at 100% CPU: mkdir
@@ -56,12 +49,12 @@
 import assert from "node:assert/strict";
 import { after, before } from "node:test";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { answered, currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { bearerHttp, listTokens, mintToken, openSession } from "../../lib/session.mjs";
-import { absentDocId, docIdFor, ledgerDoc as ledgerDocLib, ledgerFolder as ledgerFolderLib, ledgerToken, publish, readFixture, zipBundle } from "../../lib/seed.mjs";
+import { absentDocId, docIdFor, ledgerDoc as ledgerDocLib, ledgerFolder as ledgerFolderLib, ledgerToken, publish, readFixture, seedThreads, zipBundle } from "../../lib/seed.mjs";
 import { cliEntry, cliHome, runCli, spawnCli } from "../../lib/cli.mjs";
 import { patchCapability } from "../../lib/options.mjs";
 import { agentName, createHttp } from "../../lib/http.mjs";
@@ -72,6 +65,7 @@ import { tinyPng } from "../../lib/thumbs.mjs";
 import { egressMark, readEgress } from "../../lib/egress.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { mcpClient } from "../../lib/mcp.mjs";
+import { eventAt, settleLog } from "../../lib/changes.mjs";
 
 const target = currentTarget();
 after(async () => {
@@ -87,7 +81,7 @@ const LOCAL = ["local"];
 /** The patch set the skills-name case needs: a stack whose /skills/index.json names an unusable skill first. */
 const BAD_SKILL_SET = "a20-cli-bad-skill-name";
 const BAD_SKILL = patchCapability(BAD_SKILL_SET);
-const BAD_SKILL_NAME = "../a20-escape";
+const BAD_SKILL_NAME = "..";
 
 /** Where the egress log stood when this spec file started: CLI refusals after it are this file's to explain. */
 const EGRESS_SINCE = target?.kind === "local" && target.stack?.logs?.egress ? egressMark(target) : 0;
@@ -161,7 +155,7 @@ async function ready(key, { who = "owner", tokens = 1, fresh = false, docs = [] 
 const NAMES = {
   a: "A20.7a --version --json prints {version} from the CLI's own package.json, and --version alone prints `bikeshed <version>`",
   b: "A20.7b publish --json stores the file's bytes at the requested --id as v1 (url, cursor, filedIn, access) with provenance channel cli via upload and the CLI's own client header; a taken --id still publishes, under another id, said on stderr only",
-  c: "A20.7c list --json pages newest first with --limit and --cursor, and --all reads every page",
+  c: "A20.7c list --json pages newest first with --limit and --cursor, and --all returns all three documents",
   d: "A20.7d get and get --json return the whole source of a document over get_document's 200,000-character cap (truncated false, the uploaded bytes); a pasted ?k= link reads an unlisted document for a non-member, and the bare id answers as an absent one",
   e: "A20.7e update --json sends an .html through update_document (publishedVia mcp), the same bytes again is deduped, and a stale --base is refused naming the current version, minting nothing",
   f: "A20.7f update of a .zip, by name or by its magic bytes, goes up as bytes to /publish?update= (publishedVia cli): every entry, a binary image included, is stored byte for byte, and --base is honoured there too",
@@ -171,7 +165,9 @@ const NAMES = {
   j: "A20.7j changes --json: --since is required; `all` reads what another credential caused, with quote and body; a quiet cursor comes back unchanged; another document's cursor is refused; --wait --timeout on a quiet cursor exits 3 with the cursor; --wait returns 0 with what arrived after its first check, at least --interval 30 s in",
   k: "A20.7k mkdir, folders, folder, publish --folder, mv and rename --json file and retitle documents; mv needs its destination and spells the root `root`; rename keeps the address",
   l: "A20.7l skills --json lists the deployment's skills, and skills install <dir> --json writes each one's SKILL.md as served, without a token",
-  m: "A20.7m skills install refuses a skill whose name could leave the directory, and writes nothing",
+  m: "A20.7m skills install refuses a bare parent-directory name first in the index and writes nothing",
+  z: "A20.7m2 skills install refuses an uppercase name first in the index and writes nothing",
+  aa: "A20.7m3 skills install refuses an underscore name first in the index and writes nothing",
   n: "A20.7n open prints the document's address, keeping a pasted link's key, and hands exactly that address to the system opener",
   o: "A20.7o open --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
   p: "A20.7p login --json signs in through the browser flow and saves a cli token marked via browser; logout --json revokes it on the deployment (401 after) and keeps the origin; a token revoking another token's id is refused 403",
@@ -179,6 +175,10 @@ const NAMES = {
   r: "A20.7r login --paste --json prints a JSON value on stdout, as SPEC §19 says every command takes --json",
   s: "A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each",
   t: "A20.7t publish --watch --json writes nothing but JSON to stdout, as SPEC §19 says every command takes --json",
+  w: "A20.7w list --all reads both default-sized pages: all 51 documents exactly once in newest-first order",
+  x: "A20.7x changes reads both default-sized pages: all 103 recorded events exactly once in stored order",
+  y: "A20.7y changes --interval 1 respects the 30-second floor when the server requests no additional delay",
+  v: "A20.7v login in CI refuses before opening a browser or saving a credential",
   u: "A20.7u no CLI process this spec started reached for anything outside the stack (zero egress refusals with this spec as parent), and the commands it runs here reach the stack itself",
 };
 
@@ -335,7 +335,7 @@ async function cli(ctx, who, args, o = {}) {
   const token = "token" in o ? o.token : who?.token;
   const home = o.home ?? who?.home ?? cliHome(target);
   ctx.step(`bikeshed ${args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" ")}${token ? "" : "   (no token)"}`);
-  const r = await runCli(target, args, { token, home, input: o.input, timeoutMs: o.timeoutMs ?? CLI_MS });
+  const r = await runCli(target, args, { token, home, input: o.input, env: o.env, traceCalls: o.traceCalls, timeoutMs: o.timeoutMs ?? CLI_MS });
   ctx.step(`  → ${args[0]} exit ${r.code}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms${r.stderr ? `; stderr ${JSON.stringify(r.stderr.slice(0, 200))}` : ""}`);
   // A case's own run that the stack did not answer (runCli's `cut`) ends
   // INCONCLUSIVE here; a background phase (a stepLog, no ctx.inconclusive)
@@ -358,16 +358,6 @@ function refused(r, what, re) {
   assert.equal(r.code, 1, `${what}: exit ${r.code}, stdout ${JSON.stringify(r.stdout.slice(0, 200))}`);
   assert.match(r.stderr, re, `${what}: stderr`);
   assert.equal(r.stdout, "", `${what}: nothing on stdout`);
-}
-
-/** True when `text` parses as exactly one JSON value. */
-function isOneJson(text) {
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -465,8 +455,8 @@ scenario(NAMES.a, { tiers: BOTH, timeoutMs: 60_000, inconclusiveOnStackTimeout: 
 
 scenario(NAMES.l, {
   tiers: BOTH,
-  // The a20-cli-bad-skill-name stack serves an unusable name on purpose, so a whole install there is A20.7m's refusal.
-  needs: [`!${BAD_SKILL}`],
+  // These stacks deliberately serve unusable names; their refusal cases own installation.
+  needs: [`!${BAD_SKILL}`, `!${patchCapability("a20-cli-uppercase-skill")}`, `!${patchCapability("a20-cli-underscore-skill")}`],
   timeoutMs: 180_000,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -491,25 +481,24 @@ scenario(NAMES.l, {
   refused(badR, "an unknown skills subcommand", /^error: usage: bikeshed skills \[install <dir>\]/);
 });
 
-scenario(NAMES.m, {
-  tiers: LOCAL,
-  // stack up --patches a20-cli-bad-skill-name
-  needs: [BAD_SKILL],
-  timeoutMs: 120_000,
-  inconclusiveOnStackTimeout: true,
-}, async (ctx) => {
+/** Only the first entry is invalid: this makes no atomic-install promise for later entries. */
+async function refuseFirstSkill(ctx, badName) {
   const http = ctx.http({ actor: "anonymous", timeoutMs: REQUEST_MS });
   const index = (await http.get("/skills/index.json", { expect: 200 })).json;
-  precondition(index?.skills?.[0]?.name === BAD_SKILL_NAME, `the patched index names ${BAD_SKILL_NAME} first`);
+  precondition(index?.skills?.[0]?.name === badName, `the patched index names ${badName} first`);
   const home = cliHome(target);
   const parent = join(home.home, "skills-parent");
   const dir = join(parent, "agent-skills");
   mkdirSync(dir, { recursive: true });
   const r = await cli(ctx, null, ["skills", "install", dir, "--json"], { home, token: null });
-  refused(r, "skills install with an unusable name", new RegExp(`^error: refusing a skill with an unusable name: ${BAD_SKILL_NAME.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\n$`));
+  refused(r, "skills install with an unusable name", new RegExp(`^error: refusing a skill with an unusable name: ${badName.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\n$`));
   assert.deepEqual(readdirSync(dir), [], "nothing was written into the directory");
   assert.deepEqual(readdirSync(parent), ["agent-skills"], "nothing escaped it");
-});
+}
+
+scenario(NAMES.m, { tiers: LOCAL, needs: [BAD_SKILL], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, BAD_SKILL_NAME));
+scenario(NAMES.z, { tiers: LOCAL, needs: [patchCapability("a20-cli-uppercase-skill")], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, "Bikeshed"));
+scenario(NAMES.aa, { tiers: LOCAL, needs: [patchCapability("a20-cli-underscore-skill")], timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, (ctx) => refuseFirstSkill(ctx, "bikeshed_skill"));
 
 // --- A20.7n / A20.7o open -------------------------------------------------------------
 
@@ -530,37 +519,14 @@ scenario(NAMES.n, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout:
   assert.deepEqual([openedIn(h1), openedIn(h2)], [[want1], [want2]], "the opener got exactly the printed address");
 });
 
-/**
- * X-a20-cli-1 is a SPEC QUESTION (class Q), not a SPEC violation. The defect
- * tag stays so the observation is pinned: this case is TODO while `open
- * --json` prints the bare address, and "passed unexpectedly" once it prints
- * one JSON value.
- *
- * The nearest SPEC sentence is §19 spec.md:2231, "Every command takes
- * `--json`." `open <slug>` is one of those commands (spec.md:2228). Read
- * literally, "takes" holds already: the flag is accepted and the command
- * exits 0. The SPEC never says what `open` prints under it. The CLI's own
- * usage describes --json as "machine-readable output" (cli/src/index.mjs:110),
- * and open() never consults the flag (cli/src/index.mjs:1007-1019 prints
- * `console.log(url)` whatever it is given). The question for the owner: does
- * "takes `--json`" mean that every command prints one JSON value under it?
- *
- * The harm: a caller that appends --json to every command, as spec.md:2231
- * and the agent guide's "Every command takes `--json`."
- * (docs/agents/agent-guide.md:207, served as /llms.txt) invite, and parses
- * stdout, fails on `open` alone: `bikeshed open <id> --json | jq` is a parse
- * error.
- */
-scenario(NAMES.o, { tiers: BOTH, defect: "X-a20-cli-1", timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.o, { tiers: BOTH, timeoutMs: 120_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const id = docIdFor(target, "cli-open-json");
-  const r = await cli(ctx, null, ["open", id, "--json"], { home: cliHome(target), token: null });
-  precondition(r.code === 0, `open --json ran (exit ${r.code})`);
-  assert.ok(
-    isOneJson(r.stdout),
-    `SPEC QUESTION (class Q), X-a20-cli-1: open --json printed ${JSON.stringify(r.stdout)}, which is not a JSON value. ` +
-      'SPEC §19 spec.md:2231 says only "Every command takes `--json`." and never what open prints under it; the CLI\'s usage describes --json as "machine-readable output" (cli/src/index.mjs:110). ' +
-      "Harm: a caller that parses --json output fails on open alone",
-  );
+  const home = cliHome(target);
+  const url = `${target.origin}/d/${id}/v1?k=e2e-json-key`;
+  const r = await cli(ctx, null, ["open", `${target.origin}/d/${id}/v1?k=e2e-json-key`, "--json"], { home, token: null });
+  assert.deepEqual(okJson(r, "open --json"), { url }, "open --json reports the complete document URL");
+  await eventually(() => openedIn(home).length > 0, { timeout: 15_000, interval: 100, message: "the JSON open invoked the opener" });
+  assert.deepEqual(openedIn(home), [url], "open --json opens exactly the returned URL");
 });
 
 // --- A20.7b publish ---------------------------------------------------------------
@@ -627,7 +593,7 @@ scenario(NAMES.c, { tiers: BOTH, timeoutMs: 420_000, inconclusiveOnStackTimeout:
   assert.deepEqual(p2.documents.map((d) => d.id), newestFirst.slice(2), "page 2: the oldest");
   assert.equal(p2.nextCursor, null, "page 2 is the last");
   const all = okJson(allR, "list --all");
-  assert.deepEqual(all.documents.map((d) => d.id), newestFirst, "--all: every page, in order");
+  assert.deepEqual(all.documents.map((d) => d.id), newestFirst, "--all: all three documents, in order");
   assert.equal(all.nextCursor, null);
   assert.deepEqual(
     all.documents.map((d) => ({ version: d.version, visibility: d.visibility, owner: d.owner })),
@@ -662,8 +628,9 @@ scenario(NAMES.d, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   assert.equal(sha(Buffer.from(plain.stdout, "utf8")), sha(bytes), "get prints the whole source, byte for byte, and nothing else");
   const viaLink = okJson(await cli(ctx, stranger, ["get", link, "--json"]), "get <link> --json");
   assert.deepEqual(
-    { id: viaLink.id, version: viaLink.version, truncated: viaLink.truncated, canEdit: viaLink.canEdit, length: viaLink.source?.length },
-    { id: up.docId, version: "v1", truncated: false, canEdit: false, length: bytes.length },
+    { id: viaLink.id, version: viaLink.version, truncated: viaLink.truncated, canEdit: viaLink.canEdit, length: viaLink.source?.length, cursor: typeof viaLink.cursor },
+    { id: up.docId, version: "v1", truncated: false, canEdit: false, length: bytes.length, cursor: "string" },
+    "the whole-source JSON preserves the cursor to watch from",
   );
   assert.equal(sha(Buffer.from(viaLink.source, "utf8")), sha(bytes), "get --json carries the whole source: the link's key reached /content for the rest too");
   refused(bare, "get <unlisted id> without its key", /^error: no document with id "/);
@@ -886,7 +853,7 @@ async function changesWaiter(o) {
   const savedBefore = await readDoc(target, saved);
   const waiter = { ...o, token: o.tokens[2].token, home: cliHome(target) };
   const t0 = Date.now();
-  const waiting = cli(log, waiter, ["changes", up.docId, "--since", head, "--wait", "--interval", "30", "--timeout", "420", "--json"], { timeoutMs: 480_000 });
+  const waiting = cli(log, waiter, ["changes", up.docId, "--since", head, "--wait", "--interval", "1", "--timeout", "420", "--json"], { timeoutMs: 480_000, traceCalls: target.kind === "local" });
   waiting.catch(() => {});
   await eventually(async () => (await readDoc(target, saved)) !== null, { timeout: 240_000, interval: 250, message: "the waiting CLI's first check" });
   const firstCheckMs = Date.now() - t0;
@@ -909,9 +876,14 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
 
   const poller = ctx.mcp({ token: o.tokens[3].token, actor: "poller", timeoutMs: REQUEST_MS });
   await poller.initialize();
+  let recorded;
   const [noSince] = await Promise.all([
     cli(ctx, watcher, ["changes", up.docId, "--json"]),
-    eventually(async () => (await poller.ok("get_changes", { id: up.docId, since: "all" })).events.some((e) => e.type === "comment.added" && e.threadId === made.threadId), { timeout: 240_000, interval: 500, message: "the comment's events in the log (recorded by triggers)" }),
+    eventually(async () => {
+      recorded = await poller.ok("get_changes", { id: up.docId, since: "all" });
+      const types = recorded.events.filter((e) => e.threadId === made.threadId).map((e) => e.type);
+      return types.includes("thread.opened") && types.includes("comment.added");
+    }, { timeout: 240_000, interval: 500, message: "both thread and comment events in the log (recorded by independent triggers)" }),
   ]);
   refused(noSince, "changes without --since", /--since is required/);
 
@@ -923,15 +895,16 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   const all = okJson(allR, "changes --since all");
   const seen = all.events.filter((e) => e.threadId === made.threadId).map((e) => ({ type: e.type, by: e.by, channel: e.channel, quote: e.quote }));
   assert.deepEqual(
-    seen,
+    seen.toSorted((a, b) => a.type.localeCompare(b.type)),
     [
-      { type: "thread.opened", by: o.email, channel: "mcp", quote: Q.j },
       { type: "comment.added", by: o.email, channel: "mcp", quote: Q.j },
+      { type: "thread.opened", by: o.email, channel: "mcp", quote: Q.j },
     ],
     "another credential's thread and comment, each with its quote (SPEC §19)",
   );
+  assert.deepEqual(seen.map((e) => e.type), recorded.events.filter((e) => e.threadId === made.threadId).map((e) => e.type), "the CLI preserves recorded order, not trigger occurrence order (SPEC §19, ADR 0016)");
   assert.equal(all.events.find((e) => e.type === "comment.added" && e.threadId === made.threadId)?.body, body, "the comment carries its body");
-  assert.deepEqual({ cursor: typeof all.cursor, more: all.more }, { cursor: "string", more: false }, "every page read, and the cursor to pass next");
+  assert.deepEqual({ cursor: typeof all.cursor, more: all.more }, { cursor: "string", more: false }, "the small feed is complete, with the cursor to pass next");
   assert.deepEqual(okJson(mineR, "the writer's own changes").events.filter((e) => e.threadId === made.threadId), [], "what the caller caused is left out (SPEC §19)");
 
   const [quietR, staleR, waitedR] = await Promise.all([
@@ -950,9 +923,24 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   const r = await bg.waiting;
   ctx.step(`  → the wait ended after ${r.ms} ms (first check ${bg.firstCheckMs} ms in)`);
   const j = okJson(r, "changes --wait");
-  assert.deepEqual(j.events.map((e) => [e.type, e.threadId]), [["thread.opened", made.threadId], ["comment.added", made.threadId]], "the wait returned with what happened");
+  const ordered = all.events.filter((e) => e.threadId === made.threadId).map((e) => [e.type, e.threadId]);
+  const waited = j.events.map((e) => [e.type, e.threadId]);
+  assert.ok(waited.length > 0 && waited.length <= ordered.length, "the wait returns a nonempty recorded prefix");
+  assert.deepEqual(waited, ordered.slice(0, waited.length), "the wait preserves recorded order");
+  const resumed = okJson(await cli(ctx, watcher, ["changes", up.docId, "--since", j.cursor, "--json"]), "resuming after the wait");
+  assert.deepEqual([...waited, ...resumed.events.map((e) => [e.type, e.threadId])], ordered, "wait and resume deliver both events once, in recorded order");
   assert.equal(j.timedOut, undefined, "it did not time out");
-  assert.ok(r.ms >= 30_000, `the comment came after the first check, so a later check saw it, at least --interval 30 s in (took ${r.ms} ms)`);
+  if (target.kind === "local") {
+    const firstBody = r.calls.find((e) => e.phase === "body" && e.tool === "get_changes");
+    const nextCall = r.calls.find((e) => e.phase === "start" && e.tool === "get_changes" && e.id > firstBody?.id);
+    precondition(firstBody && nextCall, "the wait contains a completed first response and a later check");
+    assert.ok(nextCall.ms - firstBody.ms >= 29_900, "the next check follows the completed first response by at least the interval floor");
+    ctx.ev.json("cli-wait-calls.json", r.calls);
+  } else {
+    assert.ok(r.ms >= 30_000, "the supported deployment wait includes its interval");
+  }
+  // The default server retryAfter is 60 seconds, so this case alone cannot
+  // distinguish its delay from the CLI floor. A20.7y isolates the latter.
 });
 
 // --- A20.7k folders and rename --------------------------------------------------------
@@ -1059,13 +1047,11 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
 
   ctx.step("the saved sign-in works; a token presenting itself may not revoke another one (403), and both still work");
   const asSaved = bearerHttp(target, config.token, { actor: "saved-token", timeoutMs: REQUEST_MS });
-  const [listR, cross] = await Promise.all([
-    cli(ctx, null, ["list", "--limit", "1", "--json"], { home, token: null }),
-    asSaved.postJson("/tokens", { op: "revoke", tokenId: o.tokens[0].tokenId }),
-  ]);
+  const listR = await cli(ctx, null, ["list", "--limit", "1", "--json"], { home, token: null });
   okJson(listR, "list with the saved sign-in");
+  const cross = await asSaved.postJson("/tokens", { op: "revoke", tokenId: o.tokens[0].tokenId });
   answered(cross, "POST /tokens revoke (another token's id)");
-  assert.deepEqual({ status: cross.status, error: cross.json?.error }, { status: 403, error: "A token can revoke only itself." });
+  assert.deepEqual({ status: cross.status, error: cross.json?.error }, { status: 403, error: "A token can revoke only itself." }, "a token cannot revoke another token id");
   for (const [label, tok] of [["the bystander", o.token], ["the saved token", config.token]]) {
     const mcp = ctx.mcp({ token: tok, actor: label, timeoutMs: REQUEST_MS });
     await mcp.initialize();
@@ -1073,7 +1059,9 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   }
 
   ctx.step("logout --json revokes the saved token on the deployment and forgets it, keeping the origin");
-  const out = okJson(await cli(ctx, null, ["logout", "--json"], { home, token: null }), "logout --json");
+  const logout = await cli(ctx, null, ["logout", "--json"], { home, token: o.token });
+  const out = okJson(logout, "logout --json beside BIKESHED_TOKEN");
+  assert.match(logout.stderr, /BIKESHED_TOKEN is set in this shell/, "logout names the separate shell credential");
   assert.deepEqual(out, { origin: target.origin, revoked: true, forgot: true });
   assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), { origin: target.origin }, "the token is gone, the origin kept (SPEC §23)");
   const [probe, listedAfter] = await Promise.all([
@@ -1085,6 +1073,13 @@ scenario(NAMES.p, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   const bystander = ctx.mcp({ token: o.token, actor: "bystander-after", timeoutMs: REQUEST_MS });
   await bystander.initialize();
   await bystander.ok("list_documents", { limit: 1 });
+
+  ctx.step("an already-revoked saved browser credential is confirmed dead and still forgotten");
+  writeFileSync(configPath, JSON.stringify(config));
+  const dead = await cli(ctx, null, ["logout", "--json"], { home, token: null });
+  assert.deepEqual(okJson(dead, "logout of an already-revoked browser credential"), { origin: target.origin, revoked: true, forgot: true }, "an already-dead credential is confirmed revoked");
+  assert.equal(dead.stderr, "", "a confirmed dead credential needs no revocation advice");
+  assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), { origin: target.origin }, "logout forgets an already-dead credential and retains the origin");
 });
 
 scenario(NAMES.q, { tiers: BOTH, timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
@@ -1111,40 +1106,16 @@ scenario(NAMES.q, { tiers: BOTH, timeoutMs: 300_000, inconclusiveOnStackTimeout:
   await still.ok("list_documents", { limit: 1 });
 });
 
-/**
- * X-a20-cli-2 is a SPEC QUESTION (class Q), not a SPEC violation. The defect
- * tag stays so the observation is pinned: this case is TODO while `login
- * --paste --json` prints its prompts on stdout, and "passed unexpectedly"
- * once it prints one JSON value. The sign-in itself is a precondition, so
- * only stdout can make this case a TODO.
- *
- * The nearest SPEC sentences are §19 spec.md:2231, "Every command takes
- * `--json`.", with `login` among the commands (spec.md:2222), and §23
- * spec.md:2801-2802, "`--paste` is the old flow. … The saved config records
- * which of the two produced the token." Neither says what the paste flow
- * prints under --json, and it accepts the flag and exits 0. The question for
- * the owner: does "takes `--json`" hold for both flows of `login`?
- *
- * The harm: the same command answers --json two ways. The browser flow prints
- * `{origin, saved, via: "browser"}` (cli/src/index.mjs:313), and its own
- * comment says "stdout stays parseable for --json" (cli/src/index.mjs:197).
- * pasteLogin (cli/src/index.mjs:324-341) never reads the flag. It prints the
- * /account instructions, readline's "Token: " prompt (its output is stdout,
- * :326) and "Saved to …" there. A script that pipes a token in and parses
- * stdout gets a parse error, so it cannot read which deployment it was
- * saved for.
- */
-scenario(NAMES.r, { tiers: BOTH, defect: "X-a20-cli-2", timeoutMs: 180_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.r, { tiers: BOTH, timeoutMs: 180_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const o = await setup(ctx, "r");
   const home = cliHome(target);
   const r = await cli(ctx, null, ["login", "--paste", "--json"], { home, token: null, input: `${o.token}\n` });
-  precondition(r.code === 0 && existsSync(join(home.config, "bikeshed", "config.json")), `login --paste --json signed in (exit ${r.code})`);
-  assert.ok(
-    isOneJson(r.stdout),
-    `SPEC QUESTION (class Q), X-a20-cli-2: login --paste --json printed ${JSON.stringify(r.stdout.slice(0, 300))}, which is not a JSON value. ` +
-      'SPEC §19 spec.md:2231 says only "Every command takes `--json`.", and §23 spec.md:2801 "`--paste` is the old flow." never says what it prints; the browser flow prints {origin, saved, via} (cli/src/index.mjs:313). ' +
-      "Harm: a script that pipes a token in cannot parse the result",
-  );
+  const saved = join(home.config, "bikeshed", "config.json");
+  assert.deepEqual(okJson(r, "login --paste --json"), { origin: target.origin, saved, via: "paste" }, "paste login --json reports the saved credential source");
+  assert.deepEqual(JSON.parse(readFileSync(saved, "utf8")), { origin: target.origin, token: o.token, via: "paste" });
+  assert.match(r.stderr, /Create a token at .*\/account/);
+  assert.match(r.stderr, /Token: /, "the paste prompt stays on stderr");
+  assert.equal((r.stdout + r.stderr).includes(o.token), false, "paste login does not echo the token");
 });
 
 // --- A20.7s / A20.7t publish --watch ---------------------------------------------------
@@ -1173,7 +1144,7 @@ async function watchBursts(o) {
    * each is its own event and only the 250 ms debounce makes them one
    * publish. Returns the largest gap the writes actually had.
    */
-  const burst = async (n) => {
+  const burst = async (n, replace = false) => {
     const at = [];
     writeFileSync(file, page(title, ["partial"]));
     at.push(performance.now());
@@ -1181,7 +1152,11 @@ async function watchBursts(o) {
     appendFileSync(file, "<!-- more -->\n");
     at.push(performance.now());
     await new Promise((r) => setTimeout(r, BURST_GAP_MS));
-    writeFileSync(file, text(n));
+    if (replace) {
+      const replacement = `${file}.save`;
+      writeFileSync(replacement, text(n));
+      renameSync(replacement, file);
+    } else writeFileSync(file, text(n));
     at.push(performance.now());
     return Math.max(at[1] - at[0], at[2] - at[1]);
   };
@@ -1193,16 +1168,16 @@ async function watchBursts(o) {
   const w = await spawnCli(target, args, { token: o.token, home, maxMs: WATCH_MAX_MS });
   let watching = false;
   try {
-    // The CLI says it is watching after the first publish; it says so on stdout
-    // today (X-a20-cli-3), so either stream counts.
+    // The readiness precondition accepts either stream, so a regressed notice
+    // reaches the stdout oracle instead of making the watch look absent.
     await eventually(() => w.exited !== null || /watching watched\.html/.test(w.stdout + w.stderr), { timeout: 180_000, interval: 100, message: "the first publish, then the watch" });
     watching = w.exited === null;
     if (watching) {
       ledgerDoc(id, o);
-      for (const [n, expected] of [[2, 2], [3, 3], [3, 4]]) {
-        log.step(`burst writing revision ${n}`);
+      for (const [n, expected, replace] of [[2, 2, false], [3, 3, true], [3, 4, false]]) {
+        log.step(`burst writing revision ${n}${replace ? " by atomic replacement" : ""}`);
         w.mark(`the burst writing revision ${n}`);
-        gaps.push(await burst(n));
+        gaps.push(await burst(n, replace));
         await eventually(() => jsonStream(w.stdout).docs.length >= expected || w.exited !== null, { timeout: 180_000, interval: 100, message: `result ${expected} of the watch` });
       }
       // The product debounces saves by 250 ms (cli/src/index.mjs watchFile), a
@@ -1256,30 +1231,13 @@ scenario(NAMES.s, { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnStackTimeout:
 });
 
 /**
- * X-a20-cli-3 is a SPEC violation (class P). SPEC §19 spec.md:2257-2260:
- * "`publish --id <id>` asks for the docId. When the deployment answers with a
- * different one, because the id was taken or because a deployment too old to
- * know the parameter ignored it, the CLI says so on stderr, which keeps
- * `--json` output parseable." So publish sends its notices to stderr to keep
- * its --json output parseable. `publish --watch` is publish (spec.md:2230,
- * "plus `publish --watch`"), and it prints one JSON result per publish
- * (spec.md:2245-2247 says what publish --json prints). Its notice "watching
- * <file> — ctrl-C to stop" goes to stdout, between the first result and the
- * next (cli/src/index.mjs:1030, watchFile's console.log, whatever --json
- * says). That breaks exactly the property the SPEC sentence keeps. The CLI's
- * own --id notice is on stderr "so `--json` stays parseable"
- * (cli/src/index.mjs:458-462).
- *
- * The harm: a consumer that reads the stream of results from `publish --watch
- * --json` meets a line that is not JSON after the first result.
- *
- * Only the oracle can make this case a TODO. That a result printed and that
- * the watch ran are preconditions: a watch that never started, or exited
- * after its first publish, prints no notice and would otherwise read as
- * "passed unexpectedly".
+ * Publish notices go to stderr to preserve the machine-readable result stream
+ * (SPEC §19). The watch remains alive and produces a real result before this
+ * assertion: a process that exited before watching cannot pass by omission.
+ * controls-a20-watch-json restores the old stdout notice.
  */
 // The same watch as A20.7s (its background phase runs once, for both cases).
-scenario(NAMES.t, { tiers: BOTH, defect: "X-a20-cli-3", timeoutMs: 600_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+scenario(NAMES.t, { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
   const { bg } = await setup(ctx, "s");
   const { docs, stray } = jsonStream(bg.stdout);
   // Its oracle is the text between results: once one result printed, a later cut-off leaves it judged.
@@ -1289,9 +1247,7 @@ scenario(NAMES.t, { tiers: BOTH, defect: "X-a20-cli-3", timeoutMs: 600_000, inco
   assert.deepEqual(
     stray,
     [],
-    `X-a20-cli-3 (class P): publish --watch --json wrote ${JSON.stringify(stray)} on stdout between its JSON results. ` +
-      "SPEC §19 spec.md:2259-2260: the CLI says so on stderr, \"which keeps `--json` output parseable\" (publish's notices; publish --watch is publish, spec.md:2230). " +
-      "The watch's notice is printed on stdout (cli/src/index.mjs:1030)",
+    `X-a20-cli-3: publish --watch --json wrote ${JSON.stringify(stray)} outside its JSON results (SPEC §19: notices belong on stderr)`,
   );
 });
 
@@ -1317,4 +1273,71 @@ scenario(NAMES.u, { tiers: LOCAL, needs: ["egress-guard"], timeoutMs: 300_000, i
   assert.equal(runs[3].json.origin, target.origin, "logout with nothing saved names the stack as its deployment");
   // lastUsedAt is written best-effort after the request (functions/src/lib/tokens.ts), so it is waited for.
   await eventually(async () => Boolean((await tokensOf(o.session)).find((t) => t.tokenId === o.tokens[0].tokenId)?.lastUsedAt), { timeout: 120_000, interval: 500, message: "the stack saw the CLI's token (lastUsedAt set, SPEC §19)" });
+});
+
+scenario(NAMES.v, { tiers: BOTH, timeoutMs: 30_000 }, async (ctx) => {
+  const home = cliHome(target);
+  const result = await cli(ctx, null, ["login", "--json"], { home, token: null, env: { CI: "1", BIKESHED_LOGIN_TIMEOUT_MS: "1000" }, timeoutMs: 5000 });
+  refused(result, "login in CI", /error: In CI, set BIKESHED_TOKEN and BIKESHED_ORIGIN\./);
+  assert.deepEqual(openedIn(home), [], "CI login opens no browser");
+  assert.equal(existsSync(join(home.config, "bikeshed", "config.json")), false, "CI login saves no credential");
+});
+
+
+scenario(NAMES.w, { tiers: LOCAL, timeoutMs: 1_200_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  // A fresh account makes the list exact. Publish real documents rather than
+  // changing the server/CLI page size: --all asks for 50, so 51 needs two calls.
+  const o = await ready("w", { fresh: true });
+  o.home = cliHome(target);
+  const docs = [];
+  for (let n = 1; n <= 51; n++) {
+    const d = await publish(o.session.http, { filename: "index.html", body: page(`Page boundary ${n}`, [`Document ${n}.`]), ownerEmail: o.email, title: `CLI page ${n} ${tag()}`, name: `cli-page-${n}` });
+    docs.push({ id: d.docId, at: (await readDoc(target, `docs/${d.docId}`)).createdAt });
+  }
+  precondition(new Set(docs.map((d) => `${d.at.seconds}:${d.at.nanoseconds}`)).size === 51, "51 distinct server creation times");
+  const wanted = docs.sort((a, b) => b.at.seconds - a.at.seconds || b.at.nanoseconds - a.at.nanoseconds).map((d) => d.id);
+  const r = await cli(ctx, o, ["list", "--all", "--json"], { timeoutMs: 360_000 });
+  const all = okJson(r, "list --all across its 50-document boundary");
+  assert.deepEqual(all.documents.map((d) => d.id), wanted, "--all returns all 51 documents in order across the default page boundary");
+  assert.equal(new Set(all.documents.map((d) => d.id)).size, 51, "each document is returned once");
+  assert.equal(all.nextCursor, null, "the combined list ends at a null cursor");
+});
+
+scenario(NAMES.x, { tiers: LOCAL, timeoutMs: 900_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  const o = await ready("x", { tokens: 2, docs: [{ body: page("Changes boundary", [Q.j]), title: `CLI changes pages ${tag()}`, name: "cli-change-pages" }] });
+  const id = o.docs[0].docId;
+  const writer = ctx.mcp({ token: o.tokens[0].token, actor: "page-writer", timeoutMs: REQUEST_MS });
+  await writer.initialize();
+  // The established local seed copies the first real tool-written thread;
+  // all 102 thread/comment events are recorded by the product's own triggers.
+  await seedThreads(writer, { docId: id, n: 51, exact: Q.j, body: (i) => `CLI paging comment ${i}` });
+  const log = await settleLog(target, id, { "version.published": 1, "thread.opened": 51, "comment.added": 51 }, { timeout: 600_000, message: "all 103 source events before the CLI reads" });
+  const watcher = withToken(o, 1);
+  const all = okJson(await cli(ctx, watcher, ["changes", id, "--since", "all", "--json"], { timeoutMs: 360_000 }), "changes across its 100-event boundary");
+  const event = (e) => [e.type, e.threadId ?? null, e.commentId ?? null, e.at];
+  assert.deepEqual(all.events.map(event), log.map((row) => event({ ...row.data, at: eventAt(row) })), "changes returns all 103 events in stored order across the default page boundary");
+  assert.equal(new Set(all.events.map((e) => JSON.stringify(event(e)))).size, 103, "each event is returned once");
+  assert.equal(all.more, false, "the combined feed has consumed its final page");
+  const quiet = okJson(await cli(ctx, watcher, ["changes", id, "--since", all.cursor, "--json"]), "changes after its final combined cursor");
+  assert.deepEqual({ events: quiet.events, cursor: quiet.cursor, more: quiet.more }, { events: [], cursor: all.cursor, more: false }, "the printed cursor resumes after every combined event");
+});
+
+scenario(NAMES.y, { tiers: LOCAL, needs: [patchCapability("a20-cli-no-retry-delay")], timeoutMs: 300_000, inconclusiveOnStackTimeout: true }, async (ctx) => {
+  const o = await ready("y", { docs: [{ body: page("Interval floor", ["A quiet document."]), title: `CLI floor ${tag()}`, name: "cli-floor" }] });
+  o.home = cliHome(target);
+  const id = o.docs[0].docId;
+  await settleLog(target, id, { "version.published": 1 });
+  const probe = ctx.mcp({ token: o.token, actor: "floor-setup", timeoutMs: REQUEST_MS });
+  await probe.initialize();
+  const head = await probe.ok("get_changes", { id, since: "all" });
+  precondition(head.retryAfter === 0, "the local amplifier removes only the server retry delay");
+  const r = await cli(ctx, o, ["changes", id, "--since", head.cursor, "--wait", "--interval", "1", "--timeout", "29", "--json"], { traceCalls: true, timeoutMs: 150_000 });
+  const starts = r.calls.filter((e) => e.phase === "start" && e.tool === "get_changes");
+  const end = r.calls.find((e) => e.phase === "body" && e.id === starts[0]?.id);
+  precondition(starts.length > 0 && end, "the CLI's first get_changes has a complete transport trace");
+  if (end.ms - starts[0].ms >= 27_000) ctx.inconclusive("the first response left too little of the 29-second deadline to distinguish a one-second regression");
+  assert.equal(r.code, 3, "the 30-second floor exceeds this wait's remaining deadline");
+  assert.equal(starts.length, 1, "--interval 1 never starts a second check when the 30-second floor cannot fit");
+  assert.deepEqual({ events: r.json?.events, cursor: r.json?.cursor, timedOut: r.json?.timedOut }, { events: [], cursor: head.cursor, timedOut: true }, "the immediate timeout preserves its quiet cursor");
+  ctx.ev.json("cli-interval-calls.json", r.calls);
 });

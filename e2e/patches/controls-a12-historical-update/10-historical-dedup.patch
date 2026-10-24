@@ -1,0 +1,19 @@
+diff --git b/functions/src/lib/publish.ts a/functions/src/lib/publish.ts
+index 8572ea3..111be15 100644
+--- b/functions/src/lib/publish.ts
++++ a/functions/src/lib/publish.ts
+@@ -483,11 +483,10 @@ export async function commitNewVersion(args: {
+   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
+   const versionsRef = docRef.collection("versions");
+ 
+-  const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
+-  const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
+-  if (dup?.exists && dup.data()?.contentHash === contentHash) {
++  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
++  if (!dup.empty) {
+     return {
+-      versionId: dup.id,
++      versionId: dup.docs[0].id,
+       contentHash,
+       fileCount,
+       bytes,

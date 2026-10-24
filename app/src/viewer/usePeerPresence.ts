@@ -2,7 +2,7 @@
 // Peers, the overlay, and follow mode (SPEC §16).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { describeAnchorFromSelection } from "../annotation/anchor";
+import { describeFocusFromSelection } from "../annotation/anchor";
 import {
   createPeerOverlay,
   scrollFraction,
@@ -17,13 +17,7 @@ import {
   type PresenceMode,
 } from "../presence";
 
-/**
- * Shared AWARENESS, never shared document state. There is no CRDT and no
- * operational transform here, and that is only an honest position because
- * concurrent editing is PREVENTED by the edit lock rather than invited — see
- * useEditLock. Visible cursors without a lock would actively encourage the one
- * thing last-writer-wins handles badly.
- */
+/** Ephemeral awareness is separate from the document state shared by the CRDT. */
 export function usePeerPresence(options: {
   docId: string;
   uid: string | null;
@@ -33,8 +27,9 @@ export function usePeerPresence(options: {
   epoch: number;
   mode: PresenceMode;
   enabled: boolean;
+  liveEpoch?: string;
 }) {
-  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled } = options;
+  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled, liveEpoch = "initial" } = options;
 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [following, setFollowing] = useState<string | null>(null);
@@ -43,12 +38,12 @@ export function usePeerPresence(options: {
 
   useEffect(() => {
     if (!enabled || !uid) return;
-    handle.current = joinPresence(docId, uid, emailLower, displayName, mode);
+    handle.current = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
     return () => {
       handle.current?.leave();
       handle.current = null;
     };
-  }, [enabled, docId, uid, emailLower, displayName]);
+  }, [enabled, docId, uid, emailLower, displayName, liveEpoch]);
 
   useEffect(() => {
     handle.current?.setMode(mode);
@@ -92,7 +87,7 @@ export function usePeerPresence(options: {
     if (!enabled || !doc) return;
 
     const onSelectionChange = () => {
-      const anchor = describeAnchorFromSelection(doc);
+      const anchor = describeFocusFromSelection(doc);
       handle.current?.setFocus(anchor);
     };
     const onScroll = () => {

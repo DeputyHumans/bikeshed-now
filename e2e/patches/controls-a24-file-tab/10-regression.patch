@@ -1,0 +1,7 @@
+--- a/app/src/components/FileDropzone.tsx
++++ b/app/src/components/FileDropzone.tsx
+@@ -60,3 +60,3 @@
+         type="file"
+-        tabIndex={-1}
++        tabIndex={0}
+         aria-label="Choose a document file"

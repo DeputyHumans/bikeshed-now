@@ -1,0 +1,12 @@
+--- a/app/src/annotation/Sidebar.tsx
++++ b/app/src/annotation/Sidebar.tsx
+@@ -278,3 +278,3 @@
+                     e.preventDefault();
+-                    void act(() => rejectSuggestion({ ...where, reason: reason.trim() }));
++                    void act(() => rejectSuggestion({ ...where, reason: "" }));
+                   } else if (e.key === "Escape") {
+@@ -290,3 +290,3 @@
+                   e.stopPropagation();
+-                  void act(() => rejectSuggestion({ ...where, reason: reason.trim() }));
++                  void act(() => rejectSuggestion({ ...where, reason: "" }));
+                 }}

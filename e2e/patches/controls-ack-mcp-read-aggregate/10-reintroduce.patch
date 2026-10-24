@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -408,3 +408,3 @@
+       const before = await tx.get(viewRef);
+-      if (readReceipt(before, receipt).found) return;
++      if (readReceipt(before, receipt).found) { tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) }); return; }
+       recordReceipt(tx, viewRef, before, receipt, true);

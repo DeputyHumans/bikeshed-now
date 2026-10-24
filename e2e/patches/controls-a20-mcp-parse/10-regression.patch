@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -79,5 +79,5 @@
+ }
+
+-const PARSE_ERROR = -32700;
++const PARSE_ERROR = -32600;
+ const INVALID_REQUEST = -32600;
+ const METHOD_NOT_FOUND = -32601;

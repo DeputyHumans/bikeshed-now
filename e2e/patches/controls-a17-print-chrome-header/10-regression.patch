@@ -1,0 +1,10 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -364,7 +364,6 @@
+  * one box; usePrinting opens it to the content's scrollHeight on beforeprint.
+  */
+ @media print {
+-  .app-header,
+   .viewer-toolbar,
+   .viewer-banners,
+   .comments-panel,

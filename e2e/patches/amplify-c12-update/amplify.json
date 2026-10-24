@@ -1,10 +1,16 @@
 {
-  "what": "One server pause point in POST /draft (saveDraft), after its base check (baseVersion === currentVersion) and before the draft is written: for a curl-only draft whose check passed on the base an update is about to replace, and whose write lands after the update has published and dropped the draft (the two C12b straddle cases: S14 and X-a12-versions-2). Its own helper (functions/src/lib/e2eC12Gate.ts), so it applies alone or beside amplify-mint-join and amplify-c08-mint-races. Also a probe with no pause (30-editors-question-probe.patch): functions/src/lib/presence.ts liveEditing logs one line per editors question, `[e2e-c12-probe] {docId, at, connected, editors, modes, log, connectedMs, peersMs, logMs}`, to the stack's emulators.log, so C12a can show what the functions' own Database client read when an update was answered (X-c12-agent-vs-editors-2: a mint under N open editors, seen once)",
+  "what": "One server pause point in POST /draft (saveDraft), after its base check (baseVersion === currentVersion) and before the draft is written: for a curl-only draft whose check passed on the base an update is about to replace, and whose write lands after the update has published and dropped the draft (the two C12b straddle cases: S14 and X-a12-versions-2). Its own helper (functions/src/lib/e2eC12Gate.ts), so it applies alone or beside amplify-mint-join and amplify-c08-mint-races. Also a probe with no pause (30-editors-question-probe.patch): functions/src/lib/presence.ts liveEditing logs one line per editors question, `[e2e-c12-probe] {docId, at, connected, editors, modes, log, connectedMs, peersMs, logMs}`, to the stack's emulators.log, so C12a can show what the functions' own Database client read when an update was answered (X-c12-agent-vs-editors-2: a mint under N open editors, seen once) Also pause a real conditional draft save after its unique uploaded candidate and exact authorized snapshot are captured, just before docRef.update; log only its real code-9 refusal. C12e exercises newer-history reuse and terminal stale-base disposal separately.",
   "gates": [
     {
       "name": "draft-after-check",
       "side": "server",
       "where": "functions/src/index.ts saveDraft: after the stale-base 409 check, before loadVersionMeta and writeDraft",
+      "key": "docId"
+    },
+    {
+      "name": "draft-cas-before-write",
+      "side": "server",
+      "where": "functions/src/lib/draft.ts writeDraft: after prepare(current) and updateTime validation, immediately before the conditional docRef.update",
       "key": "docId"
     }
   ]

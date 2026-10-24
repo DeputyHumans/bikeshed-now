@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -186,3 +186,3 @@
+   await steps.flush();
+-  if (steps.saveFailed()) return "unsaved";
++  if (false && steps.saveFailed()) return "unsaved";
+   try {

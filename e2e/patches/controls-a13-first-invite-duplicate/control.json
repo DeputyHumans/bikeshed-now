@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.1 adding a person in Share sends exactly one invitation, with the subject \"<owner> shared “<title>” with you\"; re-saving the same list sends none",
+  "what": "Send each first invitation twice.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.1 adding a person in Share sends exactly one invitation, with the subject \"<owner> shared “<title>” with you\"; re-saving the same list sends none",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the add sent one invitation"
+  }
+}

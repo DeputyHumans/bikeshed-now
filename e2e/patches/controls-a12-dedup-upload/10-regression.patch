@@ -1,0 +1,10 @@
+--- a/functions/src/lib/publish.ts
++++ b/functions/src/lib/publish.ts
+@@ -486,6 +486,7 @@
+   const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
+   const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
+   if (dup?.exists && dup.data()?.contentHash === contentHash) {
++    await uploadBundle(newBundlePrefix(docRef.id), compiled.files, CREATE_ONLY);
+     return {
+       versionId: dup.id,
+       contentHash,

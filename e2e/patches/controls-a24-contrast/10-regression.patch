@@ -1,0 +1,6 @@
+--- a/app/src/styles/base.css
++++ b/app/src/styles/base.css
+@@ -146 +146,3 @@
+ }
++
++h1 { color: #aaaaaa !important; }

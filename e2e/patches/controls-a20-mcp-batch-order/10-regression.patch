@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -286,4 +286,4 @@
+   }
+   res.setHeader("Content-Type", "application/json");
+-  res.status(200).json(Array.isArray(payload) ? responses : responses[0]);
+-}
++  res.status(200).json(Array.isArray(payload) ? responses.reverse() : responses[0]);
++}

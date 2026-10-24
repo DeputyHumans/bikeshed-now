@@ -1,0 +1,8 @@
+--- a/app/src/viewer/useDocFrame.ts
++++ b/app/src/viewer/useDocFrame.ts
+@@ -114,5 +114,4 @@
+     // A second save can replace a frame that is still loading (or waiting for
+     // layout). Its blank position must not overwrite the reader's checkpoint.
+-    if (restore.current || loadedIdentityRef.current !== identityRef.current) return;
+     const view = ref.current?.contentWindow;
+     const frameDoc = ref.current?.contentDocument;

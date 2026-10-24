@@ -48,6 +48,9 @@ vi.mock("../auth", () => ({
 // would open a network client against whatever app/.env.local happens to hold.
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
 
+// Account preference restoration has its own sequence tests; routing stays hermetic.
+vi.mock("../accountPreferences", () => ({ useAccountPreferences: () => true }));
+
 vi.mock("../analytics", () => ({
   initAnalytics: () => {},
   logPageView: () => {},

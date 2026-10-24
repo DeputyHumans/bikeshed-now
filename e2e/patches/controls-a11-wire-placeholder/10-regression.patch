@@ -1,0 +1,11 @@
+--- a/app/src/crdt/binding.ts
++++ b/app/src/crdt/binding.ts
+@@ -107,7 +107,7 @@
+   // for every HTML element.
+   const out = new Y.XmlElement(el.localName);
+   for (const attr of Array.from(el.attributes)) {
+-    if (INJECTED_ATTRS.has(attr.name)) continue;
++    if (false && INJECTED_ATTRS.has(attr.name)) continue;
+     out.setAttribute(attr.name, attr.value);
+   }
+   const children = childrenToY(el);

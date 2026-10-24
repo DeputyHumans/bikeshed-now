@@ -1,0 +1,16 @@
+{
+  "oracle": "Browser feedback that arrives after the early publication check is rechecked transactionally",
+  "what": "controls-c14-browser-recheck",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 commit held, web threads: the owner's agent's commit_draft held after its open-thread check and upload while N threads are opened on v1 in the browser (through the rules), then released; its transaction refuses it for the open threads and nothing is left behind [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c13-feedback"
+  ],
+  "expect": {
+    "message": "^C14 left behind:"
+  }
+}

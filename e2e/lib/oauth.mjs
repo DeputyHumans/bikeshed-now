@@ -734,3 +734,30 @@ export async function consent(page, { approve = true, timeoutMs = 15_000, stepMs
   await approveBtn.click();
   return { clicked: "approve", armedAfterMs, moves, arming: record };
 }
+
+
+/** Disable Playwright's forced focus for one probe; always restore it before disposing the session. */
+export async function realPageFocus(host) {
+  const page = pageOf(host);
+  const session = await page.context().newCDPSession(page);
+  await session.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+  let foreground = null;
+  return {
+    async blur() {
+      // A second BrowserContext can have its own native window and focus;
+      // a tab in this same context must actually take this page's focus.
+      foreground = await page.context().newPage();
+      await foreground.goto(new URL("/privacy", page.url()).href);
+      // Navigation may replace the renderer since this session was created.
+      await session.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+      await foreground.bringToFront();
+    },
+    focus: () => page.bringToFront(),
+    async restore() {
+      try {
+        await foreground?.close();
+        await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+      } finally { await session.detach(); }
+    },
+  };
+}

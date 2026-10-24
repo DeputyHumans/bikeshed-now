@@ -1,0 +1,13 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1538,6 +1538,7 @@
+       const needsReply: string[] = [];
+-      for (const threadId of new Set(events.filter((e) => e.version === current && e.threadId).map((e) => String(e.threadId)))) {
+-        const thread = (await read(threadPath(current, threadId))).data();
++      for (const threadId of new Set(events.filter((e) => e.threadId).map((e) => String(e.threadId)))) {
++        const version = String(events.find((e) => e.threadId === threadId)?.version ?? current);
++        const thread = (await read(threadPath(version, threadId))).data();
+         if (!thread) continue;
+-        const comments = await ctx.db.doc(threadPath(current, threadId)).collection("comments").orderBy("createdAt", "asc").get();
++        const comments = await ctx.db.doc(threadPath(version, threadId)).collection("comments").orderBy("createdAt", "asc").get();
+         if (awaitsReply(thread, comments.docs)) needsReply.push(threadId);

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK suggestion cooldown: the winning committed claim delivers exactly one notice",
+  "what": "Suppress the suggestion notice after acknowledging its committed cooldown.",
+  "target": {
+    "spec": "e2e/specs/functional/a23-cooldown-ack.spec.mjs",
+    "case": "A23.8b a suggestion cooldown claim surviving native ACK loss still delivers its winning notice exactly once",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK suggestion cooldown: the winning committed claim delivers exactly one notice"
+  }
+}

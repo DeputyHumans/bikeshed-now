@@ -16,17 +16,11 @@
  *        (Open / Stay here); an unpinned reader follows to the new version
  *        and never sees the banner (useLiveSync.ts)
  *   12.3 (a second new version) the unpinned reader's next new version
- *        renders a stale "Open v2" banner for a render, which a slower CPU
- *        paints every time: X-a12-versions-3
- *   12.4 S13, a SPEC question: committing (or updating to) bytes an EARLIER
- *        version holds is deduplicated against that version. The case
- *        asserts what SPEC §2 says (deduped, nothing minted, draft cleared)
- *        and RECORDS the question (the answer names v1 while v2 stays
- *        current, and the app's toast calls it identical) in findings.jsonl;
- *        an uncaught page error from the update log's ready promise
- *        (app/src/crdt/rtdb.ts) is recorded there too, not failed
- *        (isLogReadyTdz), and so is a reverted draft that holds the body
- *        twice, which leaves the in-app part INCONCLUSIVE
+ *        must not insert a stale "Open v2" banner into the DOM, including
+ *        under CPU throttling: X-a12-versions-3 (no paint claim)
+ *   12.4 restoring historical bytes creates a new current version through
+ *        draft commit, MCP, upload and the real editor. Existing history is
+ *        immutable; only a match with the current version is a no-op.
  *   12.5 /publish?update= refusals: an editor 200, an open editor 403, id /
  *        folderId / title 400, a pending suggestion 409 pendingSuggestions,
  *        an accepted change in the draft 409 acceptedInDraft; a refusal
@@ -43,6 +37,11 @@
  *   12.7 (public projection) the withdrawal leaves public/{docId} naming the
  *        withdrawn version, so an anonymous reader of a public document loads
  *        a version that no longer exists: X-a12-versions-1
+ *
+ *   12.8 a marked postcommit projection failure preserves the successful draft response and exact bytes.
+ *   12.9 native commit acknowledgement loss preserves remembered-link drafts,
+ *        minted/deduplicated versions, and thumbnail cover/slides; actual
+ *        committed state precedes loss and the installed SDK retries once.
  *
  * A loaded shared stack answers late: inside one failed run of this file on
  * wr3h, POST /publish took 11 s, POST /access 12 s, POST /publish?update= 24 s,
@@ -95,15 +94,21 @@ import { isDeepStrictEqual } from "node:util";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
-import { docIdFor, publish, updateUpload } from "../../lib/seed.mjs";
+import { docIdFor, publish, publishOperator, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
-import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
-import { eventually, lineHunks } from "../../lib/assert.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { eventually } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
-import { postThumb } from "../../lib/thumbs.mjs";
+import { postThumb, jpegSkeleton, thumbPath } from "../../lib/thumbs.mjs";
 import { runOperator } from "../../lib/operator.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
+import { rtdbAs } from "../../lib/rtdb.mjs";
+import { changeLog, settleLog } from "../../lib/changes.mjs";
+import { logFile, logMark, waitForLog } from "../../lib/logs.mjs";
+import { waitForNativeAckProof } from "../../lib/native-ack.mjs";
+import { gates, requireHeld } from "../../lib/gates.mjs";
+import { assertDraftRaceRefusal, DRAFT_SNAPSHOT_REFUSAL } from "../../lib/draft-race-oracles.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -189,6 +194,236 @@ const grant = (ctx, owner, docId, account, role) => share(target, { owner, doc: 
 const docRecord = (docId) => readDoc(target, `docs/${docId}`);
 const versionRecord = (docId, v) => readDoc(target, `docs/${docId}/versions/${v}`);
 
+scenario("A12.8 a failed postcommit projection refresh still returns 200 for the durable draft and serves its exact bytes", {
+  tiers: ["local"], needs: ["admin-emulator", "logs", "patch:a12-projection-unavailable"], timeoutMs: 180_000, ...STALLS,
+}, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `E2E_PROJECTION_FAULT: ${tag()}`;
+  const docId = await publishDoc(ctx, owner, { title, name: "a12-projection" });
+  const visibility = await setVisibility(target, { owner, doc: docId, visibility: "public", timeoutMs: HTTP_MS });
+  precondition(visibility.status === 200, "the public projection exists before saving the draft");
+  const before = await docRecord(docId);
+  const html = docHtml(title, 2, " Exact durable bytes after projection failure.");
+  const log = logFile(target.runId), since = logMark(log);
+  // A thrown dependency may drop the response on the inverse build. Retain that
+  // observation and inspect durable state before judging the required response.
+  const response = await owner.http.postJson("/draft", { docId, baseVersion: "v1", liveEpoch: before.liveEpoch ?? "initial", html }, { timeoutMs: HTTP_MS })
+    .catch((error) => ({ status: null, json: undefined, error: String(error?.message ?? error) }));
+  const marker = `E2E_PROJECTION_UNAVAILABLE ${docId}`;
+  await waitForLog(marker, { file: log, since });
+  const after = await docRecord(docId);
+  assert.equal(after.currentVersion, "v1", "postcommit projection: saving a draft does not mint a version");
+  assert.equal(after.draft?.baseVersion, "v1", "postcommit projection: draft metadata committed before the dependency failed");
+  assert.notEqual(after.liveEpoch, before.liveEpoch ?? "initial", "postcommit projection: external draft retirement committed");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), html, "postcommit projection: committed candidate bytes remain reachable and exact");
+  ctx.ev.json("projection-failure-after-commit", { docId, marker, response, storagePrefix: after.draft.storagePrefix, liveEpoch: after.liveEpoch });
+  assert.equal(response.status, 200, "postcommit projection: a durable draft must still answer 200 after projection failure");
+  assert.equal(response.json?.draft?.storagePrefix, after.draft.storagePrefix, "postcommit projection: success names the exact persisted draft pointer");
+  assert.equal(response.json?.draft?.liveEpoch, after.liveEpoch, "postcommit projection: success names the committed epoch");
+  const served = await owner.http.get(`/draft/${docId}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "postcommit projection: the successful draft can be read back");
+  assert.equal(served.text, html, "postcommit projection: read-back serves the committed bytes");
+});
+
+// ACK loss is injected after durable commit, before the installed SDK receives
+// success. The keyed gate proves ordering; one request/caller must log its loss
+// and a second native callback. Neither an HTTP retry nor a fake commit suffices.
+const ACK_CASE = { tiers: ["local"], needs: ["admin-emulator", "logs", "gates", "patch:amplify-native-ack-loss"], timeoutMs: 240_000, ...STALLS };
+async function loseCommitAck(ctx, docId, operation, send, inspectCommitted) {
+  const g = gates(target), name = "ack-after-commit", key = `${operation}:${docId}`;
+  const log = logFile(target.runId), since = logMark(log);
+  let answeredRequest = false, pending, committed;
+  let ackHeld;
+  try {
+    await g.hold(name, { key });
+    pending = send().catch((error) => ({ status: null, error: String(error?.message ?? error) })).then((response) => { answeredRequest = true; return response; });
+    const held = ackHeld = await requireHeld(ctx, g, name, 1, { key, timeoutMs: 90_000 });
+    precondition(!answeredRequest, "ACK loss: the original request is unanswered after its actual commit");
+    committed = await inspectCommitted();
+    ctx.ev.json(`ack-held-${operation}`, { docId, operation, key, held, committed });
+    await g.release(name, { key });
+  } finally {
+    await g.release(name, { key }).catch(() => undefined);
+    if (pending) await pending;
+  }
+  const response = await pending;
+  const [ack] = await waitForNativeAckProof({ file: log, since, held: ackHeld, operation, id: docId });
+  ctx.ev.json(`ack-result-${operation}`, { docId, operation, caller: ack.caller, ack, response, committed });
+  return { response, committed };
+}
+
+scenario("A12.9a a remembered-link draft survives native commit acknowledgement loss and serves its exact committed bytes", ACK_CASE, async (ctx) => {
+  const { owner, accounts } = await castWithOwner(ctx, ["holder"]);
+  const holder = await sessionFor(ctx, accounts[1]);
+  const title = `Link ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-link" });
+  const visibility = await setVisibility(target, { owner, doc: docId, visibility: "unlisted", publicEdit: true, timeoutMs: HTTP_MS });
+  precondition(visibility.status === 200 && visibility.linkToken, "unlisted open editing has a current link token");
+  precondition((await holder.http.postJson("/unlock", { docId, k: visibility.linkToken }, { timeoutMs: HTTP_MS })).status === 200, "the nonmember has a remembered current link grant");
+  const before = await docRecord(docId), html = docHtml(title, 2, " Remembered grant ACK bytes.");
+  precondition(!before.members.includes(accounts[1].email), "the holder has no document membership shortcut");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-link", () => holder.http.postJson("/draft", { docId, baseVersion: "v1", liveEpoch: before.liveEpoch ?? "initial", html }, { timeoutMs: HTTP_MS }), async () => {
+    const d = await docRecord(docId);
+    precondition(d.draft?.storagePrefix && d.liveEpoch !== (before.liveEpoch ?? "initial"), "the draft pointer and retired epoch exist before ACK loss");
+    precondition((await readDraftObject(target, docId, "index.html")).toString() === html, "the candidate bytes are real before ACK loss");
+    return { storagePrefix: d.draft.storagePrefix, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, "ACK link draft: its own durable commit is acknowledged with 200");
+  const after = await docRecord(docId);
+  assert.equal(response.json?.draft?.storagePrefix, committed.storagePrefix, "ACK link draft: response names the committed pointer");
+  assert.equal(after.draft?.storagePrefix, committed.storagePrefix, "ACK link draft: retry retains its committed pointer");
+  assert.equal(after.liveEpoch, committed.liveEpoch, "ACK link draft: retry does not retire the session twice");
+  const served = await holder.http.get(`/draft/${docId}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "ACK link draft: committed bytes remain readable");
+  assert.equal(served.text, html, "ACK link draft: served bytes remain exact");
+});
+
+async function publishWithLostAck(ctx, mode) {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Publish ACK ${mode} ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: `a12-ack-${mode}` });
+  const html = docHtml(title, mode === "dedup" ? 1 : 2), operation = mode === "external" ? "external-publish" : mode === "dedup" ? "draft-dedup" : "draft-publish";
+  let retiring = null;
+  if (mode !== "external") {
+    const saved = await owner.http.postJson("/draft", { docId, baseVersion: "v1", html }, { timeoutMs: HTTP_MS });
+    precondition(saved.status === 200, "a real draft exists before publishing with ACK loss");
+    retiring = (await docRecord(docId)).draft.storagePrefix;
+    precondition((await listObjects(target, `${retiring}/`)).length > 0, "the draft cleanup assertion has concrete preexisting objects");
+  }
+  const before = await docRecord(docId), want = mode === "dedup" ? "v1" : "v2";
+  const send = () => mode === "external" ? updateUpload(owner.http, docId, { body: html, baseVersion: "v1", timeoutMs: HTTP_MS }) : owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: HTTP_MS });
+  const { response, committed } = await loseCommitAck(ctx, docId, operation, send, async () => {
+    const d = await docRecord(docId), v = await versionRecord(docId, want);
+    precondition(d.currentVersion === want && !d.draft && d.liveEpoch !== (before.liveEpoch ?? "initial"), "the published head and retirement exist before ACK loss");
+    precondition(v && (await versionObject(docId, want, "index.html")).toString() === html, "published bytes exist before ACK loss");
+    return { storagePrefix: v.storagePrefix ?? `docs/${docId}/${want}`, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, `ACK ${operation}: its own durable commit is acknowledged with 200`);
+  assert.equal(response.json?.versionId, want, `ACK ${operation}: response names the committed version`);
+  assert.equal(response.json?.deduped, mode === "dedup", `ACK ${operation}: response preserves the dedup result`);
+  const after = await docRecord(docId), version = await versionRecord(docId, want);
+  assert.equal(after.currentVersion, want, `ACK ${operation}: current head remains its committed version`);
+  assert.equal(after.liveEpoch, committed.liveEpoch, `ACK ${operation}: retry does not retire the session twice`);
+  assert.equal(after.draft, undefined, `ACK ${operation}: successful publication retires the draft`);
+  assert.equal(version.storagePrefix ?? `docs/${docId}/${want}`, committed.storagePrefix, `ACK ${operation}: immutable pointer remains committed`);
+  assert.deepEqual(await versionIds(docId), mode === "dedup" ? ["v1"] : ["v1", "v2"], `ACK ${operation}: retry mints no extra version`);
+  const served = await owner.http.get(`/content/${docId}/${want}/index.html`, { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, `ACK ${operation}: committed bytes remain readable`);
+  assert.equal(served.text, html, `ACK ${operation}: served bytes remain exact`);
+  if (retiring) assert.deepEqual(await listObjects(target, `${retiring}/`), [], `ACK ${operation}: success finishes retiring the old draft bytes`);
+  assert.equal((await rtdbGet(target, `editAccess/${docId}`))?.__liveEpoch, after.liveEpoch, `ACK ${operation}: success refreshes the live epoch mirror`);
+}
+scenario("A12.9b draft publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "draft"));
+scenario("A12.9c external publication survives native commit acknowledgement loss without deleting the committed version", ACK_CASE, (ctx) => publishWithLostAck(ctx, "external"));
+scenario("A12.9d deduplicated draft publication survives native commit acknowledgement loss and completes retirement", ACK_CASE, (ctx) => publishWithLostAck(ctx, "dedup"));
+scenario("A12.9f deduplicated publication acknowledges its retirement after a later publication and draft save", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Later dedup ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-dedup-later" });
+  precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 1) }, { timeoutMs: HTTP_MS })).status === 200, "an identical draft exists before deduplication");
+  const retiring = (await docRecord(docId)).draft.storagePrefix;
+  precondition((await listObjects(target, `${retiring}/`)).length > 0, "retirement has actual old draft objects to clean");
+  const laterHtml = docHtml(title, 3, " A later editor saved these bytes.");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-dedup", () => owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: HTTP_MS }), async () => {
+    precondition(!(await docRecord(docId)).draft, "the original deduplication committed before the later user actions");
+    const published = await updateUpload(owner.http, docId, { body: docHtml(title, 2), baseVersion: "v1", timeoutMs: HTTP_MS });
+    precondition(published.status === 200 && published.json?.versionId === "v2", "a separate publication advances the head before the original retry");
+    precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v2", html: laterHtml }, { timeoutMs: HTTP_MS })).status === 200, "a separate later editor saves a draft before the original retry");
+    const latest = await docRecord(docId);
+    return { liveEpoch: latest.liveEpoch, draftPrefix: latest.draft.storagePrefix };
+  });
+  assert.equal(response.status, 200, "ACK later dedup: the original committed retirement is acknowledged");
+  assert.equal(response.json?.versionId, "v1", "ACK later dedup: the response keeps its original version");
+  assert.equal(response.json?.deduped, true, "ACK later dedup: the response keeps its original deduplication result");
+  assert.deepEqual(await listObjects(target, `${retiring}/`), [], "ACK later dedup: the original retired draft bytes are removed");
+  const latest = await docRecord(docId);
+  assert.equal(latest.currentVersion, "v2", "ACK later dedup: the later publication remains current");
+  assert.equal(latest.liveEpoch, committed.liveEpoch, "ACK later dedup: the later editing session remains current");
+  assert.equal(latest.draft?.storagePrefix, committed.draftPrefix, "ACK later dedup: the later draft remains current");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), laterHtml, "ACK later dedup: the later draft bytes remain exact");
+  assert.deepEqual(latest.transactionReceipts ?? {}, {}, "ACK later dedup: the confirmed operation clears its receipt");
+});
+scenario("A12.9h a remembered-link save acknowledges its commit after a later editor saves another draft", ACK_CASE, async (ctx) => {
+  const { owner, accounts } = await castWithOwner(ctx, ["holder"]), holder = await sessionFor(ctx, accounts[1]);
+  const title = `Later link ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-link-later" });
+  const sharing = await setVisibility(target, { owner, doc: docId, visibility: "unlisted", publicEdit: true, timeoutMs: HTTP_MS });
+  precondition(sharing.status === 200 && sharing.linkToken, "the current document allows remembered-link editing");
+  precondition((await holder.http.postJson("/unlock", { docId, k: sharing.linkToken }, { timeoutMs: HTTP_MS })).status === 200, "the editor remembers the current link grant");
+  precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 2) }, { timeoutMs: HTTP_MS })).status === 200, "an old draft exists before the held save");
+  const before = await docRecord(docId), retiring = before.draft.storagePrefix, laterHtml = docHtml(title, 4);
+  precondition(!before.members.includes(accounts[1].email) && (await listObjects(target, `${retiring}/`)).length > 0, "the held writer needs the link grant and the old draft has concrete bytes");
+  const { response, committed } = await loseCommitAck(ctx, docId, "draft-link", () => holder.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 3) }, { timeoutMs: HTTP_MS }), async () => {
+    const original = await docRecord(docId);
+    precondition(original.draft?.storagePrefix !== retiring, "the original save really replaced the draft before ACK loss");
+    precondition((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: laterHtml }, { timeoutMs: HTTP_MS })).status === 200, "a later editor saves through the ordinary API before the original retry");
+    return { originalPrefix: original.draft.storagePrefix, laterPrefix: (await docRecord(docId)).draft.storagePrefix };
+  });
+  assert.equal(response.status, 200, "ACK later link: the original committed save is acknowledged");
+  assert.equal(response.json?.draft?.storagePrefix, committed.originalPrefix, "ACK later link: the response identifies the original saved draft");
+  assert.deepEqual(await listObjects(target, `${retiring}/`), [], "ACK later link: the originally replaced draft is cleaned");
+  const latest = await docRecord(docId);
+  assert.equal(latest.draft?.storagePrefix, committed.laterPrefix, "ACK later link: the later editor keeps the current draft");
+  assert.equal((await readDraftObject(target, docId, "index.html")).toString(), laterHtml, "ACK later link: the later draft bytes stay exact");
+  assert.deepEqual(latest.transactionReceipts ?? {}, {}, "ACK later link: the confirmed operation clears its receipt");
+});
+scenario("A12.9e thumbnail cover and slides survive native commit acknowledgement loss and serve the exact recorded JPEGs", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const docId = await publishDoc(ctx, owner, { title: `Thumb ACK ${tag()}`, name: "a12-ack-thumb" });
+  for (const kind of ["cover", "slides"]) {
+    const images = kind === "cover" ? [jpegSkeleton({ pad: 73 })] : [jpegSkeleton({ pad: 79 }), jpegSkeleton({ pad: 83 })];
+    const before = await docRecord(docId);
+    const { response, committed } = await loseCommitAck(ctx, docId, `thumb-${kind}`, () => postThumb(owner.http, { docId, versionId: "v1", kind, images, timeoutMs: HTTP_MS }), async () => {
+      const d = await docRecord(docId), key = kind === "cover" ? d.thumb?.cover : d.thumb?.slides?.key;
+      precondition(key && key !== (kind === "cover" ? before.thumb?.cover : before.thumb?.slides?.key), "the new thumbnail key committed before ACK loss");
+      return { key, thumb: d.thumb };
+    });
+    assert.equal(response.status, 200, `ACK thumb ${kind}: its own durable commit answers 200`);
+    assert.deepEqual(response.json, { stored: true }, `ACK thumb ${kind}: its own committed key reports stored true`);
+    assert.deepEqual((await docRecord(docId)).thumb, committed.thumb, `ACK thumb ${kind}: retry preserves the exact committed record`);
+    for (let i = 0; i < images.length; i++) {
+      const served = await owner.http.get(thumbPath(docId, "v1", committed.key, kind === "cover" ? "cover" : i), { timeoutMs: HTTP_MS });
+      assert.equal(served.status, 200, `ACK thumb ${kind}: committed JPEG remains readable`);
+      assert.deepEqual(served.buffer, images[i], `ACK thumb ${kind}: served JPEG remains exact`);
+    }
+    if (kind === "slides") {
+      const sibling = await owner.http.get(thumbPath(docId, "v1", before.thumb.cover, "cover"), { timeoutMs: HTTP_MS });
+      assert.equal(sibling.status, 200, "ACK thumb slides: previously committed cover remains readable");
+      assert.deepEqual(sibling.buffer, jpegSkeleton({ pad: 73 }), "ACK thumb slides: previously committed cover remains exact");
+    }
+  }
+});
+
+scenario("A12.9g a thumbnail acknowledges its committed upload and finishes obsolete cleanup after a later publication and thumbnail replace it", ACK_CASE, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const title = `Later thumb ACK ${tag()}`, docId = await publishDoc(ctx, owner, { title, name: "a12-ack-later-thumb" });
+  const initial = await postThumb(owner.http, { docId, versionId: "v1", images: [jpegSkeleton({ pad: 61 })], timeoutMs: HTTP_MS });
+  precondition(initial.status === 200 && initial.json?.stored === true, "the original version has a real stored thumbnail");
+  await updateTo(ctx, owner.http, docId, { body: docHtml(title, 2), baseVersion: "v1", want: "v2" });
+  const olderPrefix = `docs/${docId}/thumbs/v1/`, laterImage = jpegSkeleton({ pad: 97 });
+  precondition((await listObjects(target, olderPrefix)).length > 0, "the first pending upload has obsolete JPEGs to retire");
+  const { response, committed } = await loseCommitAck(ctx, docId, "thumb-cover", () => postThumb(owner.http, { docId, versionId: "v2", images: [jpegSkeleton({ pad: 89 })], timeoutMs: HTTP_MS }), async () => {
+    const first = await docRecord(docId);
+    precondition(first.thumb?.versionId === "v2" && first.thumb.cover, "the first upload's new key is durable while its response is held");
+    precondition((await listObjects(target, olderPrefix)).length > 0, "the first upload has not yet performed its captured cleanup");
+    await updateTo(ctx, owner.http, docId, { body: docHtml(title, 3), baseVersion: "v2", want: "v3" });
+    // A different kind has its own ACK gate, so the later operation completes
+    // before the first cover is released; both replace the current thumb row.
+    const later = await postThumb(owner.http, { docId, versionId: "v3", kind: "slides", images: [laterImage], timeoutMs: HTTP_MS });
+    precondition(later.status === 200 && later.json?.stored === true, "the later publication receives its own completed thumbnail upload");
+    const d = await docRecord(docId);
+    precondition(d.currentVersion === "v3" && d.thumb?.versionId === "v3" && d.thumb.slides?.key, "the later real upload replaces the first thumbnail key before retry");
+    return { firstKey: first.thumb.cover, thumb: d.thumb, liveEpoch: d.liveEpoch };
+  });
+  assert.equal(response.status, 200, "ACK thumb later: the first committed upload still answers 200");
+  assert.deepEqual(response.json, { stored: true }, "ACK thumb later: the first committed upload retains its success result");
+  assert.deepEqual(await listObjects(target, olderPrefix), [], "ACK thumb later: the first upload finishes its original obsolete-version cleanup");
+  const after = await docRecord(docId);
+  assert.equal(after.currentVersion, "v3", "ACK thumb later: the newer publication remains current");
+  assert.equal(after.liveEpoch, committed.liveEpoch, "ACK thumb later: thumbnail reconciliation leaves the later session epoch unchanged");
+  assert.deepEqual(after.thumb, committed.thumb, "ACK thumb later: retry never repoints the newer thumbnail");
+  assert.deepEqual(Object.keys(after.transactionReceipts ?? {}), [], "ACK thumb later: completed uploads remove only their own bounded receipts");
+  const served = await owner.http.get(thumbPath(docId, "v3", committed.thumb.slides.key, 0), { timeoutMs: HTTP_MS });
+  assert.equal(served.status, 200, "ACK thumb later: the newer thumbnail JPEG remains readable");
+  assert.deepEqual(served.buffer, laterImage, "ACK thumb later: the newer thumbnail JPEG remains exact");
+});
+
 /**
  * A setup update through /publish?update= that must mint `want`. A request
  * the stack did not answer is sent again only once the pointer is found not
@@ -213,19 +448,35 @@ async function versionIds(docId) {
   return rows.map((r) => r.id).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 }
 
-/** Object keys under docs/{docId}/{rel}. */
-const objectsUnder = async (docId, rel) => {
-  // Cover both legacy draft/ and isolated drafts/ prefixes, even after metadata is cleared.
-  if (rel === "draft/") return listObjects(target, `docs/${docId}/draft`);
-  const match = /^(v[0-9]+)\/(.*)$/.exec(rel);
-  const record = match ? await versionRecord(docId, match[1]) : null;
-  return listObjects(target, record?.storagePrefix ? `${record.storagePrefix}/${match[2]}` : `docs/${docId}/${rel}`);
-};
-const versionObject = async (docId, version, rel) => readObject(target, `${(await versionRecord(docId, version))?.storagePrefix ?? `docs/${docId}/${version}`}/${rel}`);
-const draftObject = async (docId, rel) => {
-  const draft = (await docRecord(docId))?.draft;
-  return draft ? readObject(target, `${draft.storagePrefix ?? `docs/${docId}/draft`}/${rel}`) : null;
-};
+/** Remember concrete paths before withdrawal; a missing record must not erase its byte evidence. */
+const observedPrefixes = new Map();
+async function versionObject(docId, versionId, rel) {
+  const version = await versionRecord(docId, versionId);
+  precondition(version, `version record ${docId}/${versionId} exists before reading its bytes`);
+  return readObject(target, `${version.storagePrefix ?? `docs/${docId}/${versionId}`}/${rel}`);
+}
+
+/** Unselected immutable allocations are uploads too, even without a version record. */
+async function unreferencedBundles(docId) {
+  const [versions, document, objects] = await Promise.all([
+    readCollection(target, `docs/${docId}/versions`), docRecord(docId),
+    listObjects(target, `docs/${docId}/bundles/`),
+  ]);
+  const selected = versions.map(({ id, data }) => `${data.storagePrefix ?? `docs/${docId}/${id}`}/`);
+  if (document?.draft) selected.push(`${draftStoragePrefix(docId, document.draft)}/`);
+  return objects.filter((name) => !selected.some((prefix) => name.startsWith(prefix)));
+}
+
+/** Actual snapshot objects, retaining a removed pointer and exposing never-selected uploads. */
+async function objectsUnder(docId, rel) {
+  if (!/^(v[1-9]\d*|draft)\/$/.test(rel)) return listObjects(target, `docs/${docId}/${rel}`);
+  const key = `${docId}/${rel}`;
+  const metadata = rel === "draft/" ? (await docRecord(docId))?.draft : await versionRecord(docId, rel.slice(0, -1));
+  if (metadata) observedPrefixes.set(key, rel === "draft/" ? draftStoragePrefix(docId, metadata) : metadata.storagePrefix ?? `docs/${docId}/${rel.slice(0, -1)}`);
+  const prefix = observedPrefixes.get(key) ?? `docs/${docId}/${rel.slice(0, -1)}`;
+  const objects = await listObjects(target, `${prefix}/`);
+  return metadata ? objects : [...new Set([...objects, ...await unreferencedBundles(docId)])].sort();
+}
 
 /** docs/{docId}/trust as sorted ids. */
 async function trustGrantIds(docId) {
@@ -274,27 +525,6 @@ async function openThreads(docId, v) {
 
 function noPageErrors(users) {
   for (const u of users) assert.deepEqual(u.log.errors.map((e) => e.message), [], `${u.name}: uncaught page errors`);
-}
-
-/*
- * One uncaught page error is a product defect that A12.4 does not own, so it
- * is recorded in findings.jsonl rather than failing that case; any other
- * page error still fails it. app/src/crdt/rtdb.ts:26-38 calls `stop()` inside
- * the onValue callback whose return value `stop` is. When onValue raises its
- * first event before it returns (the page error's stack runs through onValue
- * itself), the read throws "Cannot access '<stop, minified>' before
- * initialization" through the RTDB SDK's user-callback guard. resolve() is
- * then never called, and useSharedDocument.ts:69 waits on that ready() for
- * good, so that editing session never binds its shared document. Seen in A9.9
- * (run 1rac), A10.4 (wr3h) and A12.4 (l7wb, 1 of 3 full runs, as an in-app
- * commit answered). It has no defect id or case of its own yet.
- */
-const LOG_READY_TDZ = /^Cannot access '([\w$]+)' before initialization$/;
-function isLogReadyTdz(u, e) {
-  const m = LOG_READY_TDZ.exec(e.message ?? "");
-  if (!m || !/\.onValue \(/.test(e.stack ?? "")) return false;
-  const guard = `Exception was thrown by user callback. ReferenceError: Cannot access '${m[1]}' before initialization`;
-  return u.log.console.some((c) => typeof c.text === "string" && c.text.includes("@firebase/database") && c.text.includes(guard));
 }
 
 // --- the viewer -------------------------------------------------------------------
@@ -435,6 +665,7 @@ scenario("A12.1 an identical update is a no-op through /publish?update=, update_
   ctx.step("the editor saves revision 1's bytes as the draft and commits it: deduped, the draft cleared, trust kept");
   await editor.http.postJson("/draft", { docId, baseVersion: "v1", html: v1Html }, { expect: 200 });
   precondition((await docRecord(docId)).draft?.baseVersion === "v1", "the editor's draft exists");
+  precondition((await objectsUnder(docId, "draft/")).length > 0, "the retiring draft has stored bytes");
   const c = await editor.http.postJson("/commit", { docId, baseVersion: "v1" });
   assert.equal(c.status, 200, `/commit answered ${c.status} ${c.text.slice(0, 300)}`);
   assert.deepEqual(c.json, dedup, "/commit answers the dedup");
@@ -579,13 +810,11 @@ scenario("A12.3 a reader pinned to an older version gets the newer-version banne
  * in an EFFECT, after the render in which an unpinned reader's shownVersion
  * has already moved on. So when a second new version lands, that render
  * compares the new shownVersion with the previous announcement ("v2" against
- * "v3") and renders "Open v2 / Stay here" until the effect catches up. On an
- * idle machine React usually commits both renders inside one scheduler time
- * slice and nothing paints; on a slower CPU the slice runs out between them
- * and the stale banner renders. The CPU throttle (the rate DevTools calls a
- * mid-tier phone) makes that the normal case rather than an occasional one.
+ * "v3") and inserts "Open v2 / Stay here" until the effect catches up.
+ * This oracle observes DOM insertion and layout visibility under CPU
+ * throttling. It does not establish that the browser painted the banner.
  */
-scenario("A12.3 (a second new version) an unpinned reader who followed one new version never sees the banner for the next one either, not even on a slower CPU", { tiers: BOTH, defect: "X-a12-versions-3", timeoutMs: 360_000, ...STALLS }, async (ctx) => {
+scenario("A12.3 (a second new version) an unpinned reader who followed one new version never sees the banner for the next one either, not even on a slower CPU", { tiers: BOTH, timeoutMs: 360_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner and a viewer; publish revision 1 and share it; the viewer reads /d/<doc> unpinned and watches every render for the banner");
   const { owner, accounts } = await castWithOwner(ctx, ["viewer"]);
   const title = `A12.3 second ${tag()}`;
@@ -622,7 +851,7 @@ scenario("A12.3 (a second new version) an unpinned reader who followed one new v
 
 // --- A12.4 ----------------------------------------------------------------------
 
-scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the bytes of an earlier version is deduplicated against it (SPEC §2): deduped, nothing minted, the draft cleared", { tiers: BOTH, timeoutMs: 600_000, ...STALLS }, async (ctx) => {
+scenario("A12.4 restoring historical bytes publishes a new current version through commit, MCP, upload and the editor without changing history", { tiers: BOTH, timeoutMs: 600_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner; publish revision 1, then update to revision 2 (v2)");
   const { owner, accounts } = await castWithOwner(ctx, []);
   const title = `A12.4 revert ${tag()}`;
@@ -635,32 +864,38 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
 
   ctx.step("in the app's terms: the owner saves revision 1's bytes as the draft of v2 and commits it");
   await owner.http.postJson("/draft", { docId, baseVersion: "v2", html: r1 }, { expect: 200 });
+  precondition((await objectsUnder(docId, "draft/")).length > 0, "the retiring draft has stored bytes");
   const c = await owner.http.postJson("/commit", { docId, baseVersion: "v2" });
   assert.equal(c.status, 200, `/commit answered ${c.status} ${c.text.slice(0, 300)}`);
   const afterCommit = await docRecord(docId);
   observed.commit = { answer: c.json, currentVersion: afterCommit.currentVersion };
   ctx.step(`/commit answered ${JSON.stringify(c.json)}; currentVersion is ${afterCommit.currentVersion}`);
-  assert.equal(c.json.deduped, true, "identical bytes → no-op, deduped: true (SPEC §2)");
-  assert.equal(c.json.contentHash, v1.contentHash, "the hash is revision 1's");
-  assert.deepEqual({ versions: await versionIds(docId), v3Objects: await objectsUnder(docId, "v3/") }, { versions: ["v1", "v2"], v3Objects: [] }, "nothing minted, nothing uploaded");
-  assert.deepEqual({ draft: afterCommit.draft ?? null, draftObjects: await objectsUnder(docId, "draft/") }, { draft: null, draftObjects: [] }, "the draft is cleared (SPEC §2)");
+  assert.deepEqual(pick(c.json, ["versionId", "deduped", "contentHash"]), { versionId: "v3", deduped: false, contentHash: v1.contentHash }, "restoring v1 publishes v3, rather than discarding the draft as identical");
+  assert.equal(afterCommit.currentVersion, "v3", "the restored version is current");
+  assert.equal(String(await versionObject(docId, "v3", "index.html")), r1, "v3 holds the requested restoration");
+  assert.equal(afterCommit.draft ?? null, null, "the published draft is cleared");
 
-  ctx.step("through a token: update_document and /publish?update= with revision 1's content, based on v2");
+  ctx.step("through a token: restore v2 through update_document, then v1 through /publish?update=");
   const mcp = await mcpFor(ctx, owner, "owner-mcp");
-  // Each answer is judged before the next call, so a channel that minted cannot hide behind the next one's stale refusal.
-  const u = await mcp.call("update_document", { id: docId, content: r1, baseVersion: "v2" });
+  const r2 = docHtml(title, 2);
+  const u = await mcp.call("update_document", { id: docId, content: r2, baseVersion: "v3" });
   assert.equal(u.isError, false, `update_document: ${u.text.slice(0, 300)}`);
   observed.updateDocument = pick(u.json, ["versionId", "deduped", "threadsLeftBehind"]);
-  assert.deepEqual(pick(u.json, ["deduped", "contentHash"]), { deduped: true, contentHash: v1.contentHash }, `update_document: "Identical content is a no-op" (SPEC §19)`);
-  const p = await updateUpload(owner.http, docId, { body: r1, baseVersion: "v2", timeoutMs: HTTP_MS });
+  assert.deepEqual(pick(u.json, ["versionId", "deduped", "contentHash"]), { versionId: "v4", deduped: false, contentHash: v2.contentHash }, "MCP restores historical bytes as a new version");
+  assert.equal((await docRecord(docId)).currentVersion, "v4", "MCP restoration becomes current before the next channel runs");
+  assert.equal(String(await versionObject(docId, "v4", "index.html")), r2, "v4 holds the MCP restoration");
+  const p = await updateUpload(owner.http, docId, { body: r1, baseVersion: "v4", timeoutMs: HTTP_MS });
   assert.equal(p.status, 200, `/publish?update= answered ${p.status}`);
   observed.publishUpdate = pick(p.json, ["versionId", "deduped"]);
-  assert.deepEqual(pick(p.json, ["deduped", "contentHash"]), { deduped: true, contentHash: v1.contentHash }, `/publish?update=: "Identical content is a no-op" (SPEC §19)`);
+  assert.deepEqual(pick(p.json, ["versionId", "deduped", "contentHash"]), { versionId: "v5", deduped: false, contentHash: v1.contentHash }, "upload restores historical bytes as a new version");
   const final = await docRecord(docId);
-  assert.deepEqual({ versions: await versionIds(docId), currentVersion: final.currentVersion }, { versions: ["v1", "v2"], currentVersion: "v2" }, "nothing minted on any channel");
+  assert.deepEqual({ versions: await versionIds(docId), currentVersion: final.currentVersion }, { versions: ["v1", "v2", "v3", "v4", "v5"], currentVersion: "v5" }, "every restoration minted and selected one version");
+  for (const [id, bytes, parent] of [["v1", r1, null], ["v2", r2, "v1"], ["v3", r1, "v2"], ["v4", r2, "v3"], ["v5", r1, "v4"]]) {
+    assert.equal(String(await versionObject(docId, id, "index.html")), bytes, `${id}: immutable bytes`);
+    if (parent) assert.equal((await versionRecord(docId, id)).parentVersion, parent, `${id}: restoration retains linear provenance`);
+  }
 
-  // Optional part: the same thing reached through the editor, as a person would.
-  ctx.step("in the app: an editor round trip reaches the same dedup (paragraph fixture: type A, save; type B, save; delete B, save)");
+  ctx.step("in the app: type A and publish, type B and publish, remove B and publish the restored content");
   const fx = await publish(owner.http, { fixture: "crdt-paragraphs.html", title: `${title} in app`, name: "a124-inapp", timeoutMs: HTTP_MS, patient: { ctx, stopAt: "budget" } });
   precondition(fx.versionId === "v1", `publish answered ${fx.status}`);
   const appDoc = fx.docId;
@@ -704,70 +939,48 @@ scenario("A12.4 S13 (SPEC question, recorded): committing or updating to the byt
   await saveWith(tokB, "v3");
   await o.enterEdit({ timeout: FRAME_MS });
   await autosave("", { thenBackspace: tokB.length });
-  // The revert reaches S13's situation only if the editor serializes it to
-  // exactly v2's bytes; if it does not, this part measured nothing.
   const v2Bytes = await versionObject(appDoc, "v2", "index.html");
-  const draftBytes = await draftObject(appDoc, "index.html");
-  if (!draftBytes || sha(draftBytes) !== sha(v2Bytes)) {
-    /*
-     * Seen on a loaded l7wb, 3 of 4 diagnostic runs of this case: the draft
-     * was v2's body followed by the whole body again, the earlier sessions'
-     * typing included, autosaved, and "Save as new version" would publish
-     * it. SPEC §16 (spec.md:1556-1557) has a log that holds anything "win
-     * over the bytes it loaded", not be joined to them. That is recorded, and
-     * this part still measured nothing about S13.
-     */
-    const draftText = draftBytes ? String(draftBytes) : null;
-    const hunks = draftText === null ? [] : lineHunks(String(v2Bytes), draftText);
-    const bodies = draftText === null ? 0 : draftText.split('id="e2e-sentinel"').length - 1;
-    ctx.ev.json("revert-draft", { v2: String(v2Bytes), draft: draftText, hunks });
-    const saw = draftText === null ? "no draft was stored" : `the draft holds the fixture's body ${bodies} time(s) and differs from v2 in ${hunks.length} place(s), first at line ${hunks[0]?.line}`;
-    if (bodies > 1) {
-      recordFinding(target, {
-        kind: "product-suspicion",
-        case: "A12.4",
-        appDoc,
-        claim: "after two in-app commits, the third editing session's autosaved draft held the document's body twice: the loaded body, then a second copy carrying the earlier sessions' typing; SPEC §16 (spec.md:1556-1557) has a log that holds anything win over the bytes it loaded, not be joined to them",
-        hunks: hunks.map(({ line, expected, got }) => ({ line, expectedLines: expected.length, gotLines: got.length })),
-      });
-    }
-    ctx.inconclusive(`the editor's revert did not serialize to v2's stored bytes, so the in-app commit could not meet an earlier version's hash: ${saw}${bodies > 1 ? " (recorded in findings.jsonl as a product suspicion)" : ""}`);
-  }
+  const draftBytes = await readDraftObject(target, appDoc, "index.html");
+  ctx.ev.json("revert-draft", { v2: String(v2Bytes), draft: draftBytes && String(draftBytes) });
+  assert.ok(draftBytes && sha(draftBytes) === sha(v2Bytes), "removing B restores exactly v2's bytes, without duplicating the document body");
   const inApp = await save();
   const appRecord = await docRecord(appDoc);
   const v3Bytes = await versionObject(appDoc, "v3", "index.html");
-  observed.inApp = { toast: inApp.text, outcome: inApp.outcome, currentVersion: appRecord.currentVersion, draftEqualsV2: Boolean(draftBytes), currentHoldsB: String(v3Bytes).includes(tokB.trim()) };
-  ctx.step(`in the app: toast "${inApp.text}", currentVersion ${appRecord.currentVersion}`);
-  assert.deepEqual({ outcome: inApp.outcome, text: inApp.text }, { outcome: "nochange", text: DEDUP_TOAST }, "the commit deduplicated (SPEC §2) and the app said so");
-  assert.deepEqual({ versions: await versionIds(appDoc), draft: appRecord.draft ?? null }, { versions: ["v1", "v2", "v3"], draft: null }, "nothing minted; the draft cleared");
+  const v4Bytes = await versionObject(appDoc, "v4", "index.html");
+  observed.inApp = { toast: inApp.text, outcome: inApp.outcome, currentVersion: appRecord.currentVersion };
+  assert.deepEqual({ outcome: inApp.outcome, versionId: inApp.versionId }, { outcome: "published", versionId: "v4" }, "the browser reports a published restoration");
+  assert.notEqual(inApp.text, DEDUP_TOAST, "the app must not call the restored content identical to the current version");
+  assert.deepEqual({ versions: await versionIds(appDoc), currentVersion: appRecord.currentVersion, draft: appRecord.draft ?? null }, { versions: ["v1", "v2", "v3", "v4"], currentVersion: "v4", draft: null }, "the restored version is current and the published draft is cleared");
+  assert.equal(sha(v4Bytes), sha(v2Bytes), "v4 stores exactly the historical content requested");
+  assert.ok(String(v3Bytes).includes(tokB.trim()), "the superseded version retains B unchanged");
+  assert.ok(String(v4Bytes).includes(tokA.trim()) && !String(v4Bytes).includes(tokB.trim()), "current bytes keep A and remove B");
+  await waitFrameAt(ctx, o, appDoc, "v4");
+  const rendered = await frameText(await o.frame());
+  assert.ok(rendered.includes(tokA.trim()) && !rendered.includes(tokB.trim()), "the reader renders the restored content");
+  ctx.ev.json("historical-restoration", observed);
+  noPageErrors([o]);
+});
 
-  // S13, recorded rather than asserted: SPEC §2 says "dedups on contentHash",
-  // not "on the current version's", so this is the question, not a failure.
-  const finding = recordFinding(target, {
-    kind: "spec-question",
-    suspect: "S13",
-    case: "A12.4",
-    docId,
-    appDoc,
-    question: "a revert to an earlier version's bytes is deduplicated against that version: the answer names it while another stays current, the draft is deleted, and the app says the content is identical",
-    observed,
-    versionHashes: { v1: v1.contentHash, v2: v2.contentHash },
-  });
-  ctx.ev.json("s13", finding);
-  ctx.t.diagnostic(`S13 observed: ${JSON.stringify(observed)}`);
-  // The update log's ready TDZ is recorded, not failed (isLogReadyTdz); every other page error fails.
-  const tdz = o.log.errors.filter((e) => isLogReadyTdz(o, e));
-  if (tdz.length > 0) {
-    ctx.step(`recorded, not failed: ${tdz.length} uncaught "${tdz[0].message}" from the update log's ready promise (app/src/crdt/rtdb.ts:26-38), a product defect this case does not own`);
-    ctx.ev.json("log-ready-tdz", recordFinding(target, {
-      kind: "product-suspicion",
-      case: "A12.4",
-      appDoc,
-      claim: "app/src/crdt/rtdb.ts:27-37 calls stop() inside the onValue callback whose return value stop is; onValue raised its first event before returning, so the read threw and resolve() never ran: useSharedDocument.ts:69 waits on ready() for good and the editing session never binds",
-      errors: tdz.map(({ t, message, stack }) => ({ t, message, stack })),
-    }));
-  }
-  assert.deepEqual(o.log.errors.filter((e) => !isLogReadyTdz(o, e)).map((e) => e.message), [], "owner: uncaught page errors (other than the update log's ready TDZ, recorded above)");
+scenario("A12.4b operator publishing restores historical bytes as a new version and deduplicates only the current version", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 180_000, ...STALLS }, async (ctx) => {
+  const { owner } = await castWithOwner(ctx, []);
+  const seeded = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, timeoutMs: 30_000 });
+  precondition(seeded.code === 0, `operator seed exited ${seeded.code}: ${scrub(seeded.stderr)}`);
+  const docId = seeded.docId;
+  const original = await versionObject(docId, "v1", "index.html");
+  const v1 = await versionRecord(docId, "v1");
+  const newer = docHtml(`Operator restore ${tag()}`, 2);
+  await updateTo(ctx, owner.http, docId, { body: newer, baseVersion: "v1", want: "v2" });
+  const restored = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, id: docId, timeoutMs: 30_000 });
+  assert.equal(restored.code, 0, `operator restoration exits: ${scrub(restored.stderr)}`);
+  assert.equal((await docRecord(docId)).currentVersion, "v3", "operator restoration publishes historical bytes as a new current version");
+  const v3 = await versionRecord(docId, "v3");
+  assert.deepEqual(pick(v3, ["contentHash", "parentVersion"]), { contentHash: v1.contentHash, parentVersion: "v2" }, "operator restoration keeps content identity and provenance");
+  assert.equal(sha(await versionObject(docId, "v3", "index.html")), sha(original), "operator restores original bytes");
+  assert.equal(String(await versionObject(docId, "v2", "index.html")), newer, "operator preserves superseded content");
+  const duplicate = await publishOperator(target, { sample: "bikeshed-tour", owner: owner.account, id: docId, timeoutMs: 30_000 });
+  assert.equal(duplicate.code, 0);
+  assert.match(duplicate.stdout, /already published as v3 .*NO-OP/, "an identical retry names the current version even though an earlier hash also matches");
+  assert.deepEqual(await versionIds(docId), ["v1", "v2", "v3"], "identical current content mints nothing");
 });
 
 // --- A12.5 ----------------------------------------------------------------------
@@ -839,14 +1052,14 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   ctx.step("the owner accepts it through accept_suggestion: the change is in the draft; an update is now 409 acceptedInDraft and leaves the draft");
   const acc = await oMcp.call("accept_suggestion", { id: docId, threadId: sug.json.threadId });
   precondition(!acc.isError && acc.json?.inDraft === true, `accept_suggestion: ${acc.text.slice(0, 300)}`);
-  const draftBefore = await draftObject(docId, "index.html");
+  const draftBefore = await readDraftObject(target, docId, "index.html");
   precondition(draftBefore && String(draftBefore).includes("revision two of"), "the accepted change is in the draft");
   const held = await updateUpload(owner.http, docId, { body: r3, timeoutMs: HTTP_MS });
   assert.deepEqual({ status: held.status, json: held.json }, { status: 409, json: { error: ACCEPTED_ONE, acceptedInDraft: 1 } }, "/publish?update= over a draft holding an accepted change");
   const heldTool = await oMcp.call("update_document", { id: docId, content: r3, baseVersion: "v2" });
   assert.ok(heldTool.isError && heldTool.text.includes(ACCEPTED_ONE), `update_document over the accepted change: ${heldTool.text.slice(0, 300)}`);
   await nothingAt("the acceptedInDraft refusals", "v3", ["v1", "v2"]);
-  assert.equal(sha(await draftObject(docId, "index.html")), sha(draftBefore), "the refused updates left the draft as it was");
+  assert.equal(sha(await readDraftObject(target, docId, "index.html")), sha(draftBefore), "the refused updates left the draft as it was");
 
   ctx.step("the in-app commit is not held: it publishes the draft as v3, with the accepted change");
   const commit = await owner.http.postJson("/commit", { docId, baseVersion: "v2" });
@@ -931,7 +1144,10 @@ scenario("A12.6 a stale base is refused naming the current version (/publish?upd
  * shape) and the late save was refused, as a fixed product refuses it. One
  * answered 200 with no draft left landed first and measured nothing, and the
  * case is INCONCLUSIVE when no attempt ran the race (seen: a copy with no
- * padding, whose late saves all landed first). Under the defect a 409 is a
+ * padding, whose late saves all landed first). A publisher snapshot conflict
+ * is another valid opposite ordering, but only after the exact late draft and
+ * published head are shown intact; it cannot supply the publisher-wins witness.
+ * Under the defect a 409 is a
  * check that came after the pointer moved, so five of those in a row would
  * pass it unexpectedly: none of the 25 measured attempts at 2–4 MB was one
  * (at 8 MB, 2 of 8 were: the larger body reached the check later).
@@ -951,6 +1167,8 @@ scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit 
     const title = `A12.6 race ${tag()}`;
     const docId = await publishDoc(ctx, owner, { title, name: "a126-race" });
     await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: docHtml(title, 2) }, { expect: 200 });
+    const beforeVersion = plain(await versionRecord(docId, "v1"));
+    const beforeBytes = await versionObject(docId, "v1", "index.html");
     const lateHtml = docHtml(title, 2, " A late autosave.") + padding(RACE_PAD_BYTES);
     const ms = {};
     const t0 = Date.now();
@@ -960,15 +1178,32 @@ scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit 
     await new Promise((resolve) => setTimeout(resolve, RACE_LEAD_MS));
     ms.commitSent = Date.now() - t0;
     const [late, c] = await Promise.all([lateSent, timed("commitAnswered", owner.http.postJson("/commit", { docId, baseVersion: "v1" }))]);
-    precondition(c.status === 200 && c.json?.versionId === "v2", `/commit: ${c.status} ${c.text.slice(0, 200)}`);
     precondition(late.status === 200 || late.status === 409, `the late POST /draft was answered ${late.status} ${late.text.slice(0, 200)}`);
     const rec = await docRecord(docId);
+    const served = await owner.http.get(`/draft/${docId}/index.html`);
+    const draftBase = rec.draft?.baseVersion ?? null;
+    assert.ok(draftBase === null || draftBase === rec.currentVersion, "no draft is left on a superseded base: the late save cannot survive on a retired publication");
+    const commitRefused = c.status === 409 && c.json?.draftChanged === true && c.json?.error === DRAFT_SNAPSHOT_REFUSAL;
+    if (commitRefused) {
+      assertDraftRaceRefusal({ commit: c, late, beforeVersion, beforeBytes, record: rec,
+        versions: (await readCollection(target, `docs/${docId}/versions`)).map(({ id, data }) => ({ id, data: plain(data) })),
+        versionBytes: await readObject(target, `${beforeVersion.storagePrefix}/index.html`),
+        draftBytes: rec.draft ? await readDraftObject(target, docId, "index.html") : null, served, lateHtml });
+      ctx.ev.json(`refused-commit-${attempt}`, { commit: c.json, lateDraft: late.json.draft, beforeVersion,
+        currentVersion: rec.currentVersion, draft: plain(rec.draft), liveEpoch: rec.liveEpoch,
+        publishedSha256: sha(beforeBytes), lateSha256: sha(lateHtml) });
+      const row = { attempt, docId, lateDraft: late.status, commit: c.status, inFlightTogether: ms.commitSent < ms.lateAnswered, ms,
+        currentVersion: rec.currentVersion, draftBase, raced: "no: the publisher refused its superseded snapshot; the exact late save and published head survived" };
+      rows.push(row);
+      ctx.ev.json("race", rows);
+      ctx.step(`attempt ${attempt}: ${JSON.stringify(row)}`);
+      continue; // This safe opposite ordering never satisfies the publisher-wins witness.
+    }
+    precondition(c.status === 200 && c.json?.versionId === "v2", `/commit: ${c.status} ${c.text.slice(0, 200)}`);
     // The commit's transaction, by the server's clock (functions/src/lib/draft.ts now() is a server timestamp).
     ms.pointerMoved = ((await versionRecord(docId, "v2"))?.publishedAt?.toMillis?.() ?? NaN) - t0;
     // What an editor's frame loads in edit mode (frameMode.ts frameSrc) and an editor reading the head with a draft present.
-    const served = await owner.http.get(`/draft/${docId}/index.html`);
     const says = /This is revision (\d+) of the versions document\.( A late autosave\.)?/.exec(served.text ?? "");
-    const draftBase = rec.draft?.baseVersion ?? null;
     const stale = draftBase !== null && draftBase !== rec.currentVersion;
     const inFlightTogether = ms.commitSent < ms.lateAnswered;
     const row = {
@@ -1014,7 +1249,7 @@ async function recordViewOf(session, docId, versionId) {
   return sessionId;
 }
 
-scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints first and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 480_000, ...STALLS }, async (ctx) => {
+scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; the real run repoints and removes the version's bytes, record, annotations, draft and thumbnails, retags its views and the stats; the next update re-mints the id clean", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 480_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner and a viewer; publish revision 1, share it, update to revision 2 (v2)");
   const { owner, accounts } = await castWithOwner(ctx, ["viewer"]);
   const ownerEmail = accounts[0].email.toLowerCase();
@@ -1033,13 +1268,23 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const mcp = await mcpFor(ctx, owner, "owner-mcp");
   await addComment(mcp, docId, 2, `A12.7 thread on v2 ${tag()}`);
   await owner.http.postJson("/draft", { docId, baseVersion: "v2", html: docHtml(title, 2, " Drafted.") }, { expect: 200 });
+  const epoch = (await docRecord(docId)).liveEpoch ?? "initial";
+  const live = rtdbAs(target, { idToken: owner.idToken, http: ctx.http({ actor: "owner-live-log" }) });
+  const logged = await live.put(`status/${docId}/y/${epoch}/withdrawalProbe`, "AAA=");
+  precondition(logged.status === 200, `the owner wrote a retiring live-log entry: ${logged.status}`);
+
+  const initialEventCounts = { "version.published": 2, "access.changed": 1, "thread.opened": 1, "comment.added": 1 };
+  await settleLog(target, docId, initialEventCounts, { message: "withdrawal setup events" });
 
   /** Everything the withdrawal touches, as plain data. */
   const snapshot = async () => {
     const rec = await docRecord(docId);
     const views = Object.fromEntries((await readCollection(target, `docs/${docId}/views`)).map((r) => [r.id, r.data.versionId]));
     return {
+      events: plain(await changeLog(target, docId)),
       currentVersion: rec.currentVersion,
+      liveEpoch: rec.liveEpoch ?? "initial",
+      liveLog: await rtdbGet(target, `status/${docId}/y`),
       draft: rec.draft ? rec.draft.baseVersion : null,
       thumb: rec.thumb ? rec.thumb.versionId : null,
       commits: rec.stats?.commits ?? null,
@@ -1052,6 +1297,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     };
   };
   const before = await snapshot();
+  precondition(before.liveLog?.[epoch]?.withdrawalProbe === "AAA=", "the retiring live log exists before withdrawal");
   precondition(
     before.currentVersion === "v2" && before.draft === "v2" && before.thumb === "v2" && before.commits === 1 && before.v2Annotations === 1 && before.objects.v2.length === 1 && before.objects.thumbsV2.length === 1 && before.objects.draft.length === 1,
     `the setup is in place: ${JSON.stringify(before)}`,
@@ -1088,7 +1334,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     `plan for ${docId}:`,
     "repoint currentVersion: v2 -> v1",
     "discard the draft (base=v2) and its objects",
-    `/${(await versionRecord(docId, "v2")).storagePrefix}/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
+    `/${(await versionRecord(docId, "v2")).storagePrefix ?? `docs/${docId}/v2`}/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
     `/docs/${docId}/thumbs/v2/ (1 thumbnail(s))`,
     "clear thumb: it names v2",
     `delete Firestore: docs/${docId}/versions/v2 (+1 annotation(s), 1 comment(s))`,
@@ -1102,11 +1348,24 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const run = await deleteVersion(ctx, [...real, "--version", "v2", "--drop-draft", "--allow-annotations"], "real run");
   assert.equal(run.code, 0, `exit ${run.code}: ${scrub(run.stderr).slice(0, 300)}`);
   assert.ok(run.stdout.includes(`withdrew ${docId}/v2; currentVersion is now v1.`), "it says what it did");
+  await settleLog(target, docId, { ...initialEventCounts, "version.withdrawn": 1 }, { message: "exactly one withdrawal event" });
   const afterRun = await snapshot();
+  const withdrawals = afterRun.events.filter((event) => event.data.type === "version.withdrawn");
+  assert.deepEqual(withdrawals.map(({ data }) => pick(data, ["type", "audience", "version"])), [{ type: "version.withdrawn", audience: "readers", version: "v2" }], "withdrawal records the removed version exactly once for readers");
+  assert.deepEqual(afterRun.events.filter((event) => event.data.type !== "version.withdrawn"), before.events, "withdrawal preserves all preceding events");
+  const viewerMcp = await mcpFor(ctx, viewer, "viewer-withdrawal-mcp");
+  const feed = await viewerMcp.ok("get_changes", { id: docId, since: "all", includeMine: true });
+  assert.deepEqual(feed.events.filter((event) => event.type === "version.withdrawn").map((event) => pick(event, ["type", "version"])), [{ type: "version.withdrawn", version: "v2" }], "a viewer reads the withdrawal event through MCP");
+  assert.match(afterRun.liveEpoch, /^[a-f0-9-]{36}$/, "withdrawal selects a fresh live epoch");
+  assert.notEqual(afterRun.liveEpoch, before.liveEpoch, "withdrawal retires the previous live epoch");
+  assert.equal((await rtdbGet(target, `editAccess/${docId}`))?.__liveEpoch, afterRun.liveEpoch, "withdrawal publishes the new live epoch to the edit-access mirror");
   ctx.ev.json("after", afterRun);
   const v1rec = await versionRecord(docId, "v1");
   assert.deepEqual(afterRun, {
+    events: afterRun.events,
     currentVersion: "v1",
+    liveEpoch: afterRun.liveEpoch,
+    liveLog: null,
     draft: null,
     thumb: null,
     commits: 0,
@@ -1128,6 +1387,9 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const r3 = docHtml(title, 3);
   const re = await updateUpload(owner.http, docId, { body: r3, baseVersion: "v1", timeoutMs: HTTP_MS });
   assert.deepEqual({ status: re.status, ...pick(re.json, ["versionId", "deduped"]) }, { status: 200, versionId: "v2", deduped: false }, "the withdrawn id is re-used");
+  const remintedEvents = await settleLog(target, docId, { ...initialEventCounts, "version.published": 3, "version.withdrawn": 1 }, { message: "re-mint records one new publication" });
+  const newPublications = remintedEvents.filter(({ id }) => !afterRun.events.some((event) => event.id === id));
+  assert.deepEqual(newPublications.map(({ data }) => pick(data, ["type", "audience", "version"])), [{ type: "version.published", audience: "readers", version: "v2" }], "re-mint emits one new v2 publication after its withdrawal");
   assert.equal(sha(await versionObject(docId, "v2", "index.html")), sha(Buffer.from(r3)), "the new v2 holds the new bytes");
   assert.deepEqual({
     annotations: (await readCollection(target, `docs/${docId}/versions/v2/annotations`)).length,
@@ -1137,7 +1399,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   }, { annotations: 0, thumb: null, thumbs: [], oldView: "v2-deleted" }, "nothing of the withdrawn v2 attaches to the new one");
 });
 
-scenario("A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains", { tiers: ["local"], needs: ["operator-scripts"], defect: "X-a12-versions-1", timeoutMs: 300_000, ...STALLS }, async (ctx) => {
+scenario("A12.7 (public projection) withdrawing the current version of a public document repoints public/{docId} too, so an anonymous reader opens the version that remains", { tiers: ["local"], needs: ["operator-scripts"], timeoutMs: 300_000, ...STALLS }, async (ctx) => {
   ctx.step("cast an owner; publish revision 1, update to revision 2, make it public");
   const { owner, accounts } = await castWithOwner(ctx, []);
   const ownerEmail = accounts[0].email.toLowerCase();
@@ -1152,6 +1414,8 @@ scenario("A12.7 (public projection) withdrawing the current version of a public 
     ctx.step("delete-version withdraws v2");
     const run = await deleteVersion(ctx, ["--doc", docId, "--project", target.projectId, "--yes", "--account", ownerEmail, "--version", "v2"], "real run");
     precondition(run.code === 0 && (await docRecord(docId)).currentVersion === "v1", `the withdrawal ran: exit ${run.code} ${scrub(run.stderr).slice(0, 300)}`);
+    const current = await docRecord(docId);
+    const publicAfter = await readDoc(target, `public/${docId}`);
 
     ctx.step("an anonymous reader opens /d/<doc>, which resolves the version from public/{docId} (useDocument.ts resolveReader)");
     const anon = await reader(ctx, "anonymous");
@@ -1162,7 +1426,9 @@ scenario("A12.7 (public projection) withdrawing the current version of a public 
     const observed = { projection, frameVersion: srcVersion(src, docId), contentStatus };
     ctx.ev.json("anonymous", { src, ...observed });
     ctx.step(`observed ${JSON.stringify(observed)}`);
-    assert.deepEqual(observed, { projection: "v1", frameVersion: "v1", contentStatus: 200 }, "public/{docId} follows the repoint, and the anonymous reader loads v1 (scripts/delete-version.mjs never syncs the projection)");
+    assert.deepEqual(observed, { projection: "v1", frameVersion: "v1", contentStatus: 200 }, "public/{docId} follows the repoint, and the anonymous reader loads v1");
+    assert.notEqual(current.liveEpoch, row.liveEpoch ?? "initial", "public withdrawal retires the previous live epoch");
+    assert.equal(publicAfter?.liveEpoch, current.liveEpoch, "public readers receive the repointed live epoch");
   } finally {
     await setVisibility(target, { owner, doc: docId, visibility: "private", timeoutMs: HTTP_MS }).catch(() => undefined);
   }

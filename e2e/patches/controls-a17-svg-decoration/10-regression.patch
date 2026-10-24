@@ -1,0 +1,6 @@
+--- a/app/src/export/image.ts
++++ b/app/src/export/image.ts
+@@ -159,3 +159,2 @@
+   const clone = svg.cloneNode(true) as SVGSVGElement;
+-  stripDecoration(clone);
+   if (!clone.getAttribute("xmlns")) {

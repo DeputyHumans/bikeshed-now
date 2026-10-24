@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK suggestion release: native retry preserves the later lease operation",
+  "what": "Ignore the original release receipt so its native retry replays an old lease operation over newer intent.",
+  "target": {
+    "spec": "e2e/specs/functional/a08-suggestion-lease-ack.spec.mjs",
+    "case": "A8.11b a completed suggestion release does not erase a newer same-account lease before its native retry",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK suggestion release: native retry preserves the later lease operation"
+  }
+}

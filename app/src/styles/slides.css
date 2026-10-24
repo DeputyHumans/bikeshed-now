@@ -169,11 +169,11 @@
 
 @media (max-width: 860px) {
   .slide-rail {
-    position: fixed;
-    inset: var(--header-h) auto 0 0;
+    position: absolute;
+    inset: 0 auto 0 0;
     z-index: 45;
     /* Width is inherited from the base rule: one owner, one number. Being
-       `fixed` also takes the rail out of flow, so the wrapper's `auto` track
+       `absolute` also takes the rail out of flow, so the wrapper's `auto` track
        collapses to zero and the document keeps the full width with no override
        needed here at all. */
     box-shadow: var(--shadow-xl);

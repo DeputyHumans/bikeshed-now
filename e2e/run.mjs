@@ -94,6 +94,8 @@ import { acquireTierLock, tierLockMode } from "./lib/locks.mjs";
 import { DEFAULT_MAX_LOAD, GIB, startLoadSampler, waitForLoad } from "./lib/load.mjs";
 import { listStacks, readRecord, reap, saveRecord, stackFailures, startStack, stopStack } from "./lib/stack.mjs";
 import { ADMISSION_CODE } from "./lib/admission.mjs";
+import { coverageMaintenanceEligible } from "./lib/rtdb-coverage.mjs";
+import { beginRtdbInvocationChild, captureRtdbRuntime, writeRtdbInvocationEvidence } from "./lib/rtdb-runtime.mjs";
 import { jvmHeapConfig } from "./lib/jvm.mjs";
 import { extendLease, readLease } from "./lib/lifetime.mjs";
 import { RUN_OWNER_ENV, reapBrowsers, runOwnerValue } from "./lib/browsers.mjs";
@@ -105,6 +107,7 @@ import { assertTargetDeclared, controlVerdict, findTarget, greenGroups, greenRun
 import { parseAppEnvArgs } from "./lib/options.mjs";
 import { CASE_TIMEOUT_ENV, tierTimeouts } from "./lib/budget.mjs";
 import { specFilePlan } from "./lib/specfile.mjs";
+import { selfTestToolchain } from "./lib/prerequisites.mjs";
 import { relFile } from "./lib/reporter.mjs";
 
 /**
@@ -180,9 +183,16 @@ async function stopChildGroup(child, { graceMs = 10_000 } = {}) {
 }
 
 async function selfTest() {
+  let toolchain;
+  try {
+    toolchain = selfTestToolchain();
+  } catch (err) {
+    fail(`self-test prerequisites: ${err.message}`);
+  }
+  log(`self-test toolchain: ${JSON.stringify({ node: toolchain.node, firebase: toolchain.firebase })}`);
   const files = readdirSync(SELFTEST_DIR).filter((n) => n.endsWith(".test.mjs")).sort().map((n) => join(SELFTEST_DIR, n));
   if (files.length === 0) fail("no self-tests found");
-  const child = spawn(process.execPath, ["--test", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, stdio: "inherit" });
+  const child = spawn(toolchain.node.executable, ["--test", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit" });
   const code = await new Promise((r) => child.on("close", (c) => r(c ?? 1)));
   process.exit(code);
 }
@@ -339,6 +349,7 @@ async function cmdRun(argv) {
   let lock = null; // the held tier lock
   let stopSampler = null;
   let inv = null;
+  let rtdbBefore = null;
   let interrupted = null;
   let finishing = null;
   let stopWatch = null;
@@ -488,6 +499,8 @@ async function cmdRun(argv) {
       attach: values.attach ?? null,
       stackOptions: values.attach ? null : { emailOff: values["email-off"], appEnv: Object.keys(appEnv), rtdbProxy: values["rtdb-proxy"], gates: values.gates, storageShim: values["storage-shim"] },
       capabilities: [...target.capabilities].sort(),
+      rtdbEngine: target.rtdbEngine ?? null,
+      parallelism: Object.fromEntries(plan.map(({ tier }) => [tier, Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier])])),
       timeouts: Object.fromEntries(
         plan.map(({ tier, budget: b }) => [
           tier,
@@ -505,7 +518,8 @@ async function cmdRun(argv) {
       const asked = Date.now();
       lock = await acquireTierLock(tierLock.mode, { runId: target.runId, tier, onWait: (why) => log(`waiting for the ${mode} tier lock: ${why}`) });
       locks[tier] = { ...tierLock, acquiredAt: new Date().toISOString(), waitedMs: Date.now() - asked };
-      updateInvocationMeta(inv.dir, { locks });
+      const recycleCoverage = coverageMaintenanceEligible(target, tier, mode, Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier]));
+      updateInvocationMeta(inv.dir, { locks, maintenance: { rtdbCoverage: recycleCoverage } });
       try {
         if (tier === "concurrency") {
           const max = Number(values["max-load"] ?? DEFAULT_MAX_LOAD);
@@ -522,6 +536,8 @@ async function cmdRun(argv) {
         env[RUN_OWNER_ENV] = runOwnerValue();
         env.E2E_SUITE = tier;
         env.E2E_INVOCATION_DIR = inv.dir;
+        if (recycleCoverage) env.E2E_RTDB_COVERAGE_RECYCLE = "1";
+        else delete env.E2E_RTDB_COVERAGE_RECYCLE;
         env.E2E_EVIDENCE_DIR = inv.dir;
         if (values.n) env.E2E_N = values.n;
         if (values.trials) env.E2E_TRIALS = values.trials;
@@ -531,6 +547,10 @@ async function cmdRun(argv) {
             ? `${tier}: --timeout ${budget.fileTimeoutMs} ms for each file and each case without its own`
             : `${tier}: file timeout ${budget.fileTimeoutMs} ms (${budget.driver ? `${relFile(budget.driver)}'s budget` : "the tier default"}); a case without its own timeoutMs gets ${budget.caseTimeoutMs} ms`,
         );
+        if (target.rtdbEngine) {
+          const rec = readRecord(target.runId);
+          rtdbBefore = await beginRtdbInvocationChild({ rec, invocationId: inv.id, invocationDir: inv.dir, before: rtdbBefore, parallelism: inv.meta.parallelism, locks }, { record: reference => updateInvocationMeta(inv.dir, { rtdbRuntime: reference }) });
+        }
         const code = await nodeTest(files, {
           concurrency: Number(values.concurrency ?? DEFAULT_CONCURRENCY[tier]),
           timeout: budget.fileTimeoutMs,
@@ -539,6 +559,11 @@ async function cmdRun(argv) {
           resultsFile: join(inv.dir, `results-${tier}.jsonl`),
           onChild: (c) => (child = c),
         });
+        if (target.rtdbEngine) {
+          const rec = readRecord(target.runId), after = await captureRtdbRuntime(rec);
+          const reference = writeRtdbInvocationEvidence({ rec, invocationId: inv.id, invocationDir: inv.dir, before: rtdbBefore, after, parallelism: inv.meta.parallelism, locks });
+          updateInvocationMeta(inv.dir, { rtdbRuntime: reference });
+        }
         log(`${tier}: node --test exited ${code}`);
         if (code !== 0) exit = exit || code;
         if (stackDown) return finishing;
@@ -815,7 +840,7 @@ async function cmdControls(argv) {
   ledger.endedAt = new Date().toISOString();
   ledger.ok = allOk;
   save();
-  process.stdout.write(`${JSON.stringify({ ok: allOk, ledger: join(dir, "ledger.json"), controls: ledger.controls.map((c) => ({ set: c.set, oracle: c.oracle, ok: c.ok, red: c.red.case?.status ?? null, green: c.green?.status ?? null, problems: c.problems })) }, null, 2)}\n`);
+  await new Promise((resolve, reject) => process.stdout.write(`${JSON.stringify({ ok: allOk, ledger: join(dir, "ledger.json"), controls: ledger.controls.map((c) => ({ set: c.set, oracle: c.oracle, ok: c.ok, red: c.red.case?.status ?? null, green: c.green?.status ?? null, problems: c.problems })) }, null, 2)}\n`, (error) => error ? reject(error) : resolve()));
   process.exit(allOk ? 0 : 1);
 }
 

@@ -116,6 +116,7 @@
  * strips every app injection".
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
 import assert, { AssertionError } from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after } from "node:test";
@@ -140,7 +141,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const FIXTURE = "crdt-paragraphs.html";
 const BOTH = ["local", "prod"];
 const LOCAL = ["local"];
-/** Tokens each editor types per session: 5 × 16 keystrokes, so even one typist passes the 64-entry compaction. */
+/** Tokens per typing wave; held append acknowledgements can merge many keystrokes into one stored update. */
 const TOKENS = 5;
 /** Milliseconds between keystrokes: a fast typist. */
 const KEY_DELAY_MS = 25;
@@ -264,9 +265,14 @@ async function withRss(ctx, n, body) {
 
 // --- typing, and proving it was a race --------------------------------------------------------
 
-/** Type `tokens` one after another at the end of #id, as a person does (a real click, then the keys). */
+/**
+ * Start at #id's end, then type one uninterrupted sequence of real keys.
+ * Clicking the current end before every token can deliberately move a fast
+ * writer into a slower peer's unfinished word. That tests a new caret choice,
+ * not whether remote changes preserve the writer's existing caret (S2).
+ */
 async function typeTokens(u, id, tokens) {
-  for (const t of tokens) await u.typeInFrame(idSelector(id), t, { delay: KEY_DELAY_MS, at: "end" });
+  if (tokens.length) await u.typeInFrame(idSelector(id), tokens.join(""), { delay: KEY_DELAY_MS, at: "end" });
 }
 
 /** Per user, the page-clock recording of save states and input events (User.recordSaveStates) and a capture of every POST /draft. */
@@ -309,7 +315,7 @@ function watchLog(t, docId, { everyMs = 400 } = {}) {
   const loop = (async () => {
     while (!stopped) {
       try {
-        const y = await rtdbGetPatient(t, `status/${docId}/y`, { onRetry: () => (retries += 1) });
+        const y = await readLiveLogsPatient(t, docId, { onRetry: () => (retries += 1) });
         const keys = y && typeof y === "object" ? Object.keys(y) : [];
         const now = new Set(keys);
         for (const k of keys) everSeen.add(k);
@@ -323,6 +329,7 @@ function watchLog(t, docId, { everyMs = 400 } = {}) {
     }
   })();
   return {
+    snapshot: () => ({ samples, max, seen: everSeen.size, gone: gone.size, errors, retries }),
     async stop() {
       stopped = true;
       await loop;
@@ -633,17 +640,26 @@ scenario("C1 draft: after disjoint typing settles, GET /draft's body equals ever
   assertDraftEqualsPeers(d);
 });
 
-scenario("C1 BODYATTR: the draft disjoint typing left carries no spellcheck attribute on <body> or <html> that v1 lacks (I5's BODYATTR, S3's own attribute)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S3" }, async (ctx) => {
+scenario("C1 BODYATTR: the draft disjoint typing left carries no spellcheck attribute on <body> or <html> that v1 lacks (I5's BODYATTR, S3's own attribute)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const d = observation(ctx, "C1", "draft");
   const s = d.spellcheck;
   ctx.step(`spellcheck v1→draft: <body> ${JSON.stringify(s.body.v1)} → ${JSON.stringify(s.body.draft)}, <html> ${JSON.stringify(s.html.v1)} → ${JSON.stringify(s.html.draft)}; every other root attribute is the work case's (BODYATTR apart from S3)`);
   assert.deepEqual({ body: s.body.draft, html: s.html.draft }, { body: s.body.v1, html: s.html.v1 }, `S3 oracle (I5 BODYATTR): the draft's spellcheck attribute is not v1's: ${JSON.stringify(s)}`);
 });
 
-scenario('C1 banner: no co-editor is shown "<peer> saved a change while you were editing" while the others type and autosave', { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S9" }, async (ctx) => {
+scenario('C1 banner: no co-editor is shown "<peer> saved a change while you were editing" while the others type and autosave', { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const seen = observation(ctx, "C1", "banner");
   ctx.step(`conflict banners seen: ${Object.entries(seen).map(([u, rows]) => `${u} ×${rows.length}`).join(", ") || "none"}`);
   assert.deepEqual(seen, {}, 'S9 oracle: no co-editor is shown "<peer> saved a change while you were editing"');
+});
+
+scenario("C1 shared save notice: a live co-editor autosave never offers competing copies", { tiers: BOTH, n: [2], timeoutMs: CASE_MS, ...LIVE }, async (ctx) => {
+  const { docId, users } = await join(ctx, ctx.n, "C1 shared save notice");
+  const watches = await Promise.all(users.map((u) => u.watchFor(BANNER_SEL, CONFLICT_RE)));
+  const log = tokenLog(ctx.target.runId);
+  await users[0].typeAndAutosave(idSelector("e2e-1"), log.next(users[0].name, "e2e-1"), { delay: KEY_DELAY_MS, timeout: 60_000 });
+  await settle(ctx, users, docId, ctx.n);
+  assert.deepEqual(await bannerSightings(users, watches), {}, "a live co-editor autosave never offers competing copies");
 });
 
 // --- C1-serial (and C21's serial control) ------------------------------------------------------
@@ -744,8 +760,7 @@ function lateSaveProof(rows, early, plan) {
   if (others.length === 0) why.push("no later peer saved");
   if (held && others.length) {
     if (held.status !== 200) why.push(`${early.name}'s held save was answered ${held.status ?? held.state}`);
-    const sentBefore = others.filter((r) => !(r.sentAt > held.sentAt));
-    if (sentBefore.length) why.push(`${sentBefore.map((r) => r.name).join(", ")} saved before ${early.name}'s held save was sent`);
+    if (lastOther && !(lastOther.sentAt > held.sentAt)) why.push("the merged save was not sent after the held snapshot");
     const answeredAfter = others.filter((r) => !(r.respondedAt < held.respondedAt));
     if (answeredAfter.length) why.push(`${answeredAfter.map((r) => r.name).join(", ")}'s save was answered after ${early.name}'s held save`);
     const reached = theirTokens.filter((t) => held.tokens.includes(t));
@@ -806,6 +821,7 @@ async function lateSave(ctx, { hold }) {
       ctx.step(`then ${rest.map((p) => p.u.name).join(", ")}, one after another, type ${TOKENS} tokens into their own paragraph; each autosave answered 200, each last token at every peer${hold ? `, ${early.name} included` : ""}`);
       for (const p of rest) await typeAndArrive(users, p.u, p.id, p.tokens, deadline);
       if (hold) {
+        await savesQuiet(rest.map((p) => p.u), armed.filter(({ u }) => u !== early), n);
         ctx.step(`every later save answered: ${early.name}'s held save goes now`);
         release();
       }
@@ -829,13 +845,24 @@ async function lateSave(ctx, { hold }) {
       obs.stage = "reading";
       const ids = plan.map((p) => p.id);
       const peers = await segmentsOf(users, ids);
+      if (hold) {
+        // Remote updates also autosave now: the held editor may drain a merged
+        // snapshot after its old request finishes. Replay the exact older wire
+        // request after that drain, so a corrective save cannot hide data loss.
+        const oldRequest = delay.rows[0]?.postJson;
+        precondition(Boolean(oldRequest?.causal && oldRequest?.liveEpoch), "the delayed request captured its causal history and live epoch");
+        const replay = await owner.http.postJson("/draft", oldRequest);
+        assert.equal(replay.status, 200, "C1 late replay: an already superseded save is idempotent");
+        ctx.ev.json("late-replay", { request: oldRequest, response: replay.json });
+        ctx.step("replayed the exact older autosave after all corrective saves finished; read the durable draft before any further input");
+      }
       obs.draft = await readDraftAgainstPeers(ctx, { parser, owner, docId, users, ids, typed: log.typed });
       ctx.ev.json("peers", peers);
       ctx.step(`the draft: ${obs.draft.draftHash.slice(0, 12)}; the peers: ${JSON.stringify(obs.draft.peerHashes).slice(0, 300)}`);
       obs.stage = "measured";
       assertInvariant(checkI2({ peers, typed: log.typed }));
       assertCleanDraft(obs.draft);
-      if (!hold) assertDraftEqualsPeers(obs.draft);
+      assertDraftEqualsPeers(obs.draft);
     } finally {
       release();
       if (delay) await delay.restore().catch(() => undefined);
@@ -849,7 +876,7 @@ scenario("C1 late save: one editor's autosave is held in its browser while the o
   await lateSave(ctx, { hold: true });
 });
 
-scenario("C1 late save draft: after a save sent first lands last, GET /draft's body still equals every peer's and holds every typed token once and whole (I5 apart from S3's spellcheck, I2 in the draft)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S17" }, async (ctx) => {
+scenario("C1 late save draft: after a save sent first lands last, GET /draft's body still equals every peer's and holds every typed token once and whole (I5 apart from S3's spellcheck, I2 in the draft)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const d = observation(ctx, "C1-late", "draft");
   ctx.step(`the draft ${d.draftHash.slice(0, 12)} against ${Object.keys(d.peerHashes).length} peer(s), after ${observed.get(keyOf("C1-late", ctx))?.race?.held?.name ?? "p1"}'s save sent first landed last`);
   assertDraftEqualsPeers(d);
@@ -922,7 +949,7 @@ async function refusedAppend(ctx, { refuse }) {
         settleError = firstLine(err);
         ctx.step(`did not settle: ${settleError}`);
       }
-      const y = await rtdbGetPatient(ctx.target, `status/${docId}/y`);
+      const y = await readLiveLogsPatient(ctx.target, docId);
       obs.stage = "reading";
       const samples = await readI1(users);
       const peers = await segmentsOf(users, [id]);
@@ -931,10 +958,8 @@ async function refusedAppend(ctx, { refuse }) {
       ctx.ev.json("live", obs.live);
       ctx.step(`each peer's body: ${samples.map((s) => `${s.name} ${String(s.hash).slice(0, 12)} (${s.length})`).join(", ")}; the token on ${Object.entries(holds).filter(([, t]) => t.includes(tokens[0])).map(([name]) => name).join(", ") || "nobody"}; status/{d}/y holds ${obs.live.yEntries} entr(ies)`);
       obs.stage = "measured";
-      if (!refuse) {
-        assertInvariant(checkI1(samples));
-        assertInvariant(checkI2({ peers, typed: log.typed }));
-      }
+      assertInvariant(checkI1(samples));
+      assertInvariant(checkI2({ peers, typed: log.typed }));
     } finally {
       if (g) await g.release(REFUSE_GATE, { key: docId, disarm: true }).catch(() => undefined);
     }
@@ -945,13 +970,8 @@ scenario("C1 refused append: one editor's live-log append is refused as the Data
   await refusedAppend(ctx, { refuse: true });
 });
 
-// X-c01-typing-2: app/src/crdt/log.ts:108-113 sends each update once
-// (`void log.append(...).then(...)`, no catch), so a refused append is
-// neither sent again nor reported; every later update of that editor depends
-// on it and waits in each peer's Y.Doc, unapplied, until the editor's next
-// compaction (seen.size >= COMPACT_AFTER, log.ts:74, 125) appends its whole
-// state.
-scenario("C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)", { tiers: LOCAL, needs: [REFUSE_PATCH], n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "X-c01-typing-2" }, async (ctx) => {
+// Refused updates and dependent deltas are retried together before Shared returns.
+scenario("C1 refused append converges: after one editor's live-log append was refused, every peer still converges (I1) and holds the token it typed once and whole (I2)", { tiers: LOCAL, needs: [REFUSE_PATCH], n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const live = observation(ctx, "C1-refused", "live");
   ctx.step(`settle: ${live.settleError ?? "settled"}; status/{d}/y ${live.yEntries} entr(ies), under the 64-entry compaction`);
   const i1 = checkI1(live.samples);
@@ -997,6 +1017,7 @@ scenario("C2 same-paragraph typing: N editors type tokens at the end of one para
       ctx.ev.json("peers", { peers, shapes });
       obs.stage = "measured";
       assertInvariant(checkI3({ peers: shapes, baseline }));
+      assertInvariant(checkI2({ peers, typed: log.typed }));
     } finally {
       if (logWatch) await logWatch.stop().catch(() => undefined);
       stopCaptures(armed);
@@ -1004,7 +1025,7 @@ scenario("C2 same-paragraph typing: N editors type tokens at the end of one para
   }));
 });
 
-scenario("C2 tokens: after same-paragraph typing, every token is once and whole inside #e2e-1 on every peer (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S2" }, async (ctx) => {
+scenario("C2 tokens: after same-paragraph typing, every token is once and whole inside #e2e-1 on every peer (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const t = observation(ctx, "C2", "tokens");
   assertInvariant(checkI2({ peers: t.peers, typed: t.typed }));
 });
@@ -1128,6 +1149,8 @@ scenario("C2 window: N editors type tokens at the end of one paragraph inside th
       });
       obs.stage = "settling";
       await settle(ctx, users, docId, n);
+      assertInvariant(checkI2({ peers: await segmentsOf(users, [...new Set(plan.map((p) => p.id ?? "e2e-1"))]), typed: log.typed }));
+      await finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch });
       requireCompaction(ctx, obs, await logWatch.stop());
       logWatch = null;
       obs.stage = "reading";
@@ -1142,6 +1165,25 @@ scenario("C2 window: N editors type tokens at the end of one paragraph inside th
     }
   }));
 });
+
+/**
+ * The transport merges queued updates while the proxy withholds append acks.
+ * A whole typing window can therefore make only a few stored entries. Keep
+ * the original race and its 15 s convergence judgement, then type ordinary
+ * acknowledged waves until those raced edits have crossed a real compaction.
+ * All additional tokens remain part of I2; failure to compact is never a pass.
+ */
+async function finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch }) {
+  const before = logWatch.snapshot();
+  let rounds = 0;
+  while (logWatch.snapshot().gone === 0 && rounds < 8) {
+    rounds += 1;
+    await Promise.all(plan.map(({ u, id = "e2e-1" }) => typeTokens(u, id, Array.from({ length: TOKENS }, () => log.next(u.name, id)))));
+    await settle(ctx, users, docId, ctx.n, `post-window compaction wave ${rounds} settled`);
+  }
+  ctx.ev.json("window-compaction", { before, after: logWatch.snapshot(), rounds });
+  ctx.step(`after the measured race, ${rounds} acknowledged typing wave(s) exercised compaction without the proxy delay`);
+}
 
 // --- C3 ------------------------------------------------------------------------------------
 
@@ -1198,7 +1240,7 @@ scenario("C3 Enter elsewhere: one editor presses Enter at the end of the documen
   }));
 });
 
-scenario("C3 tokens: every typist's tokens are once and whole inside its own paragraph on every peer, though Enter was pressed elsewhere as it typed (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS, defect: "S2b" }, async (ctx) => {
+scenario("C3 tokens: every typist's tokens are once and whole inside its own paragraph on every peer, though Enter was pressed elsewhere as it typed (I2)", { tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: JUDGE_MS }, async (ctx) => {
   const t = observation(ctx, "C3", "tokens");
   assertInvariant(checkI2({ peers: t.peers, typed: t.typed }));
 });
@@ -1268,6 +1310,8 @@ scenario("C3 window: one editor presses Enter at the end of the document again a
       });
       obs.stage = "settling";
       await settle(ctx, users, docId, n);
+      assertInvariant(checkI2({ peers: await segmentsOf(users, [...new Set(plan.map((p) => p.id ?? "e2e-1"))]), typed: log.typed }));
+      await finishWindowCompaction(ctx, obs, { users, docId, plan, log, logWatch });
       requireCompaction(ctx, obs, await logWatch.stop());
       logWatch = null;
       obs.stage = "reading";

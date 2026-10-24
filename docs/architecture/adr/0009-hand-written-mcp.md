@@ -42,6 +42,12 @@ prompts (nothing would use them).
   revision surfaces as a failing assertion about bytes.
 - No client-side compatibility risk, because the deviation is server-only: any
   conformant MCP client still talks to it.
+- The Functions runtime parses JSON before invoking the HTTP handler. A malformed
+  `application/json` request may be refused there as HTTP 400 rather than the
+  handler's JSON-RPC `-32700`. The Hosting route pins the no-store and exposed
+  authentication headers for that boundary; clients treat its diagnostic as a
+  transport error (SPEC §23). Hand-writing the MCP handler does not replace the
+  runtime's parser.
 - This is a **documented deviation from the approved plan**, recorded here
   rather than absorbed silently, and repeated in the module header where
   somebody editing the file will actually see it.

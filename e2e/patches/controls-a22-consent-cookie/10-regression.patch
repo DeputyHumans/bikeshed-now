@@ -1,0 +1,6 @@
+--- a/functions/src/oauth/consent.ts
++++ b/functions/src/oauth/consent.ts
+@@ -159,2 +159,3 @@
+ async function deciding(req: Request): Promise<Principal | null> {
++  if (!req.headers.authorization) return (await import("../lib/actor")).resolveCaller(req);
+   const raw = req.headers.authorization;

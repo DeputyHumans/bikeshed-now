@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.8 dropping a file onto an open document offers a confirmed revision, cancel sends nothing, and a refused file can be replaced before publishing",
+  "what": "version drop prefill",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.8 dropping a file onto an open document offers a confirmed revision, cancel sends nothing, and a refused file can be replaced before publishing"
+  },
+  "expect": {
+    "message": "the document drop preselects its file"
+  }
+}

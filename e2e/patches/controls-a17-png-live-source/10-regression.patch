@@ -1,0 +1,7 @@
+--- a/app/src/export/image.ts
++++ b/app/src/export/image.ts
+@@ -126,3 +126,3 @@
+ ): Promise<void> {
+-  const dataUrl = await withCleanImageNode(node, async (clean) => {
++  const dataUrl = await (async (source: HTMLElement | SVGElement, render: (clean: HTMLElement | SVGElement) => Promise<string>) => render(source))(node, async (clean) => {
+     inlineSvgStyles(clean.ownerDocument);

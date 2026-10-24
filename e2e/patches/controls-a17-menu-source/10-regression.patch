@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -781,3 +781,3 @@
+     ];
+-    if (doc.sourceEntry) {
++    if (doc.version?.sourceEntry) {
+       entries.push({

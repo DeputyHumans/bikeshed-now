@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.8b dropped revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors",
+  "what": "leave Publish enabled while a visible peer is editing the document",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.8b dropped revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors"
+  },
+  "expect": {
+    "message": "dropped revision cannot publish over a visible active editor"
+  }
+}

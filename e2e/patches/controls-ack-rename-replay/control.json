@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK rename: original retry preserves the newer title and exact two events",
+  "what": "Ignore the original rename receipt so its native retry replays an old name over a newer real rename.",
+  "target": {
+    "spec": "e2e/specs/functional/a14-rename-ack.spec.mjs",
+    "case": "A14.9 a rename acknowledges its own native commit without overwriting a later rename or duplicating its change event",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK rename: original retry preserves the newer title and exact two events"
+  }
+}

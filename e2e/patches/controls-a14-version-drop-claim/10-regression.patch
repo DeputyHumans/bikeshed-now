@@ -1,0 +1,10 @@
+--- a/app/src/viewer/useVersionDrop.ts
++++ b/app/src/viewer/useVersionDrop.ts
+@@ -70,7 +70,6 @@
+     // Reached only if the drop lands before the target is up under the pointer.
+     const drop = (e: DragEvent) => {
+       if (!carriesFiles(e)) return;
+-      e.preventDefault();
+       lower();
+       const file = e.dataTransfer?.files?.[0];
+       if (file) latest.current(file);

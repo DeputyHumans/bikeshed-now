@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.3 a suggestion notice reaches the owner and every approver, less its author: not an editor, a viewer or the suggester; it shows the quote, the replacement and the author's note, never a generated restatement",
+  "what": "omit the author note only from suggestion HTML",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.3 a suggestion notice reaches the owner and every approver, less its author: not an editor, a viewer or the suggester; it shows the quote, the replacement and the author's note, never a generated restatement"
+  },
+  "expect": {
+    "message": "the HTML notice carries the suggestion author"
+  }
+}

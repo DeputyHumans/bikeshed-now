@@ -1,0 +1,12 @@
+--- a/scripts/lib/withdraw-version.mjs
++++ b/scripts/lib/withdraw-version.mjs
+@@ -48,3 +48,3 @@
+     const version = repoint.data();
+-    const update = { currentVersion: plan.repoint, liveEpoch, updatedAt: version.publishedAt ?? null };
++    const update = { currentVersion: plan.repoint, liveEpoch: retiredEpoch, updatedAt: version.publishedAt ?? null };
+     if (plan.draft) update.draft = deleteField();
+@@ -61,3 +61,3 @@
+       tx.update(publicRef, {
+-        currentVersion: plan.repoint, liveEpoch, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html',
++        currentVersion: plan.repoint, liveEpoch: retiredEpoch, entry: version.entry ?? 'index.html', format: version.format === 'markdown' ? 'markdown' : 'html',
+         sourceEntry: typeof version.sourceEntry === 'string' ? version.sourceEntry : null,

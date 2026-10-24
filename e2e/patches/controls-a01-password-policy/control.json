@@ -1,0 +1,13 @@
+{
+  "oracle": "An unavailable policy request must still allow Auth-validated signup",
+  "what": "An unavailable policy request must still allow Auth-validated signup",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.2b Create account enables at /signup for a password the deployment's policy accepts, so a person can sign up there",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Create account never enabled"
+  }
+}

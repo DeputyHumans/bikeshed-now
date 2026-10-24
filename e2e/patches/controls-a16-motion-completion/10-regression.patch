@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -186,3 +186,3 @@
+     const motionEvents = ["transitionend", "transitioncancel", "animationend", "animationcancel"];
+-    if (stacked) for (const event of motionEvents) doc.addEventListener(event, measure, true);
++    // Control: observe attributes only, never final computed motion state.
+     const observer = stacked && doc.body ? new view.MutationObserver(measure) : null;

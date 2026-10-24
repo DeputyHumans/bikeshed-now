@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useLiveSync.ts
++++ b/app/src/viewer/useLiveSync.ts
+@@ -89,7 +89,7 @@
+      * reader pinned to an older version is the one it is for, and once they
+      * open the new one this clears on its own.
+      */
+-    newVersion: newVersion !== null && newVersion !== shownVersion && newVersion === meta?.currentVersion ? newVersion : null,
++    newVersion: newVersion !== null && newVersion !== shownVersion ? newVersion : null,
+     dismissNewVersion: () => setNewVersion(null),
+   };
+ }

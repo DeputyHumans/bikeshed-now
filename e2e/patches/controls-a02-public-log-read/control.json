@@ -1,0 +1,13 @@
+{
+  "oracle": "Public open editors read the existing log before joining",
+  "what": "Public open editors read the existing log before joining",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c18.PE a non-member on a public open-editing document may read the live log status/{doc}/y with their own ID token: ALLOW",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "c18 PE: expected ALLOW"
+  }
+}

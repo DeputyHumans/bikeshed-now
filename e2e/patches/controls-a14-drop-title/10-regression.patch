@@ -1,0 +1,10 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -305,6 +305,7 @@
+       for (const file of usable) {
+         try {
+           const result = await uploadDoc(file, {
++            title: file.name.replace(/\.[^.]+$/, ""),
+             folderId: target,
+             marking: defaultMarkingRef.current,
+             onProgress: (fraction) =>

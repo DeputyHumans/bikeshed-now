@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -697,3 +697,3 @@
+           // Where get_changes starts: nothing that happens from now on is missed.
+-          cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(published.docId), "always"),
++          cursor: encodeCursor(await headCursor(ctx.db.collection("docs").doc(published.docId))),
+         },

@@ -1,0 +1,13 @@
+{
+  "oracle": "The sidebar must honour reduced motion when selecting a distant thread.",
+  "what": "The sidebar must honour reduced motion when selecting a distant thread.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.3b with reduced motion, a click on a highlight brings its thread card into view in the panel in one frame (with no preference it animates)",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^with reduced motion the thread card"
+  }
+}

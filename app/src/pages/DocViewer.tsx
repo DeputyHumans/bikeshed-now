@@ -22,7 +22,7 @@ import { useDocFrame } from "../viewer/useDocFrame";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
-import { clearLog } from "../crdt/rtdb";
+import { useEditSession } from "../viewer/useEditSession";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
@@ -145,12 +145,9 @@ export function DocViewer() {
   const [dialog, setDialog] = useState<Dialog>(null);
   // A file dropped onto the document, waiting in the upload dialog.
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
-  const [wantsEdit, setEditRequested] = useState(false);
-  const editingBase = useRef("");
-  const setWantsEdit = (value: boolean) => {
-    if (value) editingBase.current = doc.currentVersion;
-    setEditRequested(value);
-  };
+  const currentLiveEpoch = doc.meta?.liveEpoch ?? doc.publicDoc?.liveEpoch ?? "initial";
+  const { origin: editingOrigin, error: editOpenError, setEditing: setWantsEdit, reloadEditing } = useEditSession(docId, doc.currentVersion);
+  const wantsEdit = editingOrigin !== null;
   // Both wait on the server with nothing else on screen changing, and both
   // would act twice on a second press.
   const [commenting, setCommenting] = useState(false);
@@ -214,8 +211,8 @@ export function DocViewer() {
 
   const mode: FrameMode = useMemo(
     () =>
-      wantsEdit && canEdit && editingBase.current === doc.currentVersion
-        ? { kind: "editing", baseVersion: doc.currentVersion }
+      editingOrigin && canEdit
+        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
         : {
             kind: "reading",
             versionId: doc.currentVersion,
@@ -227,13 +224,13 @@ export function DocViewer() {
             }),
             sandboxed: !trust.trusted,
           },
-    [wantsEdit, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
+    [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
   );
 
   const frame = useDocFrame({
     mode,
     docId,
-    entry: doc.entry,
+    entry: editingOrigin?.entry ?? doc.entry,
     trustToken: trust.trustToken,
     linkToken: linkKey || undefined,
     // Editing is always sandboxed, so no answer could change how it loads.
@@ -290,7 +287,11 @@ export function DocViewer() {
     epoch: frame.epoch,
     annotations,
     selectedId,
-    onSelect: setSelectedId,
+    onSelect: (id: string) => {
+      setSelectedId(id);
+      setCommentsOpen(true);
+      setPane("comments");
+    },
   });
 
   const presence = usePeerPresence({
@@ -301,6 +302,7 @@ export function DocViewer() {
     doc: frame.doc,
     epoch: frame.epoch,
     mode: mode.kind === "editing" ? "edit" : "view",
+    liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
     enabled: signedIn,
   });
 
@@ -313,12 +315,16 @@ export function DocViewer() {
   // An unlisted document's link holder cannot — the realtime rules cannot see
   // a key — so they edit alone and publish through /draft (SPEC §16).
   const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
+  const remoteChanged = useRef<(() => void) | null>(null);
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
     epoch: frame.epoch,
     docId,
     enabled: shareLive,
+    liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
+    expectedCausal: editingOrigin?.causal,
+    onRemote: () => remoteChanged.current?.(),
   });
 
   const editor = useInlineEditor({
@@ -327,8 +333,13 @@ export function DocViewer() {
     epoch: frame.epoch,
     docId,
     authoredAssets: frame.authoredAssets,
+    ready: !shareLive || shared.bound,
+    causalStamp: shared.causalStamp,
+    flushShared: shared.flush,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
   });
+
+  remoteChanged.current = editor.markChanged;
 
   // AFTER the editor, deliberately, and unlike every hook above it: this one
   // edits rather than decorates, in the session the editor owns, and marks its
@@ -360,6 +371,7 @@ export function DocViewer() {
     shownVersion: doc.currentVersion,
     emailLower,
     isEditing: mode.kind === "editing",
+    liveEditorEmails: shared.state === "shared" ? presence.peers.filter((peer) => peer.mode === "edit").map((peer) => peer.email) : [],
     showsDraft: mode.kind === "reading" && mode.draft,
     hold: suggesting !== null || commenting,
     onPeerSavedDraft: frame.reload,
@@ -572,22 +584,19 @@ export function DocViewer() {
   }, [pendingComment, signedIn, user, doc.resolvedFor, startComment]);
 
   const commit = useCallback(async () => {
-    if (!canEdit || editingBase.current !== doc.currentVersion) return;
+    if (!canEdit || mode.kind !== "editing" || mode.baseVersion !== doc.currentVersion) return;
     setCommitting(true);
     try {
       // Saved first, every time, and published only if that save went
       // through: never the previous draft's bytes reported as published.
-      const result = await publishSaved(editor.flushNow, () => commitVersion(docId, doc.currentVersion));
+      if (mode.kind !== "editing") return;
+      const result = await publishSaved(editor.flushNow, () => commitVersion(docId, mode.baseVersion));
       if (!result) {
         toast.error("The draft didn’t save, so nothing was published. Try again.");
         return;
       }
       logEvent({ name: "version_commit", params: { format: doc.format } });
-      // The shared document described the DRAFT, which the commit has just
-      // consumed. Leaving it behind means the next person to open the editor
-      // syncs the old draft from the log and it reappears on top of the version
-      // that replaced it — published work silently reverted by a stale cache.
-      await clearLog(docId);
+      // The server has retired the exact live session consumed by this commit.
       setWantsEdit(false);
       toast.show(
         result.deduped
@@ -602,7 +611,7 @@ export function DocViewer() {
     } finally {
       setCommitting(false);
     }
-  }, [canEdit, editor, docId, doc.currentVersion, doc.format, navigate, toast]);
+  }, [editor, mode, docId, doc.format, navigate, toast, setWantsEdit]);
 
   /**
    * Leave the editor without publishing.
@@ -617,13 +626,13 @@ export function DocViewer() {
     if (!frame.doc) return;
     void printDoc(frame.doc, {
       baseHref: contentBase(docId, doc.currentVersion, linkKey || undefined),
-      marking: doc.meta?.marking ?? MARKING_OFF,
+      marking: doc.marking,
       title: doc.title,
       version: doc.currentVersion,
       user: emailLower,
-    });
+    }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Could not open a print view."));
     logEvent({ name: "export", params: { kind: "pdf" } });
-  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.meta?.marking, doc.title, emailLower]);
+  }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower, toast]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the
@@ -650,22 +659,35 @@ export function DocViewer() {
     onFile: openUpload,
   });
 
+  const editorMounted = useRef(true);
+  useEffect(() => {
+    editorMounted.current = true;
+    return () => { editorMounted.current = false; };
+  }, []);
+  const activeEditor = useRef({ origin: editingOrigin, doc: frame.doc });
+  activeEditor.current = { origin: editingOrigin, doc: frame.doc };
   const stopEditing = useCallback(async () => {
-    await editor.flushUnsaved();
+    const started = activeEditor.current;
+    const saved = await editor.flushUnsaved();
+    if (!editorMounted.current || activeEditor.current.origin !== started.origin || activeEditor.current.doc !== started.doc) return;
+    if (!saved) {
+      toast.error("Your changes are not fully saved and shared. Keep this editor open and try again.");
+      return;
+    }
     setWantsEdit(false);
-  }, [editor]);
+  }, [editor, toast, setWantsEdit]);
 
   const interactionVersion = useRef(doc.currentVersion);
   useEffect(() => {
     if (!canWrite || interactionVersion.current !== doc.currentVersion) {
-      setEditRequested(false);
+      if (!canWrite) setWantsEdit(false);
       setSuggesting(null);
       setPendingComment(false);
       setReview(null);
       setDialog((value) => value === "upload-version" ? null : value);
     }
     interactionVersion.current = doc.currentVersion;
-  }, [canWrite, doc.currentVersion]);
+  }, [canWrite, doc.currentVersion, setWantsEdit]);
 
   // Leaving the editor ends the review pass; it lives in the editing session.
   useEffect(() => {
@@ -683,7 +705,7 @@ export function DocViewer() {
       setReview({ currentId: annId ?? pendingSuggestions[0]?.annId ?? null });
       setWantsEdit(true);
     },
-    [canEdit, pendingSuggestions],
+    [pendingSuggestions, setWantsEdit],
   );
 
   // Somebody decided the one on screen — this browser, another approver, or
@@ -743,6 +765,8 @@ export function DocViewer() {
           toast.error("The change couldn’t be made in the document, so nothing was accepted. Try again, or make it by hand.");
         } else if (outcome === "unverified") {
           toast.error("The passage changed, but not as suggested, and it couldn’t be undone. Check it before you publish. Nothing was accepted.");
+        } else if (outcome === "changed-after-apply") {
+          toast.error("The suggestion changed after its previous text was saved in the draft. Nothing was accepted. Review that change and undo it if needed before deciding the revised suggestion.");
         } else if (outcome === "unrecorded") {
           toast.error("The change is in the draft, but accepting it wasn’t recorded. Accept it again to record it.");
         } else if (outcome === "unsaved") {
@@ -793,7 +817,7 @@ export function DocViewer() {
         },
       },
     ];
-    if (doc.version?.sourceEntry) {
+    if (doc.sourceEntry) {
       entries.push({
         id: "source",
         label: "Download the Markdown source",
@@ -804,7 +828,7 @@ export function DocViewer() {
               downloadSource(
                 docId,
                 doc.currentVersion,
-                doc.version!.sourceEntry!,
+                doc.sourceEntry!,
                 doc.title,
                 linkKey || undefined,
               ),
@@ -814,7 +838,7 @@ export function DocViewer() {
         },
       });
     }
-    if ((doc.version?.fileCount ?? 1) > 1) {
+    if (doc.fileCount > 1) {
       entries.push({
         id: "zip",
         label: "Download everything as a .zip",
@@ -926,7 +950,7 @@ export function DocViewer() {
     <div className="viewer" data-pane={pane}>
       {editingNow ? (
         <EditToolbar
-          format={doc.format}
+          format={doc.formatReady ? doc.format : null}
           doc={frame.doc}
           saveState={editor.saveState}
           saveError={editor.saveError}
@@ -934,8 +958,8 @@ export function DocViewer() {
           onCommit={() => void commit()}
           onExit={() => void stopEditing()}
           committing={committing}
-          commitDisabled={annotations.some((a) => !a.resolved)}
-          commitDisabledReason={publishBlockedReason({
+          commitDisabled={!reviewReady || annotations.some((a) => !a.resolved)}
+          commitDisabledReason={!reviewReady ? "Wait for the shared document to join." : publishBlockedReason({
             pending: pendingSuggestions.length,
             unresolved: annotations.some((a) => !a.resolved),
             canDecide: isApprover(doc.meta, emailLower),
@@ -1000,6 +1024,18 @@ export function DocViewer() {
         />
       )}
 
+      {editOpenError || frame.loadError || editor.reloadRequired ? (
+        <div className="banner banner-warn" role="alert">
+          {editOpenError ?? frame.loadError ?? editor.saveError}{" "}
+          <button className="btn btn-sm" onClick={() => void reloadEditing()}>Reload draft</button>
+        </div>
+      ) : null}
+      {mode.kind === "editing" && shared.error ? (
+        <div className="banner banner-warn" role="alert">
+          {shared.error}{" "}
+          {!shared.bound ? <button className="btn btn-sm" onClick={() => void setWantsEdit(false)}>Leave editing</button> : null}
+        </div>
+      ) : null}
       <ViewerBanners
         draft={draftOnScreen}
         historical={!isCurrent && Boolean(doc.currentVersion)}
@@ -1010,7 +1046,7 @@ export function DocViewer() {
         conflict={live.conflict}
         onTakeTheirs={() => {
           live.dismissConflict();
-          frame.reload();
+          void reloadEditing();
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}
@@ -1035,7 +1071,7 @@ export function DocViewer() {
             <SlidePanel
               slides={deck.slides}
               current={deck.current}
-              editable={editingNow}
+              editable={editingNow && reviewReady}
               drawerOpen={singleColumn ? railOpen : undefined}
               baseHref={baseHref}
               stage={deck.stage}
@@ -1222,7 +1258,7 @@ export function DocViewer() {
         />
       ) : null}
 
-      {offersUpload && dialog === "upload-version" && doc.meta ? (
+      {dialog === "upload-version" && doc.meta ? (
         <UploadVersionDialog
           docId={docId}
           title={doc.title}
@@ -1246,7 +1282,7 @@ export function DocViewer() {
           title={doc.title}
           version={doc.currentVersion}
           user={emailLower}
-          marking={doc.meta?.marking}
+          marking={doc.marking}
           onClose={() => setDialog(null)}
         />
       ) : null}

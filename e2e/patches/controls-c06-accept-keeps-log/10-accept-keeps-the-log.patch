@@ -1,13 +1,7 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -91,7 +91,9 @@
-   if ("status" in claimed) return claimed;
-   try {
-     if (made.state === "applied") {
--      if (editors.log) await clearEditLog(docRef.id);
-+      // e2e negative control (controls-c06-accept-keeps-log): the agent's
-+      // accept writes the draft and keeps the live log it should drop.
-+      if (editors.log) void clearEditLog;
-       await writeDraft({
-         db,
-         docRef,
+@@ -102,3 +102,3 @@
+           content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
+-          retireLive: true, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
++          retireLive: false, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
+         });

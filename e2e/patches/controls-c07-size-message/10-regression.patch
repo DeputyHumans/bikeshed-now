@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useSharedDocument.ts
++++ b/app/src/viewer/useSharedDocument.ts
+@@ -106,7 +106,7 @@
+         // become a solo autosave over a newer shared draft.
+         setError(cause instanceof Error && cause.message.includes("saved draft")
+           ? "The saved draft contains changes that live editing has not received. Keep original editing tabs open until sharing catches up. If they are gone, leave editing and ask the document owner to publish the saved draft after everyone leaves."
+-          : cause instanceof LiveLogSizeError ? cause.message : cause instanceof Error && cause.message.includes("legacy")
++          : cause instanceof LiveLogSizeError ? "Live editing unavailable" : cause instanceof Error && cause.message.includes("legacy")
+           ? "An older editing session must be saved first. Save or publish from its original tab, then reload this page."
+           : "Live editing could not start. Reload to retry. Keep other editing tabs open until their changes are saved.");
+         setState("off");

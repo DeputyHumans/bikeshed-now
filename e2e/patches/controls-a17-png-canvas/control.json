@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagram's PNG are their border box × the scale, the SVG is the diagram plus the owner's label, the PNG carries the label's pixels, and DECOR is 0 on what was rasterized and on the SVG",
+  "what": "The inert image snapshot loses the document canvas runtime pixels",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.3 Export an image: a section's PNG at 1×, 2× and 3× and a diagram's PNG are their border box × the scale, the SVG is the diagram plus the owner's label, the PNG carries the label's pixels, and DECOR is 0 on what was rasterized and on the SVG"
+  },
+  "expect": {
+    "message": "clean PNG preserves authored canvas drawing pixels"
+  }
+}

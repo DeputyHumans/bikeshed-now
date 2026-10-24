@@ -1,0 +1,10 @@
+--- a/app/src/hooks/useCoverBackfill.ts
++++ b/app/src/hooks/useCoverBackfill.ts
+@@ -103,6 +103,7 @@
+       if (stopped || !shot || shot.uniform) return;
+       if (!claimUpload(`${doc.docId}/${version}/cover`)) return;
+       await o.upload(doc.docId, version, "cover", [shot.blob]);
++      await o.upload(doc.docId, version, "cover", [shot.blob]);
+     };
+
+     const run = async () => {

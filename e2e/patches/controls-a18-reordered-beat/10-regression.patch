@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2283,3 +2283,3 @@
+     beatCeiling ??= storedMs + MAX_BEAT_MS;
+-    const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
++    const delta = Math.abs(Math.min(claimedMs, beatCeiling) - storedMs);
+     const sessionMs = storedMs + delta;

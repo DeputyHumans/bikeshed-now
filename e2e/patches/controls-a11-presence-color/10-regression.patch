@@ -1,0 +1,11 @@
+--- a/app/src/presence.ts
++++ b/app/src/presence.ts
+@@ -226,7 +226,7 @@
+           viewport: typeof v.viewport === "number" ? v.viewport : undefined,
+           composing: v.composing,
+           lastChanged: typeof v.lastChanged === "number" ? v.lastChanged : 0,
+-          color: peerColor(v.email),
++          color: peerColor(v.email).slice(0, 0) + "rgb(1, 2, 3)",
+         };
+         const previous = people.get(uid);
+         // Editing is an OR across tabs; choose the newest of equally active

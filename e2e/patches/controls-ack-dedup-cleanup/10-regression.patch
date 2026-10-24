@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -509,3 +509,3 @@
+     await clearReceipt(docRef, retirement);
+-    await removeDraftSnapshot(docId, draft);
++    // control: completed dedup skips retiring its old draft bytes.
+     await retireLiveSession(db, docId, retiredEpoch);

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK reading member: one request consumes one cap",
+  "what": "Reintroduce the reading-member acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11d member and public reading beats consume their five-minute cap once after native acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK reading member: one request consumes one cap"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.6b a refused verification send still answers 200, stores the verification attempt and logs the provider failure",
+  "what": "propagate provider failure instead of preserving the successful product request",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.6b a refused verification send still answers 200, stores the verification attempt and logs the provider failure"
+  },
+  "expect": {
+    "message": "a refused verification send does not fail the request"
+  }
+}

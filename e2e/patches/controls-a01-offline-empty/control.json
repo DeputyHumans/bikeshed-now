@@ -1,0 +1,11 @@
+{
+  "oracle": "offline cache",
+  "what": "controls-a01-offline-empty",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears"
+  },
+  "expect": {
+    "message": "offline cache"
+  }
+}

@@ -1,0 +1,7 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -164,3 +164,3 @@
+       const limit = (p: FocusPoint) => Math.min(p.offset, p.node.nodeType === Node.TEXT_NODE ? (p.node as Text).length : p.node.childNodes.length);
+-      if (selection && a && f) selection.setBaseAndExtent(a.node, limit(a), f.node, limit(f));
++      if (false && selection && a && f) selection!.setBaseAndExtent(a!.node, limit(a!), f!.node, limit(f!));
+     }

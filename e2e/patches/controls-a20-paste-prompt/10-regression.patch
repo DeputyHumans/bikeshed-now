@@ -1,0 +1,7 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -325,3 +325,3 @@
+   const { origin: where } = resolveAuth(flags);
+-  const rl = createInterface({ input: process.stdin, output: flags.json ? process.stderr : process.stdout });
++  const rl = createInterface({ input: process.stdin, output: process.stdout });
+   const notice = flags.json ? console.error : console.log;

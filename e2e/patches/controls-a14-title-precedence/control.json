@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.3 upload dialog: only the listed types, an invalid id is a 400 that stores nothing, a taken id becomes {id}-[a-z0-9]{6}, the title comes from <title>, then og:title, then the file name (Markdown: its first H1; a typed title wins), and the marking checkbox is applied",
+  "what": "title precedence",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.3 upload dialog: only the listed types, an invalid id is a 400 that stores nothing, a taken id becomes {id}-[a-z0-9]{6}, the title comes from <title>, then og:title, then the file name (Markdown: its first H1; a typed title wins), and the marking checkbox is applied"
+  },
+  "expect": {
+    "message": "both: the answer's title"
+  }
+}

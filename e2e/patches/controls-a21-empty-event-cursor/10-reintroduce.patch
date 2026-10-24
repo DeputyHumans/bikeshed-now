@@ -1,0 +1,11 @@
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -302,7 +302,7 @@
+     typeof parsed.s !== "number" ||
+     typeof parsed.n !== "number" ||
+     typeof parsed.e !== "string" ||
+-    !safeSegment(parsed.e) ||
++    (parsed.e !== "" && !safeSegment(parsed.e)) ||
+     !Number.isInteger(parsed.s) ||
+     !Number.isInteger(parsed.n) ||
+     parsed.s < -62135596800 || parsed.s > 253402300799 ||

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -148,7 +148,7 @@
+   }
+   if (before && !after) {
+     // Only scripts/delete-version.mjs deletes a version, and it acts as nobody.
+-    return [{ type: "version.withdrawn", audience: "readers", version: versionId }];
++    return [{ type: "version.withdrawn", audience: "readers", version: "v1" }];
+   }
+   return [];
+ }

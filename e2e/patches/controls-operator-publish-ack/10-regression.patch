@@ -1,0 +1,7 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -53,3 +53,3 @@
+     // the mirror, old log and captured-draft cleanup still owed by this run.
+-    if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().storagePrefix === input.version.storagePrefix)) return attempted;
++    if (false && attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().storagePrefix === input.version.storagePrefix)) return attempted;
+     const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion && version.data().contentHash === input.version.contentHash);

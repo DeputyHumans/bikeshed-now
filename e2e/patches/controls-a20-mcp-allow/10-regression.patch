@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -211,5 +211,5 @@
+   }
+   if (req.method !== "POST") {
+-    res.setHeader("Allow", "POST");
++    res.setHeader("Allow", "GET");
+     res.status(405).end();
+     return;

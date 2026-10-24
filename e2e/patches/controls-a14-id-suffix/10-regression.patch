@@ -1,0 +1,11 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -155,7 +155,7 @@
+
+ /** Six random characters from the docId alphabet. */
+ function randomSuffix(): string {
+-  return Array.from(randomBytes(6), (b) => SUFFIX_ALPHABET[b % SUFFIX_ALPHABET.length]).join("");
++  return Array.from(randomBytes(7), (b) => SUFFIX_ALPHABET[b % SUFFIX_ALPHABET.length]).join("");
+ }
+
+ /**

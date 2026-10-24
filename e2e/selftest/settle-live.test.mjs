@@ -158,6 +158,24 @@ test("a peer that never entered edit is judged on its body only: no save state a
   assert.deepEqual(r.saveStates, { p1: null, p2: null });
 });
 
+test("reader sampling changes only the compared bodies, retaining the 15 s deadline and quiet gates", async () => {
+  const c = clock();
+  const state = { html: { p1: "authored plus peer A", p2: "authored plus peer B" }, save: { p1: null, p2: null }, inEdit: { p1: false, p2: false }, drafts: {} };
+  const users = [fakeUser("p1", state), fakeUser("p2", state)];
+  const readBodies = async (given) => {
+    assert.deepEqual(given, users);
+    return given.map((u) => ({ name: u.name, hash: "same-authored-body", length: 7 }));
+  };
+  const r = await settleLive(users, { docId: "d", readBodies, readY: async () => null, now: c.now, intervalMs: 0 });
+  assert.equal(r.hash, "same-authored-body");
+  assert.equal(r.samples, 3);
+  assert.ok(r.ms >= SETTLE.yStableMs);
+  let revision = 0;
+  await assert.rejects(settleLive(users, { docId: "d", readBodies, readY: async () => ({ [revision++]: "changed" }), now: clock().now, intervalMs: 0 }), /within 15000 ms .*status\/d\/y changed/);
+  const posting = clock();
+  await assert.rejects(settleLive(users, { docId: "d", readBodies, readY: async () => { state.drafts.p1 = [{ t: posting.peek(), at: posting.peek() }]; return null; }, now: posting.now, intervalMs: 0 }), /within 15000 ms .*a POST \/draft/);
+});
+
 // --- the join gate's precondition --------------------------------------------------------
 
 test("requireJoinersHeld waits for the run that binds: a joiner's effect runs again when its draft frame loads, and only that run counts", { timeout: 20_000 }, async () => {
@@ -168,7 +186,8 @@ test("requireJoinersHeld waits for the run that binds: a joiner's effect runs ag
   const g = gateClient(s.url);
   const ctx = { inconclusive: (reason) => { throw Object.assign(new Error(`INCONCLUSIVE: ${reason}`), { code: "E2E_INCONCLUSIVE" }); } };
   const pass = (caller, run) => fetch(`${s.url}/gate/join-before-bind/pass?key=doc-1&side=client&caller=${caller}&run=${run}`, { method: "POST" });
-  // A joiner: its first run calls the gate at once; its draft frame loads later, re-running the effect (run 2) just before the frame is editable.
+  const frameRequests = [];
+  // A joiner: its first run calls the gate at once; its draft frame loads later, re-running the effect (run 2); input remains disabled until the join gate releases.
   const joiner = (name) => {
     let loaded;
     const frameReady = new Promise((r) => (loaded = r));
@@ -176,7 +195,7 @@ test("requireJoinersHeld waits for the run that binds: a joiner's effect runs ag
       name,
       calls: [pass(name, 1)],
       async waitForFrame({ match, editable }) {
-        assert.ok(match.test("/draft/doc-1/index.html") && editable === true, "it waits for the editable draft frame");
+        frameRequests.push({ match, editable });
         await frameReady;
       },
       load() {
@@ -200,6 +219,7 @@ test("requireJoinersHeld waits for the run that binds: a joiner's effect runs ag
     assert.equal(done, null, "not while one joiner's frame is still loading");
     users[1].load();
     const r = await waiting;
+    assert.ok(frameRequests.every(({ match, editable }) => match.test("/draft/doc-1/index.html") && editable !== true), "loaded draft frames must not require input before the join gate releases");
     assert.deepEqual(r.held.callers.filter((c) => c.latest).map((c) => [c.caller, c.run]).sort(), [["page-a", 2], ["page-b", 2]], "each joiner's run 2, the one that binds, is held");
     await g.release("join-before-bind");
     await Promise.all(users.flatMap((u) => u.calls));

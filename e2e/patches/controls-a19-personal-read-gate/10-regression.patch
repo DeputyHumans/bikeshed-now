@@ -1,0 +1,22 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -344,6 +344,8 @@
+       }
+     }
+
++    match /tokens/{tokenId} { allow read: if request.auth != null; }
++
+     match /{document=**} {
+       allow read, write: if false;
+     }
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -347,6 +347,8 @@
+       }
+     }
+
++    match /tokens/{tokenId} { allow read: if request.auth != null; }
++
+     match /{document=**} {
+       allow read, write: if false;
+     }

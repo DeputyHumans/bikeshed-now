@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -201,3 +201,3 @@
+       if (result.kind === "replayed") {
+-        if (result.tokenId) await revokeToken(db, result.uid, result.tokenId);
++        void revokeToken; // Refuse replay without disconnecting its grant.
+         error(res, 400, "invalid_grant", "authorization code was already used; what it issued has been revoked");

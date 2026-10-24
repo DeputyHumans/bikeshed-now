@@ -1,0 +1,13 @@
+{
+  "oracle": "All SPA shell paths need frame-deny headers before client-side navigation",
+  "what": "All SPA shell paths need frame-deny headers before client-side navigation",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.9d every app-shell entry path denies framing before client navigation, while content byte routes remain embeddable",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "app-shell paths missing frame protection"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/app/src/viewer/usePrinting.ts
++++ b/app/src/viewer/usePrinting.ts
+@@ -46,7 +46,7 @@
+       e.preventDefault();
+       onPrint();
+     };
+-    window.addEventListener("keydown", onKey);
++    // regression: only the frame hears the shortcut.
+     doc?.addEventListener("keydown", onKey);
+     return () => {
+       window.removeEventListener("keydown", onKey);

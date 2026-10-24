@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -134,3 +134,3 @@
+     const update: Record<string, unknown> = { visibility, publicEdit, updatedAt: stamp() };
+-    if (expiry && "value" in expiry) update.expiresAt = expiry.value === null ? FieldValue.delete() : Timestamp.fromMillis(expiry.value);
++    if (expiry && "value" in expiry && expiry.value !== null) update.expiresAt = Timestamp.fromMillis(expiry.value);
+     update.linkToken = visibility === "unlisted"

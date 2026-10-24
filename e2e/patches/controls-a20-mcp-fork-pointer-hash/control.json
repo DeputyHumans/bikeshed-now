@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.2.fork_document copies a version the caller can read into a private document they own at the root, with the original's bytes and lineage; a stranger and an absent id are told the id does not exist",
+  "what": "fork pointer hash",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.fork_document copies a version the caller can read into a private document they own at the root, with the original's bytes and lineage; a stranger and an absent id are told the id does not exist",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "historical fork lineage stays pinned|server-only fork pointer"
+  }
+}

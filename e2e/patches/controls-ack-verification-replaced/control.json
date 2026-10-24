@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK replacement: the original checked challenge changed",
+  "what": "Reintroduce the verification-replaced acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11c a retried wrong code cannot spend a replacement challenge's guess budget",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK replacement: the original checked challenge changed"
+  }
+}

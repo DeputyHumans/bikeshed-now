@@ -1,0 +1,7 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -26,3 +26,3 @@
+   const receipt = add.length || remove.length ? freshReceiptId() : null;
+-  const result = await db.runTransaction(async (tx) => {
++  const result = await e2eAckTransaction(db, docRef.id, "operator-access", async (tx) => {
+     const snap = await tx.get(docRef);

@@ -118,6 +118,7 @@
  * may be doubled (S1, S27), where the token can land in a second #id.
  */
 
+import { readLiveLogsPatient } from "./live-log.mjs";
 import { AssertionError } from "node:assert";
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -262,19 +263,22 @@ export async function rtdbGetPatient(target, path, { retryMs = RTDB_RETRY.retryM
  * `minLength` (default 1) is the shortest body that counts: equal EMPTY bodies
  * are not convergence. `requireShared` (default true) asks every peer that
  * entered edit to show "Shared". `readY` (async () => the value of
- * status/{d}/y) and `now` are for self-tests and a spec's own reader; by
- * default y is read as the emulator's admin on the users' target, again on a
+ * status/{d}/y) and `now` are for self-tests and a spec's own reader.
+ * `readBodies(users)` may provide authored-body samples for idle readers whose
+ * presence overlays differ. Only the sampling changes; every deadline and
+ * quiet/save/log condition still applies. By default the full live body is read.
+ * By default y is read as the emulator's admin on the users' target, again on a
  * 503 (rtdbGetPatient: `yRetries` counts those; 503s past RTDB_RETRY.retryMs
  * throw E2E_RTDB_UNAVAILABLE, the stack not answering, never an I1 failure).
  */
-export async function settleLive(users, { docId, n = users?.length, deadlineMs = null, readY = null, now = Date.now, intervalMs = SETTLE.intervalMs, minLength = 1, requireShared = true } = {}) {
+export async function settleLive(users, { docId, n = users?.length, deadlineMs = null, readY = null, now = Date.now, intervalMs = SETTLE.intervalMs, minLength = 1, requireShared = true, readBodies = readI1 } = {}) {
   if (!Array.isArray(users) || users.length < 1) throw new TypeError("settleLive: give at least one user (two or more are judged on I1; one on its body's stability)");
   if (typeof docId !== "string" || !docId) throw new TypeError("settleLive: docId is required");
   if (!Number.isInteger(minLength) || minLength < 0) throw new TypeError(`settleLive: minLength is a whole number of characters, got ${JSON.stringify(minLength)}`);
   const limit = deadlineMs ?? settleDeadlineMs(n);
   const target = users[0]?.pool?.target ?? null;
   let yRetries = 0;
-  const getY = readY ?? (() => rtdbGetPatient(target, `status/${docId}/y`, { onRetry: () => (yRetries += 1) }));
+  const getY = readY ?? (() => readLiveLogsPatient(target, docId, { onRetry: () => (yRetries += 1) }));
   const alone = users.length === 1;
   const t0 = now();
   const series = [];
@@ -283,7 +287,7 @@ export async function settleLive(users, { docId, n = users?.length, deadlineMs =
   let yChangedAt = t0;
   let last = null;
   for (;;) {
-    const samples = await readI1(users);
+    const samples = await readBodies(users);
     series.push(samples);
     if (series.length > SETTLE.i1Samples) series.shift();
     const i1 = alone ? loneBodySteady(series, SETTLE.i1Samples) : checkI1Stable(series, { samples: SETTLE.i1Samples });
@@ -644,7 +648,7 @@ export async function joinShared(ctx, { n, fixture = "crdt-paragraphs.html", bod
       await enterOne(users[0]);
       const deadline = Date.now() + sharedMs;
       for (;;) {
-        const y = await rtdbGetPatient(ctx.target, `status/${docId}/y`);
+        const y = await readLiveLogsPatient(ctx.target, docId);
         if (y && typeof y === "object" && Object.keys(y).length > 0) break;
         if (Date.now() >= deadline) ctx.inconclusive(`the sync precondition did not hold: ${users[0].name}'s seed never reached status/${docId}/y within ${sharedMs} ms`);
         await sleep(200);
@@ -779,9 +783,9 @@ export async function addMember(ctx, { owner = null, docId, name, role = "editor
  * released, returns as cancelled, and only the second binds. On a live stack
  * the second call came 13 ms and 616 ms after the first, so "N distinct
  * callers held" alone can be met before the run that matters has arrived.
- * So: N distinct callers held, then every joiner's editable /draft/ frame
- * (whose load re-runs the effect, in the same commit that makes the body
- * editable), then N distinct callers each with its LATEST run held again.
+ * So: N distinct callers held, then every joiner's loaded /draft/ frame
+ * (whose load re-runs the effect; input stays disabled until binding), then
+ * N distinct callers each with its LATEST run held again.
  * Any step that never holds ends the case INCONCLUSIVE. Resolves {first,
  * held} (requireHeld's results; `held.callers[i].latest` marks the binding
  * runs). Release with `g.release(gate)` as usual.
@@ -792,9 +796,10 @@ export async function requireJoinersHeld(ctx, g, users, { key, gate = "join-befo
   const n = users.length;
   const first = await requireHeld(ctx, g, gate, n, { key, timeoutMs, distinct: "caller" });
   try {
-    await Promise.all(users.map((u) => u.waitForFrame({ match: /\/draft\//, editable: true, timeout: timeoutMs })));
+    // Input is disabled until binding, which this gate deliberately blocks.
+    await Promise.all(users.map((u) => u.waitForFrame({ match: /\/draft\//, timeout: timeoutMs })));
   } catch (err) {
-    ctx.inconclusive(`the sync precondition did not hold: a joiner's editable draft frame never loaded while it was held at ${gate} (${err?.message ?? err})`);
+    ctx.inconclusive(`the sync precondition did not hold: a joiner's draft frame never loaded while it was held at ${gate} (${err?.message ?? err})`);
   }
   const held = await requireHeld(ctx, g, gate, n, { key, timeoutMs, distinct: "caller" });
   return { first, held };

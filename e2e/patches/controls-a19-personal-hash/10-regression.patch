@@ -1,0 +1,11 @@
+--- a/functions/src/lib/tokens.ts
++++ b/functions/src/lib/tokens.ts
+@@ -104,7 +104,7 @@
+       email: emailLower,
+       name: name.slice(0, 80),
+       channel,
+-      hash: sha256(secret),
++      hash: secret,
+       createdAt: now,
+       revokedAt: null,
+     },

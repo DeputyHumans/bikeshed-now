@@ -1,0 +1,9 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -242,5 +242,5 @@
+     parentId: input.sourceId,
+     parentVersion: versionId,
+-    parentContentHash: str(v.contentHash, ""),
++    parentContentHash: "wrong-hash",
+     forkedAt: now(),
+   });

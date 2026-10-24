@@ -118,6 +118,7 @@ export interface DocMeta {
   /** Bumped on every publish. Deliberately NOT touched by a read. */
   updatedAt: Timestamp;
 
+  liveEpoch?: string;
   draft?: DraftMeta | null;
   stats?: ViewStats;
   /** Which version's thumbnails are stored. Admin SDK only; never moves `updatedAt`. */
@@ -152,7 +153,6 @@ export interface ViewStats {
   viewers: number;
   totalMs: number;
   lastViewedAt?: Timestamp;
-  lastViewedByEmail?: string;
   commits: number;
   lastEditedAt?: Timestamp;
   lastEditedByEmail?: string;
@@ -320,11 +320,18 @@ export interface PublicDoc {
   title: string;
   slug: string;
   currentVersion: string;
+  /** Non-secret live-editing generation; absent on older projections. */
+  liveEpoch?: string;
   entry: string;
   format: SourceFormat;
+  /** Current-version download choices; older projections may omit these. */
+  sourceEntry?: string | null;
+  fileCount?: number;
   visibility: "unlisted" | "public";
   publicEdit: boolean;
   trusted: boolean;
+  /** Owner-controlled export policy; absent only on older reader projections. */
+  marking?: Marking;
   /** Epoch milliseconds, or null. Carried so an anonymous reader is told. */
   expiresAt: number | null;
   /** That it is a fork, and nothing about of what (SPEC §21). Absent on older mirrors. */
@@ -342,6 +349,7 @@ export interface EditSession {
 
 /** Firestore: docs/{docId}.draft — the shared, in-progress edit. */
 export interface DraftMeta {
+  causal?: { generation: string; vector: Record<string, number>; deletesJson: string };
   baseVersion: string;
   entry: string;
   /** Present for a Markdown-authored document: the canonical source file. */

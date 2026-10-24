@@ -1,0 +1,20 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -203,5 +203,5 @@
+   // The CORS middleware exposes no response headers, so without this a
+   // browser-hosted client cannot read the challenge that tells it to sign in.
+-  res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
++  // Negative control: omit the authentication header exposure.
+   if (req.method === "GET" || req.method === "DELETE") {
+     // Streamable HTTP allows a server to decline the SSE channel. Saying so
+--- a/firebase.json
++++ b/firebase.json
+@@ -180,8 +180,4 @@
+             "key": "Cache-Control",
+             "value": "private, no-store"
+-          },
+-          {
+-            "key": "Access-Control-Expose-Headers",
+-            "value": "WWW-Authenticate"
+           }
+         ]

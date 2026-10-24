@@ -17,6 +17,7 @@
  *   emulator hosts          every *_EMULATOR_HOST, GCLOUD_PROJECT (target.mjs
  *                           emulatorEnv), so the Admin SDK talks to this stack
  *   BIKESHED_BUCKET         the stack's bucket
+ *   E2E_GATE_URL            the current gated stack only; override refused
  *   GOOGLE_APPLICATION_CREDENTIALS
  *                           <stack HOME>/e2e-operator/adc.json, a DUMMY
  *                           `authorized_user` file. delete-version.mjs refuses
@@ -41,6 +42,7 @@ import { SYSTEM_PATH } from "./proc.mjs";
 import { emulatorEnv, requireCapability } from "./target.mjs";
 import { spawnCapture } from "./cli.mjs";
 import { describeGuard, egressEnv, GUARD_IN_TREE } from "./egress.mjs";
+import { gateUrl } from "./gates.mjs";
 
 const SCRIPT_RE = /^[a-z][a-z0-9-]*\.mjs$/;
 
@@ -80,13 +82,14 @@ export function operatorEnv(target, { extra = {} } = {}) {
     LANG: process.env.LANG || "en_US.UTF-8",
     ...emulatorEnv(target),
     BIKESHED_BUCKET: target.bucket,
+    ...(target.capabilities?.has?.("gates") ? { E2E_GATE_URL: gateUrl(target) } : {}),
     GOOGLE_APPLICATION_CREDENTIALS: dummyAdc(target),
   };
   const guard = join(target.stack.treeDir, GUARD_IN_TREE);
   if (target.stack.logs?.egress && existsSync(guard)) Object.assign(env, egressEnv({ file: describeGuard(guard).file, log: target.stack.logs.egress }));
   const fixed = emulatorEnv(target);
   for (const [k, v] of Object.entries(extra)) {
-    if ((k in fixed || k === "GOOGLE_APPLICATION_CREDENTIALS" || k === "HOME") && v !== env[k]) throw new Error(`operator env: ${k} is the stack's and cannot be overridden`);
+    if ((k in fixed || k === "GOOGLE_APPLICATION_CREDENTIALS" || k === "HOME" || k === "E2E_GATE_URL") && v !== env[k]) throw new Error(`operator env: ${k} is the stack's and cannot be overridden`);
     env[k] = String(v);
   }
   return env;

@@ -70,7 +70,7 @@
  *       stays unverified; one code mail in all (I11).
  *         race (SYNC-T), S22 (SYNC-P: the burst held at
  *         verify-complete-after-read, every guess having read the count, let
- *         go one at a time), serial positive control.
+ *         go one at a time; the transaction must re-read), serial positive control.
  * C19b  code requests at once (LOCAL). One unverified account sends
  *       STARTS_AT_ONCE[N] POST /verify/start. S23's own oracle: one 200 and
  *       one code mail (the rest 429, the 60 s resend gap). Others: every
@@ -78,7 +78,7 @@
  *       one of those mailed, and it verifies the account.
  *         race (SYNC-T), S23 (SYNC-P: the requests held at
  *         verify-start-after-read, each having read the verification in
- *         progress, let go one at a time), serial positive control.
+ *         progress, let go one at a time; the transaction must re-read), serial positive control.
  * C20a  N exchanges of one code. An app (DCR, a loopback redirect never
  *       followed) is approved through the API; the code is spent N times at
  *       once. Oracles: every exchange 200 with the identical bsa_/bsr_ pair
@@ -177,31 +177,20 @@
  *     stats.views and stats.totalMs, and are never rolled into
  *     viewers/{uid}"; §2 (l. 419–421) POST /view "Carries k in the body for
  *     an unlisted document".
- *   §14 (l. 1351) "If the email is unverified, send a code and block until
- *     verified"; (l. 1357–1360) "Step 3 is security-load-bearing". SPEC
- *     states neither the five-guess limit nor the resend gap; they are
- *     VERIFY_MAX_ATTEMPTS and VERIFY_RESEND_GAP_MS (functions/src/index.ts),
- *     whose comment calls the code "single-use, 15-minute, rate-limited".
+ *   §14 verification challenges: at most five wrong comparisons per code,
+ *     one resend reservation per account in sixty seconds, checked and
+ *     updated transactionally; mail and Auth calls stay outside retries.
  *   §23 (l. 2768–2775) "The code is spent in the transaction that mints the
  *     grant. Rotation: … A retry of the same spend within 60 s receives the
  *     identical pair, so a timeout cannot fork the chain".
  *
- * KNOWN DEFECTS. Class Q under this phase's defect bar: SPEC states no limit,
- * so no SPEC sentence is contradicted, and the harm is concrete. The plan
- * disagrees. Its suspect table marks S22 and S23 R, its fix-direction row
- * "S18–S20, S22, S23" says Ask? no, and its P bar takes "the SPEC or ADR
- * sentence it violates, or a concrete harm". Under the plan they are P
- * candidates, still owing the minimal repro and two skeptics (W2). Nothing
- * is reclassified here: the conflict goes to G1 as it stands. S22: verifyEmail reads the attempt
- * count (functions/src/index.ts:2423) and writes read + 1 (2444-2447) with
- * no transaction, so guesses sent at once are each evaluated against one
- * count: at N=2, 6 at once were all evaluated and 8-10 guesses at one code
- * in all; at N=5, 13 of 13 and 15-17; against VERIFY_MAX_ATTEMPTS 5, in
- * every race and gated trial. S23: a code
- * request reads the verification in progress (2393), checks the 60 s gap
- * (2396), then writes a new code (2402) and mails it (2416), so requests
- * sent at once each mail a code and every code but the last stored is dead.
- * The serial positive controls pass. Nearest SPEC: §14 (l. 1351, 1357).
+ * REGRESSION HISTORY. Before the transaction repair, S22 evaluated 8–10
+ * guesses at N=2 and 15–17 at N=5 because requests read one stale attempt
+ * count, then wrote count + 1. S23 mailed several competing codes after
+ * concurrent requests passed one stale resend check. The authorized repair
+ * treats both as concrete security/correctness harm and §14 now names the
+ * limits. These cases are normal assertions; the historical Q classification
+ * is retained only in campaign baseline evidence.
  *
  * In a `defect:` case only that defect's own oracle is an AssertionError (a
  * TODO); every other oracle that fails there is a plain error, a FAIL, so one
@@ -956,6 +945,82 @@ scenario("C17c thumbnails (SYNC-T): the owner and N−1 editors store v1's cover
   await judgeC17c(ctx, s, cover.rows, slides.rows, label);
 });
 
+/** A real access change lands after the candidate JPEGs, before their metadata transaction. */
+async function thumbnailAuthority(ctx, mode) {
+  await handBack(ctx);
+  const [owner, editor] = await people(ctx, ["owner", "editor"]);
+  const g = gates(target), gate = "thumb-after-upload";
+  const checks = oracleSet();
+  for (const kind of ["cover", "slides"]) {
+    const doc = await newDoc(owner, `C17c thumbnail ${mode} ${kind}`);
+    await grantEditors(target, { owner, doc: doc.docId, accounts: [editor.account], role: "editor", timeoutMs: HTTP_MS });
+    const images = kind === "cover" ? [jpegSkeleton({ pad: 37 })] : [jpegSkeleton({ pad: 41 }), jpegSkeleton({ pad: 43 })];
+    const otherKind = kind === "cover" ? "slides" : "cover";
+    const previous = jpegSkeleton({ pad: 53 });
+    const request = (s, name, which, bytes) => racer(name, { s, path: "/thumb", query: { doc: doc.docId, v: "v1", kind: which, sizes: bytes.map((b) => b.length).join(","), r: thumbRevision(target) }, contentType: "application/octet-stream", body: Buffer.concat(bytes) });
+    const seeded = answered(await request(owner, "existing other kind", otherKind, [previous]).send(), "existing thumbnail");
+    precondition(seeded.status === 200 && seeded.json?.stored === true, "owner seeded the other thumbnail kind");
+    const prefix = `docs/${doc.docId}/thumbs/v1/`;
+    const beforeObjects = await listObjects(target, prefix);
+    const initial = await readDoc(target, `docs/${doc.docId}`);
+    let pending = [], afterAccess, candidates;
+    await roomFor(ctx, 2, "one held thumbnail and the owner's access change");
+    try {
+      await g.hold(gate, { key: doc.docId });
+      pending = sendAll([request(mode === "owner" ? owner : editor, `${mode} ${kind}`, kind, images)]);
+      await held(ctx, g, gate, 1, doc.docId, pending);
+      candidates = (await listObjects(target, prefix)).filter((name) => !beforeObjects.includes(name));
+      precondition(candidates.length === images.length, `${kind}: every candidate JPEG exists before the sharing change`);
+      const access = answered(await owner.http.request("POST", "/access", {
+        json: mode === "viewer" ? { docId: doc.docId, add: [{ email: emailOf(editor), role: "viewer" }] } : { docId: doc.docId, remove: [emailOf(editor)] }, timeoutMs: HTTP_MS,
+      }), "change editor access while thumbnail upload is held");
+      precondition(access.status === 200, `access change answered ${access.status}`);
+      afterAccess = await readDoc(target, `docs/${doc.docId}`);
+      precondition(!afterAccess.editorMembers.includes(emailOf(editor)), "the uploader's editor authority is gone before the thumbnail transaction");
+      precondition(afterAccess.members.includes(emailOf(editor)) === (mode === "viewer"), "the member's read access matches the chosen downgrade/removal");
+      precondition(!pending[0].answered, "thumbnail request is still held after the access change");
+      await g.release(gate, { key: doc.docId });
+    } finally {
+      await g.release(gate, { key: doc.docId }).catch(() => undefined);
+    }
+    const [answer] = await rowsOf(ctx, pending, `thumbnail ${mode} ${kind}`);
+    const record = await readDoc(target, `docs/${doc.docId}`);
+    const objects = await listObjects(target, prefix);
+    const expectedStatus = mode === "owner" ? 200 : mode === "viewer" ? 403 : 404;
+    await checks.check(() => assert.equal(answer.status, expectedStatus, `thumbnail ${mode}: fresh authority answers ${expectedStatus}`));
+    await checks.check(() => assert.equal(stamp(record.updatedAt), stamp(afterAccess.updatedAt), "thumbnail authority: capture does not alter the access change's updatedAt"));
+    if (mode === "owner") {
+      const key = candidates[0].split("/").at(-2);
+      const expectedThumb = { ...initial.thumb, [kind]: kind === "cover" ? key : { key, count: images.length } };
+      await checks.check(() => assert.deepEqual(answer.json, { stored: true }, "thumbnail owner: successful capture is acknowledged"));
+      await checks.check(() => assert.deepEqual(record.thumb, expectedThumb, "thumbnail owner: candidate key is recorded and the other kind is retained"));
+      await checks.check(() => assert.deepEqual(sorted(objects), sorted([...beforeObjects, ...candidates]), "thumbnail owner: accepted JPEGs and previous sibling remain stored"));
+      for (let i = 0; i < images.length; i++) await checks.check(async () => {
+        const response = await served(owner, doc.docId, key, kind === "cover" ? "cover" : `s${i}`);
+        assert.equal(response.status, 200, "thumbnail owner: recorded image is served");
+        assert.deepEqual(response.buffer, images[i], "thumbnail owner: served bytes are the accepted JPEG");
+      });
+    } else {
+      await checks.check(() => assert.equal(answer.json, undefined, "thumbnail refusal discloses no metadata"));
+      await checks.check(() => assert.deepEqual(record.thumb, initial.thumb, "thumbnail revocation: refused capture cannot alter the thumbnail record"));
+      await checks.check(() => assert.deepEqual(sorted(objects), sorted(beforeObjects), "thumbnail revocation: only candidate JPEGs are deleted; the previous sibling remains"));
+    }
+    await checks.check(async () => {
+      const oldKey = otherKind === "cover" ? initial.thumb.cover : initial.thumb.slides.key;
+      const response = await served(owner, doc.docId, oldKey, otherKind === "cover" ? "cover" : "s0");
+      assert.equal(response.status, 200, "thumbnail authority: previous sibling is still served");
+      assert.deepEqual(response.buffer, previous, "thumbnail authority: previous sibling bytes remain unchanged");
+    });
+    ctx.ev.json(`thumbnail-authority-${mode}-${kind}`, { docId: doc.docId, answer, beforeObjects, candidates, objects, before: initial.thumb, after: record.thumb });
+  }
+  verdict({ others: checks });
+}
+
+const THUMB_AUTHORITY = { tiers: LOCAL, n: [2], needs: ["admin-emulator", "gates", "patch:amplify-thumb-authority"], timeoutMs: CASE_MS };
+scenario("C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "viewer"));
+scenario("C17c thumbnail authority: an editor removed after JPEG upload receives 404, changes no thumbnail, and deletes only its candidate (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "removed"));
+scenario("C17c thumbnail authority: the owner still stores and serves its exact JPEGs after removing another editor during upload (SPEC §2)", THUMB_AUTHORITY, (ctx) => thumbnailAuthority(ctx, "owner"));
+
 // =====================================================================================
 // C17d — N anonymous readers open a session at once
 // =====================================================================================
@@ -1159,7 +1224,6 @@ scenario("C19a wrong codes at once (SYNC-T): one account sends a burst of wrong 
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator"],
   n: NS,
-  defect: "S22",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1168,7 +1232,7 @@ scenario("C19a wrong codes at once (SYNC-T): one account sends a burst of wrong 
   const s = await c19aSetup(ctx, label);
   await warmVerify(ctx, s.v, s.reqs.length);
   const { rows } = await fire(ctx, s.reqs, label);
-  await judgeC19a(ctx, s, rows, label, { defect: "S22" });
+  await judgeC19a(ctx, s, rows, label);
 });
 
 scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has read the attempt count and before any is compared, then let go one at a time; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14)", {
@@ -1176,7 +1240,6 @@ scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator", ...GATED],
   n: NS,
-  defect: "S22",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1198,7 +1261,7 @@ scenario("C19a S22 (SYNC-P): the burst of wrong codes held after every guess has
   }
   const rows = await rowsOf(ctx, pending, label);
   workersNow(ctx, `after ${label}`);
-  await judgeC19a(ctx, s, rows, label, { defect: "S22" });
+  await judgeC19a(ctx, s, rows, label);
 });
 
 scenario("C19a serial positive control: the same wrong codes one after another; at most five guesses at the code are evaluated, it dies, and the account stays unverified (SPEC §14)", {
@@ -1253,7 +1316,6 @@ scenario("C19b code requests at once (SYNC-T): one account asks for a verificati
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator"],
   n: NS,
-  defect: "S23",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1262,7 +1324,7 @@ scenario("C19b code requests at once (SYNC-T): one account asks for a verificati
   const s = await c19bSetup(ctx, label);
   await warmVerify(ctx, s.v, s.reqs.length);
   const { rows } = await fire(ctx, s.reqs, label);
-  await judgeC19b(ctx, s, rows, label, { defect: "S23" });
+  await judgeC19b(ctx, s, rows, label);
 });
 
 scenario("C19b S23 (SYNC-P): the code requests held after every one has read the verification in progress and before any stores a code, then let go one at a time; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14)", {
@@ -1270,7 +1332,6 @@ scenario("C19b S23 (SYNC-P): the code requests held after every one has read the
   effects: VERIFY_MAIL,
   needs: ["email", "mailpit", "admin-emulator", ...GATED],
   n: NS,
-  defect: "S23",
   timeoutMs: CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1292,7 +1353,7 @@ scenario("C19b S23 (SYNC-P): the code requests held after every one has read the
   }
   const rows = await rowsOf(ctx, pending, label);
   workersNow(ctx, `after ${label}`);
-  await judgeC19b(ctx, s, rows, label, { defect: "S23" });
+  await judgeC19b(ctx, s, rows, label);
 });
 
 scenario("C19b serial positive control: the same code requests one after another; one code is mailed and the rest are refused 429 by the resend gap, and the code mailed verifies the account (SPEC §14)", {

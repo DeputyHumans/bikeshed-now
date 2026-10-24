@@ -25,17 +25,10 @@
 
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails, normalizeEmail } from "./lib/email.mjs";
-import {
-  GRANT_LIST,
-  ROLES,
-  computeMembership,
-  grantLists,
-  grantsOf,
-  loadFolderMembership,
-  loadTeamIndex,
-} from "./lib/membership.mjs";
+import { ROLES } from "./lib/membership.mjs";
+import { persistOperatorAccess } from "./lib/operator-writes.mjs";
 import { syncPresenceAccess } from "./lib/presence.mjs";
-import { FieldValue, getDb, getProjectId } from "./lib/firebase.mjs";
+import { closeAdmin, FieldValue, getDb, getProjectId } from "./lib/firebase.mjs";
 
 async function main() {
 const USAGE = `set-access.mjs — grant or revoke access to one document
@@ -108,47 +101,10 @@ never removable.`;
 
   const db = getDb(values.project);
   const docRef = db.collection("docs").doc(docId);
-  const snap = await docRef.get();
-  if (!snap.exists) fail(`document not found: docs/${docId}`);
-  const cur = snap.data() || {};
-
-  const ownerEmail = normalizeEmail(cur.ownerEmail || "");
-  // One role per principal, as the server's applyAccessDelta: a principal
-  // leaves every list before joining the one --role names.
-  const sets = new Map(
-    Object.entries(grantsOf(cur)).map(([list, principals]) => [list, new Set(principals)]),
+  const { ownerEmail, folderId, grants, membership } = await persistOperatorAccess(
+    db, docRef, { add, remove, role: values.role }, FieldValue.serverTimestamp(),
   );
-  const drop = (p) => {
-    for (const set of sets.values()) set.delete(p);
-  };
-
-  for (const p of remove) {
-    if (p === ownerEmail) continue; // the owner is never dropped
-    drop(p);
-  }
-  for (const p of add) {
-    if (p === ownerEmail) continue; // ownership is implicit in membership
-    drop(p);
-    sets.get(GRANT_LIST[values.role]).add(p);
-  }
-
-  const grants = Object.fromEntries(
-    [...sets].map(([list, principals]) => [list, [...principals].sort()]),
-  );
-  const folderId = cur.folderId ?? null;
-  const parent = await loadFolderMembership(db, folderId);
-  const teams = await loadTeamIndex(db, ...grantLists(grants));
-  const membership = computeMembership(ownerEmail, grants, parent, teams);
-
   if (add.length || remove.length) {
-    await docRef.set(
-      {
-        ...grants,
-        ...membership,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
     await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);
     console.log(`  updated docs/${docId} (every grant and membership field + presence mirror).`);
   }
@@ -163,4 +119,4 @@ never removable.`;
   }
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

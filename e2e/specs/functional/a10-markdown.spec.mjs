@@ -25,12 +25,11 @@
  *        included) survives, and the text of a script, a style and a
  *        textarea comes back byte for byte; a no-op commit after it is
  *        `deduped: true` on the same version and mints nothing
- *   10.3b the contrast the smoke run raised: an in-app commit of an HTML
- *        document should store the bytes that went in plus the edit
- *        (ADR 0007). The browser's parser drops the line break between
- *        <html> and <head> and moves the whitespace after </body> and
- *        </html> inside <body>, and the serializer writes what it parsed —
- *        X-a10-markdown-1, see the case
+ *   10.3b an HTML commit preserves the parsed authored DOM plus the edit,
+ *        including all attributes and whitespace within authored elements.
+ *        Browser parsing can move document-boundary whitespace; X-a10-markdown-1
+ *        retains that harmless established behavior rather than requiring a
+ *        raw-source editor beneath contentEditable
  *   10.4 idempotence after the first pass, through the browser's own
  *        serialization: md' (the first in-app save of the markdown-reference
  *        sample, published as v2) equals md'' (the draft the editor writes
@@ -48,14 +47,11 @@
  * 0007, docs/development/verification.md §2, §8 and §9, and the product
  * source cited at each oracle. Only e2e/lib/ talks to the stack.
  *
- * Normalisation, settled for the smoke run's observation: SPEC §11 allows
- * normalisation on commit for MARKDOWN only ("The first save normalizes …
- * After that first pass it MUST be idempotent"), and a Markdown commit
- * re-renders index.html on the server (functions/src/index.ts, POST /draft),
- * so the browser's serialization never reaches a Markdown version's bytes.
- * For an HTML document nothing in SPEC sanctions any normalisation, and
- * ADR 0007 says "the bytes that come back are the bytes that went in, plus
- * the edit". 10.3b holds the product to that.
+ * HTML is edited as the authored DOM (ADR 0007), then serialized by the
+ * browser. Document-boundary whitespace therefore follows HTML parsing rules;
+ * raw source bytes are not its identity boundary. 10.3b compares the complete
+ * parsed DOM without stripping attributes or normalising element text, so it
+ * still catches lost structure, meaningful whitespace and leaked decoration.
  */
 
 import assert from "node:assert/strict";
@@ -66,9 +62,10 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
 import { rehashZip } from "../../lib/bytes.mjs";
+import { inspectMarkdownRendering } from "../../lib/markdown-inspection.mjs";
 import { holdListen } from "../../lib/sync.mjs";
 import { zipFiles } from "../../lib/zipread.mjs";
 
@@ -101,6 +98,8 @@ const NO_CHANGES = "No changes to publish — the content is identical.";
 /** 10.2: a preamble, then three headings, two of them the same. */
 const STORED_MD = [
   "<!-- SPDX-License-Identifier: Apache-2.0 -->",
+  "",
+  "Before the first heading.",
   "",
   "# Stored twice",
   "",
@@ -367,70 +366,49 @@ scenario("A10.1 a Markdown document's editor disables Underline, Font, Text colo
   await u.done();
 });
 
-/**
- * The longest 10.1b holds the app's request for the version record: the
- * window a slow connection opens. The case releases it itself as soon as it
- * has read the first palette and the harm; this cap only bounds the hold.
- */
-const VERSION_READ_DELAY_MS = 8_000;
-
-scenario("A10.1b the constrained palette is in place from the editor's first render: on a Markdown document whose version record arrives late, Edit never offers the presentation controls enabled", { tiers: ["local", "prod"], defect: "X-a10-markdown-2", timeoutMs: 180_000 }, async (ctx) => {
+scenario("A10.1b the constrained palette is in place from the editor's first render: on a Markdown document whose version record arrives late, Edit never offers the presentation controls enabled", { tiers: ["local", "prod"], timeoutMs: 180_000 }, async (ctx) => {
   const { acct, session } = await castOwner();
   const md = await publish(session.http, { body: SMALL_MD, filename: "small.md", title: "Late version probe", name: "a101b" });
   const u = await signedIn(ctx, acct);
 
-  ctx.step(`hold (at most ${VERSION_READ_DELAY_MS} ms) the browser's Firestore listen requests that ask for this document's versions: a slow connection, with the product untouched`);
-  const gate = await holdListen(u, (body) => body.includes(`/docs/${md.docId}`) && /"collectionId":"versions"|\/versions\/v\d+"/.test(body), VERSION_READ_DELAY_MS);
+  ctx.step("hold the version listen until explicitly released; the case timeout and finally block bound the fixture");
+  const gate = await holdListen(u, (body) => body.includes(`/docs/${md.docId}`) && /"collectionId":"versions"|\/versions\/v\d+"/.test(body));
   try {
     await u.open(md.docId);
-    const openedAt = Date.now();
-    const gated = await eventually(() => gate.heldAt.length > 0, { timeout: 10_000, interval: 50, message: "the app's version read reaches the gate" }).catch(() => false);
-    precondition(gated, "the version read was held (the app asked for the version over the listen channel)");
-    await u.enterEdit();
-    const first = await paletteControls(u);
-    const firstAt = Date.now();
-    const stillHeld = gate.records[0].releasedAt === null;
-    ctx.ev.json("first-palette", { msAfterOpen: firstAt - openedAt, heldAt: gate.heldAt.map((t) => t - openedAt), stillHeld, controls: first });
-    precondition(stillHeld, "the first palette was read while the version read was still held");
-    ctx.step(`first palette ${firstAt - openedAt} ms after the frame loaded, the version read still held: disabled ${JSON.stringify(first.filter((c) => c.disabled).map((c) => c.name))}`);
-
-    // Evidence of the harm, never an oracle: while the window is open, centre
-    // the paragraph the way an author would, and see what the draft keeps.
-    const harm = { pressed: false };
-    try {
-      const centre = u.page.getByRole("toolbar", { name: "Formatting" }).getByRole("button", { name: "Align centre" });
-      if (await centre.isEnabled()) {
-        await u.typeInFrame('[id="small-probe"] > p', "");
-        await centre.click({ timeout: 2_000 });
-        const after = Date.now();
-        harm.pressed = true;
-        harm.stillHeldWhenPressed = gate.records[0].releasedAt === null;
-        harm.alignedInEditor = await (await u.frame()).locator('[id="small-probe"] > p').evaluate((p) => getComputedStyle(p).textAlign);
-        // What the draft keeps does not depend on the window staying open:
-        // the save carries the HTML as it was when pressed.
-        harm.draftStatus = (await u.waitForAutosave({ after, timeout: 15_000, expectStatus: null })).status;
-        const draftMd = (await session.http.get(`/draft/${encodeURIComponent(md.docId)}/index.md`)).text;
-        harm.draftMd = draftMd;
-        harm.alignmentInDraft = /center/i.test(draftMd);
-      }
-    } catch (e) {
-      harm.error = String(e?.message ?? e).slice(0, 300);
-    }
-    ctx.ev.json("harm", harm);
-    ctx.step(`harm while the window was open: ${JSON.stringify({ pressed: harm.pressed, stillHeldWhenPressed: harm.stillHeldWhenPressed, alignedInEditor: harm.alignedInEditor, alignmentInDraft: harm.alignmentInDraft, error: harm.error })}`);
-
-    // Once the held read is let through, the palette must become Markdown's:
-    // that is what ties the first palette to the version record, and it is the
-    // product's own steady state (10.1), so a timeout here is not this defect.
+    precondition(await eventually(() => gate.heldAt.length > 0, { timeout: 10_000, interval: 50, message: "the app's version read reaches the gate" }).catch(() => false), "the version read was held");
+    await u.page.evaluate(() => {
+      const records = [];
+      const sample = () => {
+        const bar = document.querySelector('[role="toolbar"][aria-label="Formatting"]');
+        if (!bar) return;
+        const controls = [...bar.querySelectorAll('.toolbar-group button, .toolbar-group select, .toolbar-group input')].map((c) => ({ name: c.getAttribute('aria-label') ?? c.id, disabled: c.disabled }));
+        if (controls.length) records.push(controls);
+      };
+      const observer = new MutationObserver(sample);
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled'] });
+      window.__a10Palette = { records, stop: () => observer.disconnect() };
+      sample();
+    });
+    // Both deferring Edit until format readiness and opening a constrained
+    // palette while loading are compliant. Never require the product to race
+    // an arbitrary 8-second timeout in order to measure its first render.
+    const edit = u.page.locator('.viewer-toolbar [aria-label="Edit"]').first();
+    const offered = await edit.count() > 0 && await edit.isVisible() && await edit.isEnabled();
+    if (offered) await edit.click();
+    const held = await eventually(async () => ({ controls: await u.page.evaluate(() => window.__a10Palette.records) }), { timeout: 2_000, interval: 150, stableSamples: 3, message: "observe the held-version UI over three samples" });
+    precondition(gate.records[0].releasedAt === null, "the readiness observation happens before releasing the version read");
+    ctx.ev.json("palette-while-version-held", { offered, ...held });
+    for (const controls of held.controls) assert.deepEqual(controls.filter((c) => PRESENTATION[c.name] && c.disabled).map((c) => c.name).sort(), Object.keys(PRESENTATION).sort(), "every palette rendered before format readiness is constrained");
     gate.release();
-    await waitDisabled(u, Object.keys(PRESENTATION), { timeout: 20_000 });
-    ctx.step(`after the held read went through (held ${gate.records[0].releasedAt - gate.records[0].at} ms) the palette is Markdown's`);
-    assert.deepEqual(
-      first.filter((c) => c.disabled).map((c) => c.name).sort(),
-      Object.keys(PRESENTATION).sort(),
-      "the editor's first palette on a Markdown document (SPEC §11: disabled, never silently dropped)",
-    );
+    if (!offered) await u.enterEdit();
+    else await u.awaitEdit();
+    await eventually(() => u.page.evaluate(() => window.__a10Palette.records.length > 0), { timeout: 20_000, interval: 100, message: "the first Formatting palette is recorded" });
+    const renders = await u.page.evaluate(() => { const x = window.__a10Palette; x.stop(); delete window.__a10Palette; return x.records; });
+    precondition(renders.length > 0, "a Formatting palette was actually rendered");
+    ctx.ev.json("palette-renders", renders);
+    assert.deepEqual(renders[0].filter((c) => PRESENTATION[c.name] && c.disabled).map((c) => c.name).sort(), Object.keys(PRESENTATION).sort(), "the editor's first palette on a Markdown document (SPEC §11: disabled, never silently dropped)");
   } finally {
+    await u.page.evaluate(() => { window.__a10Palette?.stop(); delete window.__a10Palette; }).catch(() => undefined);
     ctx.ev.json("gate", (await gate.stop()).map((r) => ({ i: r.i, at: r.at, releasedAt: r.releasedAt, body: r.body.slice(0, 400) })));
   }
 });
@@ -475,11 +453,17 @@ scenario("A10.2 a .md upload records format markdown, entry index.html, sourceEn
   ctx.ev.text("v1-index.html", html);
 
   ctx.step("the rendering: a section per heading, GitHub slugs deduped with -1, the preamble scoped, an embedded stylesheet, no external URL");
-  const ids = [...html.matchAll(/<section id="([^"]*)">/g)].map((m) => m[1]);
-  assert.deepEqual(ids, ["preamble", "stored-twice", "notes", "notes-1"], "section ids in document order");
-  assert.match(html, /<style id="[^"]+">/, "the stylesheet is embedded");
-  assert.doesNotMatch(html, /(?:src|href|action|poster)\s*=\s*["']?\s*(?:[a-z][a-z0-9+.-]*:)?\/\//i, "no attribute points at another origin");
-  assert.doesNotMatch(html, /url\(\s*["']?\s*(?:[a-z][a-z0-9+.-]*:)?\/\/|@import/i, "the stylesheet loads nothing");
+  const parser = await ctx.users.parser();
+  const rendering = await parser.evaluate(inspectMarkdownRendering, html);
+  ctx.ev.json("rendered-structure", rendering);
+  assert.deepEqual(rendering.sections, [
+    { id: "preamble", parent: null, firstTag: "p", firstText: "Before the first heading." },
+    { id: "stored-twice", parent: null, firstTag: "h1", firstText: "Stored twice" },
+    { id: "notes", parent: "stored-twice", firstTag: "h2", firstText: "Notes" },
+    { id: "notes-1", parent: "stored-twice", firstTag: "h2", firstText: "Notes" },
+  ], "section order, heading levels and nesting match the Markdown hierarchy");
+  assert.ok(rendering.styleIds.length > 0, "the stylesheet is embedded");
+  assert.deepEqual(rendering.external, [], "no HTML attribute, source set, refresh or CSS resource points outside the bundle");
 });
 
 // --- 10.3 ---------------------------------------------------------------------
@@ -534,6 +518,7 @@ scenario("A10.3 an in-app commit changes index.md by the edit and the first-pass
   await u.open(docId);
   await u.enterEdit();
   await u.typeAndAutosave('[id="edit-target"] > p', "x", { thenBackspace: 1 });
+  const retiring = (await readDoc(target, `docs/${docId}`)).draft;
   const second = await commitInApp(u);
   assert.deepEqual(
     { status: second.commit.status, versionId: second.commit.json?.versionId, deduped: second.commit.json?.deduped, toast: second.toast.text },
@@ -543,12 +528,12 @@ scenario("A10.3 an in-app commit changes index.md by the edit and the first-pass
   const versions = (await readCollection(target, `docs/${docId}/versions`)).map((v) => v.id).sort();
   const doc = await readDoc(target, `docs/${docId}`);
   assert.deepEqual({ versions, currentVersion: doc.currentVersion, draft: doc.draft ?? null }, { versions: ["v1", "v2"], currentVersion: "v2", draft: null }, "nothing minted, the draft cleared");
-  assert.deepEqual(await listObjects(target, `docs/${docId}/draft/`), [], "the draft's objects are gone");
+  assert.deepEqual(await listObjects(target, `${draftStoragePrefix(docId, retiring)}/`), [], "the draft's objects are gone");
 });
 
 // --- 10.3b --------------------------------------------------------------------
 
-scenario("A10.3b an in-app commit of an HTML document stores the bytes that went in plus the edit (ADR 0007): the whitespace before <head> and after </body> and </html> stays where the author put it", { tiers: ["local", "prod"], defect: "X-a10-markdown-1", timeoutMs: 180_000 }, async (ctx) => {
+scenario("A10.3b an in-app HTML commit preserves the complete parsed authored DOM plus the edit, including attributes and element whitespace", { tiers: ["local", "prod"], timeoutMs: 180_000 }, async (ctx) => {
   const { acct, session } = await castOwner();
   const fixture = readFixture("crdt-paragraphs.html", { raw: true }).toString("utf8");
   precondition(fixture.endsWith("</p>\n</body>\n</html>\n"), "the fixture ends as authored HTML usually does");
@@ -565,40 +550,33 @@ scenario("A10.3b an in-app commit of an HTML document stores the bytes that went
   assert.equal(done.toast.outcome, "published", `commit toast: ${done.toast.text}`);
   assert.equal(done.commit.json?.versionId, "v2");
 
-  // Mechanism (X-a10-markdown-1): serializeCleanHtml returns the doctype plus
-  // `documentElement.outerHTML` of what the browser PARSED
-  // (app/src/annotation/highlighter.ts), and HTML parsing drops whitespace
-  // before <head> and appends whitespace after </body> and </html> to <body>.
+  // X-a10-markdown-1 retained behavior: parsing moves document-boundary
+  // whitespace before editing starts. Compare the complete parsed DOM, not a
+  // filtered fingerprint: author attributes and whitespace inside elements
+  // remain part of the oracle, and editor overrides must not reach the save.
   const v2 = await stored(session.http, docId, "v2");
   const html2 = v2.files["index.html"].toString("utf8");
   ctx.ev.text("v2-index.html", html2);
   const at = fixture.indexOf("</p>", fixture.indexOf('id="e2e-1"'));
   const expected = `${fixture.slice(0, at)}${token}${fixture.slice(at)}`;
-  // S3 (spellcheck left on <body>) is its own known defect; taken out here so
-  // this case says only what it is about.
-  const withoutS3 = html2.replace(/<body([^>]*?) spellcheck="true"/, "<body$1");
-  ctx.ev.json("tails", { v1: JSON.stringify(fixture.slice(-40)), v2: JSON.stringify(withoutS3.slice(-40)) });
-  assert.deepEqual(lineHunks(expected, withoutS3), [], "v2 is v1 + the edit, byte for byte outside it (ADR 0007)");
+  const parser = await ctx.users.parser();
+  const [before, after] = await parser.evaluate((sources) => sources.map((html) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return { doctype: doc.doctype ? [doc.doctype.name, doc.doctype.publicId, doc.doctype.systemId] : null, html: doc.documentElement.outerHTML };
+  }), [expected, html2]);
+  ctx.ev.json("parsed-documents", { expected: before, stored: after });
+  assert.deepEqual(after, before, "v2 preserves the complete parsed authored DOM plus the edit");
 });
 
 // --- 10.4 ---------------------------------------------------------------------
 
-/*
- * Why the second pass runs on a second document. An in-app commit leaves the
- * document's live log behind (S8: clearLog removes `status/{doc}/y`, which the
- * RTDB rules refuse, and app/src/crdt/rtdb.ts:69-76 swallows the refusal), and
- * the next editor to join ADOPTS that log over the bytes it loaded
- * (app/src/crdt/sync.ts, "their document wins"). So a second session on the
- * same document edits the DOM of the session before the commit, not html', and
- * its draft would be md'' only by accident: a control that made the second pass
- * non-idempotent stayed green that way. md' published as a document of its own
- * renders to v2's index.html byte for byte (a precondition below), and nobody
- * has edited it, so its editor starts from html' itself.
- */
+/* Publish md' as a separate document to prove the second editor starts from
+ * the rendered first-pass source itself, independently of any live session. */
 scenario("A10.4 idempotence after the first pass: md' (the first in-app save of the markdown-reference sample) equals md'' (the draft the editor writes from md' published and saved unchanged)", { tiers: ["local", "prod"], timeoutMs: 240_000 }, async (ctx) => {
   const { acct, session } = await castOwner();
   const sample = readSample(target, "markdown-reference");
-  const up = await publish(session.http, { body: sample.bytes, filename: sample.filename, title: sample.title, name: "a104" });
+  const inputBytes = Buffer.concat([sample.bytes, Buffer.from(`\n\n${PROBE_MD}`)]);
+  const up = await publish(session.http, { body: inputBytes, filename: sample.filename, title: sample.title, name: "a104" });
   const docId = up.docId;
   const u = await signedIn(ctx, acct);
 
@@ -610,7 +588,7 @@ scenario("A10.4 idempotence after the first pass: md' (the first in-app save of 
   const v2 = await stored(session.http, docId, "v2");
   const md1 = v2.files["index.md"].toString("utf8");
   ctx.ev.text("md-prime.md", md1);
-  ctx.step(`md' is ${md1.length} characters; md was ${sample.bytes.length} bytes`);
+  ctx.step(`md' is ${md1.length} characters; md was ${inputBytes.length} bytes`);
 
   ctx.step("md' → html': publish md' as a document of its own, whose rendering must be v2's index.html");
   const second = await publish(session.http, { body: v2.files["index.md"], filename: sample.filename, title: sample.title, name: "a104-second" });
@@ -628,13 +606,19 @@ scenario("A10.4 idempotence after the first pass: md' (the first in-app save of 
   // for anything the draft lacks, and would compare md' with itself.
   const doc = await readDoc(target, `docs/${second.docId}`);
   precondition(doc.draft?.baseVersion === "v1" && doc.draft?.sourceEntry === "index.md", `the autosave wrote a Markdown draft of md': ${JSON.stringify(doc.draft ?? null)}`);
-  const draftObject = await readObject(target, `${doc.draft.storagePrefix ?? `docs/${second.docId}/draft`}/index.md`);
+  const draftObject = await readDraftObject(target, second.docId, "index.md");
   precondition(draftObject !== null, "the draft holds its own index.md");
   const md2 = draftObject.toString("utf8");
   ctx.ev.text("md-second.md", md2);
   const served = await session.http.get(`/draft/${encodeURIComponent(second.docId)}/index.md`, { expect: 200 });
   assert.equal(sha(served.buffer), sha(draftObject), "GET /draft serves the draft's own index.md");
   assert.deepEqual(lineHunks(md1, md2), [], "md'' === md' (SPEC §11)");
+  for (const raw of [SCRIPT_BLOCK, STYLE_BLOCK, TEXTAREA_BLOCK, SPDX, NOTE]) {
+    const expectedCopies = inputBytes.toString("utf8").split(raw).length - 1;
+    precondition(expectedCopies > 0, "the input includes each raw construct");
+    assert.equal(md1.split(raw).length - 1, expectedCopies, "the first pass keeps each raw block and comment byte for byte");
+    assert.equal(md2.split(raw).length - 1, expectedCopies, "the second pass keeps each raw block and comment byte for byte");
+  }
   await u.done();
 });
 

@@ -1,0 +1,15 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -176,5 +176,4 @@
+
+   const target = await resolveFolderTarget(db, input.folderId, caller);
+-  if (!target.ok) return refuse(target.status, target.error);
+
+   const srcPrefix = `${versionStoragePrefix(input.sourceId, versionId, v)}/`;
+@@ -192,4 +191,6 @@
+     }
+   });
++
++  if (!target.ok) return refuse(target.status, target.error);
+
+   // The fork's export marking is its NEW owner's policy, seeded from their

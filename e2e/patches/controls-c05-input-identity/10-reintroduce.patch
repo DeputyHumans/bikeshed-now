@@ -1,0 +1,11 @@
+--- a/app/src/crdt/sync.ts
++++ b/app/src/crdt/sync.ts
+@@ -376,7 +376,7 @@
+     if (!range || range.startContainer !== range.endContainer || range.startContainer.nodeType !== Node.TEXT_NODE || !host.contains(range.startContainer)) return;
+     const node = range.startContainer as Text;
+     if (!(yOf.get(node) instanceof Y.XmlText)) return;
+-    inputIntent = { node, before: node.data, start: range.startOffset, end: range.endOffset, event: input };
++    inputIntent = null; // Reintroduce the prefix-only edit identity bug.
+   };
+   const afterInput = () => {
+     flushLocal();

@@ -1,0 +1,10 @@
+--- a/app/src/components/UploadDialog.tsx
++++ b/app/src/components/UploadDialog.tsx
+@@ -29,6 +29,6 @@
+   const [marking, setMarking] = useState<Marking>(accountDefaultMarking ?? MARKING_OFF);
+   const markingChosen = useRef(false);
+   useEffect(() => {
+-    if (!markingChosen.current) setMarking(accountDefaultMarking ?? MARKING_OFF);
++    if (false && !markingChosen.current) setMarking(accountDefaultMarking ?? MARKING_OFF);
+   }, [accountDefaultMarking]);
+   const [progress, setProgress] = useState<number | null>(null);

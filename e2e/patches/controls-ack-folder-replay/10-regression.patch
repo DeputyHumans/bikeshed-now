@@ -1,0 +1,7 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -331,3 +331,3 @@
+         if (!originalData) throw new Error("membership receipt has no request snapshot");
+-        return { data: originalData, ...committed.result };
++        void originalData;
+       }

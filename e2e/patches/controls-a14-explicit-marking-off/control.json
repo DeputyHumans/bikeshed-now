@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.3b unchecking an account-default export stamp publishes an explicitly unmarked document",
+  "what": "a14 explicit marking off",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.3b unchecking an account-default export stamp publishes an explicitly unmarked document"
+  },
+  "expect": {
+    "message": "an explicit unchecked stamp overrides the account default"
+  }
+}

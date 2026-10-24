@@ -1,0 +1,15 @@
+{
+  "oracle": "C6 abrupt close: incomplete history must be refused",
+  "what": "Joining accepts a live history that lacks items from the durable draft.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 abrupt close preserves an ahead saved draft, blocks partial live adoption and permits explicit agent recovery [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^C6 abrupt close: incomplete history must be refused"
+  }
+}

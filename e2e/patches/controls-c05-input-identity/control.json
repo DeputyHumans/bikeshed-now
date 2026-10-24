@@ -1,0 +1,15 @@
+{
+  "oracle": "C5 repeated-character identity",
+  "what": "Discard beforeinput ranges so an equal adjacent original character takes the typed character identity",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C5 delete the words right after a caret while N−1 type at it: the words go and every token typed at the caret stays once and whole on every peer (I4), and the session converges (I1) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^I4:"
+  }
+}

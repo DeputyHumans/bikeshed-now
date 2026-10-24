@@ -266,6 +266,7 @@ function openedIn(home) {
  * @param {string} [o.cwd]        default: the home directory
  * @param {string} [o.input]      stdin
  * @param {object} [o.env]        extra variables (never BIKESHED_ORIGIN or the guard's)
+ * @param {boolean} [o.traceCalls] local-only MCP call boundaries (no arguments, headers or bodies) in result.calls
  * @param {number} [o.timeoutMs]  default 120 s; then the process group is killed
  * @param {object} [o.guard]      default createGuard(target); production refuses per guard.checkCli
  * @returns {Promise<{code, signal, stdout, stderr, json, opened: string[], entry, source, home, ms, cut: string|null}>}
@@ -273,6 +274,15 @@ function openedIn(home) {
  */
 export async function runCli(target, args, o = {}) {
   const { home, env, entry, source } = await prepare(target, args, o, "runCli");
+  let traceFile;
+  if (o.traceCalls !== undefined && typeof o.traceCalls !== "boolean") throw new TypeError("runCli: traceCalls is a boolean");
+  if (o.traceCalls) {
+    if (target.kind !== "local") throw new Error("runCli: call traces are local only");
+    traceFile = join(home.home, `calls-${rand4()}.jsonl`);
+    writeFileSync(traceFile, "");
+    env.E2E_CLI_CALL_TRACE = traceFile;
+    env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${fileURLToPath(new URL("./cli-call-trace.mjs", import.meta.url))}`].filter(Boolean).join(" ");
+  }
   const r = await spawnCapture(process.execPath, [entry, ...args], { cwd: o.cwd ?? home.home, env, input: o.input, timeoutMs: o.timeoutMs });
   let json;
   if (args.includes("--json")) {
@@ -280,7 +290,8 @@ export async function runCli(target, args, o = {}) {
       json = JSON.parse(r.stdout);
     } catch {}
   }
-  return { ...r, json, opened: openedIn(home), entry, source, home, cut: cliCut(r, commandOf(args)) };
+  const calls = traceFile ? readFileSync(traceFile, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : [];
+  return { ...r, json, calls, opened: openedIn(home), entry, source, home, cut: cliCut(r, commandOf(args)) };
 }
 
 /** The longest a spawned CLI lives by default, whatever its case does. */

@@ -89,6 +89,13 @@ service cloud.firestore {
             && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d)));
     }
 
+    // Expiry freezes every feedback mutation, including the owner's. Keep
+    // this separate from canRead: workspace queries and existing feedback
+    // remain readable under their normal membership policy (SPEC §17).
+    function feedbackWritable(d) {
+      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
+    }
+
     // The real editor set: owner, direct editors, or effective/inherited
     // editors (folder and team grants, expanded server-side). Mirrors
     // functions/src/lib/acl.ts isDocEditor(). This — not canEdit — gates the
@@ -211,6 +218,7 @@ service cloud.firestore {
           allow read: if canRead(docId, docData(docId));
           // The key list keeps `suggestion` out as well.
           allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
+            && feedbackWritable(docData(docId))
             && isExactly(['annId', 'anchor', 'authorUid', 'authorEmail', 'actor', 'color', 'resolved', 'createdAt'])
             && request.resource.data.anchor is map
             && request.resource.data.resolved == false
@@ -220,6 +228,7 @@ service cloud.firestore {
           // changes with it: not the author, anchor, colour, actor or
           // createdAt, and no field added on the side.
           allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+            && feedbackWritable(docData(docId))
             && !('suggestion' in resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
             && request.resource.data.resolved is bool
@@ -228,6 +237,7 @@ service cloud.firestore {
             && request.resource.data.resolvedBy.email == myEmail()
             && request.resource.data.resolvedBy.channel == 'web';
           allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
+            && feedbackWritable(docData(docId))
             && resource.data.authorUid == request.auth.uid
             && !('suggestion' in resource.data);
 
@@ -241,18 +251,21 @@ service cloud.firestore {
             allow read: if canRead(docId, docData(docId));
             // The key list is what keeps `generated` and `opensSuggestion` out.
             allow create: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId)) && authoredBySelf()
+              && feedbackWritable(docData(docId))
               && isExactly(['commentId', 'body', 'authorUid', 'authorEmail', 'actor', 'createdAt'])
               && request.resource.data.body is string
               && request.resource.data.createdAt == request.time;
             // Its author may reword it, and that is all: when it was written,
             // and by whom, stay as they were.
             allow update: if docData(docId).currentVersion == versionId && canRead(docId, docData(docId))
+              && feedbackWritable(docData(docId))
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)
               && !('opensSuggestion' in resource.data)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body'])
               && request.resource.data.body is string;
             allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
+              && feedbackWritable(docData(docId))
               && resource.data.authorUid == request.auth.uid
               && !('generated' in resource.data)
               && !('opensSuggestion' in resource.data);

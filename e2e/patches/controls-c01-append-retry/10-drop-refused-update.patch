@@ -1,0 +1,11 @@
+--- a/app/src/crdt/log.ts
++++ b/app/src/crdt/log.ts
+@@ -154,7 +154,7 @@
+           if (destroyed) return;
+           // Keep both the refused bytes and changes made while they were in
+           // flight. Later Yjs deltas may depend on those earlier item ids.
+-          pending = pending ? Y.mergeUpdates([update, pending]) : update;
++          pending = null; // e2e mutant: lose the refused update and its dependents
+           onDelivery(false);
+           finishWaiters(deliveryError());
+           retry = setTimeout(() => { retry = null; void drain(); }, Math.min(2_000, 200 * 2 ** Math.min(failures++, 4)));

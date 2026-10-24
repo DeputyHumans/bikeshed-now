@@ -36,6 +36,23 @@ spec processes and the stack the run started before it exits, and `run` and
 `stack up` first reap the orphans of crashed runs, expired stacks and
 orphaned Chrome processes.
 
+Reader reload controls `controls-c22-reader-place` and
+`controls-c22-reader-selection` run their complete C22 work when selected alone.
+`controls-c18-toolbar-overflow` targets C18 work at N=5; that work checks both
+reachable presence chips and visible phone actions. These cases enforce S28/S29
+as ordinary assertions; fresh campaign runs and red controls remain required.
+A17.3 seeds and checks canvas runtime pixels through the parent driver before
+export because the untrusted upload correctly cannot run its drawing script.
+
+C23 now checks snapshot refusal and explicit recovery instead of accepting
+silent whole-document replacement. Its work holds each member's autosave,
+saves twice as an unlisted link editor, requires the delayed member requests to
+refuse, then reloads members and verifies all accepted edits survive resumed
+merging. A separate held-frame case changes the draft after preparing Edit and
+checks refusal, non-editability and explicit reload. The six `controls-c23-*`
+sets each execute a complete scenario at N=2; the campaign still requires the
+main scenario at N=2,5,10,20 on fresh integrated stacks.
+
 ## Outcomes
 
 | | |
@@ -66,6 +83,8 @@ memory readings: pressure level, swap-outs since the last line, free share,
 available bytes, swap used; and a browser pool's memory waits),
 `evidence/<case>/`, and any `<name>.jsonl` of measurement rows a spec
 appended (`measure`, under For spec authors: kept whatever the outcome).
+For verified derived-runtime stacks, `rtdb-runtime.json` binds the invocation
+to before/after JVM and rules receipts; `invocation.json` references its digest.
 The memory gate's waits and refusals for a stack go to
 `e2e/.out/<runId>/load.jsonl`.
 Parallel `--attach` runs on one stack never delete, overwrite or merge each
@@ -158,21 +177,99 @@ I11 (at most one email per recipient, document and kind in 30 min) is
 controlled by `controls-a23-cooldown`: the window is not checked, so a
 second comment's notice is sent, and A23.4 goes red. A control may be built
 on an amplify set: its `stack` names `--patches amplify-<name>`, which both
-sides get, before the control's own set. A control may target one case of
+sides get, before the control's own set. The same setup field accepts the
+explicit capability-only sets `a19-analytics-live` and
+`a20-cli-bad-skill-name`, `a20-cli-uppercase-skill`, `a20-cli-underscore-skill`,
+and `a20-cli-no-retry-delay`; arbitrary product-fix or other control sets are
+refused there, so the green side cannot silently inherit the mutant. A control may target one case of
 a scenario with `n`, as `"<scenario> [N=<k>]"`: both sides then run with
 `--n <k> --trials 1` (see Adding a negative control), so no fixed-N copy of
 the scenario is needed.
+
+A14 workspace coverage includes independent title, creation, update, view-count
+and last-read orders; deeper folder reparenting; silence after moves and folder
+deletion; and cover absence windows anchored before navigation and after the
+trusted document fetch. A14.7/A14.8 exercise revision uploads through the card
+menu and document-frame drops, including format refusal, retry, deduplication,
+confirmation and stale-dialog prevention. The `controls-a14-*` sets also target
+A17.5c's late account-default and explicit-choice sequence. Their presence is
+not execution evidence: the campaign ledger retains pending controls and the
+fresh refusal/control proof. A14.7b/A14.8b open each revision dialog before
+changing a grant or expiry, and also exercise pending suggestions, accepted
+draft changes and a live editor. Refusals retain the selected file, release
+progress, and leave version records and stored bytes unchanged; the frame-drop
+dialog blocks Publish when it sees the active peer.
+
+A23 also exercises cooldown expiry by aging only its own account's cooldown
+keys on a local `admin-emulator` stack, then sending fresh comments and
+suggestions through the normal product paths. Its HTML content, recipient,
+filing, re-grant and provider-failure controls are listed under
+`e2e/patches/controls-a23-*`. Provider failure tests require an actual 200
+response. A Hosting or client cutoff remains inconclusive even when the shim
+recorded a refusal: timestamps alone do not establish why the product did
+not answer. No cutoff counts as a successful failure-handling test.
+A23.6c/d hold one recipient's provider response before its headers or midway
+through its body. They require the original access request to answer 200 while
+that hold remains armed, its connection to be cancelled, and the next recipient
+to receive their invitation. These cases require `mail-hold-recipient`; start a
+fresh stack to obtain it. Their negative controls disable the deadline or
+disconnect its cancellation signal, so a Hosting cutoff cannot substitute for
+the product's ten-second provider deadline.
 
 ## Prerequisites
 
 | | |
 |---|---|
-| Node | 24 under `~/.nvm/versions/node/v24.*` (the functions runtime is `nodejs24`), or `E2E_NODE_BIN` |
-| firebase-tools | on `PATH` (`E2E_FIREBASE_BIN`), with the emulator jars already cached in `~/.cache/firebase/emulators` |
+| Node | 24 under `~/.nvm/versions/node/v24.*`, or `E2E_NODE_BIN`; the pinned runtime is verified with 24.21.0 |
+| firebase-tools | 15.25.1 on `PATH` (`E2E_FIREBASE_BIN`), with Database 4.11.2 and the other emulator jars already cached in `~/.cache/firebase/emulators` |
 | Java | on `PATH` (`E2E_JAVA_BIN`) |
 | Mailpit | on `PATH` (`E2E_MAILPIT_BIN`) |
 | Chrome | system Chrome for the browser specs; `playwright-core` never downloads one |
 | deps | `npm run install:all` in the checkout; stacks symlink its `node_modules` |
+
+`npm run test:tools` provisions the pinned public Database archive through
+`pretest:tools`, without a Firebase CLI installation or account. It verifies
+an existing tools-test cache or copies a hash-verified Firebase cache; otherwise
+it downloads the exact public archive, verifies its SHA-256 and publishes it
+atomically under `~/.cache/bikeshed-e2e/fixtures/rtdb/`. Subsequent runs work
+offline and verify the cached bytes again. These tests inspect real original
+and derived JAR bytes; they do not launch Java or substitute a ZIP inspector.
+The first run needs network access unless the pinned archive is already cached.
+
+`--self-test` resolves and checks Node 24 before launching the suite, even
+when the calling shell uses another Node version. It also requires an
+installed firebase-tools package, prints the selected executables and
+versions, and pins `E2E_FIREBASE_BIN` for every child. Stacks use the same
+resolver and save these selections in `stack.json`'s `toolchain` field.
+An explicit missing or unusable override fails before testing; it never
+falls back to a different installation. Individual installed-tool probes
+may skip only when no Firebase installation or override exists.
+
+When several Firebase installations exist, set `E2E_FIREBASE_BIN` explicitly
+alongside `E2E_NODE_BIN` (the Node 24 bin directory). Merely invoking a
+particular `node` does not select a Firebase executable elsewhere on PATH.
+The installed-tool probes exercise env precedence and watcher behavior;
+they do not require one transpiler's object-spread spelling or a particular
+order of watcher ignore rules.
+
+New local stacks use a verified **unofficial copy of Database 4.11.2**. Its
+concurrent prefetch diagnostics append to an unsynchronized mutable list;
+the stock runtime has lost diagnostic entries and crashed its namespace in
+this suite. The copy changes only the synchronization flag on
+`RequestContext.addRuleResult`. Rule evaluation and prefetch scheduling stay
+outside that lock, while diagnostic append timing changes. The installed JAR
+is untouched. Unknown toolchain versions, archive bytes or derived output
+are refused; the exact source-owned pins are in `lib/rtdb-runtime.mjs`.
+
+Every stack records the original and derived identities, a byte-level
+attestation and its actual JVM launch. Every invocation records the JVM,
+arguments and exact rules before and after its cases. The retained archives
+under `.out/runtime-artifacts/rtdb/` let campaign checks verify the transform
+after stack teardown. The runtime capability is advertised only after live
+verification. Missing or mismatched runtime evidence cannot qualify for
+final campaign acceptance. `npm run test:rules:emulated` remains a separate
+check against the stock runtime; its result does not establish derived-runtime
+parity or production behavior.
 
 ## Tiers
 
@@ -263,7 +360,25 @@ the scenario is needed.
   emulator (pid …) ran out of memory: java.lang.OutOfMemoryError at its
   -Xmx16m cap"), `run` stops its specs and exits 1, and the watchdog marks a
   ready stack failed with that reason and stops it (tree kept).
-- **Debug logs under a cap** (`lib/debuglogs.mjs`). Two shared stacks wrote
+- **Quiescent RTDB rule-coverage recycling** (`lib/rtdb-coverage.mjs`). The
+  pinned Database emulator 4.11.2 retains every distinct evaluated rule value,
+  including complete CRDT payload strings, after the application deletes or
+  compacts that data. Serial concurrency measurements holding the exclusive
+  tier lock archive the complete coverage report as streaming gzip before the
+  first case and after a preceding browser case has fully closed. No body,
+  request or marked harness browser may remain active. A whitespace-only rules
+  round trip triggers a fresh tracker (an identical-text PUT is ignored), then
+  restores and verifies the exact staged rule bytes in `finally`. The fresh
+  report must contain zero evaluated values, and anonymous access must still
+  be denied. The archive digest, rule digest, pinned toolchain and before-case
+  boundary are recorded in `maintenance.jsonl` and case diagnostics; read-only
+  judges do not schedule another reset. A failed archive, changed rule file,
+  unknown JAR, abandoned body or incomplete restoration fails the case. Shared
+  authoring and parallel-file runs never recycle coverage. This changes no
+  database data, case outcome, timeout or heap ceiling. The installed-runtime
+  probe is `node tools/probe-e2e-rtdb-coverage.mjs`; the diagnosis and proof
+  boundary are in [the heap note](../docs/development/e2e-rtdb-heap.md).
+- **Periodic debug-log size limits** (`lib/debuglogs.mjs`). Two shared stacks wrote
   22 GB of `firebase-debug.log` and 10 GB of `firestore-debug.log` each, and
   firebase-tools has no way to lower them (the Firestore emulator's
   `-Dgoogle.cloud_firestore.debug_log_level=FINE` is a literal in its
@@ -273,7 +388,9 @@ the scenario is needed.
   a hole the size of everything before it) and copies every line into
   `firebase-debug.log` anyway. The watchdog cuts `firebase-debug.log` (written
   O_APPEND) whenever it is over half of `E2E_DEBUG_LOG_MAX_MB` (200): its
-  newest half goes to `firebase-debug.log.1`, the first cut keeps its first
+  newest half goes to `firebase-debug.log.1`. Writes between watchdog polls
+  can temporarily exceed the limit; the next check truncates the live file.
+  The first cut keeps its first
   256 KB (the start-up lines, `database rules config:` among them) as
   `firebase-debug.head.log`. `logs/emulators.log`, which every reader in
   `e2e/` reads by byte offset, is never touched. The Database emulator's own
@@ -1224,9 +1341,10 @@ now, so they must already behave:
   or `grantEditors`, or `writeMirror` from `lib/grant.mjs`). It is the
   mirror the product's own grant path would have written, read from the
   document's record, and it goes only through its own narrow guard,
-  `mirrorWriteVerdict`, on every target: one PATCH of the target's
-  database root, for a document in the run's ledger, naming run accounts
-  only, recorded in `findings.jsonl` beside the S16 finding (see THE
+  `mirrorWriteVerdict`, on every target: ETag reads and conditional replacements
+  of each access node, with the source document's revision fence, for a document
+  in the run's ledger, naming run accounts only (plus public editing when the
+  document enables it), recorded in `findings.jsonl` beside the S16 finding (see THE
   MIRROR, WRITTEN BY THE HARNESS under Seed, fixtures and grants).
 - Every account, document, folder, token, grant, OAuth client and team a spec
   creates through `lib/` is appended to the run's `ledger.jsonl`
@@ -3365,44 +3483,29 @@ actor = "operator-mirror", evidence, timeoutMs = 60_000, admin = null,
 fetchImpl = null})` → `{docId, members, editorMembers, update, status}`
 does it:
 
-- It reads `docs/<id>` through Admin and sends ONE multi-path update, a
-  PATCH of the database root (`<origin>/.json` with the databaseURL's own
-  query, `?ns=` locally), of `mirrorUpdate(id, record)`.
-- `mirrorUpdate(docId, {members, editorMembers})` →
-  `{"presenceAccess/<id>": {<key>: true, …}, "editAccess/<id>": {…}}` is
-  what `functions/src/lib/presence.ts` `syncPresenceAccess` writes on a
-  grant (`persistDocMembership`; set-access.mjs's twin, when it can): keys
-  lower-cased with dots as commas, an empty list `{}` (the node removed, as
-  the product's whole-node replace does), and no open-edit key `*` (the
-  grant path never passes publicEdit). `selftest/mirror-write.test.mjs`
-  pins it to the product's source.
-- It writes as the database's admin: the emulator's `Bearer owner` on a
-  local stack, the operator's ADC token elsewhere (as `rtdbGet` reads).
-- It goes through `createHttp` (the isolation check, one row in the case's
-  `http.jsonl`, a token redacted) with its OWN guard in place of the
-  zero-email guard, whose `RTDB_REST` lets a run write only under
-  `status/<run doc>`: `mirrorWriteVerdict(req, {target, docs, accounts,
-  docId = null})` → `{allow, rule[, reason]}` (`docs` the Set of the run's
-  document ids, `ledgerDocIds`; `accounts` its accounts' addresses, or
-  `ledgerAccounts`' Map), pure, asked before the credential is fetched and
-  again on the request as sent, on EVERY target.
-  It allows only that PATCH, for a document in the run's ledger
-  (`mirror-ledger`), of exactly `presenceAccess/<d>` and `editAccess/<d>`
-  as objects of `<key>: true` (`mirror-body`), naming run accounts only
-  (`mirror-account`: the reason counts the others and never names them);
-  any other method (`mirror-method`) or URL (`mirror-url`) is refused. A
-  refusal is `E2E_GUARD` (`rule`), with nothing sent; a document outside
-  the ledger is refused before its record is even read.
-- `E2E_MIRROR`: no record, a record whose lists are not lists of
-  addresses, a database answer that is not 200 (`status`), or none
-  (`status: null`).
-- A write made appends `{kind: "mirror-written", suspect: "S16", docId,
-  members, editors, by: "harness"}` to `findings.jsonl`, beside share()'s
-  `mirror-missing`.
-- It writes what the record says NOW, whatever the mirror holds: call it
-  once, after the grants.
-- `admin` is a self-test's `{readDoc, authorization?}`, `fetchImpl` its
-  fetch.
+- It reads `docs/<id>` and its `updateTime` through Admin. Each node carries
+  `__revision` in the product's timestamp format, `__expiresAt` as an epoch
+  deadline (zero means no expiry), and `__owner` as a normalized email. It reads `editAccess/<id>`
+  with an ETag, then conditionally replaces it; `presenceAccess/<id>` follows.
+  A newer revision is retained. An ETag conflict retries up to five times.
+- `mirrorUpdate(docId, {members, editorMembers})` builds the boolean email
+  maps (lower case, dots replaced by commas). `writeMirror` adds the revision,
+  owner, deadline, and the open-edit `*` key only for a public document with public editing enabled.
+- Requests use `createHttp`, the database admin credential, isolation checks
+  and a redacted trace row per request. No database-root read or write occurs.
+- `mirrorWriteVerdict(req, {target, docs, accounts, docId = null})` →
+  `{allow, rule[, reason]}` guards run-owned document nodes and run-account
+  grants. Its internal `publicEdit` option permits the wildcard only when the
+  source document enables it. GET and conditional PUT are the only methods;
+  PUT requires a quoted ETag, valid revision and deadline, and a normalized
+  owner who belongs to this run. Any refusal is `E2E_GUARD`.
+  All intended grants are checked before credentials are obtained.
+- `E2E_MIRROR` covers missing records/revisions, malformed membership, missing
+  ETags, unexpected responses or no answer, and exhausted conflict retries.
+- A successful synchronization appends `{kind: "mirror-written", suspect:
+  "S16", docId, members, editors, by: "harness"}` to `findings.jsonl`.
+- `admin` is a self-test's `{readDocRevision, authorization?}`; its reader
+  returns `{data, revision}`. `fetchImpl` is the stand-in fetch.
 
 `MIRROR_MODES` = `["stop", "write-missing"]`: what `grantEditors`,
 `joinShared` and `addMember` (`lib/live.mjs`) do, with their `mirror`
@@ -3983,6 +4086,11 @@ await withVisibility(ctx.target, { owner, doc: docId, visibility: "public" }, as
   `health()`. `shimKey(target)` is the dummy key, for a canary that talks to
   the shim directly. The shim's global `/__e2e/fail-next` and `/__e2e/reset`
   affect every spec on the stack: never use them on a shared one.
+  With `mail-hold-recipient`, `holdRecipient(to, {stage: "headers" | "body"})`
+  stalls only that exact recipient, `held(to)` reports received, pending and
+  closed connections, and `release(to)` ends any remaining held response
+  without delivery (call it in `finally`). A client abort leaves the hold armed
+  and increments `closed`, proving cancellation happened without a release.
 - **Password-reset mail** goes through Firebase's own mailer: read the Auth
   emulator's `/emulator/v1/projects/<projectId>/oobCodes` at
   `target.authEmulatorUrl` with `createHttp` (capability `oob-codes`).
@@ -4361,7 +4469,7 @@ is unchanged, and the product writes the mirror on it.
 **`mirror: "write-missing"` gets past it, as the plan prescribes.** Once
 every grant is made, the harness writes the document's mirror from its
 record, as the product's grant path would have (`lib/grant.mjs`
-`writeMirror`: one PATCH of the database root through its own narrow guard,
+`writeMirror`: per-node ETag compare-and-set through its own narrow guard,
 for run documents and run accounts only; see THE MIRROR, WRITTEN BY THE
 HARNESS under Seed, fixtures and grants), reads every missing grantee's
 mirror back, records `mirror-written` beside the S16 finding, steps
@@ -4464,7 +4572,7 @@ grantVia, granted, signIn, opened}` (`lib/live.mjs`):
   (`selftest/live-add-member.test.mjs`).
 
 **Settling** — `settleLive(users, {docId, n = users.length, deadlineMs,
-minLength = 1, requireShared = true})` → `{ms, hash, samples, saveStates,
+minLength = 1, requireShared = true, readBodies})` → `{ms, hash, samples, saveStates,
 shareStates, lastDraftAt, yEntries}` waits for the plan's settle conditions
 at once: I1 on 3 consecutive samples, on bodies of at least `minLength`
 characters (equal EMPTY bodies are not convergence; give a baseline's length
@@ -4483,6 +4591,15 @@ result's `yRetries` counts the 503s it read through, and a failure message
 names them. When 503s last past 5 s, settleLive throws
 `E2E_RTDB_UNAVAILABLE`, not an I1 failure. A `readY` of your own is used as
 given.
+
+For idle readers after Done, `readBodies(users)` may sample authored DOM with
+`readerBodyHash(frame)`: each reader's known presence decoration is different
+by design. The sampler removes only the independently pinned `data-bshd` values;
+unknown values and all authored content remain. C6 uses this sampler while
+retaining every deadline and save/log condition above. Live editors still use
+raw `bodyHash`, and persisted draft/version bytes still face DECOR unchanged.
+`selftest/reader-body.test.mjs` demonstrates both raw-overlay false divergence
+and an overbroad marker strip concealing real authored differences.
 
 **One editor settles too** (C9b: one editor beside N−1 agents). `settleLive([u],
 {docId})` judges every condition above except I1's convergence, which needs
@@ -4754,12 +4871,14 @@ out throws `E2E_GATE_TIMEOUT`.
   without it, and a distinct wait throws `E2E_GATE` (restart the stack).
 - **A forced simultaneous join** (S1, C4) needs more than that: a joiner's
   first held run is not the one that binds. The join effect runs when edit
-  mode starts and again when the editable draft frame loads, and only the
+  mode starts and again when the draft frame loads, and only the
   second binds; live, the second call came 13 ms and 616 ms after the
   first. `requireJoinersHeld(ctx, g, users, {key})` (`lib/live.mjs`) waits
-  for the distinct callers, then every joiner's editable `/draft/` frame,
+  for the distinct callers, then every joiner's loaded `/draft/` frame,
   then the distinct callers again, so each is held by its binding run;
-  then `g.release("join-before-bind")`. Start the joiners with
+  then `g.release("join-before-bind")`. Input stays disabled until binding,
+  so this precondition must not wait for `contenteditable=true`. Start the
+  joiners with
   `u.enterEdit({waitShared: true})` without awaiting it first, as the
   canary's gate case does.
 - **One joiner at a time** (a serial control at a client gate):
@@ -5083,7 +5202,7 @@ Declare what a case needs with `needs`: `local`, `email` or `email-off`,
 `mailpit`, `admin-emulator`, `oob-codes`, `reset`, `logs`, `patches`, and on
 stacks this harness version builds `egress-guard`, `spare-pool`, `gates`
 and `rtdb-proxy` (with those options: the aux process),
-`mail-fail-recipient`, `operator-scripts`, `resource-caps` (JVM heap caps,
+`mail-fail-recipient`, `mail-hold-recipient`, `operator-scripts`, `resource-caps` (JVM heap caps,
 capped debug logs, an owner, a lease and a watchdog), `rtdb-rules` (readiness proved
 `ns=<projectId>` enforces the tree's RTDB rules; an older stack lacks it even
 if someone has since loaded them, which `rtdbRulesStatus` checks live),
@@ -5529,6 +5648,13 @@ The functional areas share long-running stacks. On one:
 
 ## Known weaknesses
 
+The [local repair campaign](../docs/development/e2e-campaign.md) now preserves
+these findings in [`campaign.json`](campaign.json), including the source
+observations, overlap mappings, historical closure reports, product suspects
+and the full execution matrix. `node tools/check-e2e-campaign.mjs` is the
+strict completion gate; `--validate` checks structure only. The counts below
+are the imported baseline, not a claim about current fixes.
+
 The suite landed **concurrency first**. Completeness critics read every
 functional spec against the plan's catalogue and the control ledger, and
 the maintainer chose to spend the time on C1–C23 instead of filling what
@@ -5603,6 +5729,9 @@ them, with the capability named in the reason:
 | A19.2, analytics live (the consent sequence) | `measurement-id`, `patch:a19-analytics-live` | the same, plus `--patches a19-analytics-live` |
 | A19.3, the deployment's default marking | `export-mark-default` | `stack up --app-env VITE_EXPORT_MARK_ENABLED` (and the label and footer, as the case's comment shows) |
 | A20.7m, a skill name the CLI must refuse | `patch:a20-cli-bad-skill-name` | `stack up --patches a20-cli-bad-skill-name` |
+| A20.7m2, an uppercase first skill name | `patch:a20-cli-uppercase-skill` | `stack up --patches a20-cli-uppercase-skill` |
+| A20.7m3, an underscore first skill name | `patch:a20-cli-underscore-skill` | `stack up --patches a20-cli-underscore-skill` |
+| A20.7y, the CLI polling floor independently of the server retry delay | `patch:a20-cli-no-retry-delay` | `stack up --patches a20-cli-no-retry-delay` |
 | A23.7, email off | `email-off` | `stack up --email-off` |
 
 The `storage-preconditions` cases (Capabilities) likewise need
@@ -5610,8 +5739,8 @@ The `storage-preconditions` cases (Capabilities) likewise need
 refused in this build.
 
 **A `defect:` case is not a pass.** Each one is a known product defect, or a
-SPEC question or report-and-ask item under triage. The list is tracked
-outside this repository. Its TODO ("failed as expected") means the defect is
+SPEC question or report-and-ask item under triage. The list and its unresolved decisions are tracked in
+[`campaign.json`](campaign.json). Its TODO ("failed as expected") means the defect is
 still there, and "passed unexpectedly" means it may have been fixed and wants
 a look. `run` exits 0 over both, so read `summary.md`, not the exit code,
 before saying a feature works.

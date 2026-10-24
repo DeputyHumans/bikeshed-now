@@ -1,0 +1,13 @@
+{
+  "oracle": "The editing mode needs a distinct shape independent of colour.",
+  "what": "The editing mode needs a distinct shape independent of colour.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.5a mode is shown by shape: in forced colours, where colour carries nothing, an editor's chip differs from a reader's by its dot's shape and by the word \"Editing\" in its accessible name",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the dot's shape differs"
+  }
+}

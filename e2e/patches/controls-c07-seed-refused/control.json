@@ -1,13 +1,13 @@
 {
-  "oracle": "C7 liveness (I13 within the settle deadline): every peer shown as Shared receives each other peer's probe keystroke on a document joined in turn",
-  "what": "the live log's entry limit is 50,000 characters instead of 200,000 (database.rules.json and its template), so the first editor's seed of the 79 KB document (118,020 characters) is refused, as S10 refuses a ~300 KB one, and the peers stay Shared while they diverge",
+  "oracle": "^C7 live editing refused:",
+  "what": "Restore the former 200,000-character database entry limit; the measured 473,536-character seed is refused",
   "target": {
     "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
-    "case": "C7 size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule) converge, every token once on every peer and in the draft [N=2]",
+    "case": "C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound) [N=2]",
     "suite": "concurrency"
   },
   "stack": [],
   "expect": {
-    "message": "^I13: p[12] \\(probe from p[12]\\): the probe never arrived"
+    "message": "^C7 live editing refused:"
   }
 }

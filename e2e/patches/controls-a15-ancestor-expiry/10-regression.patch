@@ -1,0 +1,22 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -102,4 +102,5 @@
+   caller: Caller,
+   k: string | null,
++  ignoreExpiry = false,
+ ): Promise<{ ref: admin.firestore.DocumentReference; data: Stored } | null> {
+   if (!safeSegment(docId)) return null;
+@@ -112,5 +113,5 @@
+   // Forking reads every byte, so it is a read path: without this, copying an
+   // expired document would get its content back out from behind the date.
+-  if (expiredForReader(data, caller)) return null;
++  if (!ignoreExpiry && expiredForReader(data, caller)) return null;
+   return { ref, data };
+ }
+@@ -317,5 +318,5 @@
+     const parentId = rec.get("parentId");
+     const parent =
+-      typeof parentId === "string" ? await openReadable(db, parentId, caller, null) : null;
++      typeof parentId === "string" ? await openReadable(db, parentId, caller, null, true) : null;
+     if (!parent) {
+       hiddenAncestor = true;

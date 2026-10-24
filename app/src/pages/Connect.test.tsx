@@ -37,6 +37,9 @@ vi.mock("../auth", () => ({
  * configured measurement id would otherwise make this test log for real.
  */
 const seen = vi.hoisted(() => ({ hrefs: [] as string[] }));
+// Account preference restoration has its own sequence tests; routing stays hermetic.
+vi.mock("../accountPreferences", () => ({ useAccountPreferences: () => true }));
+
 vi.mock("../analytics", () => ({
   initAnalytics: () => seen.hrefs.push(window.location.href),
   logPageView: () => seen.hrefs.push(window.location.href),
@@ -263,11 +266,15 @@ describe("approving", () => {
     // on a slow runner is a turn after the heading (see lookAndMove).
     await moveUntilArmed();
 
-    // Losing focus starts the second again.
+    // A background window cannot settle its timer, even after a full second.
+    vi.mocked(document.hasFocus).mockReturnValue(false);
     act(() => {
       window.dispatchEvent(new Event("blur"));
     });
     expect(approveButton().disabled).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(ARM_DELAY_MS * 2); });
+    expect(approveButton().disabled).toBe(true);
+    vi.mocked(document.hasFocus).mockReturnValue(true);
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -276,6 +283,26 @@ describe("approving", () => {
       vi.advanceTimersByTime(ARM_DELAY_MS);
     });
     expect(approveButton().disabled).toBe(false);
+  });
+
+  it("discloses every allowed and excluded capability before approval", async () => {
+    renderConnect();
+    await heading(/Connect Claude to Bikeshed\?/);
+    const items = (selector: string) => Array.from(document.querySelectorAll(selector), (el) => el.textContent);
+    expect(items(".connect-list:not(.connect-list-not) li")).toEqual([
+      "Read what you can read",
+      "Publish, revise and rename documents",
+      "Comment, reply, suggest edits and resolve threads",
+      "Accept or reject suggested edits where you can, and save them as a new version",
+      "Create folders and file documents in them",
+      "Manage sharing on documents and folders you own, sending invitations to new readers",
+      "Change visibility, open editing and expiry on documents you own",
+      "Rename and move folders you can edit; delete folders you own while keeping their contents",
+    ]);
+    expect(items(".connect-list-not li")).toEqual([
+      "Delete documents or manage teams",
+      "Trust document scripts or act with permissions you do not have",
+    ]);
   });
 
   it("sends one approve for a double click", async () => {
@@ -355,6 +382,7 @@ describe("approving", () => {
     renderConnect();
     await heading(/This request can't go ahead/);
     expect(screen.getByText("PKCE is required.")).toBeDefined();
+    await act(async () => { vi.advanceTimersByTime(2500); });
     expect(leave).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Go back to claude.ai" }));

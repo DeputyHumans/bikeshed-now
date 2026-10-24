@@ -86,3 +86,15 @@ describe("uploadVersion", () => {
     await expect(uploadDoc(file, { folderId: "f1" })).rejects.toThrow("You cannot upload to that folder.");
   });
 });
+
+
+describe("uploadDoc marking", () => {
+  it("preserves an explicit off choice instead of falling back to the account default", async () => {
+    reply = { status: 200, body: { docId: "d1" } };
+    const off = { enabled: false, label: "", footer: "" };
+    await uploadDoc(file, { marking: off });
+    expect(JSON.parse(query().get("marking")!)).toEqual(off);
+    await uploadDoc(file);
+    expect(query().has("marking")).toBe(false);
+  });
+});

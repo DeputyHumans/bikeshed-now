@@ -1,0 +1,9 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -231,5 +231,5 @@
+     fileCount: typeof v.fileCount === "number" ? v.fileCount : objects.length,
+     bytes: typeof v.bytes === "number" ? v.bytes : 0,
+-    contentHash: str(v.contentHash, ""),
++    contentHash: "wrong-hash",
+     ...(Array.isArray(v.files) ? { files: v.files } : {}),
+     parentVersion: null,

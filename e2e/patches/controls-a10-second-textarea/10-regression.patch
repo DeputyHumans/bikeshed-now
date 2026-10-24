@@ -1,0 +1,9 @@
+--- a/functions/src/lib/markdown/serialize.ts
++++ b/functions/src/lib/markdown/serialize.ts
+@@ -329,5 +329,5 @@
+       tag === undefined
+         ? all
+-        : `<${tag}${attrs}>bshd-raw(${Buffer.from(text, "utf8").toString("base64")})</${tag}>`,
++        : `<${tag}${attrs}>bshd-raw(${Buffer.from(tag?.toLowerCase() === "textarea" ? text.replace(/[ \t]+$/gm, "") : text, "utf8").toString("base64")})</${tag}>`,
+   );
+ }

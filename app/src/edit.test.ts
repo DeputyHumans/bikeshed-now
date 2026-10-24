@@ -21,6 +21,18 @@ import {
 afterEach(() => post.mockReset());
 
 describe("commitVersion", () => {
+  test("a newer draft is retryable without claiming a newer version exists", async () => {
+    const conflict = new ConflictError("The draft changed. Retry.", { draftChanged: true });
+    post.mockRejectedValueOnce(conflict);
+    await expect(commitVersion("d1", "v1")).rejects.toBe(conflict);
+  });
+  test("expiry names the expiry instead of claiming a newer version exists", async () => {
+    for (const detail of [{ expired: true }, {}]) {
+      const conflict = new ConflictError("This document has expired.", detail);
+      post.mockRejectedValueOnce(conflict);
+      await expect(commitVersion("d1", "v1")).rejects.toBe(conflict);
+    }
+  });
   test("pending suggestions are their own refusal, though they are open threads too", async () => {
     post.mockRejectedValueOnce(
       new ConflictError("refused", { unresolvedCount: 3, pendingSuggestions: 2 }),

@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/token.ts
++++ b/functions/src/oauth/token.ts
+@@ -153,3 +153,3 @@
+       const issued = grantReceipt;
+-      if (issued && stored.tokenId === issued.tokenId) {
++      if (issued && stored.tokenId !== issued.tokenId) {
+         const current = (await tx.get(db.collection("tokens").doc(issued.tokenId))).data();

@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -105,5 +105,5 @@
+ const CHANGE_PAGE = 100;
+ /** How often get_changes suggests asking, in seconds. */
+-const RETRY_AFTER_SECONDS = 60;
++const RETRY_AFTER_SECONDS = 0;
+
+ /** One read per path for the length of a call. */

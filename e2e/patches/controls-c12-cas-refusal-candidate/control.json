@@ -1,0 +1,18 @@
+{
+  "oracle": "C12e CAS candidate refusal: a held draft loses its exact precondition to publication, refuses the old base, and deletes only its unreferenced upload",
+  "what": "Restore only the CAS refusal candidate omission by requiring transactionCandidateStaged before full reference-proof cleanup; all other cleanup and safety checks remain.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
+    "case": "C12e CAS candidate refusal: a held draft loses its exact precondition to publication, refuses the old base, and deletes only its unreferenced upload [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c12-update",
+    "--storage-shim",
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^C12e CAS refused candidate: the discarded upload remains unreferenced but present"
+  }
+}

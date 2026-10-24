@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -187,5 +187,5 @@
+
+     default:
+-      return rpcError(id, METHOD_NOT_FOUND, `unknown method "${method}"`);
++      return rpcError(id, INVALID_REQUEST, `unknown method "${method}"`);
+   }
+ }

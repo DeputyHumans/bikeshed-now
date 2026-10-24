@@ -31,6 +31,8 @@ type YNode = Y.XmlElement | Y.XmlText;
 
 export interface Sync {
   destroy(): void;
+  /** Publish queued local mutations before a remote update changes their base. */
+  flush(): void;
   /** The document as the CRDT currently holds it. */
   html(): string;
 }
@@ -40,9 +42,11 @@ function isDecoration(el: Element): boolean {
   return isOwnMarker(el) || isHighlightWrapper(el);
 }
 
-const INJECTED_ATTRS = new Set(["contenteditable", EMPTY_ATTR]);
+// Only the host's attributes are editor overrides, and the host is outside
+// the fragment. A descendant's contenteditable belongs to the author.
+const INJECTED_ATTRS = new Set([EMPTY_ATTR]);
 
-export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
+export function bindSync(fragment: Y.XmlFragment, host: Element, onRemote?: () => void): Sync {
   const doc = host.ownerDocument;
   const win = doc.defaultView;
   const ORIGIN = Symbol("local");
@@ -50,6 +54,8 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
   const domOf = new Map<YNode, Node>();
   const yOf = new WeakMap<Node, YNode>();
   let applyingRemote = false;
+  type InputIntent = { node: Text; before: string; start: number; end: number; event: InputEvent };
+  let inputIntent: InputIntent | null = null;
 
   const link = (y: YNode, node: Node) => {
     domOf.set(y, node);
@@ -93,7 +99,42 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
     }
   }
 
+  type FocusPoint = { node: Node; offset: number };
+  const focusPath = (node: Node | null, offset: number): FocusPoint[] => {
+    if (!node || !host.contains(node)) return [];
+    const path: FocusPoint[] = [{ node, offset }];
+    while (node !== host && node.parentNode) {
+      const parent: ParentNode = node.parentNode;
+      path.push({ node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, node) });
+      node = parent;
+    }
+    return path;
+  };
+  const shift = (offset: number, delta: { retain?: number; delete?: number; insert?: unknown }[]): number => {
+    let at = 0;
+    let next = offset;
+    for (const part of delta) {
+      if (part.retain) at += part.retain;
+      if (part.insert != null && at < offset) next += typeof part.insert === "string" || Array.isArray(part.insert) ? part.insert.length : 1;
+      if (part.delete) { next -= Math.min(part.delete, Math.max(0, offset - at)); at += part.delete; }
+    }
+    return next;
+  };
+
   function applyRemote(events: Y.YEvent<any>[]): void {
+    const selection = doc.getSelection();
+    const anchor = focusPath(selection?.anchorNode ?? null, selection?.anchorOffset ?? 0);
+    const focus = focusPath(selection?.focusNode ?? null, selection?.focusOffset ?? 0);
+    // Text.data and replaceChildren both reset native Range offsets, even when
+    // the original nodes survive. Move the captured offsets through the remote
+    // delta, preserving direction and keeping a writer before a concurrent
+    // insertion exactly at their caret so their word remains contiguous.
+    for (const event of events) {
+      const node = event.target === fragment ? host : domOf.get(event.target as YNode);
+      for (const point of [...anchor, ...focus]) {
+        if (point.node === node) point.offset = shift(point.offset, event.changes.delta);
+      }
+    }
     applyingRemote = true;
     try {
       for (const event of events) {
@@ -119,6 +160,11 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
       }
     } finally {
       applyingRemote = false;
+      const surviving = (path: FocusPoint[]) => path.find((p) => host.contains(p.node));
+      const a = surviving(anchor);
+      const f = surviving(focus);
+      const limit = (p: FocusPoint) => Math.min(p.offset, p.node.nodeType === Node.TEXT_NODE ? (p.node as Text).length : p.node.childNodes.length);
+      if (selection && a && f) selection.setBaseAndExtent(a.node, limit(a), f.node, limit(f));
     }
   }
 
@@ -186,6 +232,8 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
 
   function onMutations(records: MutationRecord[]): void {
     if (applyingRemote) return;
+    let intent = inputIntent;
+    inputIntent = null;
     fragment.doc?.transact(() => {
       for (const record of records) {
         if (record.type === "characterData") {
@@ -193,19 +241,37 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
           if (!y) continue;
           const now = (record.target as Text).data;
           const was = y.toString();
-          if (now === was) continue;
-          // Diff by common prefix and suffix. Typing changes one place, so this
-          // is both cheap and, more importantly, minimal — replacing the whole
-          // string would make every keystroke conflict with a peer's.
-          let start = 0;
-          while (start < was.length && start < now.length && was[start] === now[start]) start += 1;
-          let end = 0;
-          while (
-            end < was.length - start &&
-            end < now.length - start &&
-            was[was.length - 1 - end] === now[now.length - 1 - end]
-          ) {
-            end += 1;
+          // Equal adjacent characters do not have equal CRDT identities. Use
+          // the browser's pre-edit range when its unchanged surroundings prove
+          // the splice; a longest-prefix diff alone can swap a typed letter
+          // with its neighbour and lose it to a concurrent deletion.
+          let start = intent?.start ?? 0;
+          let until = intent?.end ?? 0;
+          const inputType = intent?.event.inputType ?? "";
+          if (intent && start === until && inputType.startsWith("delete")) {
+            const removed = Math.max(0, was.length - now.length);
+            if (inputType.endsWith("Backward")) start -= removed;
+            else if (inputType.endsWith("Forward")) until += removed;
+          }
+          let end = was.length - until;
+          const intended = intent?.node === record.target && intent.before === was && !intent.event.defaultPrevented &&
+            start >= 0 && until <= was.length && start <= until && now.length >= start + end &&
+            now.slice(0, start) === was.slice(0, start) && now.slice(now.length - end) === was.slice(until);
+          if (intent?.node === record.target) intent = null;
+          if (now === was && !intended) continue;
+          if (!intended) {
+            // Programmatic changes and structural edits have no single text
+            // range. Keep the minimal diff as their conservative fallback.
+            start = 0;
+            while (start < was.length && start < now.length && was[start] === now[start]) start += 1;
+            end = 0;
+            while (
+              end < was.length - start &&
+              end < now.length - start &&
+              was[was.length - 1 - end] === now[now.length - 1 - end]
+            ) {
+              end += 1;
+            }
           }
           const removed = was.length - start - end;
           if (removed > 0) y.delete(start, removed);
@@ -296,20 +362,48 @@ export function bindSync(fragment: Y.XmlFragment, host: Element): Sync {
     attributes: true,
   });
 
+  const flushLocal = () => {
+    const records = observer?.takeRecords() ?? [];
+    if (records.length) onMutations(records);
+  };
+  const beforeInput = (event: Event) => {
+    flushLocal();
+    inputIntent = null;
+    const input = event as InputEvent;
+    const ranges = input.getTargetRanges?.() ?? [];
+    const selection = doc.getSelection();
+    const range = ranges.length === 1 ? ranges[0] : ranges.length === 0 && selection?.rangeCount === 1 ? selection.getRangeAt(0) : null;
+    if (!range || range.startContainer !== range.endContainer || range.startContainer.nodeType !== Node.TEXT_NODE || !host.contains(range.startContainer)) return;
+    const node = range.startContainer as Text;
+    if (!(yOf.get(node) instanceof Y.XmlText)) return;
+    inputIntent = { node, before: node.data, start: range.startOffset, end: range.endOffset, event: input };
+  };
+  const afterInput = () => {
+    flushLocal();
+    inputIntent = null;
+  };
+  host.addEventListener("beforeinput", beforeInput);
+  host.addEventListener("input", afterInput);
+
   const onDeep = (events: Y.YEvent<any>[], tx: Y.Transaction) => {
     if (tx.origin === ORIGIN) return;
     // Anything the observer has queued but not delivered describes the DOM as
     // it was BEFORE this remote patch, so acting on it afterwards would replay
     // stale structure into the shared document.
     observer?.takeRecords();
+    inputIntent = null;
     applyRemote(events);
     observer?.takeRecords();
+    if (events.length) onRemote?.();
   };
   fragment.observeDeep(onDeep);
 
   return {
+    flush: flushLocal,
     destroy() {
       observer?.disconnect();
+      host.removeEventListener("beforeinput", beforeInput);
+      host.removeEventListener("input", afterInput);
       fragment.unobserveDeep(onDeep);
       domOf.clear();
     },

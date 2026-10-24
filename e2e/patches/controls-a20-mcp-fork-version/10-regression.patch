@@ -1,0 +1,9 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -241,5 +241,5 @@
+   batch.create(db.collection(FORKS).doc(docId), {
+     parentId: input.sourceId,
+-    parentVersion: versionId,
++    parentVersion: str(src.currentVersion, ""),
+     parentContentHash: str(v.contentHash, ""),
+     forkedAt: now(),

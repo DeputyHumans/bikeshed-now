@@ -1,0 +1,16 @@
+{
+  "oracle": "C13 concurrent callers share one remaining suggestion slot",
+  "what": "the transactional pending limit is ignored, so every gated request is admitted",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C13 regression: gated concurrent requests cannot exceed the pending limit [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--patches",
+    "amplify-c13-feedback"
+  ],
+  "expect": {
+    "message": "C13 pending \u2264 20"
+  }
+}
