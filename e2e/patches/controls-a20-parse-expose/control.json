@@ -1,6 +1,6 @@
 {
   "oracle": "MCP malformed JSON transport headers",
-  "what": "Hosting omits Access-Control-Expose-Headers for pre-handler MCP refusals",
+  "what": "The runtime hook and Hosting omit Access-Control-Expose-Headers for pre-handler MCP refusals",
   "target": {
     "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
     "case": "A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation",

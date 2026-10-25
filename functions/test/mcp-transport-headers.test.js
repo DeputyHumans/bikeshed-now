@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Hosting protects MCP responses rejected by the runtime before the handler runs (SPEC §23).
+// Retain MCP Hosting headers as a fallback alongside runtime transport protection (SPEC §23).
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,10 +12,10 @@ function transportHeaders() {
   return Object.fromEntries(rules.flatMap((rule) => rule.headers).map((header) => [header.key.toLowerCase(), header.value]));
 }
 
-test('Hosting makes pre-handler MCP failures private and non-cacheable', () => {
+test('Hosting configuration retains the MCP no-store fallback', () => {
   assert.equal(transportHeaders()['cache-control'], 'private, no-store', 'runtime failures need /mcp no-store independently of the function handler');
 });
 
-test('Hosting exposes the MCP authentication challenge even on pre-handler failures', () => {
+test('Hosting configuration retains the MCP challenge-exposure fallback', () => {
   assert.equal(transportHeaders()['access-control-expose-headers'], 'WWW-Authenticate', 'runtime failures need /mcp exposed authentication headers independently of the function handler');
 });

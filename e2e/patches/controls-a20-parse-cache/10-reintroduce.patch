@@ -11,3 +11,12 @@
              "key": "Access-Control-Expose-Headers",
              "value": "WWW-Authenticate"
            }
+--- a/functions/src/lib/mcp-transport.ts
++++ b/functions/src/lib/mcp-transport.ts
+@@ -11,6 +11,5 @@
+   const { request, response } = message as { request: IncomingMessage; response: ServerResponse };
+   const path = request.url?.split("?", 1)[0];
+   if (process.env.FUNCTION_TARGET !== "mcp" && path !== "/mcp" && path !== "/mcp/") return;
+-  response.setHeader("Cache-Control", "private, no-store");
+   response.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
+ });

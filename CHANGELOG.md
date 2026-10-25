@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Set MCP transport headers before the managed runtime parses JSON. Real Hosting parser failures bypassed both the handler and configured Hosting headers; malformed requests now retain the non-cacheable response and exposed authentication challenge.
+
 - Support explicitly approved controlled-race release evidence, pinned to reviewed deployed source archives and an actual guard-removal/restoration test, while retaining natural inconclusive outcomes and requiring all local campaign obligations. Preserve verified local-limit and composite qualifications in complete-file partitions.
 
 - Judge cloud notification safety before timing eligibility, so serial delivery cannot hide duplicate notices or cooldown grants behind an inconclusive race classification.

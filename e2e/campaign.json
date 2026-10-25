@@ -15246,6 +15246,39 @@
       "remaining": [
         "Final frozen verify, functional watch case and complete control campaign; authoring evidence does not close this discovery."
       ]
+    },
+    {
+      "id": "mcp-real-runtime-parse-headers",
+      "state": "in-progress",
+      "claim": "Real Hosting parser refusals for malformed MCP application/json bypass both the handler and configured Hosting headers. Install transport headers at Node HTTP request start before the runtime listener, then verify the actual preview refusal. Preserve the original failed cloud observation.",
+      "relatedOriginalItems": [
+        "X-a20-mcp-1"
+      ],
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation"
+        }
+      ],
+      "controls": [
+        {
+          "set": "controls-a20-parse-cache",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+            "case": "A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation",
+            "suite": "functional"
+          },
+          "intendedFailure": "HTTP 400 with /mcp protected transport headers"
+        },
+        {
+          "set": "controls-a20-parse-expose",
+          "target": {
+            "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+            "case": "A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation",
+            "suite": "functional"
+          },
+          "intendedFailure": "HTTP 400 with /mcp protected transport headers"
+        }
+      ]
     }
   ],
   "acceptance": {

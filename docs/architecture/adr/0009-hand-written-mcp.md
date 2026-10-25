@@ -44,8 +44,9 @@ prompts (nothing would use them).
   conformant MCP client still talks to it.
 - The Functions runtime parses JSON before invoking the HTTP handler. A malformed
   `application/json` request may be refused there as HTTP 400 rather than the
-  handler's JSON-RPC `-32700`. The Hosting route pins the no-store and exposed
-  authentication headers for that boundary; clients treat its diagnostic as a
+  handler's JSON-RPC `-32700`. A Node HTTP request-start subscription sets the
+  no-store and exposed authentication headers before the runtime listener;
+  Hosting headers alone do not protect real-cloud parser failures. Clients treat its diagnostic as a
   transport error (SPEC §23). Hand-writing the MCP handler does not replace the
   runtime's parser.
 - This is a **documented deviation from the approved plan**, recorded here

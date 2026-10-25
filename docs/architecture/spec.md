@@ -1174,7 +1174,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell,transaction-receipts}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,transaction-receipts,mcp-transport}.ts
   lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/markdown/{render,serialize,slug,theme}.ts
@@ -3222,8 +3222,10 @@ A refused `/mcp` request answers `401` with
 response sets `Access-Control-Expose-Headers: WWW-Authenticate` and
 `private, no-store`.
 
-The Hosting `/mcp` route also pins these two headers, including refusals from
-the runtime before the handler runs. The runtime parses `application/json`
+The Node HTTP request-start hook pins these two headers before the runtime's
+listener parses the body, including on the function's direct endpoint. The
+Hosting `/mcp` route retains matching headers as a fallback; Hosting alone does
+not attach them to real-cloud parser failures. The runtime parses `application/json`
 before invoking the function: malformed JSON can therefore produce an HTTP
 `400` with a runtime diagnostic rather than a JSON-RPC envelope, without
 executing a tool. Clients must accept this as a transport error. When a body

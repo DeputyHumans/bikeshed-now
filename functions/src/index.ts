@@ -14,6 +14,7 @@
  * bypasses rules, and are therefore the only sanctioned write path.
  */
 
+import "./lib/mcp-transport";
 import { healthHandler } from "./lib/health";
 import healthConfig from "./health.json";
 import { setGlobalOptions } from "firebase-functions/v2/options";
