@@ -140,7 +140,8 @@ function verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeC
     const done = JSON.parse(read(root, ref.invocation));
     need(ref.invocation.artifact === `${dir}/invocation.json` && ref.measurements.artifact === `${dir}/c13-feedback.jsonl` && ref.stack.artifact === `e2e/.out/${report.runId}/stack.json`, "run artifact belongs to another invocation");
     need(!dir.includes("/scratch/") && inv?.suite === "concurrency" && !inv.grep && inv.trials === null && JSON.stringify(inv.n) === JSON.stringify([ref.n]), "authoring, scratch, filtered or wrong-axis run");
-    need(ref.axis === "natural" ? inv.spec?.length === 0 : inv.plan?.length === 1 && JSON.stringify(inv.plan[0].files) === JSON.stringify([C14_FILE]), "wrong natural/forced selection");
+    const wholeFile = inv.spec?.length === 1 && inv.spec[0] === C14_FILE && inv.plan?.length === 1 && JSON.stringify(inv.plan[0].files) === JSON.stringify([C14_FILE]);
+    need(ref.axis === "natural" ? inv.spec?.length === 0 || wholeFile : inv.plan?.length === 1 && JSON.stringify(inv.plan[0].files) === JSON.stringify([C14_FILE]), "wrong natural/forced selection");
     stackMatches(campaign, stack);
     assert.deepEqual((stack.patches ?? []).map(p => p.set ?? p), ref.axis === "natural" ? [] : ["amplify-c08-mint-races", "amplify-c13-feedback"], "C14 composite: wrong positive patch configuration");
     for (const cap of ["local", ...(ref.axis === "forced" ? ["gates", "patch:amplify-c13-feedback"] : [])]) need(inv.capabilities?.includes(cap), `missing ${cap} capability`);

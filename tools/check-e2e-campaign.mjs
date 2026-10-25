@@ -6,8 +6,9 @@ import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseExpandedCase } from "../e2e/lib/controls.mjs";
 import { commandCounts } from "./e2e-campaign-evidence.mjs";
-import { verifyLocalLimit } from "./e2e-local-limit.mjs";
-import { verifyComposite, COMPOSITE_ITEM } from "./e2e-c14-composite.mjs";
+import { verifyLocalLimit, LIMIT_ID } from "./e2e-local-limit.mjs";
+import { verifyComposite, COMPOSITE_ITEM, COMPOSITE_ID } from "./e2e-c14-composite.mjs";
+import { verifyCloudQualification } from "./e2e-cloud-qualification.mjs";
 import { verifyCompletedRun } from "./e2e-run-completion.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 import { verifyPartitions, partitionDigest, concurrencyInventory } from "./e2e-partitions.mjs";
@@ -260,6 +261,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           need(JSON.stringify(parts.map(p => p.id).sort()) === JSON.stringify([...r.proofs].sort()), `matrix:${r.id}: partition proof set differs`);
           partitioned = parts.some(p => p.id === id && p.ref.artifact === proofs.get(id).artifact);
           need(partitioned, `matrix:${r.id}: proof is not in its partition manifest`);
+          const member = parts.find(p => p.id === id);
+          for (const field of ["outcome", "localLimit", "composite"]) need(JSON.stringify(proofs.get(id)?.[field]) === JSON.stringify(member?.proof[field]), `matrix:${r.id}: partition ${field} differs from its verified qualification`);
         } catch (error) { errors.push(`matrix:${r.id}: ${error.message}`); }
       }
       need(report.invocation?.suite === r.suite, `matrix:${r.id}: wrong suite`);
@@ -292,15 +295,25 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   }
   const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`));
   const localComplete = !validateOnly && errors.length === 0 && localPending.length === 0;
-  return { valid: errors.length === 0, complete: localComplete && pending.length === 0 && unresolvedDeploymentWitnesses.length === 0 && unresolvedNaturalWitnesses.length === 0, localComplete, unresolvedDeploymentWitnesses, unresolvedNaturalWitnesses, localAdjudications: [...localAdjudications], localPending, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
+  const complete = localComplete && pending.length === 0 && unresolvedDeploymentWitnesses.length === 0 && unresolvedNaturalWitnesses.length === 0;
+  let releaseComplete = complete, releaseQualification = null;
+  if (!validateOnly && acceptance.raceEvidencePolicy) {
+    try {
+      const policy = acceptance.raceEvidencePolicy;
+      if (policy.mode !== "controlled-with-red-green" || !text(policy.reason)) throw new Error("explicit controlled-race policy and reason required");
+      releaseQualification = verifyCloudQualification(policy.cloud, { root, version: acceptance.version, reviewedOverlays: policy.reviewedOverlays });
+      releaseComplete = localComplete && unresolvedNaturalWitnesses.every(w => w.id === COMPOSITE_ID && w.item === COMPOSITE_ITEM) && unresolvedDeploymentWitnesses.every(w => w.id === LIMIT_ID);
+    } catch (error) { errors.push(`release qualification: ${error.message}`); releaseComplete = false; }
+  }
+  return { valid: errors.length === 0, complete, releaseComplete, releaseQualification, localComplete, unresolvedDeploymentWitnesses, unresolvedNaturalWitnesses, localAdjudications: [...localAdjudications], localPending, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const allowed = new Set(["--validate", "--json", "--local-only"]);
+  const allowed = new Set(["--validate", "--json", "--local-only", "--release"]);
   const files = args.filter((a) => !a.startsWith("--"));
   if (args.some((a) => a.startsWith("--") && !allowed.has(a)) || files.length > 1) {
-    console.error("usage: node tools/check-e2e-campaign.mjs [--validate] [--local-only] [--json] [ledger.json]");
+    console.error("usage: node tools/check-e2e-campaign.mjs [--validate] [--local-only | --release] [--json] [ledger.json]");
     process.exitCode = 2;
   } else {
     try {
@@ -310,12 +323,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         console.log(`campaign: ${result.valid ? "valid ledger" : "invalid ledger"}; ${result.complete ? "COMPLETE" : "NOT COMPLETE"}`);
         console.log(JSON.stringify(result.counts));
         console.log(`${result.errors.length} evidence/schema errors; ${result.pending.length} unresolved obligations`);
+        if (args.includes("--release")) console.log(`Release qualification: ${result.releaseComplete ? "COMPLETE" : "NOT COMPLETE"}; natural outcomes remain unchanged.`);
         if (result.unresolvedDeploymentWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; ${result.unresolvedDeploymentWitnesses.length} deployment-bound concurrency witness(es) remain unresolved. No case outcome was changed.`);
         if (result.unresolvedNaturalWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; C14 composite safety leaves the original natural publication-first observation unresolved. Raw INCONCLUSIVE outcomes and the original item remain unchanged.`);
         for (const error of result.errors) console.error(`- ${error}`);
         if (args.includes("--validate")) console.log("Structural validation only; this does not establish completion.");
       }
-      process.exitCode = result.valid ? (args.includes("--validate") || (args.includes("--local-only") ? result.localComplete : result.complete) ? 0 : 1) : 2;
+      process.exitCode = result.valid ? (args.includes("--validate") || (args.includes("--release") ? result.releaseComplete : args.includes("--local-only") ? result.localComplete : result.complete) ? 0 : 1) : 2;
     } catch (e) { console.error(`campaign: ${e.message}`); process.exitCode = 2; }
   }
 }

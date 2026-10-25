@@ -6,7 +6,9 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve, relative, isAbsolute } from "node:path";
-import { verifyCompletedRun } from "./e2e-run-completion.mjs";
+import { verifyFinishedRun } from "./e2e-run-completion.mjs";
+import { verifyLocalLimit } from "./e2e-local-limit.mjs";
+import { verifyComposite } from "./e2e-c14-composite.mjs";
 
 const need = (ok, why) => { if (!ok) throw new Error(`partitions: ${why}`); };
 export const partitionDigest = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -56,7 +58,13 @@ export function verifyPartitions(campaign, cell, manifest, { root, inventory = c
     const path = partitionPath(root, ref.artifact), bytes = readFileSync(path);
     need(partitionDigest(bytes) === ref.sha256, "report digest differs");
     const report = JSON.parse(bytes), inv = report.invocation;
-    verifyCompletedRun(report, path);
+    const q = ref.qualification;
+    need(!q || ["LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(q.outcome), "unsupported partition qualification");
+    const proof = { id: `run-${report.runId}-${inv.id}`, kind: "e2e-run", artifact: ref.artifact,
+      revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: campaign.acceptance.fingerprint,
+      runId: report.runId, invocation: inv.id, outcome: q?.outcome ?? "PASS",
+      ...(q?.localLimit ? { localLimit: q.localLimit } : {}), ...(q?.composite ? { composite: q.composite } : {}) };
+    verifyFinishedRun(report, path, { expectedExit: q ? 3 : 0 });
     need(report.malformed?.length === 0 && inv.suite === cell.suite && !inv.grep && inv.trials === null, "filtered, malformed or authoring partition");
     need(inv.n?.length === 1 && inv.n[0] === cell.n, "participant count differs");
     const planned = inv.plan.flatMap(p => p.files);
@@ -64,14 +72,18 @@ export function verifyPartitions(campaign, cell, manifest, { root, inventory = c
     const expected = inventory.find(x => x.file === planned[0]);
     need(expected && !seen.has(expected.file), "unknown or duplicate file"); seen.add(expected.file);
     assert.deepEqual(report.cases.map(key).sort(), expected.cases.map(key).sort(), "partitions: case/N/trial census differs");
-    need(report.cases.every(c => pass(c) || skip(c)) && report.cases.some(pass), "partition contains failed or unjudged cases");
     const stack = JSON.parse(readFileSync(partitionPath(root, `e2e/.out/${report.runId}/stack.json`)));
     need(stack.fingerprint?.baseSha === campaign.acceptance.revision && stack.fingerprint.sha256 === campaign.acceptance.fingerprint && stack.expectVersion === campaign.acceptance.version, "partition source differs");
     need((cell.capabilities ?? []).every(cap => inv.capabilities?.includes(cap)), "partition capabilities differ");
     assert.deepEqual((stack.patches ?? []).map(p => p.set ?? p).sort(), [...(cell.options?.patches ?? [])].sort(), "partitions: capability patches differ");
-    const id = `run-${report.runId}-${inv.id}`;
+    const observations = [];
+    if (proof.outcome === "COMPOSITE-SAFETY") observations.push(...verifyComposite(campaign, proof, { report, stack }, { root }).observations);
+    if (proof.outcome === "LOCAL-LIMIT" || proof.localLimit) observations.push(...verifyLocalLimit(campaign, proof, { report, stack }, { root }).observations);
+    const observed = c => `${c.id}::${c.n ?? "-"}::${c.trial ?? 1}`;
+    need(report.cases.every(c => pass(c) || skip(c) || observations.includes(observed(c))) && report.cases.some(pass), "partition contains failed or unjudged cases");
+    const id = proof.id;
     need(!runs.has(id), "duplicate invocation"); runs.add(id);
-    result.push({ id, ref, report, stack });
+    result.push({ id, ref, report, stack, proof });
   }
   return result;
 }

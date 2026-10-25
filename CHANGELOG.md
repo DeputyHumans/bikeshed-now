@@ -16,6 +16,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Support explicitly approved controlled-race release evidence, pinned to reviewed deployed source archives and an actual guard-removal/restoration test, while retaining natural inconclusive outcomes and requiring all local campaign obligations. Preserve verified local-limit and composite qualifications in complete-file partitions.
+
+- Judge cloud notification safety before timing eligibility, so serial delivery cannot hide duplicate notices or cooldown grants behind an inconclusive race classification.
+
 - Check real-cloud notification evidence against automatic trigger identities, deployed function hashes, overlapping cooldown calls on the same instance, committed receipts and captured recipient/kind counts.
 
 - Verify concurrency partitions against executable case, participant and trial inventories, retaining each original completed invocation rather than manufacturing a full-suite result. Reject incomplete partitions and stale source or capability evidence.

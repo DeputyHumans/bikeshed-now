@@ -14,6 +14,7 @@ import { checkCampaign } from "./check-e2e-campaign.mjs";
 import { captureLocalLimit, importRun } from "./e2e-campaign-evidence.mjs";
 import { C15_WORK, C15_JUDGE, localLimitReference } from "./e2e-local-limit.mjs";
 import { PIN } from "./probe-e2e-trigger-queue.mjs";
+import { cloudQualificationFixture } from "./e2e-cloud-qualification-fixture.mjs";
 
 const imported = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url), "utf8"));
 const sha = "a".repeat(40);
@@ -71,6 +72,20 @@ function fixture(t) {
   }
   return { c, root, positive, negative, report, rewrite(value) { write(root, positive.artifact, value); } };
 }
+
+test("controlled release evidence cannot waive open work or replace valid local evidence", t => {
+  const { c, root } = fixture(t), cloud = cloudQualificationFixture(root, version);
+  c.acceptance.raceEvidencePolicy = { mode: "controlled-with-red-green", reason: "Explicit synthetic approval for controlled races", cloud: cloud.ref, reviewedOverlays: cloud.reviewedOverlays };
+  const green = checkCampaign(c, { root });
+  assert.deepEqual(green.errors, []); assert.equal(green.releaseComplete, true);
+  c.items.find(i => i.id === "S3").state = "open";
+  assert.equal(checkCampaign(c, { root }).releaseComplete, false);
+  c.items.find(i => i.id === "S3").state = "resolved";
+  c.acceptance.raceEvidencePolicy.cloud.sha256 = "b".repeat(64);
+  const stale = checkCampaign(c, { root });
+  assert.equal(stale.releaseComplete, false); assert.equal(stale.valid, false);
+  assert.match(stale.errors.join("\n"), /artifact digest differs/);
+});
 
 test("the real ledger validates but the completion gate refuses open coverage, product reports and matrix work", () => {
   const c = structuredClone(imported);
@@ -379,6 +394,11 @@ test("a pinned local limit preserves raw INC cases and full completion remains f
   assert.equal(run.localLimit.observations.length, 3);
   assert.equal(imported.importedCases, 3, "only ordinary work PASS cases become case proofs");
   assert.equal(imported.unfinished.length, 3, "the original incomplete cases remain reported");
+  const cloud = cloudQualificationFixture(f.root, version);
+  f.c.acceptance.raceEvidencePolicy = { mode: "controlled-with-red-green", reason: "Explicit synthetic controlled-race approval", cloud: cloud.ref, reviewedOverlays: cloud.reviewedOverlays };
+  const qualified = checkCampaign(f.c, { root: f.root });
+  assert.equal(qualified.releaseComplete, true); assert.equal(qualified.complete, false);
+  assert.deepEqual(qualified.unresolvedDeploymentWitnesses, result.unresolvedDeploymentWitnesses);
 });
 
 test("local limits reject arbitrary INC, unrelated cases and failed ordinary assertions", t => {

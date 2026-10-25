@@ -32,6 +32,24 @@ function peak(rows) {
   return Math.max(0, ...rows.map(r => rows.filter(s => s.instance === r.instance && s.start.at <= r.start.at && r.start.at < s.end.at).length));
 }
 
+/** A controlled wait is outside the measured call; every release is tied to its real invocation. */
+function verifyControlledTrial(trial, calls) {
+  const { controlled, logs, deployment, docId, uid, n } = trial;
+  const rows = logs.filter(r => r.jsonPayload?.marker === "e2e-cooldown-gate");
+  if (!controlled) { need(rows.length === 0, "controlled invocation lacks gate evidence"); return; }
+  const gate = controlled.gate;
+  need(controlled.path === `e2eCooldownGates/${docId}` && gate?.mode === "controlled" && gate.uid === uid && gate.expected === 2 * n, "controlled gate identity differs");
+  need(Number.isFinite(gate.releaseAt) && Number.isFinite(gate.deadline) && gate.releaseAt < gate.deadline, "controlled release is absent or expired");
+  need(calls.length === 2 * n && rows.length === calls.length && Object.keys(gate.arrivals ?? {}).length === calls.length, "controlled arrival/release census differs");
+  for (const c of calls) {
+    const arrival = gate.arrivals[c.start.execution], matches = rows.filter(r => r.jsonPayload.execution === c.start.execution);
+    need(arrival?.uid === uid && arrival.kind === c.start.kind && Number.isFinite(arrival.at) && arrival.at < gate.releaseAt && matches.length === 1, "controlled arrival does not own one release");
+    const row = matches[0], p = row.jsonPayload, labels = row.resource?.labels;
+    need(row.resource?.type === "cloud_run_revision" && labels?.project_id === deployment.projectId && labels.service_name === deployment.service && labels.revision_name === deployment.revision && row.labels?.["firebase-functions-hash"] === deployment.functionHash && row.labels.instanceId === c.instance && row.labels.execution_id === c.invocation, "controlled release belongs to another runtime");
+    need(p.phase === "released" && p.docId === docId && p.uid === uid && p.kind === c.start.kind && p.arrivedAt === arrival.at && p.releaseAt === gate.releaseAt && Number.isFinite(p.at) && gate.releaseAt <= p.at && p.at <= c.start.at, "controlled wait overlaps the measured call or its identity differs");
+  }
+}
+
 export function judgeCloudCooldownTrial(trial) {
   const { n, docId, uid, email, writes, logs, messages, deployment, recipient } = trial;
   need(Number.isInteger(n) && n >= 2 && /^e2e-/.test(docId) && /^e2e-/.test(uid) && email === `${uid}@e2e.invalid`, "fixture boundary or participant count differs");
@@ -53,14 +71,12 @@ export function judgeCloudCooldownTrial(trial) {
     const c = matches[0], write = writes.find(w => `documents/${w.path}` === t.start.subject);
     need(c.start.docId === docId && c.start.uid === uid && c.start.kind === write.kind && typeof c.result.granted === "boolean" && t.start.at <= c.start.at && c.end.at <= t.end.at, "cooldown belongs to another recipient, kind or trigger interval");
   }
-  need(peak(triggers) >= 2, "automatic triggers did not overlap");
   need(recipient?.email === email && recipient.emailNotifications !== false, "recipient was not eligible");
   need(Array.isArray(messages) && messages.length === 2 && new Set(messages.map(m => m.id)).size === 2, "expected exactly one captured message per kind");
   const peaks = {};
   for (const kind of ["comment", "suggestion"]) {
     const same = calls.filter(c => c.start.kind === kind);
     peaks[kind] = peak(same);
-    need(peaks[kind] >= 2, `${kind} cooldown calls did not overlap on one instance`);
     need(same.filter(c => c.result.granted).length === 1, `${kind} cooldown granted more or less than once`);
     const key = kind === "comment" ? docId : `${docId}:suggestions`;
     need(Number.isFinite(recipient.emailCooldowns?.[key]) && text(recipient.emailCooldownClaims?.[key]), "committed cooldown receipt missing");
@@ -68,5 +84,26 @@ export function judgeCloudCooldownTrial(trial) {
     const to = selected.length === 1 && (typeof selected[0].to === "string" ? [selected[0].to] : selected[0].to);
     need(selected.length === 1 && selected[0].subject.endsWith(`“${docId}”`) && JSON.stringify(to) === JSON.stringify([email]), "notice recipient, kind or document differs");
   }
-  return { triggers: triggers.length, calls: calls.length, peakTriggers: peak(triggers), peakCalls: peaks, messages: messages.length };
+  verifyControlledTrial(trial, calls);
+  // Check safety before timing: a missed race must not hide a real failure.
+  need(peak(triggers) >= 2, "automatic triggers did not overlap");
+  for (const kind of ["comment", "suggestion"]) need(peaks[kind] >= 2, `${kind} cooldown calls did not overlap on one instance`);
+  return { triggers: triggers.length, calls: calls.length, peakTriggers: peak(triggers), peakCalls: peaks, messages: messages.length, ...(trial.controlled ? { controlled: true } : {}) };
+}
+
+
+/** The known guard-removal control must fail for duplicate notices, with actual post-gate overlap. */
+export function judgeCloudCooldownMutation(trial) {
+  let failure;
+  try { judgeCloudCooldownTrial(trial); } catch (error) { failure = error.message; }
+  need(failure === "cloud cooldown: expected exactly one captured message per kind", "mutation did not expose duplicate notices at the intended assertion");
+  const calls = intervals(trial.logs, "e2e-cooldown-call", ["start", "result", "end"], trial.deployment);
+  need(trial.controlled && calls.length === 2 * trial.n && calls.every(c => c.result.granted) && trial.messages.length === 2 * trial.n, "mutation did not grant and send every contending call");
+  verifyControlledTrial(trial, calls);
+  for (const kind of ["comment", "suggestion"]) {
+    need(peak(calls.filter(c => c.start.kind === kind)) >= 2, "mutation cooldown calls did not overlap");
+    const notices = trial.messages.filter(m => m.subject?.includes(kind === "comment" ? " commented on “" : " suggested an edit to “"));
+    need(notices.length === trial.n && notices.every(m => m.subject.endsWith(`“${trial.docId}”`) && JSON.stringify(typeof m.to === "string" ? [m.to] : m.to) === JSON.stringify([trial.email])), "mutation notice identity or kind differs");
+  }
+  return { calls: calls.length, messages: trial.messages.length, controlled: true };
 }

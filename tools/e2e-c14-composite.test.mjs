@@ -9,10 +9,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { PLAN_TRIALS } from "../e2e/lib/budget.mjs";
 import { captureComposite, compositeReference, verifyCompositeArtifact, verifyComposite, COMPOSITE_ITEM, C14_FILE, C14_CASES, C14_CONTROLS } from "./e2e-c14-composite.mjs";
-import { captureCompositeEvidence, importRun } from "./e2e-campaign-evidence.mjs";
+import { captureCompositeEvidence, importRun, importPartitions } from "./e2e-campaign-evidence.mjs";
+import { verifyPartitions, partitionCellDigest, partitionDigest } from "./e2e-partitions.mjs";
 import { checkCampaign } from "./check-e2e-campaign.mjs";
 import { C15_WORK, C15_JUDGE } from "./e2e-local-limit.mjs";
 import { PIN } from "./probe-e2e-trigger-queue.mjs";
+import { cloudQualificationFixture } from "./e2e-cloud-qualification-fixture.mjs";
 
 const source = { revision: "a".repeat(40), version: "0.1.0", fingerprint: "f".repeat(64) };
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -182,8 +184,16 @@ test("local acceptance can be complete while full completion and the original na
   assert.deepEqual(result.errors, []); assert.equal(result.localComplete, true); assert.equal(result.complete, false);
   assert.deepEqual(result.pending, [`${COMPOSITE_ITEM}: in-progress`]); assert.deepEqual(result.localPending, []);
   assert.deepEqual(result.localAdjudications, [COMPOSITE_ITEM]); assert.equal(result.unresolvedNaturalWitnesses.length, 1);
+  const cloud = cloudQualificationFixture(f.root, source.version);
+  f.campaign.acceptance.raceEvidencePolicy = { mode: "controlled-with-red-green", reason: "Explicit synthetic controlled-race approval", cloud: cloud.ref, reviewedOverlays: cloud.reviewedOverlays };
+  const qualified = checkCampaign(f.campaign, { root: f.root });
+  assert.equal(qualified.releaseComplete, true); assert.equal(qualified.complete, false);
+  assert.deepEqual(qualified.pending, result.pending);
+  assert.deepEqual(qualified.unresolvedNaturalWitnesses, result.unresolvedNaturalWitnesses);
   const proof = f.campaign.proofs.find(p => p.outcome === "COMPOSITE-SAFETY"); delete proof.composite;
-  assert.equal(checkCampaign(f.campaign, { root: f.root }).localComplete, false, "an outcome label cannot replace the bound assessment");
+  const missing = checkCampaign(f.campaign, { root: f.root });
+  assert.equal(missing.localComplete, false, "an outcome label cannot replace the bound assessment");
+  assert.equal(missing.releaseComplete, false, "cloud evidence cannot replace the C14 assessment");
 });
 
 test("one named assessment cannot exempt another original open obligation", t => {
@@ -268,4 +278,37 @@ test("standalone composite verification finalizes its runtime artifact snapshot"
     writeFileSync(runtimePath, JSON.stringify(runtime));
   };
   assert.throws(() => verifyCompositeArtifact(f.campaign, artifact, { root: f.root }), /evidence changed before final acceptance/, "standalone verification cannot omit the final byte check");
+});
+
+
+test("complete-file partitions retain verified composite qualifications and raw inconclusive cases", t => {
+  const f = fixture(t), cell = f.campaign.acceptance.requirements.find(r => r.id === "concurrency-natural-n2");
+  for (const run of f.runs.filter(r => r.report.runId.startsWith("natural-"))) {
+    run.report.invocation.spec = run.done.spec = [C14_FILE];
+    run.report.invocation.capabilities = run.done.capabilities = [...new Set([...run.done.capabilities, ...(cell.capabilities ?? [])])];
+    f.saveRun(run);
+  }
+  const artifact = f.capture(), compositePath = "e2e/.out/composite.json";
+  write(f.root, compositePath, artifact);
+  const first = artifact.runs.find(r => r.axis === "natural" && r.n === 2), path = first.report.artifact;
+  const report = JSON.parse(readFileSync(join(f.root, path)));
+  const inventory = [{ file: C14_FILE, sha256: "a".repeat(64), cases: report.cases.map(({id,n,trial}) => ({id,n,trial})) }];
+  const manifest = { schemaVersion: 1, kind: "concurrency-partitions", cell: cell.id, source,
+    requirementSha256: partitionCellDigest(cell), inventory,
+    reports: [{ artifact: path, sha256: partitionDigest(readFileSync(join(f.root, path))),
+      qualification: { outcome: "COMPOSITE-SAFETY", composite: compositeReference(f.root, compositePath, path) } }] };
+  const check = () => verifyPartitions(f.campaign, cell, manifest, {root:f.root,inventory});
+  assert.equal(check()[0].proof.outcome, "COMPOSITE-SAFETY");
+  write(f.root, "e2e/.out/partitions.json", manifest);
+  const imported = importPartitions(f.campaign, "e2e/.out/partitions.json", {root:f.root,inventory}).candidate;
+  const proof = imported.proofs.find(p => p.partition);
+  assert.equal(proof.outcome, "COMPOSITE-SAFETY");
+  assert.deepEqual(proof.composite, manifest.reports[0].qualification.composite);
+  assert.equal(imported.items.find(i => i.id === COMPOSITE_ITEM).state, "in-progress");
+  assert.ok(JSON.parse(readFileSync(join(f.root,path))).cases.some(c=>c.status==="inconclusive"));
+  manifest.reports[0].qualification.outcome="PASS";
+  assert.throws(check,/unsupported partition qualification/);
+  manifest.reports[0].qualification.outcome="COMPOSITE-SAFETY";
+  manifest.reports[0].qualification.composite.sha256="0".repeat(64);
+  assert.throws(check,/digest differs/);
 });

@@ -109,6 +109,32 @@ Exit 3 means measurements were collected but remain inconclusive; only a fully
 passing collection produces `accepted-campaign.json`. Neither result closes
 findings automatically.
 
+A partition may retain a `LOCAL-LIMIT` or `COMPOSITE-SAFETY` qualification only
+when its attached artifact passes the same verifier used for a full run. Its
+original exit status and inconclusive cases remain intact. A complete C14 file
+can supply the natural leg of the composite assessment; partial selections cannot.
+
+## Controlled race release qualification
+
+An explicitly approved `acceptance.raceEvidencePolicy` may use mode
+`controlled-with-red-green` and a written reason. Run the final checker with
+`--release` to apply it. The ordinary completion result still reports missing
+natural witnesses. Release qualification requires complete local acceptance;
+it can adjudicate only the verified C14 composite and the named C15 emulator
+delivery limitation. Open findings, missing controls and other failures remain
+blocking.
+
+`tools/e2e-cloud-qualification.mjs` verifies the policy's `cloud` artifact and
+`reviewedOverlays` pins. Each natural/controlled pin names the reviewed archive,
+source-comparison receipt and overlay patch digests. It checks the current
+function source inventory, downloaded package bytes, runtime revision/hash,
+all 21 trial slots, and the actual deployed guard-removal and restoration.
+Natural safety failures cannot use a controlled fallback. For missed timing
+windows, controlled arrivals must be released before measurement starts and
+the actual cooldown calls must overlap on one instance. Preserve every original
+natural attempt, including inconclusive results, alongside the supplement.
+Keep deployment bindings and raw evidence under the ignored `e2e/.out/` tree.
+
 ## Updating evidence and closing items
 
 For the real-cloud notification witness, `tools/e2e-cloud-cooldown.mjs` judges

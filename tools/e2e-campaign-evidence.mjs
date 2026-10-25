@@ -144,11 +144,11 @@ export function importPartitions(campaign, manifestPath, { root = ROOT, inventor
   const rows = verifyPartitions(campaign, cell, manifest, { root, inventory });
   let candidate = structuredClone(campaign);
   const ids = [];
-  for (const { id, ref, report } of rows) {
+  for (const { id, ref, report, proof } of rows) {
     candidate = importRun(candidate, ref.artifact, { root }).candidate;
     upsert(candidate.proofs, { id, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version,
       fingerprint: candidate.acceptance.fingerprint, artifact: ref.artifact, runId: report.runId, invocation: report.invocation.id,
-      outcome: "PASS", partition: { artifact: rel, sha256: partitionDigest(bytes) } });
+      ...proof, partition: { artifact: rel, sha256: partitionDigest(bytes) } });
     ids.push(id);
   }
   const target = candidate.acceptance.requirements.find(r => r.id === cell.id);
