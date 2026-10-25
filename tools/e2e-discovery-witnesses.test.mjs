@@ -426,6 +426,15 @@ const expected = [
         "caseId": "e2e/specs/functional/a20-cli.spec.mjs::A20.7s publish --watch --json publishes once per burst of saves: the first save, then one update per burst (two new versions, then an identical burst deduped), one JSON result each"
       }
     ]
+  },
+  {
+    "id": "mcp-real-runtime-parse-headers",
+    "claim": "Real Hosting parser refusals for malformed MCP application/json bypass both the handler and configured Hosting headers. Install transport headers at Node HTTP request start before the runtime listener, then verify the actual preview refusal. Preserve the original failed cloud observation.",
+    "requiredCases": [
+      {
+        "caseId": "e2e/specs/functional/a20-mcp.spec.mjs::A20.3.parse malformed application/json is rejected with HTTP 400, a diagnostic, protected transport headers and no document mutation"
+      }
+    ]
   }
 ];
 const candidateProvenance = {
@@ -1017,11 +1026,11 @@ const nativeCells = [
 const nativeId = "native-transaction-ack-loss-misclassifies-own-commit";
 const commandIds = ["rtdb-rule-coverage-retains-live-payloads", "early-e2e-report-accepted-as-completed-run"];
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 25 discoveries retain their identities and original claims", () => {
+test("all 26 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
-test("22 non-native discoveries retain every exact affected case and N-axis cell", () => {
+test("23 non-native discoveries retain every exact affected case and N-axis cell", () => {
   const cases = expected.filter(r => r.id !== nativeId && !commandIds.includes(r.id));
   for (const original of cases) assert.deepEqual(row(original.id).requiredCases, original.requiredCases, `${original.id}: exact affected case and N-axis retention`);
 });
