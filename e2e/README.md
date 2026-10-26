@@ -398,7 +398,11 @@ parity or production behavior.
   the browser harness. The stock emulator's close callback does not unsubscribe
   its database listener: termination alone returns success while messages keep
   accumulating. Observation keeps only session IDs, numeric request offsets and
-  subscription IDs. After every browser exits, cleanup removes the observed
+  subscription IDs. Before primary pages and secondary tabs navigate, bounded
+  inspector capture retains response bodies across navigation (1 MiB total,
+  64 KiB per response); requests are neither routed nor delayed. A browser
+  regression reproduces the lost-body error with durable capture disabled.
+  After every browser exits, cleanup removes the observed
   subscriptions, appends and removes a fresh read-only barrier target, drains
   its confirmation, acknowledges the last envelope through a backchannel GET,
   and terminates the transport. The pinned handler processes removals in order;

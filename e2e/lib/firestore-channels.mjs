@@ -46,6 +46,18 @@ export function channelFrames() {
   };
 }
 
+/** Keep finite handshake bodies inspectable after navigation, without routing or delaying application requests. */
+export async function preserveFirestoreResponses(target, context, page) {
+  if (target?.kind !== "local" || target.projectId !== "demo-bikeshed" || !target.firestoreUrl) return;
+  if (!scope(target, `${target.firestoreUrl}${path}?VER=8&database=${encodeURIComponent(database(target))}`)) return;
+  const capture = await context.newCDPSession(page);
+  // Chromium otherwise drops the renderer's response bodies on navigation.
+  // These inspector-only buffers are bounded per page and die with its context.
+  await capture.send("Network.enable", {
+    maxTotalBufferSize: 1024 * 1024, maxResourceBufferSize: 65536, enableDurableMessages: true,
+  });
+}
+
 /** Observe only. Successful forward requests retain numeric routing metadata, never query content or credentials. */
 export function observeFirestoreContext(target, context) {
   if (target?.kind !== "local" || target.projectId !== "demo-bikeshed" || !target.firestoreUrl) return;

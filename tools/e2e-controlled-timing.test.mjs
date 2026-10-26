@@ -2,7 +2,7 @@
 // Reject incomplete controlled witnesses, arbitrary inconclusives and ineffective controls without relabelling natural observations (SPEC §12).
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
-import {FIRESTORE_MAINTENANCE_DELTA,CONTROLLED_READER_DELTA,CONTROLLED_READER_KIND} from './e2e-source-derivation.mjs';
+import {FIRESTORE_MAINTENANCE_DELTA,CONTROLLED_READER_DELTA,CONTROLLED_READER_KIND,CONTROLLED_READER_RESPONSE_KIND,CONTROLLED_READER_RESPONSE_DELTA} from './e2e-source-derivation.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -76,12 +76,12 @@ test('only named reader windows with exact case, N and trial identities are elig
 });
 
 
-function readerFixture(t){
+function readerFixture(t,{durable=false}={}){
  const f=fixture(t), hash=bytes=>createHash('sha256').update(bytes).digest('hex');
- const manifest=column=>{const files=[...FIRESTORE_MAINTENANCE_DELTA,CONTROLLED_READER_DELTA].filter(row=>row[column]!==null).map(row=>({path:row[0],sha256:row[column]})).sort((a,b)=>a.path<b.path?-1:1);return {snapshot:{...source,files:files.length,fingerprint:hash(files.map(r=>`${r.path}\0${r.sha256}\n`).join(''))},files};};
+ const manifest=column=>{const files=[...(durable?CONTROLLED_READER_RESPONSE_DELTA:FIRESTORE_MAINTENANCE_DELTA),CONTROLLED_READER_DELTA].filter(row=>row[column]!==null).map(row=>({path:row[0],sha256:row[column]})).sort((a,b)=>a.path<b.path?-1:1);return {snapshot:{...source,files:files.length,fingerprint:hash(files.map(r=>`${r.path}\0${r.sha256}\n`).join(''))},files};};
  const baseline=manifest(1),candidate=manifest(2);
  const bind=(p,v)=>{write(f.root,p,v);return {artifact:p,sha256:hash(readFileSync(join(f.root,p)))};};
- f.campaign.acceptance={...f.campaign.acceptance,...baseline.snapshot,sourceDerivations:[{kind:CONTROLLED_READER_KIND,fingerprint:candidate.snapshot.fingerprint,baseline:bind('e2e/.out/baseline.json',baseline),candidate:bind('e2e/.out/candidate.json',candidate)}]};
+ f.campaign.acceptance={...f.campaign.acceptance,...baseline.snapshot,sourceDerivations:[{kind:durable?CONTROLLED_READER_RESPONSE_KIND:CONTROLLED_READER_KIND,fingerprint:candidate.snapshot.fingerprint,baseline:bind('e2e/.out/baseline.json',baseline),candidate:bind('e2e/.out/candidate.json',candidate)}]};
  const prefixes=['C22 reader under a typing storm:','C22 place:','C22 reply:','C22 held loads:','C22 held loads place:','C22 held loads reply:','C22 suggesting:','C22 suggesting held:'];
  const cases=[];for(let trial=1;trial<=10;trial++)for(const prefix of prefixes)cases.push(row(prefix,trial,trial===1?'inconclusive':'pass',trial===1?(prefix.includes('suggesting')?"the storm did not reach the reader while it wrote its suggestion: 0 of the typists' 4 save(s) answered while it typed (want 2 or more)":"the storm did not reach the reader while it typed: 1 of its 1 frame reload(s) fell inside its typing window (want 2 or more)"):null,C22_FILE));
  cases.push(row('C23 unrelated layout assertion:',1,'pass',null,C22_FILE));
@@ -129,3 +129,11 @@ for(const [name,mutate,message] of [
  ['swapped natural and controlled reports',f=>{[f.manifestArgs.natural,f.manifestArgs.controlled]=[f.manifestArgs.controlled,f.manifestArgs.natural];},/interchanged/],
  ['different participant count',f=>{f.reports[1].report.invocation.n=f.reports[1].done.n=[5];},/participant count differs/],
 ])test(`negative: reader ${name} cannot qualify natural timing`,t=>{const f=readerFixture(t);mutate(f);f.save();assert.throws(f.capture,message);});
+
+test('durable-response controlled reader retains exact natural gaps and reviewed source binding',t=>{
+ const f=readerFixture(t,{durable:true}),artifact=f.capture(),result=verifyTimingArtifact(f.campaign,artifact,{root:f.root});
+ assert.equal(result.observations.length,8);
+ assert.equal(f.reports[0].report.cases.filter(c=>c.status==='inconclusive').length,8);
+ f.campaign.acceptance.sourceDerivations[0].kind=CONTROLLED_READER_KIND;
+ assert.throws(f.capture,/reviewed diagnostics-only delta/);
+});

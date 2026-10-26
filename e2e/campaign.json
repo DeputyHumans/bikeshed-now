@@ -15368,6 +15368,22 @@
           "n": 10
         }
       ]
+    },
+    {
+      "id": "firestore-handshake-navigation",
+      "state": "in-progress",
+      "classification": "local-harness-runtime",
+      "claim": "Chromium discards a completed Firestore handshake response body after navigation, so idle cleanup cannot recover its session identity and correctly refuses to continue. Enable bounded durable inspector response capture before each primary or secondary page navigates; retain fail-closed cleanup and all application request timing.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/durable-response-evidence/diagnosis.json"
+      ],
+      "remaining": [
+        "Complete the controlled reader N10 file and remaining release matrix after the passive capture repair."
+      ],
+      "mustNotDo": [
+        "Do not route or delay application requests, change data or rules, relax cleanup assertions, or accept the failed reader run."
+      ]
     }
   ],
   "acceptance": {

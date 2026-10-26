@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DONE_RETRY_DELTA, DONE_RETRY_KIND, DRAFT_ADMISSION_DELTA, DRAFT_ADMISSION_KIND, acceptedSourceFiles, reviewedSpecChange, FIRESTORE_BARRIER_DELTA, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, FIRESTORE_CHANNEL_DELTA, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_MAINTENANCE_DELTA as delta, CONTROLLED_READER_DELTA, CONTROLLED_READER_KIND, manifestFingerprint, verifySourceDerivation, assertAcceptedSource } from './e2e-source-derivation.mjs';
+import { DURABLE_RESPONSE_DELTA, DURABLE_RESPONSE_KIND, CONTROLLED_READER_RESPONSE_DELTA, CONTROLLED_READER_RESPONSE_KIND, DONE_RETRY_DELTA, DONE_RETRY_KIND, DRAFT_ADMISSION_DELTA, DRAFT_ADMISSION_KIND, acceptedSourceFiles, reviewedSpecChange, FIRESTORE_BARRIER_DELTA, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, FIRESTORE_CHANNEL_DELTA, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_MAINTENANCE_DELTA as delta, CONTROLLED_READER_DELTA, CONTROLLED_READER_KIND, manifestFingerprint, verifySourceDerivation, assertAcceptedSource } from './e2e-source-derivation.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const KIND = 'firestore-diagnostic-recycle-v1';
 function manifest(rows) {
@@ -157,5 +157,18 @@ test('delayed Done retry cannot admit any other source change or rewrite previou
  for(const [path] of DONE_RETRY_DELTA){
   const altered=manifest(candidate.files.map(r=>[r.path,r.path===path?hash('unreviewed bytes'):r.sha256]));
   assert.throws(()=>verifySourceDerivation(baseline.snapshot,altered.snapshot,baseline,altered,DONE_RETRY_KIND),/reviewed diagnostics-only delta/,path);
+ }
+});
+
+for (const controlled of [false, true]) test(`durable response inspection preserves exact source boundaries and controlled classification (${controlled})`, () => {
+ const kind = controlled ? CONTROLLED_READER_RESPONSE_KIND : DURABLE_RESPONSE_KIND;
+ const changes = [...(controlled ? CONTROLLED_READER_RESPONSE_DELTA : DURABLE_RESPONSE_DELTA), ...(controlled ? [CONTROLLED_READER_DELTA] : [])];
+ const baseline = manifest(changes.filter(r => r[1] !== null).map(r => [r[0], r[1]]));
+ const candidate = manifest(changes.map(r => [r[0], r[2]]));
+ assert.equal(verifySourceDerivation(baseline.snapshot, candidate.snapshot, baseline, candidate, kind).controlled, controlled);
+ assert.throws(() => verifySourceDerivation(baseline.snapshot, candidate.snapshot, baseline, candidate, controlled ? DURABLE_RESPONSE_KIND : CONTROLLED_READER_RESPONSE_KIND), /reviewed diagnostics-only delta/);
+ for (const [path] of changes) {
+  const altered = manifest(candidate.files.map(r => [r.path, r.path === path ? hash('unreviewed bytes') : r.sha256]));
+  assert.throws(() => verifySourceDerivation(baseline.snapshot, altered.snapshot, baseline, altered, kind), /reviewed diagnostics-only delta/, path);
  }
 });

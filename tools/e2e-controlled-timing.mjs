@@ -7,7 +7,7 @@ import { dirname, resolve, relative, isAbsolute } from 'node:path';
 import { parseExpandedCase } from '../e2e/lib/controls.mjs';
 import { PLAN_TRIALS } from '../e2e/lib/budget.mjs';
 import { verifyFinishedRun } from './e2e-run-completion.mjs';
-import { assertAcceptedSource, stackSource, CONTROLLED_READER_KIND, CONTROLLED_READER_CHANNEL_KIND, CONTROLLED_READER_BARRIER_KIND } from './e2e-source-derivation.mjs';
+import { assertAcceptedSource, stackSource, CONTROLLED_READER_KIND, CONTROLLED_READER_CHANNEL_KIND, CONTROLLED_READER_BARRIER_KIND, CONTROLLED_READER_RESPONSE_KIND } from './e2e-source-derivation.mjs';
 import { verifyCompositeControls } from './e2e-c14-composite.mjs';
 import { createRtdbAttestationCache, verifyRtdbRunAttestation, assertRtdbAttestationCacheUnchanged } from './e2e-rtdb-attestation.mjs';
 export const TIMING_ID = 'controlled-browser-timing-safety-v1';
@@ -47,7 +47,7 @@ function fullRun(campaign,ref,{root,runtimeCache,controlled=false}){
  const file=inv.spec[0];need([C10_FILE,C22_FILE].includes(file)&&report.cases.every(c=>c.file===file),'unrelated file');
  need((stack.patches??[]).length===0,'timing qualification requires an unmutated product');
  need(['storage-preconditions','rtdb-proxy'].every(cap=>inv.capabilities.includes(cap)),'timing capabilities missing');
- need(controlled?file===C22_FILE&&[CONTROLLED_READER_KIND,CONTROLLED_READER_CHANNEL_KIND,CONTROLLED_READER_BARRIER_KIND].includes(source?.kind):!source?.controlled,'natural and controlled sources were interchanged');
+ need(controlled?file===C22_FILE&&[CONTROLLED_READER_KIND,CONTROLLED_READER_CHANNEL_KIND,CONTROLLED_READER_BARRIER_KIND,CONTROLLED_READER_RESPONSE_KIND].includes(source?.kind):!source?.controlled,'natural and controlled sources were interchanged');
  verifyFinishedRun(report,local(root,ref.report.artifact),{expectedExit:controlled?0:3});
  verifyRtdbRunAttestation(campaign,{report,stack,rel:ref.report.artifact},{root,cache:runtimeCache});
  // Bind every original measurement byte; passing timing judges remain responsible

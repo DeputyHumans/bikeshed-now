@@ -1081,8 +1081,15 @@ const hosted404 = {
 expected.splice(expected.findIndex(row => row.id === 'mcp-real-runtime-parse-headers') + 1, 0, hosted404);
 commandIds.push(hosted404.id);
 
+expected.push({
+  "id": "firestore-handshake-navigation",
+  "claim": "Chromium discards a completed Firestore handshake response body after navigation, so idle cleanup cannot recover its session identity and correctly refuses to continue. Enable bounded durable inspector response capture before each primary or secondary page navigates; retain fail-closed cleanup and all application request timing.",
+  "requiredCases": []
+});
+commandIds.push("firestore-handshake-navigation");
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 31 discoveries retain their identities and original claims", () => {
+test("all 32 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
@@ -1103,6 +1110,6 @@ test("the native ACK discovery retains 34 cases, 55 controls and 11 whole-file c
   assert.deepEqual(actual.controls, nativeControls, "native ACK control retention");
   assert.deepEqual(campaign.acceptance.requirements.filter(r => r.id.startsWith("native-ack-")).map(r => r.id), nativeCells, "native ACK whole-file capability retention");
 });
-test("five command-only harness or deployment discoveries explicitly retain empty case obligations", () => {
+test("command-only harness or deployment discoveries explicitly retain empty case obligations", () => {
   for (const id of commandIds) assert.deepEqual(row(id).requiredCases, [], `${id}: explicit command-only case boundary`);
 });

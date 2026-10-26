@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Preserve bounded browser response diagnostics across navigation so local Firestore cleanup can recover completed handshakes without delaying application requests.
+
 - Keep synthetic campaign tests independent of recorded release proofs and source bindings, while preserving all original claims, required cases and historical audit records. Retain the separately verified Hosting 404 boundary in the canonical discovery inventory.
 
 - Correct the delayed Done test to retry explicit safe delivery refusals at any injected latency, retaining all data-integrity checks. Cap this release concurrency qualification at ten participants as requested; retain twenty-participant obligations as deferred coverage.

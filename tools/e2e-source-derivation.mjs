@@ -91,6 +91,20 @@ export const DRAFT_ADMISSION_DELTA = Object.freeze([
 export const DONE_RETRY_KIND = 'firestore-idle-barrier-done-retry-v5';
 export const DONE_RETRY_DELTA = Object.freeze([...DRAFT_ADMISSION_DELTA, Object.freeze(["e2e/specs/concurrency/c06-leave-commit.spec.mjs", "27d791d9acee18b19765e2aa321c7e189523f0bdef630aca94fe2e986d5f8e8c", "88c42b1e006278732119281dcb00f4cd7e861bc4fb9f131c95b3012da5fba96e"])]);
 
+// Passive bounded inspector retention only; prior proofs keep their original source profiles.
+export const DURABLE_RESPONSE_KIND = 'firestore-durable-response-v6';
+export const CONTROLLED_READER_RESPONSE_KIND = 'firestore-durable-response-controlled-reader-v4';
+const durableDigests = Object.freeze({
+  'e2e/lib/browser.mjs': 'bcbb1432a9613352a513abdb2264618021461a2d100f35e31bab04b0f30b8527',
+  'e2e/lib/firestore-channels.mjs': '9115325d915e9d9cd7e8f79ef9ff373df89e5d418363c67820ff4d02af6d55a8',
+});
+const durableDelta = base => Object.freeze([
+  ...base.map(([path, before, after]) => Object.freeze([path, before, durableDigests[path] ?? after])),
+  Object.freeze(['e2e/selftest/firestore-response-retention.test.mjs', null, 'c321a8761dfef95ee6fd857efbd9d81f871c0a45e7c03a5f1fd2fa4a7cf96518']),
+]);
+export const DURABLE_RESPONSE_DELTA = durableDelta(DONE_RETRY_DELTA);
+export const CONTROLLED_READER_RESPONSE_DELTA = durableDelta(FIRESTORE_BARRIER_DELTA);
+
 // Reviewed scheduling overlay only: simultaneous token rounds share the original quiet
 // interval. Actor count, tokens, trials, delays, holds and all assertions are unchanged.
 export const CONTROLLED_READER_DELTA = Object.freeze([
@@ -112,7 +126,7 @@ export function manifestFingerprint(manifest) {
 }
 
 export function verifySourceDerivation(acceptance, actual, baseline, candidate, kind) {
-  need(['firestore-diagnostic-recycle-v1', CONTROLLED_READER_KIND, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, DRAFT_ADMISSION_KIND, DONE_RETRY_KIND].includes(kind), 'unreviewed derivative kind');
+  need(['firestore-diagnostic-recycle-v1', CONTROLLED_READER_KIND, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, DRAFT_ADMISSION_KIND, DONE_RETRY_KIND, DURABLE_RESPONSE_KIND, CONTROLLED_READER_RESPONSE_KIND].includes(kind), 'unreviewed derivative kind');
   manifestFingerprint(baseline); manifestFingerprint(candidate);
   for (const field of ['revision', 'version', 'fingerprint']) {
     need(baseline.snapshot[field] === acceptance[field], `baseline ${field} differs`);
@@ -122,8 +136,8 @@ export function verifySourceDerivation(acceptance, actual, baseline, candidate, 
   const before = new Map(baseline.files.map(row => [row.path, row.sha256]));
   const after = new Map(candidate.files.map(row => [row.path, row.sha256]));
   const delta = [...new Set([...before.keys(), ...after.keys()])].sort().filter(path => before.get(path) !== after.get(path)).map(path => [path, before.get(path) ?? null, after.get(path) ?? null]);
-  const controlled = [CONTROLLED_READER_KIND, CONTROLLED_READER_CHANNEL_KIND, CONTROLLED_READER_BARRIER_KIND].includes(kind);
-  const maintenance = kind === DONE_RETRY_KIND ? DONE_RETRY_DELTA : kind === DRAFT_ADMISSION_KIND ? DRAFT_ADMISSION_DELTA : [FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND].includes(kind) ? FIRESTORE_BARRIER_DELTA : [FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND].includes(kind) ? FIRESTORE_CHANNEL_DELTA : FIRESTORE_MAINTENANCE_DELTA;
+  const controlled = [CONTROLLED_READER_KIND, CONTROLLED_READER_CHANNEL_KIND, CONTROLLED_READER_BARRIER_KIND, CONTROLLED_READER_RESPONSE_KIND].includes(kind);
+  const maintenance = kind === DURABLE_RESPONSE_KIND ? DURABLE_RESPONSE_DELTA : kind === CONTROLLED_READER_RESPONSE_KIND ? CONTROLLED_READER_RESPONSE_DELTA : kind === DONE_RETRY_KIND ? DONE_RETRY_DELTA : kind === DRAFT_ADMISSION_KIND ? DRAFT_ADMISSION_DELTA : [FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND].includes(kind) ? FIRESTORE_BARRIER_DELTA : [FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND].includes(kind) ? FIRESTORE_CHANNEL_DELTA : FIRESTORE_MAINTENANCE_DELTA;
   const expected = [...maintenance, ...(controlled ? [CONTROLLED_READER_DELTA] : [])].sort(([a], [b]) => a < b ? -1 : 1);
   assert.deepEqual(delta, expected, 'source derivation: bytes differ beyond the reviewed diagnostics-only delta or named controlled schedule');
   return { kind, controlled, source: actual, changes: delta };
