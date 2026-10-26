@@ -60,13 +60,6 @@ export function alertDefinitions({ project, channel, checks }) {
       documentation: { mimeType: "text/markdown", content: `Google reports a new or materially changed, active confirmed incident affecting this project or a product and location it uses. Check Service Health for the affected product, location, and mitigation. A provider warning alone does not establish a Bikeshed outage.\n\n` +
         `Description-only updates, resolved incidents, and unrelated locations do not send new alerts. Follow the existing provider incident for progress; use fresh availability checks to establish application impact.\n\n${docs}` },
     },
-    { ...base("audit_missing", [{ displayName: "Operations audit has not completed for six hours", conditionAbsent: {
-      filter: metric(`logging.googleapis.com/user/${HEARTBEAT}`, "global"), duration: "21600s", trigger: { count: 1 }, aggregations: sum(60),
-    } }]), severity: "WARNING",
-      documentation: { mimeType: "text/markdown", content: `The scheduled metadata audit has not completed for six hours. This is a monitoring gap, not evidence of an application outage.\n\n` +
-        `Check the latest operations workflow, its schedule, and authentication. Dispatch it manually if needed. GitHub schedules can be delayed; successful runs have arrived more than five hours apart. The independent minute-by-minute availability checks remain active.\n\n${docs}` },
-      alertStrategy: { autoClose: "86400s", notificationPrompts: ["OPENED", "CLOSED"], notificationChannelStrategy: [{ notificationChannelNames: [channel], renotifyInterval: "21600s" }] },
-    },
   ];
 }
 
@@ -113,17 +106,21 @@ export async function provisionMonitoring(client, options) {
     check.monitoredResource.labels.project_id = project;
     checks.push(await reconcileResource({ client, collection: `${prefix}/uptimeCheckConfigs`, field: "uptimeCheckConfigs", desired: check, key: check.userLabels.ops_key, apply, changes }));
   }
-  const metricsUrl = `https://logging.googleapis.com/v2/projects/${project}/metrics`;
-  const heartbeat = { name: HEARTBEAT, disabled: false, description: `Managed by ${OWNER}. Hourly audit completed (success or failure).`,
-    filter: 'log_id("bikeshed-ops") AND jsonPayload.event="ops_audit"', metricDescriptor: { metricKind: "DELTA", valueType: "INT64", unit: "1" } };
-  const existingMetric = (await client.list(metricsUrl, "metrics")).find((x) => x.name === HEARTBEAT);
-  if (existingMetric && !existingMetric.description?.startsWith(`Managed by ${OWNER}.`)) throw new Error("Heartbeat metric belongs to another operator");
-  if (!existingMetric || !matchesShape(existingMetric, heartbeat)) {
-    changes.push("ensure: audit heartbeat metric");
-    if (apply) await client.request(existingMetric ? `${metricsUrl}/${HEARTBEAT}` : metricsUrl, { method: existingMetric ? "PUT" : "POST", body: heartbeat });
-  }
-  for (const desired of alertDefinitions({ project, channel: channel.name, checks })) {
+  const policies = alertDefinitions({ project, channel: channel.name, checks });
+  for (const desired of policies) {
     await reconcileResource({ client, collection: `${prefix}/alertPolicies`, field: "alertPolicies", desired, key: desired.userLabels.ops_key, apply, changes });
+  }
+  // A definition removed here must leave production too, or its policy keeps alerting.
+  const keys = new Set(policies.map((x) => x.userLabels.ops_key));
+  for (const retired of (await client.list(`${prefix}/alertPolicies`, "alertPolicies")).filter((x) => owned(x) && !keys.has(x.userLabels.ops_key))) {
+    changes.push(`delete: ${retired.userLabels.ops_key}`);
+    if (apply) await client.request(`${prefix}/alertPolicies/${retired.name.split("/").at(-1)}`, { method: "DELETE" });
+  }
+  // The audit heartbeat fed only the retired missing-audit policy, so it goes after the policies.
+  const metricsUrl = `https://logging.googleapis.com/v2/projects/${project}/metrics`;
+  if ((await client.list(metricsUrl, "metrics")).some((x) => x.name === HEARTBEAT && x.description?.startsWith(`Managed by ${OWNER}.`))) {
+    changes.push("delete: audit heartbeat metric");
+    if (apply) await client.request(`${metricsUrl}/${HEARTBEAT}`, { method: "DELETE" });
   }
   const dashUrl = `https://monitoring.googleapis.com/v1/projects/${project}/dashboards`;
   const dashboards = (await client.list(dashUrl, "dashboards")).filter((x) => x.labels?.managed_by === OWNER);

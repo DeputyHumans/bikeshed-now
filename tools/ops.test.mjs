@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cloudClient } from "../scripts/lib/ops-cloud.mjs";
-import { alertDefinitions, dashboardDefinition, reconcileResource, uptimeDefinitions, OWNER } from "../scripts/lib/ops-monitoring.mjs";
+import { alertDefinitions, dashboardDefinition, owned, provisionMonitoring, reconcileResource, uptimeDefinitions, HEARTBEAT, OWNER } from "../scripts/lib/ops-monitoring.mjs";
 import { matchesShape } from "../scripts/lib/ops-cloud.mjs";
 import { ENDPOINTS } from "../scripts/lib/endpoints.mjs";
 import { fleetFindings, snapshot, probe, ensureMarker, ensureRuntimePolicy, healthConfig } from "../scripts/lib/ops-runtime.mjs";
@@ -71,7 +71,7 @@ test("availability requires two failing regions for two minutes and includes rep
   for (const check of checks.slice(1)) assert.equal(check.httpCheck.path, ENDPOINTS.find((x) => x.fn === "health").path);
   for (const check of checks) { assert.equal(check.disabled, false); assert.equal(check.period, "60s"); assert.equal(check.selectedRegions.length, 3); assert.equal(check.timeout, "10s"); }
   const policies = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks });
-  assert.equal(policies.length, 9);
+  assert.equal(policies.length, 8);
   for (const policy of policies.slice(0, 3)) {
     assert.equal(policy.conditions[0].conditionThreshold.thresholdValue, 1);
     assert.equal(policy.conditions[0].conditionThreshold.duration, "120s");
@@ -92,12 +92,43 @@ test("runtime maintenance patches only the policy and skips functions already us
   assert.deepEqual(calls[0].body, { name: "projects/demo-bikeshed/locations/region/functions/health", buildConfig: { onDeployUpdatePolicy: {} } });
 });
 
-test("audit scheduling gaps warn after six hours and do not repeat every thirty minutes", () => {
-  const policy = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks: [] }).find((x) => x.userLabels.ops_key === "audit_missing");
-  assert.equal(policy.conditions[0].conditionAbsent.duration, "21600s");
-  assert.equal(policy.alertStrategy.notificationChannelStrategy[0].renotifyInterval, "21600s");
-  assert.equal(policy.severity, "WARNING");
-  assert.match(policy.documentation.content, /not evidence of an application outage/);
+test("a delayed audit schedule is not an alert", () => {
+  // GitHub delivered the hourly audit about six times a day, up to 6.9 hours apart, so any absence threshold was noise.
+  const keys = alertDefinitions({ project: "demo-bikeshed", channel: "channels/test", checks: [] }).map((x) => x.userLabels.ops_key);
+  assert.equal(keys.includes("audit_missing"), false);
+  assert.equal(keys.some((key) => /audit/.test(key)), false);
+});
+
+test("provisioning deletes only owned policies it no longer defines, then the owned heartbeat metric", async () => {
+  const fields = ["notificationChannels", "uptimeCheckConfigs", "alertPolicies", "dashboards", "metrics"];
+  const store = Object.fromEntries(fields.map((field) => [field, []])), requests = [];
+  store.alertPolicies.push({ name: "projects/demo-bikeshed/alertPolicies/retired", userLabels: { managed_by: OWNER, ops_key: "audit_missing" } },
+    { name: "projects/demo-bikeshed/alertPolicies/theirs", userLabels: { ops_key: "audit_missing" } });
+  store.metrics.push({ name: HEARTBEAT, description: `Managed by ${OWNER}. Hourly audit completed (success or failure).` });
+  const client = { list: async (_url, field) => [...store[field]], request: async (url, { method, body }) => {
+    requests.push({ url, method });
+    const field = fields.find((x) => url.includes(`/${x}`)), rows = store[field];
+    const index = rows.findIndex((x) => url.endsWith(`/${x.name.split("/").at(-1)}`));
+    if (method === "DELETE") { rows.splice(index, 1); return {}; }
+    const row = { ...body, name: body.name ?? `projects/demo-bikeshed/${field}/${requests.length}` };
+    if (method === "PATCH") rows[index] = row; else rows.push(row);
+    return row;
+  } };
+  const run = (apply) => provisionMonitoring(client, { project: "demo-bikeshed", email: "ops@example.invalid",
+    origin: "https://example.invalid", directOrigin: "https://direct.invalid", apply });
+  const dry = await run(false);
+  assert.deepEqual(dry.changes.filter((x) => x.startsWith("delete:")), ["delete: audit_missing", "delete: audit heartbeat metric"]);
+  assert.equal(requests.length, 0);
+  await run(true);
+  assert.deepEqual(requests.filter((x) => x.method === "DELETE").map((x) => x.url), [
+    "https://monitoring.googleapis.com/v3/projects/demo-bikeshed/alertPolicies/retired",
+    `https://logging.googleapis.com/v2/projects/demo-bikeshed/metrics/${HEARTBEAT}`,
+  ]);
+  assert.deepEqual(store.alertPolicies.filter((x) => !owned(x)).map((x) => x.name), ["projects/demo-bikeshed/alertPolicies/theirs"]);
+  assert.deepEqual((await run(true)).changes, []);
+  store.metrics.push({ name: HEARTBEAT, description: "Someone else's audit counter." });
+  assert.deepEqual((await run(true)).changes, []);
+  assert.equal(requests.filter((x) => x.method === "DELETE").length, 2);
 });
 
 test("provider notifications exclude resolutions, unrelated incidents and routine description updates", () => {

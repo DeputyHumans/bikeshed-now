@@ -577,6 +577,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   precedence and watcher behavior without depending on source formatting.
   Mail settling and log-rotation tests wait for the conditions they measure.
 
+## 0.20.4 — 2026-10-26
+
+### Fixed
+
+- Stop alerting when the operations audit is late. GitHub delivered its hourly
+  schedule about six times a day, so the six-hour warning fired on normal
+  delays; a schedule that stops without failing is no longer alerted on.
+  Provisioning now deletes owned alert policies it no longer defines, and the
+  audit heartbeat metric that fed this one.
+
 ## 0.20.3 — 2026-10-23
 
 ### Fixed

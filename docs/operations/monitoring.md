@@ -24,9 +24,10 @@ node scripts/ops.mjs provision --project demo-bikeshed --account "$OPERATOR" --o
 ```
 
 Provisioning first shows the diff, then reconciles only resources labeled
-`managed_by=bikeshed-ops-v1`. It refuses duplicates and a heartbeat metric owned
-by someone else. Run it a second time: `changes` must be empty. Marker creation
-uses a create-only precondition and never overwrites a different object.
+`managed_by=bikeshed-ops-v1`. It refuses duplicates, and deletes a labeled alert
+policy that is no longer defined, so removing a definition removes the live
+alert. Run it a second time: `changes` must be empty. Marker creation uses a
+create-only precondition and never overwrites a different object.
 
 Use a dedicated operations service account with Cloud Functions Viewer, Cloud
 Run Viewer, Cloud Build Builds Viewer, Monitoring Viewer, Logging Viewer,
@@ -42,11 +43,11 @@ for the post-deploy audit. Create the marker once with the operator identity;
 the deployer needs no new private-bucket write access.
 
 Enable GitHub notification settings → Actions → Email → failed workflows only
-for the operator as a separate path when Google authentication or Logging fails.
-GitHub schedules can be delayed by hours; the independent six-hour missing-heartbeat
-warning detects a stopped audit after its first successful heartbeat. The audit
-is requested hourly, not guaranteed hourly. Minute-by-minute uptime checks run
-independently in Cloud Monitoring and remain the application availability signal.
+for the operator. It is the only path when Google authentication or Logging
+fails. The audit is requested hourly, not guaranteed hourly, and nothing alerts
+when its schedule stops without failing; the workflow's run history is where to
+look. Minute-by-minute uptime checks run independently in Cloud Monitoring and
+remain the application availability signal.
 
 ## Signals
 
@@ -58,16 +59,14 @@ independently in Cloud Monitoring and remain the application availability signal
 | Event delivery | Eventarc subscription oldest unacknowledged message over five minutes for two minutes |
 | Deployment/audit | Failed production workflow or failed/drifting audit |
 | Provider | New or materially changed, active confirmed incident with `IMPACTED` or `RELATED` relevance |
-| Audit missing | No audit log heartbeat for six hours; warning about monitoring coverage |
 | Runtime maintenance | Monday 16 UTC: actual function build older than fourteen days |
 
 All notifications go to the configured email. Availability incidents send
 recovery notifications and repeat after thirty minutes while unresolved.
-Missing-audit warnings repeat only every six hours and send a recovery notice.
 Provider warnings exclude resolved/emerging incidents, unrelated locations and
 description-only updates. They alert on a new event or a state/relevance change;
-follow the provider incident for subsequent updates. These two warnings do not
-by themselves establish an application outage. The provider filter uses the
+follow the provider incident for subsequent updates. A provider warning does not
+by itself establish an application outage. The provider filter uses the
 [documented Service Health log fields](https://docs.cloud.google.com/service-health/docs/logs).
 Log-based alerts throttle to thirty minutes; their automatic closure is **not**
 evidence of recovery. The dashboard shows uptime, backend errors, p95 latency
@@ -82,11 +81,11 @@ deployment/operator identity runs it. The audit never does. A Firebase
 and execute an actual rebuild, verify its Cloud Build completion time, and
 observe production. No scheduled production refresh is enabled.
 
-The six-hour audit threshold accommodates observed successful scheduled runs
-more than five hours apart. If gaps exceed it, inspect GitHub schedule delivery
-and the audit's authentication, then dispatch a manual run. If reliably hourly
-metadata inspection becomes necessary, move the trigger to a scheduler with a
-delivery guarantee instead of treating GitHub scheduling delays as app outages.
+There is no missing-audit alert. GitHub delivered the hourly schedule about six
+times a day, every run successful, with gaps up to 6.9 hours, so a two-hour and
+then a six-hour absence alert each fired on normal delivery. If reliably hourly
+metadata inspection becomes necessary, move the trigger to a scheduler with a delivery
+guarantee instead of alerting on GitHub scheduling delays.
 
 ## Incident response
 
