@@ -1025,12 +1025,68 @@ const nativeCells = [
 ];
 const nativeId = "native-transaction-ack-loss-misclassifies-own-commit";
 const commandIds = ["rtdb-rule-coverage-retains-live-payloads", "early-e2e-report-accepted-as-completed-run"];
+expected.push({
+  "id": "firestore-rule-coverage-retains-live-payloads",
+  "claim": "The pinned Firestore emulator retained evaluated rule values between scenarios and exhausted its fixed 2048 MB heap during the ten-editor full-file run. Preserve the interrupted result, archive coverage, and replace only the diagnostic tracker with an identical-rule reapply at verified quiescent exclusive boundaries. Fresh complete runs must establish recovery.",
+  "requiredCases": []
+});
+commandIds.push("firestore-rule-coverage-retains-live-payloads");
+
+expected.push({
+  "id": "firestore-orphaned-listen-queues",
+  "claim": "A live heap dump after GC retained about 1.48 GB in WebChannel envelopes. The pinned emulator Listen close callback does not unsubscribe its database listener, and transport termination alone returns HTTP 200 while queues continue growing. At the existing exclusive idle boundary, remove only observed subscriptions, drain removal confirmations, acknowledge buffered envelopes and terminate; preserve actual race timing and database state.",
+  "requiredCases": []
+});
+commandIds.push("firestore-orphaned-listen-queues");
+
+expected.push({
+  "id": "c7-stale-draft-admission",
+  "claim": "C7 required unconditional Shared during staggered admission even when a peer autosave changed the draft between preparing the editing session and loading its pinned iframe. The documented 409 remains non-editable and offers Reload draft; exercise that explicit recovery before typing while preserving all convergence, token and draft oracles.",
+  "requiredCases": [
+    {
+      "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
+      "n": 2
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
+      "n": 5
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
+      "n": 10
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c05-structure.spec.mjs::C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)",
+      "n": 20
+    }
+  ]
+});
+
+expected.push({
+  "id": "c6-delayed-done-safe-refusal",
+  "claim": "The C6 serial latency control assumed Done must close immediately below ten seconds of injected per-batch delay. At N=10, six-second delayed batches cumulatively exceeded the delivery deadline and the product correctly retained the editor with an explicit retry message. Exercise its single bounded retry after draining the transport window while preserving every save, token, body, presence and convergence assertion.",
+  "requiredCases": [
+    {
+      "caseId": "e2e/specs/concurrency/c06-leave-commit.spec.mjs::C6 latency serial control: under the same delay, each editor in turn types, presses Done inside the debounce and waits for its last token at every other peer; then the agent's commit_draft: nobody stays in the editor, the live log is empty, the version is clean and holds every token once (I2) and every peer's body (I5), and status/{d}/peers empties within 5 s (I12)",
+      "n": 10
+    }
+  ]
+});
+
+const hosted404 = {
+  "id": "hosting-404-preview-evidence",
+  "claim": "Local Hosting cannot reproduce production-added cache headers. Preserve the production-only case skip while checking its exact seven absent-document probes through the real same-project Hosting preview.",
+  "requiredCases": []
+};
+expected.splice(expected.findIndex(row => row.id === 'mcp-real-runtime-parse-headers') + 1, 0, hosted404);
+commandIds.push(hosted404.id);
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 26 discoveries retain their identities and original claims", () => {
+test("all 31 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
-test("23 non-native discoveries retain every exact affected case and N-axis cell", () => {
+test("25 non-native discoveries retain every exact affected case and N-axis cell", () => {
   const cases = expected.filter(r => r.id !== nativeId && !commandIds.includes(r.id));
   for (const original of cases) assert.deepEqual(row(original.id).requiredCases, original.requiredCases, `${original.id}: exact affected case and N-axis retention`);
 });
@@ -1047,6 +1103,6 @@ test("the native ACK discovery retains 34 cases, 55 controls and 11 whole-file c
   assert.deepEqual(actual.controls, nativeControls, "native ACK control retention");
   assert.deepEqual(campaign.acceptance.requirements.filter(r => r.id.startsWith("native-ack-")).map(r => r.id), nativeCells, "native ACK whole-file capability retention");
 });
-test("two command-only harness discoveries explicitly retain empty case obligations", () => {
+test("five command-only harness or deployment discoveries explicitly retain empty case obligations", () => {
   for (const id of commandIds) assert.deepEqual(row(id).requiredCases, [], `${id}: explicit command-only case boundary`);
 });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Challenge every positive axis, measurement, completion and control binding of the C14 local safety assessment (SPEC §12, §19).
 import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
+import { syntheticCampaignTemplate } from './e2e-test-campaign.mjs';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -20,7 +21,7 @@ const source = { revision: "a".repeat(40), version: "0.1.0", fingerprint: "f".re
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const refusal = "Resolve all comments before publishing a new version.";
 const newer = "This document has a newer version. Reload, then suggest the edit on it.";
-const original = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url)));
+const original = syntheticCampaignTemplate(JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url))));
 const write = (root, file, value) => { mkdirSync(dirname(join(root, file)), { recursive: true }); writeFileSync(join(root, file), typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n"); };
 const rowCase = (name, n, trial, status = "pass", extra = {}) => { const full = `${name} [N=${n}] #${trial}`; return { id: `${C14_FILE}::${full}`, name: full, file: C14_FILE, n, trial, status, at: "2026-10-15T01:30:00.000Z", ...extra }; };
 const snapshot = doc => ({ currentVersion: "v1", liveEpoch: { present: true, value: "initial" }, draft: { entry: "index.html", storagePrefix: `docs/${doc}/draft/one` }, versions: [{ id: "v1", metadata: { entry: "index.html" }, objects: [{ key: `docs/${doc}/v1/index.html`, size: 3, sha256: "1".repeat(64) }] }], draftObjects: [{ key: `docs/${doc}/draft/one/index.html`, size: 4, sha256: "2".repeat(64) }] });
@@ -36,7 +37,7 @@ function measured(kind, n, trial, doc, caseName, attempt = 1) {
 }
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "c14-composite-")); t.after(() => rmSync(root, { recursive: true, force: true }));
-  const campaign = structuredClone(original); campaign.proofs = []; campaign.controls = []; Object.assign(campaign.acceptance, source, { tree: "worktree" });
+  const campaign = structuredClone(original); campaign.acceptance.requirements.push(...campaign.acceptance.deferredRequirements); delete campaign.acceptance.concurrencyScope; delete campaign.acceptance.deferredRequirements; campaign.proofs = []; campaign.controls = []; Object.assign(campaign.acceptance, source, { tree: "worktree" });
   campaign.acceptance.requirements.forEach(r => { r.proofs = []; if (r.id === "controls") r.controlSets = []; });
   const item = campaign.items.find(i => i.id === COMPOSITE_ITEM); item.state = "in-progress";
   const manifest = { natural: [], forced: [], controlLedgers: ["e2e/.out/control-ledger.json"] }, runs = [];
@@ -83,8 +84,8 @@ test("all original positive N/trials and actual control pairs qualify separately
 });
 
 for (const [label, change, message] of [
-  ["missing N", f => f.manifest.natural.pop(), /all four natural/],
-  ["duplicate N", f => f.manifest.forced[3] = f.manifest.forced[2], /all four natural/],
+  ["missing N", f => f.manifest.natural.pop(), /all scoped natural/],
+  ["duplicate N", f => f.manifest.forced[3] = f.manifest.forced[2], /all scoped natural/],
   ["missing trial", f => { f.runs[0].report.cases.pop(); }, /missing\/duplicate/],
   ["authoring trial override", f => { f.runs[0].report.invocation.trials = f.runs[0].done.trials = 1; }, /authoring/],
   ["wrong forced patch order", f => { const path = "e2e/.out/forced-2/stack.json", stack = JSON.parse(readFileSync(join(f.root, path))); stack.patches.reverse(); write(f.root, path, stack); }, /wrong positive patch/],
@@ -114,7 +115,7 @@ for (const [label, change, message] of [
   ["missing forced v2", f => { f.runs[4].rows.find(r => r.kind === "comment-held").commit.currentWhileHeld = "v1"; }, /v2 was not observed/],
   ["early refusal substituted", f => { f.runs[4].rows.find(r => r.kind === "commit-held-agent").race.gate = "before-upload"; }, /wrong gate/],
   ["missing held caller", f => { f.runs[4].rows.find(r => r.kind === "suggestion-held").race.held = 1; }, /wrong gate/],
-  ["stale source", f => { f.campaign.acceptance.version = "different"; }, /capture version/],
+  ["stale source", f => { f.campaign.acceptance.version = "different"; }, /source derivation: version differs/],
   ["original scope removed", f => { f.campaign.items.find(i => i.id === COMPOSITE_ITEM).requiredCases.pop(); }, /every original/],
   ["original item closed", f => { f.campaign.items.find(i => i.id === COMPOSITE_ITEM).state = "resolved"; }, /must remain in-progress/],
   ["missing control", f => { f.campaign.controls.pop(); }, /missing imported control/],
@@ -311,4 +312,17 @@ test("complete-file partitions retain verified composite qualifications and raw 
   manifest.reports[0].qualification.outcome="COMPOSITE-SAFETY";
   manifest.reports[0].qualification.composite.sha256="0".repeat(64);
   assert.throws(check,/digest differs/);
+});
+
+test("approved ten-participant scope requires exactly all six lower natural and forced axes", t => {
+  const f = fixture(t);
+  f.campaign.acceptance.concurrencyScope = structuredClone(original.acceptance.concurrencyScope);
+  f.campaign.acceptance.deferredRequirements = f.campaign.acceptance.requirements.filter(r => r.n === 20);
+  f.campaign.acceptance.requirements = f.campaign.acceptance.requirements.filter(r => r.n !== 20);
+  for (const axis of ['natural', 'forced']) f.manifest[axis] = f.manifest[axis].filter(p => !p.includes('-20/'));
+  const artifact = captureComposite(f.campaign, f.manifest, { root: f.root, source });
+  assert.equal(artifact.runs.length, 6);
+  assert.ok(artifact.original.requiredCases.some(r => r.n === 20));
+  artifact.runs = artifact.runs.filter(r => !(r.axis === 'forced' && r.n === 10));
+  assert.throws(() => verifyCompositeArtifact(f.campaign, artifact, { root: f.root }), /all scoped natural and forced N cells/);
 });

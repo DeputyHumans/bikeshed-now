@@ -121,6 +121,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { readFixture } from "../../lib/seed.mjs";
 import { closeAdmin, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
+import { withDraftAdmissionReload } from "../../lib/draft-admission.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { mintToken } from "../../lib/session.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
@@ -1050,14 +1051,26 @@ async function liveLog(ctx, docId) {
 async function enterJoined(ctx, u, { timeout = 90_000 } = {}) {
   await u.page.locator('.viewer-toolbar [aria-label="Edit"]').first().click();
   u.inEdit = true;
-  await u.waitForFrame({ timeout, match: /\/draft\// });
-  return eventually(async () => {
-    const share = await u.shareState();
-    const frame = await u.frame();
-    const editable = await frame.evaluate(() => document.body.getAttribute("contenteditable") === "true");
-    const error = (await u.page.locator('[role="alert"]').allTextContents()).join(" ");
-    return share !== "joining" && (editable || error) ? { share, editable, error } : false;
-  }, { timeout, interval: 100, message: `${u.name} joins or shows an explicit editing refusal` });
+  const read = async () => {
+    await u.waitForFrame({ timeout, match: /[?&]baseVersion=/ });
+    return eventually(async () => {
+      const share = await u.shareState();
+      const frame = await u.frame();
+      const state = await frame.evaluate(() => ({
+        editable: document.body.getAttribute("contenteditable") === "true",
+        contentType: document.contentType, body: document.body.textContent, url: location.href,
+      }));
+      const error = (await u.page.locator('[role="alert"]').allTextContents()).join(" ");
+      return share !== "joining" && (state.editable || error) ? { share, ...state, error } : false;
+    }, { timeout, interval: 100, message: `${u.name} joins or shows an explicit editing refusal` });
+  };
+  return withDraftAdmissionReload(read, async (previousUrl) => {
+    await u.page.getByRole("button", { name: "Reload draft", exact: true }).click();
+    await eventually(async () => {
+      const frame = await u.frame().catch(() => null);
+      return frame && frame.url() !== previousUrl && /[?&]baseVersion=/.test(frame.url());
+    }, { timeout, interval: 100, message: `${u.name} explicitly reloads a fresh pinned draft` });
+  }, message => ctx.step(`${u.name}: ${message}`));
 }
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

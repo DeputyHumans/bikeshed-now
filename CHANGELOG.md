@@ -16,6 +16,22 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Keep synthetic campaign tests independent of recorded release proofs and source bindings, while preserving all original claims, required cases and historical audit records. Retain the separately verified Hosting 404 boundary in the canonical discovery inventory.
+
+- Correct the delayed Done test to retry explicit safe delivery refusals at any injected latency, retaining all data-integrity checks. Cap this release concurrency qualification at ten participants as requested; retain twenty-participant obligations as deferred coverage.
+
+- Exercise explicit draft reload after a documented stale-snapshot refusal during E2E join admission. Bound recovery before typing, retain version and live epoch, and preserve every convergence and token oracle.
+
+- Let targetless concurrency discovery finish naturally so forced process exit cannot silently truncate the executable case inventory. Pin full declaration drainage with a regression control.
+
+- Confirm idle Firestore cleanup with an ordered read-only subscription barrier, so already-revoked targets cannot stall the next E2E case waiting for a duplicate removal reply.
+
+- Retire observed orphaned Firestore browser subscriptions at the exclusive idle E2E maintenance boundary. Unsubscribe, drain and acknowledge their queues before transport termination, preserving active-case timing, database data, rules and heap limits.
+
+- Archive and recycle Firestore rule-value diagnostics between quiescent exclusive E2E cases. Reapply identical pinned rules and verify their bytes and enforcement, preserving database data and the existing heap ceiling after a ten-editor run exhausted the emulator's heap.
+
+- Preserve actual source fingerprints when a reviewed diagnostics-only harness repair continues an E2E campaign. Qualify narrowly defined browser timing gaps with complete controlled witnesses and regression controls while retaining natural inconclusives and requiring explicit release policy.
+
 - Set MCP transport headers before the managed runtime parses JSON. Real Hosting parser failures bypassed both the handler and configured Hosting headers; malformed requests now retain the non-cacheable response and exposed authentication challenge.
 
 - Support explicitly approved controlled-race release evidence, pinned to reviewed deployed source archives and an actual guard-removal/restoration test, while retaining natural inconclusive outcomes and requiring all local campaign obligations. Preserve verified local-limit and composite qualifications in complete-file partitions.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Collect resumable full-file concurrency measurements on fresh sequential stacks without weakening admission (SPEC §12).
 
+import { assertAcceptedSource } from "./e2e-source-derivation.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, openSync, closeSync, renameSync, rmSync } from "node:fs";
@@ -17,10 +18,10 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const need = (ok, why) => { if (!ok) throw new Error(`partition runner: ${why}`); };
 const read = p => JSON.parse(readFileSync(p, "utf8"));
 const save = (p, value) => { const temp = `${p}.${randomUUID()}.tmp`; writeFileSync(temp, JSON.stringify(value, null, 2) + "\n", { flag: "wx" }); renameSync(temp, p); };
-export function planPartitions(campaign, cellId, snapshot, inventory) {
+export function planPartitions(campaign, cellId, snapshot, inventory, { root = ROOT } = {}) {
   const cell = campaign.acceptance.requirements.find(r => r.id === cellId);
   need(cell?.suite === "concurrency" && !cell.spec && cell.planTrials, "select a complete natural concurrency cell");
-  for (const field of ["revision", "version", "fingerprint"]) need(snapshot[field] === campaign.acceptance[field], `source differs from frozen ${field}`);
+  need(!assertAcceptedSource(campaign, snapshot, { root })?.controlled, "controlled scheduling cannot substitute for natural partitions");
   const tokens = cell.command.split(/\s+/);
   need(tokens.splice(0, 3).join(" ") === "node e2e/run.mjs run", "unexpected matrix command");
   need(!tokens.some(t => /["'`;|&<>$]/.test(t)) && !tokens.some(t => ["--grep", "--trials", "--spec", "--attach", "--keep", "--spec-file", "--target"].includes(t)), "matrix command is filtered or unsafe");
@@ -40,7 +41,7 @@ export async function runPartitions(campaign, cellId, directory, { root = ROOT }
   const toolchain = selfTestToolchain();
   need(toolchain.firebase.version === "15.25.1", "select pinned Firebase CLI 15.25.1");
   const snapshot = () => snapshotWorktree(root);
-  const plan = planPartitions(campaign, cellId, snapshot(), concurrencyInventory(root));
+  const plan = planPartitions(campaign, cellId, snapshot(), concurrencyInventory(root), { root });
   mkdirSync(out, { recursive: true });
   const statePath = resolve(out, "state.json");
   const guard = () => { for (const field of ["revision", "version", "fingerprint"]) need(snapshot()[field] === plan.source[field], `source changed during measurement: ${field}`); };

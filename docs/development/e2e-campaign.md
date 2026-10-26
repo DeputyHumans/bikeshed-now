@@ -45,7 +45,7 @@ npm run verify
 npm run test:rules:emulated
 ```
 
-The ledger's `acceptance.requirements` contains 64 explicit command cells: the 51 original cells, the
+The release ledger contains 55 required command cells and nine explicitly deferred N=20 cells. The original 64-cell inventory comprises the 51 original cells, the
 thumbnail authority variant at N=2, postcommit projection failure, and eleven
 whole-file variants for native transaction acknowledgement loss. These cover
 drafts, thumbnails, operators, feedback, suggestions and leases, verification,
@@ -61,7 +61,7 @@ node --input-type=module -e 'import fs from "node:fs"; const c=JSON.parse(fs.rea
 The checked-in commands default to immutable HEAD snapshots. For final local
 acceptance, commit the integrated source first, prepare the release version
 changes, then freeze that worktree. The evidence helper rewrites only tree
-selection to `--tree worktree`, preserving all 64 cell IDs and axes, and records
+selection to `--tree worktree`, preserving the 55 required and nine deferred cell IDs and axes, and records
 the base SHA, version, source digest and complete control inventory. Evidence
 imports are proposals under `e2e/.out/`; they never resolve findings. Keep the
 source frozen until the acceptance evidence is complete, then make the release
@@ -289,3 +289,105 @@ member list in the share helper's response. A local browser/API experiment
 omits that list, matching the operator response shape: the earlier response
 check fails and the stored-grant check passes. This proves the setup contract,
 not execution against a deployment.
+
+## Reviewed maintenance and controlled timing evidence
+
+An interrupted run remains incomplete. A diagnostic-maintenance repair can
+continue a frozen campaign only through `tools/e2e-source-derivation.mjs`:
+both complete source inventories must reproduce their recorded fingerprints,
+and their exact difference must match the reviewed maintenance bytes. Product
+code, dependencies, scenario declarations, trial counts, assertions and JVM
+limits remain identical. Every report and proof retains its actual fingerprint;
+the baseline is never relabelled.
+
+The separately labelled reader scheduling overlay groups each round's typing
+before the existing quiet interval. It changes no actor count, token, delay,
+hold, trial or assertion. Its passing cases can support controlled safety, but
+its whole run cannot replace a natural matrix cell.
+
+`tools/e2e-controlled-timing.mjs` recognizes only the specific missing C10b
+accept-save overlap and C22 reader reload/save windows. C10b requires every
+default trial's ordinary work, held-save and slow-link witnesses in the same
+complete file. C22 requires a complete controlled file at the same participant
+count, identical case census, and passing counterparts for every natural gap.
+Both require the actual catalogued bug-reintroduction failures and restored
+passes. Other failures, TODOs and inconclusives remain blocking.
+
+Natural reports are immutable and remain inconclusive. Release admission also
+requires the explicit `raceEvidencePolicy.browserTiming` decision with mode
+`controlled-with-red-green` and its reason; local safety qualification alone
+does not establish natural race frequency (SPEC §12).
+
+
+## Firestore orphaned Listen retention
+
+Coverage recycling did not resolve the ten-editor emulator exhaustion. A live
+heap dump after GC located about 1.48 GB in WebChannel envelope payloads. The
+pinned emulator's Listen close callback logs closure without unsubscribing its
+database listener; HTTP 200 on transport termination did not establish cleanup.
+A real-browser probe showed continued growth from 990 to 1,950 envelopes.
+
+The idle-only harness repair captures numeric subscription/sequence metadata,
+removes observed subscriptions after browser closure, drains their removal
+confirmations, acknowledges the buffered envelopes, and terminates the session.
+The same probe then retained seven envelopes after another 80 writes, with data
+and rules unchanged. Each raw failed attempt remains retained. This is an
+isolated cleanup proof, not completion of the N10/N20 or remaining matrix gates.
+The versioned exact-source derivation preserves earlier coverage-only evidence;
+controlled reader timing remains separately labelled and cannot qualify a
+natural concurrency cell by itself.
+
+A later controlled-reader run exposed a cleanup boundary timeout after C23:
+the server had already revoked a subscription, so another removal request did
+not emit a duplicate confirmation. The run was stopped and remains failed, not
+accepted. An isolated six-browser revocation probe reproduced that timeout.
+Cleanup now appends and removes a fresh read-only target after all observed
+removals and waits for that ordered barrier, then acknowledges the stream.
+The active-subscription control deliberately retains an original target: its
+queue grows and the probe fails even though the barrier completes. The exact
+v3 source profile keeps completed v2 evidence distinct from this repair.
+
+## Stale draft admission in C7
+
+A complete N10 structure run retained one failure when a peer autosave changed
+the draft between the session GET and pinned iframe GET. The server correctly
+refused the stale snapshot with 409; SPEC §6b requires a non-editable response
+and explicit Reload draft. C7 had required unconditional Shared at admission.
+
+The harness now exercises that explicit recovery before the joining actor has
+typed, only for the exact documented refusal and at most three times. It refuses
+a changed origin, document, version or live epoch and keeps every post-admission
+oracle. The failed run remains failed. A real-browser controlled race passes
+with recovery, fails with recovery disabled, and passes after restoration.
+Reviewed source profiles and constituent fingerprints retain earlier completed
+files without relabelling their source; executable case counts stay exact.
+
+### Release scope adjustment — 2026-10-26
+
+The user explicitly capped this release's concurrency qualification at ten
+participants. Required release measurements now cover N=2,5,10. The nine N=20
+matrix cells remain recorded as deferred requirements, and original affected
+case obligations retain their historical N=20 entries. No twenty-participant
+result is represented as passed, and the general authoring suite still supports
+that count. Natural timing inconclusives remain inconclusive under the approved
+controlled-race evidence policy.
+
+The N=10 C6 delayed serial control exposed another harness assumption: a
+six-second upstream delay can cumulatively exceed the live delivery deadline.
+The UI correctly refused Done and retained the editor with its explicit retry
+message. Retry is now allowed after that exact refusal at every nonzero injected
+delay, once the transport window drains. Unknown errors still fail; there is only
+one retry and every token, saved body, presence and convergence assertion remains.
+The original failed full-file report is retained for the negative control.
+
+The historical `W2-c18-N20-firestore-oom` observation also remains open and
+explicitly deferred: its only required witness is N=20. Lower-count success does
+not resolve that observation. No product finding or lower-count obligation may
+use this exception.
+
+Synthetic evidence unit tests start from the structural campaign obligations,
+with completed proof references, source bindings and closure decisions removed
+from a clone. This isolates their fake cases from the recorded release evidence;
+it does not alter the canonical ledger, historical audit records or release gate.
+The separately verified real-Hosting 404 boundary is retained in the discovery
+inventory even though its local counterpart remains an explicit emulator limit.

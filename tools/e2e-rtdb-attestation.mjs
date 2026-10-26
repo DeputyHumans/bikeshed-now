@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Independently bind retained RTDB runtime bytes and live JVM observations to exact campaign evidence (SPEC §12).
+import { assertAcceptedSource, stackSource } from "./e2e-source-derivation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
@@ -177,7 +178,7 @@ export function verifyRtdbRunAttestation(campaign,{report,stack,rel},{root,cache
   equal(identity(stack.rtdbEngine),identity(expected),"stack engine differs from frozen acceptance policy");
   const engine=stack.rtdbEngine;
   need(report.runId===stack.runId && report.invocation?.runId===stack.runId,"report/stack run identity differs");
-  need(stack.fingerprint?.baseSha===campaign.acceptance.revision && stack.expectVersion===campaign.acceptance.version && stack.fingerprint?.sha256===campaign.acceptance.fingerprint,"source revision/version/fingerprint differs");
+  assertAcceptedSource(campaign, stackSource(stack), { root });
   equal(stack.jvm?.heapMb,DEFAULT_HEAPS,"ordinary stack heap map differs");
   let invocation;
   try { invocation=jsonFile(root,`${dirname(rel)}/invocation.json`,cache); }

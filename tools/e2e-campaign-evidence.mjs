@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Prepare frozen local campaign commands and import exact evidence into reviewable proposals without resolving findings (SPEC §12).
 
+import { captureTiming, timingReference, verifyTiming } from "./e2e-controlled-timing.mjs";
+import { assertAcceptedSource, stackSource } from "./e2e-source-derivation.mjs";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, lstatSync, readlinkSync } from "node:fs";
 import { resolve, relative, dirname, isAbsolute, basename } from "node:path";
@@ -86,9 +88,9 @@ function loadReport(campaign, artifact, root, artifacts, runtimeCache) {
   const stack = artifacts.json(resolve(root, `e2e/.out/${report.runId}/stack.json`));
   const a = campaign.acceptance;
   need(stack.fingerprint?.baseSha === a.revision && stack.expectVersion === a.version, "run differs from the acceptance revision/version");
-  if (a.fingerprint) need(stack.fingerprint?.sha256 === a.fingerprint, "run differs from the frozen source fingerprint");
+  const derivation = assertAcceptedSource(campaign, stackSource(stack), { root });
   const runtime = verifyRtdbRunAttestation(campaign, { report, stack, rel }, { root, cache: runtimeCache });
-  return { rel, report, stack, runtime };
+  return { rel, report, stack, runtime, derivation };
 }
 function caseProof(campaign, loaded, c, outcome) {
   const { report, stack, rel } = loaded;
@@ -96,12 +98,13 @@ function caseProof(campaign, loaded, c, outcome) {
   if (outcome === "PASS") need((stack.patches ?? []).every((p) => positivePatch(p.set ?? p)), "a product mutant cannot provide positive evidence");
   return { id: `case-${hash(`${rel}\0${key(c)}\0${outcome}`).slice(0, 24)}`, kind: "e2e-case", revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: stack.fingerprint.sha256, artifact: rel, runId: report.runId, invocation: report.invocation.id, caseId: c.id, n: c.n ?? null, trial: c.trial ?? 1, outcome };
 }
-export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null, compositeArtifact = null } = {}) {
+export function importRun(campaign, artifact, { root = ROOT, cellId = null, localLimitArtifact = null, compositeArtifact = null, timingArtifact = null } = {}) {
   const artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache();
   const candidate = structuredClone(campaign), loaded = loadReport(candidate, artifact, root, artifacts, runtimeCache);
   for (const c of loaded.report.cases) if (pass(c) || fail(c)) upsert(candidate.proofs, caseProof(candidate, loaded, c, pass(c) ? "PASS" : "FAIL"));
   const unfinished = loaded.report.cases.filter((c) => !pass(c) && !(c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced));
   if (cellId) {
+    need(!loaded.derivation?.controlled, "a controlled scheduling overlay cannot substitute for a natural matrix run");
     const cell = candidate.acceptance.requirements.find((r) => r.id === cellId);
     need(cell?.kind === "e2e-run" && loaded.report.invocation.suite === cell.suite, "wrong matrix cell or suite");
     const inv = loaded.report.invocation;
@@ -116,13 +119,18 @@ export function importRun(campaign, artifact, { root = ROOT, cellId = null, loca
     for (const k of cell.options?.appEnvPresent ?? []) need(loaded.stack.options?.appEnv?.[k], `matrix ${k} absent`);
     const p = { id: `run-${loaded.report.runId}-${loaded.report.invocation.id}`, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version, fingerprint: loaded.stack.fingerprint.sha256, artifact: loaded.rel, runId: loaded.report.runId, invocation: loaded.report.invocation.id, outcome: "PASS" };
     let limited = [];
+    if (timingArtifact) {
+      p.outcome = "COMPOSITE-SAFETY";
+      p.timing = timingReference(root, localPath(root, timingArtifact), loaded.rel);
+      limited.push(...verifyTiming(candidate, p, loaded, { root, runtimeCache }).observations);
+    }
     if (compositeArtifact) {
       p.outcome = "COMPOSITE-SAFETY";
       p.composite = compositeReference(root, localPath(root, compositeArtifact), loaded.rel);
       limited.push(...verifyComposite(candidate, p, loaded, { root, runtimeCache }).observations);
     }
     if (unfinished.length && localLimitArtifact) {
-      if (!compositeArtifact) p.outcome = "LOCAL-LIMIT";
+      if (!compositeArtifact && !timingArtifact) p.outcome = "LOCAL-LIMIT";
       p.localLimit = localLimitReference(root, localPath(root, localLimitArtifact), loaded.rel);
       const localObservations = verifyLocalLimit(candidate, p, loaded, { root }).observations;
       limited.push(...localObservations);
@@ -147,7 +155,7 @@ export function importPartitions(campaign, manifestPath, { root = ROOT, inventor
   for (const { id, ref, report, proof } of rows) {
     candidate = importRun(candidate, ref.artifact, { root }).candidate;
     upsert(candidate.proofs, { id, kind: "e2e-run", revision: candidate.acceptance.revision, version: candidate.acceptance.version,
-      fingerprint: candidate.acceptance.fingerprint, artifact: ref.artifact, runId: report.runId, invocation: report.invocation.id,
+      fingerprint: proof.fingerprint, artifact: ref.artifact, runId: report.runId, invocation: report.invocation.id,
       ...proof, partition: { artifact: rel, sha256: partitionDigest(bytes) } });
     ids.push(id);
   }
@@ -160,7 +168,7 @@ export function importPartitions(campaign, manifestPath, { root = ROOT, inventor
 /** Capture an actual pinned probe after the matrix runs, bound to unchanged frozen source. */
 export async function captureLocalLimit(campaign, out, { root = ROOT, probe = probeInstalledTriggerQueue, snapshot = snapshotWorktree } = {}) {
   const before = snapshot(root);
-  for (const k of ["revision", "version", "fingerprint"]) need(before[k] === campaign.acceptance[k], `local-limit source ${k} differs from frozen acceptance`);
+  assertAcceptedSource(campaign, before, { root });
   const result = await probe();
   need(JSON.stringify(snapshot(root)) === JSON.stringify(before), "source changed while capturing local limit");
   const report = { ...result, source: before, command: "node tools/e2e-campaign-evidence.mjs capture-local-limit" };
@@ -241,7 +249,7 @@ export async function captureCommand(campaign, cellId, directory, { root = ROOT,
   const cell = campaign.acceptance.requirements.find((r) => r.id === cellId);
   need(cell?.kind === "command", "capture requires a command matrix cell");
   const before = snapshotWorktree(root), a = campaign.acceptance;
-  need(before.revision === a.revision && before.version === a.version && before.fingerprint === a.fingerprint, "source is not the prepared frozen worktree");
+  assertAcceptedSource(campaign, before, { root });
   const command = cellId === "controls" && sets.length ? `node e2e/run.mjs controls ${sets.join(" ")} --tree ${a.tree}` : cell.command;
   need(sets.every((s) => /^controls-[a-z0-9-]+$/.test(s) && cell.controlSets.includes(s)), "unknown control set");
   const dir = localPath(root, directory); need(dir.startsWith("e2e/.out/"), "capture output must be ignored campaign evidence"); mkdirSync(resolve(root, dir), { recursive: true });
@@ -265,7 +273,7 @@ export async function captureCommand(campaign, cellId, directory, { root = ROOT,
 export function importCommand(campaign, artifact, { root = ROOT, cellId } = {}) {
   const artifacts = new EvidenceArtifacts(), runtimeCache = createRtdbAttestationCache(), candidate = structuredClone(campaign);
   const rel = localPath(root, artifact), report = artifacts.json(resolve(root, rel)), a = candidate.acceptance;
-  need(report.revision === a.revision && report.version === a.version && report.fingerprint === a.fingerprint, "command differs from the frozen acceptance source");
+  assertAcceptedSource(campaign, report, { root });
   need(artifacts.digest(resolve(root, localPath(root, report.log))) === report.logSha256, "command log digest differs");
   const cell = candidate.acceptance.requirements.find((r) => r.id === cellId);
   need(cell?.kind === "command" && (report.command === cell.command || cellId === "controls" && (report.command.startsWith("node e2e/run.mjs controls ") || report.controlLedgers?.length > 0)), "command does not match this matrix cell");

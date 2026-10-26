@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Recognize only the pinned C15 automatic-trigger limitation while retaining exact incomplete case identities and ordinary passing witnesses (SPEC §14).
 
+import { assertAcceptedSource, stackSource } from "./e2e-source-derivation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -50,7 +51,7 @@ export function verifyLocalLimit(campaign, proof, loaded, { root }) {
   assert.deepEqual(probe.toolchain, PIN, "local limit: unpinned CLI, emulator or JAR hash");
   assert.deepEqual(probe.structure, { core: 0, maximum: 4, queue: "unbounded LinkedBlockingQueue", delivery: "blocking HttpRequest.execute" }, "local limit: structural proof differs");
   assert.deepEqual(probe.behavior, { installedConfiguration: { core: 0, maximum: 4, active: 1, queued: 3 }, counterfactualCoreFour: { core: 4, maximum: 4, active: 4, queued: 0 } }, "local limit: behavioral proof differs");
-  for (const field of ["revision", "version", "fingerprint"]) need(probe.source?.[field] === a[field], `stale probe ${field}`);
+  assertAcceptedSource(campaign, probe.source, { root });
   need(probe.command === "node tools/e2e-campaign-evidence.mjs capture-local-limit", "probe was not captured by the bound command");
   const at = Date.parse(probe.observedAt), merged = Date.parse(report.mergedAt);
   need(Number.isFinite(at) && Number.isFinite(merged) && at >= merged, "probe predates the completed run");

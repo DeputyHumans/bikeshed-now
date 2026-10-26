@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Evidence preparation refuses stale snapshots, misleading failures and invented completion while preserving every finding (SPEC §12).
 
+import { FIRESTORE_MAINTENANCE_DELTA, CONTROLLED_READER_DELTA, CONTROLLED_READER_KIND } from "./e2e-source-derivation.mjs";
+import { createHash } from "node:crypto";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
+import { syntheticCampaignTemplate } from './e2e-test-campaign.mjs';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
@@ -11,7 +14,7 @@ import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { prepareCampaign, withTree, importRun, importControls, commandCounts, snapshotWorktree, captureCommand, importCommand } from "./e2e-campaign-evidence.mjs";
 import { materializeTree } from "../e2e/lib/tree.mjs";
-const original = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url)));
+const original = syntheticCampaignTemplate(JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url))));
 const snapshot = { revision: "a".repeat(40), version: "0.1.0", fingerprint: "f".repeat(64), files: 3 };
 const write = (root, path, value) => { const file = join(root, path); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value)); };
 function fixture(t) {
@@ -31,9 +34,9 @@ function fixture(t) {
   write(root, "e2e/.out/controls/ledger.json", ledger);
   return { c, root, base: { ...base, at: "2026-10-15T01:00:30.500Z" }, def, ledger, report: "e2e/.out/green/invocations/i/results.json", controls: "e2e/.out/controls/ledger.json" };
 }
-test("prepared worktree commands preserve all 64 axes and every unresolved finding", () => {
+test("prepared worktree commands preserve all 55 scoped axes and every unresolved finding", () => {
   const { candidate, plan } = prepareCampaign(original, snapshot);
-  assert.equal(plan.matrix.length, 64);
+  assert.equal(plan.matrix.length, 55);
   assert.deepEqual(candidate.items, original.items);
   assert.deepEqual(candidate.coverage, original.coverage);
   for (const [i, r] of candidate.acceptance.requirements.entries()) {
@@ -183,4 +186,28 @@ test("control import finalizes runtime bytes after its last pair validation", t 
   };
   try { assert.throws(() => importControls(f.c, f.controls, { root: f.root, readDefinition: () => f.def }), /evidence changed before final acceptance/, "the public control importer must finalize its runtime snapshot"); }
   finally { EvidenceArtifacts.prototype.assertUnchanged = original; }
+});
+
+
+for (const controlled of [false, true]) test(`a reviewed ${controlled ? "controlled reader" : "maintenance"} derivative imports its actual fingerprint and rejects borrowed proof identity`, t => {
+  const f = fixture(t), hash = bytes => createHash("sha256").update(bytes).digest("hex");
+  const manifest = column => {
+    const files = [["app/src/unchanged.ts", hash("unchanged product")], ...[...FIRESTORE_MAINTENANCE_DELTA, ...(controlled ? [CONTROLLED_READER_DELTA] : [])].filter(row => row[column] !== null).map(row => [row[0], row[column]])].sort(([a],[b]) => a < b ? -1 : 1).map(([path, sha256]) => ({path, sha256}));
+    return { snapshot: { ...snapshot, files: files.length, fingerprint: hash(files.map(row => `${row.path}\0${row.sha256}\n`).join("")) }, files };
+  };
+  const baseline = manifest(1), candidate = manifest(2);
+  const bind = (name, value) => { const artifact = `e2e/.out/derivation/${name}.json`; write(f.root, artifact, value); return { artifact, sha256: hash(readFileSync(join(f.root, artifact))) }; };
+  Object.assign(f.c.acceptance, baseline.snapshot, {sourceDerivations:[{kind:controlled ? CONTROLLED_READER_KIND : "firestore-diagnostic-recycle-v1",fingerprint:candidate.snapshot.fingerprint,baseline:bind("baseline",baseline),candidate:bind("candidate",candidate)}]});
+  // The independent runtime receipt must name the actual new stack, too.
+  const actualCampaign = structuredClone(f.c); Object.assign(actualCampaign.acceptance, candidate.snapshot);
+  const stackPath = "e2e/.out/green/stack.json", stack = JSON.parse(readFileSync(join(f.root,stackPath)));
+  stack.fingerprint.sha256 = candidate.snapshot.fingerprint; write(f.root,stackPath,stack);
+  attachRtdbFixture(f.root,{campaign:actualCampaign,rel:f.report});
+  if (controlled) assert.throws(()=>importRun(f.c,f.report,{root:f.root,cellId:"functional"}),/controlled scheduling overlay cannot substitute/);
+  const result=importRun(f.c,f.report,{root:f.root,...(controlled ? {} : {cellId:"functional"})});
+  assert.ok(result.candidate.proofs.length > 0);
+  assert.ok(result.candidate.proofs.every(p=>p.fingerprint===candidate.snapshot.fingerprint));
+  assert.equal(result.candidate.acceptance.fingerprint,baseline.snapshot.fingerprint,"baseline is never relabelled");
+  f.c.acceptance.sourceDerivations=[];
+  assert.throws(()=>importRun(f.c,f.report,{root:f.root}),/source fingerprint differs/);
 });

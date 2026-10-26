@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Bind fresh-stack concurrency partitions to the complete executable scenario inventory (SPEC §12).
 
+import { verifyTiming } from "./e2e-controlled-timing.mjs";
+import { acceptedSourceFiles, assertAcceptedSource, reviewedSpecChange, stackSource } from "./e2e-source-derivation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -27,7 +29,9 @@ export function concurrencyInventory(root) {
   need(files.length > 0, "no concurrency specs");
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("E2E_") && !["NODE_OPTIONS", "NODE_TEST_CONTEXT"].includes(k)));
   env.E2E_SUITE = "concurrency";
-  const output = execFileSync(process.execPath, ["--test", "--test-force-exit", "--test-concurrency=1", "--test-reporter=./e2e/lib/reporter.mjs", ...files], { cwd: root, env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, timeout: 120_000 });
+  // Targetless declarations finish naturally. Forced exit can truncate the
+  // child test event stream while still returning success and valid JSONL.
+  const output = execFileSync(process.execPath, ["--test", "--test-concurrency=1", "--test-reporter=./e2e/lib/reporter.mjs", ...files], { cwd: root, env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, timeout: 120_000 });
   const rows = output.trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
   need(rows.length > 0 && rows.every(c => skip(c) && c.skipReason === "no target (E2E_TARGET is not set)"), "inventory must only declare targetless skipped cases");
   need(new Set(rows.map(key)).size === rows.length, "duplicate declarations");
@@ -49,8 +53,14 @@ export function verifyPartitions(campaign, cell, manifest, { root, inventory = c
   need(cell?.kind === "e2e-run" && cell.suite === "concurrency" && !cell.spec && cell.planTrials, "only full concurrency matrix cells can be partitioned");
   need(manifest?.schemaVersion === 1 && manifest.kind === "concurrency-partitions" && manifest.cell === cell.id, "manifest names another matrix cell");
   need(manifest.requirementSha256 === partitionCellDigest(cell), "matrix requirement changed");
-  for (const field of ["revision", "version", "fingerprint"]) need(manifest.source?.[field] === campaign.acceptance[field], `stale ${field}`);
-  assert.deepEqual(manifest.inventory, inventory, "partitions: executable inventory differs from frozen declarations");
+  need(!assertAcceptedSource(campaign, manifest.source, { root })?.controlled, "controlled scheduling cannot substitute for natural partitions");
+  assert.deepEqual(manifest.inventory.map(({ file, cases }) => ({ file, cases })), inventory.map(({ file, cases }) => ({ file, cases })), "partitions: executable inventory differs from frozen declarations");
+  const sourceFiles = acceptedSourceFiles(campaign, manifest.source, { root });
+  for (const declared of manifest.inventory) {
+    const current = inventory.find(row => row.file === declared.file);
+    need(declared.sha256 === (sourceFiles ? sourceFiles.get(declared.file) : current.sha256), "inventory differs from its actual source manifest");
+    need(declared.sha256 === current.sha256 || reviewedSpecChange(campaign, declared.file, declared.sha256, current.sha256, { root }), "executable inventory differs beyond a reviewed spec delta");
+  }
   need(Array.isArray(manifest.reports) && manifest.reports.length === inventory.length, "missing partitions");
   const paths = new Set(), runs = new Set(), seen = new Set(), result = [];
   for (const ref of manifest.reports) {
@@ -61,9 +71,9 @@ export function verifyPartitions(campaign, cell, manifest, { root, inventory = c
     const q = ref.qualification;
     need(!q || ["LOCAL-LIMIT", "COMPOSITE-SAFETY"].includes(q.outcome), "unsupported partition qualification");
     const proof = { id: `run-${report.runId}-${inv.id}`, kind: "e2e-run", artifact: ref.artifact,
-      revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: campaign.acceptance.fingerprint,
+      revision: campaign.acceptance.revision, version: campaign.acceptance.version, fingerprint: manifest.source.fingerprint,
       runId: report.runId, invocation: inv.id, outcome: q?.outcome ?? "PASS",
-      ...(q?.localLimit ? { localLimit: q.localLimit } : {}), ...(q?.composite ? { composite: q.composite } : {}) };
+      ...(q?.localLimit ? { localLimit: q.localLimit } : {}), ...(q?.composite ? { composite: q.composite } : {}), ...(q?.timing ? { timing: q.timing } : {}) };
     verifyFinishedRun(report, path, { expectedExit: q ? 3 : 0 });
     need(report.malformed?.length === 0 && inv.suite === cell.suite && !inv.grep && inv.trials === null, "filtered, malformed or authoring partition");
     need(inv.n?.length === 1 && inv.n[0] === cell.n, "participant count differs");
@@ -73,12 +83,18 @@ export function verifyPartitions(campaign, cell, manifest, { root, inventory = c
     need(expected && !seen.has(expected.file), "unknown or duplicate file"); seen.add(expected.file);
     assert.deepEqual(report.cases.map(key).sort(), expected.cases.map(key).sort(), "partitions: case/N/trial census differs");
     const stack = JSON.parse(readFileSync(partitionPath(root, `e2e/.out/${report.runId}/stack.json`)));
-    need(stack.fingerprint?.baseSha === campaign.acceptance.revision && stack.fingerprint.sha256 === campaign.acceptance.fingerprint && stack.expectVersion === campaign.acceptance.version, "partition source differs");
+    const actual = stackSource(stack);
+    need(!assertAcceptedSource(campaign, actual, { root })?.controlled, "controlled scheduling cannot substitute for natural partitions");
+    // Each constituent keeps its actual reviewed source, including earlier
+    // completed files. A collection manifest never relabels their identity.
+    Object.assign(proof, actual);
     need((cell.capabilities ?? []).every(cap => inv.capabilities?.includes(cap)), "partition capabilities differ");
     assert.deepEqual((stack.patches ?? []).map(p => p.set ?? p).sort(), [...(cell.options?.patches ?? [])].sort(), "partitions: capability patches differ");
     const observations = [];
-    if (proof.outcome === "COMPOSITE-SAFETY") observations.push(...verifyComposite(campaign, proof, { report, stack }, { root }).observations);
+    if (proof.composite) observations.push(...verifyComposite(campaign, proof, { report, stack }, { root }).observations);
     if (proof.outcome === "LOCAL-LIMIT" || proof.localLimit) observations.push(...verifyLocalLimit(campaign, proof, { report, stack }, { root }).observations);
+    if (proof.timing) observations.push(...verifyTiming(campaign, proof, { report, stack }, { root }).observations);
+    need(proof.outcome !== "COMPOSITE-SAFETY" || proof.composite || proof.timing, "composite qualification has no assessment");
     const observed = c => `${c.id}::${c.n ?? "-"}::${c.trial ?? 1}`;
     need(report.cases.every(c => pass(c) || skip(c) || observations.includes(observed(c))) && report.cases.some(pass), "partition contains failed or unjudged cases");
     const id = proof.id;

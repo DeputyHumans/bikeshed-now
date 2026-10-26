@@ -16,7 +16,7 @@ test("fresh-stack plan preserves the original axes and adds only one full-file s
   assert.deepEqual(c, fixture(), "planning never writes campaign findings");
 });
 for (const field of ["revision", "version", "fingerprint"]) test(`NEGATIVE: stale ${field} cannot start a partition`, () => {
-  assert.throws(() => planPartitions(fixture(), "natural-n2", { ...source, [field]: "stale" }, inventory), /source differs/);
+  assert.throws(() => planPartitions(fixture(), "natural-n2", { ...source, [field]: "stale" }, inventory), /source derivation: .*differs/);
 });
 for (const addition of [" --grep one", " --trials 1", " --attach old", " --keep", " --spec other", " --target prod", " ; echo bad"]) test(`NEGATIVE: partition command refuses ${addition.trim()}`, () => {
   const c = fixture(); c.acceptance.requirements[0].command += addition;

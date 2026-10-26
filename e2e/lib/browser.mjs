@@ -423,6 +423,7 @@ import {
 } from "./frame.mjs";
 import { colourPixels, pngPixels } from "./png.mjs";
 import { firestoreOrigin } from "./firestore-client.mjs";
+import { observeFirestoreContext } from "./firestore-channels.mjs";
 import { dummyMeasurementId, isMeasurementIdShape } from "./options.mjs";
 import { ledgerDoc, ledgerFolder } from "./seed.mjs";
 import { browserArgs } from "./browsers.mjs";
@@ -4830,6 +4831,7 @@ export class BrowserPool {
 
   async instrument(user, context) {
     const target = this.target;
+    if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1") observeFirestoreContext(target, context);
     const log = user.log;
     await context.exposeBinding("__e2eToast", (source, toast) => {
       // Which page showed it, for a tab's waits (ONE PERSON IN TWO TABS); never serialised.

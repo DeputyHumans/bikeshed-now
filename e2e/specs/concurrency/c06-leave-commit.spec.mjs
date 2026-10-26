@@ -910,10 +910,10 @@ async function c6Serial(ctx, n, { latencyMs = 0 } = {}) {
         const cap = u.capture({ paths: ["/draft"], method: "POST" });
         await typeTokens(u, id, tokens);
         await clickDone(u);
-        if (latencyMs >= 10_000) {
-          // N20 deliberately delays each upstream batch as long as the live
-          // acknowledgment deadline. A truthful refusal is retried once that
-          // transport window drains; convergence's later I1 bound is unchanged.
+        if (latencyMs > 0) {
+          // Delayed upstream batches can cumulatively exceed the live delivery
+          // deadline at any participant count. Retry only its explicit safe
+          // refusal after the transport window drains; keep the I1 bound.
           await eventually(async () => !(await u.page.getByRole("toolbar", { name: "Formatting" }).count()) || (await u.saveState()) === "error",
             { timeout: 35_000, interval: 100, message: `${u.name}'s first delayed Done reaches an outcome` });
           if (await u.page.getByRole("toolbar", { name: "Formatting" }).count()) {

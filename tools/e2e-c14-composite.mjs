@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Bind a reviewed C14 serialization-safety assessment to all natural and controlled axes without converting a missing natural witness into PASS (SPEC §6a, §19, §22).
 
+import { concurrencyNs } from './e2e-concurrency-scope.mjs';
+import { assertAcceptedSource, stackSource } from "./e2e-source-derivation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -46,8 +48,8 @@ const read = (root, ref) => { const bytes = readFileSync(local(root, ref?.artifa
 const bound = (root, path) => ({ artifact: path, sha256: sha(readFileSync(local(root, path))) });
 const scope = campaign => { const item = campaign.items.find(i => i.id === COMPOSITE_ITEM); need(item, "original item is absent"); return { claim: item.claim, baseline: item.baseline, requiredCases: item.requiredCases, originalRequiredCases: item.originalRequiredCases }; };
 const requirementHash = campaign => sha(JSON.stringify(campaign.acceptance.requirements.map(({ proofs, ...row }) => row)));
-function sourceMatches(campaign, actual, label) { for (const field of ["revision", "version", "fingerprint"]) need(actual?.[field] === campaign.acceptance[field], `${label} ${field} differs from frozen acceptance`); }
-function stackMatches(campaign, stack) { sourceMatches(campaign, { revision: stack.fingerprint?.baseSha, version: stack.expectVersion, fingerprint: stack.fingerprint?.sha256 }, "stack"); }
+function sourceMatches(campaign, actual, label, root) { assertAcceptedSource(campaign, actual, { root }); }
+function stackMatches(campaign, stack, root) { assertAcceptedSource(campaign, stackSource(stack), { root }); }
 function bindRun(root, axis, path) {
   const report = JSON.parse(readFileSync(local(root, path), "utf8")), dir = dirname(path);
   return { axis, n: report.invocation?.n?.[0], report: bound(root, path), invocation: bound(root, `${dir}/invocation.json`), measurements: bound(root, `${dir}/c13-feedback.jsonl`), stack: bound(root, `e2e/.out/${report.runId}/stack.json`), reporter: readResults(local(root, dir)).files.map(name => bound(root, `${dir}/${name}`)) };
@@ -55,7 +57,7 @@ function bindRun(root, axis, path) {
 
 /** Capture references only; no run, case or original obligation is changed. */
 export function captureComposite(campaign, manifest, { root, source, observedAt = new Date().toISOString() }) {
-  sourceMatches(campaign, source, "capture");
+  sourceMatches(campaign, source, "capture", root);
   const runs = ["natural", "forced"].flatMap(axis => (manifest[axis] ?? []).map(path => bindRun(root, axis, path)));
   const controlLedgers = (manifest.controlLedgers ?? []).map(path => bound(root, path));
   const controls = C14_CONTROLS.map(set => {
@@ -126,14 +128,14 @@ export function verifyCompositeArtifact(campaign, artifact, { root, runtimeCache
 }
 function verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeCache }) {
   need(artifact?.schemaVersion === 1 && artifact.kind === "composite-c14-serialization-safety" && artifact.id === COMPOSITE_ID && artifact.command === "node tools/e2e-campaign-evidence.mjs capture-composite", "unsupported adjudication artifact");
-  sourceMatches(campaign, artifact.source, "artifact");
+  sourceMatches(campaign, artifact.source, "artifact", root);
   need(campaign.items.find(i => i.id === COMPOSITE_ITEM)?.state === "in-progress", "original item must remain in-progress, never resolved by the composite");
   assert.deepEqual(artifact.original, scope(campaign), "C14 composite: original observation or requirement changed");
   const required = ["conditional", "browser"].flatMap(kind => NS.map(n => ({ caseId: `${C14_FILE}::${C14_CASES[kind]}`, n })));
   assert.deepEqual(artifact.original.requiredCases, required, "C14 composite: every original conditional N requirement must remain");
   need(artifact.requirementsSha256 === requirementHash(campaign), "acceptance requirements changed");
-  const expected = ["natural", "forced"].flatMap(axis => NS.map(n => `${axis}:${n}`));
-  assert.deepEqual(artifact.runs.map(r => `${r.axis}:${r.n}`).sort(), expected.sort(), "C14 composite: all four natural and forced N cells are required exactly once");
+  const expected = ["natural", "forced"].flatMap(axis => concurrencyNs(campaign).map(n => `${axis}:${n}`));
+  assert.deepEqual(artifact.runs.map(r => `${r.axis}:${r.n}`).sort(), expected.sort(), "C14 composite: all scoped natural and forced N cells are required exactly once");
   const observations = [], axes = [], documents = new Set();
   for (const ref of artifact.runs) {
     const report = JSON.parse(read(root, ref.report)), stack = JSON.parse(read(root, ref.stack)), dir = dirname(ref.report.artifact), inv = report.invocation;
@@ -142,7 +144,7 @@ function verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeC
     need(!dir.includes("/scratch/") && inv?.suite === "concurrency" && !inv.grep && inv.trials === null && JSON.stringify(inv.n) === JSON.stringify([ref.n]), "authoring, scratch, filtered or wrong-axis run");
     const wholeFile = inv.spec?.length === 1 && inv.spec[0] === C14_FILE && inv.plan?.length === 1 && JSON.stringify(inv.plan[0].files) === JSON.stringify([C14_FILE]);
     need(ref.axis === "natural" ? inv.spec?.length === 0 || wholeFile : inv.plan?.length === 1 && JSON.stringify(inv.plan[0].files) === JSON.stringify([C14_FILE]), "wrong natural/forced selection");
-    stackMatches(campaign, stack);
+    stackMatches(campaign, stack, root);
     assert.deepEqual((stack.patches ?? []).map(p => p.set ?? p), ref.axis === "natural" ? [] : ["amplify-c08-mint-races", "amplify-c13-feedback"], "C14 composite: wrong positive patch configuration");
     for (const cap of ["local", ...(ref.axis === "forced" ? ["gates", "patch:amplify-c13-feedback"] : [])]) need(inv.capabilities?.includes(cap), `missing ${cap} capability`);
     const rawFiles = readResults(local(root, dir)).files.map(name => `${dir}/${name}`).sort();
@@ -193,13 +195,13 @@ function verifyCompositeArtifactWithRuntime(campaign, artifact, { root, runtimeC
     for (const row of selected) { need(!documents.has(row.docId), "an attempt reused a fixture document"); documents.add(row.docId); }
     for (const c of report.cases) need(pass(c) || c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced || observations.includes(observedKey(ref.report.artifact, c)) || incomplete(c) && scenario(c, C15_JUDGE), "unrelated failed or incomplete case cannot be adjudicated");
   }
-  verifyControls(campaign, artifact, root, runtimeCache);
+  verifyCompositeControls(campaign, artifact, root, runtimeCache);
   need(observations.length > 0, "no missing natural witness needs this adjudication");
   return { observations, axes, unresolvedNaturalWitness: { id: COMPOSITE_ID, item: COMPOSITE_ITEM, reason: "Natural publication-first reachability/frequency remains unobserved for the listed axes; controlled serialization safety does not establish that witness.", observations } };
 }
 
-function verifyControls(campaign, artifact, root, runtimeCache) {
-  assert.deepEqual(artifact.controls.map(c => c.set).sort(), [...C14_CONTROLS].sort(), "C14 composite: exact directional controls are required");
+export function verifyCompositeControls(campaign, artifact, root, runtimeCache, requiredSets = C14_CONTROLS) {
+  assert.deepEqual(artifact.controls.map(c => c.set).sort(), [...requiredSets].sort(), "composite: exact directional controls are required");
   const ledgers = artifact.controlLedgers.map(ref => JSON.parse(read(root, ref)));
   for (const ledger of ledgers) need(ledger.ok === true && Number.isFinite(Date.parse(ledger.endedAt)) && Date.parse(artifact.observedAt) >= Date.parse(ledger.endedAt) && !ledger.interrupted && ledger.commit === campaign.acceptance.revision, "control ledger is unfinished or uses another source");
   for (const ref of artifact.controls) {
@@ -209,8 +211,8 @@ function verifyControls(campaign, artifact, root, runtimeCache) {
     const selected = {}, runtimes = {};
     for (const color of ["red", "green"]) {
       const p = campaign.proofs.find(p => p.id === ref[color].id); need(p?.kind === "e2e-case" && p.id === control[color] && p.artifact === ref[color].report.artifact, "control proof identity differs");
-      sourceMatches(campaign, p, "control proof");
-      const report = JSON.parse(read(root, ref[color].report)), stack = JSON.parse(read(root, ref[color].stack)); stackMatches(campaign, stack);
+      sourceMatches(campaign, p, "control proof", root);
+      const report = JSON.parse(read(root, ref[color].report)), stack = JSON.parse(read(root, ref[color].stack)); stackMatches(campaign, stack, root);
       runtimes[color] = verifyRtdbRunAttestation(campaign, { report, stack, rel: ref[color].report.artifact }, { root, cache: runtimeCache });
       need(ref[color].stack.artifact === `e2e/.out/${report.runId}/stack.json` && report.runId === p.runId && report.invocation.id === p.invocation, "control run identity differs");
       need(report.malformed?.length === 0, "malformed control report");

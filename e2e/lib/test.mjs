@@ -153,6 +153,7 @@ import { REPO_ROOT, SPECS_DIR } from "./paths.mjs";
 import { formatNotReproduced } from "./reporter.mjs";
 import { loadTarget } from "./target.mjs";
 import { CoverageBoundary, recycleRtdbCoverage } from "./rtdb-coverage.mjs";
+import { recycleFirestoreCoverage } from "./firestore-coverage.mjs";
 
 const coverageBoundary = new CoverageBoundary();
 
@@ -1629,6 +1630,8 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
   };
   const body = async () => {
     if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1" && coverageBoundary.needed) {
+      const firestore = await recycleFirestoreCoverage(target, { boundary: coverageBoundary, caseName: c.name });
+      t.diagnostic(`maintenance: archived ${firestore.coverage.sourceBytes} bytes of Firestore rule coverage and reapplied identical rules ${firestore.rulesSha256}; ${firestore.coverage.artifact}`);
       const recycled = await recycleRtdbCoverage(target, { boundary: coverageBoundary, caseName: c.name });
       t.diagnostic(`maintenance: archived ${recycled.coverage.sourceBytes} bytes of RTDB rule coverage and restored exact rules ${recycled.rulesSha256} after a whitespace-only round trip; ${recycled.coverage.artifact}`);
     }

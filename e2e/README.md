@@ -51,7 +51,9 @@ refuse, then reloads members and verifies all accepted edits survive resumed
 merging. A separate held-frame case changes the draft after preparing Edit and
 checks refusal, non-editability and explicit reload. The six `controls-c23-*`
 sets each execute a complete scenario at N=2; the campaign still requires the
-main scenario at N=2,5,10,20 on fresh integrated stacks.
+main scenario at the approved release counts on fresh integrated stacks.
+For the 2026-10-26 release, the explicit scope is N=2,5,10; N=20 is
+retained as deferred coverage, not a passing result.
 
 ## Outcomes
 
@@ -378,6 +380,34 @@ parity or production behavior.
   database data, case outcome, timeout or heap ceiling. The installed-runtime
   probe is `node tools/probe-e2e-rtdb-coverage.mjs`; the diagnosis and proof
   boundary are in [the heap note](../docs/development/e2e-rtdb-heap.md).
+- **Quiescent Firestore rule-coverage recycling** (`lib/firestore-coverage.mjs`).
+  The same boundary also archives Firestore's rule-value report before RTDB
+  maintenance. The pinned Firestore 1.22.0 JAR rebuilds its evaluator on an
+  identical-rule PUT; no temporary rule change is needed. The helper checks
+  the live JAR and ordinary 2048m heap, preserves the complete source object,
+  verifies exact staged content before and after, requires an empty replacement
+  tracker, and checks that the anonymous probe's result is unchanged. It records
+  the compressed archive and digests in `maintenance.jsonl`. A standalone
+  installed-JAR probe retained 1,011 values after 200 writes; identical-rule
+  reapplication cleared them while preserving the document bytes and both
+  allowed and denied writes. Omitting that reapplication failed the empty-tracker
+  assertion, and restoring it passed. The helper never deletes database data,
+  raises heap limits, or runs while a case's requests or browsers remain active.
+- **Orphaned Firestore browser subscriptions** (`lib/firestore-channels.mjs`).
+  The same pinned, exclusive idle boundary retires Listen sessions observed by
+  the browser harness. The stock emulator's close callback does not unsubscribe
+  its database listener: termination alone returns success while messages keep
+  accumulating. Observation keeps only session IDs, numeric request offsets and
+  subscription IDs. After every browser exits, cleanup removes the observed
+  subscriptions, appends and removes a fresh read-only barrier target, drains
+  its confirmation, acknowledges the last envelope through a backchannel GET,
+  and terminates the transport. The pinned handler processes removals in order;
+  its already-revoked targets do not emit a second removal reply. The barrier
+  targets only a hashed path under `__e2e_channel_cleanup` and changes no data. Unknown
+  protocol state, missing confirmations, HTTP errors or lost idle admission fail
+  maintenance. No page close or active-case timing changes. A real-browser probe
+  reduced 990 retained envelopes to 7; disabling cleanup grew them to 1,950 after
+  another 80 writes, with document data and security rules unchanged.
 - **Periodic debug-log size limits** (`lib/debuglogs.mjs`). Two shared stacks wrote
   22 GB of `firebase-debug.log` and 10 GB of `firestore-debug.log` each, and
   firebase-tools has no way to lower them (the Firestore emulator's
@@ -5789,3 +5819,15 @@ before saying a feature works.
   Nothing in `target.json` is a secret.
 - Production values go only in gitignored `e2e/.env.prod`; `.env.example`
   lists the names.
+
+### Draft admission during concurrent autosaves
+
+C7 may race an existing peer's autosave between preparing an editing session
+and loading its pinned iframe. SPEC §6b requires the stale frame to remain
+non-editable and offer **Reload draft**. Before the joining actor types,
+`lib/draft-admission.mjs` permits at most three explicit reload clicks for that
+exact JSON refusal. A reload must retain the origin, document path, base version
+and live epoch. Unknown refusals and editable DOM are never retried. Participant
+counts, trials, stagger timing, typed tokens and every post-join oracle remain
+unchanged. A controlled browser check holds the iframe request, commits a peer
+autosave, observes the real 409, and checks recovery; disabling recovery fails.

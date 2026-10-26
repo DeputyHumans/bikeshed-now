@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Campaign completion controls: missing work, disguised outcomes, stale evidence and ineffective controls never become a pass (SPEC §12).
 
+import { FIRESTORE_MAINTENANCE_DELTA, CONTROLLED_READER_DELTA, CONTROLLED_READER_KIND } from "./e2e-source-derivation.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 import { attachRtdbFixture } from "./e2e-rtdb-test-fixture.mjs";
+import { syntheticCampaignTemplate } from './e2e-test-campaign.mjs';
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
@@ -16,7 +18,7 @@ import { C15_WORK, C15_JUDGE, localLimitReference } from "./e2e-local-limit.mjs"
 import { PIN } from "./probe-e2e-trigger-queue.mjs";
 import { cloudQualificationFixture } from "./e2e-cloud-qualification-fixture.mjs";
 
-const imported = JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url), "utf8"));
+const imported = syntheticCampaignTemplate(JSON.parse(readFileSync(new URL("../e2e/campaign.json", import.meta.url), "utf8")));
 const sha = "a".repeat(40);
 const version = "0.1.0";
 const fingerprint = "f".repeat(64);
@@ -27,6 +29,8 @@ function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "campaign-check-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements;
   c.proofs = [];
   c.controls = [];
   Object.assign(c.acceptance, { revision: sha, version, fingerprint });
@@ -89,6 +93,8 @@ test("controlled release evidence cannot waive open work or replace valid local 
 
 test("the real ledger validates but the completion gate refuses open coverage, product reports and matrix work", () => {
   const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements;
   c.items.find((i) => i.id === "S3").state = "open";
   c.acceptance.requirements[0].proofs = [];
   const result = checkCampaign(c, { validateOnly: true });
@@ -131,7 +137,9 @@ test("negative controls: removing baseline observations, overlap links, a later 
     (c) => c.acceptance.requirements.pop(),
     (c) => c.items.pop(),
   ]) {
-    const c = structuredClone(imported); change(c);
+    const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements; change(c);
     assert.equal(checkCampaign(c, { validateOnly: true }).valid, false);
   }
 });
@@ -203,12 +211,14 @@ test("negative controls: a filtered matrix cell, shortened trials or mismatched 
 
 
 test("all three additional CLI capability cells are mandatory and remain unproved until executed", () => {
-  assert.equal(imported.acceptance.requirements.filter(r => !["concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators", "native-ack-feedback-threads", "native-ack-suggestions", "native-ack-verification-views-teams", "native-ack-membership", "native-ack-mcp", "native-ack-oauth", "native-ack-email-cooldown", "native-ack-rename", "native-ack-suggestion-leases"].includes(r.id)).length, 51, "all original cells remain beside the added failure variants");
+  assert.equal([...imported.acceptance.requirements, ...imported.acceptance.deferredRequirements].filter(r => !["concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators", "native-ack-feedback-threads", "native-ack-suggestions", "native-ack-verification-views-teams", "native-ack-membership", "native-ack-mcp", "native-ack-oauth", "native-ack-email-cooldown", "native-ack-rename", "native-ack-suggestion-leases"].includes(r.id)).length, 51, "all original cells remain beside the added failure variants");
   for (const id of ["cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor"]) {
     const cell = imported.acceptance.requirements.find((r) => r.id === id);
     assert.equal(cell.spec, "a20-cli.spec.mjs");
     assert.deepEqual(cell.capabilities, cell.options.patches.map((p) => `patch:${p}`));
     const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements;
     c.acceptance.requirements = c.acceptance.requirements.filter((r) => r.id !== id);
     assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `removing ${id} invalidates the matrix`);
   }
@@ -264,10 +274,10 @@ test("frozen source fingerprints bind clean stacks, proofs and captured command 
   assert.equal(checkCampaign(c, { root }).complete, true);
   const stackPath = `e2e/.out/${positive.runId}/stack.json`, stack = JSON.parse(readFileSync(join(root, stackPath)));
   write(root, stackPath, { ...stack, fingerprint: { ...stack.fingerprint, sha256: "e".repeat(64), dirty: false } });
-  assert.match(checkCampaign(c, { root }).errors.join("\n"), /stack differs from the frozen source fingerprint/);
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /stack differs from the proof source fingerprint/);
   write(root, stackPath, stack);
   positive.fingerprint = "e".repeat(64);
-  assert.match(checkCampaign(c, { root }).errors.join("\n"), /evidence differs from the frozen source fingerprint/);
+  assert.match(checkCampaign(c, { root }).errors.join("\n"), /source fingerprint differs/);
   positive.fingerprint = fingerprint;
   const command = c.proofs.find((p) => p.kind === "command"), report = JSON.parse(readFileSync(join(root, command.artifact)));
   write(root, command.artifact, { ...report, fingerprint: "e".repeat(64) });
@@ -485,7 +495,7 @@ test("capturing a local boundary runs the probe and refuses source changes", asy
   assert.equal(calls, 1); assert.deepEqual(captured.source, source);
   let reads = 0;
   await assert.rejects(captureLocalLimit(f.c, "e2e/.out/changed-limit.json", { root: f.root, snapshot: () => ++reads === 1 ? source : { ...source, fingerprint: "changed" }, probe: async () => f.probe }), /source changed/);
-  await assert.rejects(captureLocalLimit(f.c, "e2e/.out/stale-limit.json", { root: f.root, snapshot: () => ({ ...source, version: "old" }), probe: async () => f.probe }), /source version differs/);
+  await assert.rejects(captureLocalLimit(f.c, "e2e/.out/stale-limit.json", { root: f.root, snapshot: () => ({ ...source, version: "old" }), probe: async () => f.probe }), /source derivation: version differs/);
 });
 
 test("a matrix cell cannot use unselected N rows as execution proof", t => {
@@ -510,6 +520,8 @@ test("the new thumbnail authority cell preserves its N2 default trials and canno
   assert.deepEqual(cell.options.patches, ["amplify-thumb-authority"]);
   assert.ok(cell.capabilities.includes("patch:amplify-thumb-authority"));
   const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements;
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), "removing thumbnail authority must invalidate the matrix");
 });
@@ -534,8 +546,10 @@ for (const [id, spec, patch, extraCapabilities = [], gated = true] of [
   assert.equal(cell.spec, spec);
   assert.deepEqual(cell.options.patches, [patch]);
   assert.deepEqual(cell.capabilities, [...(gated ? ["gates"] : []), ...extraCapabilities, `patch:${patch}`]);
-  assert.equal(cell.command, `node e2e/run.mjs run --suite functional --spec ${spec} --patches ${patch}`);
+  assert.equal(cell.command.replace(/ --tree worktree$/, ""), `node e2e/run.mjs run --suite functional --spec ${spec} --patches ${patch}`);
   const c = structuredClone(imported);
+  c.acceptance.requirements.push(...c.acceptance.deferredRequirements);
+  delete c.acceptance.concurrencyScope; delete c.acceptance.deferredRequirements;
   c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== id);
   assert.ok(checkCampaign(c, { validateOnly: true }).errors.includes(`retain matrix requirement ${id}`), `${id}: removing the variant must invalidate the matrix`);
 });
@@ -651,4 +665,44 @@ test("the checker finalizes runtime bytes after its last per-proof validation", 
     assert.equal(result.complete, false, "the checker must finalize its runtime snapshot");
     assert.match(result.errors.join("\n"), /runtime evidence snapshot: RTDB attestation: evidence changed before final acceptance/);
   } finally { EvidenceArtifacts.prototype.assertUnchanged = original; }
+});
+
+
+test("controlled source derivatives remain case evidence and cannot satisfy a natural whole-run cell", t => {
+  const f=fixture(t), {c,root,positive}=f;
+  const manifest=column=>{const files=[...FIRESTORE_MAINTENANCE_DELTA,CONTROLLED_READER_DELTA].filter(row=>row[column]!==null).map(row=>({path:row[0],sha256:row[column]})).sort((a,b)=>a.path<b.path?-1:1);return {snapshot:{revision:sha,version,files:files.length,fingerprint:hash(files.map(r=>`${r.path}\0${r.sha256}\n`).join(''))},files};};
+  const baseline=manifest(1),candidate=manifest(2);
+  const bind=(path,value)=>{write(root,path,value);return {artifact:path,sha256:hash(readFileSync(join(root,path)))};};
+  Object.assign(c.acceptance,baseline.snapshot,{sourceDerivations:[{kind:CONTROLLED_READER_KIND,fingerprint:candidate.snapshot.fingerprint,baseline:bind('e2e/.out/source-baseline.json',baseline),candidate:bind('e2e/.out/source-controlled.json',candidate)}]});
+  const runs=new Map();
+  for(const p of c.proofs){
+    p.fingerprint=p.runId===positive.runId?candidate.snapshot.fingerprint:baseline.snapshot.fingerprint;
+    if(p.kind==='command'){const report=JSON.parse(readFileSync(join(root,p.artifact)));report.fingerprint=p.fingerprint;write(root,p.artifact,report);}
+    else runs.set(p.runId,p);
+  }
+  for(const [runId,p] of runs){
+    const path=`e2e/.out/${runId}/stack.json`,stack=JSON.parse(readFileSync(join(root,path)));stack.fingerprint.sha256=p.fingerprint;write(root,path,stack);
+    attachRtdbFixture(root,{campaign:{acceptance:{...c.acceptance,fingerprint:p.fingerprint}},rel:p.artifact});
+  }
+  const result=checkCampaign(c,{root});
+  assert.match(result.errors.join('\n'),/controlled scheduling must remain case evidence, never a natural matrix run/);
+  assert.equal(result.releaseComplete,false);
+  const bad=c.proofs.find(p=>p.kind==='e2e-run'&&p.runId===positive.runId);
+  c.proofs=c.proofs.filter(p=>p.id!==bad.id);for(const r of c.acceptance.requirements)r.proofs=r.proofs.filter(id=>id!==bad.id);
+  assert.deepEqual(checkCampaign(c,{root}).errors,[],"controlled case evidence itself remains valid; the natural matrix cell stays pending");
+});
+
+// The reduced release scope is explicit; lower axes and original case obligations survive.
+test("ten-participant scope retains the full lower matrix and rejects a missing ten-participant cell", () => {
+  const c = structuredClone(imported);
+  assert.equal(checkCampaign(c, { validateOnly: true }).valid, true);
+  assert.equal(c.acceptance.deferredRequirements.length, 9);
+  assert.ok(c.items.some(i => i.requiredCases?.some(r => r.n === 20)));
+  c.acceptance.requirements = c.acceptance.requirements.filter(r => r.id !== 'concurrency-natural-n10');
+  assert.match(checkCampaign(c, { validateOnly: true }).errors.join('\n'), /retain matrix requirement concurrency-natural-n10/);
+});
+
+test("ten-participant scope cannot erase its deferred coverage", () => {
+  const c=structuredClone(imported);c.acceptance.deferredRequirements.pop();
+  assert.match(checkCampaign(c,{validateOnly:true}).errors.join('\n'),/retain all nine deferred/);
 });

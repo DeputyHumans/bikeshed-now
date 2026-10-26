@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Validate the local E2E campaign ledger and refuse completion without current cases and negative controls (SPEC §12).
 
+import { concurrencyNs, inConcurrencyScope, deferredConcurrencyItems } from './e2e-concurrency-scope.mjs';
+import { verifyTiming, TIMING_ID } from "./e2e-controlled-timing.mjs";
+import { assertAcceptedSource, stackSource } from "./e2e-source-derivation.mjs";
 import { readFileSync } from "node:fs";
 import { resolve, relative, isAbsolute, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,8 +98,15 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
   const controls = index(campaign?.controls, "controls");
   const acceptance = campaign?.acceptance ?? {};
   const requirements = index(acceptance.requirements, "requirements");
-  const matrixIds = ["verify", "rules", "selftest", "controls", "smoke", "smoke-capabilities", "functional", "account-measurement", "account-live-consent", "account-default-mark", "cli-bad-skill", "cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor", "email-off", "concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators", "native-ack-feedback-threads", "native-ack-suggestions", "native-ack-suggestion-leases", "native-ack-verification-views-teams", "native-ack-membership", "native-ack-rename", "native-ack-mcp", "native-ack-oauth", "native-ack-email-cooldown", ...["natural", "c01", "c04", "c08", "c10", "c12", "c13", "c16", "c17"].flatMap((v) => [2, 5, 10, 20].map((n) => `concurrency-${v}-n${n}`))];
+  const matrixIds = ["verify", "rules", "selftest", "controls", "smoke", "smoke-capabilities", "functional", "account-measurement", "account-live-consent", "account-default-mark", "cli-bad-skill", "cli-uppercase-skill", "cli-underscore-skill", "cli-interval-floor", "email-off", "concurrency-thumb-authority-n2", "postcommit-projection-failure", "native-ack-endpoints", "native-ack-operators", "native-ack-feedback-threads", "native-ack-suggestions", "native-ack-suggestion-leases", "native-ack-verification-views-teams", "native-ack-membership", "native-ack-rename", "native-ack-mcp", "native-ack-oauth", "native-ack-email-cooldown", ...["natural", "c01", "c04", "c08", "c10", "c12", "c13", "c16", "c17"].flatMap((v) => concurrencyNs(campaign).map((n) => `concurrency-${v}-n${n}`))];
   for (const id of matrixIds) need(requirements.has(id), `retain matrix requirement ${id}`);
+  if (acceptance.concurrencyScope) {
+    const deferred = array(acceptance.deferredRequirements);
+    const expected = ['natural', 'c01', 'c04', 'c08', 'c10', 'c12', 'c13', 'c16', 'c17'].map(v => `concurrency-${v}-n20`).sort();
+    need(JSON.stringify(deferred.map(r => r.id).sort()) === JSON.stringify(expected) && deferred.every(r => r.n === 20 && r.suite === 'concurrency'), 'retain all nine deferred twenty-participant requirements');
+    need([...requirements.values()].every(r => r.suite !== 'concurrency' || r.n <= 10), 'release requirements exceed the approved ten-participant scope');
+  }
+
   for (const id of ["coverage-new-version-dialog", "coverage-new-version-drop"]) need(discoveries.has(id), `retain later discovery ${id}`);
   const all = [...coverageItems.values(), ...items.values(), ...discoveries.values()];
   for (const item of all) {
@@ -143,14 +153,15 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     for (const p of proofs.values()) {
       try {
         need(p.revision === acceptance.revision && p.version === acceptance.version, `${p.id}: evidence differs from the acceptance revision/version`);
-        if (acceptance.fingerprint) need(p.fingerprint === acceptance.fingerprint, `${p.id}: evidence differs from the frozen source fingerprint`);
+        const sourceDerivation = assertAcceptedSource(campaign, p, { root });
+        need(!sourceDerivation?.controlled || p.kind === "e2e-case", `${p.id}: controlled scheduling must remain case evidence, never a natural matrix run`);
         const path = artifact(p.artifact);
         if (p.kind === "command") {
           const report = artifacts.json(path);
           need(report.command === p.command && report.revision === p.revision && report.version === p.version && report.outcome === p.outcome, `${p.id}: command report metadata differs`);
           const logPath = artifact(report.log), log = artifacts.text(logPath);
           need(artifacts.digest(logPath) === p.logSha256, `${p.id}: command log digest differs`);
-          if (acceptance.fingerprint) need(report.fingerprint === acceptance.fingerprint, `${p.id}: command source fingerprint differs`);
+          need(report.fingerprint === p.fingerprint, `${p.id}: command source fingerprint differs`);
           if (Array.isArray(report.controlSets)) {
             need(new Set(report.controlSets).size === report.controlSets.length && report.tests === report.controlSets.length, `${p.id}: control command counts differ from distinct completed sets`);
             const ledgerPaths = report.controlLedgers ?? (report.controlLedger ? [report.controlLedger] : []), recorded = [];
@@ -181,7 +192,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         const stack = artifacts.json(artifact(`e2e/.out/${p.runId}/stack.json`));
         need(report.runId === p.runId && report.invocation?.id === p.invocation, `${p.id}: run/invocation differs from report`);
         need(stack.fingerprint?.baseSha === p.revision && stack.expectVersion === p.version, `${p.id}: stack revision/version differs`);
-        if (acceptance.fingerprint) need(stack.fingerprint?.sha256 === acceptance.fingerprint, `${p.id}: stack differs from the frozen source fingerprint`);
+        need(stack.fingerprint?.sha256 === p.fingerprint, `${p.id}: stack differs from the proof source fingerprint`);
+        assertAcceptedSource(campaign, stackSource(stack), { root });
         need(!stack.fingerprint?.dirty || (HASH.test(p.fingerprint) && p.fingerprint === stack.fingerprint.sha256), `${p.id}: dirty stack needs its exact fingerprint`);
         need(Array.isArray(report.malformed) && report.malformed.length === 0, `${p.id}: malformed result records`);
         const patches = array(stack.patches).map((entry) => entry.set ?? entry);
@@ -195,13 +207,16 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         }
         const limit = p.outcome === "LOCAL-LIMIT" || p.localLimit ? verifyLocalLimit(campaign, p, { report, stack }, { root }) : null;
         if (p.kind === "e2e-run" && p.outcome === "PASS") verifyCompletedRun(report, path);
-        const composite = p.outcome === "COMPOSITE-SAFETY" ? verifyComposite(campaign, p, { report, stack }, { root, runtimeCache }) : null;
+        const composite = p.composite ? verifyComposite(campaign, p, { report, stack }, { root, runtimeCache }) : null;
+        const timing = p.timing ? verifyTiming(campaign, p, { report, stack }, { root, runtimeCache }) : null;
+        need(p.outcome !== "COMPOSITE-SAFETY" || composite || timing, `${p.id}: composite qualification has no assessment`);
+        if (timing) unresolvedNaturalWitnesses.push({ proof: p.id, ...timing.unresolvedNaturalWitness });
         if (composite) {
           if (!localAdjudications.has(COMPOSITE_ITEM)) unresolvedNaturalWitnesses.push({ proof: p.id, ...composite.unresolvedNaturalWitness, axes: composite.axes });
           localAdjudications.add(COMPOSITE_ITEM);
         }
         if (limit) unresolvedDeploymentWitnesses.push({ proof: p.id, ...limit.unresolvedDeploymentWitness });
-        loaded.set(p.id, { report, stack, runtime, limit, composite, selected: found[0] ?? null });
+        loaded.set(p.id, { report, stack, runtime, limit, composite, timing, selected: found[0] ?? null });
       } catch (e) { errors.push(`${p.id}: cannot verify evidence: ${e.message}`); }
     }
     for (const c of controls.values()) {
@@ -230,7 +245,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
         const p = proofs.get(id);
         return p?.kind === "e2e-case" ? [p] : [];
       });
-      for (const c of array(item.requiredCases)) need(witnessed.some((w) => affectedCaseMatches(w, c)), `${item.id}: missing affected case ${c.caseId} [N=${c.n ?? "-"}]`);
+      for (const c of array(item.requiredCases).filter(c => inConcurrencyScope(campaign, c))) need(witnessed.some((w) => affectedCaseMatches(w, c)), `${item.id}: missing affected case ${c.caseId} [N=${c.n ?? "-"}]`);
     }
     const passedKeys = new Set(), visitedReports = new Set();
     for (const { report } of loaded.values()) {
@@ -262,7 +277,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
           partitioned = parts.some(p => p.id === id && p.ref.artifact === proofs.get(id).artifact);
           need(partitioned, `matrix:${r.id}: proof is not in its partition manifest`);
           const member = parts.find(p => p.id === id);
-          for (const field of ["outcome", "localLimit", "composite"]) need(JSON.stringify(proofs.get(id)?.[field]) === JSON.stringify(member?.proof[field]), `matrix:${r.id}: partition ${field} differs from its verified qualification`);
+          for (const field of ["outcome", "localLimit", "composite", "timing"]) need(JSON.stringify(proofs.get(id)?.[field]) === JSON.stringify(member?.proof[field]), `matrix:${r.id}: partition ${field} differs from its verified qualification`);
         } catch (error) { errors.push(`matrix:${r.id}: ${error.message}`); }
       }
       need(report.invocation?.suite === r.suite, `matrix:${r.id}: wrong suite`);
@@ -278,7 +293,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       for (const [k, v] of Object.entries(r.options?.appEnv ?? {})) need(stack.options?.appEnv?.[k] === v, `matrix:${r.id}: ${k} differs`);
       for (const c of array(report.cases)) {
         if (purePass(c)) continue;
-        if (got.limit?.observations.includes(key(c)) || got.composite?.observations.includes(key(c))) continue;
+        if (got.limit?.observations.includes(key(c)) || got.composite?.observations.includes(key(c)) || got.timing?.observations.includes(key(c))) continue;
         const skipped = c.status === "skip" && !c.todo && !c.inconclusive && !c.notReproduced;
         const exclusion = exclusions.find((e) => e.caseId === c.id && text(e.reason) && all.some((i) => i.id === e.item && i.state === "resolved" && i.resolution?.kind === "local-limit"));
         need(skipped && (passedKeys.has(key(c)) || exclusion), `matrix:${r.id}: ${c.id} [N=${c.n ?? "-"}, trial=${c.trial ?? 1}] is incomplete (${c.status}${c.todo ? ", TODO" : ""})`);
@@ -293,7 +308,8 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     try { artifacts.assertUnchanged(); } catch (error) { errors.push(`evidence snapshot: ${error.message}`); }
     try { assertRtdbAttestationCacheUnchanged(runtimeCache); } catch (error) { errors.push(`runtime evidence snapshot: ${error.message}`); }
   }
-  const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`));
+  const deferredItems = deferredConcurrencyItems(campaign);
+  const localPending = pending.filter(p => ![...localAdjudications].some(id => p === `${id}: in-progress`) && !deferredItems.some(id => p === `${id}: open` || p === `${id}: in-progress`));
   const localComplete = !validateOnly && errors.length === 0 && localPending.length === 0;
   const complete = localComplete && pending.length === 0 && unresolvedDeploymentWitnesses.length === 0 && unresolvedNaturalWitnesses.length === 0;
   let releaseComplete = complete, releaseQualification = null;
@@ -302,10 +318,10 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
       const policy = acceptance.raceEvidencePolicy;
       if (policy.mode !== "controlled-with-red-green" || !text(policy.reason)) throw new Error("explicit controlled-race policy and reason required");
       releaseQualification = verifyCloudQualification(policy.cloud, { root, version: acceptance.version, reviewedOverlays: policy.reviewedOverlays });
-      releaseComplete = localComplete && unresolvedNaturalWitnesses.every(w => w.id === COMPOSITE_ID && w.item === COMPOSITE_ITEM) && unresolvedDeploymentWitnesses.every(w => w.id === LIMIT_ID);
+      releaseComplete = localComplete && unresolvedNaturalWitnesses.every(w => w.id === COMPOSITE_ID && w.item === COMPOSITE_ITEM || w.id === TIMING_ID && policy.browserTiming?.mode === "controlled-with-red-green" && text(policy.browserTiming.reason)) && unresolvedDeploymentWitnesses.every(w => w.id === LIMIT_ID);
     } catch (error) { errors.push(`release qualification: ${error.message}`); releaseComplete = false; }
   }
-  return { valid: errors.length === 0, complete, releaseComplete, releaseQualification, localComplete, unresolvedDeploymentWitnesses, unresolvedNaturalWitnesses, localAdjudications: [...localAdjudications], localPending, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
+  return { deferredItems, concurrencyScope: acceptance.concurrencyScope ?? null, deferredRequirements: array(acceptance.deferredRequirements).map(r => r.id), valid: errors.length === 0, complete, releaseComplete, releaseQualification, localComplete, unresolvedDeploymentWitnesses, unresolvedNaturalWitnesses, localAdjudications: [...localAdjudications], localPending, errors, pending, counts: { coverage: coverageItems.size, coverageOpen: [...coverageItems.values()].filter((i) => ["open", "in-progress"].includes(i.state)).length, historicalClosed: [...coverageItems.values()].filter((i) => i.state === "historical-closed").length, suspects: grouped.length, reported: reported.length, discoveries: discoveries.size, matrix: requirements.size } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -325,7 +341,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         console.log(`${result.errors.length} evidence/schema errors; ${result.pending.length} unresolved obligations`);
         if (args.includes("--release")) console.log(`Release qualification: ${result.releaseComplete ? "COMPLETE" : "NOT COMPLETE"}; natural outcomes remain unchanged.`);
         if (result.unresolvedDeploymentWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; ${result.unresolvedDeploymentWitnesses.length} deployment-bound concurrency witness(es) remain unresolved. No case outcome was changed.`);
-        if (result.unresolvedNaturalWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; C14 composite safety leaves the original natural publication-first observation unresolved. Raw INCONCLUSIVE outcomes and the original item remain unchanged.`);
+        if (result.unresolvedNaturalWitnesses.length) console.log(`Local acceptance ${result.localComplete ? "complete" : "incomplete"}; Controlled safety assessments leave the original natural timing observations unresolved. Raw INCONCLUSIVE outcomes and the original item remain unchanged.`);
         for (const error of result.errors) console.error(`- ${error}`);
         if (args.includes("--validate")) console.log("Structural validation only; this does not establish completion.");
       }
