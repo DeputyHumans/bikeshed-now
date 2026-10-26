@@ -1,6 +1,6 @@
 {
   "name": "bikeshed-now-functions",
-  "version": "0.20.3",
+  "version": "0.20.4",
   "private": true,
   "license": "Apache-2.0",
   "description": "Cloud Functions (v2): every server-side decision — auth, ACL, content proxy, versioning, Markdown compilation, provenance, teams, email, MCP.",
