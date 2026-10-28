@@ -924,6 +924,15 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
   let won = null;
   let pending = [];
   const holds = s.users.map((u) => holdRequests(u.page, (url) => url.pathname === "/commit", 1, { method: "POST", timeoutMs: 90_000 }));
+  const releases = new Map();
+  const dispatch = (i) => {
+    if (!releases.has(i)) {
+      const response = holds[i].release();
+      response.catch(() => undefined);
+      releases.set(i, response);
+    }
+    return releases.get(i);
+  };
   try {
     await Promise.all(holds.map((hold) => hold.installed));
     await g.hold("commit-before-read", { key });
@@ -934,9 +943,11 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
     await Promise.all(holds.map((hold) => hold.held));
     // Immutable snapshot CAS is about identity, even for identical HTML. Let
     // every commit read the same last saved snapshot before separating them.
-    await holds[0].release();
+    // release() also waits for the HTTP response, which this server gate holds.
+    // Dispatch now, prove arrival, and await responses only after opening gates.
+    dispatch(0);
     await requireHeld(ctx, g, "commit-before-read", 1, { key, timeoutMs: HELD_MS });
-    await Promise.all(holds.slice(1).map((hold) => hold.release()));
+    for (let i = 1; i < holds.length; i++) dispatch(i);
     await requireHeld(ctx, g, "commit-before-read", ctx.n, { key, timeoutMs: HELD_MS });
     draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while every commit is held");
@@ -957,8 +968,8 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
     ctx.step("let the losers go");
     await g.release("commit-after-read");
   } finally {
-    await Promise.all(holds.map((hold) => hold.release().catch(() => hold.unroute())));
     await releaseAll(g, ["commit-before-read", "commit-after-read"]);
+    await Promise.all(holds.map((_, i) => dispatch(i)));
   }
   const rows = await outcomesOf(ctx, s.users, pending, caps);
   await settleServer(ctx, s.docId, "after the late losers");

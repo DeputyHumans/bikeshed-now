@@ -13,7 +13,7 @@ const source={revision:'a'.repeat(40),version:'0.20.4',fingerprint:'f'.repeat(64
 const write=(root,p,v)=>{mkdirSync(dirname(join(root,p)),{recursive:true});writeFileSync(join(root,p),typeof v==='string'?v:JSON.stringify(v));};
 const naturalReason=`race not achieved: no two pages' accept saves each lacked the other's replacement (attempt3-p1#0 holds [1,1]), so this trial can neither show S17 nor count as "not reproduced"`;
 function row(prefix,trial,status='pass',reason=null,file=C10_FILE){const name=`${prefix} synthetic fixture [N=2] #${trial}`;return {id:`${file}::${name}`,name,file,n:2,trial,status,at:'2026-10-15T01:00:30.000Z',...(reason?{inconclusive:reason}:{})};}
-function fixture(t){
+function fixture(t,{patches=[],shortSpec=false}={}){
  const root=mkdtempSync(join(tmpdir(),'controlled-timing-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const campaign={acceptance:{...source},proofs:[],controls:[]};
  const path='e2e/.out/natural/invocations/i/results.json',dir=dirname(path);
@@ -22,11 +22,11 @@ function fixture(t){
   for(const prefix of ['C10b approvers press Accept','C10b slow link:','C10b judge (slow link):','C10b held save:','C10b judge (held save):'])cases.push(row(prefix,trial));
   cases.push(row('C10b judge (SYNC-T):',trial,trial===1?'inconclusive':'pass',trial===1?naturalReason:null));
  }
- const invocation={id:'i',runId:'natural',suite:'concurrency',spec:[C10_FILE],grep:null,n:[2],trials:null,capabilities:['storage-preconditions','rtdb-proxy'],plan:[{tier:'concurrency',files:[C10_FILE]}],startedAt:'2026-10-15T01:00:00Z'};
+ const invocation={id:'i',runId:'natural',suite:'concurrency',spec:[shortSpec?'c10-accepts.spec.mjs':C10_FILE],grep:null,n:[2],trials:null,capabilities:['storage-preconditions','rtdb-proxy'],plan:[{tier:'concurrency',files:[C10_FILE]}],startedAt:'2026-10-15T01:00:00Z'};
  const report={runId:'natural',invocation,malformed:[],mergedAt:'2026-10-15T01:01:00Z',cases};
  const done={...invocation,endedAt:'2026-10-15T01:01:01Z',exit:3,interrupted:null,stackDown:null};
  const stack=patches=>({runId:'natural',fingerprint:{baseSha:source.revision,sha256:source.fingerprint,dirty:true},expectVersion:source.version,patches});
- write(root,path,report);write(root,`${dir}/invocation.json`,done);write(root,'e2e/.out/natural/stack.json',stack([]));
+ write(root,path,report);write(root,`${dir}/invocation.json`,done);write(root,'e2e/.out/natural/stack.json',stack(patches));
  write(root,`${dir}/c10-accepts.jsonl`,'{"syntheticFixture":true}\n');
  const prepared=attachRtdbFixture(root,{campaign,rel:path});Object.assign(report,prepared.report);Object.assign(done,prepared.done);
  const save=()=>{write(root,path,report);write(root,`${dir}/invocation.json`,done);write(root,`${dir}/results-final.jsonl`,report.cases.map(c=>JSON.stringify(c)).join('\n')+'\n');};save();
@@ -63,6 +63,8 @@ for(const [name,mutate,expected] of [
  ['interrupted invocation',f=>{f.done.interrupted='SIGINT';},/did not finish/],
  ['missing capability',f=>{f.report.invocation.capabilities=f.done.capabilities=[];},/capabilities missing/],
  ['wrong file selection',f=>{f.report.invocation.spec=f.done.spec=[];},/complete file/],
+ ['escaped short file selection',f=>{f.report.invocation.spec=f.done.spec=['../c10-accepts.spec.mjs'];},/complete file/],
+ ['unrelated short file selection',f=>{f.report.invocation.spec=f.done.spec=['c08-mint-races.spec.mjs'];},/complete file/],
  ['no missing natural window',f=>{f.report.cases[5].status='pass';delete f.report.cases[5].inconclusive;},/unrelated failure/],
  ['missing actual control',f=>f.campaign.controls.pop(),/missing control/],
  ['invalid control ledger',f=>{f.ledger.ok=false;write(f.root,'e2e/.out/ledger.json',f.ledger);},/ledger is unfinished/],
@@ -136,4 +138,14 @@ test('durable-response controlled reader retains exact natural gaps and reviewed
  assert.equal(f.reports[0].report.cases.filter(c=>c.status==='inconclusive').length,8);
  f.campaign.acceptance.sourceDerivations[0].kind=CONTROLLED_READER_KIND;
  assert.throws(f.capture,/reviewed diagnostics-only delta/);
+});
+
+test('C10 pause-point runs retain natural inconclusives with complete same-file safety witnesses',t=>{
+ const f=fixture(t,{patches:['amplify-c10-accept'],shortSpec:true});
+ const result=verifyTimingArtifact(f.campaign,f.capture(),{root:f.root});
+ assert.equal(result.observations.length,1);
+ assert.equal(f.report.cases.filter(c=>c.status==='inconclusive').length,1);
+});
+for(const patches of [['controls-c10-i8-in-place'],['amplify-c08-mint-races'],['amplify-c10-accept','controls-c10-i8-in-place'],['amplify-c10-accept','amplify-c10-accept']])test(`unreviewed timing patches rejected: ${patches.join(',')}`,t=>{
+ const f=fixture(t,{patches});assert.throws(f.capture,/timing qualification permits only/);
 });

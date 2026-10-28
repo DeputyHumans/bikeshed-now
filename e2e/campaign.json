@@ -15384,6 +15384,32 @@
       "mustNotDo": [
         "Do not route or delay application requests, change data or rules, relax cleanup assertions, or accept the failed reader run."
       ]
+    },
+    {
+      "id": "mint-race-response-deadlock",
+      "state": "in-progress",
+      "classification": "local-harness-scheduling",
+      "claim": "The C8 late-loser test awaited a browser release that also waited for the HTTP response while deliberately holding that response at a server gate. Dispatch requests, verify gate arrivals, release gates, then drain responses; retain all publication, stale-base and fresh-draft assertions.",
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+          "n": 10
+        }
+      ],
+      "evidence": [
+        "e2e/.out/mint-dispatch-evidence/diagnosis.json"
+      ],
+      "mustNotDo": [
+        "Do not treat the original gate-timeout inconclusives as passing or relax any winner, refusal or draft-preservation assertion."
+      ]
     }
   ],
   "acceptance": {

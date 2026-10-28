@@ -1088,12 +1088,31 @@ expected.push({
 });
 commandIds.push("firestore-handshake-navigation");
 
+expected.push({
+  "id": "mint-race-response-deadlock",
+  "claim": "The C8 late-loser test awaited a browser release that also waited for the HTTP response while deliberately holding that response at a server gate. Dispatch requests, verify gate arrivals, release gates, then drain responses; retain all publication, stale-base and fresh-draft assertions.",
+  "requiredCases": [
+    {
+      "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+      "n": 2
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+      "n": 5
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c08-mint-races.spec.mjs::C8 S4b a late losing Save as new version (SYNC-P): commits held before they read the draft, the first published (deleting its draft), the losers let go to read it and held again while a fresh draft is saved on the new version; every loser is told of the newer version and the fresh draft survives",
+      "n": 10
+    }
+  ]
+});
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 32 discoveries retain their identities and original claims", () => {
+test("all 33 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
-test("25 non-native discoveries retain every exact affected case and N-axis cell", () => {
+test("26 non-native discoveries retain every exact affected case and N-axis cell", () => {
   const cases = expected.filter(r => r.id !== nativeId && !commandIds.includes(r.id));
   for (const original of cases) assert.deepEqual(row(original.id).requiredCases, original.requiredCases, `${original.id}: exact affected case and N-axis retention`);
 });

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { dirname, resolve, relative, isAbsolute } from 'node:path';
+import { basename, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { parseExpandedCase } from '../e2e/lib/controls.mjs';
 import { PLAN_TRIALS } from '../e2e/lib/budget.mjs';
 import { verifyFinishedRun } from './e2e-run-completion.mjs';
@@ -43,9 +43,11 @@ function fullRun(campaign,ref,{root,runtimeCache,controlled=false}){
  const source=assertAcceptedSource(campaign,stackSource(stack),{root});
  need(ref.stack.artifact===`e2e/.out/${report.runId}/stack.json`&&stack.runId===report.runId,'run identity differs');
  need(report.malformed?.length===0&&inv.suite==='concurrency'&&inv.grep===null&&inv.trials===null&&inv.n?.length===1&&PLAN_TRIALS[inv.n[0]],'filtered or non-plan run');
- need(inv.plan?.length===1&&inv.plan[0].files.length===1&&inv.spec?.length===1&&inv.spec[0]===inv.plan[0].files[0],'one complete file required');
- const file=inv.spec[0];need([C10_FILE,C22_FILE].includes(file)&&report.cases.every(c=>c.file===file),'unrelated file');
- need((stack.patches??[]).length===0,'timing qualification requires an unmutated product');
+ need(inv.plan?.length===1&&inv.plan[0].files.length===1&&inv.spec?.length===1,'one complete file required');
+ const file=inv.plan[0].files[0];
+ need(inv.spec[0]===file || inv.spec[0]===basename(file),'one complete file required');need([C10_FILE,C22_FILE].includes(file)&&report.cases.every(c=>c.file===file),'unrelated file');
+ const patches=(stack.patches??[]).map(p=>p.set??p);
+ need(patches.length===0 || (!controlled && file===C10_FILE && patches.length===1 && patches[0]==='amplify-c10-accept'),'timing qualification permits only the reviewed C10 pause points or an unmutated product');
  need(['storage-preconditions','rtdb-proxy'].every(cap=>inv.capabilities.includes(cap)),'timing capabilities missing');
  need(controlled?file===C22_FILE&&[CONTROLLED_READER_KIND,CONTROLLED_READER_CHANNEL_KIND,CONTROLLED_READER_BARRIER_KIND,CONTROLLED_READER_RESPONSE_KIND].includes(source?.kind):!source?.controlled,'natural and controlled sources were interchanged');
  verifyFinishedRun(report,local(root,ref.report.artifact),{expectedExit:controlled?0:3});

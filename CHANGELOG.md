@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Dispatch held publication requests before awaiting their gated responses in E2E races. Preserve natural suggestion-race inconclusives while applying the reviewed same-file safety qualification to the exact C10 pause-point configuration.
+
 - Preserve bounded browser response diagnostics across navigation so local Firestore cleanup can recover completed handshakes without delaying application requests.
 
 - Keep synthetic campaign tests independent of recorded release proofs and source bindings, while preserving all original claims, required cases and historical audit records. Retain the separately verified Hosting 404 boundary in the canonical discovery inventory.

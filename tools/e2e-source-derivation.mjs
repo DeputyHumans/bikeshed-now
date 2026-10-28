@@ -105,6 +105,14 @@ const durableDelta = base => Object.freeze([
 export const DURABLE_RESPONSE_DELTA = durableDelta(DONE_RETRY_DELTA);
 export const CONTROLLED_READER_RESPONSE_DELTA = durableDelta(FIRESTORE_BARRIER_DELTA);
 
+
+// Exact C8 transport dispatch repair: all gate, trial and product oracles remain unchanged.
+export const MINT_DISPATCH_KIND = 'firestore-durable-response-mint-dispatch-v7';
+export const MINT_DISPATCH_DELTA = Object.freeze([...DURABLE_RESPONSE_DELTA,
+  Object.freeze(['e2e/specs/concurrency/c08-mint-races.spec.mjs', '885590c2d9dfccd16685352fe261d0e9bfa911e505a7dad86452c862590e35a4', 'a5b7e3d11faa41dcffd0ec08fcbd29c83dbf5c426744a405e0e61d7e8a6b6251']),
+  Object.freeze(['e2e/selftest/mint-race-dispatch.test.mjs', null, '93db7845434e380d9469f248e618bec009fa2f418addeeb4bfd0e4ab4a9ab67e']),
+]);
+
 // Reviewed scheduling overlay only: simultaneous token rounds share the original quiet
 // interval. Actor count, tokens, trials, delays, holds and all assertions are unchanged.
 export const CONTROLLED_READER_DELTA = Object.freeze([
@@ -126,7 +134,7 @@ export function manifestFingerprint(manifest) {
 }
 
 export function verifySourceDerivation(acceptance, actual, baseline, candidate, kind) {
-  need(['firestore-diagnostic-recycle-v1', CONTROLLED_READER_KIND, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, DRAFT_ADMISSION_KIND, DONE_RETRY_KIND, DURABLE_RESPONSE_KIND, CONTROLLED_READER_RESPONSE_KIND].includes(kind), 'unreviewed derivative kind');
+  need(['firestore-diagnostic-recycle-v1', CONTROLLED_READER_KIND, FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND, FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND, DRAFT_ADMISSION_KIND, DONE_RETRY_KIND, DURABLE_RESPONSE_KIND, CONTROLLED_READER_RESPONSE_KIND, MINT_DISPATCH_KIND].includes(kind), 'unreviewed derivative kind');
   manifestFingerprint(baseline); manifestFingerprint(candidate);
   for (const field of ['revision', 'version', 'fingerprint']) {
     need(baseline.snapshot[field] === acceptance[field], `baseline ${field} differs`);
@@ -137,7 +145,7 @@ export function verifySourceDerivation(acceptance, actual, baseline, candidate, 
   const after = new Map(candidate.files.map(row => [row.path, row.sha256]));
   const delta = [...new Set([...before.keys(), ...after.keys()])].sort().filter(path => before.get(path) !== after.get(path)).map(path => [path, before.get(path) ?? null, after.get(path) ?? null]);
   const controlled = [CONTROLLED_READER_KIND, CONTROLLED_READER_CHANNEL_KIND, CONTROLLED_READER_BARRIER_KIND, CONTROLLED_READER_RESPONSE_KIND].includes(kind);
-  const maintenance = kind === DURABLE_RESPONSE_KIND ? DURABLE_RESPONSE_DELTA : kind === CONTROLLED_READER_RESPONSE_KIND ? CONTROLLED_READER_RESPONSE_DELTA : kind === DONE_RETRY_KIND ? DONE_RETRY_DELTA : kind === DRAFT_ADMISSION_KIND ? DRAFT_ADMISSION_DELTA : [FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND].includes(kind) ? FIRESTORE_BARRIER_DELTA : [FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND].includes(kind) ? FIRESTORE_CHANNEL_DELTA : FIRESTORE_MAINTENANCE_DELTA;
+  const maintenance = kind === MINT_DISPATCH_KIND ? MINT_DISPATCH_DELTA : kind === DURABLE_RESPONSE_KIND ? DURABLE_RESPONSE_DELTA : kind === CONTROLLED_READER_RESPONSE_KIND ? CONTROLLED_READER_RESPONSE_DELTA : kind === DONE_RETRY_KIND ? DONE_RETRY_DELTA : kind === DRAFT_ADMISSION_KIND ? DRAFT_ADMISSION_DELTA : [FIRESTORE_BARRIER_KIND, CONTROLLED_READER_BARRIER_KIND].includes(kind) ? FIRESTORE_BARRIER_DELTA : [FIRESTORE_CHANNEL_KIND, CONTROLLED_READER_CHANNEL_KIND].includes(kind) ? FIRESTORE_CHANNEL_DELTA : FIRESTORE_MAINTENANCE_DELTA;
   const expected = [...maintenance, ...(controlled ? [CONTROLLED_READER_DELTA] : [])].sort(([a], [b]) => a < b ? -1 : 1);
   assert.deepEqual(delta, expected, 'source derivation: bytes differ beyond the reviewed diagnostics-only delta or named controlled schedule');
   return { kind, controlled, source: actual, changes: delta };

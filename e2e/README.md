@@ -5835,3 +5835,21 @@ and live epoch. Unknown refusals and editable DOM are never retried. Participant
 counts, trials, stagger timing, typed tokens and every post-join oracle remain
 unchanged. A controlled browser check holds the iframe request, commits a peer
 autosave, observes the real 409, and checks recovery; disabling recovery fails.
+
+### Browser requests held at server gates
+
+`holdRequests.release()` dispatches a browser request and then waits for its HTTP
+response. In the C8 late-loser publication race, that response is deliberately
+held at `commit-before-read`. Start the release promise, verify the first caller
+has arrived, dispatch the remaining callers, and verify their arrivals before
+opening the server gate. Drain the response promises after releasing both server
+gates, including on a refused precondition. Awaiting a response before releasing
+its server gate deadlocks the test until the request times out. The full-file
+N2, N5 and N10 reruns retain every winner, stale-base and fresh-draft assertion.
+
+The C10 full file also contains natural timing judges when run with its reviewed
+`amplify-c10-accept` pause points. The timing qualifier accepts that exact patch
+set and either the canonical file path or its exact CLI basename. It still
+requires every slow-link and held-save trial, real failing/restored controls,
+and the original natural inconclusive records. Unrelated patches, mixed mutant
+sets, filtered runs and unrelated file selections remain rejected.
