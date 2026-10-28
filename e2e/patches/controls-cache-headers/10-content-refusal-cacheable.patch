@@ -1,7 +1,7 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -489,8 +489,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
- export const contentProxy = onRequest(PLAIN, async (req, res) => {
+@@ -496,8 +496,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
+ export const contentProxy = onRequest(WARM, async (req, res) => {
    if (rejectMethod(req, res, ["GET", "HEAD"])) return;
  
 -  // Uncacheable until something deliberately says otherwise. See noStore().

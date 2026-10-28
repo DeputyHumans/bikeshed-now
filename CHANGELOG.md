@@ -583,6 +583,31 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   precedence and watcher behavior without depending on source formatting.
   Mail settling and log-rotation tests wait for the conditions they measure.
 
+## 0.22.0 — 2026-10-27
+
+### Added
+
+- Say what a document is waiting for, and offer a way out when it stalls. The
+  wait was one label, "Opening the document…", from the sign-in round trip
+  through the frame's last image. It now reads "Signing in", "Opening the
+  document" or "Loading the page". A stage that runs past 4 s says it is taking
+  longer than it should, and past 20 s offers Try again: the page reloads for
+  the first two stages, and only the frame for the third.
+
+### Fixed
+
+- Open a document in a new tab without waiting for servers to start. The page,
+  the sign-in cookie and the document's bytes come from three functions in
+  turn, and after a quiet spell each started cold: 3.6 s and 3.0 s for two of
+  them, 3–6 s on "Opening the document…" in all. Each now keeps one instance
+  running, about $24 a month whatever the traffic
+  ([ADR 0018](docs/architecture/adr/0018-keep-the-document-open-path-warm.md)).
+- Start every function without loading the email renderer. React and the
+  email templates were imported at the top of the functions' shared module,
+  so every cold start loaded them: 221 ms of a 290 ms load, on paths that
+  never send email. They now load where email is sent, as ADR 0008 always
+  said.
+
 ## 0.21.0 — 2026-10-27
 
 ### Added

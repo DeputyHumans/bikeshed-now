@@ -160,8 +160,8 @@
 /*
  * Covers the frame while it loads, which is otherwise a blank white box under a
  * fully live toolbar. Below SelectionFab, and never a target: it is gone by the
- * time there is anything to click. The short delay keeps a fast reload from
- * flashing it.
+ * time there is anything to click — except Try again, offered on a load that
+ * has stalled. The short delay keeps a fast reload from flashing it.
  */
 .frame-loading {
   position: absolute;
@@ -173,6 +173,7 @@
   pointer-events: none;
   animation: frame-loading-in var(--t-base) var(--ease-out) var(--t-fast) both;
 }
+.frame-loading .btn { pointer-events: auto; }
 @keyframes frame-loading-in { from { opacity: 0; } }
 
 /* A file dragged onto the document (SPEC §2). It takes pointer events, unlike

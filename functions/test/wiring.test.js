@@ -83,6 +83,41 @@ test("a function that retries can be deployed by the workflow", () => {
   assert.match(step, /firebase deploy --only "\$only"[^\n]*--force/, `the by-name functions deploy needs --force for ${retrying.join(", ")}`);
 });
 
+test("exactly the three services a document open waits on are kept warm", () => {
+  // A full page load runs docShell, session and contentProxy one after
+  // another; cold, docShell alone took 3.6 s and contentProxy 3.0 s (ADR
+  // 0011). Each warm instance is a standing monthly charge, so a fourth is a
+  // decision to argue for, not a line to copy.
+  const built = require("../lib/index.js");
+  const warm = Object.keys(built)
+    .filter((n) => built[n]?.__endpoint?.minInstances !== undefined)
+    .map((n) => `${n}=${built[n].__endpoint.minInstances}`)
+    .sort();
+  assert.deepEqual(warm, ["contentProxy=1", "docShell=1", "session=1"]);
+});
+
+test("a cold start never loads the email renderer", () => {
+  // Every function shares this module graph, so whatever index.js loads at
+  // the top, every cold start pays for. @react-email/components alone was
+  // 221 ms of a 290 ms load, imported statically through email/notify on
+  // every request path ADR 0008 said would never see it. Its own process,
+  // because this file has already loaded index.js by the time it runs.
+  const { execFileSync } = require("node:child_process");
+  const probe = `
+    require(${JSON.stringify(join(__dirname, "..", "lib", "index.js"))});
+    console.log(JSON.stringify(Object.keys(require.cache)));
+  `;
+  const loaded = JSON.parse(execFileSync(process.execPath, ["-e", probe], { encoding: "utf8" }));
+  const pkg = (p) => loaded.some((k) => k.includes(`/node_modules/${p}/`));
+  assert.ok(pkg("firebase-admin"), "index.js loaded without firebase-admin, so this test checks nothing");
+  assert.deepEqual(
+    ["react", "react-dom", "@react-email", "resend"].filter(pkg),
+    [],
+    "index.js loads the email renderer at the top",
+  );
+  assert.ok(!loaded.some((k) => k.endsWith("/lib/email/notify.js")), "index.js imports email/notify at the top");
+});
+
 test("the SPA catch-all is last, after every wildcard", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   const sources = firebase.hosting.rewrites.map((r) => r.source);
