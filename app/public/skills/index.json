@@ -14,7 +14,7 @@
     },
     {
       "name": "bikeshed-permissions",
-      "description": "Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document visibility, open editing or expiry; or explaining inherited and team access.",
+      "description": "Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; or explaining inherited and team access.",
       "path": "skills/bikeshed-permissions/SKILL.md",
       "archive": "skills/bikeshed-permissions.zip"
     },

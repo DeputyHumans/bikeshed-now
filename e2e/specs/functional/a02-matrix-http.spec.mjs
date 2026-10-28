@@ -703,10 +703,10 @@ scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only en
 
 // --- MCP --------------------------------------------------------------------------
 
-/** The thirty-two tools of SPEC §19's table, in its order. */
+/** The thirty-three tools of SPEC §19's table, in its order. */
 const SPEC_TOOLS = Object.freeze([
   "get_document_access", "set_document_access", "get_folder_access", "set_folder_access",
-  "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
+  "set_document_visibility", "set_folder_visibility", "rename_folder", "move_folder", "delete_folder",
   "list_documents", "list_versions", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
   "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "list_folders",
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
@@ -849,7 +849,7 @@ scenario("A2.mcp-expired on an expired document MCP answers its editor as for an
   assert.equal(bad.length, 0, `MCP on an expired document: ${bad.length} differ\n  ${bad.join("\n  ")}`);
 });
 
-scenario("A2.mcp-names document deletion, team administration and trust stay absent; the tools are exactly SPEC §19's thirty-two", {
+scenario("A2.mcp-names document deletion, team administration and trust stay absent; the tools are exactly SPEC §19's thirty-three", {
   tiers: ["local", "prod"],
   ...STALLS,
   timeoutMs: 120_000,

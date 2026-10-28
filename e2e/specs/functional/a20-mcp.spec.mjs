@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// A20 MCP: the thirty-two tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
+// A20 MCP: the thirty-three tools each succeeding and refused, JSON-RPC errors, the 401 challenge, client headers and the link key (SPEC §19).
 
 /**
  * Catalogue A20.1–A20.6. The CLI's A20.7 is another unit's.
  *
- *   A20.1          tools/list is SPEC §19's thirty-two, and initialize says so
+ *   A20.1          tools/list is SPEC §19's thirty-three, and initialize says so
  *   A20.2.<tool>   one case per tool: what it does when it works, and each
  *                  way it is refused, with the server's exact words. The
  *                  plan's particulars live in their tool's case: idTaken
@@ -267,7 +267,7 @@ async function threadOf(who, docId, threadId, o = {}) {
 
 // --- A20.1 ---------------------------------------------------------------------------------
 
-scenario("A20.1 tools/list names exactly SPEC §19's thirty-two tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
+scenario("A20.1 tools/list names exactly SPEC §19's thirty-three tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
   timeoutMs: 240_000,
@@ -283,7 +283,7 @@ scenario("A20.1 tools/list names exactly SPEC §19's thirty-two tools, each desc
   const tools = await o.mcp.listTools();
   const names = tools.map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
-  assert.equal(names.length, 32, `exactly 32 tools: ${names.join(", ")}`);
+  assert.equal(names.length, 33, `exactly 33 tools: ${names.join(", ")}`);
   assert.equal(new Set(names).size, 32, "the names are unique");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
   const bad = [];

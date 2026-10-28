@@ -19,6 +19,7 @@ const {
 } = require("../lib/lib/acl.js");
 const { computeReach } = require("../lib/lib/folders.js");
 const { setFolderVisibility } = require("../lib/lib/management.js");
+const { TOOLS } = require("../lib/mcp/tools.js");
 const { decideFolderShell, decideShell, GENERIC, resetShellCacheForTests } = require("../lib/lib/shell.js");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -177,7 +178,14 @@ async function withStorage(fn) {
   process.env.BIKESHED_BUCKET = "test-bucket";
   Object.defineProperty(admin, "storage", {
     configurable: true,
-    value: () => ({ bucket: () => ({ file: () => ({ createReadStream: () => { throw new Error("no bytes in this test"); } }) }) }),
+    value: () => ({
+      bucket: () => ({
+        file: () => ({
+          createReadStream: () => { throw new Error("no bytes in this test"); },
+          download: async () => [Buffer.from("<p>Cut over in two weekends.</p>")],
+        }),
+      }),
+    }),
   });
   Object.defineProperty(admin, "database", { configurable: true, value: () => { throw new Error("no RTDB"); } });
   try {
@@ -394,4 +402,79 @@ test("a folder's page names it for its link, and every refusal is the untouched 
   assert.equal(pub.headers["cache-control"], "public, max-age=300");
   assert.equal(pub.headers["x-robots-tag"], undefined);
   assert.ok(!pub.body.includes("?k="), "a public folder's page never carries a key");
+});
+
+// --- The agent surface ----------------------------------------------------------
+
+/** One MCP tool, run as `who` through a token, over the world's Firestore. */
+function tools(w) {
+  return (name, who, args) => {
+    const tool = TOOLS.find((t) => t.name === name);
+    assert.ok(tool, `no tool ${name}`);
+    const ctx = {
+      db: w.db,
+      caller: { ...who, channel: "mcp", tokenId: "t1" },
+      actor: { uid: who.uid, email: who.emailLower, channel: "mcp", tokenId: "t1" },
+    };
+    return withStorage(() => tool.run(ctx, args));
+  };
+}
+
+test("an agent sets a folder's level as its owner does, and nobody else can", async () => {
+  const w = world();
+  const call = tools(w);
+  const set = await call("set_folder_visibility", OWNER, { id: "top", visibility: "unlisted" });
+  assert.equal(set.visibility, "unlisted");
+  assert.match(set.url, /\/folder\/top\?k=/);
+  assert.equal(set.publicEdit, undefined, "a folder has no open editing to report");
+  // Sparse: a date alone keeps the level and the key.
+  const dated = await call("set_folder_visibility", OWNER, { id: "top", expiresAt: NOW + DAY });
+  assert.deepEqual([dated.visibility, dated.linkToken], ["unlisted", set.linkToken]);
+  await assert.rejects(call("set_folder_visibility", OWNER, { id: "top", publicEdit: true }), /no open editing/);
+  await assert.rejects(call("set_folder_visibility", STRANGER, { id: "top", visibility: "public" }), /no folder/);
+  const access = await call("get_folder_access", OWNER, { id: "sub" });
+  assert.deepEqual(access.inheritedReach.map((r) => [r.folderId, r.visibility]), [["top", "unlisted"]]);
+  assert.ok(!JSON.stringify(access.inheritedReach).includes(set.linkToken), "inherited reach never carries the key");
+});
+
+test("an agent holding a folder's key reads what is beneath it, and is told it can do nothing else", async () => {
+  const w = world();
+  const call = tools(w);
+  const key = (await call("set_folder_visibility", OWNER, { id: "top", visibility: "unlisted" })).linkToken;
+
+  const level = await call("get_folder", STRANGER, { id: "sub", k: key });
+  assert.equal(level.viaLink, true);
+  assert.deepEqual(level.documents.map((d) => d.docId), ["memo"]);
+  assert.equal(level.readers, undefined, "a link holder is told what is there, not who reads it");
+  await assert.rejects(call("get_folder", STRANGER, { id: "sub" }), /no folder with id "sub"/);
+  await assert.rejects(call("get_folder", STRANGER, { id: "sub", k: "wrong" }), /no folder with id "sub"/);
+
+  const doc = await call("get_document", STRANGER, { id: "memo", k: key });
+  assert.equal(doc.viaFolder, true);
+  assert.deepEqual([doc.canComment, doc.canEdit, doc.canSuggest, doc.cursor], [false, false, false, null]);
+  assert.match(doc.source, /two weekends/);
+  assert.equal((await call("list_versions", STRANGER, { id: "memo", k: key })).id, "memo");
+
+  // Every write refuses the key, in words rather than as an absent id.
+  await assert.rejects(
+    call("add_comment", STRANGER, { id: "memo", k: key, exact: "two weekends", body: "?" }),
+    /through a folder's link, which lets you read it and nothing else/,
+  );
+  await assert.rejects(call("add_comment", STRANGER, { id: "memo", k: "wrong", exact: "x", body: "?" }), /no document with id "memo"/);
+});
+
+test("filing into a shared folder says who beyond its members can now read it", async () => {
+  const w = world({
+    "docs/loose": {
+      docId: "loose", title: "Loose", ownerUid: OWNER.uid, ownerEmail: OWNER.emailLower, folderId: null,
+      currentVersion: "v1", visibility: "private", ...grants, members: [OWNER.emailLower],
+      suggesterMembers: [OWNER.emailLower], editorMembers: [OWNER.emailLower], approverMembers: [OWNER.emailLower],
+    },
+  });
+  const call = tools(w);
+  await call("set_folder_visibility", OWNER, { id: "top", visibility: "public" });
+  const moved = await call("move_document", OWNER, { id: "loose", folder: "sub" });
+  assert.equal(moved.access.alsoReadableBy, "anyone");
+  assert.deepEqual(moved.access.throughFolders.map((r) => [r.folderId, r.visibility]), [["top", "public"]]);
+  assert.ok(w.store.get("public/loose"), "and it is in the public mirror at once");
 });

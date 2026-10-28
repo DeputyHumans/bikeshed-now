@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The thirty-two MCP tools (SPEC §19).
+// The thirty-three MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -53,10 +53,12 @@ import {
   isDocApprover,
   isDocEditor,
   isExpired,
+  isFolderBasis,
   visibilityOf,
   type DocAclData,
   type FolderAclData,
 } from "../lib/acl";
+import { listReach, loadReadAccess } from "../lib/reach";
 import { grantsOf } from "../lib/access";
 import { documentAudience, filedIn, firstPeople, folderAudience } from "../lib/audience";
 import {
@@ -264,6 +266,13 @@ const LINK_KEY_DESCRIPTION =
   "Only for an unlisted document you are not a member of: the key from its link, the value after ?k=. Without it such a document answers exactly as an id that does not exist.";
 
 /**
+ * How the tools that only READ describe it: a folder's key opens what is
+ * beneath the folder to read, and nothing else (SPEC §17 "A folder's reach").
+ */
+const READ_KEY_DESCRIPTION =
+  "Only for a document you are not a member of: the key from its link, the value after ?k=, whether the document's own or a shared folder's above it. A folder's key reads and nothing else. Without a key such a document answers exactly as an id that does not exist.";
+
+/**
  * Load a document the caller may read, or fail exactly as for an id that does
  * not exist. `k` is an unlisted document's key; a caller whose account already
  * holds a link grant needs none (SPEC §17).
@@ -274,7 +283,14 @@ async function loadDoc(ctx: ToolContext, slug: string, k: string | null = null) 
   if (!snap.exists) throw new Error(`no document with id "${slug}"`);
   const data = snap.data() as DocAclData & Record<string, unknown>;
   const proof = await linkProofFor(ref, data, ctx.caller, k);
-  if (!canRead(data, ctx.caller, proof)) throw new Error(`no document with id "${slug}"`);
+  if (!canRead(data, ctx.caller, proof)) {
+    // A folder's key reads, and this is a tool that does more. Saying so tells
+    // nobody anything new: the key already lets them read the document.
+    if (k && !isExpired(data, Date.now()) && (await loadReadAccess(ctx.db, data, ctx.caller, proof)) !== null) {
+      throw new Error("this document is shared with you through a folder's link, which lets you read it and nothing else");
+    }
+    throw new Error(`no document with id "${slug}"`);
+  }
   // An expired document reads as absent to everyone but its owner — the same
   // answer a document they may not read gives, so expiry cannot be used to
   // confirm that a slug exists (SPEC §17).
@@ -282,6 +298,25 @@ async function loadDoc(ctx: ToolContext, slug: string, k: string | null = null) 
     throw new Error(`no document with id "${slug}"`);
   }
   return { ref, snap, data, proof };
+}
+
+/**
+ * `loadDoc` for a tool that only READS: a shared folder's key above the
+ * document opens it too (SPEC §17 "A folder's reach"). `viaFolder` says that is
+ * how, so the tool can say the reader may do nothing else.
+ */
+async function loadDocForRead(ctx: ToolContext, slug: string, k: string | null = null) {
+  const ref = ctx.db.collection("docs").doc(slug);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error(`no document with id "${slug}"`);
+  const data = snap.data() as DocAclData & Record<string, unknown>;
+  const proof = await linkProofFor(ref, data, ctx.caller, k);
+  const access = await loadReadAccess(ctx.db, data, ctx.caller, proof);
+  if (access === null) throw new Error(`no document with id "${slug}"`);
+  if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
+    throw new Error(`no document with id "${slug}"`);
+  }
+  return { ref, snap, data, proof, viaFolder: isFolderBasis(access.basis) };
 }
 
 /**
@@ -581,13 +616,13 @@ export const TOOLS: ToolDefinition[] = [
       required: ["id"],
       properties: {
         id: { type: "string" },
-        k: { type: "string", description: LINK_KEY_DESCRIPTION },
+        k: { type: "string", description: READ_KEY_DESCRIPTION },
         limit: { type: "integer", description: "Maximum rows (default 20, max 50)." },
         cursor: { type: "string", description: "The nextCursor from the preceding page." },
       },
     },
     async run(ctx, args) {
-      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const { ref, data } = await loadDocForRead(ctx, str(args, "id"), str(args, "k"));
       const limit = args.limit === undefined ? 20 : args.limit;
       if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > LIST_LIMIT) {
         throw new Error("limit must be an integer from 1 to 50");
@@ -634,14 +669,16 @@ export const TOOLS: ToolDefinition[] = [
         version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
         k: {
           type: "string",
-          description: LINK_KEY_DESCRIPTION,
+          description: READ_KEY_DESCRIPTION,
         },
       },
     },
     async run(ctx, args) {
-      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+      const { ref, data, proof, viaFolder } = await loadDocForRead(ctx, str(args, "id"), str(args, "k"));
       const versionId = selectedVersion(args.version, data.currentVersion);
       const isCurrent = versionId === data.currentVersion;
+      // Read through a folder's key: the reader may do nothing but read.
+      const writable = isCurrent && !viaFolder && !isExpired(data, Date.now());
       const vSnap = await ref.collection("versions").doc(versionId).get();
       if (!vSnap.exists) throw new Error(`no version "${versionId}"`);
       const v = vSnap.data() || {};
@@ -675,14 +712,16 @@ export const TOOLS: ToolDefinition[] = [
         sourceFile: sourceRel,
         visibility: visibilityOf(data),
         expiresAt: expiryMs(data),
-        canComment: isCurrent && !isExpired(data, Date.now()),
-        canEdit: isCurrent && canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
-        canSuggest: isCurrent && canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
+        canComment: writable,
+        canEdit: writable && canEdit(data, ctx.caller, proof),
+        canSuggest: writable && canSuggest(data, ctx.caller, proof),
+        ...(viaFolder ? { viaFolder: true } : {}),
         forked: data.forked === true,
         filedIn: (folderId && paths.get(folderId)) || null,
         // Where get_changes starts, for watching a document you did not
         // publish. Saved as "last" only if this credential has none for it.
-        cursor: await startingCursor(ctx, ref, "ifNone"),
+        // Not for a folder's reader: get_changes reads threads, which are not theirs.
+        cursor: viaFolder ? null : await startingCursor(ctx, ref, "ifNone"),
         // Ahead of the source, not after it: an agent reads this result as JSON
         // text in key order, and a flag after 200,000 characters of source is a
         // flag it may never reach.
@@ -777,7 +816,7 @@ export const TOOLS: ToolDefinition[] = [
         title: { type: "string", description: "Optional; default is the original's title." },
         k: {
           type: "string",
-          description: LINK_KEY_DESCRIPTION,
+          description: READ_KEY_DESCRIPTION,
         },
       },
     },
@@ -824,7 +863,7 @@ export const TOOLS: ToolDefinition[] = [
         id: { type: "string", description: "The document id." },
         k: {
           type: "string",
-          description: LINK_KEY_DESCRIPTION,
+          description: READ_KEY_DESCRIPTION,
         },
       },
     },
@@ -1206,20 +1245,38 @@ export const TOOLS: ToolDefinition[] = [
     name: "get_folder",
     description:
       "Who can read one folder, and so who can read anything filed in it: everyone by email (the first 25, then a count), " +
-      "who can edit, and the teams it is shared with, named only for teams you are in. " +
-      "Nobody is emailed when a document is filed, so tell the person who will be able to read it before you file it here.",
+      "who can edit, the teams it is shared with, named only for teams you are in, and `throughFolders` when a link or a public level opens it to people beyond them. " +
+      "Nobody is emailed when a document is filed, so tell the person who will be able to read it before you file it here. " +
+      "With `k`, a folder shared with you by link instead lists one level of what it holds, to read: its subfolders and documents.",
     inputSchema: {
       type: "object",
       required: ["id"],
       properties: {
-        id: { type: "string", description: "The folder id, from list_folders." },
+        id: { type: "string", description: "The folder id, from list_folders or a /folder/<id> link." },
+        k: {
+          type: "string",
+          description: "Only for a folder you are not a member of: the key from its link, the value after ?k=. Omit it for a public folder.",
+        },
       },
     },
     async run(ctx, args) {
       const id = str(args, "id");
       const snap = safeSegment(id) ? await ctx.db.collection("folders").doc(id).get() : null;
-      // A folder the caller may not read answers as one that does not exist.
+      // A folder the caller may not read answers as one that does not exist —
+      // unless its link or public level opens it, which lists what it holds and
+      // nothing about who else can read it (SPEC §17 "A folder's reach").
       if (!snap?.exists || !canReadFolder(snap.data() as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) {
+        const listing = snap?.exists ? await listReach(ctx.db, id, str(args, "k") || null) : null;
+        if (listing && "open" in listing) {
+          const k = str(args, "k");
+          return {
+            ...listing.open,
+            viaLink: true,
+            readOnly: "Read the documents with get_document, passing the same k. A folder's link lets you read and nothing else.",
+            documents: listing.open.documents.map((d) => withReaderAddress({ ...d }, d.docId, undefined, k || undefined)),
+          };
+        }
+        if (listing && "ended" in listing) throw new Error(`the link to folder "${listing.ended.name}" has stopped working`);
         throw new Error(`no folder with id "${id}"`);
       }
       const v = snap.data() ?? {};
@@ -1840,7 +1897,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is thirty-two tools, not "some tools". */
+/** Exported for the wiring test: the surface is thirty-three tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

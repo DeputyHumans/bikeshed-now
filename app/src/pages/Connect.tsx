@@ -221,7 +221,7 @@ function Ready({
             <li>Accept or reject suggested edits where you can, and save them as a new version</li>
             <li>Create folders and file documents in them</li>
             <li>Manage sharing on documents and folders you own, sending invitations to new readers</li>
-            <li>Change visibility, open editing and expiry on documents you own</li>
+            <li>Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own</li>
             <li>Rename and move folders you can edit; delete folders you own while keeping their contents</li>
           </ul>
         </div>

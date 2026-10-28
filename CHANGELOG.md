@@ -46,6 +46,18 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   that page no longer than the link lasts, and marks a keyed page `noindex`.
   Every other folder gets the generic shell with `private, no-store`. This
   needs the new Hosting rewrite, which ships with Hosting.
+- Let an agent share a folder by link, and read through one. A new tool,
+  `set_folder_visibility`, takes the same sparse patch as
+  `set_document_visibility`, without open editing; there are now thirty-three
+  tools. `get_folder_access` reports the folder's settings, and both access
+  tools report `inheritedReach`. Given a folder's key, `get_folder` lists one
+  level of what it holds. `get_document`, `list_versions`, `fork_document` and
+  `get_lineage` read any document beneath it, and `get_document` says
+  `viaFolder: true` with every `can…` false. Every other tool refuses that key
+  in words rather than as an absent id. `access` on a filing answer names the
+  folders whose reach now opens the document (`throughFolders`), and
+  `alsoReadableBy` says `"anyone"` under a public folder. The new tool is a
+  schema change, so this release is a minor version.
 
 ## 0.22.1 — 2026-10-28
 

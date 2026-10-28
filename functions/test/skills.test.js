@@ -305,6 +305,7 @@ const CONSENT_CLAIMS = {
   get_folder_access: "manage sharing",
   set_folder_access: "manage sharing",
   set_document_visibility: "change visibility",
+  set_folder_visibility: "change visibility",
   rename_folder: "rename and move folders",
   move_folder: "rename and move folders",
   delete_folder: "delete folders",

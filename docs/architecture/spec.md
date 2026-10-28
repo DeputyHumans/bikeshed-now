@@ -2178,7 +2178,7 @@ update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
 If the head changes, the server refuses the write. Read the new head and
 reassess the request; never silently redirect a historical request to it.
 
-### MCP — thirty-two tools
+### MCP — thirty-three tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -2186,9 +2186,10 @@ reassess the request; never silently redirect a historical request to it.
 |---|---|
 | `get_document_access` | owner-only complete direct, inherited and effective access; includes visibility, open editing, expiry and usable URL without source bytes |
 | `set_document_access` | owner-only grant/revoke/role delta; invitations to newly effective readers |
-| `get_folder_access` | owner-only complete direct, inherited and effective folder access |
+| `get_folder_access` | owner-only complete direct, inherited and effective folder access; includes its visibility, expiry, usable URL and `inheritedReach` (§17) |
 | `set_folder_access` | owner-only grant/revoke/role delta and subtree recomputation; invitations to newly effective folder readers |
 | `set_document_visibility` | owner-only sparse patch of visibility, publicEdit and expiresAt; null clears expiry, omissions stay unchanged |
+| `set_folder_visibility` | owner-only sparse patch of a folder's visibility and expiresAt, which open everything beneath it to read (§17 "A folder's reach"); recomputes the subtree; no open editing |
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
@@ -2206,7 +2207,7 @@ reassess the request; never silently redirect a historical request to it.
 | `accept_suggestion` | accept a pending suggestion, for the owner or an approver: its change is made in the draft (§22) |
 | `reject_suggestion` | decline a pending suggestion, for the owner or an approver, with a reason (§22) |
 | `list_folders` | every folder the caller can see, each with its full path and how many can read it (`readers`, `shared`) |
-| `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, and its teams, each named only to its members (§13) |
+| `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, its teams, each named only to its members (§13), and `throughFolders`; with `k`, for a non-member, one level of what a folder's link opens, read-only (§17) |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
@@ -2217,11 +2218,18 @@ reassess the request; never silently redirect a historical request to it.
 | `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
 | `reopen_thread` | open such a thread again, with a note |
 
-`get_document`, `update_document`, `suggest_edit`, `get_comments`, `get_changes`,
-`add_comment`, `reply_to_comment`, `resolve_thread` and `reopen_thread` take an optional `k`: an unlisted document's key, for a caller who is not a member and
-whose account holds no link grant. Without it such a document answers exactly as
-an id that does not exist (§17). The CLI accepts the link itself wherever it
-takes an id, because the link is the only place a person holds the key.
+`list_versions`, `get_document`, `fork_document`, `get_lineage`, `update_document`,
+`suggest_edit`, `revise_suggestion`, `withdraw_suggestion`, `get_comments`,
+`get_changes`, `add_comment`, `reply_to_comment`, `resolve_thread` and
+`reopen_thread` take an optional `k`: an unlisted document's key, for a caller
+who is not a member and whose account holds no link grant. Without it such a
+document answers exactly as an id that does not exist (§17). The four that only
+read — `list_versions`, `get_document`, `fork_document` and `get_lineage` — also
+take a shared folder's key, which opens what is beneath the folder to read and
+nothing else; `get_document` then says `viaFolder: true` with every `can…` false,
+and every other tool refuses that key in words rather than as an absent id. The
+CLI accepts the link itself wherever it takes an id, because the link is the
+only place a person holds the key.
 
 ### Watching a document: `get_changes`
 
