@@ -6,10 +6,11 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it) |
+| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it); and, to read only, anyone a folder above it opens to by its link or public level (SPEC §17 "A folder's reach") |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
 | Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document: a member, anyone on a public one, a link grant on an unlisted one |
-| That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link |
+| That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link, or of a link to a folder above it |
+| A folder's key | `folders/{folderId}.linkToken`, its owner's share dialog; each folder beneath stores only a sha256 of it | the folder's members, who can read its record — never a subfolder's members, who see the hash |
 | Per-person reading history | `docs/{docId}/viewers`, `/views` | owner + real editors only |
 | Personal access token secrets | nowhere — only a SHA-256 hash is stored | nobody, including the owner, after the one-time reveal |
 | The deployment's own binding (project id, bucket, keys) | gitignored files and Firebase secret manager | the operator |
@@ -149,6 +150,29 @@ holder on an open-editing unlisted document edits without being merged live.
 A document once readable at a URL with its key stays in a shared cache for up
 to five minutes after the link is rotated, as any content does after it is made
 private (SPEC §17).
+
+### A folder's link is used to write, or reaches further than it should
+
+A folder's link or public level opens everything beneath it (ADR 0019). Three
+ways that could go wrong: the key authorizes a comment or an edit; a subfolder's
+member learns the key to a folder above that they cannot open; or a document
+stays reachable after the folder is rotated, made private, or past its date.
+
+**Mitigation.** A folder's reach is read only by `readAccess`, and only read
+paths call it. Every write keeps `canRead` and `canEdit`, which never look at a
+folder, and a test puts a write path through `readAccess` to watch the refusal
+fail. No grant is minted for a folder reader, so the rules give them no thread,
+annotation or presence. A folder's `reach` stores sha256 of each key, compared
+only by `keyMatchesHash`. Reach is recomputed by the same cascade as
+membership, so rotating revokes at once for the folder's own documents and,
+within seconds, for its subfolders'.
+
+**Residual, accepted.** Widening a folder widens documents its owner does not
+own, without asking their owners. That is "filing is sharing" (SPEC §13)
+reaching strangers, and each such document's share dialog names the folder. A
+subfolder's documents answer to a rotated key until the cascade reaches them.
+A title under a public folder stays in `public/` after the folder's date passes,
+as a document's own does after its own date.
 
 ### A client forges provenance
 
