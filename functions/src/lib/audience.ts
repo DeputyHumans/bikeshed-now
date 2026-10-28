@@ -3,7 +3,7 @@
 
 import type * as admin from "firebase-admin";
 import type { Principal } from "./auth";
-import { canReadFolder, visibilityOf, type DocAclData, type FolderAclData } from "./acl";
+import { canReadFolder, reachOf, visibilityOf, type DocAclData, type FolderAclData } from "./acl";
 import { GRANT_LIST, ROLES, grantLists, grantsOf, normalizeEmail, type Role } from "./access";
 import { referencedTeamIds } from "./teams";
 
@@ -201,6 +201,41 @@ export async function inheritedGrants(
         grants[GRANT_LIST[role]].map((principal) => ({ folderId: s.id, path, principal, role })),
       );
   });
+}
+
+/** One folder whose link or public level reaches a record beneath it. */
+export interface InheritedReach {
+  folderId: string;
+  /** That folder's path, `…` for each level the caller may not read. */
+  path: string;
+  visibility: "unlisted" | "public";
+  /** When that folder's reach ends; null when it does not. Past dates are kept, so a panel can say it ended. */
+  expiresAt: number | null;
+}
+
+/**
+ * The folders whose link or public level opens a record filed in `folderId`
+ * to people who are not its members, nearest first (SPEC §13, §17). Read off
+ * the folder's stored `reach`, which already folds in every ancestor; never
+ * the key, which only the folder's own record carries.
+ */
+export async function inheritedReach(
+  db: Db,
+  caller: Principal,
+  folderId: string | null,
+): Promise<InheritedReach[]> {
+  if (!folderId) return [];
+  const snap = await db.collection("folders").doc(folderId).get();
+  if (!snap.exists) return [];
+  const entries = reachOf(snap.data() as FolderAclData);
+  if (entries.length === 0) return [];
+  const paths = await filedIn(db, caller, entries.map((e) => e.folderId));
+  return entries.reverse().map((e) => ({
+    folderId: e.folderId,
+    path: paths.get(e.folderId)?.path ?? "…",
+    visibility: e.visibility,
+    expiresAt: e.expiresAt,
+  }));
 }
 
 /** The first PEOPLE_SHOWN of a list, and how many more there are. */

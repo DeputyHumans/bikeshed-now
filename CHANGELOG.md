@@ -14,6 +14,24 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- Share a folder by link, or make it public, with an expiry, as a document can
+  be shared. The folder's link opens everything beneath it to read: its own
+  documents, every subfolder's, and documents filed there later, including ones
+  that are private on their own or owned by someone else. A folder reader has
+  no account-level access. They get no comments, annotations, presence or
+  editing, even when signed in, because the rules cannot see a folder's key. A
+  folder's expiry ends its link and nothing else. Members keep their access,
+  and nothing beneath is frozen. Rotating the link (private, then unlisted
+  again) revokes every copy. A document under a public folder is mirrored to
+  `public/` and listed in the sitemap. The server side is in this release:
+  `POST /visibility` and `POST /unlock` take a `folderId`, and `GET /access` and
+  `GET /folder-access` report `inheritedReach`
+  ([ADR 0019](docs/architecture/adr/0019-folder-links-reach-their-subtree.md)).
+
 ## 0.22.1 — 2026-10-28
 
 ### Fixed

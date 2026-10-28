@@ -422,6 +422,9 @@ export async function publishNewDocument(
   await batch.commit();
 
   await syncPresenceAccess(docId, membership.members, membership.editorMembers);
+  // Private on its own, but filed under a public folder it is public through
+  // that folder, and must be listed the moment it exists (SPEC §13, §17).
+  if (input.folderId) await syncPublicProjection(db, docId);
 
   return {
     docId,

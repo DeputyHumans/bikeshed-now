@@ -36,7 +36,7 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, opensEditingToAnyAccount, type DocAclData, type FolderAclData } from "./acl";
+import { canEditFolder, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -111,6 +111,25 @@ export function computeMembership(
 
 /** Alias kept for call sites that read better as "this document's membership". */
 export const computeDocMembership = computeMembership;
+
+/**
+ * A folder's reach: its parent's, then its own entry when it is not private
+ * (SPEC §13, §17). The parent's already folds in every ancestor, so this is the
+ * same one-level step `computeMembership` takes, and the cascade below computes
+ * both in the same pass.
+ */
+export function computeReach(
+  folderId: string,
+  own: FolderAclData,
+  parentReach: readonly ReachEntry[],
+): ReachEntry[] {
+  // Defensive against a corrupt chain naming this folder above itself.
+  const out = parentReach.filter((e) => e.folderId !== folderId);
+  const entry = ownReachEntry(folderId, own);
+  if (entry) out.push(entry);
+  // Firestore refuses `undefined`, and a public entry has no key to hash.
+  return out.map((e) => (e.keyHash ? { ...e } : { folderId: e.folderId, visibility: e.visibility, expiresAt: e.expiresAt }));
+}
 
 /** A folder's stored effective membership, or null if it does not exist. */
 export async function loadFolderMembership(
@@ -221,6 +240,8 @@ export type FolderTarget =
       membership: Membership | null;
       /** The target's own ancestor chain, so a child can extend it. */
       ancestors: string[];
+      /** The target's reach, which a child folder inherits. Empty at the root. */
+      reach: ReachEntry[];
     }
   | { ok: false; status: 400 | 403 | 404; error: string };
 
@@ -246,7 +267,7 @@ export async function resolveFolderTarget(
   caller: FolderCaller,
 ): Promise<FolderTarget> {
   const id = typeof folderId === "string" ? folderId.trim() : "";
-  if (!id) return { ok: true, id: null, membership: null, ancestors: [] };
+  if (!id) return { ok: true, id: null, membership: null, ancestors: [], reach: [] };
   if (!safeSegment(id)) {
     return { ok: false, status: 400, error: "invalid folder id" };
   }
@@ -268,6 +289,7 @@ export async function resolveFolderTarget(
     id,
     membership: membershipOf(data),
     ancestors: asArray(data.ancestors),
+    reach: reachOf(data),
   };
 }
 
@@ -297,6 +319,8 @@ export async function createFolderRecord(
     ...membership,
     ancestors,
     depth: ancestors.length,
+    // A new folder is private, so its reach is exactly its parent's.
+    reach: computeReach(ref.id, {}, target.reach),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -304,11 +328,11 @@ export async function createFolderRecord(
 }
 
 /**
- * Recompute and persist members/editorMembers/ancestors/depth for a folder and
- * everything beneath it.
+ * Recompute and persist members/editorMembers/ancestors/depth/reach for a
+ * folder and everything beneath it.
  *
- * Call after a folder's own grants change, after it moves, or after a team it
- * grants to changes membership. The starting folder is read fresh against its
+ * Call after a folder's own grants or visibility change, after it moves, or
+ * after a team it grants to changes membership. The starting folder is read fresh against its
  * (unchanged) parent; each descendant is recomputed against its just-written
  * parent, so the traversal always visits a parent before its children. Folder
  * writes are awaited individually because a child must read its parent's fresh
@@ -341,6 +365,8 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
       parentSnap && parentSnap.exists ? membershipOf(parentSnap.data()) : null;
     const parentAncestors =
       parentSnap && parentSnap.exists ? asArray(parentSnap.data()?.ancestors) : [];
+    const parentReach =
+      parentSnap && parentSnap.exists ? reachOf(parentSnap.data()) : [];
 
     const grants = grantsOf(data);
     const teams = await loadTeamIndex(db, ...grantLists(grants));
@@ -357,12 +383,16 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         ...membership,
         ancestors,
         depth: ancestors.length,
+        reach: computeReach(folderId, data as FolderAclData, parentReach),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
 
-    // Documents directly in this folder inherit its fresh membership.
+    // Documents directly in this folder inherit its fresh membership. Its
+    // reach they read from this record when asked (lib/reach.ts), so nothing
+    // is copied onto them; the projection sync below is what lists a document
+    // under a newly public folder, and unlists it again.
     const docSnaps = await db
       .collection("docs")
       .where("folderId", "==", folderId)

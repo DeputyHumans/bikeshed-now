@@ -147,6 +147,7 @@ test("the projection carries render fields and nothing else", () => {
     "slug",
     "title",
     "trusted",
+    "viaFolder",
     "visibility",
   ].sort());
   for (const field of PRIVATE_FIELDS) {
@@ -170,6 +171,7 @@ test("the reader projection an unlisted document unlocks carries render fields a
     "slug",
     "title",
     "trusted",
+    "viaFolder",
     "visibility",
   ].sort());
   for (const field of PRIVATE_FIELDS) {

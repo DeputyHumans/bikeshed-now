@@ -322,6 +322,20 @@ The key travels in the body, never the query, so it stays out of request logs.
 `Cache-Control: private, no-store` on every answer. The grant is read in the
 same round trip as the document whether or not either exists.
 
+A document a folder's reach opens (§17 "A folder's reach") is answered with
+`viaFolder: true`, the level that reached it, `publicEdit: false` and
+`expiresAt` the end of that reader's access, and never mints a grant.
+
+Body `{ folderId, k? }` instead answers one level of a folder its reach opens:
+`200 { folderId, name, visibility, expiresAt, path, folders, documents,
+truncated }`, where `path` runs from the outermost folder the request opens
+down to this one, `documents` carries `{ docId, title, currentVersion,
+updatedAt, cover }` and leaves out documents whose own expiry has passed, and
+each list stops at 500 with `truncated` saying so. A key that matched, or a
+public level, whose date has passed is `200 { folderId, name, expiresAt,
+expired: true }` with nothing listed. Absent, private, a wrong key and a
+rotated one are the same empty `404`.
+
 ### `POST /access`
 Body `{ docId, add?: [{ email, role }], remove?: string[] }`, where `role` is
 `"viewer"`, `"suggester"`, `"editor"` or `"approver"` (§13). `add` entries
@@ -339,9 +353,11 @@ mirror (§16) and the public projection (§17).
 
 `GET /access?docId=` answers the owner's share panel: which grants the
 document inherits, and from which folder (§13). Owner-only, refused as a read
-is. `200 { inherited: [{ folderId, path, principal, role }] }`: every grant on
-the document's folder and on each folder above it, nearest folder first and
-highest role first within each. `path` names only the levels the caller can
+is. `200 { inherited: [{ folderId, path, principal, role }], inheritedReach:
+[{ folderId, path, visibility, expiresAt }] }`: every grant on the document's
+folder and on each folder above it, nearest folder first and highest role
+first within each, and every folder above whose link or public level reaches
+it (§17), ended ones included so the panel can say so. `path` names only the levels the caller can
 open and writes `…` for the rest, as `filedIn` does. `Cache-Control: private,
 no-store` on every answer, the refusals included.
 
@@ -419,8 +435,9 @@ own pending proposal, and neither destroys anything.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree. `GET
-  /folder-access?folderId=` answers as `GET /access` does, from the folder's
-  parent up: a folder's own grants are already its direct ones.
+  /folder-access?folderId=` answers as `GET /access` does, `inheritedReach`
+  included, from the folder's parent up: a folder's own grants are already its
+  direct ones.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
   deletion is deliberately unsupported (`400`). Renaming a document takes
   `canEdit`; **moving it takes `isDocEditor`**, because filing a document into a
@@ -435,7 +452,10 @@ own pending proposal, and neither destroys anything.
   answer per caller, so the handler sets `noStore` first.
 - **`POST /trust`** — owner-only global trust (§6c).
 - **`POST /marking`** — owner-only export marking (§20).
-- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit? }` (§17).
+- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }`
+  (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and
+  expiry, recomputes its subtree, and answers `{ visibility, linkToken,
+  expiresAt }`; a folder has no open editing.
 - **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
   body for an unlisted document; without a read basis it is the `404` an absent
   id gets, and nothing is counted.
@@ -502,7 +522,7 @@ teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
-public/{docId}                                 PublicDoc        (projection, public only)
+public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
 ```
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
@@ -1046,7 +1066,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell}.ts
   lib/{storage,versions,publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
   lib/markdown/{render,serialize,slug,theme}.ts
@@ -1062,8 +1082,13 @@ functions/src/
   `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST
   mirror `firestore.rules` `canRead()`** for a caller with an account; they are
   tested on both sides. `tokenMatches` is the only place a link token is
-  compared, and a wiring test holds it there.
+  compared, and a wiring test holds it there; `keyMatchesHash` is the only
+  place a folder's key is, against the hash its `reach` stores. `readAccess`
+  adds a folder's reach to `readBasis`, for read paths only (§17).
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
+- `lib/reach.ts` — the Firestore half of a folder's reach: the folder a read
+  path loads only after the document's own basis said no, and the one level of
+  a folder a stranger holding its link is shown (§13, §17).
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
 - `lib/head.ts` — what a document's own `<head>` and first words say about it
   (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
@@ -1317,7 +1342,9 @@ doc-list query, its composite index and the `canRead`/`list` rules are
 UNCHANGED.
 
 `folders/{folderId}` mirrors `DocMeta`'s ACL shape and adds `parentId`,
-`ancestors` (root-first) and `depth`. Folder writes are Admin-SDK only.
+`ancestors` (root-first) and `depth`, and `visibility`, `linkToken`,
+`expiresAt` and `reach` (§17 "A folder's reach"). Folder writes are Admin-SDK
+only.
 
 Folder delete is **owner-only** and reparents children to the folder's parent —
 never orphans. Document delete is unsupported, deliberately and explicitly.
@@ -1335,6 +1362,12 @@ and the agent surface says who that is:
 This discloses nothing new. The rules let a folder's members read its whole
 record, `members` included, and a team is named only to its own members, as the
 share panel names it (`lib/audience.ts`).
+
+**Filing under a shared folder is sharing with strangers.** A folder that is
+unlisted or public opens everything beneath it to anyone holding its link, or
+to anyone (§17), whatever each document's own level and whoever owns it. The
+share panel of each document beneath says which folder reaches it
+(`inheritedReach`), and every write that files a document says so in `access`.
 
 **The share panel says where access comes from.** A record holds only the
 flattened sets, so the panel asks `GET /access` or `GET /folder-access` (§2) and
@@ -1640,8 +1673,9 @@ and public-access-prevention; `contentProxy` stays the only path bytes take.
 dialog, which holds the people, the three levels, the link, open editing and
 the expiry together. There is no separate "who can see it" dialog: it was one
 question asked from two menu entries, and the second was found only by reading
-the overflow menu. Folders share the same dialog without that section, having
-no visibility and no expiry. One rule:
+the overflow menu. Folders share the same dialog, levels, link and expiry
+included and open editing not; what a folder's settings open, and what its
+expiry ends, is below ("A folder's reach"). One rule, for documents:
 
 > **An expired document is read-only, and visible only to its owner.**
 
@@ -1744,16 +1778,70 @@ per account and cannot be revoked alone; that is the reversal condition in
 Open editing on an unlisted document reaches its link holders and nobody else,
 and not through the live log (§16).
 
+### A folder's reach
+
+A folder has the document's three levels, its link and its expiry, set by its
+owner through `POST /visibility` with the same rules: the token is minted on
+becoming unlisted, kept while unlisted and deleted otherwise, so rotating
+revokes every link at once, and the same dates are refused. It has no open
+editing. What its settings open is **everything beneath it** — its documents
+and every subfolder's, including documents private on their own, owned by
+someone else, or filed later ([ADR 0019](adr/0019-folder-links-reach-their-subtree.md)).
+
+> **A folder's reach opens documents to read, and nothing else.**
+
+| Basis | Who | Cached at a shared URL |
+|---|---|---|
+| `folder-public` | anyone, on a document under a public folder | yes |
+| `folder-link` | anyone whose request carries the key of an unlisted folder above the document, in `k` as a document's key travels | yes, and `noindex` |
+
+Both come from `readAccess` in `lib/acl.ts`, only after the document's own
+`readBasis` has said no, and only on read paths: `contentProxy` (content and
+thumbnails), `downloadBundle`, `recordView`, `POST /unlock`, `forkDoc`,
+`docShell` and the agent read tools (§19). Every write keeps `canRead` and
+`canEdit`, which never look at a folder, so a folder's key cannot authorize a
+write by construction. No grant is minted, and the rules cannot see a folder's
+key: a folder reader, signed in or not, gets the document and not its
+comments, annotations or presence. The reader projection says
+`viaFolder: true`, and the viewer offers none of them.
+
+**Reach is denormalized, as membership is.** Each folder stores `reach`, root
+first: its parent's, then `{ folderId, visibility, keyHash?, expiresAt }` for
+itself when it is not private. `recomputeSubtree` computes it in the same pass
+as membership. `keyHash` is sha256 of the token, compared by `keyMatchesHash`
+alone; a subfolder's members read its record, and must not learn the key to a
+folder above that they cannot open. A document stores nothing new: a read
+through a folder loads the document's own folder, one read, on a request its
+own level has already refused.
+
+**A folder's expiry ends its reach and nothing else.** After the date, its link
+and its public level open nothing, and a key holder asking `POST /unlock` for
+the folder is told it ended. Members read and edit as before, and nothing
+beneath is frozen. A document's own expiry wins over any folder. Every cached
+window, the shell's included, is cut at the earlier of the document's expiry
+and the end of the reach that opened it.
+
+**A document under a public folder is public.** It is mirrored to
+`public/{docId}` with `viaFolder: true`, `publicEdit: false` and `expiresAt`
+the end of a reader's access, which puts it in the sitemap, and the mirror is
+deleted when no public folder above it remains. Open editing, presence and the
+realtime `*` key stay the document's own: a public folder writes none.
+
+**Revocation gains the cascade.** A document directly in a folder stops
+answering to a rotated key at once; a subfolder's, when the cascade reaches
+that subfolder. The five-minute window under "Caching" applies on top.
+
 ### Anonymous reads use a projection, not a rules exception
 
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
-`visibility`, `publicEdit`, `trusted`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
-recompute `members`, and **deleted the instant it stops being public**. The rule
-allows `get` of a public row only, and no `list`: an absent id and any other row
-are the same refusal.
+`visibility`, `publicEdit`, `trusted`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` — written by the same paths that
+recompute `members`, and **deleted the instant it stops being public**. A
+document under a public folder is public too, and mirrored with
+`viaFolder: true` (above). The rule allows `get` of a public row only, and no
+`list`: an absent id and any other row are the same refusal.
 
 An **unlisted** document is not mirrored. Anything in `public/` is readable by
 whoever knows an id, and once was listable by anyone at all; an unlisted
@@ -1813,6 +1901,8 @@ generic shell too; their tab title comes from the client
 | `unlisted`, no or wrong `k` | generic | `private, no-store` | — |
 | `unlisted`, correct `k` | document | `public, max-age=min(300, seconds to expiry)` | `X-Robots-Tag: noindex` and `<meta name="robots" content="noindex">` |
 | `public` | document | `public, max-age=min(300, seconds to expiry)` | — |
+| under a public folder | document | `public, max-age=min(300, seconds to the earlier end)` | — |
+| under an unlisted folder, its key in `k` | document | `public, max-age=min(300, seconds to the earlier end)` | `noindex`, both forms |
 | expired, at any level | generic | `private, no-store` | — |
 
 An absent document, a version that does not exist, and any failure between

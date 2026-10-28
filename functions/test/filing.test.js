@@ -244,7 +244,7 @@ test("GET /folder-access gives what a folder inherits from the folders above it,
   assert.equal(ok.status, 200);
   assert.deepEqual([...new Set(ok.body.inherited.map((r) => r.folderId))], ["eng"]);
   assert.equal(ok.headers["cache-control"], "private, no-store");
-  assert.deepEqual((await ask(setFolderAccess, OWNER, { folderId: "eng" })).body, { inherited: [] });
+  assert.deepEqual((await ask(setFolderAccess, OWNER, { folderId: "eng" })).body, { inherited: [], inheritedReach: [] });
   assert.equal((await ask(setFolderAccess, CY, { folderId: "reviews" })).status, 403);
   assert.equal((await ask(setFolderAccess, STRANGER, { folderId: "reviews" })).status, 404);
 });

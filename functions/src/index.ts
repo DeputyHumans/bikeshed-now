@@ -56,7 +56,7 @@ import {
   signInHint,
 } from "./config";
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
-import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, organizeFolder, ManagementError } from "./lib/management";
+import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
   canEdit,
@@ -64,6 +64,7 @@ import {
   canManageTeam,
   canRead,
   canSuggest,
+  earlierEnd,
   expiredForReader,
   expiryMs,
   isDocApprover,
@@ -74,8 +75,10 @@ import {
   visibilityOf,
   type DocAclData,
   type LinkProof,
+  type ReadAccessBasis,
   type TeamAclData,
 } from "./lib/acl";
+import { folderOfDoc, listReach, loadReadAccess } from "./lib/reach";
 import {
   grantsOf,
   normalizeEmail,
@@ -394,7 +397,9 @@ interface ReadGate {
   docSnap: admin.firestore.DocumentSnapshot;
   docData: DocAclData;
   visibility: ReturnType<typeof visibilityOf>;
-  basis: NonNullable<ReturnType<typeof readBasis>>;
+  basis: ReadAccessBasis;
+  /** When a folder's reach that opened it ends; null for the document's own bases. */
+  until: number | null;
 }
 
 /**
@@ -415,9 +420,20 @@ async function readGate(
   const docData = docSnap.data() as DocAclData;
   if (expiredForReader(docData, caller)) return null;
   const proof = await linkProofFor(docSnap.ref, docData, caller, linkKey);
-  const basis = readBasis(docData, caller, proof);
-  if (basis === null) return null;
-  return { docSnap, docData, visibility: visibilityOf(docData), basis };
+  // A READ path, so a folder's reach counts (ADR 0019).
+  const access = await loadReadAccess(db(), docData, caller, proof);
+  if (access === null) return null;
+  return { docSnap, docData, visibility: visibilityOf(docData), basis: access.basis, until: access.until };
+}
+
+/** When a cached copy must stop being served: the document's expiry, or its folder reach's end. */
+function cacheEnd(gate: ReadGate): number | null {
+  return earlierEnd(expiryMs(gate.docData), gate.until);
+}
+
+/** Opened by a key in the URL — the document's own or a folder's — so never indexed. */
+function keyedRead(gate: ReadGate): boolean {
+  return gate.visibility === "unlisted" || gate.basis === "folder-link";
 }
 
 /**
@@ -441,14 +457,15 @@ function setContentCache(res: import("express").Response, gate: ReadGate): void 
      * Revocation latency is a documented trade — a document made private again
      * can be served from cache for up to five minutes. An EXPIRY is not the
      * same thing: its moment is known in advance, so serving past it would be a
-     * choice rather than a consequence. `max-age` never outlives the date.
+     * choice rather than a consequence. `max-age` never outlives the date —
+     * nor the end of the folder reach that opened it.
      */
-    const at = expiryMs(gate.docData);
+    const at = cacheEnd(gate);
     const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
     const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
     res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
   }
-  if (gate.visibility === "unlisted") {
+  if (keyedRead(gate)) {
     res.setHeader("X-Robots-Tag", "noindex");
   }
 }
@@ -470,7 +487,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
   const left = at === null ? THUMB_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
   const maxAge = Math.max(0, Math.min(THUMB_CACHE_SECONDS, left));
   res.setHeader("Cache-Control", `private, max-age=${maxAge}, immutable`);
-  if (gate.visibility === "unlisted") {
+  if (keyedRead(gate)) {
     res.setHeader("X-Robots-Tag", "noindex");
   }
 }
@@ -699,7 +716,8 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
-  if (!canRead(docData, caller, proof)) {
+  // A read of every byte, so a folder's reach counts, as it does for content.
+  if ((await loadReadAccess(db(), docData, caller, proof)) === null) {
     res.status(404).end();
     return;
   }
@@ -770,20 +788,35 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
   try {
     const result = req.method === "GET" ? await getAccess(ctx, "document", id) : await changeAccess(ctx, "document", id, body);
-    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : { ...result.direct, members: result.effective.members });
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited, inheritedReach: result.inheritedReach } : { ...result.direct, members: result.effective.members });
   } catch (error) { managementFailure(error, res); }
 });
 
-/** The web form remains a full replacement; MCP uses the shared sparse patch. */
+/**
+ * The web form remains a full replacement; MCP uses the shared sparse patch.
+ * `{ folderId }` in place of `docId` sets a folder's own level and expiry,
+ * which is what its reach opens beneath it (SPEC §13, §17).
+ */
 export const setVisibility = onRequest(PLAIN, async (req, res) => {
   noStore(res);
   if (rejectMethod(req, res, ["POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) { res.status(401).end(); return; }
   const body = jsonBody(req) as Record<string, unknown> | null;
-  const id = typeof body?.docId === "string" ? body.docId : "";
   const expiry = parseExpiry(body?.expiresAt);
   if ("error" in expiry) { badRequest(res, expiry.error); return; }
+  if (body?.docId === undefined && body?.folderId !== undefined) {
+    const folderId = typeof body.folderId === "string" ? body.folderId : "";
+    try {
+      const result = await changeFolderVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, folderId, {
+        visibility: body.visibility, expiresAt: expiry.value,
+      });
+      const { visibility, linkToken, expiresAt } = result;
+      res.status(200).json({ visibility, linkToken, expiresAt });
+    } catch (error) { managementFailure(error, res); }
+    return;
+  }
+  const id = typeof body?.docId === "string" ? body.docId : "";
   try {
     const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
       visibility: body?.visibility, publicEdit: body?.publicEdit === true, expiresAt: expiry.value,
@@ -1544,7 +1577,7 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
   const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
   try {
     const result = req.method === "GET" ? await getAccess(ctx, "folder", id) : await changeAccess(ctx, "folder", id, body);
-    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : result.direct);
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited, inheritedReach: result.inheritedReach } : result.direct);
   } catch (error) { managementFailure(error, res); }
 });
 
@@ -1795,16 +1828,18 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
   // key is a view of nothing, and answering otherwise would confirm the id.
   const k = typeof body?.k === "string" ? body.k.trim() : null;
   const proof = await linkProofFor(docRef, docData, caller, k);
-  const basis = readBasis(docData, caller, proof);
-  if (basis === null || expiredForReader(docData, caller)) {
+  const access = expiredForReader(docData, caller) ? null : await loadReadAccess(db(), docData, caller, proof);
+  if (access === null) {
     res.status(404).end();
     return;
   }
+  const basis = access.basis;
 
   const actor = caller ? actorFrom(caller, req) : null;
   const automated = actor ? isAutomated(actor) : false;
+  // A public folder's reader read a public page; a folder key's, an unlisted one.
   const via: "app" | "unlisted" | "public" =
-    basis === "member" ? "app" : basis === "public" ? "public" : "unlisted";
+    basis === "member" ? "app" : basis === "public" || basis === "folder-public" ? "public" : "unlisted";
 
   const rawMs = typeof body?.ms === "number" && Number.isFinite(body.ms) ? body.ms : 0;
   const claimedMs = automated
@@ -1904,19 +1939,38 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
  * who read `docs/{docId}` directly — unlisted without the key or with a wrong
  * one, and a grant from before the link was rotated (SPEC §1.4b). The key
  * travels in the body, never the query, so it stays out of request logs.
+ *
+ * A document a folder's reach opens is answered too, marked `viaFolder`, and
+ * never grants: that reader is read-only (ADR 0019). `{ folderId, k? }` in
+ * place of `docId` answers what one level of such a folder holds
+ * (`lib/reach.ts listReach`), with the same one 404 for every refusal.
  */
 export const unlockDoc = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
   noStore(res); // every answer, the 200 included: it may have minted a grant
   const caller = await resolveCaller(req);
 
-  const body = jsonBody(req) as { docId?: unknown; k?: unknown } | null;
+  const body = jsonBody(req) as { docId?: unknown; folderId?: unknown; k?: unknown } | null;
+  const k = typeof body?.k === "string" ? body.k.trim() : null;
+  if (body?.docId === undefined && body?.folderId !== undefined) {
+    const folderId = typeof body.folderId === "string" ? body.folderId : "";
+    if (!folderId || !safeSegment(folderId)) {
+      badRequest(res, "invalid or missing folderId");
+      return;
+    }
+    const listing = await listReach(db(), folderId, k);
+    if (!listing) {
+      res.status(404).end();
+      return;
+    }
+    res.status(200).json("open" in listing ? listing.open : { ...listing.ended, expired: true });
+    return;
+  }
   const docId = typeof body?.docId === "string" ? body.docId : "";
   if (!docId || !safeSegment(docId)) {
     badRequest(res, "invalid or missing docId");
     return;
   }
-  const k = typeof body?.k === "string" ? body.k.trim() : null;
 
   // The grant is read in the same round trip whether or not the document
   // exists, so how long the answer takes does not say which it was.
@@ -1929,15 +1983,16 @@ export const unlockDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const data = docSnap.data() as DocAclData & Record<string, unknown>;
-  const basis = readBasis(data, caller, { k, grantToken: grantTokenOf(grantSnap) });
-  const projection = basis === null ? null : await readerProjection(docRef, data);
+  const access = await loadReadAccess(db(), data, caller, { k, grantToken: grantTokenOf(grantSnap) });
+  const projection = access === null ? null : await readerProjection(docRef, data, access);
   if (!projection) {
     res.status(404).end();
     return;
   }
 
+  // Only the document's OWN key grants. A folder's reach never does.
   if (
-    basis === "link" &&
+    access?.basis === "link" &&
     caller &&
     typeof data.linkToken === "string" &&
     !tokenMatches(data.linkToken, grantTokenOf(grantSnap))
@@ -2461,7 +2516,9 @@ export const docShell = onRequest(WARM, async (req, res) => {
 
   const docSnap = await db().collection("docs").doc(docId).get();
   const doc = docSnap.exists ? (docSnap.data() as ShellDoc) : null;
-  const decision = decideShell({ doc, k, versionId: pinned, now: Date.now() });
+  // The folder is read only when the document's own level has said no.
+  const folder = doc && readBasis(doc, null, { k }) === null ? await folderOfDoc(db(), doc) : null;
+  const decision = decideShell({ doc, folder, k, versionId: pinned, now: Date.now() });
   if (decision.kind === "generic") {
     serveGeneric();
     return;

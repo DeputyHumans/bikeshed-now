@@ -19,7 +19,7 @@
  */
 
 import { PUBLIC_CACHE_SECONDS } from "../config";
-import { type DocAclData, expiryMs, isExpired, readBasis, visibilityOf } from "./acl";
+import { type DocAclData, type FolderAclData, earlierEnd, expiryMs, isExpired, readAccess, visibilityOf } from "./acl";
 import type { DocHead } from "./head";
 import { escapeAttr, escapeText } from "./html";
 
@@ -33,7 +33,7 @@ export interface DocumentDecision {
   versionId: string;
   /** Seconds the page may be cached publicly: the content window, cut at expiry. */
   maxAge: number;
-  /** True for an unlisted document: served, but not for crawlers to index. */
+  /** True when a key in the URL opened it — the document's or a folder's: served, but not for crawlers to index. */
   noindex: boolean;
 }
 
@@ -54,26 +54,38 @@ export interface ShellDoc extends DocAclData {
  * unlisted needs the link token, and the cache window is the content window
  * capped at the time left before expiry, so `max-age` never outlives the date.
  * A `k` that is absent never matches a token that is absent (`tokenMatches`).
+ *
+ * `folder` is the record of the folder the document is filed in: a public
+ * folder's reach, or a folder key in `k`, opens the page as `contentProxy`
+ * would open the bytes, and the window is cut at that reach's end too
+ * (ADR 0019).
  */
 export function decideShell(input: {
   doc: ShellDoc | null;
+  folder?: FolderAclData | null;
   k: string;
   versionId: string | null;
   now: number;
 }): ShellDecision {
   const { doc, k, now } = input;
   if (doc === null) return GENERIC;
-  const basis = readBasis(doc, null, { k });
-  if (basis !== "public" && basis !== "link") return GENERIC;
+  const access = readAccess(doc, null, { k }, input.folder ?? null, now);
+  // With no caller, the only bases are the URL's own: never member or grant.
+  if (access === null || access.basis === "member" || access.basis === "grant") return GENERIC;
   if (isExpired(doc, now)) return GENERIC;
   const visibility = visibilityOf(doc);
   const versionId = input.versionId ?? doc.currentVersion;
   if (typeof versionId !== "string" || versionId.length === 0) return GENERIC;
 
-  const at = expiryMs(doc);
+  const at = earlierEnd(expiryMs(doc), access.until);
   const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - now) / 1000);
   const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
-  return { kind: "document", versionId, maxAge, noindex: visibility === "unlisted" };
+  return {
+    kind: "document",
+    versionId,
+    maxAge,
+    noindex: visibility === "unlisted" || access.basis === "folder-link",
+  };
 }
 
 /* ------------------------------------------------------------------------ */

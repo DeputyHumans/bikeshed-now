@@ -1,6 +1,6 @@
 # 0012 — An unlisted document needs its link, everywhere
 
-**Status** Accepted · **Spec** §1.4, §2, §4, §16, §17, §19
+**Status** Accepted, extended by [0019](0019-folder-links-reach-their-subtree.md) (a folder's link) · **Spec** §1.4, §2, §4, §16, §17, §19
 
 ## Context
 
