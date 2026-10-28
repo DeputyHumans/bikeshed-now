@@ -171,7 +171,7 @@ a written argument in a pull request, not a dependency.
 |---|---|---|
 | `app/` runtime | **8** | Markdown renders server-side; email renders server-side. The eighth is `yjs`, argued for in [ADR 0010](adr/0010-crdt-for-shared-document-state.md) — no CRDT can be hand-written at a defensible size |
 | `functions/` eager | **9**, budget 10 | `adm-zip`, `cookie`, `firebase-admin`, `firebase-functions`, `markdown-it`, `mime-types`, `resend`, `turndown`, `turndown-plugin-gfm` |
-| `functions/` lazy | 4 | `react`, `react-dom`, `@react-email/components`, `@react-email/render` — intended to load only inside the email path ([0008](adr/0008-runtime-email-rendering.md)); imported statically today through `functions/src/email/notify.ts`, so every function's cold start pays for them ([0011](adr/0011-document-page-through-a-function.md)) |
+| `functions/` lazy | 4 | `react`, `react-dom`, `@react-email/components`, `@react-email/render` — loaded only inside the email path ([0008](adr/0008-runtime-email-rendering.md)): `functions/src/index.ts` imports `email/notify` where it sends, and `wiring.test.js` fails if a cold start loads them |
 | `cli/` | its own package | nothing it pulls in reaches the app or the functions |
 | root | dev only | |
 

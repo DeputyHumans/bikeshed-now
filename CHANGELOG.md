@@ -24,6 +24,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   them, 3–6 s on "Opening the document…" in all. Each now keeps one instance
   running, about $24 a month whatever the traffic
   ([ADR 0018](docs/architecture/adr/0018-keep-the-document-open-path-warm.md)).
+- Start every function without loading the email renderer. React and the
+  email templates were imported at the top of the functions' shared module,
+  so every cold start loaded them: 221 ms of a 290 ms load, on paths that
+  never send email. They now load where email is sent, as ADR 0008 always
+  said.
 
 ## 0.21.0 — 2026-10-27
 

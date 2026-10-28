@@ -96,6 +96,28 @@ test("exactly the three services a document open waits on are kept warm", () => 
   assert.deepEqual(warm, ["contentProxy=1", "docShell=1", "session=1"]);
 });
 
+test("a cold start never loads the email renderer", () => {
+  // Every function shares this module graph, so whatever index.js loads at
+  // the top, every cold start pays for. @react-email/components alone was
+  // 221 ms of a 290 ms load, imported statically through email/notify on
+  // every request path ADR 0008 said would never see it. Its own process,
+  // because this file has already loaded index.js by the time it runs.
+  const { execFileSync } = require("node:child_process");
+  const probe = `
+    require(${JSON.stringify(join(__dirname, "..", "lib", "index.js"))});
+    console.log(JSON.stringify(Object.keys(require.cache)));
+  `;
+  const loaded = JSON.parse(execFileSync(process.execPath, ["-e", probe], { encoding: "utf8" }));
+  const pkg = (p) => loaded.some((k) => k.includes(`/node_modules/${p}/`));
+  assert.ok(pkg("firebase-admin"), "index.js loaded without firebase-admin, so this test checks nothing");
+  assert.deepEqual(
+    ["react", "react-dom", "@react-email", "resend"].filter(pkg),
+    [],
+    "index.js loads the email renderer at the top",
+  );
+  assert.ok(!loaded.some((k) => k.endsWith("/lib/email/notify.js")), "index.js imports email/notify at the top");
+});
+
 test("the SPA catch-all is last, after every wildcard", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   const sources = firebase.hosting.rewrites.map((r) => r.source);

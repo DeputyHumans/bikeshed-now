@@ -178,14 +178,9 @@ import {
   safeSegment,
   strParam,
 } from "./lib/http";
-import {
-  claimCommentCooldown,
-  sendCommentNotice,
-  sendInvitations,
-  sendVerificationCode,
-  uidForEmail,
-  type InviteTarget,
-} from "./email/notify";
+// Types only: email/notify loads React and the templates, so the three paths
+// that send import it where they send, and no cold start pays for it (ADR 0008).
+import type { InviteTarget } from "./email/notify";
 
 // Runtime update policy is managed by the operator API until the SDK exposes it.
 setGlobalOptions({ preserveExternalChanges: true });
@@ -2037,6 +2032,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
       },
       { merge: true },
     );
+    const { sendVerificationCode } = await import("./email/notify");
     await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
     res.status(200).json({ sent: true, email });
     return;
@@ -2353,6 +2349,7 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
     // A branch of the invitation template, not a fourth message type: being
     // added to a team silently grants access to everything that team holds,
     // which is the same silence the invitation exists to break.
+    const { sendInvitations } = await import("./email/notify");
     await sendInvitations(caller.emailLower, invitees, {
       title: typeof team.name === "string" ? team.name : "a team",
       kind: "team",
@@ -2611,6 +2608,7 @@ export const onCommentCreated = onDocumentCreated(
         ? (actor.channel as "cli" | "mcp" | "api")
         : undefined;
 
+    const { claimCommentCooldown, sendCommentNotice, uidForEmail } = await import("./email/notify");
     for (const email of recipients) {
       const uid = await uidForEmail(db(), email);
       // No account yet means no cooldown record and no preference to honour.
