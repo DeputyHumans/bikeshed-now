@@ -16,6 +16,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- Say what a document is waiting for, and offer a way out when it stalls. The
+  wait was one label, "Opening the document…", from the sign-in round trip
+  through the frame's last image. It now reads "Signing in", "Opening the
+  document" or "Loading the page". A stage that runs past 4 s says it is taking
+  longer than it should, and past 20 s offers Try again: the page reloads for
+  the first two stages, and only the frame for the third.
+
 ### Fixed
 
 - Open a document in a new tab without waiting for servers to start. The page,

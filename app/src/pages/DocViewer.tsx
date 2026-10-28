@@ -875,7 +875,17 @@ export function DocViewer() {
     return entries;
   }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload]);
 
-  if (doc.loading) return <Loading label="Opening the document" />;
+  // Nothing is asked for until the gate settles, so on a full page load the
+  // first wait is the sign-in round trip, and it is named as such. Try again
+  // reloads the page: a stalled sign-in or Listen does not recover in place.
+  if (doc.loading) {
+    return (
+      <Loading
+        label={gate === "loading" ? "Signing in" : "Opening the document"}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
   if (doc.notFound) return <NotHere />;
 
   const editingNow = mode.kind === "editing";
@@ -1061,7 +1071,7 @@ export function DocViewer() {
                 reload — which is a blank white box without it. */}
             {frame.loading ? (
               <div className="frame-loading">
-                <Loading label="Opening the document" />
+                <Loading label="Loading the page" onRetry={frame.reload} />
               </div>
             ) : null}
             {/* Over the frame, like the loading cover, and for the same
