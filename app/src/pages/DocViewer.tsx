@@ -179,7 +179,11 @@ export function DocViewer() {
   // required, on every document, whatever its owner chose.
   const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
   const isCurrent = Boolean(headVersion) && doc.currentVersion === headVersion;
-  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt);
+  // A reader who came through a folder's link or public level reads, and
+  // nothing else: the rules hold no grant for them, so no thread, no presence
+  // and no edit is theirs, signed in or not (SPEC §17 "A folder's reach").
+  const throughFolder = !doc.meta && doc.publicDoc?.viaFolder === true;
+  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt) && !throughFolder;
   const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
   // The real editor set, as the server asks of an upload (SPEC §2).
   const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);
@@ -302,7 +306,7 @@ export function DocViewer() {
     doc: frame.doc,
     epoch: frame.epoch,
     mode: mode.kind === "editing" ? "edit" : "view",
-    enabled: signedIn,
+    enabled: signedIn && !throughFolder,
   });
 
   // Between the annotation layer and the editor, deliberately: cleanups run in
@@ -313,7 +317,10 @@ export function DocViewer() {
   // A member, or anyone on a PUBLIC open-editing document, shares the live log.
   // An unlisted document's link holder cannot — the realtime rules cannot see
   // a key — so they edit alone and publish through /draft (SPEC §16).
-  const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
+  // A public folder's reader is told "public" and still shares nothing live:
+  // the realtime `*` key is the document's own level's alone.
+  const shareLive =
+    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
@@ -440,7 +447,7 @@ export function DocViewer() {
   // now: on an unlisted document, the threads become readable only after
   // /unlock has recorded that account's grant.
   useEffect(() => {
-    if (!doc.currentVersion) return;
+    if (!doc.currentVersion || throughFolder) return;
     return listAnnotations(
       docId,
       doc.currentVersion,
@@ -456,7 +463,7 @@ export function DocViewer() {
         setAnnotations([]);
       },
     );
-  }, [docId, doc.currentVersion, settleComments, doc.resolvedFor]);
+  }, [docId, doc.currentVersion, settleComments, doc.resolvedFor, throughFolder]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -889,7 +896,7 @@ export function DocViewer() {
   if (doc.notFound) return <NotHere />;
 
   const editingNow = mode.kind === "editing";
-  const showComments = commentsOpen && Boolean(doc.currentVersion);
+  const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
   /**
    * The navigator is for DECKS, not for anything with two sections in it.
    *
@@ -966,12 +973,13 @@ export function DocViewer() {
           // who is not a member is told too, which is what the projection
           // carries the date for (SPEC §17).
           expiresAt={doc.meta?.expiresAt ?? doc.publicDoc?.expiresAt ?? null}
+          expiryOf={throughFolder ? "folder-link" : "document"}
           onExpiry={isOwner ? () => setDialog("share") : undefined}
           peers={presence.peers}
           following={presence.following}
           onToggleFollow={presence.toggleFollow}
           commentsOpen={commentsOpen}
-          onToggleComments={() => setCommentsOpen((v) => !v)}
+          onToggleComments={throughFolder ? undefined : () => setCommentsOpen((v) => !v)}
           canEdit={canEdit}
           canShare={isOwner}
           onShare={() => setDialog("share")}

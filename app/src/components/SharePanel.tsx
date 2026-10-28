@@ -13,7 +13,8 @@ import { inheritedFolderAccess, setFolderAccess } from "../folders";
 import { logEvent } from "../analytics";
 import type { VisibilityState } from "../visibility";
 import { GRANT_LIST, ROLES, ROLE_HINT, ROLE_LABEL, grantsOf, type RoleGrants } from "../roles";
-import type { InheritedGrant, Role, TeamMeta } from "../types";
+import type { InheritedGrant, InheritedReach, Role, TeamMeta } from "../types";
+import { isExpired } from "../expiry";
 
 /**
  * Teams and people live in ONE list, and a team shows its expansion inline.
@@ -23,8 +24,9 @@ import type { InheritedGrant, Role, TeamMeta } from "../types";
  * six named people, and the person deciding whether to share deserves to see
  * both without navigating away.
  *
- * For a document the same dialog also holds the visibility level, the link,
- * open editing and the expiry, under the people: one question, asked once.
+ * The same dialog also holds the visibility level, the link and the expiry,
+ * under the people: one question, asked once. A document's adds open editing;
+ * a folder's says that its level reaches everything beneath it.
  */
 
 export interface ShareTarget {
@@ -173,10 +175,14 @@ function resolvePrincipal(value: string, teamByName: Map<string, TeamMeta>): str
   return team ? `team:${team.teamId}` : null;
 }
 
-/** What the level lets in beyond the people listed, for the footer's count. */
-function beyondThePeople(visibility: VisibilityState["visibility"]): string {
-  if (visibility === "public") return ", and anyone";
-  if (visibility === "unlisted") return ", and anyone with the link";
+/**
+ * What the level lets in beyond the people listed, for the footer's count —
+ * the record's own, or a folder's above it that has not ended.
+ */
+function beyondThePeople(visibility: VisibilityState["visibility"], reach: InheritedReach[] = []): string {
+  const live = reach.filter((r) => r.expiresAt === null || !isExpired(r.expiresAt));
+  if (visibility === "public" || live.some((r) => r.visibility === "public")) return ", and anyone";
+  if (visibility === "unlisted" || live.length > 0) return ", and anyone with the link";
   return "";
 }
 
@@ -191,7 +197,7 @@ export function SharePanel({
   target: ShareTarget;
   teams: TeamMeta[];
   isOwner: boolean;
-  /** A document's level, link, open editing and expiry. Folders have none, and pass none. */
+  /** The record's level, link and expiry, and for a document its open editing. */
   visibility?: VisibilityState;
   onClose: () => void;
   onChanged: (next: RoleGrants) => void;
@@ -204,13 +210,19 @@ export function SharePanel({
   // What the folders above give, which only the server can say: the owner may
   // not be able to open them, and the record holds only the flattened result.
   const [inherited, setInherited] = useState<InheritedGrant[]>([]);
+  // And which folders above open it beyond those people (SPEC §17).
+  const [reach, setReach] = useState<InheritedReach[]>([]);
   const [inheritedFailed, setInheritedFailed] = useState(false);
   useEffect(() => {
     if (!isOwner) return;
     let live = true;
     const read = target.kind === "doc" ? inheritedAccess : inheritedFolderAccess;
     void read(target.id).then(
-      (rows) => live && setInherited(rows),
+      (rows) => {
+        if (!live) return;
+        setInherited(rows.grants);
+        setReach(rows.reach);
+      },
       () => live && setInheritedFailed(true),
     );
     return () => {
@@ -219,7 +231,7 @@ export function SharePanel({
   }, [isOwner, target.kind, target.id]);
   // Followed here only for the footer: the section owns the editing of it.
   const [level, setLevel] = useState(visibility?.visibility ?? "private");
-  const showsVisibility = visibility !== undefined && target.kind === "doc";
+  const showsVisibility = visibility !== undefined;
 
   /**
    * Teams are entered BY NAME and stored as `team:{id}`.
@@ -302,8 +314,8 @@ export function SharePanel({
                 the second one. And only the whole truth for a private
                 document — the level can let in everybody else. */}
             {target.members.length}{" "}
-            {showsVisibility && level !== "private"
-              ? `${target.members.length === 1 ? "person" : "people"}${beyondThePeople(level)}`
+            {beyondThePeople(level, reach)
+              ? `${target.members.length === 1 ? "person" : "people"}${beyondThePeople(level, reach)}`
               : `${target.members.length === 1 ? "person has" : "people have"} access`}
           </span>
           {/* One busy flag covers every row, so one spinner says it. */}
@@ -416,8 +428,9 @@ export function SharePanel({
 
           {showsVisibility ? (
             <VisibilitySection
-              docId={target.id}
+              target={{ kind: target.kind, id: target.id }}
               current={visibility}
+              inheritedReach={reach}
               onChanged={(next) => setLevel(next.visibility)}
             />
           ) : null}

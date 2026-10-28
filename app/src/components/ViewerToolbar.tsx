@@ -60,6 +60,7 @@ export function ViewerToolbar({
   folders,
   versionLabel,
   expiresAt,
+  expiryOf = "document",
   onExpiry,
   peers,
   following,
@@ -95,14 +96,17 @@ export function ViewerToolbar({
   folders: FolderMeta[];
   versionLabel: string;
   /** When the content stops being served; null or absent for never. */
-  expiresAt?: DocMeta["expiresAt"];
+  expiresAt?: DocMeta["expiresAt"] | number | null;
+  /** Whose date that is: the document's, or the folder link this reader came through. */
+  expiryOf?: "document" | "folder-link";
   /** The owner's tap on the expiry chip. The toolbar does not know which dialog it opens. */
   onExpiry?: () => void;
   peers: Peer[];
   following: string | null;
   onToggleFollow: (uid: string) => void;
   commentsOpen: boolean;
-  onToggleComments: () => void;
+  /** Absent for a reader who came through a folder's link: they have no threads to open. */
+  onToggleComments?: () => void;
   canEdit: boolean;
   editing: boolean;
   onToggleEdit: () => void;
@@ -143,7 +147,7 @@ export function ViewerToolbar({
       {/* Beside the version rather than a banner above the document: a date
           is a fact about this document, and for most of its life not an
           urgent one. */}
-      <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} />
+      <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} of={expiryOf} />
       {onOpenForks ? (
         <ForkChip
           forked={forked === true}
@@ -156,7 +160,7 @@ export function ViewerToolbar({
       <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />
 
       <div className="viewer-toolbar-actions">
-        {singleColumn ? (
+        {!onToggleComments ? null : singleColumn ? (
           <div className="pane-toggle" role="group" aria-label="Show">
             <button type="button" aria-pressed={pane === "doc"} onClick={() => onPane("doc")}>
               Document

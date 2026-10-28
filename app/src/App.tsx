@@ -11,6 +11,7 @@ import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
 import { Loading } from "./components/Spinner";
 import { DocList } from "./pages/DocList";
+import { SharedFolder } from "./pages/SharedFolder";
 import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
 import { SignUp } from "./pages/SignUp";
@@ -134,7 +135,10 @@ export function App() {
           <Route
             path="/folder/:folderId"
             element={
-              <RequireAccount>
+              // Signed out, a folder's link opens what it reaches (SPEC §17);
+              // signed in, the workspace decides, and hands a folder its owner
+              // never shared with this account to the same page.
+              <RequireAccount signedOut={<SharedFolder />}>
                 <DocList />
               </RequireAccount>
             }

@@ -2,7 +2,7 @@
 // The workspace never calls itself empty while it is still loading, and says when it is busy (SPEC §5, §13).
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DocMeta, FolderMeta } from "../types";
@@ -49,6 +49,7 @@ vi.mock("../forks", () => ({ forkDoc }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
 const { backfill } = vi.hoisted(() => ({ backfill: vi.fn() }));
 vi.mock("../hooks/useCoverBackfill", () => ({ useCoverBackfill: backfill }));
+vi.mock("./SharedFolder", () => ({ SharedFolder: () => <p>SHARED FOLDER</p> }));
 
 import { DocList } from "./DocList";
 import { ToastProvider } from "../components/Toast";
@@ -308,5 +309,43 @@ describe("uploading a new version from the workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByRole("menuitem", { name: "Upload a new version…" })).toBeNull();
+  });
+});
+
+describe("a folder this account is not a member of", () => {
+  function mountFolder(folderId: string) {
+    return render(
+      <MemoryRouter initialEntries={[`/folder/${folderId}?k=key`]}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/folder/:folderId" element={<DocList />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("is handed to the shared-folder page once its folders have arrived, and never before", () => {
+    // Before the folders land, every folder looks foreign; deciding then would
+    // send a member to the stranger's page for one frame.
+    mountFolder("theirs");
+    expect(screen.queryByText("SHARED FOLDER")).toBeNull();
+    act(() => listeners.docs?.([]));
+    act(() => listeners.folders?.([]));
+    expect(screen.getByText("SHARED FOLDER")).toBeTruthy();
+  });
+
+  it("is the workspace for a member, whatever key the URL carries", () => {
+    mountFolder("mine");
+    act(() => listeners.docs?.([]));
+    act(() =>
+      listeners.folders?.([
+        {
+          folderId: "mine", name: "Mine", parentId: null, ancestors: [], depth: 0,
+          ownerEmail: "me@example.com", members: ["me@example.com"], viewers: [], editors: [],
+        } as unknown as FolderMeta,
+      ]),
+    );
+    expect(screen.queryByText("SHARED FOLDER")).toBeNull();
   });
 });

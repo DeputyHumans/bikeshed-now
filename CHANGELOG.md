@@ -31,6 +31,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   `POST /visibility` and `POST /unlock` take a `folderId`, and `GET /access` and
   `GET /folder-access` report `inheritedReach`
   ([ADR 0019](docs/architecture/adr/0019-folder-links-reach-their-subtree.md)).
+- Set a folder's level, link and date in its Share dialog, as a document's are
+  set. Someone with the link, or anyone for a public folder, opens
+  `/folder/{id}` without an account. They see a read-only page of its
+  subfolders and documents with their covers, and every link out carries the
+  key. A signed-in account that is not a member gets the same page. A
+  document's share dialog names each folder above it that reaches it, and its
+  count of readers includes those folders' readers. Cards show a folder's level
+  and when its sharing ends. Moving something into a shared folder says who can
+  now read it. A reader who came through a folder's link is offered no
+  comments, presence or editing, and their chip says when the link stops.
 
 ## 0.22.1 — 2026-10-28
 

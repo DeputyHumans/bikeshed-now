@@ -93,6 +93,58 @@ export function expiryExplanation(
 }
 
 /** True inside the last week, which is when a chip should start insisting. */
+/**
+ * A folder's date, which ends its link and its public level and nothing else
+ * (SPEC §17 "A folder's reach"). It must not say "expires": the folder, its
+ * documents and everybody it is shared with by name are untouched.
+ */
+export function sharingLabel(
+  value: Timestamp | number | null | undefined,
+  nowMs: number = Date.now(),
+): string | null {
+  const at = expiryMs(value);
+  if (at === null) return null;
+  if (at <= nowMs) return "Sharing ended";
+  const left = at - nowMs;
+  if (left < DAY) return "Sharing ends today";
+  const days = Math.floor(left / DAY);
+  if (days === 1) return "Sharing ends tomorrow";
+  if (days < 14) return `Sharing ends in ${days} days`;
+  return `Sharing ends ${formatDay(at)}`;
+}
+
+/** The sentence behind a folder's chip, for its owner and for its members. */
+export function sharingExplanation(
+  value: Timestamp | number | null | undefined,
+  isOwner: boolean,
+  nowMs: number = Date.now(),
+): string | null {
+  const at = expiryMs(value);
+  if (at === null) return null;
+  const who = isOwner ? "the people you shared it with" : "everyone it is shared with by name";
+  if (at > nowMs) {
+    return `Its link works until ${formatDay(at)}. Nothing is deleted then: the link stops working, and ${who} keep their access.`;
+  }
+  return isOwner
+    ? `Its link stopped working on ${formatDay(at)}. Nothing has been deleted, and ${who} still have access. Change or clear the date to share it again.`
+    : `Its link stopped working on ${formatDay(at)}. Nothing has been deleted, and ${who} still have access.`;
+}
+
+/**
+ * What a reader who came through a folder's link is told: their access ends,
+ * the document does not, and they cannot tell who else may still read it.
+ */
+export function throughFolderExplanation(
+  value: Timestamp | number | null | undefined,
+  nowMs: number = Date.now(),
+): string | null {
+  const at = expiryMs(value);
+  if (at === null) return null;
+  return at > nowMs
+    ? `You can read this through a shared folder until ${formatDay(at)}. Nothing is deleted then: the link just stops working.`
+    : "The shared link to this folder has stopped working. Nothing has been deleted. Ask whoever shared it for a new link.";
+}
+
 export function expiringSoon(
   value: Timestamp | number | null | undefined,
   nowMs: number = Date.now(),

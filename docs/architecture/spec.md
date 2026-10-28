@@ -1047,7 +1047,7 @@ app/src/
   export/{labels.ts,html.ts,pdf.ts,image.ts}
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
   workspace/tree.ts
-  pages/{DocList.tsx,DocViewer.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
+  pages/{DocList.tsx,DocViewer.tsx,SharedFolder.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```

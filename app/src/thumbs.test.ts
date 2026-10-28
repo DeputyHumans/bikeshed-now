@@ -125,6 +125,15 @@ describe("where a stored image is read from", () => {
     expect(thumbUrl("q3-plan", "v4", KEY, 7)).toBe(`/thumb/q3-plan/v4/${KEY}/s7.jpg`);
   });
 
+  it("carries a link's key as the path segment, so a reader with no account is let in", () => {
+    // A document's key or a folder's: the server reads either from `~<k>`
+    // (SPEC §2, §17), and without it a stranger's cover is a 404.
+    expect(coverUrl("q3-plan", { versionId: "v2", cover: KEY }, "folder-key")).toBe(
+      `/thumb/~folder-key/q3-plan/v2/${KEY}/cover.jpg`,
+    );
+    expect(thumbUrl("q3-plan", "v2", KEY, "cover", null)).toBe(`/thumb/q3-plan/v2/${KEY}/cover.jpg`);
+  });
+
   const STORED = { versionId: "v3", slides: { key: KEY, count: 3 } };
   const READING = { reading: true, draft: false, shownVersion: "v3", slideCount: 3 };
 

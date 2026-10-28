@@ -58,6 +58,7 @@ vi.mock("../analytics", () => ({
  */
 vi.mock("./DocList", () => ({ DocList: () => <p>WORKSPACE</p> }));
 vi.mock("./SignUp", () => ({ SignUp: () => <p>SIGN-IN SCREEN</p> }));
+vi.mock("./SharedFolder", () => ({ SharedFolder: () => <p>SHARED FOLDER</p> }));
 
 function renderAt(path: string) {
   return render(
@@ -133,15 +134,21 @@ describe("who gets the landing page", () => {
   );
 
   /** The landing page is opted into by `/` alone, not by being signed out. */
-  it.each(["/folder/f1", "/account"])(
-    "sends a signed-out visitor at %s to the sign-in screen",
-    (path) => {
-      auth.gate = "signed_out";
-      renderAt(path);
-      expect(screen.getByText("SIGN-IN SCREEN")).toBeDefined();
-      expect(hero()).toBeNull();
-    },
-  );
+  it("sends a signed-out visitor at /account to the sign-in screen", () => {
+    auth.gate = "signed_out";
+    renderAt("/account");
+    expect(screen.getByText("SIGN-IN SCREEN")).toBeDefined();
+    expect(hero()).toBeNull();
+  });
+
+  /** A folder's link opens what it reaches without an account (SPEC §17). */
+  it("hands a signed-out visitor at /folder/f1 to the shared-folder page, which decides", () => {
+    auth.gate = "signed_out";
+    renderAt("/folder/f1?k=key");
+    expect(screen.getByText("SHARED FOLDER")).toBeDefined();
+    expect(screen.queryByText("SIGN-IN SCREEN")).toBeNull();
+    expect(hero()).toBeNull();
+  });
 
   it("shows the spinner, not the landing page, while the gate is loading", () => {
     auth.gate = "loading";

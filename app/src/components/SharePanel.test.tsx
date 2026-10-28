@@ -8,16 +8,16 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { SharePanel, type ShareTarget } from "./SharePanel";
 import { ToastProvider } from "./Toast";
 import { endOfDayMs } from "../expiry";
-import { shareUrl, type VisibilityState } from "../visibility";
-import type { AccessChange, AccessState } from "../access";
-import type { InheritedGrant, TeamMeta, Visibility } from "../types";
+import { folderShareUrl, shareUrl, type VisibilityState } from "../visibility";
+import type { AccessChange, AccessState, Inheritance } from "../access";
+import type { InheritedGrant, InheritedReach, TeamMeta, Visibility } from "../types";
 
 /**
  * The dialog's job is what it SENDS; the transport is stubbed. `vi.hoisted`
  * because `vi.mock`'s factory is hoisted above every other statement, and a
  * plain const would still be in the temporal dead zone.
  */
-const { setAccess, setFolderAccess, setVisibility } = vi.hoisted(() => ({
+const { setAccess, setFolderAccess, setVisibility, setFolderVisibility } = vi.hoisted(() => ({
   setAccess: vi.fn(
     async (_id: string, change: AccessChange): Promise<AccessState> => ({
       viewers: (change.add ?? []).map((a) => a.principal),
@@ -39,11 +39,19 @@ const { setAccess, setFolderAccess, setVisibility } = vi.hoisted(() => ({
       expiresAt,
     }),
   ),
+  setFolderVisibility: vi.fn(
+    async (_id: string, visibility: Visibility, expiresAt: number | null): Promise<VisibilityState> => ({
+      visibility,
+      publicEdit: false,
+      linkToken: visibility === "unlisted" ? "ftok" : null,
+      expiresAt,
+    }),
+  ),
 }));
 
 const { inheritedAccess, inheritedFolderAccess } = vi.hoisted(() => ({
-  inheritedAccess: vi.fn(async (_id: string): Promise<InheritedGrant[]> => []),
-  inheritedFolderAccess: vi.fn(async (_id: string): Promise<InheritedGrant[]> => []),
+  inheritedAccess: vi.fn(async (_id: string): Promise<Inheritance> => ({ grants: [], reach: [] })),
+  inheritedFolderAccess: vi.fn(async (_id: string): Promise<Inheritance> => ({ grants: [], reach: [] })),
 }));
 
 vi.mock("../access", () => ({ setAccess, inheritedAccess }));
@@ -51,7 +59,7 @@ vi.mock("../folders", () => ({ setFolderAccess, inheritedFolderAccess }));
 vi.mock("../visibility", async () => {
   // `shareUrl` and `visibilityStateOf` stay real; only the network call is stubbed.
   const actual = await vi.importActual<typeof import("../visibility")>("../visibility");
-  return { ...actual, setVisibility };
+  return { ...actual, setVisibility, setFolderVisibility };
 });
 const { logEvent } = vi.hoisted(() => ({ logEvent: vi.fn() }));
 vi.mock("../analytics", () => ({ logEvent }));
@@ -122,11 +130,43 @@ describe("who can see it, inside the share dialog", () => {
     expect(input.compareDocumentPosition(radio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test("a folder never gets them, whatever it is handed", () => {
-    // Folders have no visibility and no expiry: the section is a document's.
-    renderShare({ target: { ...DOC, kind: "folder" }, visibility: UNLISTED });
-    expect(screen.queryByRole("radio")).toBeNull();
+  test("a folder gets the levels, its own link and a date, and no open editing", async () => {
+    // What a folder's level opens is read-only, so there is nothing to tick;
+    // what it reaches is everything beneath it, and the dialog says so.
+    const FOLDER_LINK: VisibilityState = { ...UNLISTED, publicEdit: false, linkToken: "ftok" };
+    renderShare({ target: { ...DOC, kind: "folder", id: "f1" }, visibility: FOLDER_LINK });
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText(/everything in this folder and its subfolders can be read without an account/i)).toBeTruthy();
+    expect(screen.getByText(/documents other people filed here, and anything filed here later/i)).toBeTruthy();
+    expect((screen.getByLabelText("Share link") as HTMLInputElement).value).toBe(folderShareUrl("f1", FOLDER_LINK));
+    expect(folderShareUrl("f1", FOLDER_LINK)).toContain("/folder/f1?k=ftok");
+    expect(screen.getByText(/the link stops working and the folder stops being public/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: /public/i }));
+    await waitFor(() => expect(setFolderVisibility).toHaveBeenCalledTimes(1));
+    expect(setFolderVisibility).toHaveBeenCalledWith("f1", "public", FUTURE);
+    expect(setVisibility).not.toHaveBeenCalled();
+  });
+
+  test("a private folder has no date to set, because its date ends only its link", () => {
+    renderShare({ target: { ...DOC, kind: "folder", id: "f1" }, visibility: { ...PRIVATE, expiresAt: null } });
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
     expect(document.querySelector("#expires-on")).toBeNull();
+  });
+
+  test("a document says which shared folder reaches it, and counts who that lets in", async () => {
+    // Private on its own, public through a folder: the dialog must not claim
+    // three people are the whole audience (SPEC §17).
+    const REACH: InheritedReach[] = [
+      { folderId: "eng", path: "Engineering", visibility: "public", expiresAt: null },
+      { folderId: "old", path: "Archive", visibility: "unlisted", expiresAt: Date.now() - DAY },
+    ];
+    inheritedAccess.mockResolvedValueOnce({ grants: [], reach: REACH });
+    renderShare({ visibility: PRIVATE });
+    expect(await screen.findByText(/anyone can read it through “Engineering”/i)).toBeTruthy();
+    expect(screen.getByText(/“Archive” was shared by link until its date passed/i)).toBeTruthy();
+    expect(screen.getByText(/1 person, and anyone$/)).toBeTruthy();
   });
 
   test("changing the level sends the whole triple, with the date untouched", async () => {
@@ -302,7 +342,7 @@ describe("access that comes through a folder", () => {
   ];
 
   test("each inherited grant is listed after the direct ones, tagged with its folder, and cannot be changed here", async () => {
-    inheritedAccess.mockResolvedValueOnce(THROUGH);
+    inheritedAccess.mockResolvedValueOnce({ grants: THROUGH, reach: [] });
     renderShare({ visibility: PRIVATE, teams: [PLATFORM], target: { ...DOC, viewers: ["ana@example.com"] } });
 
     const cy = (await screen.findByText("via Engineering/Reviews")).closest("li") as HTMLElement;
@@ -324,9 +364,10 @@ describe("access that comes through a folder", () => {
   });
 
   test("somebody granted directly and through a folder is listed twice, so removing one is not mistaken for both", async () => {
-    inheritedAccess.mockResolvedValueOnce([
-      { folderId: "eng", path: "Engineering", principal: "cy@example.com", role: "editor" },
-    ]);
+    inheritedAccess.mockResolvedValueOnce({
+      grants: [{ folderId: "eng", path: "Engineering", principal: "cy@example.com", role: "editor" }],
+      reach: [],
+    });
     renderShare({ visibility: PRIVATE, target: { ...DOC, viewers: ["cy@example.com"] } });
     const inherited = (await screen.findByText("via Engineering")).closest("li") as HTMLElement;
     expect(inherited.textContent).toContain("cy@example.com");
@@ -335,9 +376,10 @@ describe("access that comes through a folder", () => {
   });
 
   test("a grant on a folder the owner cannot open says so rather than naming it", async () => {
-    inheritedAccess.mockResolvedValueOnce([
-      { folderId: "top", path: "…", principal: "dee@example.com", role: "viewer" },
-    ]);
+    inheritedAccess.mockResolvedValueOnce({
+      grants: [{ folderId: "top", path: "…", principal: "dee@example.com", role: "viewer" }],
+      reach: [],
+    });
     renderShare({ visibility: PRIVATE });
     const row = (await screen.findByText("via a folder you cannot open")).closest("li") as HTMLElement;
     expect(row.textContent).toContain("dee@example.com");
@@ -351,9 +393,10 @@ describe("access that comes through a folder", () => {
   });
 
   test("a folder asks what the folders above it give, and a document does not", async () => {
-    inheritedFolderAccess.mockResolvedValueOnce([
-      { folderId: "eng", path: "Engineering", principal: "ana@example.com", role: "viewer" },
-    ]);
+    inheritedFolderAccess.mockResolvedValueOnce({
+      grants: [{ folderId: "eng", path: "Engineering", principal: "ana@example.com", role: "viewer" }],
+      reach: [],
+    });
     renderShare({ target: { ...DOC, kind: "folder", id: "f1" } });
     expect(await screen.findByText("via Engineering")).toBeTruthy();
     expect(inheritedFolderAccess).toHaveBeenCalledWith("f1");
