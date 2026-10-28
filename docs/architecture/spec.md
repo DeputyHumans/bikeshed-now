@@ -109,7 +109,9 @@ the same `404` as an absent id, or every write endpoint would be the existence
 check the read paths closed. This drops no feature and closes the existence
 oracle that an open gate would otherwise open. "May read" includes an unlisted
 document's key or link grant (§17), and nothing less: without them an unlisted
-document answers exactly as a private one.
+document answers exactly as a private one. The viewer's not-found page offers
+to sign in, or to switch account, from the reader's own sign-in state alone;
+it is never given the document, so it says no more than the `404` does.
 
 ---
 
