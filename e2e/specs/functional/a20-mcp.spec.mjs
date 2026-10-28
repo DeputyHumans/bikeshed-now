@@ -62,13 +62,16 @@ const BOTH = ["local", "prod"];
 /** SPEC §19's table, in its order. */
 const SPEC_TOOLS = Object.freeze([
   "get_document_access", "set_document_access", "get_folder_access", "set_folder_access",
-  "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
+  "set_document_visibility", "set_folder_visibility", "rename_folder", "move_folder", "delete_folder",
   "list_documents", "list_versions", "get_document", "publish_document", "fork_document", "get_lineage", "update_document", "commit_draft",
   "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion", "list_folders",
   "get_folder", "create_folder", "move_document", "rename_document", "get_comments", "get_changes", "add_comment",
   "reply_to_comment", "resolve_thread", "reopen_thread",
 ]);
-/** The nine SPEC §19 says take an optional `k`. */
+/**
+ * Nine of the tools SPEC §19 says take an optional `k`, each probed here for
+ * the absent id's answer without it. A folder's key on the read tools is A25's.
+ */
 const KEY_TOOLS = Object.freeze([
   "get_document", "update_document", "suggest_edit", "get_comments", "get_changes", "add_comment", "reply_to_comment", "resolve_thread", "reopen_thread",
 ]);
@@ -284,7 +287,7 @@ scenario("A20.1 tools/list names exactly SPEC §19's thirty-three tools, each de
   const names = tools.map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
   assert.equal(names.length, 33, `exactly 33 tools: ${names.join(", ")}`);
-  assert.equal(new Set(names).size, 32, "the names are unique");
+  assert.equal(new Set(names).size, 33, "the names are unique");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
   const bad = [];
   for (const t of tools) {
@@ -1104,7 +1107,7 @@ scenario("A20.3 a missing or empty required argument is a tool error naming exac
   const unprobed = requiring.filter((n) => !sent.some((x) => x.startsWith(`${n} `)));
   if (target.kind === "local") assert.deepEqual(unprobed, [], "every tool that requires an argument was probed");
   else ctx.step(`not probed on ${target.kind} (the guard needs a run document's id): ${unprobed.join(", ")}`);
-  assert.equal(requiring.length, 30, `tools that require an argument: ${requiring.join(", ")}`);
+  assert.equal(requiring.length, 31, `tools that require an argument: ${requiring.join(", ")}`);
   const doc = await record(d.id);
   assert.deepEqual({ version: doc?.currentVersion, title: doc?.title }, { version: "v1", title: d.title }, "no probe changed the document");
 

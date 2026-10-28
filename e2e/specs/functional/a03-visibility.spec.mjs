@@ -21,7 +21,7 @@
  *   A3.3   /d/**: private and absent are byte-identical with identical headers
  *          (Date aside); unlisted with its key is cacheable, noindex and titled
  *          by the document; a POST is 405 (SPEC §2 /d, §17 "Link previews")
- *   A3.4   public/{d} holds exactly the 12 projected keys; an anonymous get of
+ *   A3.4   public/{d} holds exactly the 13 projected keys; an anonymous get of
  *          an unlisted or an absent row, and an anonymous list, are refused by
  *          the rules (SPEC §17 "Anonymous reads use a projection")
  *   A3.5   making a public document private (or unlisted) removes its row
@@ -80,7 +80,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const PUBLIC_MAX_AGE = 300;
 const THUMB_MAX_AGE = 86_400;
 /** The exact projection keys of public/{docId} (SPEC §17, lib/publicdoc.ts PROJECTED_KEYS). */
-const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "forked", "format", "publicEdit", "publishedAt", "slug", "title", "trusted", "visibility"];
+const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "forked", "format", "publicEdit", "publishedAt", "slug", "title", "trusted", "viaFolder", "visibility"];
 /** POST /unlock's reader projection: the same minus publishedAt (SPEC §2 /unlock). */
 const READER_KEYS = PUBLIC_KEYS.filter((k) => k !== "publishedAt");
 
@@ -368,7 +368,7 @@ scenario("A3.2 /unlock: no or wrong k is one empty 404 like an absent id; the ri
   }
   assert.equal((await readDoc(target, `docs/${U.docId}/linkGrants/${stranger.uid}`)), null, "no grant from a refused unlock");
 
-  ctx.step("the right k, anonymously: the reader projection, exactly its 11 keys");
+  ctx.step("the right k, anonymously: the reader projection, exactly its 12 keys");
   const a = await anon.postJson("/unlock", { docId: U.docId, k });
   assert.equal(a.status, 200);
   assert.deepEqual(Object.keys(a.json).sort(), READER_KEYS, "the reader projection's keys, publishedAt not among them");
@@ -442,7 +442,7 @@ scenario("A3.3 /d/**: a private and an absent slug answer identical headers (Dat
 
 // --- A3.4 ---------------------------------------------------------------------
 
-scenario("A3.4 public/{d} has exactly the 12 projected keys; anonymous get of an unlisted or absent row and anonymous list are denied by the rules", { inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
+scenario("A3.4 public/{d} has exactly the 13 projected keys; anonymous get of an unlisted or absent row and anonymous list are denied by the rules", { inconclusiveOnStackTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
   const [owner] = await castSessions(["owner"]);
   const fs = anonFirestore(ctx);
   const B = await publishPage(owner, "proj-public");
