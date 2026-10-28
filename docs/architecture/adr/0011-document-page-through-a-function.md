@@ -1,6 +1,6 @@
 # 0011 — Serve the document page through a function
 
-**Status** Accepted · **Spec** §2, §17
+**Status** Accepted, amended by [0018](0018-keep-the-document-open-path-warm.md) (`minInstances`) · **Spec** §2, §17
 
 ## Context
 

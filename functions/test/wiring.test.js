@@ -83,6 +83,19 @@ test("a function that retries can be deployed by the workflow", () => {
   assert.match(step, /firebase deploy --only "\$only"[^\n]*--force/, `the by-name functions deploy needs --force for ${retrying.join(", ")}`);
 });
 
+test("exactly the three services a document open waits on are kept warm", () => {
+  // A full page load runs docShell, session and contentProxy one after
+  // another; cold, docShell alone took 3.6 s and contentProxy 3.0 s (ADR
+  // 0011). Each warm instance is a standing monthly charge, so a fourth is a
+  // decision to argue for, not a line to copy.
+  const built = require("../lib/index.js");
+  const warm = Object.keys(built)
+    .filter((n) => built[n]?.__endpoint?.minInstances !== undefined)
+    .map((n) => `${n}=${built[n].__endpoint.minInstances}`)
+    .sort();
+  assert.deepEqual(warm, ["contentProxy=1", "docShell=1", "session=1"]);
+});
+
 test("the SPA catch-all is last, after every wildcard", () => {
   const firebase = JSON.parse(readFileSync(join(ROOT, "firebase.json"), "utf8"));
   const sources = firebase.hosting.rewrites.map((r) => r.source);

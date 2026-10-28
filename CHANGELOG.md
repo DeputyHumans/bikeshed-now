@@ -14,6 +14,17 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Open a document in a new tab without waiting for servers to start. The page,
+  the sign-in cookie and the document's bytes come from three functions in
+  turn, and after a quiet spell each started cold: 3.6 s and 3.0 s for two of
+  them, 3–6 s on "Opening the document…" in all. Each now keeps one instance
+  running, about $24 a month whatever the traffic
+  ([ADR 0018](docs/architecture/adr/0018-keep-the-document-open-path-warm.md)).
+
 ## 0.21.0 — 2026-10-27
 
 ### Added

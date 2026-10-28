@@ -567,8 +567,14 @@ to surprise you.
   are where traffic spikes. Gated content, and a link holder's read on the
   strength of their account's grant rather than a key in the URL, stays
   `private, no-store`.
-- **Set the budget alert.** As of early 2026 a small team's usage sits inside
-  the Firebase free tier; a public document that gets attention does not.
+- **Three functions are always on.** `docShell`, `session` and `contentProxy`
+  keep one instance each so a first open does not wait for them to start
+  ([ADR 0018](../architecture/adr/0018-keep-the-document-open-path-warm.md)):
+  about $24 a month at 2026-10 prices, whatever the traffic. A deployment with
+  almost no readers can set them back to zero in `functions/src/index.ts`.
+- **Set the budget alert.** As of early 2026 a small team's usage, those three
+  instances aside, sits inside the Firebase free tier; a public document that
+  gets attention does not.
 
 There is deliberately **no rate limiter**. CDN caching is the cost defence, and
 Firebase App Check is the named hook if abuse ever appears.

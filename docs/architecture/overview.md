@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — seventeen records of about thirty lines each.
+[`adr/`](adr/) — eighteen records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -200,9 +200,12 @@ through `docShell`, which serves the app shell with the document's own head
 for link previews ([ADR 0011](adr/0011-document-page-through-a-function.md)).
 That is the price of the private bucket, the ACL and a link that unfurls as
 the document, and it is the thing most likely to surprise you on a bill — and
-on a stopwatch, since a document open cold-starts two services in sequence, and
-an unlisted one opened by someone who is not a member three: `/unlock` checks
-the key before the bytes are asked for
+on a stopwatch, since a document opened in a new tab waits on `docShell`,
+`session` and `contentProxy` in sequence. Those three keep one instance each,
+about $24 a month whatever the traffic
+([ADR 0018](adr/0018-keep-the-document-open-path-warm.md)). An unlisted one
+opened by someone who is not a member waits on a fourth, still cold: `/unlock`
+checks the key before the bytes are asked for
 ([ADR 0012](adr/0012-unlisted-needs-its-link.md)).
 
 Two consequences:

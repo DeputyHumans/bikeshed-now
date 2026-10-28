@@ -222,6 +222,13 @@ const EXPIRED_WRITE = "this document has expired — change or clear its expiry 
 /** Functions that may send email declare the secret; the rest never load it. */
 const MAILING = { region: REGION, secrets: [RESEND_API_KEY] };
 const PLAIN = { region: REGION };
+/**
+ * The three services a document open waits on, in series: docShell, session,
+ * contentProxy. Each is its own Cloud Run service and cold-starts on its own,
+ * which put seconds in front of a first open (ADR 0011). One idle instance
+ * each is a standing monthly charge, priced there; nothing else is warm.
+ */
+const WARM = { ...PLAIN, minInstances: 1 };
 
 /** Public operational health; never reads user documents or writes state. */
 export const health = onRequest({ ...PLAIN, timeoutSeconds: 10 }, healthHandler({
@@ -253,7 +260,7 @@ function extractIdToken(req: Request): string | null {
  * a sign-in screen ends up looking broken to the one person who most needs to
  * understand what happened.
  */
-export const session = onRequest(PLAIN, async (req, res) => {
+export const session = onRequest(WARM, async (req, res) => {
   if (req.method === "DELETE") {
     res.setHeader(
       "Set-Cookie",
@@ -491,7 +498,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
  * from the path when the viewer put it there, so that a bundle's relative
  * files carry it too, else from `?k=`.
  */
-export const contentProxy = onRequest(PLAIN, async (req, res) => {
+export const contentProxy = onRequest(WARM, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
 
   // Uncacheable until something deliberately says otherwise. See noStore().
@@ -2417,7 +2424,7 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
  * built, so a throw before then falls back to a generic shell that is still
  * uncacheable — never a broken page pinned at a public URL for the window.
  */
-export const docShell = onRequest(PLAIN, async (req, res) => {
+export const docShell = onRequest(WARM, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
 
   // Uncacheable until the page is built and says otherwise. See noStore().
