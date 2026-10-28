@@ -16,6 +16,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+- Rebase the verification-mail regression control onto deferred email loading, preserving its suppression of the verification message after a committed reservation.
+
 - Make harness self-tests share the machine-wide test lock, so their browsers cannot enter an exclusive concurrency measurement or prevent its diagnostic cleanup. Retain the lock until the test child closes and forward interruption to its process group.
 
 - Dispatch held publication requests before awaiting their gated responses in E2E races. Preserve natural suggestion-race inconclusives while applying the reviewed same-file safety qualification to the exact C10 pause-point configuration.
