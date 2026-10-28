@@ -192,8 +192,23 @@ async function selfTest() {
   log(`self-test toolchain: ${JSON.stringify({ node: toolchain.node, firebase: toolchain.firebase })}`);
   const files = readdirSync(SELFTEST_DIR).filter((n) => n.endsWith(".test.mjs")).sort().map((n) => join(SELFTEST_DIR, n));
   if (files.length === 0) fail("no self-tests found");
-  const child = spawn(toolchain.node.executable, ["--test", "--test-concurrency=2", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit" });
-  const code = await new Promise((r) => child.on("close", (c) => r(c ?? 1)));
+  const lock = await acquireTierLock("shared", { runId: `selftest-${process.pid}`, tier: "selftest", onWait: (why) => log(`waiting for the self-test tier lock: ${why}`) });
+  let code;
+  try {
+    const child = spawn(toolchain.node.executable, ["--test", "--test-concurrency=2", "--test-force-exit", "--test-reporter=spec", ...files], { cwd: REPO_ROOT, env: toolchain.env, stdio: "inherit", detached: true });
+    const stop = () => { void stopChildGroup(child); };
+    for (const signal of SIGNALS) process.on(signal, stop);
+    try {
+      code = await new Promise((resolveRun, reject) => {
+        child.once("error", reject);
+        child.once("close", (c) => resolveRun(c ?? 1));
+      });
+    } finally {
+      for (const signal of SIGNALS) process.off(signal, stop);
+    }
+  } finally {
+    lock.release();
+  }
   process.exit(code);
 }
 

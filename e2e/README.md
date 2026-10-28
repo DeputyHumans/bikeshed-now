@@ -25,6 +25,11 @@ npm run test:e2e -- classify [--merge] <run> <id> <H|E|P|I|U> <note…>
 npm run test:e2e -- controls [<set>…]           # every oracle family red with its patch, green without
 ```
 
+Self-tests take the same machine-wide shared tier lock as functional runs.
+They wait while a concurrency measurement holds the exclusive lock, and keep
+their shared lock until the test child closes. Interrupting self-tests stops
+the child process group before releasing that lock.
+
 `run` exits 0 when everything passed (known defects failing as expected,
 and NOT REPRODUCED trials, included), 1 when a case failed, the stack failed or was stopped under the
 run (an emulator died, its lease ran out), or the stack's teardown left

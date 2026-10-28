@@ -89,7 +89,7 @@ test("run.mjs takes each tier's lock as tierLockMode chose it from the run's own
   const src = readFileSync(RUN_MJS, "utf8");
   const code = blankSource(src); // comments and string contents blanked: only code matches
   assert.doesNotMatch(code, /\bTIER_MODE\b/, "no tier's lock is read from TIER_MODE directly");
-  assert.equal([...code.matchAll(/\bacquireTierLock\s*\(/g)].length, 1, "one place takes a tier lock");
+  assert.equal([...code.matchAll(/\bacquireTierLock\s*\(/g)].length, 2, "the suite runner and the self-test runner each take a tier lock");
   assert.match(code, /\bacquireTierLock\s*\(\s*tierLock\.mode\s*,/, "the lock taken is the one tierLockMode chose");
   assert.match(code, /\.tierLock\s*=\s*tierLockMode\s*\(\s*p\.tier\s*,\s*selection\s*\)/, "chosen per tier of the plan, from the run's selection");
   assert.match(code, /const selection\s*=\s*\{\s*n:\s*values\.n\s*\?\s*values\.n\.split\(/, "--n as numbers");
