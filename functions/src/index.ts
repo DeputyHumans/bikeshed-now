@@ -74,6 +74,7 @@ import {
   tokenMatches,
   visibilityOf,
   type DocAclData,
+  type FolderAclData,
   type LinkProof,
   type ReadAccessBasis,
   type TeamAclData,
@@ -162,7 +163,9 @@ import { resolveMarking, type Marking } from "./lib/marking";
 import { HEAD_SCAN_BYTES, readHead } from "./lib/head";
 import {
   collectPrefix,
+  composeFolderPage,
   composePage,
+  decideFolderShell,
   decideShell,
   loadShell,
   renderShell,
@@ -2459,6 +2462,55 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
+ * `GET /folder/:folderId` — the shell, naming the folder when its own public
+ * level or its key opens it. Its own function so `docShell`'s staged fallback
+ * stays the document's alone. Nothing inside the folder is read, so the only
+ * step that can throw is the one read of the folder and the render; either
+ * way the answer is the generic shell, uncacheable.
+ */
+async function serveFolderShell(
+  req: Request,
+  res: import("express").Response,
+  segments: string[],
+  template: string,
+  serveGeneric: () => void,
+): Promise<void> {
+  if (segments.length !== 1) {
+    serveGeneric();
+    return;
+  }
+  const [folderId] = segments;
+  const k = strParam(req, "k");
+  try {
+    const folderSnap = await db().collection("folders").doc(folderId).get();
+    const folder = folderSnap.exists ? (folderSnap.data() as FolderAclData & { name?: unknown }) : null;
+    const decision = decideFolderShell({ folder, k, now: Date.now() });
+    if (decision.kind === "generic" || folder === null) {
+      serveGeneric();
+      return;
+    }
+    const html = renderShell(template, composeFolderPage({
+      origin: publicOrigin(),
+      folderId,
+      name: typeof folder.name === "string" && folder.name ? folder.name : "Untitled folder",
+      decision,
+      k,
+    }));
+    // ONLY NOW, as for a document: the page exists, so this URL may be cached with it.
+    res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
+    if (decision.noindex) res.setHeader("X-Robots-Tag", "noindex");
+    res.status(200);
+    if (req.method === "HEAD") res.end();
+    else res.send(html);
+  } catch (err) {
+    console.warn("docShell: generic fallback at folder", (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    noStore(res);
+    res.removeHeader("X-Robots-Tag");
+    serveGeneric();
+  }
+}
+
+/**
  * GET /d/:docId[/:versionId] — the app shell for a document page, with the
  * document's own head for crawlers (SPEC §17).
  *
@@ -2504,6 +2556,13 @@ export const docShell = onRequest(WARM, async (req, res) => {
     if (isHead) res.end();
     else res.send(template);
   };
+
+  // A folder's page: its name for a pasted link (SPEC §17 "A folder's reach").
+  const folderSegments = pathSegments(req, "folder");
+  if (folderSegments) {
+    await serveFolderShell(req, res, folderSegments, template, serveGeneric);
+    return;
+  }
 
   const segments = pathSegments(req, "d");
   if (!segments || segments.length < 1 || segments.length > 2) {

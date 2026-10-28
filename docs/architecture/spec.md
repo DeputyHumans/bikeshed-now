@@ -160,15 +160,17 @@ which also holds this table to them.
 | `/content/**` | `contentProxy` |
 | `/thumb/**` | `contentProxy` |
 | `/d/**` | `docShell` |
+| `/folder/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
 | — (Firestore trigger) | `recordVersionEvent` |
 | — (Firestore trigger) | `recordThreadEvent` |
 | — (Firestore trigger) | `recordCommentEvent` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
-catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
-through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
-`docShell` answers with the app shell itself, not an API (§17 "Link previews").
+catch-all. `/folder` is an exact rewrite to `createFolder`, which the
+`/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites
+that serve a **client route**: `docShell` answers with the app shell itself,
+not an API (§17 "Link previews").
 
 **`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers
 `/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302`
@@ -189,7 +191,8 @@ Every endpoint is **auth-first**: authentication is checked before anything that
 could reveal whether a document exists. The one exception is `GET /d/**`, which
 never authenticates at all: it decides from the document record and `k` alone,
 and answers a private slug and an absent one with the same bytes (§17 "Link
-previews").
+previews"). `GET /folder/**` is the same function, deciding from the folder
+record and `k`.
 
 ### `POST /session`
 Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1.
@@ -303,6 +306,16 @@ answers are `405` for a method other than `GET`/`HEAD` and `503` when no shell
 has ever been adopted from Hosting (§17); a `403` with an HTML body is the
 platform refusing the invocation, not the function answering
 (`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
+
+### `GET /folder/:folderId`
+The same shell, from the same function, for a folder's page. When the folder's
+own public level, or its key in `?k=`, opens it and its reach has not ended
+(§17 "A folder's reach"), the head says the folder's name with the default
+card, and nothing read from inside it; `public, max-age=min(300, seconds to
+the reach's end)`, plus `X-Robots-Tag: noindex` and the meta form when a key
+opened it. Every other folder, absent and private alike, is the generic shell
+with `private, no-store`. A member's workspace at the same URL is the client's;
+the shell does not authenticate.
 
 ### `POST /unlock`
 Body `{ docId, k? }`. What a reader who is not a member may know about a
@@ -1907,6 +1920,13 @@ generic shell too; their tab title comes from the client
 
 An absent document, a version that does not exist, and any failure between
 the decision and the finished page are generic as well.
+
+`/folder/**` goes to the same function (§2 `GET /folder/:folderId`). A
+folder's page names the folder, with the default card, when the folder's own
+public level or its key opens it, under the same cache and robots rules as a
+document's; it reads nothing inside the folder, so a cached page never goes on
+describing contents that have changed. Every other folder is the generic
+shell.
 
 **The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked
 for as a byte range and capped again in the function, so a large document is

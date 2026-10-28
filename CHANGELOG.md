@@ -41,6 +41,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   and when its sharing ends. Moving something into a shared folder says who can
   now read it. A reader who came through a folder's link is offered no
   comments, presence or editing, and their chip says when the link stops.
+- Unfurl a folder's link with the folder's name. `/folder/**` now goes to
+  `docShell`, which names a folder whose public level or key opens it, caches
+  that page no longer than the link lasts, and marks a keyed page `noindex`.
+  Every other folder gets the generic shell with `private, no-store`. This
+  needs the new Hosting rewrite, which ships with Hosting.
 
 ## 0.22.1 — 2026-10-28
 

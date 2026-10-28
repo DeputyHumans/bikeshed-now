@@ -45,6 +45,7 @@
       { "source": "/content/**", "function": "contentProxy" },
       { "source": "/thumb/**", "function": "contentProxy" },
       { "source": "/d/**", "function": "docShell" },
+      { "source": "/folder/**", "function": "docShell" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [

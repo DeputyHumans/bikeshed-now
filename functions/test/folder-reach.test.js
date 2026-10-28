@@ -19,9 +19,12 @@ const {
 } = require("../lib/lib/acl.js");
 const { computeReach } = require("../lib/lib/folders.js");
 const { setFolderVisibility } = require("../lib/lib/management.js");
-const { decideShell, GENERIC } = require("../lib/lib/shell.js");
+const { decideFolderShell, decideShell, GENERIC, resetShellCacheForTests } = require("../lib/lib/shell.js");
+const { readFileSync } = require("node:fs");
+const { join } = require("node:path");
 const {
   contentProxy,
+  docShell,
   manageSuggestion,
   organize,
   saveDraft,
@@ -317,4 +320,78 @@ test("only the owner sets a folder's level, a past date is refused, and a folder
   const past = await c.post(setVisibility, OWNER, { folderId: "top", visibility: "unlisted", expiresAt: NOW - DAY });
   assert.equal(past.status, 400);
   assert.equal(w.store.get("folders/top").visibility, undefined, "a refused date changes nothing");
+});
+
+// --- A folder's page, for a pasted link ---------------------------------------
+
+test("a folder's page decision: its public level or its key, cut at its end", () => {
+  const link = folderWith([{ folderId: "top", visibility: "unlisted", keyHash: keyHashOf(KEY), expiresAt: NOW + 60_000 }]);
+  const linked = decideFolderShell({ folder: link, k: KEY, now: NOW });
+  assert.equal(linked.kind, "folder");
+  assert.equal(linked.noindex, true);
+  assert.ok(linked.maxAge <= 60);
+  assert.equal(decideFolderShell({ folder: link, k: "wrong", now: NOW }), GENERIC);
+  assert.equal(decideFolderShell({ folder: link, k: KEY, now: NOW + 60_001 }), GENERIC);
+  assert.equal(decideFolderShell({ folder: null, k: KEY, now: NOW }), GENERIC);
+  const pub = decideFolderShell({ folder: folderWith([{ folderId: "top", visibility: "public", expiresAt: null }]), k: "", now: NOW });
+  assert.deepEqual([pub.kind, pub.noindex, pub.maxAge], ["folder", false, 300]);
+});
+
+// The built shell, as Hosting serves it: `loadShell` adopts only a page with
+// the root marker and a hashed module asset.
+const TEMPLATE = readFileSync(join(__dirname, "..", "..", "app", "index.html"), "utf8").replace(
+  "</head>",
+  '<script type="module" src="/assets/index-test.js"></script></head>',
+);
+
+/** The shell as Hosting serves it, for the length of `fn`. */
+async function withShell(fn) {
+  const saved = globalThis.fetch;
+  const origin = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://bikeshed.example";
+  resetShellCacheForTests();
+  globalThis.fetch = async () => new Response(TEMPLATE, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = saved;
+    if (origin === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = origin;
+    resetShellCacheForTests();
+  }
+}
+
+test("a folder's page names it for its link, and every refusal is the untouched shell, uncacheable", async () => {
+  const w = world();
+  const c = caller(w);
+  const key = (await c.post(setVisibility, OWNER, { folderId: "top", visibility: "unlisted", expiresAt: NOW + 60_000 })).body.linkToken;
+  const page = (path, query = {}) =>
+    withShell(() => withFakeAdmin({ db: w.db, sessions: SESSIONS }, () => invoke(docShell, { method: "GET", path, query })));
+
+  const named = await page("/folder/top", { k: key });
+  assert.equal(named.status, 200);
+  assert.match(named.body, /<title>Top<\/title>/);
+  assert.ok(named.body.includes(`/folder/top?k=${encodeURIComponent(key)}`), "og:url is the link as shared");
+  assert.match(named.body, /<meta name="robots" content="noindex" \/>/);
+  assert.equal(named.headers["x-robots-tag"], "noindex");
+  const maxAge = Number(/^public, max-age=(\d+)$/.exec(named.headers["cache-control"])?.[1]);
+  assert.ok(maxAge > 0 && maxAge <= 60, `max-age ${maxAge} outlives the link`);
+  // The subfolder answers to the same key: it is reached.
+  assert.match((await page("/folder/sub", { k: key })).body, /<title>Sub<\/title>/);
+
+  // Hosting adds max-age=600 to a function response that sets no
+  // Cache-Control, so every refusal must set one, and the same one.
+  for (const [path, query] of [["/folder/top", { k: "wrong" }], ["/folder/top", {}], ["/folder/nope", { k: key }], ["/folder/top/extra", { k: key }]]) {
+    const refused = await page(path, query);
+    assert.equal(refused.status, 200);
+    assert.equal(refused.headers["cache-control"], "private, no-store", `${path} ${JSON.stringify(query)}`);
+    assert.equal(refused.headers["x-robots-tag"], undefined);
+    assert.equal(refused.body, TEMPLATE, "a refusal carries no folder-specific byte");
+  }
+
+  await c.post(setVisibility, OWNER, { folderId: "top", visibility: "public", expiresAt: null });
+  const pub = await page("/folder/top", { k: "anything" });
+  assert.equal(pub.headers["cache-control"], "public, max-age=300");
+  assert.equal(pub.headers["x-robots-tag"], undefined);
+  assert.ok(!pub.body.includes("?k="), "a public folder's page never carries a key");
 });

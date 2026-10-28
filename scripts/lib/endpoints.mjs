@@ -78,6 +78,11 @@ export const ENDPOINTS = [
   // serving its own shell for `/d/*`. `devProxy: false` keeps the row out of
   // the dev proxy while Hosting still rewrites it.
   { path: "/d", fn: "docShell", match: "prefix", devProxy: false },
+  // A folder's page is a client route too, and its shell says the folder's
+  // name to a pasted link when its link or public level opens it (SPEC §17).
+  // `/folder` itself is the exact createFolder row above, which a prefix
+  // glob does not match.
+  { path: "/folder", fn: "docShell", match: "prefix", devProxy: false },
 ];
 
 /**
