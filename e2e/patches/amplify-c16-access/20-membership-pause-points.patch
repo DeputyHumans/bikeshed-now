@@ -1,20 +1,36 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -43,2 +43,3 @@
+@@ -41,6 +41,7 @@ import { safeSegment } from "./http";
+ import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
+ import { syncPresenceAccess } from "./presence";
  import { syncPublicProjection } from "./publicdoc";
 +import { e2eAccessGate } from "./e2eAccessGate";
  
-@@ -364,2 +365,3 @@
+ type Db = admin.firestore.Firestore;
+ 
+@@ -389,6 +390,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+       { merge: true },
+     );
  
 +    await e2eAccessGate("subtree-before-docs-read", folderId);
-     // Documents directly in this folder inherit its fresh membership.
-@@ -394,2 +396,3 @@
+     // Documents directly in this folder inherit its fresh membership. Its
+     // reach they read from this record when asked (lib/reach.ts), so nothing
+     // is copied onto them; the projection sync below is what lists a document
+@@ -422,6 +424,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+         );
+         touched.push({ id: docSnap.id, membership: docMembership, publicEdit: opensEditingToAnyAccount(dd as DocAclData) });
        }
 +      await e2eAccessGate("subtree-docs-before-write", folderId);
        await batch.commit();
-@@ -452,3 +455,5 @@
+       // Presence is gated by a mirror of `members` in RTDB and shared document
+       // state by a mirror of `editorMembers`, so every place that recomputes
+@@ -480,7 +483,9 @@ export async function persistDocMembership(
+     { merge: true },
+   );
    for (const e of events(membership)) addEvent(batch, docRef, e);
 +  await e2eAccessGate("doc-membership-before-write", docRef.id);
    await batch.commit();
 +  await e2eAccessGate("doc-mirror-before-write", docRef.id);
    const fresh = (await docRef.get()).data() as DocAclData;
+   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
+   await syncPublicProjection(db, docRef.id);

@@ -1,14 +1,15 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -305,7 +305,10 @@
-   // A member, or anyone on a PUBLIC open-editing document, shares the live log.
-   // An unlisted document's link holder cannot — the realtime rules cannot see
+@@ -319,8 +319,11 @@ export function DocViewer() {
    // a key — so they edit alone and publish through /draft (SPEC §16).
--  const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
+   // A public folder's reader is told "public" and still shares nothing live:
+   // the realtime `*` key is the document's own level's alone.
 +  // e2e negative control (controls-c04-joiner-alone): on a public open-editing
 +  // document everyone but the owner edits alone, the shape of an S27 "fix"
 +  // that drops open editors out of the live log instead of letting them read it.
-+  const shareLive = signedIn && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public") && !(doc.publicEdit && !isOwner);
+   const shareLive =
+-    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
++    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public") && !(doc.publicEdit && !isOwner);
    const shared = useSharedDocument({
      mode,
      doc: frame.doc,

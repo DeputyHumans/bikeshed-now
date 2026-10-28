@@ -1,11 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -693,7 +693,7 @@
-   }
-   const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
-   if (!canRead(docData, caller, proof)) {
+@@ -703,7 +703,7 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
+ 
+   const segments = pathSegments(req, "download");
+   if (!segments || segments.length < 2) {
 -    res.status(404).end();
 +    res.status(404).end("not readable"); // e2e control: a refusal unlike an absent id's
      return;
    }
- 
+   const [docId, versionId] = segments;

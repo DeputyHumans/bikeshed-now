@@ -1,7 +1,7 @@
 --- a/functions/src/lib/fork.ts
 +++ b/functions/src/lib/fork.ts
-@@ -110,7 +110,6 @@
-   if (!canRead(data, caller, proof)) return null;
+@@ -114,7 +114,6 @@ async function openReadable(
+   if ((await loadReadAccess(db, data, caller, proof)) === null) return null;
    // Forking reads every byte, so it is a read path: without this, copying an
    // expired document would get its content back out from behind the date.
 -  if (expiredForReader(data, caller)) return null;

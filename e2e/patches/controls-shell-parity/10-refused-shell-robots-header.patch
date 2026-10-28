@@ -1,8 +1,8 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2842,6 +2842,8 @@ export const docShell = onRequest(PLAIN, async (req, res) => {
-   const doc = docSnap.exists ? (docSnap.data() as ShellDoc) : null;
-   const decision = decideShell({ doc, k, versionId: pinned, now: Date.now() });
+@@ -2579,6 +2579,8 @@ export const docShell = onRequest(WARM, async (req, res) => {
+   const folder = doc && readBasis(doc, null, { k }) === null ? await folderOfDoc(db(), doc) : null;
+   const decision = decideShell({ doc, folder, k, versionId: pinned, now: Date.now() });
    if (decision.kind === "generic") {
 +    // e2e control: a refused but existing document is "helpfully" kept out of indexes.
 +    if (doc !== null) res.setHeader("X-Robots-Tag", "noindex");
