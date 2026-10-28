@@ -2,7 +2,7 @@
 // Negative-path coverage for cloud credentials, ownership, runtime audits and health (SPEC §12).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cloudClient } from "../scripts/lib/ops-cloud.mjs";
+import { cloudClient, READ_RETRY_DELAYS_MS } from "../scripts/lib/ops-cloud.mjs";
 import { alertDefinitions, dashboardDefinition, owned, provisionMonitoring, reconcileResource, uptimeDefinitions, HEARTBEAT, OWNER } from "../scripts/lib/ops-monitoring.mjs";
 import { matchesShape } from "../scripts/lib/ops-cloud.mjs";
 import { ENDPOINTS } from "../scripts/lib/endpoints.mjs";
@@ -17,6 +17,46 @@ test("refresh an expired credential once and refuse non-Google forwarding", asyn
   assert.deepEqual(calls, ["Bearer token-1", "Bearer token-2"]);
   await assert.rejects(client.request("https://googleapis.com.evil.invalid/"), /Refusing/);
   assert.equal(calls.length, 2);
+});
+
+/** A client whose responses are scripted per call, recording methods and pauses. */
+function scripted(statuses) {
+  const methods = [], waits = [];
+  const client = cloudClient({ mint: () => "token", wait: async (ms) => { waits.push(ms); }, fetcher: async (url, opts) => {
+    methods.push(opts.method); const status = statuses[Math.min(methods.length, statuses.length) - 1];
+    return new Response(status === 200 ? '{"ok":true}' : "unavailable", { status });
+  } });
+  return { client, methods, waits };
+}
+
+test("read through Google's transient errors, backing off, and stop after the last retry", async () => {
+  // The 2026-10-28 deploys: one 503 among the snapshot's reads, and nothing deployed.
+  const once = scripted([503, 429, 200]);
+  assert.deepEqual(await once.client.request("https://us-central1-run.googleapis.com/apis/x"), { ok: true });
+  assert.deepEqual(once.waits, READ_RETRY_DELAYS_MS.slice(0, 2));
+
+  const always = scripted([503]);
+  await assert.rejects(always.client.request("https://us-central1-run.googleapis.com/apis/x"), (error) => error.status === 503);
+  assert.equal(always.methods.length, READ_RETRY_DELAYS_MS.length + 1);
+  assert.deepEqual(always.waits, READ_RETRY_DELAYS_MS);
+
+  const listed = scripted([502, 200]);
+  assert.deepEqual(await listed.client.list("https://cloudfunctions.googleapis.com/v2/f", "functions"), []);
+  assert.equal(listed.methods.length, 2);
+});
+
+test("never repeat a write, and never retry a read the API refused", async () => {
+  // A write that answered 503 may still have landed; sending it again could apply it twice.
+  for (const method of ["POST", "PATCH", "DELETE"]) {
+    const write = scripted([503, 200]);
+    await assert.rejects(write.client.request("https://logging.googleapis.com/v2/entries:write", { method, body: {} }), (error) => error.status === 503);
+    assert.deepEqual([write.methods.length, write.waits], [1, []], method);
+  }
+  for (const status of [400, 403, 404]) {
+    const refused = scripted([status, 200]);
+    await assert.rejects(refused.client.request("https://us-central1-run.googleapis.com/apis/x"), (error) => error.status === status);
+    assert.deepEqual([refused.methods.length, refused.waits], [1, []], String(status));
+  }
 });
 
 test("reconcile only owned resources, detect drift, and make a second application a no-op", async () => {

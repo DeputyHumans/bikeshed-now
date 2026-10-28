@@ -14,6 +14,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Stop one 503 from Google failing a deploy before it starts. The deploy saves
+  evidence before it changes anything, by reading every function's Cloud Run
+  service, one call per function. The ops client gave up on the first 5xx, so
+  one bad answer stopped the whole run. It failed three deploys of 0.22.0 that
+  way, and the hourly audit as well. Reads now retry after 1, 2 and 4 s on 429
+  or a 5xx. Writes are still sent once, because a write that answered 503 may
+  already have been applied.
+
 ## 0.22.0 — 2026-10-27
 
 ### Added
