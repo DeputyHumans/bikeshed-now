@@ -65,6 +65,7 @@ import { ImageExportDialog } from "../components/ImageExportDialog";
 import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
 import { Icon } from "../components/Icon";
 import { Loading } from "../components/Spinner";
+import { NotHere } from "../components/NotHere";
 import { useToast } from "../components/Toast";
 import { visibilityStateOf } from "../visibility";
 import type { MenuEntry } from "../components/Menu";
@@ -899,19 +900,7 @@ export function DocViewer() {
   }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload]);
 
   if (doc.loading) return <Loading label="Opening the document" />;
-  if (doc.notFound) {
-    return (
-      <div className="empty-state">
-        <h1>Not here</h1>
-        <p>
-          {/* Deliberately indistinguishable from "you may not read this": with
-              no domain gate, a difference between the two would let anyone walk
-              the slug space. */}
-          This document does not exist, or you do not have access to it.
-        </p>
-      </div>
-    );
-  }
+  if (doc.notFound) return <NotHere />;
 
   const editingNow = mode.kind === "editing";
   const showComments = commentsOpen && Boolean(doc.currentVersion);

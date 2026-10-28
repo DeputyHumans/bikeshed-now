@@ -581,6 +581,16 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   precedence and watcher behavior without depending on source formatting.
   Mail settling and log-rotation tests wait for the conditions they measure.
 
+## 0.21.0 — 2026-10-27
+
+### Added
+
+- Offer a way in from "Not here". A reader who is not signed in gets a Sign in
+  button; one signed in with another address sees which address and can switch
+  account. Either way they come back to the same link, key included. What the
+  page offers depends only on the reader's own sign-in state, so it still
+  cannot tell an absent document from one they may not read (SPEC §1.4).
+
 ## 0.20.4 — 2026-10-26
 
 ### Fixed
