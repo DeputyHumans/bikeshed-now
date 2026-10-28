@@ -965,11 +965,12 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
         <tr><td><code>bikeshed access document|folder &lt;id&gt;</code></td><td>Inspect grants; --add principals --role role and --remove principals change direct grants</td></tr>
         <tr><td><code>bikeshed visibility &lt;id&gt; [private|unlisted|public]</code></td><td>Read settings or patch with --public-edit true|false and --expires timestamp|none; omissions stay unchanged</td></tr>
+        <tr><td><code>bikeshed visibility folder &lt;id&gt; [private|unlisted|public]</code></td><td>A folder's level and --expires; its link opens everything beneath it, to read</td></tr>
         <tr><td><code>bikeshed rename-folder &lt;id&gt; &lt;name&gt;</code></td><td>Rename a folder</td></tr>
         <tr><td><code>bikeshed move-folder &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a folder; changes inherited access</td></tr>
         <tr><td><code>bikeshed delete-folder &lt;id&gt;</code></td><td>Owner-only; reparent contents</td></tr>
         <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids and how many can read each</td></tr>
-        <tr><td><code>bikeshed folder &lt;id&gt;</code></td><td>Who can read a folder, and so anything filed in it</td></tr>
+        <tr><td><code>bikeshed folder &lt;id|link&gt;</code></td><td>Who can read a folder, and so anything filed in it; with a folder's link, what it opens</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
         <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
         <tr><td><code>bikeshed rename &lt;id&gt; &lt;title&gt;</code></td><td>Give a document a new title; its address stays</td></tr>

@@ -218,7 +218,7 @@ bikeshed commit <id>
 bikeshed open <id>
 
 bikeshed folders
-bikeshed folder <id>
+bikeshed folder <id|link>
 bikeshed mkdir <name> [--parent <id>]
 bikeshed mv <id> <folder|root>
 bikeshed rename <id> <title>

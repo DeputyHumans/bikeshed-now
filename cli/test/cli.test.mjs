@@ -1362,6 +1362,15 @@ test("management commands preserve sparse patches and map explicit folder destin
     [["visibility", "doc", "unlisted"], "set_document_visibility", { id: "doc", visibility: "unlisted" }],
     [["visibility", "doc", "--expires", "none", "--public-edit", "false"], "set_document_visibility", { id: "doc", publicEdit: false, expiresAt: null }],
     [["visibility", "doc", "--expires", "2027-01-01T00:00:00Z"], "set_document_visibility", { id: "doc", expiresAt: Date.UTC(2027, 0, 1) }],
+    // A folder's level and date; its link works in place of the id, and a
+    // document called "folder" is still reachable alone or by naming its kind.
+    [["visibility", "folder", "f1"], "get_folder_access", { id: "f1" }],
+    [["visibility", "folder", "https://example.test/folder/f1?k=fkey", "public"], "set_folder_visibility", { id: "f1", visibility: "public" }],
+    [["visibility", "folder", "f1", "--expires", "none"], "set_folder_visibility", { id: "f1", expiresAt: null }],
+    [["visibility", "folder"], "get_document_access", { id: "folder" }],
+    [["visibility", "document", "folder", "unlisted"], "set_document_visibility", { id: "folder", visibility: "unlisted" }],
+    [["folder", "https://example.test/folder/f1?k=fkey"], "get_folder", { id: "f1", k: "fkey" }],
+    [["folder", "f1"], "get_folder", { id: "f1" }],
     [["rename-folder", "f", "Reviews"], "rename_folder", { id: "f", name: "Reviews" }],
     [["move-folder", "f", "root"], "move_folder", { id: "f" }],
     [["move-folder", "f", "parent"], "move_folder", { id: "f", parent: "parent" }],
@@ -1381,6 +1390,8 @@ test("invalid management commands fail before reaching the server", async () => 
       ["access", "document", "d", "--remove", "a@example.com,"],
       ["visibility", "d", "--public-edit", "yes"],
       ["visibility", "d", "--expires", "2027-01-01"],
+      ["visibility", "folder", "f1", "--public-edit", "true"],
+      ["folder", "https://example.test/d/doc?k=x"],
       ["move-folder", "f"], ["delete-folder", "f", "extra"],
     ];
     const failed = [];
@@ -1417,5 +1428,32 @@ test("conflicting or unsupported version selectors fail before a request", async
       await assert.rejects(runAsync(args, { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" }));
     }
     assert.equal(seen.length, 0);
+  });
+});
+
+test("a folder opened by its link lists what it holds, with each document's link, and nobody who reads it", async () => {
+  const result = {
+    folderId: "sub", name: "Sub", visibility: "unlisted", expiresAt: null, viaLink: true,
+    path: [{ folderId: "top", name: "Top" }, { folderId: "sub", name: "Sub" }],
+    folders: [{ folderId: "deep", name: "Drafts" }],
+    documents: [{ docId: "memo", title: "Memo", url: "https://example.test/d/memo?k=fkey" }],
+    truncated: false,
+  };
+  await withServer(rpcOk(result), async (origin) => {
+    const { stdout } = await runAsync(["folder", "https://example.test/folder/sub?k=fkey", "--origin", origin, "--token", "test"]);
+    assert.equal(stdout, "Top/Sub  sub  (read-only, through its link)\n  Drafts/  deep\n  Memo  https://example.test/d/memo?k=fkey\n");
+  });
+});
+
+test("a folder's settings print without open editing, and a document says which folder reaches it", async () => {
+  const folderResult = { id: "f1", kind: "folder", owner: "owner@example.com", direct: { viewers: [] }, inherited: [], inheritedReach: [], effective: { members: ["owner@example.com"] }, visibility: "public", expiresAt: null, url: "https://example.test/folder/f1" };
+  await withServer(rpcOk(folderResult), async (origin) => {
+    const { stdout } = await runAsync(["visibility", "folder", "f1", "--origin", origin, "--token", "test"]);
+    assert.equal(stdout, "visibility: public; link ends: never\nhttps://example.test/folder/f1\n");
+  });
+  const docResult = { id: "d", kind: "document", owner: "owner@example.com", direct: { viewers: [] }, inherited: [], inheritedReach: [{ folderId: "f1", path: "Planning", visibility: "unlisted", expiresAt: Date.UTC(2027, 0, 1) }], effective: { members: ["owner@example.com"] }, visibility: "private", publicEdit: false, expiresAt: null, url: "https://example.test/d/d" };
+  await withServer(rpcOk(docResult), async (origin) => {
+    const { stdout } = await runAsync(["access", "document", "d", "--origin", origin, "--token", "test"]);
+    assert.match(stdout, /readable by anyone with the folder's link through Planning, until 2027-01-01T00:00:00.000Z\n/);
   });
 });

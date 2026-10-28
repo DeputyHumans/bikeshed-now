@@ -2500,7 +2500,11 @@ endpoint; every URL in it is relative and nothing stamps it.
 `--add <comma-separated principals> --role <role>` and/or `--remove <principals>`
 change it. Adding requires an explicit role. `bikeshed visibility <id>` reads
 settings; optional `private|unlisted|public`, `--public-edit true|false`, and
-`--expires <ISO timestamp|none>` patch them. `bikeshed rename-folder <id> <name>`,
+`--expires <ISO timestamp|none>` patch them. `bikeshed visibility folder <id|link>`
+maps to `get_folder_access` and `set_folder_visibility`, and refuses
+`--public-edit`; `visibility document <id>` names a document explicitly.
+`bikeshed folder <link>` passes a folder link's key to `get_folder`.
+`bikeshed rename-folder <id> <name>`,
 `bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
 the three folder tools. All support human-readable and `--json` output.
 

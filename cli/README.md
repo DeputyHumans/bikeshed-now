@@ -82,7 +82,10 @@ bikeshed publish platform.md --id 01-platform
 `publish` says where it filed the document and who can read it there.
 `bikeshed folders` counts who can read each folder, and `bikeshed folder <id>`
 names them: filing a document in a folder shares it with all of them, and
-nobody is emailed.
+nobody is emailed. Under a folder shared by link or made public it is readable
+by anyone holding the link, or anyone, and the output says through which
+folder. Given a folder's link, `bikeshed folder <link>` lists what that link
+opens, to read only.
 
 Ids are shared by the whole deployment and never change, so choose one every
 time: put the date first on something time-bound
@@ -145,6 +148,13 @@ to change visibility, `--public-edit true|false` to change open editing, or
 `--expires <ISO-8601 timestamp with timezone|none>` to set or clear expiry.
 Omitted settings stay unchanged. These commands are owner-only, including on
 expired documents; the returned URL includes an unlisted key when needed.
+
+`bikeshed visibility folder <id|link>` does the same for a folder, without
+`--public-edit`. A folder's link or public level opens everything beneath it to
+read, without an account: its subfolders, documents filed later, and documents
+that are private on their own. Its expiry ends only that; the people it is
+shared with keep their access. `bikeshed visibility document <id>` names a
+document explicitly, for one whose id is `folder`.
 
 `bikeshed rename-folder <id> <name>` and
 `bikeshed move-folder <id> <folder|root>` require edit rights.

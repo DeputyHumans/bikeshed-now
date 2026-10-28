@@ -58,6 +58,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   folders whose reach now opens the document (`throughFolders`), and
   `alsoReadableBy` says `"anyone"` under a public folder. The new tool is a
   schema change, so this release is a minor version.
+- Share and open a folder by link from the command line.
+  `bikeshed visibility folder <id|link> [private|unlisted|public] [--expires …]`
+  sets a folder's level and date and refuses `--public-edit`.
+  `bikeshed visibility document <id>` names a document explicitly.
+  `bikeshed folder <link>` lists what a folder's link opens, and filing output
+  names the folder whose reach widens who can read (`bikeshed-now` 0.18.0).
 
 ## 0.22.1 — 2026-10-28
 
