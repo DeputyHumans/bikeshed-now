@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Apply the explicitly reviewed ten-participant campaign scope to cloud qualification as well as local runs; retain every N2/N5/N10 trial and defer N20 consistently.
+
 - Await shared browser shutdown before E2E maintenance, retain shutdown failures, and stop measuring after an unusable cleanup boundary. Record phase timings, avoid redundant source hashing, and stage patch-test source once while isolating each control without reducing scenarios or trials.
 - Align framing checks with shared-folder routing, refresh header controls after the Hosting hotfix, and check successful document bytes and actual viewer rendering.
 - Repair duplicated OAuth scenario setup and stale control patches after integration; reject invalid spec syntax before starting emulators.

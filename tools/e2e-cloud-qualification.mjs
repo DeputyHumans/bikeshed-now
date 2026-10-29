@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { resolve, relative, isAbsolute } from "node:path";
+import { concurrencyNs } from "./e2e-concurrency-scope.mjs";
 import { EvidenceArtifacts } from "./e2e-artifact-cache.mjs";
 import { judgeCloudCooldownTrial, judgeCloudCooldownMutation } from "./e2e-cloud-cooldown.mjs";
 
@@ -17,7 +18,8 @@ const overlays = new Set(["src/index.ts", "src/oauth/consent.ts", "src/oauth/tok
 const timing = new Set(["cloud cooldown: automatic triggers did not overlap", ...["comment", "suggestion"].map(k => `cloud cooldown: ${k} cooldown calls did not overlap on one instance`)]);
 
 /** Reviewed overlays are pinned by the release policy, not trusted merely because the artifact names them. */
-export function verifyCloudQualification(ref, { root, version, reviewedOverlays }) {
+export function verifyCloudQualification(ref, { root, version, reviewedOverlays, concurrencyScope }) {
+  const participantCounts = concurrencyNs({ acceptance: { concurrencyScope } });
   const cache = new EvidenceArtifacts();
   const path = p => {
     need(typeof p === "string" && p.startsWith("e2e/.out/") && !isAbsolute(p) && !p.includes("\\") && !relative(root, resolve(root, p)).startsWith(".."), "artifact must remain in ignored evidence directory");
@@ -70,7 +72,7 @@ export function verifyCloudQualification(ref, { root, version, reviewedOverlays 
     need(!!t.controlled === (label !== "natural"), "natural/controlled classification differs");
     return t;
   };
-  const expected = [2, 5, 10, 20].flatMap(n => Array.from({ length: n === 2 ? 10 : n === 5 ? 5 : 3 }, (_, i) => `${n}:${i + 1}`));
+  const expected = participantCounts.flatMap(n => Array.from({ length: n === 2 ? 10 : n === 5 ? 5 : 3 }, (_, i) => `${n}:${i + 1}`));
   assert.deepEqual(m.trials.map(t => `${t.n}:${t.trial}`).sort(), expected.sort(), "cloud qualification: trial matrix differs");
   let natural = 0, controlled = 0;
   for (const row of m.trials) {

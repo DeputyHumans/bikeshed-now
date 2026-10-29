@@ -317,7 +317,7 @@ export function checkCampaign(campaign, { root = ROOT, validateOnly = false } = 
     try {
       const policy = acceptance.raceEvidencePolicy;
       if (policy.mode !== "controlled-with-red-green" || !text(policy.reason)) throw new Error("explicit controlled-race policy and reason required");
-      releaseQualification = verifyCloudQualification(policy.cloud, { root, version: acceptance.version, reviewedOverlays: policy.reviewedOverlays });
+      releaseQualification = verifyCloudQualification(policy.cloud, { root, version: acceptance.version, reviewedOverlays: policy.reviewedOverlays, concurrencyScope: acceptance.concurrencyScope });
       releaseComplete = localComplete && unresolvedNaturalWitnesses.every(w => w.id === COMPOSITE_ID && w.item === COMPOSITE_ITEM || w.id === TIMING_ID && policy.browserTiming?.mode === "controlled-with-red-green" && text(policy.browserTiming.reason)) && unresolvedDeploymentWitnesses.every(w => w.id === LIMIT_ID);
     } catch (error) { errors.push(`release qualification: ${error.message}`); releaseComplete = false; }
   }

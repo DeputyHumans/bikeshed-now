@@ -128,7 +128,10 @@ blocking.
 `reviewedOverlays` pins. Each natural/controlled pin names the reviewed archive,
 source-comparison receipt and overlay patch digests. It checks the current
 function source inventory, downloaded package bytes, runtime revision/hash,
-all 21 trial slots, and the actual deployed guard-removal and restoration.
+all required trial slots, and the actual deployed guard-removal and restoration.
+The reviewed ten-participant scope requires 18 cloud trials (10 at N=2, five
+at N=5, three at N=10); without that explicit scope the original 21-trial
+matrix including N=20 remains required.
 Natural safety failures cannot use a controlled fallback. For missed timing
 windows, controlled arrivals must be released before measurement starts and
 the actual cooldown calls must overlap on one instance. Preserve every original
