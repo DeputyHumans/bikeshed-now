@@ -365,7 +365,8 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   const forked = ro.events.filter((e) => e.type === "fork.created");
   assert.equal(forked.length, 1);
   assert.match(forked[0].at, DAY, "a fork is dated to the day (SPEC §21)");
-  assert.deepEqual(Object.keys(forked[0]).sort(), ["at", "type"], "and never by whom: no by, no channel");
+  // Which version was forked is about the document; who forked it never is.
+  assert.deepEqual(Object.keys(forked[0]).sort(), ["at", "id", "type", "version"], "and never by whom: no by, no channel");
 
   ctx.step("state: whether a draft exists is the editors' business");
   assert.equal("draft" in rv.state, false, "the viewer's state says nothing about a draft");

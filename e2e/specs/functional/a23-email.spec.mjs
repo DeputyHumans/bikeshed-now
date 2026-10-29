@@ -444,7 +444,7 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
   const l2 = linesOf(m2);
   assert.ok(l2[0].startsWith(`${K.account.email} commented on "${title2}" (via `), l2[0]);
   assert.match(l2[0], / \(via personal token “e2e a23 [^”]+”\)\.$/, "an agent's notice names the token it came through (ADR 0023)");
-  assert.match(htmlOf(m2), /Posted via (?:<!-- -->)?MCP(?:<!-- -->)? — this comment came from\s+automation/, "and so does its HTML part");
+  assert.match(htmlOf(m2), /Posted via (?:<!-- -->)?personal token (?:“|&#x201C;|&ldquo;)e2e a23 .+?(?:”|&#x201D;|&rdquo;)(?:<!-- -->)?: this came from\s+automation/, "and so does its HTML part");
   assert.ok(l2.includes(agentBody), `the text part carries the body literally, <b>x</b> included: ${JSON.stringify(l2)}`);
   assert.ok(!htmlOf(m2).includes("<b>x</b>"), "the HTML part carries <b>x</b> as markup: a comment body was rendered as HTML");
   assert.ok(htmlOf(m2).includes("&lt;b&gt;x&lt;/b&gt;"), "the HTML part shows <b>x</b> escaped, as text");
