@@ -413,6 +413,22 @@ export async function writeUser(target, uid, data, { merge = true } = {}) {
   return data;
 }
 
+/**
+ * Trust a document for everyone as the operator does: `scripts/publish.mjs`
+ * writes `trusted: true` with Admin credentials. Through POST /trust it takes
+ * a superadmin who owns the document (ADR 0021), and an e2e account is never
+ * one on production, so a case about what a TRUSTED document does, rather
+ * than about who may trust one, sets it here. The projection carries the flag
+ * too, when there is one; a later visibility change rebuilds it from the record.
+ */
+export async function trustAsOperator(target, docId) {
+  if (!docId || typeof docId !== "string") throw new Error("trustAsOperator: docId is required");
+  const { db } = adminFor(target);
+  await db.collection("docs").doc(docId).set({ trusted: true }, { merge: true });
+  const pub = db.collection("public").doc(docId);
+  if ((await pub.get()).exists) await pub.set({ trusted: true }, { merge: true });
+}
+
 /** The RTDB key the product uses for an email (dots become commas). */
 export function emailKey(email) {
   return String(email).toLowerCase().split(".").join(",");

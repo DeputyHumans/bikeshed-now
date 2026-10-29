@@ -96,7 +96,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { docIdFor, publish, publishOperator, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, trustAsOperator } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
@@ -629,8 +629,8 @@ scenario("A12.1 an identical update is a no-op through /publish?update=, update_
   const editor = await sessionFor(ctx, editorAcct);
   const viewer = await sessionFor(ctx, viewerAcct);
 
-  ctx.step("the owner trusts it for everyone (POST /trust); the viewer and the editor each grant themselves personal trust");
-  await owner.http.postJson("/trust", { docId, trusted: true }, { expect: 200 });
+  ctx.step("it is trusted for everyone, as the operator trusts it (POST /trust is a superadmin's, ADR 0021); the viewer and the editor each grant themselves personal trust");
+  await trustAsOperator(target, docId);
   await grantPersonalTrust(viewer, docId);
   await grantPersonalTrust(editor, docId);
   const grantsBefore = plain(await readCollection(target, `docs/${docId}/trust`));

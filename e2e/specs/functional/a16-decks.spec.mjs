@@ -64,7 +64,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, publish, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
-import { closeAdmin, listObjects, readDoc } from "../../lib/admin.mjs";
+import { closeAdmin, listObjects, readDoc, trustAsOperator } from "../../lib/admin.mjs";
 import { eventually, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { treeConstant } from "../../lib/target.mjs";
 
@@ -100,9 +100,12 @@ async function signInUi(ctx, u, account) {
   await untilLanded(ctx, `${u.name}: sign-in through the UI`, () => u.signInUi(account.email, account.password), null, { stopAt: "budget" });
 }
 
-/** POST /trust {trusted: true}, sent again while it goes unanswered and the record is not trusted yet. */
-async function trust(ctx, owner, docId) {
-  await untilLanded(ctx, `POST /trust ${docId}`, () => owner.http.postJson("/trust", { docId, trusted: true }, { expect: 200 }), async () => (await readDoc(target, `docs/${docId}`))?.trusted === true, { stopAt: "budget" });
+/**
+ * Trust a deck for everyone as the operator does: POST /trust is a
+ * superadmin's (ADR 0021), and these cases are about what a trusted deck does.
+ */
+async function trust(docId) {
+  await trustAsOperator(target, docId);
 }
 
 /** The scenarios' common options: a loaded shared stack's non-answer is INCONCLUSIVE, never judged. */
@@ -529,7 +532,7 @@ scenario("A16.2 keys scroll a flat deck and the rail follows; on a stacked trust
     d: (await publish(owner.http, { body: d.bytes, filename: d.filename, title: `D ${t}`, name: "a162-d", patient: { ctx, stopAt: "budget" } })).docId,
     pd: (await publish(owner.http, { body: sectionsDoc({ n: 4, minHeight: "100vh", script: TAKES_ARROWDOWN }), filename: "index.html", title: `Takes ArrowDown ${t}`, name: "a162-pd", patient: { ctx, stopAt: "budget" } })).docId,
   };
-  for (const id of [docs.d, docs.pd]) await trust(ctx, owner, id);
+  for (const id of [docs.d, docs.pd]) await trust(id);
   const o = await ownerBrowser(ctx, accounts[0]);
 
   ctx.step("Q (flat): each paging key on the parent scrolls the frame to its slide and the rail marks it");
@@ -639,7 +642,7 @@ scenario("A16.2b on the animated deck, trusted (stacked), four ArrowRight presse
     still: (await publish(owner.http, { body: Buffer.from(still), filename: "index.html", title: `D still ${t}`, name: "a162b-still", patient: { ctx, stopAt: "budget" } })).docId,
     d: (await publish(owner.http, { body: d.bytes, filename: d.filename, title: `D ${t}`, name: "a162b-d", patient: { ctx, stopAt: "budget" } })).docId,
   };
-  for (const id of Object.values(docs)) await trust(ctx, owner, id);
+  for (const id of Object.values(docs)) await trust(id);
   const o = await ownerBrowser(ctx, accounts[0]);
 
   const presses = async (docId, what) => {

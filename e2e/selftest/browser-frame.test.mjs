@@ -115,13 +115,16 @@ async function frameShows(u, path, hash = "") {
 
 const detailsOpen = async (u) => (await u.frame()).evaluate(() => document.getElementById("det").open);
 
-test("parseDocumentPath: content (with and without a link key) and draft paths of one document; anything else is null", () => {
-  assert.deepEqual(parseDocumentPath("/content/d-one/v1/index.html"), { kind: "content", docId: "d-one", versionId: "v1", keyed: false });
-  assert.deepEqual(parseDocumentPath("/content/~k3y/d-one/v2/a/b.html"), { kind: "content", docId: "d-one", versionId: "v2", keyed: true });
-  assert.deepEqual(parseDocumentPath("/content/d-one/v1/"), { kind: "content", docId: "d-one", versionId: "v1", keyed: false }, "the version's directory");
-  assert.deepEqual(parseDocumentPath("/draft/d-one/index.html"), { kind: "draft", docId: "d-one", versionId: null, keyed: false });
+test("parseDocumentPath: content (with and without a link key, plain or run) and draft paths of one document; anything else is null", () => {
+  assert.deepEqual(parseDocumentPath("/content/d-one/v1/index.html"), { kind: "content", docId: "d-one", versionId: "v1", keyed: false, run: false });
+  assert.deepEqual(parseDocumentPath("/content/~k3y/d-one/v2/a/b.html"), { kind: "content", docId: "d-one", versionId: "v2", keyed: true, run: false });
+  assert.deepEqual(parseDocumentPath("/content/d-one/v1/"), { kind: "content", docId: "d-one", versionId: "v1", keyed: false, run: false }, "the version's directory");
+  // The run variant an unsandboxed frame loads (ADR 0021): the same document, not a document called "!run".
+  assert.deepEqual(parseDocumentPath("/content/!run/d-one/v1/index.html"), { kind: "content", docId: "d-one", versionId: "v1", keyed: false, run: true });
+  assert.deepEqual(parseDocumentPath("/content/~k3y/!run/d-one/v2/x.html"), { kind: "content", docId: "d-one", versionId: "v2", keyed: true, run: true });
+  assert.deepEqual(parseDocumentPath("/draft/d-one/index.html"), { kind: "draft", docId: "d-one", versionId: null, keyed: false, run: false });
   assert.deepEqual(parseDocumentPath("/content/d%20one/v1/x.html")?.docId, "d one", "segments are decoded");
-  for (const p of ["/content/d-one/v1", "/content/~k3y/d-one/v1", "/content/~/d-one/v1/x", "/draft/d-one", "/d/d-one", "/contents/d-one/v1/x", "content/d-one/v1/x", "/content/%E0%A4%A/v1/x", "", null]) {
+  for (const p of ["/content/d-one/v1", "/content/~k3y/d-one/v1", "/content/~/d-one/v1/x", "/content/!run/d-one/v1", "/draft/d-one", "/d/d-one", "/contents/d-one/v1/x", "content/d-one/v1/x", "/content/%E0%A4%A/v1/x", "", null]) {
     assert.equal(parseDocumentPath(p), null, `NEGATIVE: ${JSON.stringify(p)} is not a document file`);
   }
 });

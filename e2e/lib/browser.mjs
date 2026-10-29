@@ -728,10 +728,12 @@ export function classifyUrl(rawUrl, target, { method = "GET" } = {}) {
 
 /**
  * Is `pathname` one of a document's own files? The reading frame loads
- * `/content/[~<link key>/]<docId>/<versionId>/<file>` and the draft
- * `/draft/<docId>/<file>` (app/src/viewer/frameMode.ts `frameSrc`). Returns
- * `{kind: "content" | "draft", docId, versionId, keyed}` (versionId null for a
- * draft; keyed when the path carries a link key), or null.
+ * `/content/[~<link key>/][!run/]<docId>/<versionId>/<file>` and the draft
+ * `/draft/<docId>/<file>` (app/src/viewer/frameMode.ts `frameSrc`; `!run` is
+ * the run variant an unsandboxed frame asks for, ADR 0021). Returns
+ * `{kind: "content" | "draft", docId, versionId, keyed, run}` (versionId null
+ * for a draft; keyed when the path carries a link key; run when it asks for the
+ * document's script to run), or null.
  */
 export function parseDocumentPath(pathname) {
   const segs = String(pathname ?? "").split("/");
@@ -745,15 +747,18 @@ export function parseDocumentPath(pathname) {
   };
   if (segs[1] === "draft") {
     const docId = dec(segs[2]);
-    return docId ? { kind: "draft", docId, versionId: null, keyed: false } : null;
+    return docId ? { kind: "draft", docId, versionId: null, keyed: false, run: false } : null;
   }
   if (segs[1] !== "content") return null;
   const keyed = segs[2].startsWith("~");
-  const at = keyed ? 3 : 2;
-  if (segs.length < at + 3 || (keyed && segs[2].length < 2)) return null;
+  if (keyed && segs[2].length < 2) return null;
+  const afterKey = keyed ? 3 : 2;
+  const run = segs[afterKey] === "!run";
+  const at = run ? afterKey + 1 : afterKey;
+  if (segs.length < at + 3) return null;
   const docId = dec(segs[at]);
   const versionId = dec(segs[at + 1]);
-  return docId && versionId ? { kind: "content", docId, versionId, keyed } : null;
+  return docId && versionId ? { kind: "content", docId, versionId, keyed, run } : null;
 }
 
 /**

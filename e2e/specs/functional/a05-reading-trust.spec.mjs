@@ -864,13 +864,22 @@ async function deckState(u) {
 const DECK_QUOTE = "a reader wants to comment on";
 
 scenario("A5.6 a drag that selects text on a click-to-advance deck does not advance it", { tiers: ["local", "prod"], timeoutMs: A56_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
-  ctx.step("cast an owner, who uploads a deck that advances on click and trusts it for everyone, so its script runs");
+  ctx.step("cast an owner, who uploads a deck that advances on click and runs it for themselves, so its script runs");
   const { owner, accounts } = await castWithOwner(ctx, []);
   const up = await publish(owner.http, { body: CLICK_DECK, filename: "index.html", title: `Click deck ${tag()}`, name: "a56-click-deck", timeoutMs: FN_MS, patient: { ctx, ...PATIENCE } });
-  await trustForEveryone(ctx, owner, up.docId);
 
   const o = await signedIn(ctx, accounts[0], "owner");
   await openDoc(o, up.docId);
+  // Trusting it for everyone takes a superadmin (ADR 0021); running it for
+  // oneself is any reader's, and is all the deck's script needs.
+  const trustDlg = await openTrustDialog(o);
+  await pressInDialog(o, trustDlg, "Run it for me");
+  await eventually(async () => (await trustGrants(up.docId)).some((g) => g.id === accounts[0].uid), { timeout: 30_000, message: "the owner's own grant exists" });
+  await eventually(async () => {
+    const s = await viewState(o);
+    if (!s.ready || s.sandbox !== null) throw new Error(`the frame has not remounted unsandboxed: ${JSON.stringify(s)}`);
+    return true;
+  }, { timeout: 45_000, message: "the deck's frame remounts unsandboxed" });
   const initial = await eventually(async () => {
     const s = await deckState(o);
     if (s.current !== 0) throw new Error(`the deck's script has not run: ${JSON.stringify(s)}`);

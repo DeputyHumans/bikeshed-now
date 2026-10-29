@@ -129,7 +129,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, readDoc, readObject, rtdbGet, trustAsOperator } from "../../lib/admin.mjs";
 import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { frameText, inFrameDoc } from "../../lib/frame.mjs";
@@ -283,8 +283,9 @@ async function stageTour(ctx, { name, trusted = false, readers = [] }) {
   const s = readSample(target, TOUR);
   const staged = await stage(ctx, { name, title: s.title, body: s.bytes, filename: s.filename, readers });
   if (trusted) {
-    const { out: t, landed } = await untilLanded(ctx, "POST /trust", () => staged.owner.http.postJson("/trust", { docId: staged.docId, trusted: true }), async () => (await readDoc(target, `docs/${staged.docId}`))?.trusted === true, patience(ctx));
-    precondition(landed || (t.status === 200 && t.json?.trusted === true), `POST /trust answered ${t?.status} ${t?.text?.slice(0, 200)}`);
+    // As the operator trusts it: POST /trust is a superadmin's (ADR 0021).
+    await trustAsOperator(target, staged.docId);
+    precondition((await readDoc(target, `docs/${staged.docId}`))?.trusted === true, "the tour is trusted for everyone");
   }
   return { ...staged, html: s.bytes.toString("utf8") };
 }
@@ -426,7 +427,8 @@ scenario("A9.1 entering edit mode on a trusted document mounts a new iframe with
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   const reading = await o.waitForFrame();
   assert.equal(reading.sandbox, null, `a trusted document is read with no sandbox (got ${JSON.stringify(reading.sandbox)})`);
-  assert.equal(reading.src, `/content/${docId}/v1/index.html`);
+  // The run variant, the only address that runs a document's script (ADR 0021).
+  assert.equal(reading.src, `/content/!run/${docId}/v1/index.html`);
   await o.page.evaluate(() => {
     document.querySelector("iframe.doc-frame").__e2eReadingFrame = true;
   });
