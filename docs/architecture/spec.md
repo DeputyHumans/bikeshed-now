@@ -3137,10 +3137,7 @@ reading frame untouched. Ancestors and authored styles remain so the selected
 section or diagram keeps its layout. The owner's marking is then applied to
 the exported SVG or PNG, including for public and unlisted readers.
 
-**Where the export is reached.** The viewer toolbar's **Print** button, just
-before the More menu. On a phone (≤ 600 px), where the toolbar has no room for
-it, the More menu's **Print or save as PDF** instead — one or the other, never
-both, decided by the same width test.
+**Where the export is reached.** The viewer toolbar's **Print** button, just before the More menu. On a phone (≤ 600 px), where the toolbar has no room for it, the More menu's **Print or save as PDF** instead — one or the other, never both, decided by the same width test.
 
 **The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page is routed to it — heard on the frame's window as well as the app's, because the reader's focus is usually inside the document. File → Print fires no event that could be redirected, so the page prints acceptably by itself: the chrome presentation mode hides is hidden on paper, and the frame is opened to its content's full height on `beforeprint` so the document paginates rather than printing as one clipped box, then closed again with the reader's scroll position restored. That path carries **no stamp** and prints what is on screen, highlights included. Where the engine delivers no events from the frame (§6), Cmd+P with focus inside the document is this path too. It grants nothing the reader lacked: the content proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may read it, and "Download the HTML" hands them the file. The marking is a property of the export path, not an access control.
 

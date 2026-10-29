@@ -76,16 +76,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
-- Print from the toolbar. **Print**, just before the More menu, prints the
-  document or saves it as a PDF, stamped with the owner's marking as before;
-  it used to be found only under More → Download. On a phone the toolbar has
-  no room for it, so there it stays in the More menu as *Print or save as PDF*.
-  Cmd/Ctrl+P is unchanged.
-- Share and manage a folder from inside it. The open folder's **Share** button
-  (for its owner) and its menu (rename, move, delete) now sit beside its name
-  in the workspace, so changing a folder no longer means going up a level to
-  find its card. Deleting the folder you are in takes you up to where its
-  contents land.
+- Print from the toolbar. **Print**, just before the More menu, prints the document or saves it as a PDF, stamped with the owner's marking as before; it used to be found only under More → Download. On a phone the toolbar has no room for it, so there it stays in the More menu as *Print or save as PDF*. Cmd/Ctrl+P is unchanged.
+- Share and manage a folder from inside it. The open folder's **Share** button (for its owner) and its menu (rename, move, delete) now sit beside its name in the workspace, so changing a folder no longer means going up a level to find its card. Deleting the folder you are in takes you up to where its contents land.
 
 ## 0.24.2 — 2026-10-29
 
