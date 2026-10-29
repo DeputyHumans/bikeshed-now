@@ -1279,7 +1279,7 @@ test("changes wants --since, and says what it may be", () => {
 test("changes prints what happened and the cursor to pass next, reading every page first", async () => {
   const pages = [
     { cursor: "c1", more: true, events: [CHANGE], needsReply: [], state: {} },
-    { cursor: "c2", more: false, events: [{ ...CHANGE, body: "And egress?" }], needsReply: ["t1"], state: {} },
+    { cursor: "c2", more: false, events: [{ ...CHANGE, body: "And egress?", channel: "app", via: "“Claude” (connected app)" }], needsReply: ["t1"], state: {} },
   ];
   await withServer(rpcSeq(pages), async (origin, seen) => {
     const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
@@ -1290,6 +1290,7 @@ test("changes prints what happened and the cursor to pass next, reading every pa
     assert.equal(seen[1].body.params.arguments.since, "c1", "the next page starts where the last ended");
     assert.match(stdout, /comment\.added {2}ana@example\.com {2}\(t1\) “a single weekend”: Is the fortnight in this\?/);
     assert.match(stdout, /And egress\?/);
+    assert.match(stdout, /ana@example\.com \[via “Claude” \(connected app\)\]/, "what acted, in the words stored when it did");
     assert.match(stdout, /waiting on a reply: t1/);
     assert.match(stdout, /next: --since c2\n$/);
   });
@@ -1453,6 +1454,18 @@ test("versions follows every history page and preserves its current-version meta
     assert.deepEqual(seen.map(s => s.body.params.arguments.cursor), [undefined, "v2"]);
   });
 });
+test("versions says who published each and through what, or only how it arrived when that is all it is told", async () => {
+  const versions = [
+    { version: "v2", isCurrent: true, publishedAt: "2026-10-29T12:00:00.000Z", origin: "upload", automated: true, publishedBy: "ana@example.com", channel: "cli", via: "CLI on mbp", label: "v2" },
+    { version: "v1", publishedAt: "2026-10-28T12:00:00.000Z", origin: "edit", automated: false, label: "v1" },
+  ];
+  await withServer(rpcOk({ currentVersion: "v2", versions, nextCursor: null }), async (origin) => {
+    const { stdout } = await runAsync(["versions", "d1"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.match(stdout, /\* v2 {2}2026-10-29T12:00:00\.000Z {2}upload {2}ana@example\.com via CLI on mbp {2}v2/);
+    assert.match(stdout, / {2}v1 {2}2026-10-28T12:00:00\.000Z {2}edit {4}v1/, "a person in the browser needs no words");
+  });
+});
+
 test("conflicting or unsupported version selectors fail before a request", async () => {
   await withServer(rpcOk({}), async (origin, seen) => {
     for (const args of [["get", "https://example.com/d/d1/v1", "--version", "v2"], ["reply", "https://example.com/d/d1/v1", "t1", "text", "--version", "v2"], ["lineage", "d1", "--version", "v1"], ["get", "d1", "--base", "v1"]]) {

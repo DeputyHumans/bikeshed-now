@@ -563,7 +563,11 @@ async function versions(flags, [ref, ...rest]) {
     cursor = result.nextCursor;
   } while (flags.all && cursor);
   out(flags.json, { ...result, versions: rows }, () => {
-    for (const row of rows) console.log(`${row.isCurrent ? "*" : " "} ${row.version}  ${row.publishedAt ?? ""}  ${row.label}  ${row.url ?? ""}`);
+    for (const row of rows) {
+      // Who and through what reach a member only (SPEC §17); a link holder sees how it arrived.
+      const who = [row.publishedBy, row.via ? `via ${row.via}` : row.automated ? "automated" : ""].filter(Boolean).join(" ");
+      console.log(`${row.isCurrent ? "*" : " "} ${row.version}  ${row.publishedAt ?? ""}  ${row.origin ?? ""}  ${who}  ${row.label}  ${row.url ?? ""}`);
+    }
     if (cursor) console.log(`… more: bikeshed versions ${ref} --cursor ${cursor}`);
   });
 }
@@ -1017,7 +1021,9 @@ function printChanges(flags, result) {
     for (const e of result.events) {
       const quote = e.quote ? ` “${e.quote}”` : "";
       const words = e.body ? `: ${e.body}` : e.replacement !== undefined ? ` → “${e.replacement}”` : "";
-      const via = e.channel && e.channel !== "web" ? ` [via ${e.channel}]` : "";
+      // What acted, in the words the server stored when it did; an event from
+      // before those were stored names its channel.
+      const via = e.via ? ` [via ${e.via}]` : e.channel && e.channel !== "web" ? ` [via ${e.channel}]` : "";
       console.log(`${e.at}  ${e.type}  ${e.by ?? ""}${via}${e.threadId ? `  (${e.threadId})` : ""}${quote}${words}`);
     }
     if (result.needsReply?.length) console.log(`waiting on a reply: ${result.needsReply.join(", ")}`);
