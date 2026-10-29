@@ -767,8 +767,8 @@ export function DocList() {
           docId={revisingDoc.docId}
           title={revisingDoc.title}
           headVersion={revisingDoc.currentVersion}
-          // Missing means trusted (SPEC §6c).
-          trusted={revisingDoc.trusted !== false}
+          // Only `true` is trust (SPEC §6c, ADR 0021).
+          trusted={revisingDoc.trusted === true}
           draftBy={revisingDoc.draft?.updatedByEmail ?? null}
           onClose={() => setRevising(null)}
           onPublished={(result) => {

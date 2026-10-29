@@ -8,18 +8,20 @@
  *   5.1 the sandbox matrix of docs/development/verification.md §5: a scripted
  *       upload (trusted:false) is sandboxed `allow-same-origin`, its script
  *       does not run, and the trust prompt shows; a script-free upload is
- *       sandboxed the same and never prompts; a trusted document (the owner's
- *       POST /trust, and locally the operator script) has no sandbox, its
- *       script runs, and nothing prompts
+ *       sandboxed the same and never prompts; a trusted document (locally,
+ *       its superadmin owner's POST /trust and the operator script) has no
+ *       sandbox, its script runs, and nothing prompts
  *   5.2 the trust dialog: "Keep it sandboxed" changes nothing; "Run it for
  *       me" writes trust/{uid} for that reader alone, never `docs.trusted`;
- *       "Trust it for everyone" is shown to the owner only, POST /trust
- *       refuses everyone else (403 to a reader, 404 to a stranger, 401 to
- *       nobody), and the owner's press un-sandboxes it for every reader
+ *       "Trust it for everyone" is shown to a superadmin owner only (an
+ *       ordinary owner's dialog lacks it and their POST /trust is 403, ADR
+ *       0021), POST /trust refuses everyone else (403 to a reader, 404 to a
+ *       stranger, 401 to nobody), and locally the superadmin owner's press
+ *       un-sandboxes it for every reader
  *   5.3 a reader holding a personal grant opens the document: the frame loads
  *       ONCE, already unsandboxed (the first load waits for their answer)
- *   5.4 trust carries into a new version only when the owner wrote it in the
- *       app: the owner's commit keeps `trusted` and every trust/{uid}; an
+ *   5.4 (local: it needs the stack's superadmin) trust carries into a new
+ *       version only when the owner wrote it in the app: the owner's commit keeps `trusted` and every trust/{uid}; an
  *       editor's commit, the owner's own update_document, the owner's commit
  *       through a cli token and the owner's POST /publish?update= each
  *       withdraw both; a deduplicated update changes nothing
@@ -33,6 +35,12 @@
  *   5.7 a comment inside the nested <details> of the tour's #s5-sections is
  *       anchored to that section; after a reload its highlight is redrawn
  *       with both of its <details> open and the other eight still closed
+ *   5.8 the script lock (ADR 0021): the tour opened at its own /content
+ *       address carries `sandbox allow-same-origin` for every reader and,
+ *       opened top-level, renders with its script not run; its run address
+ *       (`/content/!run/…`) is unlocked only for the reader who consented,
+ *       never cacheable, and framed only by this origin; a service worker's
+ *       script fetch is refused
  *
  * Expected behaviour is SPEC §6, §6c and §6d, verification.md §5 and §6, and
  * the product source cited at each oracle. Only e2e/lib/ talks to the stack.
@@ -88,7 +96,7 @@ import assert from "node:assert/strict";
 import { after } from "node:test";
 import { isDeepStrictEqual } from "node:util";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
-import { cast, rand4, runTag } from "../../lib/accounts.mjs";
+import { cast, castSuperadmin, rand4, runTag } from "../../lib/accounts.mjs";
 import { bearerHttp, mintToken, openSession } from "../../lib/session.mjs";
 import { publish, publishOperator, publishZip, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
@@ -137,6 +145,7 @@ const A54_MS = 900_000;
 const A55_MS = 420_000;
 const A56_MS = 420_000;
 const A57_MS = 420_000;
+const A58_MS = 480_000;
 /** How many more presses a "Service call error" refusal may cost, and the back-off before each (lib/browser.mjs comment's, for the emulator, not a wait on the product). */
 const SERVICE_RETRIES = 3;
 const SERVICE_BACKOFF_MS = 3_000;
@@ -214,11 +223,34 @@ async function trustForEveryone(ctx, owner, docId) {
 
 // --- helpers ------------------------------------------------------------------
 
-/** An owner with a session, and the rest of the cast as bare accounts. */
-async function castWithOwner(ctx, roles) {
-  const accounts = await cast(target, ["owner", ...roles]);
+/**
+ * An owner with a session, and the rest of the cast as bare accounts. With
+ * `superadmin`, the owner is the stack's superadmin (lib/accounts.mjs
+ * castSuperadmin, local only): the one account that may trust a document it
+ * owns for everyone (ADR 0021).
+ */
+async function castWithOwner(ctx, roles, { superadmin = false } = {}) {
+  const ownerAcct = superadmin ? await castSuperadmin(target) : (await cast(target, ["owner"]))[0];
+  const rest = roles.length > 0 ? await cast(target, roles) : [];
+  const accounts = [ownerAcct, ...rest];
   const owner = await sessionFor(ctx, accounts[0]);
   return { owner, accounts };
+}
+
+/** Production has no e2e superadmin, so trusting for everyone is exercised locally only (ADR 0021). */
+const HAS_SUPERADMIN = () => target.kind === "local";
+
+/**
+ * The trust dialog's buttons once the dialog has asked the server what it
+ * may offer (GET /trust): the same answer on `stableSamples` samples in a
+ * row, so "Trust it for everyone" arriving late is seen, and so is its
+ * staying away.
+ */
+async function settledButtons(dlg, want, message) {
+  return eventually(async () => {
+    assert.deepEqual(await dialogButtons(dlg), want, message);
+    return true;
+  }, { stableSamples: 8, interval: 250, timeout: 20_000, message });
 }
 
 /** Publish a sample through POST /publish (a browser upload: trusted:false, SPEC §6c), patiently. */
@@ -360,21 +392,24 @@ function noPageErrors(users) {
 // --- A5.1 ---------------------------------------------------------------------
 
 scenario("A5.1 sandbox matrix: a scripted untrusted upload is sandboxed, runs nothing and prompts; a script-free one is sandboxed and silent; a trusted one runs its script unsandboxed and silent", { tiers: ["local", "prod"], timeoutMs: A51_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
-  ctx.step("cast an owner; upload the scripted tour twice and the script-free sample once through POST /publish");
-  const { owner, accounts } = await castWithOwner(ctx, []);
+  ctx.step("cast an owner (locally the stack's superadmin); upload the scripted tour twice and the script-free sample once through POST /publish");
+  const { owner, accounts } = await castWithOwner(ctx, [], { superadmin: HAS_SUPERADMIN() });
   const scripted = await uploadSample(ctx, owner, TOUR, "a51-scripted");
   const plain = await uploadSample(ctx, owner, SCRIPT_FREE, "a51-script-free");
-  const trustedUp = await uploadSample(ctx, owner, TOUR, "a51-trusted");
-
-  ctx.step("the owner trusts the second tour for everyone (POST /trust)");
-  const t = await trustForEveryone(ctx, owner, trustedUp.docId);
-  if (t !== null) assert.deepEqual(t.json, { trusted: true }, "POST /trust's answer");
 
   const rows = [
     { label: "scripted, untrusted", docId: scripted.docId, stored: false, want: { sandbox: SANDBOXED, offered: true, scriptRan: false } },
     { label: "script-free, untrusted", docId: plain.docId, stored: false, want: { sandbox: SANDBOXED, offered: false, scriptRan: null } },
-    { label: "scripted, trusted by the owner", docId: trustedUp.docId, stored: true, want: { sandbox: null, offered: false, scriptRan: true } },
   ];
+  if (HAS_SUPERADMIN()) {
+    ctx.step("the superadmin owner trusts a second tour for everyone (POST /trust)");
+    const trustedUp = await uploadSample(ctx, owner, TOUR, "a51-trusted");
+    const t = await trustForEveryone(ctx, owner, trustedUp.docId);
+    if (t !== null) assert.deepEqual(t.json, { trusted: true }, "POST /trust's answer");
+    rows.push({ label: "scripted, trusted by its superadmin owner", docId: trustedUp.docId, stored: true, want: { sandbox: null, offered: false, scriptRan: true } });
+  } else {
+    ctx.step("production has no e2e superadmin: the row trusted for everyone is checked locally only (ADR 0021)");
+  }
   if (target.kind === "local") {
     ctx.step("locally, also publish the tour with the operator script (scripts/publish.mjs writes trusted:true)");
     const op = await publishOperator(target, { sample: TOUR, owner: accounts[0], title: `Operator tour ${tag()}` });
@@ -402,9 +437,9 @@ scenario("A5.1 sandbox matrix: a scripted untrusted upload is sandboxed, runs no
 
 // --- A5.2 ---------------------------------------------------------------------
 
-scenario("A5.2 trust dialog: Keep it sandboxed changes nothing, Run it for me writes trust/{uid} for that reader only, Trust it for everyone is the owner's alone", { tiers: ["local", "prod"], timeoutMs: A52_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
-  ctx.step("cast an owner, two viewers and a stranger; the owner uploads the tour and shares it with both viewers");
-  const { owner, accounts } = await castWithOwner(ctx, ["viewer", "viewer2", "stranger"]);
+scenario("A5.2 trust dialog: Keep it sandboxed changes nothing, Run it for me writes trust/{uid} for that reader only, Trust it for everyone is a superadmin owner's alone", { tiers: ["local", "prod"], timeoutMs: A52_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+  ctx.step("cast an owner (locally the stack's superadmin), two viewers and a stranger; the owner uploads the tour and shares it with both viewers");
+  const { owner, accounts } = await castWithOwner(ctx, ["viewer", "viewer2", "stranger"], { superadmin: HAS_SUPERADMIN() });
   const [, viewerAcct, viewer2Acct, strangerAcct] = accounts;
   const doc = await uploadSample(ctx, owner, TOUR, "a52-dialog");
   for (const a of [viewerAcct, viewer2Acct]) await shareWith(ctx, owner, doc.docId, a, "viewer");
@@ -416,7 +451,7 @@ scenario("A5.2 trust dialog: Keep it sandboxed changes nothing, Run it for me wr
 
   ctx.step("the viewer opens the dialog: Run it for me and Keep it sandboxed, and no Trust it for everyone");
   let dlg = await openTrustDialog(v);
-  assert.deepEqual(await dialogButtons(dlg), { "Run it for me": 1, "Sandbox it again for me": 0, "Trust it for everyone": 0, "Keep it sandboxed": 1 }, "a reader's dialog");
+  await settledButtons(dlg, { "Run it for me": 1, "Sandbox it again for me": 0, "Trust it for everyone": 0, "Keep it sandboxed": 1 }, "a reader's dialog");
 
   ctx.step("Keep it sandboxed: the dialog closes, and for 3 s no grant, no flag, no frame load and no change in the view");
   const vLoads = v.watchFrameLoads(doc.docId);
@@ -461,9 +496,26 @@ scenario("A5.2 trust dialog: Keep it sandboxed changes nothing, Run it for me wr
   assert.deepEqual(refusals, { viewer: 403, viewer2: 403, stranger: 404, anonymous: 401 }, "POST /trust by anyone but the owner");
   assert.equal((await docRecord(doc.docId)).trusted, false, "no refused call changed the flag");
 
-  ctx.step("the owner's dialog has Trust it for everyone; pressing it sets docs.trusted and un-sandboxes the owner's frame");
+  ctx.step("an owner who is no superadmin may not trust for everyone: the viewer's own upload offers only Run it for me, and its POST /trust is refused (ADR 0021)");
+  const own = await uploadSample(ctx, vs, TOUR, "a52-own");
+  await openDoc(v, own.docId);
+  await expectView(v, sandboxedView, { message: "the viewer's own upload is sandboxed" });
+  dlg = await openTrustDialog(v);
+  await settledButtons(dlg, { "Run it for me": 1, "Sandbox it again for me": 0, "Trust it for everyone": 0, "Keep it sandboxed": 1 }, "an ordinary owner's dialog");
+  await pressInDialog(v, dlg, "Keep it sandboxed", { timeout: 10_000 });
+  const ownRefusal = answered(await vs.http.postJson("/trust", { docId: own.docId, trusted: true }), "an ordinary owner's POST /trust");
+  assert.equal(ownRefusal.status, 403, "an owner who is no superadmin is refused");
+  assert.equal((await docRecord(own.docId)).trusted, false, "the refusal changed nothing");
+
+  if (!HAS_SUPERADMIN()) {
+    ctx.step("production has no e2e superadmin: trusting for everyone is checked locally only");
+    noPageErrors([o, v]);
+    return;
+  }
+
+  ctx.step("the superadmin owner's dialog has Trust it for everyone; pressing it sets docs.trusted and un-sandboxes the owner's frame");
   dlg = await openTrustDialog(o);
-  assert.deepEqual(await dialogButtons(dlg), { "Run it for me": 1, "Sandbox it again for me": 0, "Trust it for everyone": 1, "Keep it sandboxed": 1 }, "the owner's dialog");
+  await settledButtons(dlg, { "Run it for me": 1, "Sandbox it again for me": 0, "Trust it for everyone": 1, "Keep it sandboxed": 1 }, "the superadmin owner's dialog");
   const trustMark = o.responseMark();
   // The press waits for the dialog to close, which follows POST /trust's answer; its refusal is read after that answer.
   const pressed = pressInDialog(o, dlg, "Trust it for everyone", { timeout: SLOW.timeout });
@@ -548,9 +600,11 @@ async function commitInApp(ctx, session, docId, baseVersion, html) {
   return c.json.versionId;
 }
 
-scenario("A5.4 a version by anyone but the owner in the app withdraws global and personal trust; the owner's own commit keeps both", { tiers: ["local", "prod"], timeoutMs: A54_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
-  ctx.step("cast an owner, an editor and a viewer; the owner uploads the tour and shares it");
-  const { owner, accounts } = await castWithOwner(ctx, ["editor", "viewer"]);
+scenario("A5.4 a version by anyone but the owner in the app withdraws global and personal trust; the owner's own commit keeps both", { tiers: ["local"], timeoutMs: A54_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+  // Local only: its owner trusts for everyone at every version, which takes
+  // a superadmin, and production has no e2e superadmin (ADR 0021).
+  ctx.step("cast the stack's superadmin as owner, an editor and a viewer; the owner uploads the tour and shares it");
+  const { owner, accounts } = await castWithOwner(ctx, ["editor", "viewer"], { superadmin: true });
   const [, editorAcct, viewerAcct] = accounts;
   const doc = await uploadSample(ctx, owner, TOUR, "a54-withdraw");
   await shareWith(ctx, owner, doc.docId, editorAcct, "editor");
@@ -937,5 +991,70 @@ scenario("A5.7 a highlight inside a nested <details> reopens exactly its own anc
     before.details.map((d) => (d.s5 ? "s5:open" : "other:closed")),
     "exactly the highlight's own ancestors are open",
   );
+  noPageErrors([o]);
+});
+
+// --- A5.8 ---------------------------------------------------------------------
+
+scenario("A5.8 a scripted page opened at its own address runs nothing; its run address runs it only for the reader who consented; no page may register a service worker", { tiers: ["local", "prod"], timeoutMs: A58_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+  ctx.step("cast an owner and a viewer; the owner uploads the tour and shares it; the viewer runs it for themselves in the dialog");
+  const { owner, accounts } = await castWithOwner(ctx, ["viewer"]);
+  const [, viewerAcct] = accounts;
+  const doc = await uploadSample(ctx, owner, TOUR, "a58-direct");
+  await shareWith(ctx, owner, doc.docId, viewerAcct, "viewer");
+  const v = await signedIn(ctx, viewerAcct, "viewer");
+  await openDoc(v, doc.docId);
+  await grantPersonal(v, viewerAcct, doc.docId);
+  const vs = await sessionFor(ctx, viewerAcct);
+
+  const plain = `/content/${encodeURIComponent(doc.docId)}/v1/index.html`;
+  const run = `/content/!run/${encodeURIComponent(doc.docId)}/v1/index.html`;
+  /** functions/src/lib/scriptlock.ts SCRIPT_LOCK and RUN_ANCESTORS. */
+  const LOCK = "sandbox allow-same-origin";
+  const ANCESTORS = "frame-ancestors 'self'";
+
+  ctx.step("the plain address is locked for everyone who may read it, the viewer who consented included");
+  for (const [who, http] of [["owner", owner.http], ["viewer", vs.http]]) {
+    const r = answered(await http.get(plain), `${who}'s GET of the plain address`);
+    assert.deepEqual([r.status, r.headers.get("content-security-policy")], [200, LOCK], `${who}: the plain address`);
+  }
+
+  ctx.step("the run address: unlocked for the viewer who consented, locked for the owner who did not, never cacheable either way");
+  const ran = answered(await vs.http.get(run), "the viewer's GET of the run address");
+  assert.deepEqual(
+    [ran.status, ran.headers.get("content-security-policy"), ran.headers.get("cache-control")],
+    [200, ANCESTORS, "private, no-store"],
+    "the consenting viewer's run address",
+  );
+  const locked = answered(await owner.http.get(run), "the owner's GET of the run address");
+  assert.deepEqual(
+    [locked.status, locked.headers.get("content-security-policy"), locked.headers.get("cache-control")],
+    [200, `${LOCK}; ${ANCESTORS}`, "private, no-store"],
+    "the owner, who never consented",
+  );
+
+  ctx.step("a service worker's script fetch of the page is refused at either address");
+  for (const path of [plain, run]) {
+    const r = answered(await vs.http.get(path, { headers: { "service-worker": "script" } }), `a worker's fetch of ${path}`);
+    assert.equal(r.status, 404, `a worker's fetch of ${path}`);
+  }
+
+  ctx.step("in a browser, top-level: the owner sees the page at either address with its script not run; the viewer's run address runs it");
+  const o = await signedIn(ctx, accounts[0], "owner");
+  /** The tour's script builds one #dot-nav link per section[id]; unrun, there are none. */
+  const topLevel = async (u, path) => {
+    await u.goto(path, SLOW);
+    return u.page.evaluate(() => ({
+      sections: document.querySelectorAll("section[id]").length,
+      dots: document.getElementById("dot-nav")?.children.length ?? 0,
+    }));
+  };
+  for (const path of [plain, run]) {
+    const got = await topLevel(o, path);
+    assert.ok(got.sections > 0, `the owner sees the page at ${path} (${JSON.stringify(got)})`);
+    assert.equal(got.dots, 0, `the owner's top-level ${path} ran no script`);
+  }
+  const mine = await topLevel(v, run);
+  assert.ok(mine.dots > 0 && mine.dots === mine.sections, `the viewer's run address ran the script they trusted (${JSON.stringify(mine)})`);
   noPageErrors([o]);
 });

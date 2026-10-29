@@ -100,6 +100,21 @@ export function signInHint(): string {
   return process.env.BIKESHED_SIGN_IN_HINT || "";
 }
 
+/**
+ * Who may trust a document for everyone (ADR 0021): `BIKESHED_SUPERADMINS`,
+ * addresses separated by commas or spaces, lowercased. Deployment
+ * configuration, never committed. Unset means nobody — the safe default.
+ */
+export function superadmins(): ReadonlySet<string> {
+  const raw = process.env.BIKESHED_SUPERADMINS ?? "";
+  return new Set(
+    raw
+      .split(/[\s,]+/)
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0),
+  );
+}
+
 /** True inside the Firebase emulator suite. */
 export function isEmulated(): boolean {
   return process.env.FUNCTIONS_EMULATOR === "true";

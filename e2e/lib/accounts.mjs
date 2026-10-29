@@ -249,6 +249,52 @@ export async function cast(target, roles, o = {}) {
   return out;
 }
 
+/**
+ * The local stack's one superadmin (ADR 0021): lib/patch.mjs names this
+ * address in the stack's BIKESHED_SUPERADMINS, so it alone may trust a
+ * document it owns for everyone. Fixed, because the stack's configuration is
+ * written once and outlives every run that uses it.
+ */
+export const E2E_SUPERADMIN = "superadmin@example.com";
+
+/**
+ * The stack's superadmin as an account, signed up on first use and reused by
+ * every run after: its password is set to this run's passwordFor(), and it is
+ * marked verified, through the Auth emulator's admin endpoints. Local only:
+ * production's superadmins are its deployment's people, never e2e accounts,
+ * so a case that needs one runs that part locally. Ledgered like any cast.
+ *
+ * Concurrent invocations on one stack each set the password to their own;
+ * a session already made is unaffected, and each signs in right after.
+ */
+export async function castSuperadmin(target, o = {}) {
+  if (target.kind !== "local") throw new Error("castSuperadmin is local-only: a production deployment's superadmins are never e2e accounts");
+  const http = o.http ?? createHttp(target, { actor: "harness", evidence: o.evidence });
+  const key = encodeURIComponent(target.webApiKey);
+  const admin = { headers: { authorization: "Bearer owner" }, expect: 200 };
+  const email = E2E_SUPERADMIN;
+  const password = passwordFor(email);
+  let uid;
+  try {
+    const r = await http.postJson(`${target.authRestBase}/accounts:signUp?key=${key}`, { email, password, returnSecureToken: true }, { expect: 200 });
+    uid = r.json?.localId;
+  } catch (err) {
+    if (!emailTaken(err)) throw err;
+    const r = await http.postJson(`${target.authRestBase}/accounts:lookup?key=${key}`, { email: [email] }, admin);
+    uid = r.json?.users?.[0]?.localId;
+  }
+  if (!uid) throw new Error(`castSuperadmin: no account for ${email}`);
+  await http.postJson(`${target.authRestBase}/accounts:update?key=${key}`, { localId: uid, password, emailVerified: true }, admin);
+  const acct = Object.freeze({ role: "superadmin", email, password, uid });
+  appendLedger(target, { kind: "account", role: acct.role, email, uid, tier: target.kind, via: "rest" });
+  const record = optOutRecord(acct, o);
+  if (record) {
+    const write = o.writeUser ?? (await import("./admin.mjs")).writeUser;
+    await write(target, uid, record);
+  }
+  return acct;
+}
+
 /** One account. */
 export async function castOne(target, role, o) {
   const [a] = await cast(target, [role], o);

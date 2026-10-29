@@ -222,9 +222,10 @@ test("the projection carries trust so an anonymous reader is sandboxed the same 
   assert.equal(t.trusted, true);
 });
 
-test("a missing trusted flag is treated as trusted, as it is everywhere else", () => {
-  const p = projectPublicDoc("d1", storedDoc({ visibility: "public", trusted: undefined }));
-  assert.equal(p.trusted, true);
+test("only trusted: true is trust; a missing flag fails closed, as it does everywhere else (ADR 0021)", () => {
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "public", trusted: undefined })).trusted, false);
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "public", trusted: "yes" })).trusted, false);
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "public", trusted: true })).trusted, true);
 });
 
 // --- Export marking --------------------------------------------------------

@@ -915,7 +915,7 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li><strong>Put an id on every section.</strong> A comment anchors to the nearest element with an id. Without one it anchors to the whole page, and any edit above shifts it. Markdown headings get ids for free.</li>
     <li>An update keeps the format: a zip replaces every file, and one <code>.md</code> or <code>.html</code> replaces the entry and keeps the files beside it.</li>
     <li>Markdown is CommonMark with tables, strikethrough and task lists. Mermaid, math, footnotes and front matter show as typed.</li>
-    <li>Scripts run once a person trusts the document: its owner for everyone, any reader for themselves. Each version published through the CLI or MCP sandboxes it again. Images, stylesheets and fonts from other sites load either way.</li>
+    <li>Scripts run only for a reader who chooses to run them, or for everyone once a deployment's superadmin who owns the document trusts it. Opened at its own file address, a page never runs its scripts. Each version published through the CLI or MCP sandboxes it again. Images, stylesheets and fonts from other sites load either way.</li>
     <li>Choose the address with <code>--id</code>, or <code>id</code> in <code>publish_document</code>: lowercase letters, digits and hyphens, up to 60 characters. A taken id gets a few random characters added, so hand back the <code>url</code> the result returns, never one built from the id you asked for.</li>
   </ul>
 </div>

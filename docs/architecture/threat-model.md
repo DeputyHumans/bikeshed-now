@@ -54,11 +54,35 @@ given, and global trust is a decision taken on behalf of every reader. Only the
 operator script, which runs with Admin credentials against Firestore directly,
 creates a document `trusted: true`.
 
+**The sandbox travels with the bytes, not only with the frame**
+([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). Until
+0.25.0 the frame's attribute was the whole defence, and the same `/content/…`
+address opened any other way, pasted into a tab, in a popup or an `<object>`,
+ran the document's scripts on this origin as whoever opened it. Every
+scriptable content and draft response now carries
+`Content-Security-Policy: sandbox allow-same-origin` itself. A document's
+script runs only at its run variant (`/content/[~k/]!run/…`), which the server
+unlocks only for global trust or the caller's own personal grant, never caches,
+and lets only this origin frame. The session cookie is `SameSite=Strict`, so a
+page elsewhere that frames it presents no caller. No content path serves a
+service worker's script, and a draft's script never runs.
+
+**Global trust is a superadmin's, not an owner's.** It lets a document's author
+act as every reader, and until 0.25.0 any owner could grant it on their own
+document: an account could publish a page, trust it and share it. Now only an
+owner listed in `BIKESHED_SUPERADMINS`, deployment configuration that is never
+committed, may lift the sandbox for everyone, and an absent flag is untrusted.
+`scripts/reconcile-trust.mjs` withdraws trust granted under the old rule.
+
 **Residual, accepted.** An editor the owner deliberately added could inject a
 `<script>` into a trusted document via devtools and commit it. This is an
 owner-gated relaxation, not a silent divergence: granting edit rights on a
 trusted document is granting the ability to run script for every reader, and the
-share panel says so.
+share panel says so. A reader's personal grant runs the document's script at
+its run variant wherever they open it, the frame or a tab: the only session it
+reaches is the one that granted it. When a document's own trust changes, a
+cached copy of its plain address can carry the old header for up to five
+minutes; the run variant is never cached, so this cannot unlock anything.
 
 ### An unverified address claims someone else's pending shares
 

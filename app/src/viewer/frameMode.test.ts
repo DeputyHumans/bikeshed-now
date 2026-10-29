@@ -103,6 +103,17 @@ describe("frameSrc", () => {
     expect(new URL("img/a.png", src).pathname).toBe("/content/~tok_123/d1/v2/img/a.png");
     expect(new URL("../v2/style.css", src).pathname).toBe("/content/~tok_123/d1/v2/style.css");
   });
+
+  it("asks for the run variant only when the frame is unsandboxed, and every relative file inherits it", () => {
+    // Every other content URL is served locked (ADR 0021): a trusted frame
+    // that loaded the plain URL would show its document with the script off.
+    expect(frameSrc(READING, "d1", "index.html", 0)).not.toContain("!run");
+    const src = new URL(frameSrc({ ...READING, sandboxed: false }, "d1", "index.html", 0, "tok_123"), "https://x.example");
+    expect(src.pathname).toBe("/content/~tok_123/!run/d1/v2/index.html");
+    expect(new URL("app.js", src).pathname).toBe("/content/~tok_123/!run/d1/v2/app.js");
+    // A draft never runs, so it never asks.
+    expect(frameSrc({ ...READING, sandboxed: false, draft: true }, "d1", "index.html", 3)).toBe("/draft/d1/index.html?r=3");
+  });
 });
 
 describe("contentBase", () => {
@@ -115,10 +126,11 @@ describe("contentBase", () => {
 });
 
 describe("effective trust", () => {
-  it("treats an absent flag as trusted", () => {
-    // Documents published before the flag existed, and every CLI publish, are
-    // the ones that need their scripts.
-    expect(isEffectivelyTrusted(undefined, false)).toBe(true);
+  it("treats an absent flag as untrusted, as the server does (ADR 0021)", () => {
+    // It once meant trusted, for documents older than the flag. A flag a
+    // superadmin never set is not trust.
+    expect(isEffectivelyTrusted(undefined, false)).toBe(false);
+    expect(isEffectivelyTrusted(true, false)).toBe(true);
   });
 
   it("treats an explicit false as untrusted", () => {

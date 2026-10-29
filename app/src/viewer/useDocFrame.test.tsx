@@ -121,7 +121,8 @@ describe("useDocFrame hold", () => {
 
     rerender({ mode: READING, entry: "index.html", trustToken: "t0", hold: false });
 
-    expect(result.current.frameProps?.src).toBe("/content/d1/v1/index.html");
+    // Unsandboxed, so it asks for the run variant (ADR 0021).
+    expect(result.current.frameProps?.src).toBe("/content/!run/d1/v1/index.html");
     expect(result.current.loading).toBe(true);
   });
 

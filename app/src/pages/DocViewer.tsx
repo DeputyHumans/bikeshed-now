@@ -216,23 +216,22 @@ export function DocViewer() {
     emailLower,
   });
 
-  const mode: FrameMode = useMemo(
-    () =>
-      editingOrigin && canEdit
-        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
-        : {
-            kind: "reading",
-            versionId: doc.currentVersion,
-            draft: readsDraft({
-              hasDraft: Boolean(doc.meta?.draft),
-              canEdit,
-              shownVersion: doc.currentVersion,
-              headVersion,
-            }),
-            sandboxed: !trust.trusted,
-          },
-    [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
-  );
+  const mode: FrameMode = useMemo(() => {
+    if (editingOrigin && canEdit) {
+      return { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision };
+    }
+    const draft = readsDraft({
+      hasDraft: Boolean(doc.meta?.draft),
+      canEdit,
+      shownVersion: doc.currentVersion,
+      headVersion,
+    });
+    // A draft's script never runs, trusted or not: any editor may have written
+    // it, and the server serves it locked anyway (ADR 0021).
+    return { kind: "reading", versionId: doc.currentVersion, draft, sandboxed: draft || !trust.trusted };
+  }, [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted]);
+  /** A draft never runs its script, so trusting it would change nothing to offer. */
+  const showsDraft = mode.kind === "reading" && mode.draft;
 
   const frame = useDocFrame({
     mode,
@@ -422,7 +421,7 @@ export function DocViewer() {
     isOwner,
     expired: isExpired(doc.meta?.expiresAt),
     sandboxed: mode.kind !== "reading" || mode.sandboxed,
-    globallyTrusted: doc.meta?.trusted !== false,
+    globallyTrusted: doc.meta?.trusted === true,
     thumbVersion: thumb?.versionId ?? null,
     thumbRevision: thumb?.rev ?? 1,
     hasCover: Boolean(thumb?.cover),
@@ -1022,7 +1021,7 @@ export function DocViewer() {
           onOpenForks={() => setDialog("forks")}
           editing={wantsEdit}
           onToggleEdit={() => void (wantsEdit ? stopEditing() : canEdit && setWantsEdit(true))}
-          offerTrust={liveTrust.shouldOffer}
+          offerTrust={liveTrust.shouldOffer && !showsDraft}
           onOpenTrust={() => setDialog("trust")}
           hasSlides={hasSlides}
           railOpen={railOpen}
@@ -1063,7 +1062,7 @@ export function DocViewer() {
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}
-        offerTrust={liveTrust.shouldOffer}
+        offerTrust={liveTrust.shouldOffer && !showsDraft}
         scriptsBuildContent={deck.scan.kind === "script-required"}
         onOpenTrust={() => setDialog("trust")}
       />
