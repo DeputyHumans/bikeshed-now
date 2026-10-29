@@ -35,6 +35,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - A draft's session log merged two agents of one person, on two tokens, into one entry.
 - A version withdrawn by an operator was recorded with nobody behind it. It is now attributed to the operator script.
 - A fork's change-log event now names the version that was forked, still never who forked it.
+- After an operator withdraws a version, the document's last edited names the version that is current again. It used to be cleared only when the count of published versions reached zero, so withdrawing a later version kept naming its editor.
 
 ## 0.26.5 — 2026-10-29
 

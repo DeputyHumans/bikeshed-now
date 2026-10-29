@@ -260,7 +260,7 @@ async function main() {
   );
   if (!values["keep-stats"]) {
     console.log(
-      `  stats.commits: ${commits} -> ${nextCommits}${nextCommits === 0 ? " (and clear lastEditedAt/lastEditedByEmail)" : ""}`,
+      `  stats.commits: ${commits} -> ${nextCommits}, and last edited becomes ${repoint}'s publish`,
     );
   }
   if (!values["keep-views"]) {

@@ -55,6 +55,18 @@ for (const laterDraft of [false, true]) test(`an operator withdrawal acknowledge
   assert.equal(store.get('docs/d').draft?.storagePrefix, laterDraft ? 'docs/d/bundles/later' : undefined);
 });
 
+test('after a withdrawal, last edited names the version that is current again', async () => {
+  // It used to be cleared only when the count reached 0, which meant "back to
+  // v1" while a first version went uncounted; v2's editor would now outlive v2.
+  const at = { seconds: 1, nanoseconds: 0 };
+  const current = { ...node, currentVersion: 'v2', stats: { commits: 2, lastEditedByEmail: 'bo@example.com' } };
+  const version = { storagePrefix: 'docs/d/bundles/doomed', entry: 'index.html' };
+  const { db, store } = fakeFirestore({ 'docs/d': current, 'docs/d/versions/v1': { storagePrefix: 'docs/d/bundles/retained', publishedByEmail: owner, publishedAt: at }, 'docs/d/versions/v2': version });
+  await repointWithdrawal(db, db.doc('docs/d'), { currentVersion: 'v2', doomed: 'v2', repoint: 'v1', version, draft: current.draft }, remove);
+  const stats = store.get('docs/d').stats;
+  assert.deepEqual([stats.commits, stats.lastEditedByEmail, stats.lastEditedAt], [1, owner, at]);
+});
+
 test('an operator withdrawal retains its retirement result after a later publication changes the head and epoch', async () => {
   const current = { ...node, currentVersion: 'v2', stats: { commits: 2 } };
   const version = { storagePrefix: 'docs/d/bundles/doomed', entry: 'index.html' };

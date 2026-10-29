@@ -53,10 +53,11 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
     if (data.thumb?.versionId === plan.doomed) update.thumb = deleteField();
     if (!plan.keepStats) {
       update['stats.commits'] = Math.max(0, Number(data.stats?.commits ?? 0) - 1);
-      if (update['stats.commits'] === 0) {
-        update['stats.lastEditedAt'] = deleteField();
-        update['stats.lastEditedByEmail'] = deleteField();
-      }
+      // "Last edited" names the version that is current again. It used to be
+      // cleared when the count reached 0, which stood for "back to v1" only
+      // while a document's first version went uncounted.
+      update['stats.lastEditedAt'] = version.publishedAt ?? deleteField();
+      update['stats.lastEditedByEmail'] = typeof version.publishedByEmail === 'string' ? version.publishedByEmail : deleteField();
     }
     const result = { retiredEpoch, draftPrefix };
     recordReceipt(tx, docRef, fresh, receipt, result);
