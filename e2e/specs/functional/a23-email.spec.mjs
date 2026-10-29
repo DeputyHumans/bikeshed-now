@@ -16,7 +16,7 @@
  *          the author, less anyone with no account record or opted out, never
  *          another thread's author; `<b>x</b>` literal in the text part and
  *          escaped in the HTML part; the link is /d/{doc}/{version}; an
- *          agent's says "via MCP"
+ *          agent's names the token it came through ("via personal token “…”")
  *   A23.2b a participant whose access was REMOVED is told nothing of later
  *          comments (the notice carries the passage and the comment): the
  *          X-a23-email-1 regression
@@ -375,7 +375,7 @@ scenario("A23.1 one invitation per new member for a document, a folder and a tea
 
 // --- A23.2 ----------------------------------------------------------------------
 
-scenario("A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's says via MCP", {
+scenario("A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's names the token it came through", {
   tiers: LOCAL,
   effects: ["email:POST /access", "email:comment"],
   needs: ["email", "mailpit"],
@@ -440,9 +440,10 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
   htmlContains(m1, QUOTE, "the quoted passage");
   htmlContains(m1, opening, "the comment body");
 
-  ctx.step("an agent's notice: via MCP in both parts, <b>x</b> literal in the text part and escaped in the HTML part");
+  ctx.step("an agent's notice: the token it came through, in both parts, <b>x</b> literal in the text part and escaped in the HTML part");
   const l2 = linesOf(m2);
-  assert.equal(l2[0], `${K.account.email} commented on "${title2}" (via MCP).`, "an agent's notice says via MCP");
+  assert.ok(l2[0].startsWith(`${K.account.email} commented on "${title2}" (via `), l2[0]);
+  assert.match(l2[0], / \(via personal token “e2e a23 [^”]+”\)\.$/, "an agent's notice names the token it came through (ADR 0023)");
   assert.match(htmlOf(m2), /Posted via (?:<!-- -->)?MCP(?:<!-- -->)? — this comment came from\s+automation/, "and so does its HTML part");
   assert.ok(l2.includes(agentBody), `the text part carries the body literally, <b>x</b> included: ${JSON.stringify(l2)}`);
   assert.ok(!htmlOf(m2).includes("<b>x</b>"), "the HTML part carries <b>x</b> as markup: a comment body was rendered as HTML");
@@ -588,10 +589,11 @@ scenario("A23.3 a suggestion notice reaches the owner and every approver, less i
     assert.ok(htmlOf(m).includes(`href="${target.origin}/d/${docId}/v1"`), "the HTML suggestion links to its version");
   }
 
-  ctx.step("the approver's deletion: the owner and the other approver are told, via MCP, with no generated restatement as its body");
+  ctx.step("the approver's deletion: the owner and the other approver are told, naming the token, with no generated restatement as its body");
   for (const m of got2) {
     const l = linesOf(m);
-    assert.equal(l[0], `${AP1.account.email} suggested an edit to "${t2}" (via MCP).`);
+    assert.ok(l[0].startsWith(`${AP1.account.email} suggested an edit to "${t2}" (via `), l[0]);
+    assert.match(l[0], / \(via personal token “e2e a23 [^”]+”\)\.$/);
     assert.ok(l.includes(`On: "${DEL}"`), `the quote: ${JSON.stringify(l)}`);
     assert.ok(l.includes("Suggested: delete this."), `a deletion says so: ${JSON.stringify(l)}`);
     assert.ok(!l.some((x) => x.startsWith("Suggested deleting")), `the generated opener is not repeated as a body: ${JSON.stringify(l)}`);
@@ -725,7 +727,7 @@ scenario("A23.4b an expired comment or suggestion cooldown permits a new notice 
 
 // --- A23.5 ----------------------------------------------------------------------
 
-scenario("A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance says via MCP, a withdrawal reaches the owner; none as a suggestion notice, none to the decider", {
+scenario("A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance names the token it came through, a withdrawal reaches the owner; none as a suggestion notice, none to the decider", {
   tiers: LOCAL,
   effects: ["email:POST /access", "email:comment", "email:suggestion"],
   needs: ["email", "mailpit"],
@@ -768,7 +770,8 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   assert.ok(!lr.some((l) => l.startsWith("Suggested")), `no suggestion line in a decision: ${JSON.stringify(lr)}`);
   assert.ok(htmlOf(mr).includes("You received this because you own this document or replied in this thread."), "the comment branch's footnote");
   const la = linesOf(ma);
-  assert.equal(la[0], `${me} commented on "${t2}" (via MCP).`, "an agent's acceptance is a comment notice that says via MCP");
+  assert.ok(la[0].startsWith(`${me} commented on "${t2}" (via `), la[0]);
+  assert.match(la[0], / \(via personal token “e2e a23 [^”]+”\)\.$/, "an agent's acceptance is a comment notice naming the token");
   htmlContains(ma, "Accepted.", "the acceptance");
   assert.ok(la.includes("Accepted."), `the decision note: ${JSON.stringify(la)}`);
   assert.ok(la.includes(`Reply in context: ${target.origin}/d/${doc2}/v1`), `the link: ${JSON.stringify(la)}`);

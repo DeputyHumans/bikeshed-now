@@ -991,7 +991,7 @@ scenario("A20.2.get_comments returns each unresolved thread with its quote and c
       canComment: true,
       url: url(d.id),
       truncated: false,
-      threads: [{ threadId: first.threadId, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, via: "mcp", body: "First thread." }] }],
+      threads: [{ threadId: first.threadId, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, channel: "mcp", via: `personal token “e2e a20 ${v.acct.role}”`, body: "First thread." }] }],
     },
     "get_comments with one agent's thread (an agent's comment awaits no reply)",
   );

@@ -3,7 +3,7 @@
   "what": "CommentNotice.tsx renders the comment body with dangerouslySetInnerHTML, so markup in a comment reaches the HTML part as markup",
   "target": {
     "spec": "e2e/specs/functional/a23-email.spec.mjs",
-    "case": "A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's says via MCP",
+    "case": "A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's names the token it came through",
     "suite": "functional"
   },
   "stack": [],

@@ -1,9 +1,9 @@
 {
-  "oracle": "A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance says via MCP, a withdrawal reaches the owner; none as a suggestion notice, none to the decider",
+  "oracle": "A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance names the token it came through, a withdrawal reaches the owner; none as a suggestion notice, none to the decider",
   "what": "omit accept decision text only from HTML",
   "target": {
     "spec": "e2e/specs/functional/a23-email.spec.mjs",
-    "case": "A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance says via MCP, a withdrawal reaches the owner; none as a suggestion notice, none to the decider"
+    "case": "A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance names the token it came through, a withdrawal reaches the owner; none as a suggestion notice, none to the decider"
   },
   "expect": {
     "message": "the HTML notice carries the acceptance"

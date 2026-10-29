@@ -1299,7 +1299,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
   const before = await snapshot();
   precondition(before.liveLog?.[epoch]?.withdrawalProbe === "AAA=", "the retiring live log exists before withdrawal");
   precondition(
-    before.currentVersion === "v2" && before.draft === "v2" && before.thumb === "v2" && before.commits === 1 && before.v2Annotations === 1 && before.objects.v2.length === 1 && before.objects.thumbsV2.length === 1 && before.objects.draft.length === 1,
+    before.currentVersion === "v2" && before.draft === "v2" && before.thumb === "v2" && before.commits === 2 && before.v2Annotations === 1 && before.objects.v2.length === 1 && before.objects.thumbsV2.length === 1 && before.objects.draft.length === 1,
     `the setup is in place: ${JSON.stringify(before)}`,
   );
   assert.deepEqual(before.views, { [sid1]: "v1", [sid2]: "v2" }, "the view sessions name their versions");
@@ -1338,7 +1338,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     `/docs/${docId}/thumbs/v2/ (1 thumbnail(s))`,
     "clear thumb: it names v2",
     `delete Firestore: docs/${docId}/versions/v2 (+1 annotation(s), 1 comment(s))`,
-    "stats.commits: 1 -> 0 (and clear lastEditedAt/lastEditedByEmail)",
+    "stats.commits: 2 -> 1, and last edited becomes v1's publish",
     'retag 1 view session(s): versionId "v2" -> "v2-deleted"',
     "--dry-run: nothing was written.",
   ]) assert.ok(dry.stdout.includes(line), `the dry run's plan says ${JSON.stringify(line)}`);
@@ -1368,8 +1368,9 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     liveLog: null,
     draft: null,
     thumb: null,
-    commits: 0,
-    lastEditedByEmail: null,
+    // Both versions were counted; v1 is, and last edited names it again.
+    commits: 1,
+    lastEditedByEmail: v1rec.publishedByEmail,
     updatedAt: v1rec.publishedAt.toMillis(),
     versions: ["v1"],
     v2Annotations: 0,

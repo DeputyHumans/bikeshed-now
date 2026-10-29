@@ -139,8 +139,10 @@ const typesOf = (r) => counts(r.events.map((e) => e.type));
 
 /** An event as get_changes gives it, with `at` checked for its form and taken out. */
 function stripAt(e) {
-  const { at, ...rest } = e;
+  const { at, id, ...rest } = e;
   assert.match(String(at), ISO, `event ${e.type}: at is an ISO time (${at})`);
+  // Each event names itself, opaquely, so a page can be keyed (ADR 0023).
+  assert.ok(typeof id === "string" && id.length > 0, `event ${e.type}: an id`);
   return rest;
 }
 
@@ -217,10 +219,10 @@ scenario("A21.1 a browser thread, comment and resolve reach the owner's agent as
   await resolveIn(ow, docId, "v1", t.annId, true);
   const rows = await settle(docId, { "version.published": 1, "access.changed": SHARE_EVENTS, "thread.opened": 1, "comment.added": 1, "thread.resolved": 1 }, "the publish, the share, the thread, its comment and the resolve are recorded");
 
-  ctx.step("SPEC §4: each stored event has only the log's fields and an actor of uid, channel and token; no body is stored, and no address outside access.changed's own data (who was added or removed)");
+  ctx.step("SPEC §4: each stored event has only the log's fields and an actor of uid, channel, token and the credential's words (via); no body is stored, and no address outside access.changed's own data (who was added or removed)");
   for (const r of rows) {
     assert.deepEqual(Object.keys(r.data).filter((k) => !EVENT_FIELDS.includes(k)), [], `${r.data.type}: fields outside SPEC §4's list`);
-    if (r.data.actor) assert.deepEqual(Object.keys(r.data.actor).filter((k) => !["uid", "channel", "tokenId"].includes(k)), [], `${r.data.type}: the actor carries more than uid, channel and token`);
+    if (r.data.actor) assert.deepEqual(Object.keys(r.data.actor).filter((k) => !["uid", "channel", "tokenId", "via"].includes(k)), [], `${r.data.type}: the actor carries more than uid, channel, token and via`);
     const { data, ...rest } = r.data;
     const raw = JSON.stringify(rest) + (r.data.type === "access.changed" ? "" : JSON.stringify(data ?? null));
     for (const secret of [viewerAcct.email, ownerAcct.email]) assert.ok(!raw.includes(secret), `${r.data.type}: the stored event holds the address ${secret}`);
@@ -232,7 +234,7 @@ scenario("A21.1 a browser thread, comment and resolve reach the owner's agent as
   const visible = rows.filter((r) => r.data.type !== "version.published"); // the agent's own publish: left out without includeMine
   assert.deepEqual(r1.events.map((e) => [e.type, e.at]), visible.map((r) => [r.data.type, eventAt(r)]), "every event but the agent's own publish, each once, in recorded order");
   const byType = Object.fromEntries(r1.events.map((e) => [e.type, stripAt(e)]));
-  const common = { channel: "web", version: "v1", threadId: t.annId, quote: t.anchor.exact };
+  const common = { channel: "web", automated: false, version: "v1", threadId: t.annId, quote: t.anchor.exact };
   assert.deepEqual(byType["thread.opened"], { type: "thread.opened", ...common, by: viewerAcct.email }, "thread.opened: by its author, with the passage");
   assert.deepEqual(byType["comment.added"], { type: "comment.added", ...common, commentId: t.commentId, by: viewerAcct.email, body: BODY }, "comment.added: body and quote");
   assert.deepEqual(byType["thread.resolved"], { type: "thread.resolved", ...common, by: ownerAcct.email }, "thread.resolved: by whoever resolved it, not by its author");
@@ -353,8 +355,8 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
     assert.deepEqual(
       re.events.filter((e) => e.type === "access.changed").map(stripAt),
       [
-        { type: "access.changed", channel: "web", added: [viewerAcct.email], removed: [], by: ownerAcct.email },
-        { type: "access.changed", channel: "web", added: [editorAcct.email], removed: [], by: ownerAcct.email },
+        { type: "access.changed", channel: "web", automated: false, added: [viewerAcct.email], removed: [], by: ownerAcct.email },
+        { type: "access.changed", channel: "web", automated: false, added: [editorAcct.email], removed: [], by: ownerAcct.email },
       ],
       "access.changed: who was added and removed, and by whom",
     );
