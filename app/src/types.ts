@@ -488,4 +488,10 @@ export interface Comment {
 }
 
 /** The typed outcomes of POST /session. Not error strings (SPEC §2). */
-export type SessionStatus = "ok" | "unverified" | "not_allowed" | "session_failed";
+export type SessionStatus =
+  | "ok"
+  | "unverified"
+  | "not_allowed"
+  | "session_failed"
+  /** Google renamed the account, and a job is moving it to the new address (SPEC §14). */
+  | "moving";

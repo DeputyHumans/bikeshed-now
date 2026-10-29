@@ -30,7 +30,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   that leaves nobody with less access if it stops partway. It signs the
   account out everywhere and revokes personal tokens minted under the old
   address. History keeps the address it was written under. Each owner's ACL
-  log records the move (ADR 0020, SPEC §14).
+  log records the move (ADR 0020, SPEC §14). While it runs, the sign-in screen
+  says "Moving your account to …". Afterwards the app signs in again as the
+  new address and says what was signed out. An account that was already
+  signed in when Google renamed it sees a notice offering the move.
 - Find a thread's earlier participants by account rather than by the address
   on their comment. Someone who moved address keeps getting notices, and an
   author is never sent their own comment under an address they have left.

@@ -342,6 +342,21 @@ export function watchUser(
 }
 
 /**
+ * Follow an account's move to the address Google renamed it to (SPEC §14): its
+ * job's `state`, or null while it cannot be read. Only the server writes it.
+ */
+export function watchAccountMove(
+  jobId: string,
+  onState: (state: string | null) => void,
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "accountMoves", jobId),
+    (snap) => onState(snap.exists() ? String(snap.data().state ?? "") : null),
+    () => onState(null),
+  );
+}
+
+/**
  * Write the client-settable part of the account record.
  *
  * Verification state and email cooldowns are absent on purpose: the rules

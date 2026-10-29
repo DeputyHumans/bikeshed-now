@@ -947,7 +947,11 @@ function wsFrameLog() {
   return log;
 }
 
-/** What POST /session answers, by its body's `status` (functions/src/index.ts, SPEC §2): signInUi's expectStatus values. */
+/**
+ * What POST /session answers, by its body's `status` (functions/src/index.ts, SPEC §2): signInUi's expectStatus values.
+ * `moving` is the fifth outcome and is not one of them: it answers only a body carrying Google's ID token after a
+ * Google popup (SPEC §14), which the password form signInUi drives never sends.
+ */
 const SESSION_OUTCOMES = Object.freeze(["ok", "unverified", "not_allowed", "session_failed"]);
 const SESSION_POST = Object.freeze({ method: "POST", path: "/session" });
 /** The sign-in page's pathname, as the router matches it (lowercased). */

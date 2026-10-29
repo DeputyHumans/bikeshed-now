@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth, type PopupProvider } from "../auth";
+import { signingInLabel } from "../components/AddressNotice";
 import { PasswordForm } from "../components/PasswordForm";
 import { auth } from "../firebase";
 import { Icon } from "../components/Icon";
@@ -77,6 +78,7 @@ export function SignUp() {
     error,
     notAllowedMessage,
     linkPrompt,
+    movingTo,
     signIn,
     completeLink,
     signOut,
@@ -127,7 +129,7 @@ export function SignUp() {
    * Placed after every hook, because an early return before one changes the
    * hook order between renders.
    */
-  if (gate === "loading") return <Loading label="Signing in" />;
+  if (gate === "loading") return <Loading label={signingInLabel(movingTo)} />;
   // Back to what they were doing, when that was somewhere on this site — a
   // reader who pressed Fork on a document comes back to it to finish (SPEC §21).
   if (gate === "ready") return <Navigate to={next} replace />;

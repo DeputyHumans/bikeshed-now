@@ -512,9 +512,19 @@ own pending proposal, and neither destroys anything.
 3. `auth/account-exists-with-different-credential` triggers the linking flow
    (§14). One account per email is the intended invariant, not a limitation.
 4. Get the ID token and `POST /session` to set `__session` — required so the
-   same-origin iframe can load gated `/content/**`.
+   same-origin iframe can load gated `/content/**`. After a popup the sign-in
+   makes this call itself, and the listener leaves it alone. After a Google
+   popup it includes `googleIdToken` when Google's address differs from the
+   account's (§14 "An address Google renames"). Only the newest of two
+   overlapping calls decides the gate.
 5. Re-`POST /session` on every `onIdTokenChanged`.
 6. Sign out: `DELETE /session`, then `auth.signOut()`.
+7. On `moving`, wait on `accountMoves/{jobId}` while the gate stays `loading`,
+   showing the address being moved to, and ignore the listener meanwhile. On
+   `done`, run `signInWithCredential` with the same Google token, which is a
+   fresh sign-in past the move's revocation. On `blocked`, say why and sync as
+   before. A signed-in account whose Google `providerData` address differs
+   from its own is offered the move, through `reauthenticateWithPopup`.
 
 The app talks to Firestore directly for doc lists, annotations and comments
 (gated by `firestore.rules`). It loads document CONTENT only through the

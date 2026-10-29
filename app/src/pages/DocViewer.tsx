@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
+import { signingInLabel } from "../components/AddressNotice";
 import { logEvent } from "../analytics";
 import { createAnnotation, formatRelative, listAnnotations, listMyFolders, listMyTeams } from "../firestore";
 import { describeAnchorFromRange, describeAnchorFromSelection } from "../annotation/anchor";
@@ -125,7 +126,7 @@ export function DocViewer() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { user, emailLower, gate } = useAuth();
+  const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
   const signedIn = gate === "ready" && Boolean(user);
   const linkKey = params.get("k") ?? "";
@@ -888,7 +889,7 @@ export function DocViewer() {
   if (doc.loading) {
     return (
       <Loading
-        label={gate === "loading" ? "Signing in" : "Opening the document"}
+        label={gate === "loading" ? signingInLabel(movingTo) : "Opening the document"}
         onRetry={() => window.location.reload()}
       />
     );

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "./auth";
+import { AddressNotice, signingInLabel } from "./components/AddressNotice";
 import { initAnalytics, logPageView } from "./analytics";
 import { CookieConsent } from "./components/CookieConsent";
 import { Privacy, Terms } from "./pages/Legal";
@@ -78,8 +79,8 @@ function RequireAccount({
   children: React.ReactNode;
   signedOut?: React.ReactNode;
 }) {
-  const { gate } = useAuth();
-  if (gate === "loading") return <Loading label="Signing in" />;
+  const { gate, movingTo } = useAuth();
+  if (gate === "loading") return <Loading label={signingInLabel(movingTo)} />;
   if (gate === "signed_out" && signedOut) return <>{signedOut}</>;
   if (gate !== "ready") return <SignUp />;
   return <>{children}</>;
@@ -123,6 +124,7 @@ export function App() {
       </a>
       <Header />
       <main className="main" id="main" tabIndex={-1}>
+        <AddressNotice />
         <Routes>
           <Route
             path="/"
