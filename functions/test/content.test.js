@@ -9,6 +9,7 @@ const { contentPath } = require("../lib/lib/http.js");
 test("a plain request names the document, the version and the file", () => {
   assert.deepEqual(contentPath(["d1", "v2", "img", "a.png"]), {
     k: null,
+    run: false,
     docId: "d1",
     versionId: "v2",
     relPath: "img/a.png",
@@ -26,6 +27,7 @@ test("an unlisted document's key may ride in the path, ahead of the document", (
   // reference inherits it.
   assert.deepEqual(contentPath(["~tok_123", "d1", "v2", "img", "a.png"]), {
     k: "tok_123",
+    run: false,
     docId: "d1",
     versionId: "v2",
     relPath: "img/a.png",
@@ -43,4 +45,25 @@ test("a file whose name starts with a tilde is still a file", () => {
   const parts = contentPath(["d1", "v2", "~notes.png"]);
   assert.equal(parts.k, null);
   assert.equal(parts.relPath, "~notes.png");
+});
+
+test("the run variant asks, after any key and before the document (ADR 0021)", () => {
+  assert.deepEqual(contentPath(["!run", "d1", "v2", "index.html"]), {
+    k: null,
+    run: true,
+    docId: "d1",
+    versionId: "v2",
+    relPath: "index.html",
+  });
+  assert.deepEqual(contentPath(["~tok_123", "!run", "d1", "v2"]), {
+    k: "tok_123",
+    run: true,
+    docId: "d1",
+    versionId: "v2",
+    relPath: "index.html",
+  });
+  // Only that position asks: anywhere else it is a name like any other, and a
+  // document id can never be it, so it is never mistaken for one.
+  assert.equal(contentPath(["d1", "!run", "index.html"]).run, false);
+  assert.equal(contentPath(["!run", "v2"]), null);
 });

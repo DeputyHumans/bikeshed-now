@@ -64,7 +64,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, docIdFor, ledgerDoc, ledgerFolder, publish, readSample, updateUpload, zipBundle } from "../../lib/seed.mjs";
 import { share, shareFolder } from "../../lib/grant.mjs";
-import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, writeUser } from "../../lib/admin.mjs";
+import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, trustAsOperator, writeUser } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
@@ -1189,8 +1189,9 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
     mk("Editor control"),
   ]);
   const docs = Object.fromEntries(["plain1", "plain2", "deckUntrusted", "deckTrusted", "filed", "expired", "control"].map((k, i) => [k, made[i]]));
-  const trust = await O.http.postJson("/trust", { docId: docs.deckTrusted, trusted: true });
-  precondition(trust.status === 200 && (await readDoc(target, `docs/${docs.deckTrusted}`))?.trusted === true, "the second deck is trusted for everyone");
+  // Trusted as the operator trusts it: POST /trust is a superadmin's (ADR 0021).
+  await trustAsOperator(target, docs.deckTrusted);
+  precondition((await readDoc(target, `docs/${docs.deckTrusted}`))?.trusted === true, "the second deck is trusted for everyone");
   await Promise.all(["expired", "control"].map((k) => share(target, { owner: O, doc: docs[k], account: E.account, role: "editor" })));
   for (const id of Object.values(docs)) precondition(!(await readDoc(target, `docs/${id}`))?.thumb, `${id} starts with no cover`);
 

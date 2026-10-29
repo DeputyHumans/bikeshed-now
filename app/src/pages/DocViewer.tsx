@@ -15,7 +15,7 @@ import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
 import { printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
-import { useIsSingleColumn } from "../hooks/useMediaQuery";
+import { useIsPhone, useIsSingleColumn } from "../hooks/useMediaQuery";
 
 import { useDocument } from "../viewer/useDocument";
 import { useDocumentTitle } from "../viewer/useDocumentTitle";
@@ -128,6 +128,7 @@ export function DocViewer() {
   const toast = useToast();
   const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
+  const phone = useIsPhone();
   const signedIn = gate === "ready" && Boolean(user);
   const linkKey = params.get("k") ?? "";
 
@@ -215,23 +216,22 @@ export function DocViewer() {
     emailLower,
   });
 
-  const mode: FrameMode = useMemo(
-    () =>
-      editingOrigin && canEdit
-        ? { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision }
-        : {
-            kind: "reading",
-            versionId: doc.currentVersion,
-            draft: readsDraft({
-              hasDraft: Boolean(doc.meta?.draft),
-              canEdit,
-              shownVersion: doc.currentVersion,
-              headVersion,
-            }),
-            sandboxed: !trust.trusted,
-          },
-    [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted],
-  );
+  const mode: FrameMode = useMemo(() => {
+    if (editingOrigin && canEdit) {
+      return { kind: "editing", baseVersion: editingOrigin.baseVersion, liveEpoch: editingOrigin.liveEpoch, draftRevision: editingOrigin.draftRevision };
+    }
+    const draft = readsDraft({
+      hasDraft: Boolean(doc.meta?.draft),
+      canEdit,
+      shownVersion: doc.currentVersion,
+      headVersion,
+    });
+    // A draft's script never runs, trusted or not: any editor may have written
+    // it, and the server serves it locked anyway (ADR 0021).
+    return { kind: "reading", versionId: doc.currentVersion, draft, sandboxed: draft || !trust.trusted };
+  }, [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted]);
+  /** A draft never runs its script, so trusting it would change nothing to offer. */
+  const showsDraft = mode.kind === "reading" && mode.draft;
 
   const frame = useDocFrame({
     mode,
@@ -421,7 +421,7 @@ export function DocViewer() {
     isOwner,
     expired: isExpired(doc.meta?.expiresAt),
     sandboxed: mode.kind !== "reading" || mode.sandboxed,
-    globallyTrusted: doc.meta?.trusted !== false,
+    globallyTrusted: doc.meta?.trusted === true,
     thumbVersion: thumb?.versionId ?? null,
     thumbRevision: thumb?.rev ?? 1,
     hasCover: Boolean(thumb?.cover),
@@ -622,14 +622,6 @@ export function DocViewer() {
     }
   }, [editor, mode, docId, doc.format, navigate, toast, setWantsEdit]);
 
-  /**
-   * Leave the editor without publishing.
-   *
-   * The pending autosave is flushed FIRST. `useInlineEditor`'s cleanup clears
-   * the debounce timer, so leaving within a second of the last keystroke would
-   * otherwise drop that keystroke on the floor — silently, since the draft that
-   * remains looks perfectly healthy.
-   */
   /** The export: a scrubbed, stamped snapshot of what the frame shows (SPEC §20). */
   const printCurrent = useCallback(() => {
     if (!frame.doc) return;
@@ -675,6 +667,14 @@ export function DocViewer() {
   }, []);
   const activeEditor = useRef({ origin: editingOrigin, doc: frame.doc });
   activeEditor.current = { origin: editingOrigin, doc: frame.doc };
+  /**
+   * Leave the editor without publishing.
+   *
+   * The pending autosave is flushed FIRST. `useInlineEditor`'s cleanup clears
+   * the debounce timer, so leaving within a second of the last keystroke would
+   * otherwise drop that keystroke on the floor — silently, since the draft that
+   * remains looks perfectly healthy.
+   */
   const stopEditing = useCallback(async () => {
     const started = activeEditor.current;
     const saved = await editor.flushUnsaved();
@@ -857,8 +857,11 @@ export function DocViewer() {
         },
       });
     }
+    // On a phone Print is listed here instead of on the toolbar: the bar
+    // already fills 400px, and printing from a phone is rare enough to sit one
+    // tap further away. Anywhere wider it is a button and is not listed twice.
+    if (phone) entries.push({ id: "pdf", label: "Print or save as PDF", onSelect: printCurrent });
     entries.push(
-      { id: "pdf", label: "Print or save as PDF", onSelect: printCurrent },
       { id: "image", label: "Export an image…", onSelect: () => setDialog("image") },
       { id: "sep1", separator: true },
     );
@@ -905,7 +908,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
@@ -1018,13 +1021,14 @@ export function DocViewer() {
           onOpenForks={() => setDialog("forks")}
           editing={wantsEdit}
           onToggleEdit={() => void (wantsEdit ? stopEditing() : canEdit && setWantsEdit(true))}
-          offerTrust={liveTrust.shouldOffer}
+          offerTrust={liveTrust.shouldOffer && !showsDraft}
           onOpenTrust={() => setDialog("trust")}
           hasSlides={hasSlides}
           railOpen={railOpen}
           onToggleRail={() => setRailOpen((open) => !open)}
           onOverview={() => deck.setOverviewOpen(true)}
           onPresent={startPresenting}
+          onPrint={phone ? undefined : printCurrent}
           menuEntries={menuEntries}
           pane={pane}
           onPane={setPane}
@@ -1058,7 +1062,7 @@ export function DocViewer() {
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}
-        offerTrust={liveTrust.shouldOffer}
+        offerTrust={liveTrust.shouldOffer && !showsDraft}
         scriptsBuildContent={deck.scan.kind === "script-required"}
         onOpenTrust={() => setDialog("trust")}
       />

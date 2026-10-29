@@ -343,7 +343,15 @@ test("the endpoints that change the record write their event with the change", a
   await w.call("move_document", OWNER, { folder: "f1" });
   const sessions = { s: { uid: OWNER.uid, email: OWNER.emailLower, email_verified: true } };
   const post = (fn, body) => withFakeAdmin({ db: w.db, sessions }, () => invoke(fn, { headers: { cookie: "__session=s" }, body }));
-  assert.equal((await post(triggers.trustDoc, { docId: "d1", trusted: true })).status, 200);
+  // Trusting for everyone is a superadmin's, on their own document (ADR 0021).
+  const admins = process.env.BIKESHED_SUPERADMINS;
+  process.env.BIKESHED_SUPERADMINS = OWNER.emailLower;
+  try {
+    assert.equal((await post(triggers.trustDoc, { docId: "d1", trusted: true })).status, 200);
+  } finally {
+    if (admins === undefined) delete process.env.BIKESHED_SUPERADMINS;
+    else process.env.BIKESHED_SUPERADMINS = admins;
+  }
   assert.equal((await post(triggers.setVisibility, { docId: "d1", visibility: "unlisted", expiresAt: Date.now() + 86_400_000 })).status, 200);
   const got = await w.call("get_changes", OWNER, { since: cursor }, "t-other");
   assert.deepEqual(got.events.map((e) => e.type), ["doc.renamed", "doc.moved", "doc.trust", "doc.visibility", "doc.expiry"]);

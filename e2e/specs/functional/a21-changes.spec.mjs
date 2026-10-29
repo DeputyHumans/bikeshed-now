@@ -82,7 +82,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, mintToken, openSession } from "../../lib/session.mjs";
 import { createFolderMcp, docIdFor, fork, forkMcp, publishMcp, readFixture } from "../../lib/seed.mjs";
 import { setVisibility, share } from "../../lib/grant.mjs";
-import { closeAdmin, readDoc } from "../../lib/admin.mjs";
+import { closeAdmin, readDoc, trustAsOperator } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { changeLog, eventAt, logAfter, settleLog } from "../../lib/changes.mjs";
 import { anchorIn, commentPath, webAnnotationWrite, webReply, webResolve, webThread } from "../../lib/web.mjs";
@@ -304,10 +304,13 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   const { owner, accounts, agent, docId } = await stage(ctx, ["viewer", "editor"], "a213-audience", "A21.3 audience");
   const [ownerAcct, viewerAcct, editorAcct] = accounts;
 
-  ctx.step("the owner shares with a viewer and an editor (two access.changed locally; email-free operator grants on production), trusts the document (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
+  ctx.step("the owner shares with a viewer and an editor (two access.changed locally; email-free operator grants on production), restores the sandbox of the document the operator trusted (doc.trust), opens and closes an unlisted link (two doc.visibility) and files it in a new folder (doc.moved)");
   await share(target, { owner, doc: docId, account: viewerAcct, role: "viewer" });
   await share(target, { owner, doc: docId, account: editorAcct, role: "editor" });
-  await owner.http.postJson("/trust", { docId, trusted: true }, { expect: 200 });
+  // Lifting the sandbox is a superadmin's (ADR 0021); restoring it is any
+  // owner's, and records the same event. The operator's write records none.
+  await trustAsOperator(target, docId);
+  await owner.http.postJson("/trust", { docId, trusted: false }, { expect: 200 });
   await setVisibility(target, { owner, doc: docId, visibility: "unlisted" });
   await setVisibility(target, { owner, doc: docId, visibility: "private" });
   const folder = await createFolderMcp(agent.mcp, { name: `A21.3 ${tag()}`, ownerEmail: ownerAcct.email });
@@ -321,6 +324,8 @@ scenario("A21.3 audience: a viewer never receives access.changed or another edit
   const ALL = { "version.published": 1, "access.changed": 2 * SHARE_EVENTS, "doc.trust": 1, "doc.visibility": 2, "doc.moved": 1, "thread.opened": 1, "comment.added": 1, "fork.created": 1 };
   await settle(docId, ALL, "every change is recorded");
   ctx.step("append an editor-only trust change after every reader event, so filtering cannot leave the cursor behind");
+  // Trusted again as the operator trusts it, so the owner's restoring is a change, and an event.
+  await trustAsOperator(target, docId);
   await owner.http.postJson("/trust", { docId, trusted: false }, { expect: 200 });
   ALL["doc.trust"] += 1;
   const tailed = await settle(docId, ALL, "the hidden tail event is recorded");

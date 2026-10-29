@@ -16,8 +16,8 @@
  * version — a bundle's own pages — still navigates the frame.
  */
 
-/** `/content/[~key/]{docId}/{versionId}/` or `/draft/{docId}/`: one version's files. */
-const VERSION_ROOT = /^\/content\/(?:~[^/]+\/)?[^/]+\/[^/]+\/|^\/draft\/[^/]+\//;
+/** `/content/[~key/][!run/]{docId}/{versionId}/` or `/draft/{docId}/`: one version's files. */
+const VERSION_ROOT = /^\/content\/(?:~[^/]+\/)?(?:!run\/)?[^/]+\/[^/]+\/|^\/draft\/[^/]+\//;
 
 /** Does following `href` from the document at `documentUrl` leave it? */
 export function leavesDocument(href: string, documentUrl: string): boolean {

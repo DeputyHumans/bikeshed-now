@@ -13,7 +13,7 @@ import {
 
 /**
  * Only for responsive branches CSS cannot express — the Doc/Comments segmented
- * control, the drawers, the toolbar overflow menu. Layout that CSS can handle
+ * control, the drawers, Print moving into the More menu. Layout that CSS can handle
  * stays in the stylesheets, because a media query that lives in JavaScript does
  * not apply until after hydration.
  */

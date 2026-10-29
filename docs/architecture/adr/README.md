@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Twenty decisions that a newcomer would otherwise re-argue in a pull request, each
+Twenty-one decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
@@ -12,7 +12,7 @@ actually available at the time.
 | | Decision | Status |
 |---|---|---|
 | [0001](0001-same-origin-iframe.md) | Render documents in a same-origin iframe | Accepted |
-| [0002](0002-two-scope-trust.md) | Two trust scopes: global and personal | Accepted |
+| [0002](0002-two-scope-trust.md) | Two trust scopes: global and personal | Amended by 0021 |
 | [0003](0003-server-side-markdown.md) | Compile Markdown on the server, once per version | Accepted |
 | [0004](0004-email-keyed-acl.md) | Key the ACL by verified email, not uid | Amended by 0020 |
 | [0005](0005-generated-rules.md) | Generate the security rules from one policy file | Accepted |
@@ -31,6 +31,7 @@ actually available at the time.
 | [0018](0018-keep-the-document-open-path-warm.md) | Keep the document-open path warm | Accepted |
 | [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Accepted |
 | [0020](0020-an-account-follows-its-google-address.md) | An account follows the address Google renames it to | Accepted |
+| [0021](0021-a-documents-script-runs-only-with-consent.md) | A document's script runs only with its reader's consent | Accepted |
 
 ## Format
 

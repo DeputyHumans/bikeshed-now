@@ -96,7 +96,7 @@ export function useCoverBackfill(
       const base = contentBase(doc.docId, version);
       const html = await o.fetchHtml(`${base}${entry}`);
       if (!html || stopped) return;
-      if (doc.trusted !== false && /<script\b/i.test(html)) return;
+      if (doc.trusted === true && /<script\b/i.test(html)) return;
       const source = new DOMParser().parseFromString(html, "text/html");
       capturer ??= o.makeCapturer();
       const shot = await capturer.capture(buildPagePreviewDoc(source, base), { page: true });

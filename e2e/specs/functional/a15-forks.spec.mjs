@@ -65,7 +65,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, fork, ledgerDoc, publish, updateUpload } from "../../lib/seed.mjs";
 import { closeWindows, setVisibility, share, shareFolder } from "../../lib/grant.mjs";
-import { closeAdmin, queryCollection, readCollection, readDoc, listObjects } from "../../lib/admin.mjs";
+import { closeAdmin, queryCollection, readCollection, readDoc, listObjects, trustAsOperator } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { entryHtml, rehashZip } from "../../lib/bytes.mjs";
@@ -401,8 +401,9 @@ scenario("A15.2 a fork of a trusted public document is private, trusted:false, f
   const { owner: O, reader: R } = await sessions(ctx, ["owner", "reader"]);
   const tag = caseTag();
   const S = await publishDoc(ctx, O, "a15-2-src", `A15.2 source ${tag}`);
-  const trust = await idempotent(ctx, O, "/trust", { docId: S.docId, trusted: true });
-  precondition(trust.status === 200 && trust.json?.trusted === true, `POST /trust: ${trust.status} ${trust.text.slice(0, 200)}`);
+  // As the operator trusts it: POST /trust is a superadmin's (ADR 0021).
+  await trustAsOperator(target, S.docId);
+  precondition((await readDoc(target, `docs/${S.docId}`))?.trusted === true, "the source is trusted for everyone");
   ctx.step("the owner marks the source's exports; the reader's account has a default marking of its own");
   const ownerMarking = { enabled: true, label: `Owner policy ${tag}`, footer: "owner footer" };
   const readerDefault = { enabled: true, label: `Reader default ${tag}`, footer: "" };

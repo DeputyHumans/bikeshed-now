@@ -57,6 +57,7 @@ import {
   isEmulated,
   publicOrigin,
   signInHint,
+  superadmins,
 } from "./config";
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
 import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
@@ -166,6 +167,13 @@ import { renderMarkdown } from "./lib/markdown/render";
 import { htmlToMarkdown } from "./lib/markdown/serialize";
 import { resolveMarking, type Marking } from "./lib/marking";
 import { HEAD_SCAN_BYTES, readHead } from "./lib/head";
+import {
+  canTrustForEveryone,
+  contentSecurityPolicy,
+  globallyTrusted,
+  isScriptable,
+  isServiceWorkerFetch,
+} from "./lib/scriptlock";
 import {
   collectPrefix,
   composeFolderPage,
@@ -399,6 +407,42 @@ export const appConfig = onRequest({ ...PLAIN, cors: true }, async (req, res) =>
 // Content
 // ---------------------------------------------------------------------------
 
+/** The type a file is served as: by its name, never sniffed. */
+function contentTypeOf(relPath: string): string {
+  return mime.lookup(relPath) || "application/octet-stream";
+}
+
+/**
+ * The script lock for a content or draft response (ADR 0021). Set on every
+ * 200 a document path serves, so a scripted document opened any way but the
+ * run variant renders inert; the run variant also refuses foreign framing.
+ */
+function setScriptLock(
+  res: import("express").Response,
+  relPath: string,
+  run: { asked: boolean; granted: boolean },
+): void {
+  const csp = contentSecurityPolicy({ contentType: contentTypeOf(relPath), run: run.asked, unlocked: run.granted });
+  if (csp !== null) res.setHeader("Content-Security-Policy", csp);
+}
+
+/**
+ * The run variant's question: does a superadmin's global trust, or this
+ * reader's own consent, stand behind running this document's script? The
+ * reader's consent is `docs/{docId}/trust/{uid}`, their own record; a stranger,
+ * a signed-out visitor and a page elsewhere (the session cookie is
+ * `SameSite=Strict`) have none.
+ */
+async function mayRunScript(
+  gate: ReadGate,
+  caller: Awaited<ReturnType<typeof resolveCaller>>,
+): Promise<boolean> {
+  if (globallyTrusted(gate.docData)) return true;
+  if (!caller) return false;
+  const consent = await gate.docSnap.ref.collection("trust").doc(caller.uid).get();
+  return consent.exists;
+}
+
 /** Stream a Storage object, mapping a missing object to 404 rather than 500. */
 function streamObject(
   res: import("express").Response,
@@ -408,7 +452,7 @@ function streamObject(
   jsonErrors = false,
 ): void {
   const file = bucket().file(objectKey);
-  res.setHeader("Content-Type", mime.lookup(relPath) || "application/octet-stream");
+  res.setHeader("Content-Type", contentTypeOf(relPath));
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (isHead) {
     res.status(200).end();
@@ -550,6 +594,13 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
   // Uncacheable until something deliberately says otherwise. See noStore().
   noStore(res);
 
+  // A worker would outlive the page that registered it, and serve what it
+  // likes without the lock (ADR 0021).
+  if (isServiceWorkerFetch(req.get("service-worker"))) {
+    res.status(404).end();
+    return;
+  }
+
   const caller = await resolveCaller(req);
 
   const isThumb = req.path.startsWith("/thumb/");
@@ -602,8 +653,17 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
   }
 
   setContentCache(res, gate);
-  // Deliberately NO X-Frame-Options or frame-ancestors: the content must embed
-  // same-origin in the app's iframe, which is what makes annotation possible.
+  // Deliberately NO X-Frame-Options, and frame-ancestors only on the run
+  // variant: the content must embed same-origin in the app's iframe, which is
+  // what makes annotation possible.
+  const runs = parts.run && isScriptable(contentTypeOf(relPath));
+  const granted = runs ? await mayRunScript(gate, caller) : false;
+  if (runs) {
+    // Unlocked or not, this answer depends on who asked, so no cache may
+    // keep it for the next person at this URL.
+    res.setHeader("Cache-Control", "private, no-store");
+  }
+  setScriptLock(res, relPath, { asked: parts.run, granted });
 
   streamObject(res, objectKey, relPath, req.method === "HEAD");
 });
@@ -877,28 +937,32 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
- * POST /trust — the owner lifts (or restores) the untrusted-content sandbox.
+ * POST /trust — lift (or restore) the untrusted-content sandbox for everyone.
+ * GET /trust?docId= — what the trust dialog may offer this caller.
  *
- * Owner-only, and gated exactly like sharing: flipping this lets the bundle's own
- * JavaScript run same-origin for EVERY reader, which is a decision made on other
- * people's behalf. The per-account opt-in is a client write to
- * docs/{docId}/trust/{uid} and never touches this flag (SPEC §6c).
+ * Lifting it lets the document's own JavaScript run same-origin for EVERY
+ * reader, which lets its author act as each of them. So it is no longer the
+ * owner's call alone: only a superadmin (`BIKESHED_SUPERADMINS`, deployment
+ * configuration) who owns the document may lift it (ADR 0021). Restoring the
+ * sandbox stays the owner's, because it only ever takes a power away. The
+ * per-account opt-in is a client write to docs/{docId}/trust/{uid} and never
+ * touches this flag (SPEC §6c).
  */
 export const trustDoc = onRequest(PLAIN, async (req, res) => {
-  if (rejectMethod(req, res, ["POST"])) return;
+  if (rejectMethod(req, res, ["GET", "POST"])) return;
+  noStore(res);
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
     return;
   }
 
-  const body = jsonBody(req) as { docId?: unknown; trusted?: unknown } | null;
-  const docId = typeof body?.docId === "string" ? body.docId : "";
+  const body = req.method === "POST" ? (jsonBody(req) as { docId?: unknown; trusted?: unknown } | null) : null;
+  const docId = req.method === "POST" ? (typeof body?.docId === "string" ? body.docId : "") : strParam(req, "docId");
   if (!docId || !safeSegment(docId)) {
     badRequest(res, "invalid or missing docId");
     return;
   }
-  const trusted = body?.trusted !== false;
 
   const ref = db().collection("docs").doc(docId);
   const snap = await ref.get();
@@ -911,6 +975,18 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
+  const mayLift = canTrustForEveryone(data, caller.emailLower, superadmins());
+
+  if (req.method === "GET") {
+    res.status(200).json({ trusted: globallyTrusted(data), canTrustForEveryone: mayLift });
+    return;
+  }
+
+  const trusted = body?.trusted !== false;
+  if (trusted && !mayLift) {
+    res.status(403).json({ error: TRUST_FOR_EVERYONE_REFUSED });
+    return;
+  }
 
   const batch = db().batch();
   batch.set(ref, { trusted, updatedAt: now() }, { merge: true });
@@ -921,6 +997,10 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
   await syncPublicProjection(db(), docId);
   res.status(200).json({ trusted });
 });
+
+/** What an owner who is not a superadmin is told when they try to trust for everyone. */
+const TRUST_FOR_EVERYONE_REFUSED =
+  "Only this deployment's administrators can run a document's code for everyone. Each reader can still choose to run it for themselves.";
 
 /**
  * POST /marking — owner-only export marking. `{ docId, marking }`.
@@ -1097,6 +1177,10 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   noStore(res); // before any branch can return — see noStore()
   // Even empty refusals must not look like editable HTML to the parent frame.
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+  if (isServiceWorkerFetch(req.get("service-worker"))) {
+    res.status(404).end();
+    return;
+  }
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
@@ -1187,6 +1271,9 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
 
   res.setHeader("Cache-Control", "private, no-store");
+  // A draft's script never runs, for anyone: any editor may have written it,
+  // and it is nobody's published word yet (ADR 0021).
+  setScriptLock(res, relPath, { asked: false, granted: false });
   streamObject(res, objectKey, relPath, req.method === "HEAD", true);
 });
 

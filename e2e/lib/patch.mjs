@@ -44,6 +44,7 @@ import { dirname, join } from "node:path";
 import { PATCHES_DIR, assertPath } from "./paths.mjs";
 import { assertStackPort } from "./ports.mjs";
 import { GATE_ENV, isAmplifySet, readAmplify } from "./gates.mjs";
+import { E2E_SUPERADMIN } from "./accounts.mjs";
 
 export const PROJECT_ID = "demo-bikeshed";
 export const BUCKET = "demo-bikeshed-content";
@@ -234,7 +235,9 @@ export function writeFunctionsEnv(treeDir, ports, { mailFrom = MAIL_FROM, apiKey
     envLine("BIKESHED_PUBLIC_ORIGIN", origin) +
     envLine("BIKESHED_BUCKET", BUCKET) +
     envLine("RESEND_BASE_URL", shim) +
-    envLine("BIKESHED_MAIL_FROM", mailFrom);
+    envLine("BIKESHED_MAIL_FROM", mailFrom) +
+    // The one account that may trust a document for everyone (ADR 0021).
+    envLine("BIKESHED_SUPERADMINS", E2E_SUPERADMIN);
   let gate = null;
   if (gateUrl != null) {
     const m = /^http:\/\/127\.0\.0\.1:(\d+)$/.exec(String(gateUrl));

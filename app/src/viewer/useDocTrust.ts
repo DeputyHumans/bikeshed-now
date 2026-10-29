@@ -76,7 +76,7 @@ export function useDocTrust(options: {
    * can still change, and it waits for that account's answer or the cap. It
    * never waits on auth: a link opens before sign-in has decided (SPEC §17).
    */
-  const settled = docTrusted !== false || asking === null || answered || gaveUp;
+  const settled = docTrusted === true || asking === null || answered || gaveUp;
 
   return {
     trusted,

@@ -1,6 +1,6 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -496,8 +496,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
+@@ -585,8 +585,7 @@
  export const contentProxy = onRequest(WARM, async (req, res) => {
    if (rejectMethod(req, res, ["GET", "HEAD"])) return;
  
@@ -8,5 +8,5 @@
 -  noStore(res);
 +  // e2e control: the refusals of contentProxy no longer say no-store.
  
-   const caller = await resolveCaller(req);
- 
+   // A worker would outlive the page that registered it, and serve what it
+   // likes without the lock (ADR 0021).

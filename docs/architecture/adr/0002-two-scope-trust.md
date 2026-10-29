@@ -1,6 +1,6 @@
 # 0002 — Two trust scopes: global and personal
 
-**Status** Accepted · **Spec** §6c
+**Status** Amended by [0021](0021-a-documents-script-runs-only-with-consent.md) · **Spec** §6c
 
 ## Context
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // The two trust scopes, and who bears the risk of each (SPEC §6c).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { useToast } from "./Toast";
-import { setTrusted } from "../trust";
+import { mayTrustForEveryone, setTrusted } from "../trust";
 import { logEvent } from "../analytics";
 
 /**
@@ -33,6 +33,21 @@ export function TrustDialog({
   const toast = useToast();
   // Which grant is in flight, so the button that was pressed is the one that spins.
   const [busy, setBusy] = useState<"global" | "personal" | null>(null);
+  // Owning a document no longer lets you run its code for everyone: only a
+  // deployment's superadmins may (ADR 0021). The server says which this is;
+  // until it has, and if it cannot, the choice is not offered.
+  const [forEveryone, setForEveryone] = useState(false);
+  useEffect(() => {
+    if (!isOwner) return;
+    let live = true;
+    mayTrustForEveryone(docId).then(
+      (may) => live && setForEveryone(may),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [docId, isOwner]);
 
   const run = async (fn: () => Promise<unknown>, scope: "global" | "personal") => {
     setBusy(scope);
@@ -84,12 +99,13 @@ export function TrustDialog({
           </button>
         </div>
 
-        {isOwner ? (
+        {forEveryone ? (
           <div className="trust-scope" data-scope="global">
             <div className="trust-scope-title">Run it for everyone</div>
             <p className="trust-scope-note">
-              {/* A decision made on other people's behalf, so it is owner-only.
-                  A trusted document's code runs same-origin for every reader. */}
+              {/* A decision made on other people's behalf, so it is a
+                  superadmin's, on their own document. A trusted document's
+                  code runs same-origin for every reader. */}
               This document's code will run for every reader. Only do this if you
               know where it came from.
             </p>

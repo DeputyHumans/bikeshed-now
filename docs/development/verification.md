@@ -182,6 +182,13 @@ The prompt appears only when the document is sandboxed **and** actually contains
 a `<script>`. That AND is why the two HTML samples differ the way they do, and
 it is what keeps the prompt meaningful when it appears.
 
+The sandbox is also in the bytes (SPEC §2 "The script lock"). Open the scripted
+fork's own address, `/content/<id>/v1/index.html`, in a tab: the page renders
+and `#dot-nav` stays empty, and `curl -sI` shows
+`content-security-policy: sandbox allow-same-origin`. Its run address,
+`/content/!run/<id>/v1/index.html`, is unlocked (`frame-ancestors 'self'` alone)
+only once you have chosen *Run it for me*.
+
 ### 6 · A highlight opens every collapsed ancestor it needs — and only those
 
 The most important observation here. Select text inside the **nested**
@@ -465,7 +472,7 @@ Specs are under `e2e/specs/`; the `A` cases are `functional/`, the `C` cases
 | 2 | a10-markdown | A10.2 | `format`, `entry`, `sourceEntry`, `rendererVersion`; both files stored and zipped | the operator script's actor, `uid: null, channel: "cli"` |
 | 3 | a02-matrix-http | A2.X, A2.AN | a stranger's and an anonymous 404 are byte-equal to an absent id's: status, body and headers | — |
 | 4 | a03-visibility, a02-matrix-http, a18-stats | A3.1–A3.7, A3.9, A2.LK, A2.LKw, A18.5 | every proxy, `/unlock` and `/d` row; private and absent byte-identical; the `public/{id}` keys; link grants and rotation; `POST /view` without the token | production's own headers (below) |
-| 5 | a05-reading-trust, a15-forks | A5.1, A15.2 | the three trust rows; a fork resets `trusted` | — (A5.1 uploads the samples rather than forking them) |
+| 5 | a05-reading-trust, a15-forks | A5.1, A5.8, A15.2 | the three trust rows; a fork resets `trusted`; the plain address locked for everyone, the run address unlocked only for the reader who consented, a worker's fetch refused | — (A5.1 uploads the samples rather than forking them) |
 | 6 | a05-reading-trust | A5.7 | `elementId: "s5-sections"`, the highlight redrawn, both ancestors open, the other eight closed | — |
 | 7 | a09-editing | A9.7, A9.11 | the commit refused with its reason; every v1 and v2 count; no duplicate id; `#dot-nav` empty in the bytes and filled when read; v2 clean and its hash right | — |
 | 8 | a10-markdown | A10.1, A10.5 | the disabled controls and their tooltip; the format-aware download menu | — |

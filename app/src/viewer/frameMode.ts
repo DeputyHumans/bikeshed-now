@@ -81,17 +81,25 @@ export function frameSandbox(mode: FrameMode): string | undefined {
 }
 
 /**
+ * The path segment that asks the server to let a document's own script run,
+ * after any key: the server's `RUN_SEGMENT` (ADR 0021). Every other content
+ * URL is served locked, whatever frame it lands in.
+ */
+export const RUN_SEGMENT = "!run";
+
+/**
  * The directory a published version's files are read from.
  *
  * An unlisted document's token goes in the PATH, ahead of the document, not in
  * `?k=`. A query string belongs to one URL: the entry got it, and every image
  * and stylesheet the entry names by relative path was requested without it, so
  * a reader with the link but no account got the text and nothing else. A path
- * segment is inherited by every relative reference (SPEC §2, §17).
+ * segment is inherited by every relative reference (SPEC §2, §17). `run` asks
+ * for the document's script to run, the same way, for the same reason.
  */
-export function contentBase(docId: string, versionId: string, linkToken?: string): string {
+export function contentBase(docId: string, versionId: string, linkToken?: string, run = false): string {
   const key = linkToken ? `~${encodeURIComponent(linkToken)}/` : "";
-  return `/content/${key}${docId}/${versionId}/`;
+  return `/content/${key}${run ? `${RUN_SEGMENT}/` : ""}${docId}/${versionId}/`;
 }
 
 /** The URL for a mode. Drafts and published versions come from different paths. */
@@ -114,19 +122,21 @@ export function frameSrc(
     return `/draft/${docId}/${entry}?${query}`;
   }
   if (mode.draft) return `/draft/${docId}/${entry}?r=${epoch}`;
-  return `${contentBase(docId, mode.versionId, linkToken)}${entry}`;
+  // An unsandboxed frame is one that means to run the document's script, and
+  // only the run variant can: everything else is served locked (ADR 0021).
+  return `${contentBase(docId, mode.versionId, linkToken, !mode.sandboxed)}${entry}`;
 }
 
 /**
  * Effective trust for one reader (SPEC §6c).
  *
- * Absent `trusted` means trusted: documents published before the flag existed,
- * and documents published by the CLI, are the ones that need their scripts.
- * `false` is the explicit browser-upload case.
+ * Only `trusted === true`, which a superadmin sets, trusts a document for
+ * everyone. An absent flag once meant trusted, for documents older than the
+ * flag; it now fails closed, as the server does (ADR 0021).
  */
 export function isEffectivelyTrusted(
   docTrusted: boolean | undefined,
   personallyTrusted: boolean,
 ): boolean {
-  return docTrusted !== false || personallyTrusted;
+  return docTrusted === true || personallyTrusted;
 }

@@ -30,6 +30,7 @@ import { Breadcrumb } from "../components/Breadcrumb";
 import { FolderTree } from "../components/FolderTree";
 import { Icon } from "../components/Icon";
 import { Menu, type MenuEntry } from "../components/Menu";
+import { MoreMenu } from "../components/MoreMenu";
 import { MoveDialog } from "../components/MoveDialog";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
@@ -366,10 +367,6 @@ export function DocList() {
   // every document nobody has opened since (SPEC §6d).
   useCoverBackfill(visibleDocs, emailLower ?? "");
 
-  const currentFolderName = useMemo(
-    () => folders.find((f) => f.folderId === folderId)?.name ?? "Everything",
-    [folders, folderId],
-  );
 
   const visibleFolders = useMemo(() => {
     const scoped = search
@@ -413,6 +410,10 @@ export function DocList() {
     });
 
   const folderById = useMemo(() => new Map(folders.map((f) => [f.folderId, f])), [folders]);
+  // The folder this page is showing, looked up once for its header, its name
+  // and whether this account can see it at all.
+  const current = folderId ? folderById.get(folderId) : undefined;
+  const currentFolderName = current?.name ?? "Everything";
 
   /**
    * Filing is sharing, and filing under a shared folder is sharing with
@@ -547,6 +548,13 @@ export function DocList() {
           ) {
             return;
           }
+          // Deleted from inside itself, from this tab, the page would be left
+          // on a folder that no longer exists, which reads as a link to
+          // somebody else's folder. Go up first, to where its contents are
+          // about to land.
+          if (folder.folderId === folderId) {
+            navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
+          }
           // The server moves the contents up before it removes the folder, so
           // for a moment both are on screen; saying so keeps that from looking
           // like a glitch.
@@ -560,7 +568,15 @@ export function DocList() {
 
   // A folder this account is not a member of: its link may still open it,
   // read-only, exactly as it would for somebody signed out (SPEC §17).
-  if (folderId && !foldersLoading && !folderById.has(folderId)) return <SharedFolder />;
+  if (folderId && !foldersLoading && !current) return <SharedFolder />;
+
+  // The open folder's own actions sit beside its name: sharing a folder used
+  // to mean going up a level to find its card's menu. Its menu is the card's,
+  // less "Open" (this is it) and, for its owner, less the Share the button
+  // beside it already is; anyone else keeps Share there, disabled, with the
+  // reason.
+  const ownsCurrent = current?.ownerEmail === emailLower;
+  const headerOmits = ownsCurrent ? ["open", "share"] : ["open"];
 
   return (
     <div className="workspace">
@@ -573,7 +589,23 @@ export function DocList() {
         data-drop-over={workspaceDrop.over || undefined}
         {...workspaceDrop.handlers}
       >
-        <Breadcrumb folderId={folderId} folders={folders} />
+        <div className="workspace-head">
+          <Breadcrumb folderId={folderId} folders={folders} />
+          {current ? (
+            <div className="workspace-head-actions">
+              {ownsCurrent ? (
+                <button type="button" className="btn btn-sm" onClick={() => shareFolder(current)}>
+                  <Icon name="share" size={15} /> Share
+                </button>
+              ) : null}
+              <MoreMenu
+                label="Folder actions"
+                menuLabel={`Actions for ${current.name}`}
+                entries={folderMenu(current).filter((e) => !headerOmits.includes(e.id))}
+              />
+            </div>
+          ) : null}
+        </div>
 
         <div className="workspace-toolbar">
           {singleColumn ? (
@@ -735,8 +767,8 @@ export function DocList() {
           docId={revisingDoc.docId}
           title={revisingDoc.title}
           headVersion={revisingDoc.currentVersion}
-          // Missing means trusted (SPEC §6c).
-          trusted={revisingDoc.trusted !== false}
+          // Only `true` is trust (SPEC §6c, ADR 0021).
+          trusted={revisingDoc.trusted === true}
           draftBy={revisingDoc.draft?.updatedByEmail ?? null}
           onClose={() => setRevising(null)}
           onPublished={(result) => {

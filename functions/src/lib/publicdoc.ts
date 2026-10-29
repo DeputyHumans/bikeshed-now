@@ -168,7 +168,8 @@ export function projectReader(
       // Open editing is the document's own setting for its own readers, and
       // never reaches anyone through a folder.
       publicEdit: !reach && data.publicEdit === true,
-      trusted: data.trusted !== false,
+      // Only `true` is trust (ADR 0021); an absent flag fails closed.
+      trusted: data.trusted === true,
       marking: resolveMarking(data.marking),
       expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,
       viaFolder: reach !== null,

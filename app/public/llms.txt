@@ -704,7 +704,7 @@ generated table of contents.
 
 ### HTML
 
-| In the document | Sandboxed (the default) | Trusted, by the owner for everyone or by a reader for themselves |
+| In the document | Sandboxed (the default) | Trusted, by a reader for themselves (or for everyone, only by a deployment's superadmin) |
 |---|---|---|
 | `<script>`, inline or `src` | Does not run | Runs |
 | `onclick` and every other handler attribute | Does not run | Runs |
