@@ -1,6 +1,6 @@
 {
   "name": "bikeshed-now",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "license": "Apache-2.0",
   "type": "module",
   "description": "Publish and revise documents on a Bikeshed deployment from the terminal.",
