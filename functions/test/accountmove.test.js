@@ -11,8 +11,8 @@ const { computeMembership } = require("../lib/lib/folders.js");
 const presence = require("../lib/lib/presence.js");
 const { googleAddress, moveJobId, requestMove, runMove } = require("../lib/lib/accountmove.js");
 
-const OLD = "victoria@old.example.com";
-const NEW = "victoria@new.example.com";
+const OLD = "ana@old.example.com";
+const NEW = "ana@new.example.com";
 const OTHER = "olu@example.com";
 const SUB = "google-sub-1";
 
@@ -31,7 +31,7 @@ function googleToken(claims, key = privateKey, header = { alg: "RS256", kid: "k1
 const valid = (over = {}) => ({
   iss: "https://accounts.google.com",
   sub: SUB,
-  email: "Victoria@New.Example.com",
+  email: "Ana@New.Example.com",
   email_verified: true,
   exp: Math.floor(Date.now() / 1000) + 600,
   ...over,
@@ -137,7 +137,7 @@ function world(over = {}) {
   const folder = node(OTHER, { viewers: [OLD] }, null, new Map(), { parentId: null, depth: 0, ancestors: [] });
   const seed = {
     // Hers, and one the operator published in her name with no uid.
-    "docs/own": node(OLD, { viewers: [OTHER] }, null, new Map(), { ownerUid: "u-vic", title: "Own" }),
+    "docs/own": node(OLD, { viewers: [OTHER] }, null, new Map(), { ownerUid: "u-ana", title: "Own" }),
     "docs/ops": node(OLD, {}, null, new Map(), { ownerUid: null, title: "Operator" }),
     // Someone else's, shared with both of her addresses: the higher role wins.
     "docs/shared": node(OTHER, { editors: [OLD], viewers: [NEW] }, null, new Map(), { ownerUid: "u-olu" }),
@@ -154,23 +154,23 @@ function world(over = {}) {
     // Somebody nothing to do with her.
     "docs/unrelated": node(OTHER, { viewers: ["x@example.com"] }, null, new Map(), { ownerUid: "u-olu" }),
     // History, which keeps the address it was written under.
-    "docs/own/versions/v1/annotations/a1/comments/c1": { authorUid: "u-vic", authorEmail: OLD, body: "hi" },
+    "docs/own/versions/v1/annotations/a1/comments/c1": { authorUid: "u-ana", authorEmail: OLD, body: "hi" },
     // Credentials: one minted under the old address, one under the new.
-    "tokens/p-old": { tokenId: "p-old", uid: "u-vic", email: OLD, revokedAt: null, hash: "h" },
-    "users/u-vic/tokens/p-old": { tokenId: "p-old", revokedAt: null },
-    "tokens/p-new": { tokenId: "p-new", uid: "u-vic", email: NEW, revokedAt: null, hash: "h" },
-    "users/u-vic": { uid: "u-vic", email: OLD, verification: { hash: "x", email: OLD } },
+    "tokens/p-old": { tokenId: "p-old", uid: "u-ana", email: OLD, revokedAt: null, hash: "h" },
+    "users/u-ana/tokens/p-old": { tokenId: "p-old", revokedAt: null },
+    "tokens/p-new": { tokenId: "p-new", uid: "u-ana", email: NEW, revokedAt: null, hash: "h" },
+    "users/u-ana": { uid: "u-ana", email: OLD, verification: { hash: "x", email: OLD } },
     ...over,
   };
   const { db, store } = fakeFirestore(seed);
   const users = {
-    "u-vic": { uid: "u-vic", email: OLD, emailVerified: true, providerData: [{ providerId: "google.com" }] },
+    "u-ana": { uid: "u-ana", email: OLD, emailVerified: true, providerData: [{ providerId: "google.com" }] },
   };
   return { db, store, users };
 }
 
-const job = { uid: "u-vic", from: OLD, to: NEW, state: "pending" };
-const jobId = moveJobId("u-vic", NEW);
+const job = { uid: "u-ana", from: OLD, to: NEW, state: "pending" };
+const jobId = moveJobId("u-ana", NEW);
 
 async function move(w, j = job) {
   w.store.set(`accountMoves/${jobId}`, { ...j });
@@ -196,12 +196,12 @@ test("everything that named the old address names the new one, and nothing names
   assert.equal(await move(w), "done");
   assert.deepEqual(naming(w.store, OLD), []);
 
-  assert.equal(w.users["u-vic"].email, NEW);
-  assert.equal(w.users["u-vic"].emailVerified, true);
-  assert.ok(w.users["u-vic"].tokensValidAfterTime, "signed out everywhere");
+  assert.equal(w.users["u-ana"].email, NEW);
+  assert.equal(w.users["u-ana"].emailVerified, true);
+  assert.ok(w.users["u-ana"].tokensValidAfterTime, "signed out everywhere");
   assert.equal(w.store.get(`accountMoves/${jobId}`).state, "done");
-  assert.equal(w.store.get("users/u-vic").email, NEW);
-  assert.equal(w.store.get("users/u-vic").verification, undefined, "a pending code cannot undo the move");
+  assert.equal(w.store.get("users/u-ana").email, NEW);
+  assert.equal(w.store.get("users/u-ana").verification, undefined, "a pending code cannot undo the move");
 
   const own = w.store.get("docs/own");
   assert.equal(own.ownerEmail, NEW);
@@ -242,7 +242,7 @@ test("a token minted under the old address is revoked; one under the new is not"
   const w = world();
   await move(w);
   assert.ok(w.store.get("tokens/p-old").revokedAt, "would act as the old address forever");
-  assert.ok(w.store.get("users/u-vic/tokens/p-old").revokedAt);
+  assert.ok(w.store.get("users/u-ana/tokens/p-old").revokedAt);
   assert.equal(w.store.get("tokens/p-new").revokedAt, null);
 });
 
@@ -306,7 +306,7 @@ test("a job that dies before the commit leaves both addresses with access", asyn
     /backend unavailable/,
   );
   assert.ok(failed);
-  assert.equal(w.users["u-vic"].email, OLD);
+  assert.equal(w.users["u-ana"].email, OLD);
   const shared = w.store.get("docs/shared");
   assert.ok(shared.editorMembers.includes(OLD) && shared.editorMembers.includes(NEW));
   assert.equal(w.store.get("docs/own").ownerEmail, OLD, "still hers, under the address she still signs in with");
@@ -322,10 +322,10 @@ test("a job that dies after the commit is finished by its redelivery", async () 
   let calls = 0;
   presence.syncPresenceAccess = async () => {
     // The first presence refresh after the commit fails the job, mid-cascade.
-    if (w.users["u-vic"].email === NEW && calls++ === 0) throw new Error("rtdb unavailable");
+    if (w.users["u-ana"].email === NEW && calls++ === 0) throw new Error("rtdb unavailable");
   };
   await assert.rejects(move(w), /rtdb unavailable/);
-  assert.equal(w.users["u-vic"].email, NEW);
+  assert.equal(w.users["u-ana"].email, NEW);
   assert.notDeepEqual(naming(w.store, OLD), [], "the crash left work behind");
 
   presence.syncPresenceAccess = async () => {};
@@ -338,7 +338,7 @@ test("a team rewritten but never re-expanded is still found", async () => {
   // A run that died between rewriting the team and re-expanding it: the team
   // no longer names the old address, but the document it grants still does.
   const w = world({ "teams/t": { teamId: "t", ownerEmail: OTHER, admins: [OTHER, NEW].sort(), members: [NEW, OTHER].sort() } });
-  w.users["u-vic"].email = NEW;
+  w.users["u-ana"].email = NEW;
   assert.ok(w.store.get("docs/viateam").members.includes(OLD));
   assert.equal(await move(w), "done");
   assert.ok(!w.store.get("docs/viateam").members.includes(OLD));
@@ -351,7 +351,7 @@ test("an account that never proved the new address does not stand in the way", a
   assert.equal(await move(w), "done");
   assert.equal(w.users["u-squat"], undefined);
   assert.equal(w.store.has("users/u-squat"), false);
-  assert.equal(w.users["u-vic"].email, NEW);
+  assert.equal(w.users["u-ana"].email, NEW);
 });
 
 test("an account that did prove the new address blocks the move, and nothing changes", async () => {
@@ -359,14 +359,14 @@ test("an account that did prove the new address blocks the move, and nothing cha
   w.users["u-twin"] = { uid: "u-twin", email: NEW, emailVerified: true, providerData: [{ providerId: "password" }] };
   assert.equal(await move(w), "blocked");
   assert.equal(w.store.get(`accountMoves/${jobId}`).reason, "address-taken");
-  assert.equal(w.users["u-vic"].email, OLD);
+  assert.equal(w.users["u-ana"].email, OLD);
   assert.ok(w.users["u-twin"]);
   assert.ok(!w.store.get("docs/own").members.includes(NEW), "no access was handed to the other account");
 });
 
 test("a job for an address the account no longer has does nothing", async () => {
   const w = world();
-  w.users["u-vic"].email = "victoria@third.example.com";
+  w.users["u-ana"].email = "ana@third.example.com";
   assert.equal(await move(w), "blocked");
   assert.equal(w.store.get(`accountMoves/${jobId}`).reason, "stale");
   assert.ok(w.store.get("docs/own").members.includes(OLD));
@@ -374,12 +374,12 @@ test("a job for an address the account no longer has does nothing", async () => 
 
 test("asking twice while a move is pending is the same move", async () => {
   const { db, store } = fakeFirestore();
-  const a = await requestMove(db, "u-vic", OLD, NEW);
+  const a = await requestMove(db, "u-ana", OLD, NEW);
   store.set(`accountMoves/${a}`, { ...store.get(`accountMoves/${a}`), marker: 1 });
-  const b = await requestMove(db, "u-vic", OLD, NEW);
+  const b = await requestMove(db, "u-ana", OLD, NEW);
   assert.equal(a, b);
   assert.equal(store.get(`accountMoves/${a}`).marker, 1, "the pending job was not replaced");
   store.set(`accountMoves/${a}`, { ...store.get(`accountMoves/${a}`), state: "blocked" });
-  await requestMove(db, "u-vic", OLD, NEW);
+  await requestMove(db, "u-ana", OLD, NEW);
   assert.equal(store.get(`accountMoves/${a}`).state, "pending", "a blocked one is asked again");
 });

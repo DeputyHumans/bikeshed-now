@@ -3,7 +3,7 @@
 @@ -131,6 +131,7 @@ import {
    slugify,
  } from "./lib/folders";
- import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
+ import { computeTeamMembers } from "./lib/teams";
 +import { e2eAccessGate } from "./lib/e2eAccessGate";
  import { forkDocument, lineageFor } from "./lib/fork";
  import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";

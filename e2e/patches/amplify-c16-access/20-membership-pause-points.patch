@@ -1,14 +1,14 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -41,6 +41,7 @@ import { safeSegment } from "./http";
- import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
+@@ -41,6 +41,7 @@
+ import { EMPTY_TEAM_INDEX, findGrantsForTeam, loadTeamIndex, type TeamIndex } from "./teams";
  import { syncPresenceAccess } from "./presence";
  import { syncPublicProjection } from "./publicdoc";
 +import { e2eAccessGate } from "./e2eAccessGate";
  
  type Db = admin.firestore.Firestore;
  
-@@ -389,6 +390,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+@@ -407,6 +408,7 @@
        { merge: true },
      );
  
@@ -16,7 +16,7 @@
      // Documents directly in this folder inherit its fresh membership. Its
      // reach they read from this record when asked (lib/reach.ts), so nothing
      // is copied onto them; the projection sync below is what lists a document
-@@ -422,6 +424,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+@@ -440,6 +442,7 @@
          );
          touched.push({ id: docSnap.id, membership: docMembership, publicEdit: opensEditingToAnyAccount(dd as DocAclData) });
        }
@@ -24,7 +24,7 @@
        await batch.commit();
        // Presence is gated by a mirror of `members` in RTDB and shared document
        // state by a mirror of `editorMembers`, so every place that recomputes
-@@ -480,7 +483,9 @@ export async function persistDocMembership(
+@@ -499,7 +502,9 @@
      { merge: true },
    );
    for (const e of events(membership)) addEvent(batch, docRef, e);

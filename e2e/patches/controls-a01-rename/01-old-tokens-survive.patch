@@ -1,0 +1,11 @@
+--- a/functions/src/lib/accountmove.ts
++++ b/functions/src/lib/accountmove.ts
+@@ -477,7 +477,7 @@
+   for (const t of tokens.docs) {
+     const d = t.data() ?? {};
+     if (d.revokedAt == null && normalizeEmail(String(d.email ?? "")) === job.from) {
+-      if (await revokeToken(db, job.uid, t.id)) revoked += 1;
++      if (false && (await revokeToken(db, job.uid, t.id))) revoked += 1;
+     }
+   }
+ 

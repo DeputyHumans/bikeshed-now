@@ -172,8 +172,8 @@ describe("the auth gate while the session is set", () => {
 
 // --- An address Google renamed (SPEC §14) -------------------------------------
 
-const OLD = "victoria@old.example.com";
-const NEW = "victoria@new.example.com";
+const OLD = "ana@old.example.com";
+const NEW = "ana@new.example.com";
 
 function person(email: string, googleEmail?: string) {
   return {
@@ -210,7 +210,7 @@ describe("a Google sign-in", () => {
 
   it("sends Google's token, once, when Google calls the account something else", async () => {
     const view = await signedOut();
-    googlePopup(person(OLD), "Victoria@New.Example.com");
+    googlePopup(person(OLD), "Ana@New.Example.com");
     answers({ status: "ok" });
     await act(() => view.state.auth!.signIn("google"));
     expect(bodies()).toEqual([{ idToken: `id-token-for-${OLD}`, googleIdToken: "google-id-token" }]);
@@ -221,7 +221,7 @@ describe("moving to the address Google renamed the account to", () => {
   async function startMove() {
     const view = await signedOut();
     googlePopup(person(OLD), NEW);
-    answers({ status: "moving", jobId: "u-vic~abc", to: NEW });
+    answers({ status: "moving", jobId: "u-ana~abc", to: NEW });
     let signedIn!: Promise<void>;
     act(() => {
       signedIn = view.state.auth!.signIn("google");
@@ -303,7 +303,7 @@ describe("an account signed in before Google renamed it", () => {
     popup.profileEmail = NEW;
     (mockedAuth as { currentUser?: User }).currentUser = person(OLD, NEW);
     popup.reauth.mockImplementationOnce(async () => ({ user: person(OLD, NEW) }));
-    answers({ status: "moving", jobId: "u-vic~abc", to: NEW });
+    answers({ status: "moving", jobId: "u-ana~abc", to: NEW });
     act(() => {
       void view.state.auth!.moveToGoogleAddress();
     });

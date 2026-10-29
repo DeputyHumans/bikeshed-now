@@ -53,6 +53,14 @@
  *   A1.9c the framing proof, local only (it needs a stack spare port for the
  *         other origin): such a page can frame each variant with the sign-in
  *         form showing, though not /signup itself (X-a01-identity-2)
+ *   A1.10 an address Google renamed (§14, ADR 0020), local only (the Auth
+ *         emulator's unsigned Google tokens): a Google account signed up as
+ *         one address, renamed to another under the same `sub`, still gets
+ *         an ID token for the old one; POST /session with Google's token
+ *         answers "moving" and sets no cookie; the moveAccount job ends
+ *         "done"; a fresh Google sign-in is the new address, reads what was
+ *         shared with it, manages what it owns, and every credential of the
+ *         old address (its __session, a personal token) is refused
  *
  * Email-sending cases are local only and declare their effects. Only e2e/lib/
  * talks to the stack. Waits for the server's answer allow ANSWER_MS: a shared
@@ -1033,4 +1041,106 @@ scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNU
   ctx.step(`framed by another origin with the sign-in form showing: ${JSON.stringify(framed)}`);
   const exposed = FRAME_VARIANTS.filter((p) => framed[p]);
   assert.deepEqual(exposed, [], `variant paths another origin framed with the sign-in form showing, though it could not frame /signup: ${exposed.join(", ")}`);
+}));
+
+// --- A1.10 --------------------------------------------------------------------
+
+/** A Google identity for the Auth emulator: the claims it takes as an unsigned id_token. */
+function googleClaims(sub, email) {
+  return { sub, email, email_verified: true, name: "A1.10" };
+}
+
+/** accounts:signInWithIdp with a fake Google id_token, as the SDK's popup sends it; the emulator's answer. */
+async function googleSignIn(http, claims) {
+  const r = answered(
+    await http.postJson(`${target.authRestBase}/accounts:signInWithIdp?key=${encodeURIComponent(target.webApiKey)}`, {
+      postBody: `id_token=${encodeURIComponent(JSON.stringify(claims))}&providerId=google.com`,
+      requestUri: "http://localhost",
+      returnSecureToken: true,
+      returnIdpCredential: true,
+    }),
+    "accounts:signInWithIdp",
+  );
+  assert.equal(r.status, 200, `signInWithIdp: ${r.status} ${JSON.stringify(r.json?.error ?? {})}`);
+  return { idToken: r.json.idToken, uid: r.json.localId, googleIdToken: JSON.stringify(claims) };
+}
+
+/** An ID token's `email` claim, read and not verified: the stack verifies it. */
+function tokenEmail(idToken) {
+  return JSON.parse(Buffer.from(String(idToken).split(".")[1], "base64url").toString("utf8")).email;
+}
+
+scenario("A1.10 an account Google renamed moves to the new address: \"moving\", the job done, the new address reads its shares and manages its documents, and the old address's cookie and token are refused", {
+  tiers: ["local"],
+  timeoutMs: 540_000,
+}, budgeted(540_000, async (ctx) => {
+  const setupBy = Date.now() + SETUP_MS;
+  const tag = `${runTag(target.runId)}-${rand4()}`;
+  const sub = `g-a110-${tag}`;
+  const OLD = localEmail(target, `a110-old-${rand4()}`);
+  const NEW = localEmail(target, `a110-new-${rand4()}`);
+  const [other] = await cast(target, ["owner"]);
+  const otherSession = await sessionFor(ctx, other, "other-owner", setupBy);
+
+  ctx.step("an account signs up with Google as the old address, owns a document and mints a personal token");
+  const before = httpFor(ctx, "renamed-old");
+  const first = await googleSignIn(before, googleClaims(sub, OLD));
+  assert.equal(tokenEmail(first.idToken), OLD);
+  const opened = answered(await before.postJson("/session", { idToken: first.idToken }), "POST /session (old)");
+  assert.deepEqual(opened.json, { status: "ok" }, "the first sign-in");
+  const own = await publish(before, { fixture: "crdt-paragraphs.html", title: `A1.10 owned ${tag}`, name: "a110-own", patient: { ctx, stopAt: setupBy } });
+  const minted = answered(await before.postJson("/tokens", { op: "create", name: "a110", channel: "cli" }), "POST /tokens");
+  assert.equal(minted.status, 200, "minting a personal token");
+
+  ctx.step("someone else shares a document with the NEW address before the account has it");
+  const shared = await publish(otherSession.http, { fixture: "crdt-paragraphs.html", title: `A1.10 for the new address ${tag}`, name: "a110-shared", patient: { ctx, stopAt: setupBy } });
+  await share(target, { owner: otherSession, doc: shared, account: { email: NEW }, role: "viewer", verify: false });
+
+  // The revocation check compares whole seconds of auth_time, so the rename
+  // must come in a later second than the first sign-in, or a stale cookie
+  // would pass for the wrong reason.
+  await new Promise((r) => setTimeout(r, 1_100));
+
+  ctx.step("Google renames the account: the same sub now says the new address, and Firebase's token still says the old one");
+  const renamed = httpFor(ctx, "renamed-google");
+  const second = await googleSignIn(renamed, googleClaims(sub, NEW));
+  assert.equal(second.uid, first.uid, "the same account, matched by Google's id");
+  assert.equal(tokenEmail(second.idToken), OLD, "the defect's premise: Firebase kept the old address");
+
+  ctx.step("POST /session with Google's token answers moving, without a cookie for the address being left");
+  const moving = answered(await renamed.postJson("/session", { idToken: second.idToken, googleIdToken: second.googleIdToken }), "POST /session (rename)");
+  assert.equal(moving.json?.status, "moving", `POST /session: ${JSON.stringify(moving.json)}`);
+  assert.equal(moving.json.to, NEW);
+  assert.equal(renamed.jar.has("__session"), false, "no cookie for the old address");
+
+  ctx.step(`the moveAccount job ${moving.json.jobId} finishes`);
+  await eventually(async () => (await readDoc(target, `accountMoves/${moving.json.jobId}`))?.state === "done", {
+    timeout: ANSWER_MS,
+    interval: 500,
+    message: "the account move is done",
+  });
+
+  ctx.step("signing in with Google again is the new address, with a session");
+  const after = httpFor(ctx, "renamed-new");
+  const third = await googleSignIn(after, googleClaims(sub, NEW));
+  assert.equal(tokenEmail(third.idToken), NEW, "the account now carries the new address");
+  const newSession = answered(await after.postJson("/session", { idToken: third.idToken }), "POST /session (new)");
+  assert.deepEqual(newSession.json, { status: "ok" });
+
+  ctx.step("the new address reads what was shared with it, and manages what it owns");
+  assert.equal(answered(await after.get(`/content/${encodeURIComponent(shared.docId)}/${shared.versionId}/`)).status, 200, "the document shared with the new address");
+  assert.equal(answered(await after.get(`/content/${encodeURIComponent(own.docId)}/${own.versionId}/`)).status, 200, "its own document");
+  const managed = answered(await after.postJson("/access", { docId: own.docId, add: [{ email: localEmail(target, `a110-guest-${rand4()}`), role: "viewer" }] }), "POST /access (owner)");
+  assert.equal(managed.status, 200, `sharing its own document as the new address: ${JSON.stringify(managed.json)}`);
+  const ownDoc = await readDoc(target, `docs/${own.docId}`);
+  assert.equal(ownDoc.ownerEmail, NEW);
+  assert.ok(!ownDoc.members.includes(OLD), "the old address is gone from its document");
+  assert.equal((await readDoc(target, `docs/${own.docId}/acl/moved-${moving.json.jobId}`))?.reason, "address-moved", "its document's log says the address moved");
+  assert.equal((await readDoc(target, `users/${first.uid}`))?.email, NEW);
+
+  ctx.step("every credential of the old address is refused");
+  assert.equal(answered(await before.get(`/content/${encodeURIComponent(own.docId)}/${own.versionId}/`)).status, 404, "the old address's __session after the move");
+  const pat = httpFor(ctx, "renamed-pat");
+  const revoked = answered(await pat.postJson("/tokens", { op: "revoke" }, { headers: { authorization: `Bearer ${minted.json.token}` } }), "POST /tokens (old token)");
+  assert.equal(revoked.status, 401, "a personal token minted under the old address still works after the move");
 }));
