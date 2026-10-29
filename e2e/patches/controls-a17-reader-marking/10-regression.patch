@@ -1,9 +1,9 @@
 --- a/functions/src/lib/publicdoc.ts
 +++ b/functions/src/lib/publicdoc.ts
-@@ -169,7 +169,7 @@
-       // never reaches anyone through a folder.
+@@ -170,7 +170,7 @@
        publicEdit: !reach && data.publicEdit === true,
-       trusted: data.trusted !== false,
+       // Only `true` is trust (ADR 0021); an absent flag fails closed.
+       trusted: data.trusted === true,
 -      marking: resolveMarking(data.marking),
 +      marking: resolveMarking(undefined),
        expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,

@@ -1136,8 +1136,22 @@ expected.push({
 });
 commandIds.push("resume-print-baseline-settle");
 
+expected.push({
+  "id": "resume-response-delay-deadline",
+  "claim": "A response-delay timer could wake just before its requested duration. Recheck a monotonic deadline before releasing a completed backend response, while preserving explicit restore and request ordering.",
+  "requiredCases": []
+});
+commandIds.push("resume-response-delay-deadline");
+
+expected.push({
+  "id": "resume-accessibility-touch-fixture",
+  "claim": "A fresh Chromium blank document could retain desktop pointer media despite a touch context. Navigate the synthetic accessibility fixture before checking its touch identity and preserve every product target-size and focus assertion.",
+  "requiredCases": []
+});
+commandIds.push("resume-accessibility-touch-fixture");
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 37 discoveries retain their identities and original claims", () => {
+test("all 39 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
