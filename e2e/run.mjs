@@ -106,8 +106,8 @@ import { INVOCATIONS_DIR, SCRATCH_INVOCATIONS_DIR, createInvocation, nodeTestArg
 import { assertTargetDeclared, controlVerdict, findTarget, greenGroups, greenRunArgs, listControlSets, makeControlsDir, readControl, redRunArgs } from "./lib/controls.mjs";
 import { parseAppEnvArgs } from "./lib/options.mjs";
 import { CASE_TIMEOUT_ENV, tierTimeouts } from "./lib/budget.mjs";
-import { specFilePlan } from "./lib/specfile.mjs";
-import { selfTestToolchain } from "./lib/prerequisites.mjs";
+import { assertSpecsParse, specFilePlan } from "./lib/specfile.mjs";
+import { node24, selfTestToolchain } from "./lib/prerequisites.mjs";
 import { relFile } from "./lib/reporter.mjs";
 
 /**
@@ -353,6 +353,7 @@ async function cmdRun(argv) {
     }
   }
 
+  try { assertSpecsParse(plan.flatMap(p => p.files), node24().executable); } catch (err) { fail(err.message); }
   await autoReap();
 
   // --- interrupt handling: one teardown, whoever asks first -----------------

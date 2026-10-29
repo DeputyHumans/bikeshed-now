@@ -1,15 +1,7 @@
---- a/functions/src/mcp/server.ts
-+++ b/functions/src/mcp/server.ts
-@@ -203,5 +203,5 @@
-   // The CORS middleware exposes no response headers, so without this a
-   // browser-hosted client cannot read the challenge that tells it to sign in.
--  res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
-+  // Negative control: omit the authentication header exposure.
-   if (req.method === "GET" || req.method === "DELETE") {
-     // Streamable HTTP allows a server to decline the SSE channel. Saying so
 --- a/firebase.json
 +++ b/firebase.json
-@@ -180,8 +180,4 @@
+@@ -187,10 +187,6 @@
+           {
              "key": "Cache-Control",
              "value": "private, no-store"
 -          },
@@ -18,6 +10,7 @@
 -            "value": "WWW-Authenticate"
            }
          ]
+       },
 --- a/functions/src/lib/mcp-transport.ts
 +++ b/functions/src/lib/mcp-transport.ts
 @@ -12,5 +12,4 @@
@@ -26,3 +19,14 @@
    response.setHeader("Cache-Control", "private, no-store");
 -  response.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
  });
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -206,7 +206,7 @@
+ export async function handleMcp(req: Request, res: Response): Promise<void> {
+   // The CORS middleware exposes no response headers, so without this a
+   // browser-hosted client cannot read the challenge that tells it to sign in.
+-  res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
++  // Negative control: omit the authentication header exposure.
+   if (req.method === "GET" || req.method === "DELETE") {
+     // Streamable HTTP allows a server to decline the SSE channel. Saying so
+     // explicitly is friendlier than a 404, which reads as "wrong URL".

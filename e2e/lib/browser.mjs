@@ -2101,7 +2101,7 @@ export class User {
     const root = this.tabOf ?? this;
     if (name !== null && (typeof name !== "string" || name.trim() === "")) throw new TypeError(`${root.name}: newTab name is a non-empty string, or null for "${root.name}-tab<k>", got ${showValue(name)}`);
     if (root.closed) throw new Error(`${root.name}: newTab: this user is closed, and its context with it`);
-    if (root.pool.closed) throw new Error("pool is closed");
+    if (root.pool.closing || root.pool.closed) throw new Error("pool is closed");
     const taken = (n) => n === root.name || root.tabs.some((t) => t.name === n);
     // Named and claimed synchronously: tabs asked for concurrently must not take the same name.
     let tabName = name;
@@ -2118,7 +2118,7 @@ export class User {
     root.tabs.push(tab);
     try {
       await root.pool.admitContexts(1);
-      if (root.closed || root.pool.closed) throw new Error(`${root.name}: newTab: ${root.closed ? "the user was closed" : "the pool was closed"} while the tab waited for memory`);
+      if (root.closed || root.pool.closing || root.pool.closed) throw new Error(`${root.name}: newTab: ${root.closed ? "the user was closed" : "the pool was closed"} while the tab waited for memory`);
       tab.page = await root.context.newPage();
       if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1") await preserveFirestoreResponses(root.pool.target, root.context, tab.page);
     } catch (err) {
@@ -4724,6 +4724,8 @@ export class BrowserPool {
     this.version = null;
     this.parserPage = null;
     this.closed = false;
+    this.closing = false;
+    this.closePromise = null;
     this.memoryGated = false; // the pool's base (E2E_POOL_BASE_GB) was asked for once
     this.prepaid = 0; // contexts many() already asked memory for
   }
@@ -4758,6 +4760,7 @@ export class BrowserPool {
 
   /** The browser slot for the next context; launches are shared, never duplicated. */
   slot() {
+    if (this.closing || this.closed) throw new Error("pool is closed");
     let b = this.browsers.find((x) => x.contexts < this.usersPerBrowser);
     if (!b) {
       b = {
@@ -4796,12 +4799,12 @@ export class BrowserPool {
    * a key it does not take, throws a TypeError before anything is made.
    */
   async user({ name = null, consent = null, device = null } = {}) {
-    if (this.closed) throw new Error("pool is closed");
+    if (this.closing || this.closed) throw new Error("pool is closed");
     consent = checkConsent(consent, "user()");
     device = checkDevice(device, "user()");
     if (this.prepaid > 0) this.prepaid -= 1;
     else await this.admitContexts(1);
-    if (this.closed) throw new Error("pool is closed");
+    if (this.closing || this.closed) throw new Error("pool is closed");
     // Numbered synchronously: users made concurrently (many()) must not all
     // read the same length before any of them is pushed.
     this.seq = (this.seq ?? 0) + 1;
@@ -4970,6 +4973,7 @@ export class BrowserPool {
   async parser() {
     if (this.parserPage && !this.parserPage.isClosed()) return this.parserPage;
     await this.admitContexts(1);
+    if (this.closing || this.closed) throw new Error("pool is closed");
     const slot = this.browsers[0] ?? this.slot();
     const browser = await slot.promise;
     const context = await browser.newContext({ serviceWorkers: "block" });
@@ -5021,13 +5025,14 @@ export class BrowserPool {
    * write it to evidence only through ctx.ev, which redacts.
    */
   async printRenderer({ width = PRINT_PAGE.width, height = PRINT_PAGE.height, media = "print", deviceScaleFactor = 1 } = {}) {
-    if (this.closed) throw new Error("pool is closed");
+    if (this.closing || this.closed) throw new Error("pool is closed");
     for (const [n, v] of [["width", width], ["height", height]]) {
       if (!Number.isInteger(v) || v < 1 || v > 16_384) throw new Error(`printRenderer: ${n} is an integer from 1 to 16384, got ${showValue(v)}`);
     }
     if (!RENDER_MEDIA.includes(media)) throw new Error(`printRenderer: media is "print", "screen" or null, got ${showValue(media)}`);
     if (!(typeof deviceScaleFactor === "number" && deviceScaleFactor > 0 && deviceScaleFactor <= 4)) throw new Error(`printRenderer: deviceScaleFactor is a number above 0, at most 4, got ${showValue(deviceScaleFactor)}`);
     await this.admitContexts(1);
+    if (this.closing || this.closed) throw new Error("pool is closed");
     const slot = this.browsers[0] ?? this.slot();
     const browser = await slot.promise;
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor, serviceWorkers: "block", reducedMotion: "reduce" });
@@ -5091,21 +5096,27 @@ export class BrowserPool {
     return { browsers: this.browsers.length, users: this.users.length, via: this.via, version: this.version };
   }
 
-  async close() {
-    if (this.closed) return;
-    this.closed = true;
-    try {
-      await Promise.allSettled(this.users.map((u) => u.close()));
-      await Promise.allSettled((this.renderContexts ?? []).map((c) => c.close()));
-    } finally {
-      // Every browser, whatever the contexts did: a Chrome left open outlives the case.
-      await Promise.allSettled(
-        this.browsers.map(async (b) => {
+  close() {
+    if (this.closePromise) return this.closePromise;
+    this.closing = true; // reject new contexts immediately, but do not claim quiescence
+    this.closePromise = Promise.resolve().then(async () => {
+      try {
+        await Promise.allSettled(this.users.map((u) => u.close()));
+        await Promise.allSettled((this.renderContexts ?? []).map((c) => c.close()));
+      } finally {
+        // A failed context close must not strand any browser. Every caller awaits
+        // this same completion, including a second close during timeout cleanup.
+        const results = await Promise.allSettled(this.browsers.map(async (b) => {
           const browser = await b.promise.catch(() => null);
-          await browser?.close().catch(() => undefined);
-        }),
-      );
-    }
+          await browser?.close();
+        }));
+        const errors = results.filter(r => r.status === "rejected").map(r => r.reason);
+        if (errors.length) throw new AggregateError(errors, "browser shutdown failed");
+        this.closed = true;
+        this.closing = false;
+      }
+    });
+    return this.closePromise;
   }
 }
 

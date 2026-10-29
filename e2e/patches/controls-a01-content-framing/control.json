@@ -1,0 +1,13 @@
+{
+  "oracle": "Successful document content must remain frameable",
+  "what": "Block successful content responses with a Hosting frame guard",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.9e successful document bytes remain frameable and render inside the protected viewer",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "successful document bytes must not carry"
+  }
+}

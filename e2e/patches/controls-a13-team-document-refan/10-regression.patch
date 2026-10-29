@@ -1,9 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2621,5 +2621,5 @@
- async function refanTeam(teamId: string): Promise<number> {
-   const { docIds, folderIds } = await findGrantsForTeam(db(), teamId);
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -500,7 +500,7 @@
+   opts: RecomputeOptions = {},
+ ): Promise<number> {
+   const { docIds, folderIds } = await findGrantsForTeam(db, teamId);
 -  for (const id of docIds) {
 +  for (const id of docIds.slice(0, 0)) {
-     const ref = db().collection("docs").doc(id);
+     const ref = db.collection("docs").doc(id);
      const snap = await ref.get();
+     if (!snap.exists) continue;

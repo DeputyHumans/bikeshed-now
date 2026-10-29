@@ -1,12 +1,20 @@
 --- a/firebase.json
 +++ b/firebase.json
-@@ -176,3 +176,3 @@
+@@ -195,7 +195,7 @@
+         ]
+       },
        {
--        "source": "!/{content,draft,thumb}/**",
+-        "source": "!/@(content|draft|thumb)/**",
 +        "source": "/__frame_control_unused__/**",
          "headers": [
-@@ -229,3 +229,3 @@
+           {
+             "key": "X-Frame-Options",
+@@ -248,7 +248,7 @@
+         ]
+       },
        {
 -        "source": "/connect",
 +        "source": "/connect-unframed",
          "headers": [
+           {
+             "key": "X-Frame-Options",

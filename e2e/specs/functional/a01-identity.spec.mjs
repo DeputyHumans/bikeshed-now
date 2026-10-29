@@ -41,7 +41,7 @@
  *   A1.9  /connect and /signup send X-Frame-Options: DENY and
  *         frame-ancestors 'none' (§23 Consent)
  *   A1.9b mixed case, trailing slash and encoded routes, and protected account
- *         and folder routes, render sign-in and carry the same frame headers.
+ *         routes render sign-in; folder refusals carry the same frame headers.
  *         Production Hosting headers require a production observation; local
  *         execution proves only the emulator (X-a01-identity-2).
  *   A1.9c the framing proof, local only (it needs a stack spare port for the
@@ -962,8 +962,8 @@ scenario("A1.9 /connect and /signup send X-Frame-Options: DENY and Content-Secur
   assert.deepEqual(bad, [], `every /connect and /signup response is 200 with X-Frame-Options: DENY and frame-ancestors 'none'; these are not: ${bad.map((b) => `${b.path} ${b.status} X-Frame-Options=${b.xfo} frame-ancestors=${b.ancestors}`).join("; ")}`);
 }));
 
-/** Is a frame of `url`, made by a page on another origin, showing the sign-in form? */
-async function framedShowsSignIn(u, framerOrigin, url) {
+/** Is a frame of `url`, made by a page on another origin, showing its protected app page? */
+async function framedShowsProtectedPage(u, framerOrigin, url) {
   await u.page.goto(`${framerOrigin}/?src=${encodeURIComponent(url)}`, { waitUntil: "load" });
   const iframe = u.page.locator("iframe#framed");
   await iframe.waitFor({ state: "attached", timeout: 10_000 });
@@ -973,22 +973,25 @@ async function framedShowsSignIn(u, framerOrigin, url) {
     const f = await (await iframe.elementHandle())?.contentFrame();
     if (!f) throw new Error("no frame yet");
     const fu = f.url();
-    if (fu.startsWith("chrome-error:")) return { url: fu, signIn: false };
+    if (fu.startsWith("chrome-error:")) return { url: fu, rendered: false };
     if (!fu.startsWith(target.origin)) throw new Error(`frame at ${fu}`);
-    if (await f.locator("#auth-password").isVisible().catch(() => false)) return { url: fu, signIn: true };
+    if (await f.locator("#auth-password").isVisible().catch(() => false)) return { url: fu, rendered: true };
+    if (new URL(url).pathname.startsWith("/folder/") && await f.getByRole("heading", { name: "Not here", exact: true }).isVisible().catch(() => false)) return { url: fu, rendered: true };
     throw new Error(`frame at ${fu}, no form yet`);
   }, { timeout: 15_000, interval: 200, message: `the framed ${url} settled` });
 }
 
-/** Alternate and protected routes that render sign-in at the requested path. */
+/** Alternate sign-in routes and a folder refusal, all protected against framing. */
 const FRAME_VARIANTS = Object.freeze(["/SIGNUP", "/Signup", "/CONNECT", "/Connect", "/signup/", "/CONNECT/", "/%73ignup", "/account", "/folder/e2e-framing"]);
 
-/** Did each variant, in an anonymous browser, show the sign-in form at its own path? Throws a precondition when one did not: the case's premise. */
-async function variantsRenderSignIn(ctx, u) {
-  ctx.step("each alternate or protected route renders sign-in at its own path");
+/** Did each protected route, in an anonymous browser, show its expected page? Throws a precondition when one did not: the case's premise. */
+async function variantsRenderProtectedPage(ctx, u) {
+  ctx.step("each protected route renders its expected page at its own path");
   for (const p of FRAME_VARIANTS) {
     await u.goto(p);
-    await u.page.locator("#auth-password").waitFor({ state: "visible", timeout: 15_000 });
+    // A shared-folder route renders its refusal rather than forcing sign-in (SPEC §17).
+    const expected = p.startsWith("/folder/") ? u.page.getByRole("heading", { name: "Not here", exact: true }) : u.page.locator("#auth-password");
+    await expected.waitFor({ state: "visible", timeout: 15_000 });
     precondition(new URL(u.page.url()).pathname === p, `${p} did not stay at ${p} (${u.page.url()})`);
   }
 }
@@ -1013,7 +1016,7 @@ scenario("A1.9b case variants of /signup and /connect (/SIGNUP, /Signup, /CONNEC
   }
 
   const u = await ctx.users.user({ name: "anonymous" });
-  await variantsRenderSignIn(ctx, u);
+  await variantsRenderProtectedPage(ctx, u);
 
   ctx.step("GET each variant over HTTP, anonymous, no cookie: its status, its frame headers, and whether its body is /signup's app shell");
   const headers = {};
@@ -1033,7 +1036,7 @@ scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNU
   timeoutMs: 120_000,
 }, budgeted(120_000, async (ctx) => {
   const u = await ctx.users.user({ name: "anonymous" });
-  await variantsRenderSignIn(ctx, u);
+  await variantsRenderProtectedPage(ctx, u);
 
   ctx.step("a page on another origin (a stack spare port) frames /signup and each variant");
   const claim = await claimSparePort(target, { purpose: "a01-framer" });
@@ -1046,9 +1049,9 @@ scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNU
   try {
     await new Promise((resolve, reject) => server.once("error", reject).listen(claim.port, "127.0.0.1", resolve));
     const framer = `http://127.0.0.1:${claim.port}`;
-    const canonical = await framedShowsSignIn(u, framer, `${target.origin}/signup`);
-    precondition(canonical.signIn === false, `the framing check is blind: another origin framed /signup itself (${JSON.stringify(canonical)})`);
-    for (const p of FRAME_VARIANTS) framed[p] = (await framedShowsSignIn(u, framer, `${target.origin}${p}`)).signIn;
+    const canonical = await framedShowsProtectedPage(u, framer, `${target.origin}/signup`);
+    precondition(canonical.rendered === false, `the framing check is blind: another origin framed /signup itself (${JSON.stringify(canonical)})`);
+    for (const p of FRAME_VARIANTS) framed[p] = (await framedShowsProtectedPage(u, framer, `${target.origin}${p}`)).rendered;
   } finally {
     await new Promise((r) => server.close(r));
     claim.release();
@@ -1072,13 +1075,30 @@ scenario("A1.9d every app-shell entry path denies framing before client navigati
     if (h.status !== 200 || !framesDenied(h)) exposed.push({ path, ...h });
   }
   assert.deepEqual(exposed, [], `app-shell paths missing frame protection: ${JSON.stringify(exposed)}`);
-  // These are absent documents, so no protected bytes need to be fetched to
-  // prove the Hosting rule leaves the application's iframe routes alone.
+  // Error responses cover refusal paths only. Successful bytes and browser
+  // embedding are checked separately; Hosting can treat the paths differently.
   for (const prefix of ["content", "draft", "thumb"]) {
     const h = frameHeaders(answered(await http.get(`/${prefix}/e2e-absent-framing/v1/index.html`)));
     assert.equal(h.xfo, null, `${prefix} remains embeddable`);
     assert.equal(h.ancestors, null, `${prefix} remains embeddable`);
   }
+}));
+
+scenario("A1.9e successful document bytes remain frameable and render inside the protected viewer", {
+  tiers: ["local"], needs: ["admin-emulator"], timeoutMs: 120_000,
+}, budgeted(120_000, async (ctx) => {
+  const [account] = await cast(target, ["owner"]);
+  const session = await sessionFor(ctx, account, "owner", Date.now() + SETUP_MS);
+  const up = await publish(session.http, { body: "<!doctype html><html><body><h1>Frameable document witness</h1></body></html>", filename: "index.html", title: "Frame witness", name: "a19-frame-witness" });
+  const response = answered(await session.http.get(`/content/${up.docId}/${up.versionId}/index.html`));
+  assert.equal(response.status, 200, "successful document content is required; a missing-document response is not evidence");
+  assert.equal(frameHeaders(response).xfo, null, "successful document bytes must not carry X-Frame-Options");
+  assert.equal(frameHeaders(response).ancestors, null, "successful document bytes must not carry frame-ancestors");
+  const user = await ctx.users.user({ name: "document-owner" });
+  await user.signInUi(account.email, account.password);
+  await user.open(up.docId);
+  const frame = await user.frame();
+  await frame.getByRole("heading", { name: "Frameable document witness", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
 }));
 
 // --- A1.10 --------------------------------------------------------------------

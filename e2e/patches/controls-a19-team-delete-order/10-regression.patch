@@ -1,15 +1,15 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2697,11 +2697,8 @@
+@@ -2419,11 +2419,8 @@
    }
 
    if (op === "delete") {
-+    const affected = await refanTeam(teamId);
++    const affected = await refanTeam(db(), teamId);
      await ref.delete();
 -    // Grants naming the team survive as dangling references and expand to
 -    // nothing, which DENIES. Re-fanning here is what turns that from a latent
 -    // inconsistency into an immediate, correct revocation.
--    const affected = await refanTeam(teamId);
+-    const affected = await refanTeam(db(), teamId);
      res.status(200).json({ ok: true, affected });
      return;
    }

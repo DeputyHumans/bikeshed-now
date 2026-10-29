@@ -92,6 +92,14 @@ available bytes, swap used; and a browser pool's memory waits),
 appended (`measure`, under For spec authors: kept whatever the outcome).
 For verified derived-runtime stacks, `rtdb-runtime.json` binds the invocation
 to before/after JVM and rules receipts; `invocation.json` references its digest.
+`timings.jsonl` records source materialization and build phases in the stack run
+directory, and admission, case body, browser cleanup and maintenance phases in
+each invocation. Durations use a monotonic clock; rows include outcome and
+process RSS, but no request payloads. Missing timing records are not evidence of
+a completed phase. A failed maintenance or unsafe cleanup boundary stops later
+case bodies in that spec process with an explicit NOT RUN skip; a fresh stack
+is required before retrying them.
+
 The memory gate's waits and refusals for a stack go to
 `e2e/.out/<runId>/load.jsonl`.
 Parallel `--attach` runs on one stack never delete, overwrite or merge each

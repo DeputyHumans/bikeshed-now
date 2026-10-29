@@ -1,7 +1,11 @@
 --- a/functions/src/lib/publicdoc.ts
 +++ b/functions/src/lib/publicdoc.ts
-@@ -139,3 +139,3 @@
+@@ -169,7 +169,7 @@
+       // never reaches anyone through a folder.
+       publicEdit: !reach && data.publicEdit === true,
        trusted: data.trusted !== false,
 -      marking: resolveMarking(data.marking),
 +      marking: resolveMarking(undefined),
-       expiresAt: expiryMs(data as DocAclData),
+       expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,
+       viaFolder: reach !== null,
+       forked: data.forked === true,

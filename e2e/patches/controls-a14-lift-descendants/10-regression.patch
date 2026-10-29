@@ -1,8 +1,8 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -369,6 +369,6 @@
+@@ -429,6 +429,6 @@
      const docs = await db.collection("docs").where("folderId", "==", folderId).get();
-     for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
+     for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, opts);
      const children = await db.collection("folders").where("parentId", "==", folderId).get();
 -    for (const child of children.docs) queue.push(child.id);
 +    for (const child of children.docs) if (folderId !== rootId) queue.push(child.id);

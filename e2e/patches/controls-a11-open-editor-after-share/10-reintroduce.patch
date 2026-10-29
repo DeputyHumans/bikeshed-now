@@ -1,31 +1,20 @@
 --- a/functions/src/lib/presence.ts
 +++ b/functions/src/lib/presence.ts
-@@ -108,7 +108,7 @@
-       return out;
-     };
+@@ -110,3 +110,3 @@
      const edit = keyed(data.editorMembers);
 -    if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
 +    if (publicEdit && opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
      const replace = async (path: string, next: Record<string, true | string | number>) => {
-       await db.ref(path).transaction((current) => {
-         const prior = current?.__revision;
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -25,7 +25,6 @@
- 
- import { addEvent, type EventInput } from "./events";
- import { randomBytes } from "crypto";
--import { opensEditingToAnyAccount, type DocAclData } from "./acl";
- import * as admin from "firebase-admin";
- import { FieldValue } from "firebase-admin/firestore";
- import {
-@@ -436,8 +435,7 @@
-     return next;
-   });
+@@ -38,3 +38,3 @@
+ } from "./access";
+-import { canEditFolder, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
++import { canEditFolder, ownReachEntry, reachOf, type FolderAclData, type ReachEntry } from "./acl";
+ import { safeSegment } from "./http";
+@@ -481,4 +481,3 @@
    if (receipt) await clearReceipt(docRef, receipt);
 -  const fresh = (await docRef.get()).data() as DocAclData;
 -  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
 +  await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers);
    await syncPublicProjection(db, docRef.id);
-   return membership;
- }

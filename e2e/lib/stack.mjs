@@ -125,6 +125,7 @@ import { E2E_DIR, STACKS_DIR, LOCKS_DIR, ensureDir, logsDir, newRunId, runDir as
 import { allocateBlock, isPidAlive, lockIsLive, updateLockFile, releaseLockFile } from "./ports.mjs";
 import { materializeTree, removeTree } from "./tree.mjs";
 import { BUCKET, PROJECT_ID, applyPatchSet, parseDotenv, patchAppConfig, patchFirebaseJson, writeFunctionsEnv } from "./patch.mjs";
+import { timePhase } from "./timing.mjs";
 import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, processStartSecs, processTable, processesUnder, requireTool, rssBytes, run, spawnDetached } from "./proc.mjs";
 import { firebaseTools, node24 } from "./prerequisites.mjs";
 import { captureRtdbRuntime, prepareRtdbRuntime } from "./rtdb-runtime.mjs";
@@ -713,7 +714,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     rec.processes.push(spawnWatchdog(rec, { nodeBin, pollMs }));
     saveRecord(rec);
     say(log, `tree: --tree ${tree}`);
-    const t = await materializeTree({
+    const t = await timePhase(rec.runDir, "source-materialization", () => materializeTree({
       runId,
       tree,
       install,
@@ -723,7 +724,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
         logFile: rec.logs.build,
         signal,
       }),
-    });
+    }));
     rec.fingerprint = t.fingerprint;
     rec.nodeModules = t.nodeModules;
     rec.expectVersion = JSON.parse(readFileSync(join(rec.treeDir, "package.json"), "utf8")).version;
@@ -750,7 +751,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     saveRecord(rec);
     signal?.throwIfAborted();
 
-    rec.build = await buildTree(rec, { nodeBin, log });
+    rec.build = await timePhase(rec.runDir, "build", () => buildTree(rec, { nodeBin, log }));
     saveRecord(rec);
     signal?.throwIfAborted();
 

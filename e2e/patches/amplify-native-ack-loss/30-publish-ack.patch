@@ -3,8 +3,8 @@
 @@ -21,2 +21,3 @@
  import * as admin from "firebase-admin";
 +import { e2eAckTransaction } from "./e2eAckTransaction";
- import { randomUUID } from "node:crypto";
-@@ -524,3 +525,3 @@
+ import { syncPublicProjection } from "./publicdoc";
+@@ -528,3 +529,3 @@
    try {
 -    await db.runTransaction(async (tx) => {
 +    await e2eAckTransaction(db, docRef.id, "external-publish", async (tx) => {

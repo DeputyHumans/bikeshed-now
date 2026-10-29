@@ -1,9 +1,11 @@
 --- a/functions/src/lib/fork.ts
 +++ b/functions/src/lib/fork.ts
-@@ -390,5 +390,5 @@
+@@ -395,7 +395,7 @@
+       if (!snap.exists) continue;
        const data = snap.data() as Stored;
        const proof = await linkProofFor(snap.ref, data, caller, null);
--      if (!canRead(data, caller, proof) || expiredForReader(data, caller)) continue;
-+      if (!canRead(data, caller, proof)) continue;
+-      if (expiredForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
++      if ((await loadReadAccess(db, data, caller, proof)) === null) continue;
        const listing: ForkListing = {
          docId: snap.id,
+         title: str(data.title, "Untitled"),

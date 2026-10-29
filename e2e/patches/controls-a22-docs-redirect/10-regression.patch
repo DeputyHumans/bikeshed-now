@@ -1,7 +1,11 @@
 --- a/firebase.json
 +++ b/firebase.json
-@@ -14,3 +14,3 @@
+@@ -12,7 +12,7 @@
+     "redirects": [
+       {
          "source": "/docs",
 -        "destination": "/d/docs",
 +        "destination": "/d/docs-developers",
          "type": 302
+       },
+       {

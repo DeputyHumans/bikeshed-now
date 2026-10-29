@@ -1,11 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2966,7 +2966,7 @@
+@@ -2816,7 +2816,7 @@
      // A new suggestion is for the people who can decide it: only they can
      // clear it, and until they do it holds back the next version (SPEC §22).
      const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
 -    const deciders = suggestion ? membershipOf(doc).approverMembers : [];
 +    const deciders = suggestion ? membershipOf(doc).members : [];
      for (const e of deciders) recipients.add(normalizeEmail(e));
-     for (const c of siblingSnap.docs) {
-       const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+     // People are found by account where a comment names one, and by address
+     // only where it does not: an address somebody has since moved from (SPEC

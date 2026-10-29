@@ -1,6 +1,6 @@
 --- a/firebase.json
 +++ b/firebase.json
-@@ -177,10 +177,6 @@
+@@ -185,10 +185,6 @@
          "source": "/mcp",
          "headers": [
            {
