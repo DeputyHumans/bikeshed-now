@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Explicitly settle print comparison frames after removing elements instead of relying on browser-dependent screenshot timing.
+
 - Align the OAuth consent E2E expectation with folder visibility and expiry authority and detect its removal with a dedicated disclosure control.
 
 - Prefer an explicitly configured or installed Playwright-matched browser before system Chrome, avoiding the measured system-browser shutdown delay without skipping browser cleanup or reducing test coverage.

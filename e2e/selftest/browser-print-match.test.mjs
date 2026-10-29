@@ -148,7 +148,7 @@ const COUNTING = `<!DOCTYPE html><html><head><style>
   });
 </script></head><body><div class="gone">x</div><div id="late"></div></body></html>`;
 
-test("printRenderer render: settles before it reads, so the probe sees a page two animation frames on; the shot after `without` is two frames on as well (Playwright's own wait); settle: false does not settle", async () => {
+test("printRenderer render: settles before it reads, so the probe sees a page two animation frames on; the shot after `without` is two frames on as well; settle: false does not settle", async () => {
   pool ??= new BrowserPool({ target });
   const r = await pool.printRenderer({ width: 200, height: 100 });
   try {
@@ -159,7 +159,7 @@ test("printRenderer render: settles before it reads, so the probe sees a page tw
       const out = await r.render(COUNTING, { probe: frames, without: ".gone", regions: { late: box } });
       assert.equal(out.settled, true);
       assert.ok(out.probed >= 2, `two animation frames had passed before the probe (round ${i}: ${out.probed})`);
-      // Not render's settle: Playwright's screenshot waits for this itself (render's header), pinned here so a change in it shows.
+      // The renderer explicitly settles after removal; screenshot timing alone is not portable.
       assert.ok(colourPixels(out.basePng, { color: RED, region: { x: 0, y: 0, w: 100, h: 70 } }).count >= 60 * 40 * 0.9, `round ${i}: the shot after the removal is two frames on, the late block painted`);
     }
     const raw = await r.render(COUNTING, { probe: frames, settle: false });

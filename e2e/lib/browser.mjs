@@ -5009,11 +5009,9 @@ export class BrowserPool {
    * boxes and styles read, and the probe, are those of the page as painted,
    * not of a frame before it (a stamp's box measured that early did not
    * enclose the glyphs later shot, which then counted as stray pixels). A
-   * screenshot needs no settling of its own: Playwright's waits for
-   * `document.fonts.ready` and Chrome draws a fresh frame for it (measured,
-   * Playwright 1.63 with Chrome 154: a shot after `without` showed what a
-   * page painted two animation frames after the removal, the first of them
-   * busy for 150 ms). `settle: false` skips it, as render did before; a page
+   * baseline screenshot settles again after `without` removes elements: a
+   * browser screenshot alone does not reliably wait for subsequent animation
+   * frames. `settle: false` skips these explicit waits; a page
    * that does not settle within `timeout` throws.
    * Resolves {width, height, elements, probed, removed, png, basePng, pixels,
    * blocked, settled}, each null when not asked for (`settled` is whether it
@@ -5075,6 +5073,7 @@ export class BrowserPool {
             els.forEach((el) => el.remove());
             return els.length;
           }, without);
+          if (settle) await settleRender(page, timeout);
           basePng = await page.screenshot({ type: "png", timeout });
         }
         if (boxes) {
