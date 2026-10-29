@@ -1,0 +1,7 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -223,3 +223,3 @@
+             <li>Manage sharing on documents and folders you own, sending invitations to new readers</li>
+-            <li>Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own</li>
++            <li>Change visibility, open editing and expiry on documents you own</li>
+             <li>Rename and move folders you can edit; delete folders you own while keeping their contents</li>

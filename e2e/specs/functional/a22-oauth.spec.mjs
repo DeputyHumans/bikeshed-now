@@ -358,7 +358,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
       "Read what you can read", "Publish, revise and rename documents", "Comment, reply, suggest edits and resolve threads",
       "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
       "Manage sharing on documents and folders you own, sending invitations to new readers",
-      "Change visibility, open editing and expiry on documents you own",
+      "Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own",
       "Rename and move folders you can edit; delete folders you own while keeping their contents",
     ], "consent discloses every allowed capability");
     assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
