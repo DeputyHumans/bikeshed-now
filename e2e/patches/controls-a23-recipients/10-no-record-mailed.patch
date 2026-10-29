@@ -1,6 +1,20 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2992,8 +2992,9 @@
+@@ -2950,10 +2950,9 @@
+     for (const c of siblingSnap.docs) {
+       const d = c.data() ?? {};
+       const uid = uidOf(d);
+-      if (uid) {
+-        uids.add(uid);
+-        continue;
+-      }
++      // e2e negative control (controls-a23-recipients): a participant is
++      // also mailed at the address their comment stored, account or not.
++      if (uid) uids.add(uid);
+       const e = normalizeEmail(String(d.authorEmail || ""));
+       if (e) recipients.add(e);
+     }
+@@ -2987,8 +2986,9 @@
        // No account yet means no cooldown record and no preference to honour.
        // Staying silent is the right default: they were never told about the
        // document either.
