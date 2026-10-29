@@ -61,3 +61,22 @@ for (const aftermath of ["none", "accepted", "later-revision", "revision-limit",
   assert.equal(comments.length, 1); assert.equal(comments[0][1].body, "revised note");
   assert.deepEqual(count(), { callbackCalls: 2, failures: 1 });
 });
+
+for (const abortCommits of [5, 8]) test(`a suggestion survives ${abortCommits} contended commits and a lost acknowledgement`, async () => {
+  const w = world();
+  const count = loseFirstTransactionAcknowledgement(w.db, { abortCommits });
+  const result = await w.create();
+  assert.equal(anns(w).length, 1);
+  assert.equal(result.annId, anns(w)[0][1].annId);
+  assert.equal([...w.store.keys()].filter(path => path.includes('/comments/')).length, 1);
+  assert.deepEqual(count(), { failures: 1, callbackCalls: abortCommits + 2 });
+});
+
+test("suggestion contention has a finite retry budget without partial feedback", async () => {
+  const w = world();
+  const count = loseFirstTransactionAcknowledgement(w.db, { abortCommits: 10 });
+  await assert.rejects(w.create(), { code: 10 });
+  assert.deepEqual(count(), { failures: 0, callbackCalls: 10 });
+  assert.equal(anns(w).length, 0);
+  assert.equal([...w.store.keys()].filter(path => path.includes('/comments/')).length, 0);
+});
