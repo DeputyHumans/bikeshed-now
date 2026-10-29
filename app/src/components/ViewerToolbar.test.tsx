@@ -10,7 +10,12 @@ import { ToastProvider } from "./Toast";
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-function renderToolbar(props: { expiresAt: number | null; onExpiry?: () => void }) {
+function renderToolbar(props: {
+  expiresAt: number | null;
+  onExpiry?: () => void;
+  onToggleComments?: () => void;
+  expiryOf?: "document" | "folder-link";
+}) {
   return render(
     <MemoryRouter>
       <ToastProvider>
@@ -151,5 +156,14 @@ describe("forking from the toolbar", () => {
   test("a document that is neither a fork nor forked has no chip", () => {
     const { container } = mountWith({ forked: false, forkCount: 0, onOpenForks: () => {} });
     expect(container.querySelector(".fork-chip")).toBeNull();
+  });
+});
+
+describe("a reader who came through a folder's link", () => {
+  test("is offered no comments, and told when their link ends rather than that the document expires", () => {
+    renderToolbar({ expiresAt: Date.now() + 3 * DAY, expiryOf: "folder-link", onToggleComments: undefined });
+    expect(screen.queryByRole("button", { name: /comments/i })).toBeNull();
+    const chip = screen.getByRole("button", { name: /sharing ends/i });
+    expect(chip.getAttribute("title")).toMatch(/through a shared folder/);
   });
 });

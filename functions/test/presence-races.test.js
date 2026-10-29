@@ -210,3 +210,21 @@ for (const runtime of ['functions', 'operator']) test(`${runtime} mirror carries
     assert.equal(maps.get('presenceAccess/d').__liveEpoch, 'next-epoch');
   });
 });
+
+
+test('a folder-public projection writer cannot restore a revoked folder reach', { timeout: 5000 }, async () => {
+  const { db, store } = fakeFirestore({
+    'docs/d': { ...doc, visibility: 'private', folderId: 'f' },
+    'folders/f': { visibility: 'public', reach: [{ folderId: 'f', visibility: 'public', expiresAt: null }] },
+  });
+  await syncPublicProjection(db, 'd');
+  assert.equal(store.get('public/d').viaFolder, true);
+  const { entered, resume } = holdRead(db, 'folders/f');
+  const old = syncPublicProjection(db, 'd');
+  await entered.promise;
+  await db.doc('folders/f').update({ visibility: 'private', reach: [] });
+  await syncPublicProjection(db, 'd');
+  assert.equal(store.has('public/d'), false);
+  resume.open(); await old;
+  assert.equal(store.has('public/d'), false);
+});

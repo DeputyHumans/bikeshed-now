@@ -49,6 +49,13 @@ when its schedule stops without failing; the workflow's run history is where to
 look. Minute-by-minute uptime checks run independently in Cloud Monitoring and
 remain the application availability signal.
 
+Every read the deploy evidence and the audit make (one Cloud Run read per
+function, among others) is retried after 1, 2 and 4 s when Google answers 429
+or a 5xx. Writes are never repeated. Without the retry, a single 503 among
+those reads failed the deploy before anything deployed. That happened three
+times on 2026-10-28. So a failure that still reads "HTTP 503" has outlasted
+four tries, about 7 s.
+
 ## Signals
 
 | Signal | Trigger |

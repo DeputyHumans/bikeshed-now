@@ -19,7 +19,7 @@
  */
 
 import { PUBLIC_CACHE_SECONDS } from "../config";
-import { type DocAclData, expiryMs, isExpired, readBasis, visibilityOf } from "./acl";
+import { type DocAclData, type FolderAclData, earlierEnd, expiryMs, folderAccess, isExpired, readAccess, visibilityOf } from "./acl";
 import type { DocHead } from "./head";
 import { escapeAttr, escapeText } from "./html";
 
@@ -33,7 +33,7 @@ export interface DocumentDecision {
   versionId: string;
   /** Seconds the page may be cached publicly: the content window, cut at expiry. */
   maxAge: number;
-  /** True for an unlisted document: served, but not for crawlers to index. */
+  /** True when a key in the URL opened it — the document's or a folder's: served, but not for crawlers to index. */
   noindex: boolean;
 }
 
@@ -54,26 +54,91 @@ export interface ShellDoc extends DocAclData {
  * unlisted needs the link token, and the cache window is the content window
  * capped at the time left before expiry, so `max-age` never outlives the date.
  * A `k` that is absent never matches a token that is absent (`tokenMatches`).
+ *
+ * `folder` is the record of the folder the document is filed in: a public
+ * folder's reach, or a folder key in `k`, opens the page as `contentProxy`
+ * would open the bytes, and the window is cut at that reach's end too
+ * (ADR 0019).
  */
 export function decideShell(input: {
   doc: ShellDoc | null;
+  folder?: FolderAclData | null;
   k: string;
   versionId: string | null;
   now: number;
 }): ShellDecision {
   const { doc, k, now } = input;
   if (doc === null) return GENERIC;
-  const basis = readBasis(doc, null, { k });
-  if (basis !== "public" && basis !== "link") return GENERIC;
+  const access = readAccess(doc, null, { k }, input.folder ?? null, now);
+  // With no caller, the only bases are the URL's own: never member or grant.
+  if (access === null || access.basis === "member" || access.basis === "grant") return GENERIC;
   if (isExpired(doc, now)) return GENERIC;
   const visibility = visibilityOf(doc);
   const versionId = input.versionId ?? doc.currentVersion;
   if (typeof versionId !== "string" || versionId.length === 0) return GENERIC;
 
-  const at = expiryMs(doc);
+  const at = earlierEnd(expiryMs(doc), access.until);
   const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - now) / 1000);
   const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
-  return { kind: "document", versionId, maxAge, noindex: visibility === "unlisted" };
+  return {
+    kind: "document",
+    versionId,
+    maxAge,
+    noindex: visibility === "unlisted" || access.basis === "folder-link",
+  };
+}
+
+export interface FolderDecision {
+  kind: "folder";
+  /** Seconds the page may be cached publicly: the content window, cut at the reach's end. */
+  maxAge: number;
+  /** True when the folder's key opened it: served, but not for crawlers to index. */
+  noindex: boolean;
+}
+
+/**
+ * Whether a folder's page says what the folder is, for a pasted link (SPEC §17
+ * "A folder's reach"). Anonymous, as the document's decision is: its public
+ * level, or its key in `k`, and a reach that has not ended. Everything else is
+ * the one `GENERIC`, the owner included.
+ */
+export function decideFolderShell(input: {
+  folder: FolderAclData | null;
+  k: string;
+  now: number;
+}): typeof GENERIC | FolderDecision {
+  const { folder, k, now } = input;
+  if (folder === null) return GENERIC;
+  const access = folderAccess(folder, k, now);
+  if (access === null) return GENERIC;
+  const left = access.until === null ? PUBLIC_CACHE_SECONDS : Math.floor((access.until - now) / 1000);
+  const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
+  return { kind: "folder", maxAge, noindex: access.basis === "folder-link" };
+}
+
+/**
+ * A folder's page: its name and the default card, nothing read from inside
+ * it. A count or a list of titles here would be one more thing a cached page
+ * goes on saying after the folder changes.
+ */
+export function composeFolderPage(input: {
+  origin: string;
+  folderId: string;
+  name: string;
+  decision: FolderDecision;
+  k: string;
+}): ShellPage {
+  const { origin, folderId, decision, k } = input;
+  const token = decision.noindex && k.length > 0 ? k : null;
+  return {
+    title: input.name,
+    description: "A shared folder on Bikeshed. Open it to read what is inside.",
+    keywords: null,
+    url: `${origin}/folder/${folderId}${token !== null ? `?k=${encodeURIComponent(token)}` : ""}`,
+    image: `${origin}${DEFAULT_CARD.path}`,
+    imageIsDefault: true,
+    noindex: decision.noindex,
+  };
 }
 
 /* ------------------------------------------------------------------------ */

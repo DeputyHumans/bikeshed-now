@@ -1,11 +1,10 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -935,7 +935,7 @@
-           doc={frame.doc}
-           saveState={editor.saveState}
-           saveError={editor.saveError}
--          sharing={shared.state}
-+          sharing={shared.state === "off" ? "shared" : shared.state}
-           onCommit={() => void commit()}
-           onExit={() => void stopEditing()}
-           committing={committing}
+@@ -323,6 +323,5 @@
+   // A public folder's reader is told "public" and still shares nothing live:
+   // the realtime `*` key is the document's own level's alone.
+-  const shareLive =
+-    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
++  const shareLive = signedIn;
+   const remoteChanged = useRef<(() => void) | null>(null);
+   const shared = useSharedDocument({

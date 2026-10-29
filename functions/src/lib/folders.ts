@@ -25,7 +25,6 @@
 
 import { addEvent, type EventInput } from "./events";
 import { randomBytes } from "crypto";
-import { opensEditingToAnyAccount, type DocAclData } from "./acl";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -37,9 +36,9 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, type FolderAclData } from "./acl";
+import { canEditFolder, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
-import { EMPTY_TEAM_INDEX, referencedTeamIds, type TeamIndex } from "./teams";
+import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
 import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
@@ -113,6 +112,25 @@ export function computeMembership(
 
 /** Alias kept for call sites that read better as "this document's membership". */
 export const computeDocMembership = computeMembership;
+
+/**
+ * A folder's reach: its parent's, then its own entry when it is not private
+ * (SPEC §13, §17). The parent's already folds in every ancestor, so this is the
+ * same one-level step `computeMembership` takes, and the cascade below computes
+ * both in the same pass.
+ */
+export function computeReach(
+  folderId: string,
+  own: FolderAclData,
+  parentReach: readonly ReachEntry[],
+): ReachEntry[] {
+  // Defensive against a corrupt chain naming this folder above itself.
+  const out = parentReach.filter((e) => e.folderId !== folderId);
+  const entry = ownReachEntry(folderId, own);
+  if (entry) out.push(entry);
+  // Firestore refuses `undefined`, and a public entry has no key to hash.
+  return out.map((e) => (e.keyHash ? { ...e } : { folderId: e.folderId, visibility: e.visibility, expiresAt: e.expiresAt }));
+}
 
 /** A folder's stored effective membership, or null if it does not exist. */
 export async function loadFolderMembership(
@@ -223,6 +241,8 @@ export type FolderTarget =
       membership: Membership | null;
       /** The target's own ancestor chain, so a child can extend it. */
       ancestors: string[];
+      /** The target's reach, which a child folder inherits. Empty at the root. */
+      reach: ReachEntry[];
     }
   | { ok: false; status: 400 | 403 | 404; error: string };
 
@@ -248,7 +268,7 @@ export async function resolveFolderTarget(
   caller: FolderCaller,
 ): Promise<FolderTarget> {
   const id = typeof folderId === "string" ? folderId.trim() : "";
-  if (!id) return { ok: true, id: null, membership: null, ancestors: [] };
+  if (!id) return { ok: true, id: null, membership: null, ancestors: [], reach: [] };
   if (!safeSegment(id)) {
     return { ok: false, status: 400, error: "invalid folder id" };
   }
@@ -270,6 +290,7 @@ export async function resolveFolderTarget(
     id,
     membership: membershipOf(data),
     ancestors: asArray(data.ancestors),
+    reach: reachOf(data),
   };
 }
 
@@ -299,6 +320,8 @@ export async function createFolderRecord(
     ...membership,
     ancestors,
     depth: ancestors.length,
+    // A new folder is private, so its reach is exactly its parent's.
+    reach: computeReach(ref.id, {}, target.reach),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -320,6 +343,7 @@ export async function persistFolderMembership(
   db: Db,
   ref: admin.firestore.DocumentReference,
   change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
+  opts: RecomputeOptions = {},
 ): Promise<{ data: admin.firestore.DocumentData; before: Membership; membership: Membership; grants: RoleGrants } | null> {
   const receipt = change ? freshReceiptId() : null;
   let originalData: admin.firestore.DocumentData | undefined;
@@ -346,7 +370,7 @@ export async function persistFolderMembership(
     const before = computeMembership(String(data.ownerEmail || ""), grantsOf(data), parent, beforeTeams);
     const membership = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
     const ancestors = parentId ? [...parentAncestors, parentId] : [];
-    tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, reach: computeReach(ref.id, { ...data, ...patch } as FolderAclData, parentSnap?.exists ? reachOf(parentSnap.data()) : []), ...stampOf(opts) }, { merge: true });
     if (receipt) {
       originalData = data; // request-local only: never persist a document snapshot in its receipt
       recordReceipt(tx, ref, snap, receipt, { before, membership, grants });
@@ -358,11 +382,11 @@ export async function persistFolderMembership(
 }
 
 /**
- * Recompute and persist members/editorMembers/ancestors/depth for a folder and
- * everything beneath it.
+ * Recompute and persist members/editorMembers/ancestors/depth/reach for a
+ * folder and everything beneath it.
  *
- * Call after a folder's own grants change, after it moves, or after a team it
- * grants to changes membership. The starting folder is read fresh against its
+ * Call after a folder's own grants or visibility change, after it moves, or
+ * after a team it grants to changes membership. The starting folder is read fresh against its
  * (unchanged) parent; each descendant is recomputed against its just-written
  * parent, so the traversal always visits a parent before its children. Folder
  * writes are awaited individually because a child must read its parent's fresh
@@ -372,7 +396,25 @@ export async function persistFolderMembership(
  * documents is 200 document writes. Each is a transaction; the
  * trade is stated in docs/architecture/overview.md so it is not discovered at scale.
  */
-export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+/**
+ * `touchUpdatedAt: false` is for a recompute that is not a change anybody made
+ * to the record: an account moving to a new address (SPEC §14). `updatedAt`
+ * is what every collaborator's card reads as "updated", so stamping it there
+ * would announce an edit on every document the person could see.
+ */
+export interface RecomputeOptions {
+  touchUpdatedAt?: boolean;
+}
+
+function stampOf(opts: RecomputeOptions): { updatedAt?: FieldValue } {
+  return opts.touchUpdatedAt === false ? {} : { updatedAt: FieldValue.serverTimestamp() };
+}
+
+export async function recomputeSubtree(
+  db: Db,
+  rootId: string,
+  opts: RecomputeOptions = {},
+): Promise<void> {
   const queue: string[] = [rootId];
   const visited = new Set<string>();
   while (queue.length > 0) {
@@ -380,12 +422,12 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
     if (visited.has(folderId)) continue;
     visited.add(folderId);
     const ref = db.collection("folders").doc(folderId);
-    const result = await persistFolderMembership(db, ref);
+    const result = await persistFolderMembership(db, ref, undefined, opts);
     if (!result) continue;
     // The traversal only discovers ids. Each write rereads its current node,
     // parent and teams, so an older traversal cannot restore revoked access.
     const docs = await db.collection("docs").where("folderId", "==", folderId).get();
-    for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
+    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, opts);
     const children = await db.collection("folders").where("parentId", "==", folderId).get();
     for (const child of children.docs) queue.push(child.id);
   }
@@ -404,6 +446,7 @@ export async function persistDocMembership(
   /** Apply a delta to the transaction's current record, never a caller's snapshot. */
   change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
   events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
+  opts: RecomputeOptions = {},
 ): Promise<Membership> {
   const receipt = change ? freshReceiptId() : null;
   const membership = await db.runTransaction(async (tx) => {
@@ -430,7 +473,7 @@ export async function persistDocMembership(
     const beforeTeams = await transactionTeams(db, tx, grantsOf(before));
     const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams);
     const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
-    tx.set(docRef, { ...patch, ...next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(docRef, { ...patch, ...next, ...stampOf(opts) }, { merge: true });
     for (const event of events(next, before, previous)) addEvent(tx, docRef, event);
     if (receipt) recordReceipt(tx, docRef, snap, receipt, next);
     return next;
@@ -440,4 +483,31 @@ export async function persistDocMembership(
   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
   await syncPublicProjection(db, docRef.id);
   return membership;
+}
+
+/**
+ * Re-expand every grant that names this team.
+ *
+ * The affected set is an `array-contains` QUERY over `team:{id}` grants, not a
+ * traversal, which is what lets this reuse the folder cascade rather than needing
+ * a job queue. The cost is honest: a team granted on 200 documents is 200 writes.
+ * That is a batch, and the trade is written down in docs/architecture/overview.md rather
+ * than discovered at ten thousand documents.
+ */
+export async function refanTeam(
+  db: Db,
+  teamId: string,
+  opts: RecomputeOptions = {},
+): Promise<number> {
+  const { docIds, folderIds } = await findGrantsForTeam(db, teamId);
+  for (const id of docIds) {
+    const ref = db.collection("docs").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    await persistDocMembership(db, ref, undefined, undefined, opts);
+  }
+  for (const id of folderIds) {
+    await recomputeSubtree(db, id, opts);
+  }
+  return docIds.length + folderIds.length;
 }

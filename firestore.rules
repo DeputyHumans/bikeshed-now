@@ -360,6 +360,15 @@ service cloud.firestore {
       }
     }
 
+    // --- Account moves (SPEC §14, ADR 0020) ------------------------------
+    // The job that moves an account to the address Google renamed it to. Its
+    // own account watches it to know when to sign in again, and may not list
+    // anyone else's: a job names two addresses. Only the server writes.
+    match /accountMoves/{jobId} {
+      allow get: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow list, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

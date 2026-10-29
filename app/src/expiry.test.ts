@@ -9,6 +9,9 @@ import {
   expiryLabel,
   expiryMs,
   isExpired,
+  sharingExplanation,
+  sharingLabel,
+  throughFolderExplanation,
   toDateInput,
 } from "./expiry";
 
@@ -133,5 +136,36 @@ describe("the date field", () => {
     const at = endOfDayMs("2026-10-01") as number;
     expect(toDateInput(at)).toBe("2026-10-01");
     expect(toDateInput(null)).toBe("");
+  });
+});
+
+describe("a folder's date, which ends its link and nothing else", () => {
+  test("never says the folder expires, and escalates the same way", () => {
+    expect(sharingLabel(null, NOW)).toBeNull();
+    expect(sharingLabel(NOW + 3 * HOUR, NOW)).toBe("Sharing ends today");
+    expect(sharingLabel(NOW + DAY + HOUR, NOW)).toBe("Sharing ends tomorrow");
+    expect(sharingLabel(NOW + 5 * DAY, NOW)).toBe("Sharing ends in 5 days");
+    expect(sharingLabel(NOW - 1, NOW)).toBe("Sharing ended");
+    for (const at of [NOW + HOUR, NOW + 40 * DAY, NOW - DAY]) {
+      expect(sharingLabel(at, NOW)).not.toMatch(/expire/i);
+    }
+  });
+
+  test("says nothing is deleted and the people it is shared with keep access", () => {
+    for (const at of [NOW + 40 * DAY, NOW - DAY]) {
+      for (const isOwner of [true, false]) {
+        const said = sharingExplanation(at, isOwner, NOW) as string;
+        expect(said).toMatch(/nothing (is|has been) deleted/i);
+        expect(said).toMatch(/keep their access|still have access/);
+      }
+    }
+    expect(sharingExplanation(NOW - DAY, true, NOW)).toMatch(/change or clear the date/i);
+    expect(sharingExplanation(NOW - DAY, false, NOW)).not.toMatch(/change or clear/i);
+  });
+
+  test("a reader who came through the link is told their link ends, and who to ask", () => {
+    expect(throughFolderExplanation(NOW + 40 * DAY, NOW)).toMatch(/through a shared folder until/);
+    expect(throughFolderExplanation(NOW - 1, NOW)).toMatch(/ask whoever shared it/i);
+    expect(throughFolderExplanation(null, NOW)).toBeNull();
   });
 });

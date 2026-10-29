@@ -8,7 +8,7 @@ import type { Principal } from "./auth";
 import type { Actor } from "./actor";
 import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, visibilityOf, expiryMs, opensEditingToAnyAccount, type DocAclData, type FolderAclData } from "./acl";
 import { applyAccessDelta, grantsOf, invalidPrincipals, parseAccessDelta, parseExpiry, type Role } from "./access";
-import { filedIn, inheritedGrants, folderAudience } from "./audience";
+import { filedIn, inheritedGrants, inheritedReach, folderAudience } from "./audience";
 import { membershipOf, persistFolderMembership, persistDocMembership, recomputeSubtree, resolveFolderTarget, slugify, wouldCycle, type Membership } from "./folders";
 import { addEvent, eventActor } from "./events";
 import { syncPresenceAccess } from "./presence";
@@ -42,12 +42,16 @@ async function load(ctx: ManagementContext, kind: ResourceKind, id: string, owne
   return { ref, snap, data };
 }
 
-function settings(id: string, data: DocumentData) {
+function settings(kind: ResourceKind, id: string, data: DocumentData) {
   const visibility = visibilityOf(data as DocAclData);
   const key = visibility === "unlisted" && typeof data.linkToken === "string" ? data.linkToken : null;
+  const path = kind === "document" ? "d" : "folder";
   return {
-    visibility, publicEdit: data.publicEdit === true, expiresAt: expiryMs(data as DocAclData),
-    url: `${publicOrigin()}/d/${encodeURIComponent(id)}${key ? `?k=${encodeURIComponent(key)}` : ""}`,
+    visibility,
+    // A folder has no open editing: what its reach opens is read-only (ADR 0019).
+    ...(kind === "document" ? { publicEdit: data.publicEdit === true } : {}),
+    expiresAt: expiryMs(data as DocAclData),
+    url: `${publicOrigin()}/${path}/${encodeURIComponent(id)}${key ? `?k=${encodeURIComponent(key)}` : ""}`,
   };
 }
 
@@ -55,11 +59,13 @@ function settings(id: string, data: DocumentData) {
 export async function getAccess(ctx: ManagementContext, kind: ResourceKind, id: string) {
   const { data } = await load(ctx, kind, id);
   const parent = kind === "document" ? data.folderId : data.parentId;
+  const parentId = typeof parent === "string" ? parent : null;
   return {
     id, kind, owner: String(data.ownerEmail), direct: grantsOf(data),
-    inherited: await inheritedGrants(ctx.db, ctx.caller, typeof parent === "string" ? parent : null),
+    inherited: await inheritedGrants(ctx.db, ctx.caller, parentId),
+    inheritedReach: await inheritedReach(ctx.db, ctx.caller, parentId),
     effective: membershipOf(data),
-    ...(kind === "document" ? settings(id, data) : {}),
+    ...settings(kind, id, data),
   };
 }
 
@@ -151,7 +157,52 @@ export async function setVisibility(ctx: ManagementContext, id: string, patch: R
   const data = (await ref.get()).data()!;
   const m = membershipOf(data);
   await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
-  return { id, ...settings(id, data), linkToken: data.linkToken ?? null };
+  return { id, ...settings("document", id, data), linkToken: data.linkToken ?? null };
+}
+
+/**
+ * A folder's own level and expiry: what its reach opens beneath it (SPEC §13,
+ * §17). Sparse, as for a document. The token follows the document's rule —
+ * kept while unlisted, minted on becoming unlisted, deleted otherwise — so
+ * making the folder private and unlisted again revokes every link at once. The
+ * expiry ends the reach only: members keep their access, and nothing beneath
+ * is frozen (ADR 0019).
+ */
+export async function setFolderVisibility(ctx: ManagementContext, id: string, patch: Record<string, unknown>) {
+  const { ref } = await load(ctx, "folder", id);
+  if (Object.hasOwn(patch, "publicEdit")) bad("a folder has no open editing: what its link opens is read-only");
+  const fields = ["visibility", "expiresAt"].filter(k => Object.hasOwn(patch, k));
+  if (!fields.length) bad("provide visibility and/or expiresAt");
+  if (Object.hasOwn(patch, "visibility") && (typeof patch.visibility !== "string" || !["private", "unlisted", "public"].includes(patch.visibility))) bad('visibility must be "private", "unlisted" or "public"');
+  if (Object.hasOwn(patch, "expiresAt") && patch.expiresAt !== null && typeof patch.expiresAt !== "number") bad("expiresAt must be epoch milliseconds or null");
+  const expiry = Object.hasOwn(patch, "expiresAt") ? parseExpiry(patch.expiresAt) : undefined;
+  if (expiry && "error" in expiry) bad(expiry.error);
+  const before = await ctx.db.runTransaction(async tx => {
+    const data = (await tx.get(ref)).data()!;
+    if (!canManageFolder(data as FolderAclData, ctx.caller.emailLower)) throw new ManagementError(403, "only the owner can manage this folder");
+    const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
+    const update: Record<string, unknown> = { visibility, updatedAt: stamp() };
+    if (expiry && "value" in expiry) update.expiresAt = expiry.value === null ? FieldValue.delete() : Timestamp.fromMillis(expiry.value);
+    update.linkToken = visibility === "unlisted"
+      ? (typeof data.linkToken === "string" && data.linkToken.length >= 22 ? data.linkToken : randomBytes(16).toString("base64url"))
+      : FieldValue.delete();
+    tx.set(ref, update, { merge: true });
+    return { visibility: visibilityOf(data as DocAclData), expiresAt: expiryMs(data as DocAclData), linkToken: data.linkToken ?? null };
+  });
+  // The folder's own entry and every descendant's inherited one, and the
+  // public mirror of every document beneath it, in one pass.
+  await recomputeSubtree(ctx.db, id);
+  const data = (await ref.get()).data()!;
+  const after = settings("folder", id, data);
+  if (before.visibility !== after.visibility || before.expiresAt !== after.expiresAt || before.linkToken !== (data.linkToken ?? null)) {
+    await ref.collection("acl").doc().create({
+      at: stamp(), actor: ctx.actor,
+      visibility: { from: before.visibility, to: after.visibility },
+      expiresAt: { from: before.expiresAt, to: after.expiresAt },
+      linkRotated: before.linkToken !== null && before.linkToken !== (data.linkToken ?? null),
+    });
+  }
+  return { id, ...after, linkToken: data.linkToken ?? null };
 }
 
 export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move" | "delete", args: Record<string, unknown> = {}) {

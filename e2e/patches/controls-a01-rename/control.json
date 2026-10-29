@@ -1,0 +1,13 @@
+{
+  "oracle": "every credential of the address an account moved from is refused after the move (A1.10)",
+  "what": "the move leaves personal tokens minted under the old address unrevoked, so one still acts as that address",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.10 an account Google renamed moves to the new address: \"moving\", the job done, the new address reads its shares and manages its documents, and the old address's cookie and token are refused",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a personal token minted under the old address still works after the move"
+  }
+}

@@ -59,7 +59,8 @@ import {
   signInHint,
 } from "./config";
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
-import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, organizeFolder, ManagementError } from "./lib/management";
+import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
+import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
   canEdit,
@@ -67,6 +68,7 @@ import {
   canManageTeam,
   canRead,
   canSuggest,
+  earlierEnd,
   expiredForReader,
   expiryMs,
   isDocApprover,
@@ -76,9 +78,12 @@ import {
   tokenMatches,
   visibilityOf,
   type DocAclData,
+  type FolderAclData,
   type LinkProof,
+  type ReadAccessBasis,
   type TeamAclData,
 } from "./lib/acl";
+import { folderOfDoc, listReach, loadReadAccess } from "./lib/reach";
 import {
   normalizeEmail,
   parseExpiry,
@@ -125,11 +130,11 @@ import {
   isValidDocId,
   membershipOf,
   persistDocMembership,
-  recomputeSubtree,
+  refanTeam,
   resolveFolderTarget,
   slugify,
 } from "./lib/folders";
-import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
+import { computeTeamMembers } from "./lib/teams";
 import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
@@ -163,7 +168,9 @@ import { resolveMarking, type Marking } from "./lib/marking";
 import { HEAD_SCAN_BYTES, readHead } from "./lib/head";
 import {
   collectPrefix,
+  composeFolderPage,
   composePage,
+  decideFolderShell,
   decideShell,
   loadShell,
   renderShell,
@@ -296,6 +303,30 @@ export const session = onRequest(WARM, async (req, res) => {
     return;
   }
 
+  /**
+   * Google renamed this account (SPEC §14, ADR 0020). The browser sends
+   * Google's own token only when the two addresses differ; `googleAddress`
+   * believes nothing but Google's signature, bound to this account by `sub`.
+   * The move itself is a job a trigger finishes: Hosting cuts a request at
+   * sixty seconds, and a move can touch every document the person can see.
+   * No cookie: this token names the address the account is leaving. Anything
+   * that fails here signs the person in as they were, which is no worse than
+   * before.
+   */
+  const googleIdToken = (jsonBody(req) as { googleIdToken?: unknown } | null)?.googleIdToken;
+  if (googleIdToken !== undefined) {
+    try {
+      const to = await googleAddress(googleIdToken, gate.googleSubs);
+      if (to && to !== gate.principal.emailLower) {
+        const jobId = await requestMove(db(), gate.principal.uid, gate.principal.emailLower, to);
+        res.status(200).json({ status: "moving", jobId, to });
+        return;
+      }
+    } catch (err) {
+      console.error("could not start an account move:", (err as Error)?.message ?? err);
+    }
+  }
+
   let sessionCookie: string;
   try {
     sessionCookie = await admin
@@ -400,7 +431,9 @@ interface ReadGate {
   docSnap: admin.firestore.DocumentSnapshot;
   docData: DocAclData;
   visibility: ReturnType<typeof visibilityOf>;
-  basis: NonNullable<ReturnType<typeof readBasis>>;
+  basis: ReadAccessBasis;
+  /** When a folder's reach that opened it ends; null for the document's own bases. */
+  until: number | null;
 }
 
 /**
@@ -421,9 +454,20 @@ async function readGate(
   const docData = docSnap.data() as DocAclData;
   if (expiredForReader(docData, caller)) return null;
   const proof = await linkProofFor(docSnap.ref, docData, caller, linkKey);
-  const basis = readBasis(docData, caller, proof);
-  if (basis === null) return null;
-  return { docSnap, docData, visibility: visibilityOf(docData), basis };
+  // A READ path, so a folder's reach counts (ADR 0019).
+  const access = await loadReadAccess(db(), docData, caller, proof);
+  if (access === null) return null;
+  return { docSnap, docData, visibility: visibilityOf(docData), basis: access.basis, until: access.until };
+}
+
+/** When a cached copy must stop being served: the document's expiry, or its folder reach's end. */
+function cacheEnd(gate: ReadGate): number | null {
+  return earlierEnd(expiryMs(gate.docData), gate.until);
+}
+
+/** Opened by a key in the URL — the document's own or a folder's — so never indexed. */
+function keyedRead(gate: ReadGate): boolean {
+  return gate.visibility === "unlisted" || gate.basis === "folder-link";
 }
 
 /**
@@ -447,14 +491,15 @@ function setContentCache(res: import("express").Response, gate: ReadGate): void 
      * Revocation latency is a documented trade — a document made private again
      * can be served from cache for up to five minutes. An EXPIRY is not the
      * same thing: its moment is known in advance, so serving past it would be a
-     * choice rather than a consequence. `max-age` never outlives the date.
+     * choice rather than a consequence. `max-age` never outlives the date —
+     * nor the end of the folder reach that opened it.
      */
-    const at = expiryMs(gate.docData);
+    const at = cacheEnd(gate);
     const left = at === null ? PUBLIC_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
     const maxAge = Math.max(0, Math.min(PUBLIC_CACHE_SECONDS, left));
     res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
   }
-  if (gate.visibility === "unlisted") {
+  if (keyedRead(gate)) {
     res.setHeader("X-Robots-Tag", "noindex");
   }
 }
@@ -476,7 +521,7 @@ function setThumbCache(res: import("express").Response, gate: ReadGate): void {
   const left = at === null ? THUMB_CACHE_SECONDS : Math.floor((at - Date.now()) / 1000);
   const maxAge = Math.max(0, Math.min(THUMB_CACHE_SECONDS, left));
   res.setHeader("Cache-Control", `private, max-age=${maxAge}, immutable`);
-  if (gate.visibility === "unlisted") {
+  if (keyedRead(gate)) {
     res.setHeader("X-Robots-Tag", "noindex");
   }
 }
@@ -720,7 +765,8 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
-  if (!canRead(docData, caller, proof)) {
+  // A read of every byte, so a folder's reach counts, as it does for content.
+  if ((await loadReadAccess(db(), docData, caller, proof)) === null) {
     res.status(404).end();
     return;
   }
@@ -791,20 +837,35 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
   const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
   try {
     const result = req.method === "GET" ? await getAccess(ctx, "document", id) : await changeAccess(ctx, "document", id, body);
-    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : { ...result.direct, members: result.effective.members });
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited, inheritedReach: result.inheritedReach } : { ...result.direct, members: result.effective.members });
   } catch (error) { managementFailure(error, res); }
 });
 
-/** The web form remains a full replacement; MCP uses the shared sparse patch. */
+/**
+ * The web form remains a full replacement; MCP uses the shared sparse patch.
+ * `{ folderId }` in place of `docId` sets a folder's own level and expiry,
+ * which is what its reach opens beneath it (SPEC §13, §17).
+ */
 export const setVisibility = onRequest(PLAIN, async (req, res) => {
   noStore(res);
   if (rejectMethod(req, res, ["POST"])) return;
   const caller = await resolveCaller(req);
   if (!caller) { res.status(401).end(); return; }
   const body = jsonBody(req) as Record<string, unknown> | null;
-  const id = typeof body?.docId === "string" ? body.docId : "";
   const expiry = parseExpiry(body?.expiresAt);
   if ("error" in expiry) { badRequest(res, expiry.error); return; }
+  if (body?.docId === undefined && body?.folderId !== undefined) {
+    const folderId = typeof body.folderId === "string" ? body.folderId : "";
+    try {
+      const result = await changeFolderVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, folderId, {
+        visibility: body.visibility, expiresAt: expiry.value,
+      });
+      const { visibility, linkToken, expiresAt } = result;
+      res.status(200).json({ visibility, linkToken, expiresAt });
+    } catch (error) { managementFailure(error, res); }
+    return;
+  }
+  const id = typeof body?.docId === "string" ? body.docId : "";
   try {
     const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
       visibility: body?.visibility, publicEdit: body?.publicEdit === true,
@@ -1616,7 +1677,7 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
   const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
   try {
     const result = req.method === "GET" ? await getAccess(ctx, "folder", id) : await changeAccess(ctx, "folder", id, body);
-    res.status(200).json(req.method === "GET" ? { inherited: result.inherited } : result.direct);
+    res.status(200).json(req.method === "GET" ? { inherited: result.inherited, inheritedReach: result.inheritedReach } : result.direct);
   } catch (error) { managementFailure(error, res); }
 });
 
@@ -1867,16 +1928,18 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
   // key is a view of nothing, and answering otherwise would confirm the id.
   const k = typeof body?.k === "string" ? body.k.trim() : null;
   const proof = await linkProofFor(docRef, docData, caller, k);
-  const basis = readBasis(docData, caller, proof);
-  if (basis === null || expiredForReader(docData, caller)) {
+  const access = expiredForReader(docData, caller) ? null : await loadReadAccess(db(), docData, caller, proof);
+  if (access === null) {
     res.status(404).end();
     return;
   }
+  const basis = access.basis;
 
   const actor = caller ? actorFrom(caller, req) : null;
   const automated = actor ? isAutomated(actor) : false;
+  // A public folder's reader read a public page; a folder key's, an unlisted one.
   const via: "app" | "unlisted" | "public" =
-    basis === "member" ? "app" : basis === "public" ? "public" : "unlisted";
+    basis === "member" ? "app" : basis === "public" || basis === "folder-public" ? "public" : "unlisted";
 
   const rawMs = typeof body?.ms === "number" && Number.isFinite(body.ms) ? body.ms : 0;
   const claimedMs = automated
@@ -1984,19 +2047,38 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
  * who read `docs/{docId}` directly — unlisted without the key or with a wrong
  * one, and a grant from before the link was rotated (SPEC §1.4b). The key
  * travels in the body, never the query, so it stays out of request logs.
+ *
+ * A document a folder's reach opens is answered too, marked `viaFolder`, and
+ * never grants: that reader is read-only (ADR 0019). `{ folderId, k? }` in
+ * place of `docId` answers what one level of such a folder holds
+ * (`lib/reach.ts listReach`), with the same one 404 for every refusal.
  */
 export const unlockDoc = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
   noStore(res); // every answer, the 200 included: it may have minted a grant
   const caller = await resolveCaller(req);
 
-  const body = jsonBody(req) as { docId?: unknown; k?: unknown } | null;
+  const body = jsonBody(req) as { docId?: unknown; folderId?: unknown; k?: unknown } | null;
+  const k = typeof body?.k === "string" ? body.k.trim() : null;
+  if (body?.docId === undefined && body?.folderId !== undefined) {
+    const folderId = typeof body.folderId === "string" ? body.folderId : "";
+    if (!folderId || !safeSegment(folderId)) {
+      badRequest(res, "invalid or missing folderId");
+      return;
+    }
+    const listing = await listReach(db(), folderId, k);
+    if (!listing) {
+      res.status(404).end();
+      return;
+    }
+    res.status(200).json("open" in listing ? listing.open : { ...listing.ended, expired: true });
+    return;
+  }
   const docId = typeof body?.docId === "string" ? body.docId : "";
   if (!docId || !safeSegment(docId)) {
     badRequest(res, "invalid or missing docId");
     return;
   }
-  const k = typeof body?.k === "string" ? body.k.trim() : null;
 
   // The grant is read in the same round trip whether or not the document
   // exists, so how long the answer takes does not say which it was.
@@ -2009,15 +2091,16 @@ export const unlockDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const data = docSnap.data() as DocAclData & Record<string, unknown>;
-  const basis = readBasis(data, caller, { k, grantToken: grantTokenOf(grantSnap) });
-  const projection = basis === null ? null : await readerProjection(docRef, data);
+  const access = await loadReadAccess(db(), data, caller, { k, grantToken: grantTokenOf(grantSnap) });
+  const projection = access === null ? null : await readerProjection(docRef, data, access);
   if (!projection) {
     res.status(404).end();
     return;
   }
 
+  // Only the document's OWN key grants. A folder's reach never does.
   if (
-    basis === "link" &&
+    access?.basis === "link" &&
     caller &&
     typeof data.linkToken === "string" &&
     !tokenMatches(data.linkToken, grantTokenOf(grantSnap))
@@ -2270,28 +2353,6 @@ export const manageTokens = onRequest(PLAIN, async (req, res) => {
 // Teams
 // ---------------------------------------------------------------------------
 
-/**
- * Re-expand every grant that names this team.
- *
- * The affected set is an `array-contains` QUERY over `team:{id}` grants, not a
- * traversal, which is what lets this reuse the folder cascade rather than needing
- * a job queue. The cost is honest: a team granted on 200 documents is 200 writes.
- * That is a batch, and the trade is written down in docs/architecture/overview.md rather
- * than discovered at ten thousand documents.
- */
-async function refanTeam(teamId: string): Promise<number> {
-  const { docIds, folderIds } = await findGrantsForTeam(db(), teamId);
-  for (const id of docIds) {
-    const ref = db().collection("docs").doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) continue;
-    await persistDocMembership(db(), ref);
-  }
-  for (const id of folderIds) {
-    await recomputeSubtree(db(), id);
-  }
-  return docIds.length + folderIds.length;
-}
 
 /** POST /team — `{ op: "create" | "rename" | "delete", teamId?, name? }`. */
 export const manageTeam = onRequest(PLAIN, async (req, res) => {
@@ -2362,7 +2423,7 @@ export const manageTeam = onRequest(PLAIN, async (req, res) => {
     // Grants naming the team survive as dangling references and expand to
     // nothing, which DENIES. Re-fanning here is what turns that from a latent
     // inconsistency into an immediate, correct revocation.
-    const affected = await refanTeam(teamId);
+    const affected = await refanTeam(db(), teamId);
     res.status(200).json({ ok: true, affected });
     return;
   }
@@ -2448,7 +2509,7 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
 
   // Removing someone from a team must revoke their access everywhere the team
   // was granted, and adding someone must grant it. Both are the same recompute.
-  const affected = await refanTeam(teamId);
+  const affected = await refanTeam(db(), teamId);
 
   const beforeSet = new Set(before);
   const invitees: InviteTarget[] = members
@@ -2513,6 +2574,55 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
 });
 
 /**
+ * `GET /folder/:folderId` — the shell, naming the folder when its own public
+ * level or its key opens it. Its own function so `docShell`'s staged fallback
+ * stays the document's alone. Nothing inside the folder is read, so the only
+ * step that can throw is the one read of the folder and the render; either
+ * way the answer is the generic shell, uncacheable.
+ */
+async function serveFolderShell(
+  req: Request,
+  res: import("express").Response,
+  segments: string[],
+  template: string,
+  serveGeneric: () => void,
+): Promise<void> {
+  if (segments.length !== 1) {
+    serveGeneric();
+    return;
+  }
+  const [folderId] = segments;
+  const k = strParam(req, "k");
+  try {
+    const folderSnap = await db().collection("folders").doc(folderId).get();
+    const folder = folderSnap.exists ? (folderSnap.data() as FolderAclData & { name?: unknown }) : null;
+    const decision = decideFolderShell({ folder, k, now: Date.now() });
+    if (decision.kind === "generic" || folder === null) {
+      serveGeneric();
+      return;
+    }
+    const html = renderShell(template, composeFolderPage({
+      origin: publicOrigin(),
+      folderId,
+      name: typeof folder.name === "string" && folder.name ? folder.name : "Untitled folder",
+      decision,
+      k,
+    }));
+    // ONLY NOW, as for a document: the page exists, so this URL may be cached with it.
+    res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
+    if (decision.noindex) res.setHeader("X-Robots-Tag", "noindex");
+    res.status(200);
+    if (req.method === "HEAD") res.end();
+    else res.send(html);
+  } catch (err) {
+    console.warn("docShell: generic fallback at folder", (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    noStore(res);
+    res.removeHeader("X-Robots-Tag");
+    serveGeneric();
+  }
+}
+
+/**
  * GET /d/:docId[/:versionId] — the app shell for a document page, with the
  * document's own head for crawlers (SPEC §17).
  *
@@ -2559,6 +2669,13 @@ export const docShell = onRequest(WARM, async (req, res) => {
     else res.send(template);
   };
 
+  // A folder's page: its name for a pasted link (SPEC §17 "A folder's reach").
+  const folderSegments = pathSegments(req, "folder");
+  if (folderSegments) {
+    await serveFolderShell(req, res, folderSegments, template, serveGeneric);
+    return;
+  }
+
   const segments = pathSegments(req, "d");
   if (!segments || segments.length < 1 || segments.length > 2) {
     serveGeneric();
@@ -2570,7 +2687,9 @@ export const docShell = onRequest(WARM, async (req, res) => {
 
   const docSnap = await db().collection("docs").doc(docId).get();
   const doc = docSnap.exists ? (docSnap.data() as ShellDoc) : null;
-  const decision = decideShell({ doc, k, versionId: pinned, now: Date.now() });
+  // The folder is read only when the document's own level has said no.
+  const folder = doc && readBasis(doc, null, { k }) === null ? await folderOfDoc(db(), doc) : null;
+  const decision = decideShell({ doc, folder, k, versionId: pinned, now: Date.now() });
   if (decision.kind === "generic") {
     serveGeneric();
     return;
@@ -2699,11 +2818,38 @@ export const onCommentCreated = onDocumentCreated(
     const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
     const deciders = suggestion ? membershipOf(doc).approverMembers : [];
     for (const e of deciders) recipients.add(normalizeEmail(e));
+    // People are found by account where a comment names one, and by address
+    // only where it does not: an address somebody has since moved from (SPEC
+    // §14) finds nobody, so they would stop hearing about the thread, and the
+    // author's own stale address would not exclude them from their own notice.
+    const uidOf = (c: Record<string, unknown>): string | null => {
+      const uid = c.authorUid ?? (c.actor as { uid?: unknown } | undefined)?.uid;
+      return typeof uid === "string" && uid ? uid : null;
+    };
+    const authorUid = uidOf(comment);
+    const uids = new Set<string>(authorUid ? [authorUid] : []);
     for (const c of siblingSnap.docs) {
-      const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+      const d = c.data() ?? {};
+      const uid = uidOf(d);
+      if (uid) {
+        uids.add(uid);
+        continue;
+      }
+      const e = normalizeEmail(String(d.authorEmail || ""));
       if (e) recipients.add(e);
     }
+    const accounts = uids.size
+      ? await db().getAll(...[...uids].map((uid) => db().collection("users").doc(uid)))
+      : [];
+    let authorNow = "";
+    for (const account of accounts) {
+      const e = normalizeEmail(String(account.data()?.email || ""));
+      if (!e) continue;
+      if (account.id === authorUid) authorNow = e;
+      else recipients.add(e);
+    }
     recipients.delete(authorEmail);
+    if (authorNow) recipients.delete(authorNow);
     if (recipients.size === 0) return;
 
     const quote = String(annSnap.data()?.anchor?.exact ?? "").slice(0, 300);
@@ -2738,6 +2884,29 @@ export const onCommentCreated = onDocumentCreated(
           : {}),
       });
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Moving an account (SPEC §14, ADR 0020)
+// ---------------------------------------------------------------------------
+
+/**
+ * Finish moving an account to the address Google renamed it to.
+ *
+ * Fires when a job becomes `pending`, and on nothing else: its own `done` or
+ * `blocked` is a write to the same record. `retry: true` because a move left
+ * half done is the one outcome worse than not starting, and `runMove` resumes
+ * from wherever a failed attempt stopped. The long timeout is the point of
+ * being a trigger: the work is a recompute of everything the person can see.
+ */
+export const moveAccount = onDocumentWritten(
+  { document: "accountMoves/{jobId}", region: REGION, retry: true, timeoutSeconds: 540, memory: "512MiB" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data() as MoveJob | undefined;
+    if (!after || after.state !== "pending" || before?.state === "pending") return;
+    await runMove(db(), event.params.jobId, after);
   },
 );
 

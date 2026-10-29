@@ -1,26 +1,34 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -43,2 +43,3 @@
- import { syncPresenceAccess } from "./presence";
+@@ -41,4 +41,5 @@
+ import { safeSegment } from "./http";
+ import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
 +import { e2eAccessGate } from "./e2eAccessGate";
+ import { syncPresenceAccess } from "./presence";
  import { syncPublicProjection } from "./publicdoc";
-@@ -384,2 +385,3 @@
+@@ -426,8 +427,10 @@
+     const result = await persistFolderMembership(db, ref, undefined, opts);
      if (!result) continue;
 +    await e2eAccessGate("subtree-before-docs-read", folderId);
      // The traversal only discovers ids. Each write rereads its current node,
-@@ -387,3 +389,4 @@
+     // parent and teams, so an older traversal cannot restore revoked access.
      const docs = await db.collection("docs").where("folderId", "==", folderId).get();
--    for (const doc of docs.docs) await persistDocMembership(db, doc.ref);
+-    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, opts);
 +    await e2eAccessGate("subtree-docs-before-write", folderId);
-+    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, true);
++    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, opts, true);
      const children = await db.collection("folders").where("parentId", "==", folderId).get();
-@@ -406,3 +409,5 @@
+     for (const child of children.docs) queue.push(child.id);
+@@ -449,5 +452,7 @@
    events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
+   opts: RecomputeOptions = {},
 +  e2eFromCascade = false,
  ): Promise<Membership> {
 +  if (!e2eFromCascade) await e2eAccessGate("doc-membership-before-write", docRef.id);
    const receipt = change ? freshReceiptId() : null;
-@@ -438,2 +443,3 @@
+   const membership = await db.runTransaction(async (tx) => {
+@@ -481,4 +486,5 @@
+   });
    if (receipt) await clearReceipt(docRef, receipt);
 +  if (!e2eFromCascade) await e2eAccessGate("doc-mirror-before-write", docRef.id);
    const fresh = (await docRef.get()).data() as DocAclData;
+   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));

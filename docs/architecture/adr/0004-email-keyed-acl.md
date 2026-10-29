@@ -1,6 +1,6 @@
 # 0004 — Key the ACL by verified email, not uid
 
-**Status** Accepted · **Spec** §1, §4
+**Status** Accepted, amended by [0020](0020-an-account-follows-its-google-address.md) (an address Google renames) · **Spec** §1, §4
 
 ## Context
 

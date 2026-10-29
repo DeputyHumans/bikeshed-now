@@ -642,6 +642,16 @@ opened the old one loses the link grant it held, at once. There is no way to
 withdraw one account's grant alone. Content cached at the old key's URL is in
 the same five-minute window as everything else.
 
+**A folder's link works the same way, plus the cascade.** Rotating a folder's
+link, making it private, or letting its date pass closes everything beneath it
+(SPEC §17 "A folder's reach"). Documents directly in the folder stop answering
+to the old key at once. A subfolder's documents follow when the cascade reaches
+that subfolder, usually within seconds, because each folder stores its
+ancestors' reach rather than walking them. The five-minute CDN window applies
+on top, to the content and to the folder's own `/folder/**` page. Before
+widening a folder, list what is beneath it: a document someone else filed there,
+or one private on its own, becomes readable through the folder's link too.
+
 ---
 
 ## Taking it down
@@ -679,6 +689,8 @@ written when there were two, and reported success.
 | A reader sees 404 on a document they were granted | membership not recomputed | `set-access.mjs --doc <id> --list` shows the effective members |
 | Every unlisted document reads "Not here", even with its link | `unlockDoc` not invokable | `curl -si https://<deployment>/unlock` must answer 405; the invoker repair is under §3b |
 | One unlisted link stopped working | the owner rotated it (private, then unlisted) | the new link is in the Share dialog; the old one is meant to be dead |
+| A folder's link opens the folder page but a document under it says "Not here" | the document's own expiry passed (it wins over any folder), or it was moved out of the folder | check the document's date and folder; a folder's link never reaches a document filed elsewhere |
+| A pasted folder link unfurls as the product, not the folder | Hosting predates the `/folder/**` rewrite, or the folder is private or its date passed | deploy Hosting; `curl -sI 'https://<deployment>/folder/<id>?k=<key>'` must show `public, max-age` |
 | `npm run emulators` fails to bind | another process on 8088/5050 | change the port in `firebase.json`; everything reads it from there |
 
 **Logs.** `firebase functions:log --project <id> --account you@example.com`.

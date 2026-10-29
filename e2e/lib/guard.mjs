@@ -89,7 +89,7 @@ export const READ_TOOLS = Object.freeze(new Set([
 ]));
 /** Management mutations run only on isolated stacks: grants send invitations. */
 export const MANAGEMENT_TOOLS = Object.freeze(new Set([
-  "set_document_access", "set_folder_access", "set_document_visibility", "rename_folder", "move_folder", "delete_folder",
+  "set_document_access", "set_folder_access", "set_document_visibility", "set_folder_visibility", "rename_folder", "move_folder", "delete_folder",
 ]));
 export const CREATE_TOOLS = Object.freeze(new Set(["publish_document", "create_folder"]));
 export const ACT_TOOLS = Object.freeze(new Set([

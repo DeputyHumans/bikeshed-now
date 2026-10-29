@@ -352,6 +352,21 @@ export function watchUser(
 }
 
 /**
+ * Follow an account's move to the address Google renamed it to (SPEC §14): its
+ * job's `state`, or null while it cannot be read. Only the server writes it.
+ */
+export function watchAccountMove(
+  jobId: string,
+  onState: (state: string | null) => void,
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "accountMoves", jobId),
+    (snap) => onState(snap.exists() ? String(snap.data().state ?? "") : null),
+    () => onState(null),
+  );
+}
+
+/**
  * Write the client-settable part of the account record.
  *
  * Verification state and email cooldowns are absent on purpose: the rules
@@ -417,9 +432,10 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 /** Relative "when" for card meta lines. Falls back to absolute past a week. */
-export function formatRelative(ts: Timestamp | null | undefined): string {
-  if (!ts) return "never";
-  const then = ts.toDate();
+export function formatRelative(ts: Timestamp | number | null | undefined): string {
+  if (ts == null) return "never";
+  // A number is epoch milliseconds, as a server answer carries a time.
+  const then = typeof ts === "number" ? new Date(ts) : ts.toDate();
   const seconds = Math.floor((Date.now() - then.getTime()) / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Access decisions for documents and folders (SPEC §2, §8, §17).
 
-import { timingSafeEqual } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 
 /**
  * These functions MUST mirror firestore.rules. The rules are the real boundary
@@ -29,6 +29,8 @@ export interface DocAclData {
   publicEdit?: unknown;
   expiresAt?: unknown;
   linkToken?: unknown;
+  /** The folder it is filed in, whose reach may open it to a stranger (SPEC §13). */
+  folderId?: unknown;
 }
 
 function includesEmail(list: unknown, emailLower: string): boolean {
@@ -345,6 +347,11 @@ export interface FolderAclData {
   ownerEmail?: string | null;
   members?: unknown;
   editorMembers?: unknown;
+  visibility?: unknown;
+  expiresAt?: unknown;
+  linkToken?: unknown;
+  /** Its own reach and every ancestor's, root first (`ReachEntry`). */
+  reach?: unknown;
 }
 
 export function canReadFolder(
@@ -387,6 +394,172 @@ export function canManageFolder(
     typeof folder.ownerEmail === "string" &&
     folder.ownerEmail.toLowerCase() === emailLower
   );
+}
+
+// --- Folder reach ----------------------------------------------------------
+// A folder may be unlisted or public, as a document may, and what that opens
+// is everything beneath it: its documents and every subfolder's, whatever each
+// document's own visibility (SPEC §13, §17; ADR 0019). It opens them to READ
+// and nothing else. That is why none of this feeds `readBasis`, `canRead` or
+// `canEdit`: every write path asks those, so a folder's key cannot authorize a
+// write without someone first routing a write path through `readAccess`.
+//
+// Like `members`, reach is denormalized down the tree rather than walked: each
+// folder stores its own entry plus its parent's whole `reach`, so a document
+// needs only its own folder's record to know every folder that opens it.
+
+/** One folder whose link or public level opens what is beneath it. */
+export interface ReachEntry {
+  folderId: string;
+  visibility: "unlisted" | "public";
+  /**
+   * sha256 of the folder's link token, unlisted only. Never the token: a
+   * folder's record is readable by its members, and a member of a subfolder
+   * must not learn the key to an ancestor they cannot open.
+   */
+  keyHash?: string;
+  /** When this folder's reach ends, epoch ms; null when it does not. */
+  expiresAt: number | null;
+}
+
+export function keyHashOf(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("base64url");
+}
+
+/**
+ * Does a presented key hash to the stored one? Constant time, and neither side
+ * may be empty, for `tokenMatches`' reason: an absent key must never match.
+ */
+export function keyMatchesHash(storedHash: unknown, presented: unknown): boolean {
+  if (typeof storedHash !== "string" || storedHash.length === 0) return false;
+  if (typeof presented !== "string" || presented.length === 0) return false;
+  const a = Buffer.from(storedHash, "utf8");
+  const b = Buffer.from(keyHashOf(presented), "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** A stored `reach`, read defensively: a malformed entry opens nothing. */
+export function reachOf(folder: FolderAclData | null | undefined): ReachEntry[] {
+  const raw = folder?.reach;
+  if (!Array.isArray(raw)) return [];
+  const out: ReachEntry[] = [];
+  for (const e of raw as Record<string, unknown>[]) {
+    if (!e || typeof e !== "object" || typeof e.folderId !== "string") continue;
+    const expiresAt = typeof e.expiresAt === "number" && Number.isFinite(e.expiresAt) ? e.expiresAt : null;
+    if (e.visibility === "public") {
+      out.push({ folderId: e.folderId, visibility: "public", expiresAt });
+    } else if (e.visibility === "unlisted" && typeof e.keyHash === "string" && e.keyHash) {
+      out.push({ folderId: e.folderId, visibility: "unlisted", keyHash: e.keyHash, expiresAt });
+    }
+  }
+  return out;
+}
+
+/** The entry a folder's OWN settings contribute to its reach, or null when private. */
+export function ownReachEntry(folderId: string, folder: FolderAclData): ReachEntry | null {
+  const visibility = visibilityOf(folder);
+  const expiresAt = expiryMs(folder);
+  if (visibility === "public") return { folderId, visibility, expiresAt };
+  if (visibility === "unlisted" && typeof folder.linkToken === "string" && folder.linkToken) {
+    return { folderId, visibility, keyHash: keyHashOf(folder.linkToken), expiresAt };
+  }
+  return null;
+}
+
+function isCurrent(e: ReachEntry, nowMs: number): boolean {
+  return e.expiresAt === null || e.expiresAt > nowMs;
+}
+
+/**
+ * Every entry of a folder's reach this request opens, root first: the public
+ * ones, and the unlisted ones whose key it carries. With `includeEnded`, the
+ * ones whose date has passed too, so a key holder can be told the link ended
+ * rather than shown nothing.
+ */
+export function openedReach(
+  folder: FolderAclData | null | undefined,
+  k: string | null | undefined,
+  nowMs: number,
+  includeEnded = false,
+): ReachEntry[] {
+  return reachOf(folder).filter(
+    (e) =>
+      (includeEnded || isCurrent(e, nowMs)) &&
+      (e.visibility === "public" || keyMatchesHash(e.keyHash, k)),
+  );
+}
+
+/** The latest end among entries: null, never, if any of them does not end. */
+export function latestEnd(entries: ReachEntry[]): number | null {
+  let latest = 0;
+  for (const e of entries) {
+    if (e.expiresAt === null) return null;
+    latest = Math.max(latest, e.expiresAt);
+  }
+  return latest;
+}
+
+export type FolderBasis = "folder-public" | "folder-link";
+export type ReadAccessBasis = ReadBasis | FolderBasis;
+
+/**
+ * On what basis, and until when, may this caller read a document's content?
+ * `until` is when a folder's reach ends (null for the document's own bases,
+ * whose only end is its own expiry), so a cache window can be capped at it.
+ */
+export interface ReadAccess {
+  basis: ReadAccessBasis;
+  until: number | null;
+}
+
+export function isFolderBasis(basis: ReadAccessBasis | null | undefined): basis is FolderBasis {
+  return basis === "folder-public" || basis === "folder-link";
+}
+
+/**
+ * What a folder's reach opens to this request. Public wins over a key, as it
+ * does for a document's own levels: a page anybody may read is not a page
+ * decided by its URL, and `folder-link` is what marks a response noindex.
+ */
+export function folderAccess(
+  folder: FolderAclData | null | undefined,
+  k: string | null | undefined,
+  nowMs: number,
+): ReadAccess | null {
+  const opened = openedReach(folder, k, nowMs);
+  if (opened.length === 0) return null;
+  const pub = opened.filter((e) => e.visibility === "public");
+  return pub.length > 0
+    ? { basis: "folder-public", until: latestEnd(pub) }
+    : { basis: "folder-link", until: latestEnd(opened) };
+}
+
+/**
+ * May this caller READ the document's content, counting what its folder opens?
+ * For READ paths only — the bytes, a thumbnail, a download, a fork's copy, a
+ * view, the reader projection. Every write path keeps `canRead`/`canEdit`.
+ *
+ * The document's own basis wins, so a link grant still lets its holder comment.
+ * `folder` must be the record of the folder the document is filed in.
+ */
+export function readAccess(
+  doc: DocAclData | undefined | null,
+  caller: { uid: string; emailLower: string } | null,
+  proof: LinkProof,
+  folder: FolderAclData | null | undefined,
+  nowMs: number = Date.now(),
+): ReadAccess | null {
+  if (!doc) return null;
+  const own = readBasis(doc, caller, proof);
+  if (own !== null) return { basis: own, until: null };
+  return folderAccess(folder, proof.k, nowMs);
+}
+
+/** The earlier of two ends, either of which may be "never". */
+export function earlierEnd(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
 }
 
 // --- Teams -----------------------------------------------------------------

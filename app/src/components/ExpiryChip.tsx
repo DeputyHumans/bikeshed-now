@@ -3,7 +3,15 @@
 
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
-import { expiringSoon, expiryExplanation, expiryLabel, isExpired } from "../expiry";
+import {
+  expiringSoon,
+  expiryExplanation,
+  expiryLabel,
+  isExpired,
+  sharingExplanation,
+  sharingLabel,
+  throughFolderExplanation,
+} from "../expiry";
 import type { DocMeta } from "../types";
 
 /**
@@ -23,15 +31,28 @@ import type { DocMeta } from "../types";
 export function ExpiryChip({
   expiresAt,
   onOpen,
+  of = "document",
 }: {
-  expiresAt: DocMeta["expiresAt"];
+  expiresAt: DocMeta["expiresAt"] | number | null;
   /** The owner's tap. Only an owner is handed the dialog, so this also decides the wording. */
   onOpen?: () => void;
+  /**
+   * Whose date it is. A folder's date ends its link and nothing else, so it
+   * says "sharing ends", never "expires"; a reader who came through a folder's
+   * link is told when THEIR link stops (SPEC §17 "A folder's reach").
+   */
+  of?: "document" | "folder" | "folder-link";
 }) {
   const toast = useToast();
-  const label = expiryLabel(expiresAt);
+  const label = of === "document" ? expiryLabel(expiresAt) : sharingLabel(expiresAt);
   if (!label) return null;
-  const explanation = expiryExplanation(expiresAt, onOpen !== undefined) as string;
+  const explanation = (
+    of === "folder"
+      ? sharingExplanation(expiresAt, onOpen !== undefined)
+      : of === "folder-link"
+        ? throughFolderExplanation(expiresAt)
+        : expiryExplanation(expiresAt, onOpen !== undefined)
+  ) as string;
 
   return (
     <button

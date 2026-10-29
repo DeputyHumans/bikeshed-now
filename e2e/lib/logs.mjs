@@ -159,7 +159,7 @@ export function grepLog(pattern, opts = {}) {
  * onDocumentCreated or onDocumentWritten): functionRuns' default `triggers`.
  * selftest/function-runs.test.mjs pins it to the source.
  */
-export const FIRESTORE_TRIGGERS = Object.freeze(["onCommentCreated", "recordCommentEvent", "recordThreadEvent", "recordVersionEvent"]);
+export const FIRESTORE_TRIGGERS = Object.freeze(["moveAccount", "onCommentCreated", "recordCommentEvent", "recordThreadEvent", "recordVersionEvent"]);
 
 /**
  * With DEBUG set, the CLI's console logger appends the record's metadata to

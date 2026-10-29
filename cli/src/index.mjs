@@ -84,7 +84,8 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
 
 Organising
   bikeshed folders                     the folder tree, with ids and readers
-  bikeshed folder <id>                 who can read a folder, and so what is in it
+  bikeshed folder <id|link>            who can read a folder, and so what is in it;
+                                       with a folder's link, what the link opens
   bikeshed mkdir <name> [--parent <id>]  create a folder
   bikeshed mv <id> <folder|root>       move a document
   bikeshed rename <id> <title>         change a document's title; its address stays
@@ -96,6 +97,9 @@ Management
   bikeshed visibility <id> [private|unlisted|public]
     --public-edit true|false            change open editing
     --expires <ISO timestamp|none>      set or clear expiry; omitted settings stay unchanged
+  bikeshed visibility folder <id> [private|unlisted|public] [--expires <ISO timestamp|none>]
+                                       a folder's link or public level opens EVERYTHING
+                                       beneath it to read; its expiry ends only that
   bikeshed rename-folder <id> <name>    rename a folder you can edit
   bikeshed move-folder <id> <folder|root> move a folder and recompute inherited access
   bikeshed delete-folder <id>           owner-only; reparent contents, retain documents
@@ -819,20 +823,51 @@ function describeAccess(result) {
   const where = result.filedIn ? `filed in ${result.filedIn.path}` : "at the root";
   const who = access.readers === 1 ? "only you can read it" : `${access.readers} people can read it`;
   const also = access.alsoReadableBy ? `, and ${access.alsoReadableBy}` : "";
-  return `${where}: ${who}${also}`;
+  // A folder's link or public level reaches what is filed beneath it; say which.
+  const through = access.throughFolders?.length
+    ? ` (through ${access.throughFolders.map((f) => f.path).join(", ")})`
+    : "";
+  return `${where}: ${who}${also}${through}`;
+}
+
+/**
+ * A folder's id, and its key when what was pasted is the folder's link,
+ * `…/folder/<id>?k=<key>` (SPEC §17 "A folder's reach").
+ */
+function folderArgs(ref) {
+  if (!/^https?:\/\//i.test(ref)) return { id: ref };
+  let url;
+  try { url = new URL(ref); } catch { fail(`not a folder link: ${ref}`); }
+  const match = url.pathname.match(/^\/folder\/([^/]+)\/?$/);
+  if (!match) fail(`not a folder link: ${ref}`);
+  const k = url.searchParams.get("k");
+  return { id: decodeURIComponent(match[1]), ...(k ? { k } : {}) };
 }
 
 /** Who can read one folder: and so who can read anything filed in it. */
-async function folder(flags, [id]) {
-  if (!id) fail("usage: bikeshed folder <id>");
+async function folder(flags, [ref]) {
+  if (!ref) fail("usage: bikeshed folder <id|link>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "get_folder", { id });
+  const result = await callTool(origin, token, "get_folder", folderArgs(ref));
+  // Opened by its link: what it holds, to read, and nothing about who reads it.
+  if (result.viaLink) {
+    out(flags.json, result, () => {
+      console.log(`${result.path.map((p) => p.name).join("/")}  ${result.folderId}  (read-only, through its link)`);
+      for (const f of result.folders) console.log(`  ${f.name}/  ${f.folderId}`);
+      for (const d of result.documents) console.log(`  ${d.title}  ${d.url ?? d.docId}`);
+      if (result.truncated) console.log("  (more than can be listed at once)");
+    });
+    return;
+  }
   out(flags.json, result, () => {
     console.log(`${result.path}  ${result.id}${result.canWrite ? "" : "  (read-only)"}`);
     console.log(`${result.readers} can read it${result.readers === 1 ? " (only you)" : ""}:`);
     for (const person of result.people) console.log(`  ${person}`);
     if (result.morePeople > 0) console.log(`  and ${result.morePeople} more`);
     if (result.teams.length) console.log(`teams: ${result.teams.join(", ")}`);
+    for (const f of result.throughFolders ?? []) {
+      console.log(`also ${f.visibility === "public" ? "anyone" : "anyone with the link"}, through ${f.path}${f.expiresAt === null ? "" : ` until ${new Date(f.expiresAt).toISOString()}`}`);
+    }
     console.log(`can edit: ${[...result.editors, ...(result.moreEditors ? [`and ${result.moreEditors} more`] : [])].join(", ")}`);
   });
 }
@@ -843,11 +878,18 @@ function printManagedAccess(result) {
   for (const [role, people] of Object.entries(result.direct)) console.log(`${role}: ${people.join(", ") || "none"}`);
   for (const grant of result.inherited) console.log(`inherited ${grant.role}: ${grant.principal} via ${grant.path}`);
   for (const [role, people] of Object.entries(result.effective)) console.log(`${role}: ${people.join(", ") || "none"}`);
+  for (const r of result.inheritedReach ?? []) {
+    console.log(`readable by ${r.visibility === "public" ? "anyone" : "anyone with the folder's link"} through ${r.path}${r.expiresAt === null ? "" : `, until ${new Date(r.expiresAt).toISOString()}`}`);
+  }
   if (result.visibility !== undefined) printVisibility(result);
 }
 
 function printVisibility(result) {
-  console.log(`visibility: ${result.visibility}; open editing: ${result.publicEdit ? "on" : "off"}; expires: ${result.expiresAt === null ? "never" : new Date(result.expiresAt).toISOString()}`);
+  const expires = result.expiresAt === null ? "never" : new Date(result.expiresAt).toISOString();
+  // A folder has no open editing, and its date ends only its link.
+  console.log(result.publicEdit === undefined
+    ? `visibility: ${result.visibility}; link ends: ${expires}`
+    : `visibility: ${result.visibility}; open editing: ${result.publicEdit ? "on" : "off"}; expires: ${expires}`);
   console.log(result.url);
 }
 
@@ -870,9 +912,16 @@ async function access(flags, [kind, ref, ...rest]) {
   out(flags.json, result, () => printManagedAccess(result));
 }
 
-async function visibility(flags, [ref, level, ...rest]) {
-  if (!ref || rest.length || (level !== undefined && !["private", "unlisted", "public"].includes(level))) fail("usage: bikeshed visibility <id> [private|unlisted|public] [--public-edit true|false] [--expires <ISO timestamp|none>]");
-  const args = { id: docArgs(ref).id };
+async function visibility(flags, positionals) {
+  // `visibility folder <id> …` and `visibility document <id> …` name the kind;
+  // a bare `visibility <id>` is a document, as it always was.
+  const named = ["folder", "document"].includes(positionals[0]) && positionals.length > 1;
+  const kind = named ? positionals[0] : "document";
+  const [ref, level, ...rest] = named ? positionals.slice(1) : positionals;
+  const usage = "usage: bikeshed visibility [folder|document] <id> [private|unlisted|public] [--public-edit true|false] [--expires <ISO timestamp|none>]";
+  if (!ref || rest.length || (level !== undefined && !["private", "unlisted", "public"].includes(level))) fail(usage);
+  if (kind === "folder" && flags["public-edit"] !== undefined) fail("a folder has no open editing: what its link opens is read-only");
+  const args = { id: kind === "folder" ? folderArgs(ref).id : docArgs(ref).id };
   if (level !== undefined) args.visibility = level;
   if (flags["public-edit"] !== undefined) {
     if (!["true", "false"].includes(flags["public-edit"])) fail("--public-edit must be true or false");
@@ -886,7 +935,11 @@ async function visibility(flags, [ref, level, ...rest]) {
     }
   }
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, Object.keys(args).length > 1 ? "set_document_visibility" : "get_document_access", args);
+  const changing = Object.keys(args).length > 1;
+  const tool = kind === "folder"
+    ? (changing ? "set_folder_visibility" : "get_folder_access")
+    : (changing ? "set_document_visibility" : "get_document_access");
+  const result = await callTool(origin, token, tool, args);
   out(flags.json, result, () => printVisibility(result));
 }
 

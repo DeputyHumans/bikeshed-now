@@ -33,7 +33,8 @@ import { Menu, type MenuEntry } from "../components/Menu";
 import { MoveDialog } from "../components/MoveDialog";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
-import { visibilityStateOf, type VisibilityState } from "../visibility";
+import { folderVisibilityStateOf, liveReach, visibilityStateOf, type VisibilityState } from "../visibility";
+import { SharedFolder } from "./SharedFolder";
 import { UploadDialog } from "../components/UploadDialog";
 import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
 import { offersVersionUpload } from "../roles";
@@ -52,11 +53,23 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "lastViewed", label: "Recently read" },
 ];
 
-function VisibilityChip({ doc }: { doc: DocMeta }) {
-  const visibility = doc.visibility ?? "private";
+/**
+ * The level a stranger meets: the record's own, or a folder's above it that
+ * has not ended, whichever reaches further (SPEC §17 "A folder's reach"). A
+ * private document in a public folder is public, and the card must not say
+ * otherwise.
+ */
+function VisibilityChip({ own, through }: { own?: DocMeta["visibility"]; through?: "unlisted" | "public" | null }) {
+  const mine = own ?? "private";
+  const visibility = mine === "public" || through === "public" ? "public" : mine === "unlisted" || through ? "unlisted" : "private";
   if (visibility === "private") return null;
+  const inherited = visibility !== mine;
   return (
-    <span className="chip visibility-chip" data-visibility={visibility}>
+    <span
+      className="chip visibility-chip"
+      data-visibility={visibility}
+      title={inherited ? "Through a folder it is in" : undefined}
+    >
       <Icon name={visibility === "public" ? "globe" : "eye"} size={12} />
       {visibility === "public" ? "Public" : "Link"}
     </span>
@@ -65,11 +78,14 @@ function VisibilityChip({ doc }: { doc: DocMeta }) {
 
 function DocCard({
   doc,
+  through,
   menu,
   onShare,
   showCover,
 }: {
   doc: DocMeta;
+  /** The level its folder's reach gives it, when the folder is one this account can read. */
+  through: "unlisted" | "public" | null;
   menu: MenuEntry[];
   /** The owner's way to the date behind the expiry chip; absent for anyone else. */
   onShare?: () => void;
@@ -112,7 +128,7 @@ function DocCard({
         </span>
       </div>
       <div className="doc-card-meta">
-        <VisibilityChip doc={doc} />
+        <VisibilityChip own={doc.visibility} through={through} />
         {/* A fork usually carries its original's title, so in a list that
             holds both, this mark is what tells them apart. */}
         {doc.forked ? (
@@ -161,10 +177,13 @@ function FolderCard({
   folder,
   menu,
   onFiles,
+  onShare,
 }: {
   folder: FolderMeta;
   menu: MenuEntry[];
   onFiles: (files: File[], folderId: string) => void;
+  /** The owner's way to the date behind the chip; absent for anyone else. */
+  onShare?: () => void;
 }) {
   const drop = useFileDrop(
     useCallback((files: File[]) => onFiles(files, folder.folderId), [onFiles, folder.folderId]),
@@ -188,6 +207,10 @@ function FolderCard({
         </span>
       </div>
       <div className="doc-card-meta">
+        <VisibilityChip own={folder.visibility} through={liveReach(folder)} />
+        {folder.visibility && folder.visibility !== "private" ? (
+          <ExpiryChip expiresAt={folder.expiresAt ?? null} onOpen={onShare} of="folder" />
+        ) : null}
         <span className="doc-card-stat">
           {folder.members.length} {folder.members.length === 1 ? "person" : "people"}
         </span>
@@ -216,7 +239,7 @@ export function DocList() {
   const [sort, setSort] = useState<SortKey>("recent");
   const [drawer, setDrawer] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // A document brings its visibility triple along; a folder has none.
+  // A document brings its visibility triple along; a folder its level and date.
   const [sharing, setSharing] = useState<{
     target: ShareTarget;
     visibility?: VisibilityState;
@@ -373,6 +396,40 @@ export function DocList() {
       visibility: visibilityStateOf(doc),
     });
 
+  const shareFolder = (folder: FolderMeta) =>
+    setSharing({
+      target: {
+        kind: "folder",
+        id: folder.folderId,
+        title: folder.name,
+        ownerEmail: folder.ownerEmail,
+        viewers: folder.viewers,
+        editors: folder.editors,
+        suggesters: folder.suggesters,
+        approvers: folder.approvers,
+        members: folder.members,
+      },
+      visibility: folderVisibilityStateOf(folder),
+    });
+
+  const folderById = useMemo(() => new Map(folders.map((f) => [f.folderId, f])), [folders]);
+
+  /**
+   * Filing is sharing, and filing under a shared folder is sharing with
+   * strangers (SPEC §13). Nobody is emailed, so this is where the person who
+   * filed it finds out.
+   */
+  const sayWhoCanReadNow = (kind: "doc" | "folder", title: string, target: string | null) => {
+    const reach = liveReach(target ? folderById.get(target) : undefined);
+    if (!reach) return;
+    const who = reach === "public" ? "anyone" : "anyone with its link";
+    toast.show(
+      kind === "doc"
+        ? `“${title}” can now be read by ${who}, through the folder it is in.`
+        : `Everything in “${title}” can now be read by ${who}, through the folder it is in.`,
+    );
+  };
+
   const revisingDoc = revising ? (docs.find((d) => d.docId === revising) ?? null) : null;
 
   const docMenu = (doc: DocMeta): MenuEntry[] => {
@@ -449,20 +506,7 @@ export function DocList() {
         label: "Share…",
         disabled: !isOwner,
         reason: `Only ${folder.ownerEmail} can change sharing.`,
-        onSelect: () =>
-          setSharing({
-            target: {
-              kind: "folder",
-              id: folder.folderId,
-              title: folder.name,
-              ownerEmail: folder.ownerEmail,
-              viewers: folder.viewers,
-              editors: folder.editors,
-              suggesters: folder.suggesters,
-              approvers: folder.approvers,
-              members: folder.members,
-            },
-          }),
+        onSelect: () => shareFolder(folder),
       },
       {
         id: "rename",
@@ -513,6 +557,10 @@ export function DocList() {
       },
     ];
   };
+
+  // A folder this account is not a member of: its link may still open it,
+  // read-only, exactly as it would for somebody signed out (SPEC §17).
+  if (folderId && !foldersLoading && !folderById.has(folderId)) return <SharedFolder />;
 
   return (
     <div className="workspace">
@@ -624,6 +672,7 @@ export function DocList() {
                     folder={folder}
                     menu={folderMenu(folder)}
                     onFiles={uploadFiles}
+                    onShare={folder.ownerEmail === emailLower ? () => shareFolder(folder) : undefined}
                   />
                 ))}
               </div>
@@ -636,6 +685,7 @@ export function DocList() {
                     <DocCard
                       key={doc.docId}
                       doc={doc}
+                      through={liveReach(doc.folderId ? folderById.get(doc.folderId) : undefined)}
                       menu={docMenu(doc)}
                       onShare={isOwner ? () => shareDoc(doc) : undefined}
                       showCover={isOwner || !isExpired(doc.expiresAt)}
@@ -718,7 +768,10 @@ export function DocList() {
           currentFolderId={moving.folderId}
           folders={folders}
           onClose={() => setMoving(null)}
-          onMoved={() => setMoving(null)}
+          onMoved={(target) => {
+            setMoving(null);
+            sayWhoCanReadNow(moving.kind, moving.title, target);
+          }}
         />
       ) : null}
     </div>

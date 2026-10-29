@@ -5,21 +5,23 @@ import { useState } from "react";
 import { Icon } from "./Icon";
 import { Spinner } from "./Spinner";
 import { useToast } from "./Toast";
-import { setVisibility, shareUrl, type VisibilityState } from "../visibility";
-import { endOfDayMs, expiryLabel, toDateInput } from "../expiry";
-import type { Visibility } from "../types";
+import { folderShareUrl, setFolderVisibility, setVisibility, shareUrl, type VisibilityState } from "../visibility";
+import { endOfDayMs, expiryLabel, isExpired, sharingLabel, toDateInput } from "../expiry";
+import type { InheritedReach, Visibility } from "../types";
 
 /**
  * Each option says what it means in terms of WHO, not in terms of a setting
  * name. "Unlisted" tells a person nothing; "anyone with the link, signed in or
  * not" tells them exactly what they are agreeing to.
  */
-const OPTIONS: {
+type Option = {
   value: Visibility;
   title: string;
   describes: string;
   icon: "lock" | "eye" | "globe";
-}[] = [
+};
+
+const OPTIONS: Option[] = [
   {
     value: "private",
     title: "Private",
@@ -42,21 +44,76 @@ const OPTIONS: {
 ];
 
 /**
+ * A folder's options say what they reach, because that is the surprise: not
+ * the folder, but everything in it, at every depth, including what somebody
+ * else filed there and what is filed tomorrow (SPEC §17 "A folder's reach").
+ */
+const FOLDER_OPTIONS: Option[] = [
+  {
+    value: "private",
+    title: "Private",
+    describes: "Only you and the people you share it with.",
+    icon: "lock",
+  },
+  {
+    value: "unlisted",
+    title: "Anyone with the link",
+    describes:
+      "Everything in this folder and its subfolders can be read without an account by anyone holding the link. Not indexed by search engines.",
+    icon: "eye",
+  },
+  {
+    value: "public",
+    title: "Public",
+    describes:
+      "Everything in this folder and its subfolders can be read by anyone, is indexed by search engines, and is listed in the sitemap.",
+    icon: "globe",
+  },
+];
+
+/** Where a document's wider audience comes from, when a folder above it is shared. */
+function ReachNote({ reach }: { reach: InheritedReach[] }) {
+  if (reach.length === 0) return null;
+  return (
+    <ul className="reach-list" aria-label="Shared through its folders">
+      {reach.map((r) => {
+        const ended = r.expiresAt !== null && isExpired(r.expiresAt);
+        const who = r.visibility === "public" ? "Anyone can read it" : "Anyone with the folder’s link can read it";
+        const until = sharingLabel(r.expiresAt);
+        return (
+          <li key={r.folderId} className="field-hint" data-ended={ended || undefined}>
+            <Icon name={r.visibility === "public" ? "globe" : "eye"} />{" "}
+            {ended
+              ? `“${r.path}” was shared ${r.visibility === "public" ? "publicly" : "by link"} until its date passed. That no longer reaches this document.`
+              : `${who} through “${r.path}”${until ? ` (${until.toLowerCase()})` : ""}. Change that on the folder.`}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
  * A section rather than a dialog of its own. It was one — "Who can see it…",
  * a second menu entry beside "Share…" — and the two asked one question from
  * two places, with the second found only by reading the overflow menu. The
- * share dialog holds it now, under the people, for documents only: a folder
- * has no visibility and no expiry.
+ * share dialog holds it now, under the people. A folder has it too, without
+ * open editing: what a folder's level opens is read-only, and its expiry ends
+ * only that.
  */
 export function VisibilitySection({
-  docId,
+  target,
   current,
+  inheritedReach = [],
   onChanged,
 }: {
-  docId: string;
+  target: { kind: "doc" | "folder"; id: string };
   current: VisibilityState;
+  /** Folders above whose link or public level reaches this one, from GET /access. */
+  inheritedReach?: InheritedReach[];
   onChanged: (next: VisibilityState) => void;
 }) {
+  const isFolder = target.kind === "folder";
   const toast = useToast();
   const [state, setState] = useState(current);
   const [busy, setBusy] = useState(false);
@@ -76,7 +133,9 @@ export function VisibilitySection({
   ) => {
     setBusy(true);
     try {
-      const next = await setVisibility(docId, visibility, publicEdit, expiresAt);
+      const next = isFolder
+        ? await setFolderVisibility(target.id, visibility, expiresAt)
+        : await setVisibility(target.id, visibility, publicEdit, expiresAt);
       setState(next);
       onChanged(next);
     } catch (e) {
@@ -86,7 +145,7 @@ export function VisibilitySection({
     }
   };
 
-  const link = shareUrl(docId, state);
+  const link = isFolder ? folderShareUrl(target.id, state) : shareUrl(target.id, state);
 
   return (
     <section aria-labelledby="visibility-heading" className="visibility-section">
@@ -98,7 +157,7 @@ export function VisibilitySection({
         {busy ? <Spinner label="Saving" /> : null}
       </div>
       <div className="visibility-options">
-        {OPTIONS.map((option) => (
+        {(isFolder ? FOLDER_OPTIONS : OPTIONS).map((option) => (
           <label
             key={option.value}
             className="visibility-option"
@@ -140,6 +199,13 @@ export function VisibilitySection({
             </button>
           </div>
 
+          {isFolder ? (
+            <p className="field-hint" style={{ marginTop: "var(--s-3)" }}>
+              That includes documents other people filed here, and anything
+              filed here later. Readers get the documents only: commenting and
+              editing still need you to share with them by name.
+            </p>
+          ) : (
           <div className="checkbox-row" style={{ marginTop: "var(--s-3)" }}>
             <input
               id="public-edit"
@@ -160,6 +226,7 @@ export function VisibilitySection({
               </span>
             </label>
           </div>
+          )}
         </>
       ) : null}
 
@@ -171,18 +238,24 @@ export function VisibilitySection({
         </p>
       ) : null}
 
+      {!isFolder ? <ReachNote reach={inheritedReach} /> : null}
+
       {/* Expiry applies at every visibility, which is why it sits outside the
           branches above: a private document shared with six reviewers is
           exactly the kind that should stop being readable after the review. */}
+      {/* A folder's date ends only what its level opens, so it means nothing
+          on a private folder — unless one is already set and needs clearing. */}
+      {!isFolder || state.visibility !== "private" || state.expiresAt !== null ? (
       <div className="expiry-row">
         <label htmlFor="expires-on">
-          <strong>Stop being readable after</strong>
+          <strong>{isFolder ? "Stop sharing the link after" : "Stop being readable after"}</strong>
           <span className="field-hint" style={{ display: "block" }}>
             {/* The single most important sentence in this dialog. "Expire"
                 reads as "delete" to almost everybody, and this product does not
                 delete documents at all. */}
-            Nothing is deleted. After this date only you can open it, and it
-            cannot be edited until you change or clear the date.
+            {isFolder
+              ? "Nothing is deleted. After this date the link stops working and the folder stops being public. The people you shared it with keep their access."
+              : "Nothing is deleted. After this date only you can open it, and it cannot be edited until you change or clear the date."}
           </span>
         </label>
         <div className="link-row">
@@ -212,9 +285,10 @@ export function VisibilitySection({
           ) : null}
         </div>
         {state.expiresAt !== null ? (
-          <p className="field-hint">{expiryLabel(state.expiresAt)}</p>
+          <p className="field-hint">{isFolder ? sharingLabel(state.expiresAt) : expiryLabel(state.expiresAt)}</p>
         ) : null}
       </div>
+      ) : null}
     </section>
   );
 }

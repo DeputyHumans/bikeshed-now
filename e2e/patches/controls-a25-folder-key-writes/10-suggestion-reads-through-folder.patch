@@ -1,0 +1,12 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1230,7 +1230,8 @@
+     draft?: { baseVersion?: unknown } | null;
+   };
+   const proof = await linkProofFor(ref, data, caller, typeof body.k === "string" ? body.k : null);
+-  if (!canRead(data, caller, proof)) {
++  // e2e control: a write path reads through a folder's reach, so a folder key suggests.
++  if ((await loadReadAccess(db(), data, caller, proof)) === null) {
+     res.status(refusal(data, caller, proof)).end();
+     return;
+   }

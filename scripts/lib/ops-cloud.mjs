@@ -6,7 +6,13 @@ export class CloudError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-export function cloudClient({ account, fetcher = fetch, mint } = {}) {
+// Google's APIs answer the odd read with 429 or a 5xx. One among the snapshot's
+// per-service reads used to stop a deploy before anything deployed.
+export const READ_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+const transient = (status) => status === 429 || status >= 500;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function cloudClient({ account, fetcher = fetch, mint, wait = pause } = {}) {
   if (!mint && !account && !(process.env.CI && process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
     throw new Error("Pass --account, or use CI Workload Identity Federation; implicit local credentials are refused");
   }
@@ -15,13 +21,18 @@ export function cloudClient({ account, fetcher = fetch, mint } = {}) {
   let credential;
   async function request(url, { method = "GET", body, raw, headers = {} } = {}) {
     if (!url.startsWith("https://") || !new URL(url).hostname.endsWith(".googleapis.com")) throw new Error("Refusing credential forwarding outside Google APIs");
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let refreshed = false, retries = 0;
+    for (;;) {
       credential ??= await token();
       const res = await fetcher(url, {
         method, headers: { Authorization: `Bearer ${credential}`, "Content-Type": raw ? "text/plain" : "application/json", ...headers },
         body: raw ?? (body === undefined ? undefined : JSON.stringify(body)), signal: AbortSignal.timeout(30_000), redirect: "error",
       });
-      if (res.status === 401 && attempt === 0) { credential = undefined; await res.arrayBuffer(); continue; }
+      if (res.status === 401 && !refreshed) { refreshed = true; credential = undefined; await res.arrayBuffer(); continue; }
+      // Only a read is repeated: a write that failed may still have landed.
+      if (method === "GET" && transient(res.status) && retries < READ_RETRY_DELAYS_MS.length) {
+        await res.arrayBuffer(); await wait(READ_RETRY_DELAYS_MS[retries++]); continue;
+      }
       if (!res.ok) {
         // Server error bodies can contain configuration; never echo them into artifacts.
         await res.arrayBuffer();
@@ -32,7 +43,6 @@ export function cloudClient({ account, fetcher = fetch, mint } = {}) {
       const text = await res.text();
       return text ? JSON.parse(text) : {};
     }
-    throw new Error("Credential refresh failed");
   }
   async function list(url, field) {
     const rows = [];

@@ -168,7 +168,7 @@ test("the parsers find what is really there (a parser that finds nothing would p
   for (const known of ["setAccess", "setFolderAccess", "verifyEmail", "manageTeamMembers", "onCommentCreated"]) {
     assert.ok(mailing.includes(known), `${known} found as email-capable (found: ${mailing.join(", ")})`);
   }
-  assert.equal(toolBlocks().length, 32, "32 tool blocks across the MCP modules");
+  assert.equal(toolBlocks().length, 33, "33 tool blocks across the MCP modules");
   const writers = commentWritingTools().sort();
   for (const known of ["add_comment", "reply_to_comment", "resolve_thread", "reopen_thread", "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion"]) {
     assert.ok(writers.includes(known), `${known} found as comment-writing (found: ${writers.join(", ")})`);

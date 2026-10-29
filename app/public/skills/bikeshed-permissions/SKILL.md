@@ -1,6 +1,6 @@
 ---
 name: bikeshed-permissions
-description: Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document visibility, open editing or expiry; or explaining inherited and team access.
+description: Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; or explaining inherited and team access.
 ---
 
 # Manage access on Bikeshed
@@ -68,6 +68,22 @@ five minutes after revocation (SPEC §17).
 Return the server's usable URL and settings. Public/unlisted visibility is
 separate from direct and inherited membership; making a document private does
 not revoke its explicit or inherited members.
+
+## A folder's link or public level
+
+`set_folder_visibility`, with `id` and any of `visibility` and `expiresAt`, or
+`bikeshed visibility folder <id> [private|unlisted|public] [--expires …]`.
+There is no open editing on a folder.
+
+It opens **everything beneath the folder, to read, without an account**: its
+subfolders, documents filed there later, and documents that are private on
+their own or owned by someone else. Before you widen a folder, tell the person
+that, and name anything they might not expect to be in it. Its expiry ends the
+link or public level only: members keep their access, and nothing is frozen.
+Making it private and then unlisted again revokes every old link. Report the
+returned `url`. `get_folder_access` reports the folder's settings, and
+`get_document_access` reports `inheritedReach`: every folder above a document
+whose link or public level lets more people read it.
 
 Folder rename, move and deletion are covered by `bikeshed-folders`.
 

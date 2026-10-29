@@ -585,6 +585,93 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
   precedence and watcher behavior without depending on source formatting.
   Mail settling and log-rotation tests wait for the conditions they measure.
 
+## 0.24.0 — 2026-10-28
+
+### Fixed
+
+- Follow an account to the address Google renamed it to. Firebase finds a
+  returning Google user by Google's account id and never updates the stored
+  address. Someone whose Workspace admin moved them to a new domain therefore
+  signed in as their old address, and saw nothing shared with the new one.
+  Now a Google sign-in whose verified address differs moves the account:
+  everything it owns, every grant and team membership naming the old address,
+  and the account record all move to the new one. The new address is believed
+  only from Google's own signed token, bound to the account by Google's id.
+  The move runs as a retried job (`accountMoves/`, the `moveAccount` trigger)
+  that leaves nobody with less access if it stops partway. It signs the
+  account out everywhere and revokes personal tokens minted under the old
+  address. History keeps the address it was written under. Each owner's ACL
+  log records the move (ADR 0020, SPEC §14). While it runs, the sign-in screen
+  says "Moving your account to …". Afterwards the app signs in again as the
+  new address and says what was signed out. An account that was already
+  signed in when Google renamed it sees a notice offering the move.
+- Find a thread's earlier participants by account rather than by the address
+  on their comment. Someone who moved address keeps getting notices, and an
+  author is never sent their own comment under an address they have left.
+
+## 0.23.0 — 2026-10-28
+
+### Added
+
+- Share a folder by link, or make it public, with an expiry, as a document can
+  be shared. The folder's link opens everything beneath it to read: its own
+  documents, every subfolder's, and documents filed there later, including ones
+  that are private on their own or owned by someone else. A folder reader has
+  no account-level access. They get no comments, annotations, presence or
+  editing, even when signed in, because the rules cannot see a folder's key. A
+  folder's expiry ends its link and nothing else. Members keep their access,
+  and nothing beneath is frozen. Rotating the link (private, then unlisted
+  again) revokes every copy. A document under a public folder is mirrored to
+  `public/` and listed in the sitemap. The server side is in this release:
+  `POST /visibility` and `POST /unlock` take a `folderId`, and `GET /access` and
+  `GET /folder-access` report `inheritedReach`
+  ([ADR 0019](docs/architecture/adr/0019-folder-links-reach-their-subtree.md)).
+- Set a folder's level, link and date in its Share dialog, as a document's are
+  set. Someone with the link, or anyone for a public folder, opens
+  `/folder/{id}` without an account. They see a read-only page of its
+  subfolders and documents with their covers, and every link out carries the
+  key. A signed-in account that is not a member gets the same page. A
+  document's share dialog names each folder above it that reaches it, and its
+  count of readers includes those folders' readers. Cards show a folder's level
+  and when its sharing ends. Moving something into a shared folder says who can
+  now read it. A reader who came through a folder's link is offered no
+  comments, presence or editing, and their chip says when the link stops.
+- Unfurl a folder's link with the folder's name. `/folder/**` now goes to
+  `docShell`, which names a folder whose public level or key opens it, caches
+  that page no longer than the link lasts, and marks a keyed page `noindex`.
+  Every other folder gets the generic shell with `private, no-store`. This
+  needs the new Hosting rewrite, which ships with Hosting.
+- Let an agent share a folder by link, and read through one. A new tool,
+  `set_folder_visibility`, takes the same sparse patch as
+  `set_document_visibility`, without open editing; there are now thirty-three
+  tools. `get_folder_access` reports the folder's settings, and both access
+  tools report `inheritedReach`. Given a folder's key, `get_folder` lists one
+  level of what it holds. `get_document`, `list_versions`, `fork_document` and
+  `get_lineage` read any document beneath it, and `get_document` says
+  `viaFolder: true` with every `can…` false. Every other tool refuses that key
+  in words rather than as an absent id. `access` on a filing answer names the
+  folders whose reach now opens the document (`throughFolders`), and
+  `alsoReadableBy` says `"anyone"` under a public folder. The new tool is a
+  schema change, so this release is a minor version.
+- Share and open a folder by link from the command line.
+  `bikeshed visibility folder <id|link> [private|unlisted|public] [--expires …]`
+  sets a folder's level and date and refuses `--public-edit`.
+  `bikeshed visibility document <id>` names a document explicitly.
+  `bikeshed folder <link>` lists what a folder's link opens, and filing output
+  names the folder whose reach widens who can read (`bikeshed-now` 0.18.0).
+
+## 0.22.1 — 2026-10-28
+
+### Fixed
+
+- Stop one 503 from Google failing a deploy before it starts. The deploy saves
+  evidence before it changes anything, by reading every function's Cloud Run
+  service, one call per function. The ops client gave up on the first 5xx, so
+  one bad answer stopped the whole run. It failed three deploys of 0.22.0 that
+  way, and the hourly audit as well. Reads now retry after 1, 2 and 4 s on 429
+  or a 5xx. Writes are still sent once, because a write that answered 503 may
+  already have been applied.
+
 ## 0.22.0 — 2026-10-27
 
 ### Added

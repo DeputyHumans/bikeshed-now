@@ -3,7 +3,7 @@
 
 import type * as admin from "firebase-admin";
 import type { Principal } from "./auth";
-import { canReadFolder, visibilityOf, type DocAclData, type FolderAclData } from "./acl";
+import { canReadFolder, reachOf, visibilityOf, type DocAclData, type FolderAclData } from "./acl";
 import { GRANT_LIST, ROLES, grantLists, grantsOf, normalizeEmail, type Role } from "./access";
 import { referencedTeamIds } from "./teams";
 
@@ -45,9 +45,47 @@ export interface Audience {
   teams: string[];
   /**
    * Set when a count would understate the audience: a public document is open to
-   * anyone signed in, and an unlisted one to anyone holding its link.
+   * anyone signed in, and an unlisted one to anyone holding its link. Through a
+   * folder's public level it is anyone at all, signed in or not, to read only.
    */
-  alsoReadableBy?: "anyone signed in" | "anyone with the link";
+  alsoReadableBy?: "anyone signed in" | "anyone with the link" | "anyone";
+  /**
+   * The folders whose link or public level opens this to people who are not
+   * its members, nearest first, and when each ends (SPEC §17 "A folder's
+   * reach"). For a folder, itself included. Absent when there are none.
+   */
+  throughFolders?: { folderId: string; path: string; visibility: "unlisted" | "public"; expiresAt: number | null }[];
+}
+
+/** What the folders above a record let in beyond its members, from its folder's stored reach. */
+async function reachAudience(
+  db: Db,
+  caller: Principal,
+  folder: FolderAclData | undefined,
+): Promise<Pick<Audience, "throughFolders">> {
+  const now = Date.now();
+  const live = reachOf(folder).filter((e) => e.expiresAt === null || e.expiresAt > now);
+  if (live.length === 0) return {};
+  const paths = await filedIn(db, caller, live.map((e) => e.folderId));
+  return {
+    throughFolders: live.reverse().map((e) => ({
+      folderId: e.folderId,
+      path: paths.get(e.folderId)?.path ?? "…",
+      visibility: e.visibility,
+      expiresAt: e.expiresAt,
+    })),
+  };
+}
+
+/** The widest audience a record's own level and its folders' reach let in. */
+function widest(
+  own: "private" | "unlisted" | "public",
+  reach: Pick<Audience, "throughFolders">,
+): Pick<Audience, "alsoReadableBy"> {
+  if (own === "public") return { alsoReadableBy: "anyone signed in" };
+  if (reach.throughFolders?.some((r) => r.visibility === "public")) return { alsoReadableBy: "anyone" };
+  if (own === "unlisted" || reach.throughFolders?.length) return { alsoReadableBy: "anyone with the link" };
+  return {};
 }
 
 function strings(v: unknown): string[] {
@@ -139,15 +177,12 @@ export async function documentAudience(
     ...grantLists(grantsOf(data)),
     ...chain.flatMap((s) => grantLists(grantsOf(s.data()))),
   ]);
-  const visibility = visibilityOf(data);
+  const reach = await reachAudience(db, caller, chain[0]?.data() as FolderAclData | undefined);
   return {
     ...people(strings(data.members)),
     teams,
-    ...(visibility === "public"
-      ? { alsoReadableBy: "anyone signed in" as const }
-      : visibility === "unlisted"
-        ? { alsoReadableBy: "anyone with the link" as const }
-        : {}),
+    ...widest(visibilityOf(data), reach),
+    ...reach,
   };
 }
 
@@ -162,7 +197,9 @@ export async function folderAudience(db: Db, caller: Principal, folder: Snap): P
     caller,
     [folder, ...above].flatMap((s) => grantLists(grantsOf(s.data()))),
   );
-  return { ...people(strings(folder.data()?.members)), teams };
+  // A folder's own level is in its reach, so a folder never adds itself twice.
+  const reach = await reachAudience(db, caller, folder.data() as FolderAclData | undefined);
+  return { ...people(strings(folder.data()?.members)), teams, ...widest("private", reach), ...reach };
 }
 
 /** One grant a record inherits, and the folder it is made on. */
@@ -202,6 +239,41 @@ export async function inheritedGrants(
         grants[GRANT_LIST[role]].map((principal) => ({ folderId: s.id, path, principal, role })),
       );
   });
+}
+
+/** One folder whose link or public level reaches a record beneath it. */
+export interface InheritedReach {
+  folderId: string;
+  /** That folder's path, `…` for each level the caller may not read. */
+  path: string;
+  visibility: "unlisted" | "public";
+  /** When that folder's reach ends; null when it does not. Past dates are kept, so a panel can say it ended. */
+  expiresAt: number | null;
+}
+
+/**
+ * The folders whose link or public level opens a record filed in `folderId`
+ * to people who are not its members, nearest first (SPEC §13, §17). Read off
+ * the folder's stored `reach`, which already folds in every ancestor; never
+ * the key, which only the folder's own record carries.
+ */
+export async function inheritedReach(
+  db: Db,
+  caller: Principal,
+  folderId: string | null,
+): Promise<InheritedReach[]> {
+  if (!folderId) return [];
+  const snap = await db.collection("folders").doc(folderId).get();
+  if (!snap.exists) return [];
+  const entries = reachOf(snap.data() as FolderAclData);
+  if (entries.length === 0) return [];
+  const paths = await filedIn(db, caller, entries.map((e) => e.folderId));
+  return entries.reverse().map((e) => ({
+    folderId: e.folderId,
+    path: paths.get(e.folderId)?.path ?? "…",
+    visibility: e.visibility,
+    expiresAt: e.expiresAt,
+  }));
 }
 
 /** The first PEOPLE_SHOWN of a list, and how many more there are. */

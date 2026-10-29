@@ -237,6 +237,31 @@
 }
 .drop-hint .upload-progress { width: 80px; flex: none; }
 
+/* A folder opened by its link (SPEC §17): the workspace's grid and cards,
+   without the rail, the toolbar or any menu, because nothing here is the
+   reader's to change. */
+.shared-folder {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--s-4);
+}
+.shared-folder-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.shared-folder-head h1 {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  font-size: var(--fs-h2);
+}
+.shared-folder-note { margin: 0 0 var(--s-4); color: var(--color-ink-muted); }
+.shared-folder .doc-grid + .shared-folder-note { margin-top: var(--s-4); }
+
 @media (prefers-reduced-motion: reduce) {
   .workspace-main { transition: none; }
 }
@@ -273,5 +298,6 @@
 
 @media (max-width: 600px) {
   .doc-grid { grid-template-columns: minmax(0, 1fr); }
+  .shared-folder { padding: var(--s-3); }
   .folder-link { --folder-indent: 10px; }
 }

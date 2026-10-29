@@ -239,8 +239,40 @@ export interface FolderMeta {
   /** Root-first folder ids: breadcrumb, subtree and cycle guard in one field. */
   ancestors: string[];
   depth: number;
+  /**
+   * The folder's own level, link and expiry: what its reach opens beneath it,
+   * to read (SPEC §17 "A folder's reach"). Absent on most folders: private.
+   */
+  visibility?: Visibility;
+  linkToken?: string;
+  expiresAt?: Timestamp;
+  /** This folder's reach and every ancestor's, root first; server-written. */
+  reach?: ReachEntry[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+/** One folder whose link or public level opens what is beneath it. Never carries the key. */
+export interface ReachEntry {
+  folderId: string;
+  visibility: "unlisted" | "public";
+  keyHash?: string;
+  /** Epoch milliseconds, or null when it does not end. */
+  expiresAt: number | null;
+}
+
+/**
+ * A folder above a record whose link or public level reaches it, from GET
+ * /access or /folder-access (SPEC §2). Read-only in the share panel, like an
+ * inherited grant: it is changed on the folder.
+ */
+export interface InheritedReach {
+  folderId: string;
+  /** The folder's path, `…` for each level the owner cannot open. */
+  path: string;
+  visibility: "unlisted" | "public";
+  /** Epoch milliseconds, past ones included; null when it does not end. */
+  expiresAt: number | null;
 }
 
 /**
@@ -336,6 +368,12 @@ export interface PublicDoc {
   expiresAt: number | null;
   /** That it is a fork, and nothing about of what (SPEC §21). Absent on older mirrors. */
   forked?: boolean;
+  /**
+   * This reader's access comes from a folder's link or public level, and is
+   * read-only: no comments, no presence, no editing (SPEC §17). `expiresAt` is
+   * then when THEIR access ends. Absent on older mirrors.
+   */
+  viaFolder?: boolean;
   publishedAt?: Timestamp;
 }
 
@@ -458,4 +496,10 @@ export interface Comment {
 }
 
 /** The typed outcomes of POST /session. Not error strings (SPEC §2). */
-export type SessionStatus = "ok" | "unverified" | "not_allowed" | "session_failed";
+export type SessionStatus =
+  | "ok"
+  | "unverified"
+  | "not_allowed"
+  | "session_failed"
+  /** Google renamed the account, and a job is moving it to the new address (SPEC §14). */
+  | "moving";

@@ -5,40 +5,64 @@ import { act, render } from "@testing-library/react";
 import type { User } from "firebase/auth";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listener } = vi.hoisted(() => ({
+const { listener, popup, move } = vi.hoisted(() => ({
   listener: { current: null as ((user: User | null) => Promise<void>) | null },
+  popup: {
+    signIn: vi.fn(),
+    reauth: vi.fn(),
+    withCredential: vi.fn(),
+    profileEmail: "" as string | undefined,
+  },
+  move: { onState: null as ((state: string | null) => void) | null },
 }));
 
 vi.mock("firebase/auth", () => ({
   GithubAuthProvider: { credentialFromError: () => null },
-  GoogleAuthProvider: { credentialFromError: () => null },
+  GoogleAuthProvider: {
+    credentialFromError: () => null,
+    credentialFromResult: () => ({ idToken: "google-id-token" }),
+    credential: (idToken: string) => ({ idToken }),
+  },
   createUserWithEmailAndPassword: vi.fn(),
   fetchSignInMethodsForEmail: vi.fn(),
+  getAdditionalUserInfo: () => ({ profile: { email: popup.profileEmail } }),
   linkWithCredential: vi.fn(),
   onIdTokenChanged: (_auth: unknown, next: (user: User | null) => Promise<void>) => {
     listener.current = next;
     return () => {};
   },
+  reauthenticateWithPopup: popup.reauth,
   sendPasswordResetEmail: vi.fn(),
+  signInWithCredential: popup.withCredential,
   signInWithEmailAndPassword: vi.fn(),
-  signInWithPopup: vi.fn(),
+  signInWithPopup: popup.signIn,
   signOut: vi.fn(),
 }));
 vi.mock("./firebase", () => ({ auth: {}, githubProvider: {}, googleProvider: {} }));
+vi.mock("./firestore", () => ({
+  watchAccountMove: (_jobId: string, onState: (state: string | null) => void) => {
+    move.onState = onState;
+    return () => {
+      move.onState = null;
+    };
+  },
+}));
 vi.mock("./analytics", () => ({ logEvent: vi.fn() }));
 
-import { AuthProvider, useAuth, type AuthGate } from "./auth";
+import { AuthProvider, useAuth, type AuthGate, type AuthState } from "./auth";
+import { auth as mockedAuth } from "./firebase";
 
 const USER = { email: "reader@example.com", getIdToken: async () => "id-token" } as User;
 
 /** Every gate the app rendered, in order — a flash shows up here even when it does not last. */
 function mount() {
   const gates: AuthGate[] = [];
-  const state: { error: string | null } = { error: null };
+  const state: { error: string | null; auth: AuthState | null } = { error: null, auth: null };
   function Probe() {
     const auth = useAuth();
     if (gates[gates.length - 1] !== auth.gate) gates.push(auth.gate);
     state.error = auth.error;
+    state.auth = auth;
     return null;
   }
   render(
@@ -65,6 +89,11 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   listener.current = null;
+  move.onState = null;
+  popup.signIn.mockReset();
+  popup.reauth.mockReset();
+  popup.withCredential.mockReset();
+  popup.profileEmail = undefined;
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -138,5 +167,155 @@ describe("the auth gate while the session is set", () => {
 
     expect(gates[gates.length - 1]).toBe("signed_out");
     expect(state.error).toMatch(/secure session/);
+  });
+});
+
+// --- An address Google renamed (SPEC §14) -------------------------------------
+
+const OLD = "ana@old.example.com";
+const NEW = "ana@new.example.com";
+
+function person(email: string, googleEmail?: string) {
+  return {
+    email,
+    getIdToken: async () => `id-token-for-${email}`,
+    metadata: {},
+    providerData: googleEmail ? [{ providerId: "google.com", email: googleEmail }] : [],
+  } as unknown as User;
+}
+
+const answers = (...statuses: object[]) => {
+  for (const body of statuses) fetchMock.mockResolvedValueOnce({ ok: true, json: async () => body });
+};
+const bodies = () => fetchMock.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+
+/** A Google popup the way the SDK runs one: the listener hears first, then the promise resolves. */
+function googlePopup(user: User, googleEmail: string) {
+  popup.profileEmail = googleEmail;
+  popup.signIn.mockImplementationOnce(async () => {
+    await listener.current!(user);
+    return { user };
+  });
+}
+
+describe("a Google sign-in", () => {
+  it("asks for one session, carrying nothing extra, when Google agrees on the address", async () => {
+    const view = await signedOut();
+    googlePopup(person(OLD), OLD);
+    answers({ status: "ok" });
+    await act(() => view.state.auth!.signIn("google"));
+    expect(bodies()).toEqual([{ idToken: `id-token-for-${OLD}` }]);
+    expect(view.gates.at(-1)).toBe("ready");
+  });
+
+  it("sends Google's token, once, when Google calls the account something else", async () => {
+    const view = await signedOut();
+    googlePopup(person(OLD), "Ana@New.Example.com");
+    answers({ status: "ok" });
+    await act(() => view.state.auth!.signIn("google"));
+    expect(bodies()).toEqual([{ idToken: `id-token-for-${OLD}`, googleIdToken: "google-id-token" }]);
+  });
+});
+
+describe("moving to the address Google renamed the account to", () => {
+  async function startMove() {
+    const view = await signedOut();
+    googlePopup(person(OLD), NEW);
+    answers({ status: "moving", jobId: "u-ana~abc", to: NEW });
+    let signedIn!: Promise<void>;
+    act(() => {
+      signedIn = view.state.auth!.signIn("google");
+    });
+    await vi.waitFor(() => expect(move.onState).not.toBeNull());
+    return { view, signedIn };
+  }
+
+  it("waits on the job, saying so, then signs in again as the new address", async () => {
+    const { view, signedIn } = await startMove();
+    const from = view.gates.length - 1;
+    expect(view.gates.at(-1)).toBe("loading");
+    expect(view.state.auth!.movingTo).toBe(NEW);
+
+    // The job revokes this session, and the SDK notices: no sign-out flash.
+    await act(() => tokenChanged(null));
+    expect(view.gates.at(-1)).toBe("loading");
+
+    popup.withCredential.mockImplementationOnce(async () => {
+      await listener.current!(person(NEW, NEW));
+      return { user: person(NEW, NEW) };
+    });
+    answers({ status: "ok" });
+    await act(async () => {
+      move.onState!("done");
+      await signedIn;
+    });
+
+    expect(popup.withCredential).toHaveBeenCalledWith({}, { idToken: "google-id-token" });
+    expect(view.gates.at(-1)).toBe("ready");
+    expect(view.state.auth!.emailLower).toBe(NEW);
+    expect(view.state.auth!.movingTo).toBeNull();
+    expect(view.state.auth!.addressNotice).toEqual({ kind: "moved", address: NEW });
+    expect(view.gates.slice(from)).toEqual(["loading", "ready"]);
+  });
+
+  it("explains a blocked move and carries on as the old address", async () => {
+    const { view, signedIn } = await startMove();
+    answers({ status: "ok" });
+    await act(async () => {
+      move.onState!("blocked");
+      await signedIn;
+    });
+    expect(bodies().at(-1)).toEqual({ idToken: `id-token-for-${OLD}` });
+    expect(view.gates.at(-1)).toBe("ready");
+    expect(view.state.auth!.emailLower).toBe(OLD);
+    expect(view.state.auth!.addressNotice).toEqual({ kind: "blocked", address: NEW });
+    expect(popup.withCredential).not.toHaveBeenCalled();
+  });
+});
+
+describe("the order of overlapping sessions", () => {
+  it("lets the newest answer decide, however late an older one arrives", async () => {
+    const { gates } = await signedOut();
+    const first = sessionCall();
+    const second = sessionCall();
+    fetchMock.mockReturnValueOnce(first.pending).mockReturnValueOnce(second.pending);
+    const a = tokenChanged(USER);
+    const b = tokenChanged(USER);
+    await act(async () => {
+      second.answer("ok");
+      await b;
+    });
+    await act(async () => {
+      first.answer("session_failed");
+      await a;
+    });
+    expect(gates.at(-1)).toBe("ready");
+  });
+});
+
+describe("an account signed in before Google renamed it", () => {
+  it("is told, and can move with one more Google popup", async () => {
+    const view = await signedOut();
+    answers({ status: "ok" });
+    await act(() => tokenChanged(person(OLD, NEW)));
+    expect(view.state.auth!.addressNotice).toEqual({ kind: "drift", address: NEW });
+
+    popup.profileEmail = NEW;
+    (mockedAuth as { currentUser?: User }).currentUser = person(OLD, NEW);
+    popup.reauth.mockImplementationOnce(async () => ({ user: person(OLD, NEW) }));
+    answers({ status: "moving", jobId: "u-ana~abc", to: NEW });
+    act(() => {
+      void view.state.auth!.moveToGoogleAddress();
+    });
+    await vi.waitFor(() => expect(move.onState).not.toBeNull());
+    expect(bodies().at(-1)).toEqual({ idToken: `id-token-for-${OLD}`, googleIdToken: "google-id-token" });
+    expect(view.state.auth!.movingTo).toBe(NEW);
+  });
+
+  it("is not told anything when Google and the account agree", async () => {
+    const view = await signedOut();
+    answers({ status: "ok" });
+    await act(() => tokenChanged(person(OLD, OLD)));
+    expect(view.state.auth!.addressNotice).toBeNull();
   });
 });

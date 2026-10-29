@@ -75,8 +75,8 @@ render allowlist mode in memory and feed the string straight to
 Vite inlines everything it imports into the public bundle, so `app/src/generated/
 policy.ts` carries the email SHAPE rules and one boolean (`POLICY_IS_OPEN`) and
 never the domain list. The client learns policy outcomes from `POST /session`,
-which returns exactly four typed outcomes: `ok`, `unverified`, `not_allowed`,
-`session_failed`.
+which returns exactly five typed outcomes: `ok`, `unverified`, `not_allowed`,
+`session_failed`, and `moving` when Google has renamed the account (§14).
 
 ### 1.3 Email validity
 
@@ -165,15 +165,18 @@ which also holds this table to them.
 | `/content/**` | `contentProxy` |
 | `/thumb/**` | `contentProxy` |
 | `/d/**` | `docShell` |
+| `/folder/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
 | — (Firestore trigger) | `recordVersionEvent` |
 | — (Firestore trigger) | `recordThreadEvent` |
 | — (Firestore trigger) | `recordCommentEvent` |
+| — (Firestore trigger) | `moveAccount` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
-catch-all. `/folder` is an exact rewrite, so `/folder/{id}` correctly falls
-through to the SPA. `/d/**` is the one rewrite that serves a **client route**:
-`docShell` answers with the app shell itself, not an API (§17 "Link previews").
+catch-all. `/folder` is an exact rewrite to `createFolder`, which the
+`/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites
+that serve a **client route**: `docShell` answers with the app shell itself,
+not an API (§17 "Link previews").
 
 **`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers
 `/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302`
@@ -194,7 +197,8 @@ Every endpoint is **auth-first**: authentication is checked before anything that
 could reveal whether a document exists. The one exception is `GET /d/**`, which
 never authenticates at all: it decides from the document record and `k` alone,
 and answers a private slug and an absent one with the same bytes (§17 "Link
-previews").
+previews"). `GET /folder/**` is the same function, deciding from the folder
+record and `k`.
 
 ### `POST /session`
 Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1.
@@ -210,6 +214,14 @@ Response `200 { status: "ok" }`, or `200 { status: "unverified" }`,
 `403 { status: "not_allowed", message }`, `401 { status: "session_failed" }`.
 The status is a typed outcome, not an error string, so the UI can explain
 rejection as a *state* rather than a failure.
+
+The body may also carry `googleIdToken`, Google's own ID token from the
+sign-in that just happened. The browser sends it only when Google's address
+for the account differs from the account's. When Google's signature, `sub`
+and `email_verified` all hold (§14 "An address Google renames"), the response
+is `200 { status: "moving", jobId, to }`. No cookie is minted, because the
+presented token names the address the account is leaving. In all other cases
+it is the ordinary outcome as if the field were absent.
 
 ### `DELETE /session`
 Clears `__session` (Max-Age=0). `204`.
@@ -313,6 +325,16 @@ has ever been adopted from Hosting (§17); a `403` with an HTML body is the
 platform refusing the invocation, not the function answering
 (`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
 
+### `GET /folder/:folderId`
+The same shell, from the same function, for a folder's page. When the folder's
+own public level, or its key in `?k=`, opens it and its reach has not ended
+(§17 "A folder's reach"), the head says the folder's name with the default
+card, and nothing read from inside it; `public, max-age=min(300, seconds to
+the reach's end)`, plus `X-Robots-Tag: noindex` and the meta form when a key
+opened it. Every other folder, absent and private alike, is the generic shell
+with `private, no-store`. A member's workspace at the same URL is the client's;
+the shell does not authenticate.
+
 ### `POST /unlock`
 Body `{ docId, k? }`. What a reader who is not a member may know about a
 document, and the one place an unlisted document's key is exchanged for access.
@@ -330,6 +352,20 @@ the projection: the reader is told a document expired rather than shown nothing.
 The key travels in the body, never the query, so it stays out of request logs.
 `Cache-Control: private, no-store` on every answer. The grant is read in the
 same round trip as the document whether or not either exists.
+
+A document a folder's reach opens (§17 "A folder's reach") is answered with
+`viaFolder: true`, the level that reached it, `publicEdit: false` and
+`expiresAt` the end of that reader's access, and never mints a grant.
+
+Body `{ folderId, k? }` instead answers one level of a folder its reach opens:
+`200 { folderId, name, visibility, expiresAt, path, folders, documents,
+truncated }`, where `path` runs from the outermost folder the request opens
+down to this one, `documents` carries `{ docId, title, currentVersion,
+updatedAt, cover }` and leaves out documents whose own expiry has passed, and
+each list stops at 500 with `truncated` saying so. A key that matched, or a
+public level, whose date has passed is `200 { folderId, name, expiresAt,
+expired: true }` with nothing listed. Absent, private, a wrong key and a
+rotated one are the same empty `404`.
 
 ### `POST /access`
 Body `{ docId, add?: [{ email, role }], remove?: string[] }`, where `role` is
@@ -351,9 +387,11 @@ mirror (§16) and the public projection (§17).
 
 `GET /access?docId=` answers the owner's share panel: which grants the
 document inherits, and from which folder (§13). Owner-only, refused as a read
-is. `200 { inherited: [{ folderId, path, principal, role }] }`: every grant on
-the document's folder and on each folder above it, nearest folder first and
-highest role first within each. `path` names only the levels the caller can
+is. `200 { inherited: [{ folderId, path, principal, role }], inheritedReach:
+[{ folderId, path, visibility, expiresAt }] }`: every grant on the document's
+folder and on each folder above it, nearest folder first and highest role
+first within each, and every folder above whose link or public level reaches
+it (§17), ended ones included so the panel can say so. `path` names only the levels the caller can
 open and writes `…` for the rest, as `filedIn` does. `Cache-Control: private,
 no-store` on every answer, the refusals included.
 
@@ -451,8 +489,9 @@ own pending proposal, and neither destroys anything.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
 - **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
   owner-only; cascade-recomputes the whole subtree. `GET
-  /folder-access?folderId=` answers as `GET /access` does, from the folder's
-  parent up: a folder's own grants are already its direct ones.
+  /folder-access?folderId=` answers as `GET /access` does, `inheritedReach`
+  included, from the folder's parent up: a folder's own grants are already its
+  direct ones.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
   deletion is deliberately unsupported (`400`). Renaming a document takes
   `canEdit`; **moving it takes `isDocEditor`**, because filing a document into a
@@ -467,7 +506,10 @@ own pending proposal, and neither destroys anything.
   answer per caller, so the handler sets `noStore` first.
 - **`POST /trust`** — owner-only global trust (§6c).
 - **`POST /marking`** — owner-only export marking (§20).
-- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }` (§17). Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
+- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }`
+  (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and
+  expiry, recomputes its subtree, and answers `{ visibility, linkToken,
+  expiresAt }`; a folder has no open editing. Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
 - **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
   body for an unlisted document; without a read basis it is the `404` an absent
   id gets, and nothing is counted.
@@ -502,9 +544,19 @@ own pending proposal, and neither destroys anything.
 3. `auth/account-exists-with-different-credential` triggers the linking flow
    (§14). One account per email is the intended invariant, not a limitation.
 4. Get the ID token and `POST /session` to set `__session` — required so the
-   same-origin iframe can load gated `/content/**`.
+   same-origin iframe can load gated `/content/**`. After a popup the sign-in
+   makes this call itself, and the listener leaves it alone. After a Google
+   popup it includes `googleIdToken` when Google's address differs from the
+   account's (§14 "An address Google renames"). Only the newest of two
+   overlapping calls decides the gate.
 5. Re-`POST /session` on every `onIdTokenChanged`.
 6. Sign out: `DELETE /session`, then `auth.signOut()`.
+7. On `moving`, wait on `accountMoves/{jobId}` while the gate stays `loading`,
+   showing the address being moved to, and ignore the listener meanwhile. On
+   `done`, run `signInWithCredential` with the same Google token, which is a
+   fresh sign-in past the move's revocation. On `blocked`, say why and sync as
+   before. A signed-in account whose Google `providerData` address differs
+   from its own is offered the move, through `reauthenticateWithPopup`.
 
 The app talks to Firestore directly for doc lists, annotations and comments
 (gated by `firestore.rules`). It loads document CONTENT only through the
@@ -534,7 +586,8 @@ teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
-public/{docId}                                 PublicDoc        (projection, public only)
+public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
+accountMoves/{jobId}                           AccountMove      (server-written; its own account may read, §14)
 ```
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
@@ -581,6 +634,14 @@ How events are written:
 A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId,
 tokenId, updatedAt }`: the last cursor `get_changes` gave that credential for
 that document. It is server-only.
+
+**`accountMoves/{jobId}`** is `{ uid, from, to, state, reason?, requestedAt,
+finishedAt? }`. It is one account's move to the address Google renamed it to
+(§14). `state` is `pending`, `done` or `blocked`, and `reason` is
+`address-taken` or `stale`. The id is `{uid}~{sha256(to) prefix}`, so a second
+tab finds the first one's job. `POST /session` creates it, and the
+`moveAccount` trigger finishes it. Its own account may `get` it, to know when
+to sign in again. No client lists or writes one.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
@@ -1147,7 +1208,7 @@ app/src/
   export/{labels.ts,html.ts,pdf.ts,image.ts}
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
   workspace/tree.ts
-  pages/{DocList.tsx,DocViewer.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
+  pages/{DocList.tsx,DocViewer.tsx,SharedFolder.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```
@@ -1175,10 +1236,11 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,teams,tokens}.ts
+  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,transaction-receipts,mcp-transport}.ts
   lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
+  lib/accountmove.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
@@ -1192,10 +1254,20 @@ functions/src/
   `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST
   mirror `firestore.rules` `canRead()`** for a caller with an account; they are
   tested on both sides. `tokenMatches` is the only place a link token is
-  compared, and a wiring test holds it there.
+  compared, and a wiring test holds it there; `keyMatchesHash` is the only
+  place a folder's key is, against the hash its `reach` stores. `readAccess`
+  adds a folder's reach to `readBasis`, for read paths only (§17).
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
 - `lib/writeAuthority.ts` — transaction-local expiry and edit permission, including
   a current link grant read, before uploaded content becomes the selected draft or version (§17).
+
+- `lib/accountmove.ts` — believing Google's word for an account's new address,
+  and the job that moves the account and everything naming its old address
+  (§14 "An address Google renames"). `lib/rename.ts` is the other kind of
+  rename: a document's title.
+- `lib/reach.ts` — the Firestore half of a folder's reach: the folder a read
+  path loads only after the document's own basis said no, and the one level of
+  a folder a stranger holding its link is shown (§13, §17).
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
 - `lib/head.ts` — what a document's own `<head>` and first words say about it
   (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
@@ -1512,7 +1584,9 @@ doc-list query, its composite index and the `canRead`/`list` rules are
 UNCHANGED.
 
 `folders/{folderId}` mirrors `DocMeta`'s ACL shape and adds `parentId`,
-`ancestors` (root-first) and `depth`. Folder writes are Admin-SDK only.
+`ancestors` (root-first) and `depth`, and `visibility`, `linkToken`,
+`expiresAt` and `reach` (§17 "A folder's reach"). Folder writes are Admin-SDK
+only.
 
 Folder delete is **owner-only** and reparents children to the folder's parent —
 never orphans. Document delete is unsupported, deliberately and explicitly.
@@ -1530,6 +1604,12 @@ and the agent surface says who that is:
 This discloses nothing new. The rules let a folder's members read its whole
 record, `members` included, and a team is named only to its own members, as the
 share panel names it (`lib/audience.ts`).
+
+**Filing under a shared folder is sharing with strangers.** A folder that is
+unlisted or public opens everything beneath it to anyone holding its link, or
+to anyone (§17), whatever each document's own level and whoever owns it. The
+share panel of each document beneath says which folder reaches it
+(`inheritedReach`), and every write that files a document says so in `access`.
 
 **The share panel says where access comes from.** A record holds only the
 flattened sets, so the panel asks `GET /access` or `GET /folder-access` (§2) and
@@ -1609,6 +1689,94 @@ A lost transaction acknowledgement does not reserve and mail another code or
 charge the same request for another wrong guess. Wrong-guess receipts belong
 to the challenge that was checked; a retry cannot spend a replacement
 challenge's budget.
+
+### An address Google renames
+
+Firebase finds a returning Google user by Google's permanent account id
+(`sub`), and never rewrites the account's own `email`. When a Workspace admin
+renames somebody, for example from `ana@old.example` to `ana@new.example`,
+Google's tokens carry the new address while ours keep the old one. Anything
+shared with the new address is then invisible. So the account follows Google
+(ADR 0020).
+
+**Detecting it.** After a Google popup sign-in, the browser compares the
+address in Google's profile with the account's. Only when they differ does it
+send Google's ID token as `googleIdToken` on `POST /session` (§2). An ordinary
+sign-in costs nothing extra.
+
+**Believing it.** The server, never the browser, decides. It accepts Google's
+token only if all of these hold:
+- its RS256 signature checks against Google's published keys, verified locally
+  and not through the throttled tokeninfo endpoint;
+- `iss` is Google, in either of its two spellings, and the token has not
+  expired;
+- `email_verified` is `"true"` as a string. Google writes it both ways, and
+  `"false"` is truthy;
+- `sub` is one of the Google ids in the caller's *verified* Firebase token
+  (`firebase.identities["google.com"]`);
+- the address passes §1.3 and the deployment's policy.
+
+`aud` is not checked: binding by `sub` means the most any token can do is align
+the caller's own account with what Google vouches for now. Under the Auth
+emulator, and only while `FIREBASE_AUTH_EMULATOR_HOST` is set, the emulator's
+unsigned token is read instead, under the same switch firebase-admin uses.
+
+**Moving.** `POST /session` creates `accountMoves/{jobId}` (§4) and answers
+`moving`. The `moveAccount` trigger does the work, with `retry: true` and a
+540-second budget, because Hosting cuts a request at sixty seconds. Every step
+finds its work by querying `members`, `admins` and token `email` for the old
+address, so a redelivery resumes wherever an attempt died. The steps, in order:
+
+1. **Collision.** One account per address (§1). An account already holding the
+   new address that is unverified and password-only can never pass the gate,
+   so it owns nothing; it is deleted, as Firebase itself drops such an account
+   when a trusted provider vouches for the address. Any other holder ends the
+   job `blocked` with `address-taken`, and nothing changes. A pending
+   `verification` is cleared, so an old code cannot undo the move.
+2. **Add.** The new address is added beside the old one everywhere the old is
+   named: team members and admins, and each grant list, taking the higher role
+   when both are present. On records the person owns, it is added as an
+   approver for now. Every record found is recomputed through
+   `refanTeam`, `recomputeSubtree` and `persistDocMembership`, without stamping
+   `updatedAt`, because a move is not a publish.
+3. **Commit.** `updateUser({ email, emailVerified: true })`, then
+   `revokeRefreshTokens`. The account is signed out everywhere. Personal tokens
+   minted under the old address are revoked, since one would act as that
+   address for good. Connected apps close at their next refresh (§23).
+4. **Remove.** `ownerEmail` moves to the new address, the old address is
+   dropped, and everything found is recomputed again. An owner is never also a
+   grant. Then `users/{uid}.email` moves, and presence is re-synced for every
+   document touched. The job is `done` once no `members` or `admins` on a
+   document, folder or team names the old address; otherwise it throws and is
+   retried.
+
+If the job dies before the commit, both addresses hold access. If it dies after,
+the new address does. Nobody loses anything either way.
+
+**The record of it.** Each document and folder that named the old address
+*directly* gets an `acl` entry with `reason: "address-moved"`, `added: [new]`
+and `removed: [old]`. Each such document also gets an `access.changed` event,
+written in the same transaction as the rewrite under a fixed id, so a
+redelivery writes neither twice. A record that only inherited the address did
+not change and gets neither. **History is not rewritten**: comments,
+annotations, versions, views, trust records and the change log keep the
+address they were written under, each with a uid beside it. A comment notice
+therefore finds a thread's earlier participants by `authorUid` and their
+current `users/{uid}.email`, and excludes the author the same way.
+
+**The browser.** On `moving`, the app waits on its job record. On `done`, it
+signs in again with the same Google token (`signInWithCredential`), which is a
+fresh `auth_time` past the revocation. On `blocked`, it says another account
+already uses the address and carries on as before. An account that is signed
+in when the rename happens learns of it from `providerData`, and is offered the
+move.
+
+**Not covered.** GitHub and password accounts do not follow automatically,
+because GitHub does not vouch for addresses. An allowlist that rejects the
+*old* address stops the gate before the move is considered, so a deployment
+renaming its domain keeps both domains listed until everyone has moved. A
+share sent to the old address after the move goes to whoever proves that
+address, which is §1's ordinary rule; there are no aliases.
 
 ### Email
 
@@ -1976,8 +2144,9 @@ and public-access-prevention; `contentProxy` stays the only path bytes take.
 dialog, which holds the people, the three levels, the link, open editing and
 the expiry together. There is no separate "who can see it" dialog: it was one
 question asked from two menu entries, and the second was found only by reading
-the overflow menu. Folders share the same dialog without that section, having
-no visibility and no expiry. One rule:
+the overflow menu. Folders share the same dialog, levels, link and expiry
+included and open editing not; what a folder's settings open, and what its
+expiry ends, is below ("A folder's reach"). One rule, for documents:
 
 > **An expired document is read-only, and visible only to its owner.**
 
@@ -2091,18 +2260,72 @@ per account and cannot be revoked alone; that is the reversal condition in
 Open editing on an unlisted document reaches its link holders and nobody else,
 and not through the live log (§16).
 
+### A folder's reach
+
+A folder has the document's three levels, its link and its expiry, set by its
+owner through `POST /visibility` with the same rules: the token is minted on
+becoming unlisted, kept while unlisted and deleted otherwise, so rotating
+revokes every link at once, and the same dates are refused. It has no open
+editing. What its settings open is **everything beneath it** — its documents
+and every subfolder's, including documents private on their own, owned by
+someone else, or filed later ([ADR 0019](adr/0019-folder-links-reach-their-subtree.md)).
+
+> **A folder's reach opens documents to read, and nothing else.**
+
+| Basis | Who | Cached at a shared URL |
+|---|---|---|
+| `folder-public` | anyone, on a document under a public folder | yes |
+| `folder-link` | anyone whose request carries the key of an unlisted folder above the document, in `k` as a document's key travels | yes, and `noindex` |
+
+Both come from `readAccess` in `lib/acl.ts`, only after the document's own
+`readBasis` has said no, and only on read paths: `contentProxy` (content and
+thumbnails), `downloadBundle`, `recordView`, `POST /unlock`, `forkDoc`,
+`docShell` and the agent read tools (§19). Every write keeps `canRead` and
+`canEdit`, which never look at a folder, so a folder's key cannot authorize a
+write by construction. No grant is minted, and the rules cannot see a folder's
+key: a folder reader, signed in or not, gets the document and not its
+comments, annotations or presence. The reader projection says
+`viaFolder: true`, and the viewer offers none of them.
+
+**Reach is denormalized, as membership is.** Each folder stores `reach`, root
+first: its parent's, then `{ folderId, visibility, keyHash?, expiresAt }` for
+itself when it is not private. `recomputeSubtree` computes it in the same pass
+as membership. `keyHash` is sha256 of the token, compared by `keyMatchesHash`
+alone; a subfolder's members read its record, and must not learn the key to a
+folder above that they cannot open. A document stores nothing new: a read
+through a folder loads the document's own folder, one read, on a request its
+own level has already refused.
+
+**A folder's expiry ends its reach and nothing else.** After the date, its link
+and its public level open nothing, and a key holder asking `POST /unlock` for
+the folder is told it ended. Members read and edit as before, and nothing
+beneath is frozen. A document's own expiry wins over any folder. Every cached
+window, the shell's included, is cut at the earlier of the document's expiry
+and the end of the reach that opened it.
+
+**A document under a public folder is public.** It is mirrored to
+`public/{docId}` with `viaFolder: true`, `publicEdit: false` and `expiresAt`
+the end of a reader's access, which puts it in the sitemap, and the mirror is
+deleted when no public folder above it remains. Open editing, presence and the
+realtime `*` key stay the document's own: a public folder writes none.
+
+**Revocation gains the cascade.** A document directly in a folder stops
+answering to a rotated key at once; a subfolder's, when the cascade reaches
+that subfolder. The five-minute window under "Caching" applies on top.
+
 ### Anonymous reads use a projection, not a rules exception
 
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
-`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `forked`, `publishedAt` — written by the same paths that
+`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
 are the same refusal. The source document, current version and projection
 set/delete share a Firestore transaction, so an older public snapshot cannot
 restore the projection after a newer visibility change has completed.
+A document under a public folder is public too, and mirrored with `viaFolder: true`. Its folder is read in that same transaction.
 
 An **unlisted** document is not mirrored. Anything in `public/` is readable by
 whoever knows an id, and once was listable by anyone at all; an unlisted
@@ -2168,10 +2391,19 @@ generic shell too; their tab title comes from the client
 | `unlisted`, no or wrong `k` | generic | `private, no-store` | — |
 | `unlisted`, correct `k` | document | `public, max-age=min(300, seconds to expiry)` | `X-Robots-Tag: noindex` and `<meta name="robots" content="noindex">` |
 | `public` | document | `public, max-age=min(300, seconds to expiry)` | — |
+| under a public folder | document | `public, max-age=min(300, seconds to the earlier end)` | — |
+| under an unlisted folder, its key in `k` | document | `public, max-age=min(300, seconds to the earlier end)` | `noindex`, both forms |
 | expired, at any level | generic | `private, no-store` | — |
 
 An absent document, a version that does not exist, and any failure between
 the decision and the finished page are generic as well.
+
+`/folder/**` goes to the same function (§2 `GET /folder/:folderId`). A
+folder's page names the folder, with the default card, when the folder's own
+public level or its key opens it, under the same cache and robots rules as a
+document's; it reads nothing inside the folder, so a cached page never goes on
+describing contents that have changed. Every other folder is the generic
+shell.
 
 **The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked
 for as a byte range and capped again in the function, so a large document is
@@ -2452,7 +2684,7 @@ update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
 If the head changes, the server refuses the write. Read the new head and
 reassess the request; never silently redirect a historical request to it.
 
-### MCP — thirty-two tools
+### MCP — thirty-three tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -2460,9 +2692,10 @@ reassess the request; never silently redirect a historical request to it.
 |---|---|
 | `get_document_access` | owner-only complete direct, inherited and effective access; includes visibility, open editing, expiry and usable URL without source bytes |
 | `set_document_access` | owner-only grant/revoke/role delta; invitations to newly effective readers |
-| `get_folder_access` | owner-only complete direct, inherited and effective folder access |
+| `get_folder_access` | owner-only complete direct, inherited and effective folder access; includes its visibility, expiry, usable URL and `inheritedReach` (§17) |
 | `set_folder_access` | owner-only grant/revoke/role delta and subtree recomputation; invitations to newly effective folder readers |
 | `set_document_visibility` | owner-only sparse patch of visibility, publicEdit and expiresAt; null clears expiry, omissions stay unchanged |
+| `set_folder_visibility` | owner-only sparse patch of a folder's visibility and expiresAt, which open everything beneath it to read (§17 "A folder's reach"); recomputes the subtree; no open editing |
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
@@ -2480,7 +2713,7 @@ reassess the request; never silently redirect a historical request to it.
 | `accept_suggestion` | accept a pending suggestion, for the owner or an approver: its change is made in the draft (§22) |
 | `reject_suggestion` | decline a pending suggestion, for the owner or an approver, with a reason (§22) |
 | `list_folders` | every folder the caller can see, each with its full path and how many can read it (`readers`, `shared`) |
-| `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, and its teams, each named only to its members (§13) |
+| `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, its teams, each named only to its members (§13), and `throughFolders`; with `k`, for a non-member, one level of what a folder's link opens, read-only (§17) |
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
@@ -2491,11 +2724,18 @@ reassess the request; never silently redirect a historical request to it.
 | `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
 | `reopen_thread` | open such a thread again, with a note |
 
-`get_document`, `update_document`, `suggest_edit`, `get_comments`, `get_changes`,
-`add_comment`, `reply_to_comment`, `resolve_thread` and `reopen_thread` take an optional `k`: an unlisted document's key, for a caller who is not a member and
-whose account holds no link grant. Without it such a document answers exactly as
-an id that does not exist (§17). The CLI accepts the link itself wherever it
-takes an id, because the link is the only place a person holds the key.
+`list_versions`, `get_document`, `fork_document`, `get_lineage`, `update_document`,
+`suggest_edit`, `revise_suggestion`, `withdraw_suggestion`, `get_comments`,
+`get_changes`, `add_comment`, `reply_to_comment`, `resolve_thread` and
+`reopen_thread` take an optional `k`: an unlisted document's key, for a caller
+who is not a member and whose account holds no link grant. Without it such a
+document answers exactly as an id that does not exist (§17). The four that only
+read — `list_versions`, `get_document`, `fork_document` and `get_lineage` — also
+take a shared folder's key, which opens what is beneath the folder to read and
+nothing else; `get_document` then says `viaFolder: true` with every `can…` false,
+and every other tool refuses that key in words rather than as an absent id. The
+CLI accepts the link itself wherever it takes an id, because the link is the
+only place a person holds the key.
 
 `fork_document` and `get_lineage` use the same optional key as their read proof
 (§21). `revise_suggestion` and `withdraw_suggestion` also take `k` to read the
@@ -2785,7 +3025,11 @@ endpoint; every URL in it is relative and nothing stamps it.
 `--add <comma-separated principals> --role <role>` and/or `--remove <principals>`
 change it. Adding requires an explicit role. `bikeshed visibility <id>` reads
 settings; optional `private|unlisted|public`, `--public-edit true|false`, and
-`--expires <ISO timestamp|none>` patch them. `bikeshed rename-folder <id> <name>`,
+`--expires <ISO timestamp|none>` patch them. `bikeshed visibility folder <id|link>`
+maps to `get_folder_access` and `set_folder_visibility`, and refuses
+`--public-edit`; `visibility document <id>` names a document explicitly.
+`bikeshed folder <link>` passes a folder link's key to `get_folder`.
+`bikeshed rename-folder <id> <name>`,
 `bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
 the three folder tools. All support human-readable and `--json` output.
 

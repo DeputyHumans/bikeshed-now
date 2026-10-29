@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "./auth";
+import { AddressNotice, signingInLabel } from "./components/AddressNotice";
 import { initAnalytics, logPageView } from "./analytics";
 import { useAccountPreferences } from "./accountPreferences";
 import { CookieConsent } from "./components/CookieConsent";
@@ -12,6 +13,7 @@ import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
 import { Loading } from "./components/Spinner";
 import { DocList } from "./pages/DocList";
+import { SharedFolder } from "./pages/SharedFolder";
 import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
 import { SignUp } from "./pages/SignUp";
@@ -78,8 +80,8 @@ function RequireAccount({
   children: React.ReactNode;
   signedOut?: React.ReactNode;
 }) {
-  const { gate } = useAuth();
-  if (gate === "loading") return <Loading label="Signing in" />;
+  const { gate, movingTo } = useAuth();
+  if (gate === "loading") return <Loading label={signingInLabel(movingTo)} />;
   if (gate === "signed_out" && signedOut) return <>{signedOut}</>;
   if (gate !== "ready") return <SignUp />;
   return <>{children}</>;
@@ -123,6 +125,7 @@ export function App() {
       </a>
       <Header />
       <main className="main" id="main" tabIndex={-1}>
+        <AddressNotice />
         <Routes>
           <Route
             path="/"
@@ -135,7 +138,10 @@ export function App() {
           <Route
             path="/folder/:folderId"
             element={
-              <RequireAccount>
+              // Signed out, a folder's link opens what it reaches (SPEC §17);
+              // signed in, the workspace decides, and hands a folder its owner
+              // never shared with this account to the same page.
+              <RequireAccount signedOut={<SharedFolder />}>
                 <DocList />
               </RequireAccount>
             }

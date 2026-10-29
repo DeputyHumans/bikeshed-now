@@ -3,7 +3,8 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { expiryMs, visibilityOf, type DocAclData } from "./acl";
+import { earlierEnd, expiryMs, folderAccess, visibilityOf, type DocAclData, type ReadAccess } from "./acl";
+import { folderOfDoc } from "./reach";
 import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
@@ -30,6 +31,10 @@ type Db = admin.firestore.Firestore;
  * whole revocation path, and it is why this function is called from every place
  * that can change visibility or membership rather than from the one endpoint
  * that obviously changes it.
+ *
+ * A document filed under a PUBLIC FOLDER is public too, whatever its own level,
+ * so it is mirrored the same way, marked `viaFolder` (SPEC §13, §17). The folder
+ * cascade calls this for every document beneath a folder whose reach changed.
  */
 export interface ReaderDoc {
   docId: string;
@@ -61,6 +66,14 @@ export interface ReaderDoc {
    */
   expiresAt: number | null;
   /**
+   * The reader's access comes from a folder's link or public level, not from
+   * the document's own. Such a reader is read-only: no comments, no presence,
+   * no editing, so the viewer offers none of them (ADR 0019). `expiresAt` is
+   * then when THEIR access ends — the earlier of the document's own expiry and
+   * the folder's — and `visibility` the level that reaches them.
+   */
+  viaFolder: boolean;
+  /**
    * That this document was forked from another, and NOTHING about which one.
    * Enough for a reader's viewer to know a lineage is worth asking for; the
    * parent itself is answered per caller by `POST /fork`, never mirrored
@@ -91,6 +104,7 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "trusted",
   "marking",
   "expiresAt",
+  "viaFolder",
   "forked",
 ];
 
@@ -110,18 +124,34 @@ function only<T extends object>(obj: T, keys: readonly (keyof T)[]): T {
   return obj;
 }
 
+/** A folder's reach, as the projection describes it: the level, and its end. */
+export interface FolderReach {
+  visibility: "unlisted" | "public";
+  until: number | null;
+}
+
+/** The folder reach a read access stands for, or null for the document's own bases. */
+export function reachOfAccess(access: ReadAccess | null): FolderReach | null {
+  if (access?.basis === "folder-public") return { visibility: "public", until: access.until };
+  if (access?.basis === "folder-link") return { visibility: "unlisted", until: access.until };
+  return null;
+}
+
 /**
  * What a reader of a non-private document is told about it: the render fields,
- * nothing about who shares or reads it. Null for a private document. Exported so
- * a test can assert the output keys exactly, which is the check that actually
- * prevents a leak: a future field added to DocMeta must not silently ride along.
+ * nothing about who shares or reads it. Null for a private document, unless a
+ * folder's reach is what opened it. Exported so a test can assert the output
+ * keys exactly, which is the check that actually prevents a leak: a future
+ * field added to DocMeta must not silently ride along.
  */
 export function projectReader(
   docId: string,
   data: Record<string, unknown>,
+  reach: FolderReach | null = null,
 ): ReaderDoc | null {
-  const visibility = visibilityOf(data as DocAclData);
+  const visibility = reach ? reach.visibility : visibilityOf(data as DocAclData);
   if (visibility === "private") return null;
+  const ownExpiry = expiryMs(data as DocAclData);
   return only<ReaderDoc>(
     {
       docId,
@@ -135,23 +165,31 @@ export function projectReader(
       sourceEntry: typeof data.sourceEntry === "string" ? data.sourceEntry : null,
       fileCount: typeof data.fileCount === "number" && Number.isSafeInteger(data.fileCount) && data.fileCount > 0 ? data.fileCount : 1,
       visibility,
-      publicEdit: data.publicEdit === true,
+      // Open editing is the document's own setting for its own readers, and
+      // never reaches anyone through a folder.
+      publicEdit: !reach && data.publicEdit === true,
       trusted: data.trusted !== false,
       marking: resolveMarking(data.marking),
-      expiresAt: expiryMs(data as DocAclData),
+      expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,
+      viaFolder: reach !== null,
       forked: data.forked === true,
     },
     READER_KEYS,
   );
 }
 
-/** The world-readable mirror of a PUBLIC document; null for any other level. */
+/**
+ * The world-readable mirror of a PUBLIC document — its own level, or a public
+ * folder's reach — and null for any other.
+ */
 export function projectPublicDoc(
   docId: string,
   data: Record<string, unknown>,
+  reach: FolderReach | null = null,
 ): PublicDoc | null {
-  if (visibilityOf(data as DocAclData) !== "public") return null;
-  const reader = projectReader(docId, data);
+  const own = visibilityOf(data as DocAclData) === "public";
+  if (!own && reach?.visibility !== "public") return null;
+  const reader = projectReader(docId, data, own ? null : reach);
   if (!reader) return null;
   return only<PublicDoc>(
     {
@@ -199,14 +237,15 @@ async function withVersionFields(
 export async function readerProjection(
   docRef: admin.firestore.DocumentReference,
   data: Record<string, unknown>,
+  access: ReadAccess | null = null,
 ): Promise<ReaderDoc | null> {
-  return projectReader(docRef.id, await withVersionFields(docRef, data));
+  return projectReader(docRef.id, await withVersionFields(docRef, data), reachOfAccess(access));
 }
 
 /**
- * Bring `public/{docId}` into line with the document's current visibility:
- * write the projection, or delete it. Idempotent, and safe to call after any
- * write to the document.
+ * Bring `public/{docId}` into line with the document's current visibility and
+ * its folder's reach: write the projection, or delete it. Idempotent, and safe
+ * to call after any write to the document.
  */
 export async function syncPublicProjection(db: Db, docId: string): Promise<void> {
   const docRef = db.collection("docs").doc(docId);
@@ -214,8 +253,10 @@ export async function syncPublicProjection(db: Db, docId: string): Promise<void>
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     const data = snap.data() || {};
-    const projection = snap.exists && visibilityOf(data as DocAclData) === "public"
-      ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx))
+    const reach = visibilityOf(data as DocAclData) === "public" ? null
+      : reachOfAccess(folderAccess(await folderOfDoc(db, data as DocAclData, tx), null, Date.now()));
+    const projection = snap.exists && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
+      ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx), reach)
       : null;
     if (projection) tx.set(publicRef, projection);
     else tx.delete(publicRef);

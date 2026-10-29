@@ -80,7 +80,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const PUBLIC_MAX_AGE = 300;
 const THUMB_MAX_AGE = 86_400;
 /** The exact projection keys of public/{docId} (SPEC §17, lib/publicdoc.ts PROJECTED_KEYS). */
-const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "fileCount", "forked", "format", "liveEpoch", "marking", "publicEdit", "publishedAt", "slug", "sourceEntry", "title", "trusted", "visibility"];
+const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "fileCount", "forked", "format", "liveEpoch", "marking", "publicEdit", "publishedAt", "slug", "sourceEntry", "title", "trusted", "viaFolder", "visibility"];
 /** POST /unlock's reader projection: the same minus publishedAt (SPEC §2 /unlock). */
 const READER_KEYS = PUBLIC_KEYS.filter((k) => k !== "publishedAt");
 
@@ -351,7 +351,7 @@ scenario("A3.2 /unlock: no or wrong k is one empty 404 like an absent id; the ri
   }
   assert.equal((await readDoc(target, `docs/${U.docId}/linkGrants/${stranger.uid}`)), null, "no grant from a refused unlock");
 
-  ctx.step("the right k, anonymously: the reader projection, exactly its 11 keys");
+  ctx.step("the right k, anonymously: the reader projection, exactly its 12 keys");
   const a = await anon.postJson("/unlock", { docId: U.docId, k });
   assert.equal(a.status, 200);
   assert.deepEqual(Object.keys(a.json).sort(), READER_KEYS, "the reader projection's keys, publishedAt not among them");

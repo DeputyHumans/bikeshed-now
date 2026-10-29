@@ -19,6 +19,9 @@ export function NotHere() {
   const navigate = useNavigate();
   // Back to this exact URL: the version, the link key, the hash.
   const signIn = `/signup?next=${encodeURIComponent(`${pathname}${search}${hash}`)}`;
+  // From the URL, never from a record: a folder link and a document link
+  // refuse alike, and only the noun differs.
+  const what = pathname.startsWith("/folder/") ? "folder" : "document";
 
   return (
     <div className="empty-state">
@@ -27,7 +30,7 @@ export function NotHere() {
         {/* Deliberately indistinguishable from "you may not read this": with
             no domain gate, a difference between the two would let anyone walk
             the slug space. */}
-        This document does not exist, or you do not have access to it.
+        This {what} does not exist, or you do not have access to it.
       </p>
       {gate === "loading" ? null : gate === "ready" ? (
         <>

@@ -44,20 +44,27 @@ export const THUMB_PIXEL_RATIO = 0.5;
 /** JPEG quality; well under the byte cap at this size. */
 export const THUMB_QUALITY = 0.75;
 
-/** The URL of one stored image. Only ever built from what the record names. */
+/**
+ * The URL of one stored image. Only ever built from what the record names.
+ *
+ * `k` is a link's key, a document's or a folder's, carried as the `~<k>` path
+ * segment as content's is: a reader with no account has no other proof.
+ */
 export function thumbUrl(
   docId: string,
   versionId: string,
   key: string,
   slot: "cover" | number,
+  k?: string | null,
 ): string {
   const name = slot === "cover" ? "cover" : `s${slot}`;
-  return `/thumb/${encodeURIComponent(docId)}/${encodeURIComponent(versionId)}/${key}/${name}.jpg`;
+  const keyed = k ? `~${encodeURIComponent(k)}/` : "";
+  return `/thumb/${keyed}${encodeURIComponent(docId)}/${encodeURIComponent(versionId)}/${key}/${name}.jpg`;
 }
 
 /** The workspace card's cover, from whatever version the record names. */
-export function coverUrl(docId: string, thumb: DocThumb | undefined): string | null {
-  return thumb?.cover ? thumbUrl(docId, thumb.versionId, thumb.cover, "cover") : null;
+export function coverUrl(docId: string, thumb: DocThumb | undefined, k?: string | null): string | null {
+  return thumb?.cover ? thumbUrl(docId, thumb.versionId, thumb.cover, "cover", k) : null;
 }
 
 /**

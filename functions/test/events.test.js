@@ -366,6 +366,7 @@ test("every way to change a document records an event, or says why it need not",
     downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads",
     // Tools
     get_document_access: "reads", get_folder_access: "reads",
+    set_folder_visibility: "a cascade; a folder's reach is logged on folders/{id}/acl, and get_changes reports a document's own visibility",
     set_folder_access: "a cascade; get_changes reports state.readers",
     rename_folder: "folder metadata", move_folder: "a cascade; state.readers", delete_folder: "reparenting; state.readers",
     list_versions: "reads", list_documents: "reads", get_document: "reads", get_lineage: "reads", list_folders: "reads", get_folder: "reads",

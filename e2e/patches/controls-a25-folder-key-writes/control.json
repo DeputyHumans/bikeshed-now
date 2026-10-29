@@ -1,0 +1,13 @@
+{
+  "oracle": "a folder's key reads and never writes (A25.1, SPEC §17 \"A folder's reach\", ADR 0019): a signed-in stranger holding it is refused a suggestion",
+  "what": "manageSuggestion asks readAccess instead of canRead (functions/src/index.ts), so a folder's key reaches a write path",
+  "target": {
+    "spec": "e2e/specs/functional/a25-folder-links.spec.mjs",
+    "case": "A25.1 a folder link opens a private document two levels down, to read: /unlock in both forms, keyed bytes cacheable and noindex, the folder shell named; every refusal alike; a signed-in stranger gets no grant and cannot write",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a suggestion through a folder's key"
+  }
+}

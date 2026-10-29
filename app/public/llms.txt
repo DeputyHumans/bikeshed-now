@@ -121,7 +121,7 @@ request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
 first. The one thing kept between calls is a bookmark: the last `get_changes`
 cursor each credential was given for each document, so a client that forgets
-can ask for `"last"`. If all you have is an HTTP client, you have all thirty-two tools.
+can ask for `"last"`. If all you have is an HTTP client, you have all thirty-three tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -151,7 +151,7 @@ somebody might commit.
 | `accept_suggestion` | Accept somebody's suggestion, as the owner or an approver: its change goes into the draft |
 | `reject_suggestion` | Decline somebody's suggestion, as the owner or an approver, with a reason |
 | `list_folders` | Every folder you can see, each with its full path and how many people can read it |
-| `get_folder` | Who can read one folder, by email, and the teams it is shared with |
+| `get_folder` | Who can read one folder, by email, the teams it is shared with, and any link or public level that opens it further (`throughFolders`). With `k`, a folder shared with you by link lists what it holds |
 | `create_folder` | Create one, optionally inside another |
 | `move_document` | File a document into a folder, or back out to the root; says who can read it now |
 | `rename_document` | Change a document's title; its address stays |
@@ -218,7 +218,7 @@ bikeshed commit <id>
 bikeshed open <id>
 
 bikeshed folders
-bikeshed folder <id>
+bikeshed folder <id|link>
 bikeshed mkdir <name> [--parent <id>]
 bikeshed mv <id> <folder|root>
 bikeshed rename <id> <title>
@@ -594,6 +594,15 @@ Once the person whose token you hold has opened the link in a browser, their
 account holds the access and the key is no longer needed. If the owner rotates
 the link, the old key stops working. Ask for the new one; do not guess.
 
+A **folder's** link, `https://<deployment>/folder/<id>?k=<key>`, opens everything
+beneath the folder, to read and nothing else. `get_folder` with that `k` lists
+one level: subfolders and documents, each with its `url`. `get_document`,
+`list_versions`, `fork_document` and `get_lineage` accept the same key for any
+document beneath it. `get_document` then says `viaFolder: true`, and you cannot
+comment, suggest or edit, even with an account; other tools say so when given
+that key. To do more, the owner has to share the document or folder with the
+person by name.
+
 ## Writing a document that works well here
 
 Each of the four below changes whether a feature works.
@@ -766,6 +775,17 @@ Over MCP: `set_document_visibility`, with `id` and any of `visibility`
 epoch milliseconds, or null to clear). Omitted settings stay unchanged. CLI
 timestamps require a timezone. Private disables open editing. Remaining
 unlisted preserves the existing key; returning to private revokes that key.
+
+A folder has the same levels and expiry, through `set_folder_visibility`
+(`id`, `visibility`, `expiresAt`), or `bikeshed visibility folder <id> …`. It
+has no open editing. **A folder's link or public level opens everything beneath
+it to read, without an account:** its subfolders, documents filed there later,
+and documents other people own or that are private on their own. Say so, and
+name the folder, before you widen one. Its expiry ends only the link or the
+public level. The people it is shared with keep their access, and nothing
+beneath it is frozen. Every document's `get_document_access` lists the folders
+that reach it (`inheritedReach`), and filing into such a folder says so in
+`access.throughFolders`.
 
 Owners may change settings on expired documents, so clear or extend expiry
 when authorized instead of copying the document. Content editing stays frozen

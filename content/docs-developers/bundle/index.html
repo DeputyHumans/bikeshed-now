@@ -850,7 +850,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Thirty-two tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Thirty-three tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -861,6 +861,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>get_folder_access</code></td><td>Inspect owner-visible folder access</td></tr>
         <tr><td><code>set_folder_access</code></td><td>Owner-only folder grants, inherited by its subtree</td></tr>
         <tr><td><code>set_document_visibility</code></td><td>Owner-only sparse visibility, open editing and expiry changes</td></tr>
+        <tr><td><code>set_folder_visibility</code></td><td>Owner-only sparse visibility and expiry for a folder, which open everything beneath it to read</td></tr>
         <tr><td><code>rename_folder</code></td><td>Rename a folder you can edit</td></tr>
         <tr><td><code>move_folder</code></td><td>Move a folder and recompute inherited access</td></tr>
         <tr><td><code>delete_folder</code></td><td>Owner-only; reparent contents and retain all documents</td></tr>
@@ -884,7 +885,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>fork_document</code></td><td>Copy a document you can read into a new private one</td></tr>
         <tr><td><code>get_lineage</code></td><td>Where a document came from and, for its owner, its forks</td></tr>
         <tr><td><code>list_folders</code></td><td>Every folder you can see, with its full path and how many people can read it</td></tr>
-        <tr><td><code>get_folder</code></td><td>Who can read one folder, by email, and the teams it is shared with, named only to their members</td></tr>
+        <tr><td><code>get_folder</code></td><td>Who can read one folder, by email, and the teams it is shared with, named only to their members; with <code>k</code>, what a folder shared by link holds</td></tr>
         <tr><td><code>create_folder</code></td><td>Create a folder</td></tr>
         <tr><td><code>move_document</code></td><td>Move a document into a folder, or back to the top; says who can read it now</td></tr>
         <tr><td><code>rename_document</code></td><td>Give a document a new title; its address stays</td></tr>
@@ -964,11 +965,12 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed open &lt;id&gt;</code></td><td>Open it in a browser</td></tr>
         <tr><td><code>bikeshed access document|folder &lt;id&gt;</code></td><td>Inspect grants; --add principals --role role and --remove principals change direct grants</td></tr>
         <tr><td><code>bikeshed visibility &lt;id&gt; [private|unlisted|public]</code></td><td>Read settings or patch with --public-edit true|false and --expires timestamp|none; omissions stay unchanged</td></tr>
+        <tr><td><code>bikeshed visibility folder &lt;id&gt; [private|unlisted|public]</code></td><td>A folder's level and --expires; its link opens everything beneath it, to read</td></tr>
         <tr><td><code>bikeshed rename-folder &lt;id&gt; &lt;name&gt;</code></td><td>Rename a folder</td></tr>
         <tr><td><code>bikeshed move-folder &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a folder; changes inherited access</td></tr>
         <tr><td><code>bikeshed delete-folder &lt;id&gt;</code></td><td>Owner-only; reparent contents</td></tr>
         <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids and how many can read each</td></tr>
-        <tr><td><code>bikeshed folder &lt;id&gt;</code></td><td>Who can read a folder, and so anything filed in it</td></tr>
+        <tr><td><code>bikeshed folder &lt;id|link&gt;</code></td><td>Who can read a folder, and so anything filed in it; with a folder's link, what it opens</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>
         <tr><td><code>bikeshed mv &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a document</td></tr>
         <tr><td><code>bikeshed rename &lt;id&gt; &lt;title&gt;</code></td><td>Give a document a new title; its address stays</td></tr>

@@ -284,6 +284,45 @@ describe("firestore rules", () => {
         createdAt: new Date(),
       });
 
+      // A public folder holding a document that is private on its own, as the
+      // folder cascade leaves them (SPEC §17 "A folder's reach"). The server
+      // serves its bytes and mirrors it; the rules must open nothing more.
+      await setDoc(doc(db, "folders/shared"), {
+        folderId: "shared",
+        name: "Shared",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        visibility: "public",
+        reach: [{ folderId: "shared", visibility: "public", expiresAt: null }],
+        members: [OWNER.email],
+        editorMembers: [OWNER.email],
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/under-public-folder"), {
+        docId: "under-public-folder",
+        title: "Under a public folder",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        folderId: "shared",
+        visibility: "private",
+        members: [OWNER.email],
+        editorMembers: [OWNER.email],
+        currentVersion: "v1",
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/under-public-folder/versions/v1"), { versionId: "v1" });
+      await setDoc(doc(db, "docs/under-public-folder/versions/v1/annotations/a1"), {
+        annId: "a1",
+        authorUid: OWNER.uid,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "public/under-public-folder"), {
+        docId: "under-public-folder",
+        title: "Under a public folder",
+        visibility: "public",
+        viaFolder: true,
+      });
+
       await setDoc(doc(db, "teams/t1"), {
         teamId: "t1",
         name: "Design",
@@ -313,6 +352,13 @@ describe("firestore rules", () => {
       });
       await setDoc(doc(db, "users/u-owner/tokens/grant1"), { tokenId: "grant1", kind: "oauth", name: "Claude" });
       await setDoc(doc(db, "oauthCodes/c1"), { uid: OWNER.uid, codeChallenge: "x" });
+      // An account moving to the address Google renamed it to (SPEC §14).
+      await setDoc(doc(db, "accountMoves/u-owner~1"), {
+        uid: OWNER.uid,
+        from: OWNER.email,
+        to: "owner@renamed.example.com",
+        state: "pending",
+      });
     });
   });
 
@@ -1038,6 +1084,34 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, STRANGER).firestore(), "folders/f1")));
   });
 
+  it("a folder's own level opens its record to nobody, in the rules", async () => {
+    // A public folder is read through the server, which projects; its record
+    // carries members and every ancestor's key hash.
+    for (const db of [env.unauthenticatedContext().firestore(), verified(env, STRANGER).firestore()]) {
+      await assertFails(getDoc(doc(db, "folders/shared")));
+      await assertFails(getDocs(query(collection(db, "folders"), where("visibility", "==", "public"))));
+    }
+    // Control: the same read is the owner's, so the refusal above is the rule's.
+    await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "folders/shared")));
+  });
+
+  it("a document under a public folder is mirrored, and its threads stay behind an account that is a member", async () => {
+    // A folder's reach opens the bytes to read, through the server, and
+    // nothing in the rules: no versions, no annotations, no record (ADR 0019).
+    const anon = env.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anon, "public/under-public-folder")));
+    const stranger = verified(env, STRANGER).firestore();
+    for (const db of [anon, stranger]) {
+      await assertFails(getDoc(doc(db, "docs/under-public-folder")));
+      await assertFails(getDoc(doc(db, "docs/under-public-folder/versions/v1")));
+      await assertFails(getDocs(collection(db, "docs/under-public-folder/versions/v1/annotations")));
+    }
+    // Control: a member reads all of it.
+    const owner = verified(env, OWNER).firestore();
+    await assertSucceeds(getDoc(doc(owner, "docs/under-public-folder/versions/v1")));
+    await assertSucceeds(getDocs(collection(owner, "docs/under-public-folder/versions/v1/annotations")));
+  });
+
   it("a team is visible to its members and to nobody else", async () => {
     await assertSucceeds(getDoc(doc(verified(env, EDITOR).firestore(), "teams/t1")));
     await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "teams/t1")));
@@ -1082,6 +1156,25 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "tokens/tok1")));
     await assertFails(
       setDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok2"), { name: "x" }),
+    );
+  });
+
+  it("an account move is watched by its own account alone, and written by nobody", async () => {
+    // The browser waits on it to know when to sign in again; a job names two
+    // addresses, so nobody else may read or list it, and only the server's
+    // trigger may write it — a client-written job would move an account.
+    const owner = verified(env, OWNER).firestore();
+    await assertSucceeds(getDoc(doc(owner, "accountMoves/u-owner~1")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "accountMoves/u-owner~1")));
+    await assertFails(getDocs(collection(owner, "accountMoves")));
+    await assertFails(updateDoc(doc(owner, "accountMoves/u-owner~1"), { state: "done" }));
+    await assertFails(
+      setDoc(doc(owner, "accountMoves/u-owner~2"), {
+        uid: OWNER.uid,
+        from: OWNER.email,
+        to: "attacker@example.com",
+        state: "pending",
+      }),
     );
   });
 

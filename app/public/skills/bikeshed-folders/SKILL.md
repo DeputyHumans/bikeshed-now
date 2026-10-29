@@ -47,7 +47,14 @@ read is one you cannot file into, and the call will refuse.
 
 `get_folder` names them: everyone by email (the first 25, then a count), who
 can edit, and the teams it is shared with. A team you are not in shows as "a
-team you are not in", as it does in the app, and is never sized.
+team you are not in", as it does in the app, and is never sized. When a link or
+a public level opens the folder further, `throughFolders` says which folder
+does it, and `alsoReadableBy` says to whom: anything filed there is readable by
+them too, without an account.
+
+Given a folder's link, `/folder/<id>?k=<key>`, pass `k` to `get_folder` to list
+what it holds, and pass the same `k` to `get_document` for each document. That
+is reading only: you cannot comment, suggest or edit through a folder's link.
 
 ## Choosing a folder for a new document
 
@@ -122,8 +129,8 @@ Report the returned destination and reparented counts. Use these operations
 when authorized; do not ask again for authorization already given.
 
 For sharing and role changes use `get_folder_access`, `set_folder_access`,
-`get_document_access` and `set_document_access`, described in the
-`bikeshed-permissions` skill. Documents cannot be deleted.
+`set_folder_visibility`, `get_document_access` and `set_document_access`,
+described in the `bikeshed-permissions` skill. Documents cannot be deleted.
 
 If a listing is `truncated`, the workspace has more folders than one call
 returns. Say so rather than treating what you got as the whole tree.

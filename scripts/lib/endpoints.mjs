@@ -78,14 +78,20 @@ export const ENDPOINTS = [
   // serving its own shell for `/d/*`. `devProxy: false` keeps the row out of
   // the dev proxy while Hosting still rewrites it.
   { path: "/d", fn: "docShell", match: "prefix", devProxy: false },
+  // A folder's page is a client route too, and its shell says the folder's
+  // name to a pasted link when its link or public level opens it (SPEC §17).
+  // `/folder` itself is the exact createFolder row above, which a prefix
+  // glob does not match.
+  { path: "/folder", fn: "docShell", match: "prefix", devProxy: false },
 ];
 
 /**
  * Functions with no Hosting rewrite: Firestore triggers. `onCommentCreated`
  * sends comment notices; the three `record…Event` triggers write the change
- * log (SPEC §19, ADR 0016).
+ * log (SPEC §19, ADR 0016); `moveAccount` moves an account to the address
+ * Google renamed it to (SPEC §14, ADR 0020).
  */
-export const TRIGGERS = ["onCommentCreated", "recordVersionEvent", "recordThreadEvent", "recordCommentEvent"];
+export const TRIGGERS = ["onCommentCreated", "recordVersionEvent", "recordThreadEvent", "recordCommentEvent", "moveAccount"];
 
 /** Every deployed function name, in `firebase functions:delete` order. */
 export function functionNames() {

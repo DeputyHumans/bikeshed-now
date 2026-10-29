@@ -2,7 +2,7 @@
 // Client for the owner-only sharing endpoint (SPEC §2, §18).
 
 import { get, post } from "./api";
-import type { InheritedGrant, Role } from "./types";
+import type { InheritedGrant, InheritedReach, Role } from "./types";
 
 /**
  * Writes to docs/* are server-side only — firestore.rules denies client writes —
@@ -33,8 +33,14 @@ export function setAccess(docId: string, change: AccessChange): Promise<AccessSt
   );
 }
 
+/** What a record inherits from the folders above it: their grants, and their reach (SPEC §2). */
+export interface Inheritance {
+  grants: InheritedGrant[];
+  reach: InheritedReach[];
+}
+
 /** What the document inherits from its folders, for its owner's share panel. */
-export async function inheritedAccess(docId: string): Promise<InheritedGrant[]> {
-  const { inherited } = await get<{ inherited: InheritedGrant[] }>("/access", { docId });
-  return inherited;
+export async function inheritedAccess(docId: string): Promise<Inheritance> {
+  const { inherited, inheritedReach } = await get<{ inherited: InheritedGrant[]; inheritedReach?: InheritedReach[] }>("/access", { docId });
+  return { grants: inherited, reach: inheritedReach ?? [] };
 }

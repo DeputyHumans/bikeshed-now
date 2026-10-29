@@ -1,17 +1,31 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2969,9 +2969,13 @@
-     const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
-     const deciders = suggestion ? membershipOf(doc).approverMembers : [];
-     for (const e of deciders) recipients.add(normalizeEmail(e));
+@@ -2714,6 +2714,10 @@
+     };
+     const authorUid = uidOf(comment);
+     const uids = new Set<string>(authorUid ? [authorUid] : []);
 +    // A participant who is no longer a member is told nothing more.
 +    const members = new Set(
 +      (Array.isArray(doc.members) ? doc.members : []).map((m: unknown) => normalizeEmail(String(m))),
 +    );
      for (const c of siblingSnap.docs) {
-       const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+       const d = c.data() ?? {};
+       const uid = uidOf(d);
+@@ -2722,7 +2726,7 @@
+         continue;
+       }
+       const e = normalizeEmail(String(d.authorEmail || ""));
 -      if (e) recipients.add(e);
 +      if (e && members.has(e)) recipients.add(e);
      }
+     const accounts = uids.size
+       ? await db().getAll(...[...uids].map((uid) => db().collection("users").doc(uid)))
+@@ -2732,7 +2736,7 @@
+       const e = normalizeEmail(String(account.data()?.email || ""));
+       if (!e) continue;
+       if (account.id === authorUid) authorNow = e;
+-      else recipients.add(e);
++      else if (members.has(e)) recipients.add(e);
+     }
      recipients.delete(authorEmail);
-     if (recipients.size === 0) return;
+     if (authorNow) recipients.delete(authorNow);

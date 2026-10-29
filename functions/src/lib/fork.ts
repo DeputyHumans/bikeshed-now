@@ -25,7 +25,6 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
   canManageSharing,
-  canRead,
   expiredForReader,
   isMember,
   visibilityOf,
@@ -37,6 +36,8 @@ import { emptyGrants } from "./access";
 import { computeDocMembership, resolveFolderTarget, slugify } from "./folders";
 import { safeSegment } from "./http";
 import { linkProofFor } from "./linkgrant";
+import { syncPublicProjection } from "./publicdoc";
+import { loadReadAccess } from "./reach";
 import { resolveMarking } from "./marking";
 import { syncPresenceAccess } from "./presence";
 import { CREATE_ONLY, placeNewDocument } from "./publish";
@@ -108,7 +109,9 @@ async function openReadable(
   if (!snap.exists) return null;
   const data = snap.data() as Stored;
   const proof = await linkProofFor(ref, data, caller, k);
-  if (!canRead(data, caller, proof)) return null;
+  // A read of the source, so a folder's reach counts (ADR 0019); the fork
+  // itself is the caller's own document, which nothing here can widen.
+  if ((await loadReadAccess(db, data, caller, proof)) === null) return null;
   // Forking reads every byte, so it is a read path: without this, copying an
   // expired document would get its content back out from behind the date.
   if (expiredForReader(data, caller)) return null;
@@ -253,6 +256,9 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   await batch.commit();
 
   await syncPresenceAccess(docId, membership.members, membership.editorMembers);
+  // Filed under a public folder, the fork is public through it (SPEC §13, §17).
+  // A new document has no mirror to delete, so only a public reach needs one.
+  if (target.reach.some((e) => e.visibility === "public")) await syncPublicProjection(db, docId);
   return { ok: true, docId, versionId: "v1", title };
 }
 
@@ -367,9 +373,9 @@ async function changedSince(
  * Every fork made from this document: all of them counted, the ones the owner
  * can open listed.
  *
- * "Can open" is the same `canRead` the content proxy uses, so an unlisted fork
- * appears only to an owner who holds its link grant, and an expired one not at
- * all. A fork's owner is named only where the original's owner is a member of
+ * "Can open" is the same read access the content proxy uses, so an unlisted
+ * fork appears only to an owner who holds its link grant or whose folder's
+ * reach opens it, and an expired one not at all. A fork's owner is named only where the original's owner is a member of
  * that fork and could read the name off its record anyway.
  *
  * Costs N+1 reads plus a grant read per unlisted fork, on demand, with no
@@ -389,7 +395,7 @@ async function forksOf(
       if (!snap.exists) continue;
       const data = snap.data() as Stored;
       const proof = await linkProofFor(snap.ref, data, caller, null);
-      if (!canRead(data, caller, proof) || expiredForReader(data, caller)) continue;
+      if (expiredForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
       const listing: ForkListing = {
         docId: snap.id,
         title: str(data.title, "Untitled"),
