@@ -14,9 +14,11 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## 0.24.3 — 2026-10-29
+## Unreleased
 
 ### Fixed
+
+- Retain all four resumed-campaign discoveries in the exact identity and claim inventory guard.
 
 - Explicitly settle print comparison frames after removing elements instead of relying on browser-dependent screenshot timing.
 

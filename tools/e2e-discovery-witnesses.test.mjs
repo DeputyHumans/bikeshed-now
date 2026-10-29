@@ -1107,8 +1107,37 @@ expected.push({
   ]
 });
 
+
+expected.push({
+  "id": "resume-browser-shutdown-boundary",
+  "claim": "Concurrent pool close callers could return before browser exit, shutdown errors were swallowed, and a renderer waiting for memory could launch after shutdown. Await shared shutdown and refuse later measurement after an unsafe maintenance boundary.",
+  "requiredCases": []
+});
+commandIds.push("resume-browser-shutdown-boundary");
+
+expected.push({
+  "id": "resume-integrated-control-preflight",
+  "claim": "Integrated OAuth declarations contained duplicate bindings and stale capability disclosure; mutation patches drifted from current source and the staged Hosting configuration. Reject invalid syntax before startup and validate independent controls with their declared overlays and refreshed disclosure oracles.",
+  "requiredCases": []
+});
+commandIds.push("resume-integrated-control-preflight");
+
+expected.push({
+  "id": "resume-cloud-participant-scope",
+  "claim": "Cloud qualification still demanded twenty-participant trials after local acceptance adopted the reviewed ten-participant cap. Share the exact validated scope while retaining every N2/N5/N10 trial and the original unscoped matrix.",
+  "requiredCases": []
+});
+commandIds.push("resume-cloud-participant-scope");
+
+expected.push({
+  "id": "resume-print-baseline-settle",
+  "claim": "The print comparison baseline relied on screenshot timing to include two animation frames after element removal. The Playwright-matched browser exposed an unpainted baseline. Explicitly settle after removal and retain the same pixel assertion.",
+  "requiredCases": []
+});
+commandIds.push("resume-print-baseline-settle");
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 33 discoveries retain their identities and original claims", () => {
+test("all 37 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
