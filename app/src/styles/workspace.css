@@ -64,22 +64,14 @@
   font-size: var(--fs-small);
   color: var(--color-ink-muted);
 }
-/* The workspace's trail, with the open folder's own actions beside its name.
-   The trail keeps its margin wherever it stands alone (the viewer, a shared
-   folder); here the row owns the spacing. */
-.workspace-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-  margin-bottom: var(--s-3);
-}
-.workspace-head .breadcrumb { margin-bottom: 0; min-width: 0; }
-.workspace-head-actions { display: flex; align-items: center; gap: var(--s-1); }
 .breadcrumb a { color: inherit; text-decoration: none; }
 .breadcrumb a:hover { color: var(--color-ink); text-decoration: underline; }
 .breadcrumb-sep { opacity: 0.5; }
 
+/* The trail with the open folder's own actions beside its name, and the
+   toolbar under it: two rows laid out alike. The trail keeps its own margin
+   where it stands alone (a shared folder); here the row owns the spacing. */
+.workspace-head,
 .workspace-toolbar {
   display: flex;
   align-items: center;
@@ -87,6 +79,8 @@
   flex-wrap: wrap;
   margin-bottom: var(--s-3);
 }
+.workspace-head .breadcrumb { margin-bottom: 0; min-width: 0; }
+.workspace-head-actions { display: flex; align-items: center; gap: var(--s-1); }
 .workspace-search { flex: 1; min-width: 180px; max-width: 320px; }
 
 .doc-grid {

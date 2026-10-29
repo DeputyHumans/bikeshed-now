@@ -858,8 +858,9 @@ export function DocViewer() {
         },
       });
     }
-    // On a phone the toolbar has no room for Print, so it is listed here; on
-    // anything wider it is a button of its own and is not listed twice.
+    // On a phone Print is listed here instead of on the toolbar: the bar
+    // already fills 400px, and printing from a phone is rare enough to sit one
+    // tap further away. Anywhere wider it is a button and is not listed twice.
     if (phone) entries.push({ id: "pdf", label: "Print or save as PDF", onSelect: printCurrent });
     entries.push(
       { id: "image", label: "Export an image…", onSelect: () => setDialog("image") },
@@ -908,7 +909,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again

@@ -30,6 +30,7 @@ import { Breadcrumb } from "../components/Breadcrumb";
 import { FolderTree } from "../components/FolderTree";
 import { Icon } from "../components/Icon";
 import { Menu, type MenuEntry } from "../components/Menu";
+import { MoreMenu } from "../components/MoreMenu";
 import { MoveDialog } from "../components/MoveDialog";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
@@ -366,10 +367,6 @@ export function DocList() {
   // every document nobody has opened since (SPEC §6d).
   useCoverBackfill(visibleDocs, emailLower ?? "");
 
-  const currentFolderName = useMemo(
-    () => folders.find((f) => f.folderId === folderId)?.name ?? "Everything",
-    [folders, folderId],
-  );
 
   const visibleFolders = useMemo(() => {
     const scoped = search
@@ -413,6 +410,10 @@ export function DocList() {
     });
 
   const folderById = useMemo(() => new Map(folders.map((f) => [f.folderId, f])), [folders]);
+  // The folder this page is showing, looked up once for its header, its name
+  // and whether this account can see it at all.
+  const current = folderId ? folderById.get(folderId) : undefined;
+  const currentFolderName = current?.name ?? "Everything";
 
   /**
    * Filing is sharing, and filing under a shared folder is sharing with
@@ -547,9 +548,10 @@ export function DocList() {
           ) {
             return;
           }
-          // Deleted from inside itself, the page would be left on a folder that
-          // no longer exists, which reads as a link to somebody else's folder.
-          // Go up first, to where its contents are about to land.
+          // Deleted from inside itself, from this tab, the page would be left
+          // on a folder that no longer exists, which reads as a link to
+          // somebody else's folder. Go up first, to where its contents are
+          // about to land.
           if (folder.folderId === folderId) {
             navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
           }
@@ -566,12 +568,15 @@ export function DocList() {
 
   // A folder this account is not a member of: its link may still open it,
   // read-only, exactly as it would for somebody signed out (SPEC §17).
-  if (folderId && !foldersLoading && !folderById.has(folderId)) return <SharedFolder />;
+  if (folderId && !foldersLoading && !current) return <SharedFolder />;
 
-  // The folder this page is showing, with its own actions beside its name:
-  // sharing a folder used to mean going up a level to find its card's menu.
-  const current = folderId ? folderById.get(folderId) : undefined;
+  // The open folder's own actions sit beside its name: sharing a folder used
+  // to mean going up a level to find its card's menu. Its menu is the card's,
+  // less "Open" (this is it) and, for its owner, less the Share the button
+  // beside it already is; anyone else keeps Share there, disabled, with the
+  // reason.
   const ownsCurrent = current?.ownerEmail === emailLower;
+  const headerOmits = ownsCurrent ? ["open", "share"] : ["open"];
 
   return (
     <div className="workspace">
@@ -593,19 +598,10 @@ export function DocList() {
                   <Icon name="share" size={15} /> Share
                 </button>
               ) : null}
-              <Menu
-                label={`Actions for ${current.name}`}
-                // The card's menu, less "Open" (this is it) and, for its owner,
-                // less the Share the button beside it already is. Anyone else
-                // keeps Share there, disabled, with the reason.
-                entries={folderMenu(current).filter(
-                  (e) => e.id !== "open" && !(ownsCurrent && e.id === "share"),
-                )}
-                trigger={(props) => (
-                  <button {...props} type="button" className="icon-btn" aria-label="Folder actions">
-                    <Icon name="more" size={16} />
-                  </button>
-                )}
+              <MoreMenu
+                label="Folder actions"
+                menuLabel={`Actions for ${current.name}`}
+                entries={folderMenu(current).filter((e) => !headerOmits.includes(e.id))}
               />
             </div>
           ) : null}

@@ -71,6 +71,28 @@ function mount() {
   );
 }
 
+/** The workspace opened on a path, with "/" there to be navigated up to. */
+function mountAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <Routes>
+          <Route path="/folder/:folderId" element={<DocList />} />
+          <Route path="/" element={<p>EVERYTHING</p>} />
+        </Routes>
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
+
+function folderMeta(overrides: Partial<FolderMeta> = {}): FolderMeta {
+  return {
+    folderId: "plans", name: "Plans", parentId: null, ancestors: [], depth: 0,
+    ownerEmail: "me@example.com", members: ["me@example.com"], viewers: [], editors: [],
+    ...overrides,
+  } as unknown as FolderMeta;
+}
+
 const EMPTY = /Nothing here yet/;
 
 beforeEach(() => {
@@ -79,6 +101,7 @@ beforeEach(() => {
   createFolder.mockReset();
   forkDoc.mockReset();
   uploadDoc.mockClear();
+  deleteFolder.mockClear();
 });
 
 afterEach(() => {
@@ -337,22 +360,10 @@ describe("dropping a new document", () => {
 });
 
 describe("a folder this account is not a member of", () => {
-  function mountFolder(folderId: string) {
-    return render(
-      <MemoryRouter initialEntries={[`/folder/${folderId}?k=key`]}>
-        <ToastProvider>
-          <Routes>
-            <Route path="/folder/:folderId" element={<DocList />} />
-          </Routes>
-        </ToastProvider>
-      </MemoryRouter>,
-    );
-  }
-
   it("is handed to the shared-folder page once its folders have arrived, and never before", () => {
     // Before the folders land, every folder looks foreign; deciding then would
     // send a member to the stranger's page for one frame.
-    mountFolder("theirs");
+    mountAt("/folder/theirs?k=key");
     expect(screen.queryByText("SHARED FOLDER")).toBeNull();
     act(() => listeners.docs?.([]));
     act(() => listeners.folders?.([]));
@@ -360,63 +371,38 @@ describe("a folder this account is not a member of", () => {
   });
 
   it("is the workspace for a member, whatever key the URL carries", () => {
-    mountFolder("mine");
+    mountAt("/folder/mine?k=key");
     act(() => listeners.docs?.([]));
     act(() =>
-      listeners.folders?.([
-        {
-          folderId: "mine", name: "Mine", parentId: null, ancestors: [], depth: 0,
-          ownerEmail: "me@example.com", members: ["me@example.com"], viewers: [], editors: [],
-        } as unknown as FolderMeta,
-      ]),
+      listeners.folders?.([folderMeta({ folderId: "mine", name: "Mine" })]),
     );
     expect(screen.queryByText("SHARED FOLDER")).toBeNull();
   });
 });
 
 describe("the open folder's own actions", () => {
-  const folder = (over: Partial<FolderMeta> = {}) =>
-    ({
-      folderId: "plans", name: "Plans", parentId: null, ancestors: [], depth: 0,
-      ownerEmail: "me@example.com", members: ["me@example.com"], viewers: [], editors: [],
-      ...over,
-    }) as unknown as FolderMeta;
-
-  function openFolder(folders: FolderMeta[], folderId = "plans") {
-    const view = render(
-      <MemoryRouter initialEntries={[`/folder/${folderId}`]}>
-        <ToastProvider>
-          <Routes>
-            <Route path="/folder/:folderId" element={<DocList />} />
-            <Route path="/" element={<p>EVERYTHING</p>} />
-          </Routes>
-        </ToastProvider>
-      </MemoryRouter>,
-    );
+  function openFolder(folders: FolderMeta[]) {
+    const view = mountAt("/folder/plans");
     act(() => listeners.docs?.([]));
     act(() => listeners.folders?.(folders));
     return view;
   }
 
-  beforeEach(() => {
-    deleteFolder.mockClear();
-  });
-
   it("lets its owner share it from inside, without going up a level to its card", async () => {
-    openFolder([folder()]);
+    openFolder([folderMeta()]);
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("offers everything the card's menu does except Open, and Share only once", () => {
-    openFolder([folder()]);
+    openFolder([folderMeta()]);
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     const items = screen.getAllByRole("menuitem").map((b) => b.textContent);
     expect(items).toEqual(["Rename…", "Move…", "Delete folder"]);
   });
 
   it("gives somebody else's folder no Share button, and says in the menu who can", () => {
-    openFolder([folder({ ownerEmail: "dana@example.com", members: ["dana@example.com", "me@example.com"] } as Partial<FolderMeta>)]);
+    openFolder([folderMeta({ ownerEmail: "dana@example.com", members: ["dana@example.com", "me@example.com"] })]);
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     const share = screen.getByRole("menuitem", { name: "Share…" }) as HTMLButtonElement;
@@ -426,7 +412,7 @@ describe("the open folder's own actions", () => {
 
   it("goes up a level when the folder being looked at is deleted, rather than stay on one that is gone", () => {
     vi.stubGlobal("confirm", () => true);
-    openFolder([folder()]);
+    openFolder([folderMeta()]);
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }));
     expect(deleteFolder).toHaveBeenCalledWith("plans");
@@ -436,7 +422,7 @@ describe("the open folder's own actions", () => {
   it("is not shown on the workspace's top level, which is no folder at all", () => {
     mount();
     act(() => listeners.docs?.([]));
-    act(() => listeners.folders?.([folder()]));
+    act(() => listeners.folders?.([folderMeta()]));
     expect(screen.queryByRole("button", { name: "Folder actions" })).toBeNull();
   });
 });

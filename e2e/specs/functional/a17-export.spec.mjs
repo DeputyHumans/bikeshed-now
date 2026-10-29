@@ -514,15 +514,16 @@ function printExtract(d, locked) {
  */
 const PRINT_FRAME = '[sandbox~="allow-modals"]';
 
+/** The toolbar's own Print button: the way a reader prints, anywhere wider than a phone. */
+const printButton = (u) => u.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true });
+const toolbarPrint = (u) => () => printButton(u).click();
+
 /**
  * Print once through User.capturePrint (`action` a More-menu label or a
  * function): the one print frame and its one snapshot, `{html, stamps,
  * firstChildren, date, year}`. Exactly one frame printed exactly once is the
  * harness's measurement holding, so a miss is a precondition.
  */
-/** The toolbar's own Print button: the way a reader prints, anywhere wider than a phone. */
-const toolbarPrint = (u) => () => u.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true }).click();
-
 async function printOnce(ctx, u, action, what) {
   const rec = await u.capturePrint(action, { extract: printExtract, arg: LOCKED, match: PRINT_FRAME });
   if (rec.ignored.length > 0) ctx.step(`${what}: ${rec.ignored.length} iframe(s) added during the print were not print frames (sandbox ${JSON.stringify(rec.ignored.map((f) => f.sandbox))}): ignored`);
@@ -723,7 +724,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   ctx.step("on a 400 px touch phone Print is not on the toolbar, which has no room for it, and More actions → Print or save as PDF prints the same stamped, scrubbed snapshot");
   const phone = await signedIn(ctx, accounts[0], "owner-phone", { device: { width: 400, height: 800, touch: true } });
   await openDoc(ctx, phone, docId);
-  assert.equal(await phone.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true }).count(), 0, "no Print button on a phone's toolbar");
+  assert.equal(await printButton(phone).count(), 0, "no Print button on a phone's toolbar");
   const { frame: phoneFrame, snap: phonePrint } = await printOnce(ctx, phone, "Print or save as PDF", "the phone's More-menu print");
   assert.equal(phoneFrame.sandbox, "allow-same-origin allow-modals", "the phone's print frame sandbox");
   assert.deepEqual(phonePrint.stamps.map((s) => [s.className, s.text]), snap.stamps.map((s) => [s.className, s.text]), "the phone's print stamps the same label and footer");
@@ -779,7 +780,7 @@ scenario("A17.1b an anonymous holder of an unlisted document's link who prints i
   precondition(isDeepStrictEqual((await readDoc(target, `docs/${docId}`)).marking, marking), "docs/{id}.marking is the owner's marking");
   const stamped = [[MARK_CLASS, marking.label], [FOOTER_CLASS, `${title} · v1`]];
 
-  ctx.step("positive control: the owner prints this same document from the More menu and gets both stamps");
+  ctx.step("positive control: the owner prints this same document from the toolbar and gets both stamps");
   const o = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, o, docId);
   const ours = await printOnce(ctx, o, toolbarPrint(o), "the owner's print");
@@ -788,7 +789,7 @@ scenario("A17.1b an anonymous holder of an unlisted document's link who prints i
   precondition(isDeepStrictEqual(ownerStamps, stamped), `the owner's print of this document carries the marking (the control): ${JSON.stringify(ownerStamps)}`);
   const k = await unlisted(ctx, owner, docId);
 
-  ctx.step("an anonymous reader opens /d/<id>?k= and prints from the More menu");
+  ctx.step("an anonymous reader opens /d/<id>?k= and prints from the toolbar");
   const anon = await ctx.users.user({ name: "link-holder" });
   await openDoc(ctx, anon, docId, { k });
   const theirs = await printOnce(ctx, anon, toolbarPrint(anon), "the link holder's print");
