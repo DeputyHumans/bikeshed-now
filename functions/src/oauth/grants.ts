@@ -174,6 +174,8 @@ export function replayCodePair(tokenId: string, code: string, nonce: string, acc
 interface GrantRecord {
   kind?: string;
   uid: string;
+  /** The name the app registered, which is what provenance calls it. */
+  name?: string;
   email: string;
   client?: { id?: string };
   resource?: string;
@@ -226,7 +228,9 @@ export async function verifyAccessToken(
       /* touch is best-effort */
     });
 
-  return { tokenId, uid: g.uid, emailLower: g.email, channel: "mcp" };
+  // An app reads as an app wherever it acts, under the name it registered.
+  // The record's own `channel` stays "mcp" for the account screen's list.
+  return { tokenId, uid: g.uid, emailLower: g.email, channel: "app", name: typeof g.name === "string" ? g.name : "" };
 }
 
 /**

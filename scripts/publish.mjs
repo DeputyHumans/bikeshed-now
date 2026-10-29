@@ -257,7 +257,10 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   const actor = {
     uid: null,
     email: values.account ?? before.data()?.ownerEmail ?? ownerEmail,
-    channel: "cli",
+    // Admin credentials, not an account: it says so rather than pose as the
+    // CLI (SPEC §17).
+    channel: "operator",
+    via: "an operator script",
     client: CLIENT,
   };
   const result = await commitOperatorVersion(db, docRef, {
@@ -270,7 +273,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
       ...(sourceEntry ? { sourceEntry } : {}),
       ...(rendererVersion ? { rendererVersion } : {}),
       storagePrefix, fileCount, bytes, contentHash, files: files.map((f) => f.rel),
-      publishedVia: "cli", publishedByEmail: actor.email, publishedBy: actor,
+      origin: "upload", publishedVia: "operator", publishedByEmail: actor.email, publishedBy: actor,
     },
   }, FieldValue.serverTimestamp());
   if (result.duplicate) {

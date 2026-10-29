@@ -175,7 +175,7 @@ test("get_comments shows a suggestion's change and state, and not the server's r
   assert.deepEqual(threads[0].comments, [], "the generated opener is not repeated to the agent");
 });
 
-test("get_comments shows what a suggestion said before it was changed, by channel and never by token", async () => {
+test("get_comments shows what a suggestion said before it was changed, by channel and never by token id", async () => {
   const w = world();
   const { changeSuggestion } = require("../lib/lib/suggestions.js");
   const { threadId } = await withBucket(() =>
@@ -200,7 +200,8 @@ test("get_comments shows what a suggestion said before it was changed, by channe
   assert.equal(suggestion.revisions.length, 1);
   const [earlier] = suggestion.revisions;
   assert.equal(earlier.replacement, "will do");
-  assert.equal(earlier.via, "mcp");
+  assert.equal(earlier.channel, "mcp");
+  assert.equal(earlier.via, "a personal token", "the credential in words, never its id");
   assert.match(earlier.at, /^\d{4}-\d{2}-\d{2}T/, "an ISO time an agent can read");
   assert.doesNotMatch(JSON.stringify(threads), /t1|tokenId/, "which token did it is not an agent's business");
 });
@@ -309,7 +310,7 @@ test("a suggester's agent changes its suggestion, then takes it back, and the re
   const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1", includeResolved: true });
   assert.equal(threads[0].suggestion.state, "withdrawn");
   assert.deepEqual(
-    threads[0].comments.map((c) => [c.body, c.via]),
+    threads[0].comments.map((c) => [c.body, c.channel]),
     [
       ["Cut it instead.", "mcp"],
       ["Withdrawn.", "mcp"],

@@ -24,6 +24,7 @@ import * as admin from "firebase-admin";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { actorFrom } from "../lib/actor";
+import type { Principal } from "../lib/auth";
 import { bearerFrom, isTokenShaped, verifyToken, type VerifiedToken } from "../lib/tokens";
 import { isAccessTokenShaped, verifyAccessToken } from "../oauth/grants";
 import { allowedResources, challenge } from "../oauth/metadata";
@@ -195,13 +196,27 @@ async function dispatch(
 }
 
 /**
+ * Who a verified /mcp credential acts as: its own channel and name, never the
+ * endpoint's (ADR 0023).
+ */
+export function mcpPrincipal(verified: VerifiedToken): Principal {
+  return {
+    uid: verified.uid,
+    emailLower: verified.emailLower,
+    channel: verified.channel,
+    tokenId: verified.tokenId,
+    credentialName: verified.name,
+  };
+}
+
+/**
  * Handle a POST to /mcp.
  *
  * Authentication is a personal access token or a connected app's access token
- * (SPEC §23), and the channel is stamped `mcp` unconditionally — the endpoint
- * knows more about the channel than the credential does, so a token minted for
- * the CLI still reads as `mcp` when it arrives here. There is no anonymous MCP
- * access: publishing always attributes to a real account.
+ * (SPEC §23), and what acted is the credential's own channel: the CLI reads
+ * `cli` here too, a connected app `app`, and only a personal token minted for
+ * MCP reads `mcp` (ADR 0023). There is no anonymous MCP access: publishing
+ * always attributes to a real account.
  */
 export async function handleMcp(req: Request, res: Response): Promise<void> {
   // The CORS middleware exposes no response headers, so without this a
@@ -252,16 +267,11 @@ export async function handleMcp(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const principal = {
-    uid: verified.uid,
-    emailLower: verified.emailLower,
-    channel: "mcp" as const,
-    tokenId: verified.tokenId,
-  };
+  const principal = mcpPrincipal(verified);
   const ctx: ToolContext = {
     db: admin.firestore(),
     caller: principal,
-    actor: actorFrom(principal, req, "mcp"),
+    actor: actorFrom(principal, req),
   };
 
   const messages: JsonRpcRequest[] = Array.isArray(payload)

@@ -68,5 +68,7 @@ test('an operator withdrawal retains its retirement result after a later publica
   assert.equal(result.retiredEpoch, 'old');
   assert.equal(result.draftPrefix, 'docs/d/bundles/captured/');
   assert.equal(store.get('docs/d').currentVersion, 'v3', 'ACK operator withdrawal: the newer publication remains current');
-  assert.equal(store.get('docs/d').stats.commits, 1, 'ACK operator withdrawal: retry does not decrement stats again');
+  // 2, less the withdrawal, plus the later publication, which counts as every
+  // publish does. A retried decrement would leave 1.
+  assert.equal(store.get('docs/d').stats.commits, 2, 'ACK operator withdrawal: retry does not decrement stats again');
 });

@@ -14,6 +14,28 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- Attribution names the credential, not the endpoint ([ADR 0023](docs/architecture/adr/0023-attribution-names-the-credential.md)). The CLI reads as `cli` on every endpoint, `/mcp` included, where it used to read `mcp`: one person at one terminal no longer produces three different records (`bikeshed publish` read `upload`, `update site.zip` read `cli`, `update notes.md` read `mcp`). An app connected by signing in, such as Claude, now reads as `app` rather than `mcp`. The operator scripts read as `operator`, not `cli`. A personal token minted for MCP or the API still reads `mcp` or `api`. Records written before this release keep what they say.
+- Every action records what did it, in words: `via` is stored with the actor when it acts, as `CLI on mbp`, `CLI token “deploy-bot”`, `personal token “laptop agent”`, `“Claude” (connected app)` or `an operator script`. Revoking or renaming a token later never rewrites history. An app's name is its own claim, so it is always quoted and marked as an app.
+- **Breaking for agents that read `get_comments`:** a comment's and a suggestion revision's `via` is now those words, absent for a person in the browser, and the kind moved to a new `channel` field. `via` used to hold the channel (`"mcp"`, `"web"`).
+- A version records how its content arrived as `origin` (`upload`, `edit` or `fork`), apart from who sent it. `publishedVia` is still written, now derived from `origin` and the channel, so `bikeshed publish` records `cli` like its updates. Every new document and fork counts its first version in "versions published", and so does every operator publish.
+
+### Added
+
+- The Activity panel is one feed, newest first, of everything that happened to the document: every version published (by whom, through what, and whether it was uploaded, edited or forked), comment, suggestion and decision, share, rename, move, visibility, expiry and trust change, and every read. Each row names who acted and, for anything but a person in the browser, what they acted through. People and Automation filter every kind of row, not only reads, and *Show earlier activity* pages back. It used to show reads and access changes only, as two lists, and never who published a version. It is served by `GET /activity`, editors only.
+- MCP `list_versions` says how each version arrived (`origin`) and whether a person did it (`automated`), and, for a member, who published it, `channel` and `via`; a link holder is not told who. `get_changes` events carry `id`, `automated`, `via` and, for a publish, `origin`. `bikeshed versions` and `bikeshed changes` print who and through what.
+- Comment notification emails say what an automated comment came through in the same words, and a suggestion accepted or declined by an agent says so beside the approver's name.
+
+### Fixed
+
+- An account that moved to a new Google address appeared in Activity as the new address granting itself access. It now reads as the address changing.
+- A draft's session log merged two agents of one person, on two tokens, into one entry.
+- A version withdrawn by an operator was recorded with nobody behind it. It is now attributed to the operator script.
+- A fork's change-log event now names the version that was forked, still never who forked it.
+
 ## 0.26.5 — 2026-10-29
 
 ### Fixed

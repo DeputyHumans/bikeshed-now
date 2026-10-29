@@ -177,7 +177,7 @@ export async function sendCommentNotice(
     docTitle: props.docTitle,
     quote: props.quote,
     body: props.body,
-    viaChannel: props.viaChannel,
+    via: props.via,
     suggestion: props.suggestion,
   };
   await sendEmail({

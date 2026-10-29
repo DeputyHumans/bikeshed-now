@@ -30,11 +30,27 @@ const TOKEN_RE = /^bsk_([0-9a-f]{32})\.([A-Za-z0-9_-]{20,64})$/;
  *
  * This is what makes `channel` in the provenance record honest. A caller cannot
  * declare "I am the CLI"; the token they present was created as a CLI token, by
- * their own past self, and the server reads that from its own record. The /mcp
- * endpoint overrides to "mcp" regardless, because the endpoint is the stronger
- * signal.
+ * their own past self, and the server reads that from its own record. It holds
+ * on every endpoint, /mcp included: attribution names the credential, not the
+ * door it came through (ADR 0023).
  */
 export type TokenChannel = "cli" | "mcp" | "api";
+
+/**
+ * What a verified credential reads as: a personal token's own channel, or
+ * `app` for an app connected by signing in (SPEC §23).
+ */
+export type CredentialChannel = TokenChannel | "app";
+
+/**
+ * The names `bikeshed login` gives the token it mints. Defined here, beside the
+ * label that reads them, so "CLI on mbp" is shown as itself rather than as a
+ * token somebody named "CLI on mbp".
+ */
+export const CLI_LOGIN_PREFIX = "CLI on ";
+export const CLI_LOGIN_FALLBACK = "Command line";
+export const cliLoginName = (device: string | null | undefined): string =>
+  device ? `${CLI_LOGIN_PREFIX}${device}` : CLI_LOGIN_FALLBACK;
 
 export interface TokenRecord {
   tokenId: string;
@@ -198,7 +214,9 @@ export interface VerifiedToken {
   tokenId: string;
   uid: string;
   emailLower: string;
-  channel: TokenChannel;
+  channel: CredentialChannel;
+  /** The token's name, or the connected app's: what provenance calls it. */
+  name: string;
 }
 
 /**
@@ -273,6 +291,7 @@ export async function verifyToken(
     uid: record.uid,
     emailLower: record.email,
     channel: record.channel ?? "api",
+    name: typeof record.name === "string" ? record.name : "",
   };
 }
 

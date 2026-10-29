@@ -195,9 +195,9 @@ test("an automated comment is labelled as such", () => {
     quote: "x",
     body: "y",
     url: "https://example.test/d/memo",
-    viaChannel: "mcp",
+    via: "personal token “agent”",
   });
-  assert.match(text, /\(via MCP\)/);
+  assert.match(text, /\(via personal token “agent”\)/, "what it came through, in the words stored with it");
 });
 
 test("a hostile title or body stays inert in the plain-text alternative", () => {

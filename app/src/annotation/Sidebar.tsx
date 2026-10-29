@@ -7,6 +7,7 @@ import { useToast } from "../components/Toast";
 import { addComment, listComments, setResolved } from "../firestore";
 import { peerColor } from "../brand/tokens";
 import { formatRelative } from "../firestore";
+import { viaOf } from "../provenance";
 import { logEvent } from "../analytics";
 import { rejectSuggestion, reviseSuggestion, withdrawSuggestion } from "../suggestions";
 import { SuggestForm } from "../components/SuggestPopover";
@@ -21,15 +22,15 @@ import type { Peer } from "../presence";
  */
 
 function CommentAuthor({ comment }: { comment: Comment }) {
-  const via = comment.actor?.channel;
+  const via = viaOf(comment.actor);
   return (
     <div className="comment-head">
       <span className="comment-author">{comment.authorEmail}</span>
-      {via && via !== "web" ? (
+      {via ? (
         // Server-derived, so it can be stated as fact. The self-reported client
         // and agent strings beside it get no badge, because a badge implying
         // verification it does not have is worse than no badge.
-        <span className="badge-automated" title={`Posted through the ${via.toUpperCase()} interface`}>
+        <span className="badge-automated" title={`Posted on ${comment.authorEmail}'s behalf by ${via}`}>
           via {via}
         </span>
       ) : null}
@@ -41,6 +42,13 @@ function CommentAuthor({ comment }: { comment: Comment }) {
       <span>{formatRelative(comment.createdAt)}</span>
     </div>
   );
+}
+
+/** Who decided a suggestion, and through what when it was not them in the browser. */
+function decider(s: Suggestion, fallback: string): string {
+  const who = s.decidedBy?.email ?? fallback;
+  const via = viaOf(s.decidedBy);
+  return via ? `${who}, via ${via}` : who;
 }
 
 /** Whether a suggestion's claim is still held, and by whom. */
@@ -58,9 +66,9 @@ function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggest
   const holder = suggestion.state === "pending" ? claimHolder(suggestion) : null;
   const status =
     suggestion.state === "accepted"
-      ? `Accepted by ${suggestion.decidedBy?.email ?? "an approver"}`
+      ? `Accepted by ${decider(suggestion, "an approver")}`
       : suggestion.state === "rejected"
-        ? `Rejected by ${suggestion.decidedBy?.email ?? "an approver"}`
+        ? `Rejected by ${decider(suggestion, "an approver")}`
         : suggestion.state === "withdrawn"
           ? `Withdrawn by ${suggestion.decidedBy?.email ?? "its author"}`
           : stale

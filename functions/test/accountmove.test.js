@@ -256,7 +256,9 @@ test("each owner's log says the address moved, where it was named, once", async 
     assert.equal(e.reason, "address-moved");
     assert.deepEqual([e.added, e.removed], [[NEW], [OLD]]);
   }
-  assert.equal(w.store.get(`docs/shared/events/${entry}`).type, "access.changed");
+  const event = w.store.get(`docs/shared/events/${entry}`);
+  assert.equal(event.type, "access.changed");
+  assert.equal(event.data.reason, "address-moved", "the feed says an address changed, not that it granted itself access");
   // Reached only through the team or the folder: nothing about it changed.
   assert.equal(w.store.has(`docs/viateam/acl/${entry}`), false);
   assert.equal(w.store.has(`docs/infolder/acl/${entry}`), false);

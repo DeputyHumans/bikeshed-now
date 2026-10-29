@@ -27,9 +27,11 @@ type Writer = admin.firestore.WriteBatch | admin.firestore.Transaction;
  * - An event is created, never overwritten. A redelivered trigger therefore
  *   writes nothing, where an overwrite would move `at` past a cursor and report
  *   the event twice.
- * - No email and no body is stored. Both are joined from the source record when
- *   the log is read, so a deleted comment drops out of the feed instead of
- *   living on in it.
+ * - No body is stored, and no actor's email: both are joined from the source
+ *   record when the log is read, so a deleted comment drops out of the feed
+ *   instead of living on in it, and an account that moved address reads under
+ *   its new one. An access change does keep the addresses it granted or
+ *   removed, because a grant is to an address (ADR 0004).
  */
 
 export type EventType =
@@ -48,7 +50,6 @@ export type EventType =
   | "doc.expiry"
   | "doc.moved"
   | "doc.visibility"
-  | "doc.link_rotated"
   | "doc.trust"
   | "access.changed"
   | "fork.created";
@@ -61,6 +62,8 @@ export interface EventActor {
   uid: string | null;
   channel: string;
   tokenId?: string;
+  /** The credential in words, as it was when it acted (lib/actor.ts). */
+  via?: string;
 }
 
 export interface EventInput {
@@ -73,15 +76,19 @@ export interface EventInput {
   data?: Record<string, unknown>;
 }
 
-/** The log's own part of an actor: uid, channel and token, never the email. */
+/** The log's own part of an actor: uid, channel, token and its words, never the email. */
 export function eventActor(actor: Partial<Actor> | null | undefined): EventActor | null {
   if (!actor || typeof actor.channel !== "string") return null;
   return {
     uid: typeof actor.uid === "string" ? actor.uid : null,
     channel: actor.channel,
     ...(typeof actor.tokenId === "string" && actor.tokenId ? { tokenId: actor.tokenId } : {}),
+    ...(typeof actor.via === "string" && actor.via ? { via: actor.via } : {}),
   };
 }
+
+/** Who withdraws a version: only scripts/delete-version.mjs does, as nobody. */
+const OPERATOR: EventActor = { uid: null, channel: "operator", via: "an operator script" };
 
 /** The stored shape of an event, for a writer that has to choose its id itself. */
 export function eventRecord(input: EventInput): Record<string, unknown> {
@@ -148,8 +155,7 @@ export function versionEvents(versionId: string, before: Data, after: Data): Eve
     ];
   }
   if (before && !after) {
-    // Only scripts/delete-version.mjs deletes a version, and it acts as nobody.
-    return [{ type: "version.withdrawn", audience: "readers", version: versionId }];
+    return [{ type: "version.withdrawn", audience: "readers", version: versionId, actor: OPERATOR }];
   }
   return [];
 }

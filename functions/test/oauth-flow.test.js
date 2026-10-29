@@ -20,7 +20,7 @@ const { fakeFirestore, fakeToken, withFakeAdmin, invoke } = require("./fakes.js"
 const { oauth, oauthConsent, mcp, manageTokens } = require("../lib/index.js");
 const { handleConsent } = require("../lib/oauth/consent.js");
 const { verifyAccessToken } = require("../lib/oauth/grants.js");
-const { resolveCaller } = require("../lib/lib/actor.js");
+const { actorFrom, resolveCaller } = require("../lib/lib/actor.js");
 const { clearClientCache } = require("../lib/oauth/clients.js");
 
 const ANA_TOKEN = { uid: "u-ana", email: "ana@example.com", email_verified: true };
@@ -328,6 +328,8 @@ test("the command line gets an ordinary personal token through the same consent"
   assert.ok(caller, "the CLI personal token authenticates beyond MCP at /publish");
   assert.equal(caller.uid, "u-ana");
   assert.equal(caller.channel, "cli");
+  assert.equal(caller.credentialName, "CLI on laptop");
+  assert.equal(actorFrom(caller, { headers: {} }).via, "CLI on laptop", "what its actions are attributed to");
   const row = (await w.listTokens()).body.tokens.find((x) => x.tokenId === caller.tokenId);
   assert.equal(row.name, "CLI on laptop");
   assert.equal(row.kind, undefined);
@@ -511,6 +513,19 @@ test("a token may be bound to any host this deployment answers on, and no other"
   assert.equal(g.resource, "https://demo-bikeshed.web.app/mcp");
   const verified = await w.run(() => verifyAccessToken(w.db, pair.access_token, ["https://elsewhere.example/mcp"]));
   assert.equal(verified, null, "a token is only good for the resource it was issued for");
+});
+
+test("an app connected by signing in acts as an app, under the name it registered", async () => {
+  // It used to read "mcp", the same as a personal token and the CLI (ADR 0023).
+  const w = world();
+  const { pair, tokenId } = await connect(w);
+  const g = w.store.get(`tokens/${tokenId}`);
+  const verified = await w.run(() => verifyAccessToken(w.db, pair.access_token, [RESOURCE]));
+  assert.equal(verified.channel, "app");
+  assert.equal(verified.name, g.name);
+  assert.ok(g.name, "the grant carries the app's registered name");
+  const actor = actorFrom({ ...verified, credentialName: verified.name }, { headers: {} });
+  assert.equal(actor.via, `“${g.name}” (connected app)`);
 });
 
 // --- The token endpoint -----------------------------------------------------

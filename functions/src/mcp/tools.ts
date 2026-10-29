@@ -41,7 +41,7 @@ import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
 import { MANAGEMENT_TOOLS } from "./management";
 import { bucketName, publicOrigin } from "../config";
-import type { Actor } from "../lib/actor";
+import { viaLabel, type Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
 import {
   canEdit,
@@ -55,6 +55,7 @@ import {
   isDocEditor,
   isExpired,
   isFolderBasis,
+  isMember,
   visibilityOf,
   type DocAclData,
   type FolderAclData,
@@ -73,6 +74,7 @@ import {
   type EventActor,
 } from "../lib/events";
 import { extractBundle } from "../lib/bundle";
+import { describeEvents, docReader, originOf } from "../lib/changefeed";
 import { grantTokenOf, linkGrantRef, linkProofFor } from "../lib/linkgrant";
 import {
   BAD_DOC_ID,
@@ -110,14 +112,6 @@ const CHANGE_PAGE = 100;
 /** How often get_changes suggests asking, in seconds. */
 const RETRY_AFTER_SECONDS = 60;
 
-/** One read per path for the length of a call. */
-function memo<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
-  const seen = new Map<string, Promise<T>>();
-  return (key) => {
-    if (!seen.has(key)) seen.set(key, fn(key));
-    return seen.get(key)!;
-  };
-}
 /**
  * The folder tree comes back whole or not at all.
  *
@@ -157,15 +151,23 @@ function asArray(v: unknown): string[] {
 }
 
 /**
- * One earlier form of a suggestion, as an agent reads it: the channel it was
- * changed through, never the token that did it.
+ * What acted, as an agent reads it: the channel, and for anything but a person
+ * in the browser the credential in words ("CLI on mbp"), never the token's id.
+ * `via` means those words in every tool (ADR 0023).
  */
+function actedThrough(actor: Actor | undefined): { channel: string; via?: string } {
+  const channel = actor?.channel ?? "web";
+  if (channel === "web") return { channel };
+  return { channel, via: actor?.via ?? viaLabel(channel) };
+}
+
+/** One earlier form of a suggestion, as an agent reads it. */
 function revisionOut(r: { replacement?: unknown; note?: unknown; at?: { toDate?: () => Date }; actor?: Actor }) {
   return {
     replacement: String(r.replacement ?? ""),
     ...(typeof r.note === "string" && r.note ? { note: r.note } : {}),
     at: r.at?.toDate?.().toISOString() ?? null,
-    via: r.actor?.channel ?? "web",
+    ...actedThrough(r.actor),
   };
 }
 
@@ -636,11 +638,16 @@ export const TOOLS: ToolDefinition[] = [
         q = q.startAfter(cursor.data()!.publishedAt, cursor.id);
       }
       const snap = await q.get();
+      // Who published, and through which credential, is a member's to know:
+      // a link holder learns how each version arrived and whether a person
+      // did it, never an address or a token's name (SPEC §17).
+      const member = isMember(data as DocAclData, ctx.caller.uid, ctx.caller.emailLower);
       return {
         id: ref.id,
         currentVersion: data.currentVersion,
         versions: snap.docs.slice(0, limit).map((v) => {
           const row = v.data();
+          const by = row.publishedBy as Actor | undefined;
           return withReaderAddress({
             version: v.id,
             label: row.label ?? v.id,
@@ -648,6 +655,11 @@ export const TOOLS: ToolDefinition[] = [
             format: row.format === "markdown" ? "markdown" : "html",
             contentHash: row.contentHash ?? null,
             isCurrent: v.id === data.currentVersion,
+            origin: originOf(row),
+            automated: by ? by.channel !== "web" : null,
+            ...(member
+              ? { publishedBy: row.publishedByEmail ?? null, ...(by?.channel ? { channel: by.channel } : {}), ...(by?.via ? { via: by.via } : {}) }
+              : {}),
           }, ref.id, v.id, str(args, "k") || undefined);
         }),
         nextCursor: snap.docs.length > limit ? snap.docs[limit - 1].id : null,
@@ -770,8 +782,8 @@ export const TOOLS: ToolDefinition[] = [
       if (!target.ok) throw new Error(target.error);
 
       const compiled = compileBundle(extracted, title);
-      // `via: "mcp"` is stamped here, from the endpoint, not from anything the
-      // caller sent. Provenance survives the agent path (SPEC §17).
+      // Provenance is the actor's, from the credential, not anything the
+      // caller sent (SPEC §17).
       const published = await publishNewDocument({
         db: ctx.db,
         actor: ctx.actor,
@@ -781,7 +793,6 @@ export const TOOLS: ToolDefinition[] = [
         title,
         folderId: target.id,
         parentMembership: target.membership,
-        via: "mcp",
         ...(wantedId ? { docId: wantedId } : {}),
       });
       const requestedId = wantedId || slugify(title);
@@ -939,7 +950,6 @@ export const TOOLS: ToolDefinition[] = [
         extracted,
         actor: ctx.actor,
         authorEmail: ctx.caller.emailLower,
-        via: "mcp",
         k: proof.k,
       });
       if ("error" in committed) throw new Error(committed.error);
@@ -1512,7 +1522,7 @@ export const TOOLS: ToolDefinition[] = [
               id: c.id,
               at: (v.createdAt as admin.firestore.Timestamp | undefined)?.toDate?.().toISOString() ?? null,
               author: v.authorEmail,
-              via: (v.actor as Actor | undefined)?.channel ?? "web",
+              ...actedThrough(v.actor as Actor | undefined),
               body: v.body,
             };
           }),
@@ -1587,76 +1597,9 @@ export const TOOLS: ToolDefinition[] = [
       });
 
       const current = String(data.currentVersion ?? "");
-      const read = memo((path: string) => ctx.db.doc(path).get());
+      const read = docReader(ctx.db);
       const threadPath = (version: string, threadId: string) => `docs/${ref.id}/versions/${version}/annotations/${threadId}`;
-      const emailOf = memo(async (uid: string) => String((await read(`users/${uid}`)).data()?.email ?? "") || null);
-      const folderIds = visible.flatMap((e) => {
-        const d = e.data().data as { from?: unknown; to?: unknown } | undefined;
-        return e.data().type === "doc.moved" ? [d?.from, d?.to].filter((x): x is string => typeof x === "string") : [];
-      });
-      const paths = await filedIn(ctx.db, ctx.caller, folderIds);
-
-      const events = [];
-      for (const e of visible) {
-        const v = e.data();
-        const actor = v.actor as EventActor | undefined;
-        const at = (v.at as admin.firestore.Timestamp | undefined)?.toDate?.().toISOString() ?? null;
-        const out: Record<string, unknown> = {
-          type: v.type,
-          // A fork's time would say more than its count, and its owner is told
-          // only that one was made (SPEC §21): the day, no more.
-          at: v.type === "fork.created" && at ? at.slice(0, 10) : at,
-          ...(actor?.channel ? { channel: actor.channel } : {}),
-          ...(v.version ? { version: v.version } : {}),
-          ...(v.threadId ? { threadId: v.threadId } : {}),
-        };
-        const thread = v.threadId && v.version ? (await read(threadPath(v.version, v.threadId))).data() : undefined;
-        if (thread) out.quote = String((thread.anchor as { exact?: unknown } | undefined)?.exact ?? "");
-        switch (v.type) {
-          case "comment.added": {
-            const c = (await read(`${threadPath(v.version, v.threadId)}/comments/${v.commentId}`)).data();
-            if (!c) continue; // deleted by its author: gone from the feed too
-            Object.assign(out, { commentId: v.commentId, by: c.authorEmail, body: c.body });
-            break;
-          }
-          case "thread.opened":
-          case "suggestion.opened":
-            out.by = thread?.authorEmail ?? null;
-            if (thread?.suggestion) out.replacement = String((thread.suggestion as { replacement?: unknown }).replacement ?? "");
-            break;
-          case "thread.resolved":
-          case "thread.reopened":
-            out.by = (thread?.resolvedBy as { email?: unknown } | undefined)?.email ?? null;
-            break;
-          case "suggestion.accepted":
-          case "suggestion.rejected":
-          case "suggestion.withdrawn":
-            out.by = (thread?.suggestion as { decidedBy?: { email?: unknown } } | undefined)?.decidedBy?.email ?? null;
-            break;
-          case "suggestion.revised": {
-            const s = thread?.suggestion as { replacement?: unknown; revisions?: Array<{ actor?: { email?: unknown } }> } | undefined;
-            out.by = s?.revisions?.[s.revisions.length - 1]?.actor?.email ?? null;
-            out.replacement = String(s?.replacement ?? "");
-            break;
-          }
-          case "version.published":
-            out.by = (await read(`docs/${ref.id}/versions/${v.version}`)).data()?.publishedByEmail ?? null;
-            break;
-          case "doc.moved": {
-            const d = (v.data ?? {}) as { from?: string | null; to?: string | null };
-            out.from = d.from ? paths.get(d.from) ?? { id: d.from, path: "…" } : null;
-            out.to = d.to ? paths.get(d.to) ?? { id: d.to, path: "…" } : null;
-            out.by = actor?.uid ? await emailOf(actor.uid) : null;
-            break;
-          }
-          case "fork.created":
-            break;
-          default:
-            Object.assign(out, v.data ?? {});
-            out.by = actor?.uid ? await emailOf(actor.uid) : null;
-        }
-        events.push(out);
-      }
+      const events = await describeEvents(ctx.db, ref, ctx.caller, visible, read);
 
       // Threads in this page a person is waiting on, which this caller can
       // still answer: the current version only, as reply_to_comment has it.

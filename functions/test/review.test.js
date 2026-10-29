@@ -69,7 +69,6 @@ function update(docRef) {
     actor: ACTOR,
     authorEmail: "ed@example.com",
     baseVersion: "v1",
-    via: "mcp",
   });
 }
 
@@ -182,7 +181,6 @@ async function updateWhile(during) {
       actor: ACTOR,
       authorEmail: "ed@example.com",
       baseVersion: "v1",
-      via: "mcp",
     });
     return { result, store };
   } finally {
@@ -242,7 +240,6 @@ function updateIn(db) {
     actor: ACTOR,
     authorEmail: "ed@example.com",
     baseVersion: "v1",
-    via: "mcp",
   });
 }
 

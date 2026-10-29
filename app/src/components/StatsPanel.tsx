@@ -1,18 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Reading statistics, and the activity feed built from them (SPEC §4, §17).
+// Reading statistics, and the Activity feed: everything that happened to a document, who did it and through what (SPEC §4, §17).
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { Loading } from "./Spinner";
-import {
-  formatDuration,
-  formatRelative,
-  listAclChanges,
-  listDocViewers,
-  listViewSessions,
-} from "../firestore";
-import type { AclChange, DocMeta, ViewSession, ViewerStat } from "../types";
+import { formatDuration, formatRelative, formatTimestamp, listDocViewers } from "../firestore";
+import { describeActivity, fetchActivity, subjectOf, type ActivityItem } from "../activity";
+import { viaOf } from "../provenance";
+import type { DocMeta, ViewerStat } from "../types";
 
 /**
  * Two audiences, deliberately separated.
@@ -21,9 +18,27 @@ import type { AclChange, DocMeta, ViewSession, ViewerStat } from "../types";
  * breakdown is editor-gated, because "who read this and for how long" is a
  * different kind of fact from "how many people read this", and open editing on
  * a public document must not hand it to a stranger.
+ *
+ * The feed is one list, newest first, from GET /activity: every change the log
+ * records and every reading session, each saying who acted and through what.
+ * It used to be reading sessions followed by access changes, two lists in one,
+ * and never said who published a version or whether a person or an agent did.
  */
 
 type Filter = "all" | "people" | "automation";
+
+const ICON: Record<string, IconName> = {
+  read: "eye",
+  "version.published": "upload",
+  "version.withdrawn": "doc",
+  "doc.renamed": "edit",
+  "doc.moved": "folder",
+  "doc.visibility": "globe",
+  "doc.expiry": "clock",
+  "doc.trust": "shield",
+  "access.changed": "share",
+  "fork.created": "fork",
+};
 
 function ViewerRows({ viewers }: { viewers: ViewerStat[] }) {
   if (viewers.length === 0) return <p className="empty-state">Nobody has opened it yet.</p>;
@@ -42,11 +57,40 @@ function ViewerRows({ viewers }: { viewers: ViewerStat[] }) {
   );
 }
 
-function describeAcl(change: AclChange): string {
-  const parts: string[] = [];
-  if (change.added.length) parts.push(`granted ${change.added.join(", ")}`);
-  if (change.removed.length) parts.push(`removed ${change.removed.join(", ")}`);
-  return parts.join(" and ") || "changed access";
+function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
+  const via = viaOf(item);
+  const ms = item.at ? Date.parse(item.at) : NaN;
+  // A fork carries its day alone (SPEC §21): its time is not its author's to know.
+  const dayOnly = item.type === "fork.created";
+  return (
+    <li className="activity-row">
+      <Icon name={ICON[item.type] ?? "comment"} size={14} />
+      <span className="activity-who">{subjectOf(item)}</span>
+      <span className="activity-what">{describeActivity(item)}</span>
+      {via ? (
+        // Server-derived, so stated as fact: the credential, in the words it
+        // was given when it acted (provenance.ts).
+        <span className="badge-automated" title={`Done through ${via}, not by a person in the browser`}>
+          via {via}
+        </span>
+      ) : null}
+      {item.version ? (
+        <span className="caption">
+          <Link to={`/d/${docId}/${item.version}`}>{item.version}</Link>
+          {item.type === "read" && !item.automated ? ` · ${formatDuration(item.ms)}` : ""}
+        </span>
+      ) : null}
+      {Number.isFinite(ms) ? (
+        <time
+          className="activity-when"
+          dateTime={item.at ?? undefined}
+          title={dayOnly ? new Date(ms).toLocaleDateString() : formatTimestamp(ms)}
+        >
+          {dayOnly ? new Date(ms).toLocaleDateString() : formatRelative(ms)}
+        </time>
+      ) : null}
+    </li>
+  );
 }
 
 export function StatsPanel({
@@ -60,26 +104,50 @@ export function StatsPanel({
   onClose: () => void;
 }) {
   const [viewers, setViewers] = useState<ViewerStat[]>([]);
-  const [sessions, setSessions] = useState<ViewSession[]>([]);
-  const [aclChanges, setAclChanges] = useState<AclChange[]>([]);
+  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
-  // Until all three lists are in, "Nobody has opened it yet" would be a guess.
+  // Until both are in, "Nobody has opened it yet" would be a guess.
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!canSeeDetail) return;
+    let live = true;
     void Promise.all([
-      listDocViewers(meta.docId).then(setViewers).catch(() => setViewers([])),
-      listViewSessions(meta.docId).then(setSessions).catch(() => setSessions([])),
-      listAclChanges(meta.docId).then(setAclChanges).catch(() => setAclChanges([])),
-    ]).then(() => setLoaded(true));
+      listDocViewers(meta.docId).then((v) => live && setViewers(v)).catch(() => live && setViewers([])),
+      fetchActivity(meta.docId)
+        .then((page) => {
+          if (!live) return;
+          setItems(page.items);
+          setNext(page.next);
+        })
+        .catch((e: Error) => live && setFailed(e.message)),
+    ]).then(() => live && setLoaded(true));
+    return () => {
+      live = false;
+    };
   }, [meta.docId, canSeeDetail]);
+
+  const loadMore = () => {
+    if (!next || more) return;
+    setMore(true);
+    fetchActivity(meta.docId, next)
+      .then((page) => {
+        setItems((have) => [...have, ...page.items]);
+        setNext(page.next);
+      })
+      .catch((e: Error) => setFailed(e.message))
+      .finally(() => setMore(false));
+  };
 
   const stats = meta.stats;
   const identified = viewers.length;
-
-  const filtered = sessions.filter((s) =>
-    filter === "all" ? true : filter === "automation" ? s.automated : !s.automated,
+  // Every row, not only reads: an agent's grant is automation, a person's
+  // publish is not.
+  const shown = items.filter((i) =>
+    filter === "all" ? true : filter === "automation" ? i.automated === true : i.automated !== true,
   );
 
   return (
@@ -137,36 +205,18 @@ export function StatsPanel({
               </button>
             ))}
           </div>
+          {failed ? <p className="field-error">{failed}</p> : null}
           <ul className="activity-feed">
-            {filtered.map((session) => (
-              <li key={session.sessionId} className="activity-row">
-                <Icon name="eye" size={14} />
-                <span>{session.email ?? "somebody without an account"}</span>
-                {session.automated ? (
-                  <span className="badge-automated">via {session.actor?.channel}</span>
-                ) : null}
-                <span className="caption">
-                  {session.versionId} · {formatDuration(session.ms)}
-                </span>
-                <span className="activity-when">{formatRelative(session.lastBeatAt)}</span>
-              </li>
+            {shown.map((item) => (
+              <ActivityRow key={item.id} item={item} docId={meta.docId} />
             ))}
-            {aclChanges.map((change, i) => (
-              <li key={`acl-${i}`} className="activity-row">
-                <Icon name="share" size={14} />
-                <span>
-                  {change.actor?.email} {describeAcl(change)}
-                </span>
-                {change.actor && change.actor.channel !== "web" ? (
-                  <span className="badge-automated">via {change.actor.channel}</span>
-                ) : null}
-                <span className="activity-when">{formatRelative(change.at)}</span>
-              </li>
-            ))}
-            {filtered.length === 0 && aclChanges.length === 0 ? (
-              <li className="empty-state">Nothing yet.</li>
-            ) : null}
+            {shown.length === 0 && !failed ? <li className="empty-state">Nothing yet.</li> : null}
           </ul>
+          {next ? (
+            <button type="button" className="btn btn-sm" disabled={more} aria-busy={more} onClick={loadMore}>
+              Show earlier activity
+            </button>
+          ) : null}
         </>
       )}
     </Modal>

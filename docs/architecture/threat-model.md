@@ -228,6 +228,8 @@ else, and a comment's author can change only its `body` (SPEC §4).
 self-reported**. A badge implying verification it does not have would be worse
 than no badge.
 
+`via`, the credential in words, is server-derived, but one part of it is a claim: an app connected by signing in names itself when it registers. An app could call itself "Web" or "Claude". So an app's name is always quoted and marked, `“Web” (connected app)`, and the channel beside it (`app`) is the server's; the label can mislead about which app, never about whether a person in the browser acted (ADR 0023). A token's name is its owner's own label, shown to the document's editors and to readers of its comments; the forensic `tokenId` is never shown.
+
 ### A suggestion is forged, cleared or decided by someone who may not
 
 A reader could write an annotation that looks like a suggestion, or set

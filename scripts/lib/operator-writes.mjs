@@ -95,6 +95,9 @@ export async function commitOperatorVersion(db, docRef, input, timestamp, delete
       docId: docRef.id, title: input.title, slug: input.slug,
       ...(snap.exists ? {} : { ownerUid: null, ownerEmail: input.ownerEmail, createdAt: timestamp, visibility: 'private', publicEdit: false, folderId: null }),
       ...grants, ...membership, currentVersion: versionId, liveEpoch, draft: deleteField(), trusted: true, updatedAt: timestamp,
+      // Counted as every other publish counts, so withdraw-version's
+      // decrement has something to take back.
+      stats: { commits: FieldValue.increment(1) },
     }, { merge: true });
     tx.create(docRef.collection('versions').doc(versionId), {
       ...input.version, versionId, label: input.label ?? versionId,

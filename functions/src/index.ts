@@ -89,7 +89,8 @@ import {
   normalizeEmail,
   parseExpiry,
 } from "./lib/access";
-import { actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
+import { actorFrom, isAutomated, resolveCaller, viaLabel, type Actor } from "./lib/actor";
+import { activityPage, decodeFeedCursor } from "./lib/changefeed";
 import {
   CREATE_ONLY,
   compileBundle,
@@ -1600,7 +1601,6 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     folderId: target.id,
     parentMembership: target.membership,
     marking: strParam(req, "marking") ? jsonParam(req, "marking") : undefined,
-    via: "upload",
     ...(wantedId ? { docId: wantedId } : {}),
   }).catch((e: Error) => e);
 
@@ -1698,7 +1698,6 @@ async function updateFromUpload(
     actor,
     authorEmail: caller.emailLower,
     editorsOnly: true,
-    via: isAutomated(actor) ? (actor.channel as "cli" | "mcp" | "api") : "upload",
   }).catch((e: Error) => e);
 
   if (result instanceof Error) {
@@ -1952,6 +1951,32 @@ export const forkDoc = onRequest(PLAIN, async (req, res) => {
 // Reading statistics
 // ---------------------------------------------------------------------------
 
+/**
+ * GET /activity?docId=…&before=… — one page of a document's Activity panel,
+ * newest first: its change log and its reading sessions, each saying who acted
+ * and through what (SPEC §17, ADR 0023).
+ *
+ * Editors only, as the panel always was: who read a document, and how, is a
+ * different kind of fact from how many did. Somebody who cannot read the
+ * document gets the absent id's 404; a reader who is not an editor, 403.
+ */
+async function serveActivity(req: Request, res: import("express").Response): Promise<void> {
+  noStore(res);
+  if (rejectMethod(req, res, ["GET"])) return;
+  const caller = await resolveCaller(req);
+  if (!caller) { res.status(401).end(); return; }
+  const docId = strParam(req, "docId");
+  if (!docId || !safeSegment(docId)) { badRequest(res, "invalid or missing docId"); return; }
+  const cursor = decodeFeedCursor(strParam(req, "before"));
+  if ("error" in cursor) { badRequest(res, cursor.error); return; }
+
+  const docRef = db().collection("docs").doc(docId);
+  const data = (await docRef.get()).data();
+  if (!data || !canRead(data, caller) || expiredForReader(data, caller)) { res.status(404).end(); return; }
+  if (!isDocEditor(data, caller.uid, caller.emailLower)) { res.status(403).end(); return; }
+  res.status(200).json(await activityPage(db(), docRef, data, caller, cursor));
+}
+
 /** A client-supplied sessionId becomes a document id, so it is opaque and bounded. */
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -1977,6 +2002,13 @@ const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
  *    that applies to a machine fetch at all.
  */
 export const recordView = onRequest(PLAIN, async (req, res) => {
+  // GET /activity rides on this function, as /thumb's reads ride on
+  // contentProxy: one more route, not one more function whose public invoker
+  // a deploy could fail to grant without any check noticing (SPEC §2).
+  if (req.path === "/activity") {
+    await serveActivity(req, res);
+    return;
+  }
   if (rejectMethod(req, res, ["POST"])) return;
   noStore(res); // before any branch can return — see noStore()
   const caller = await resolveCaller(req);
@@ -2945,10 +2977,9 @@ export const onCommentCreated = onDocumentCreated(
     const body =
       suggestion && comment.generated === true ? "" : String(comment.body ?? "").slice(0, 2000);
     const title = typeof doc.title === "string" ? doc.title : docId;
-    const viaChannel =
-      actor && actor.channel !== "web"
-        ? (actor.channel as "cli" | "mcp" | "api")
-        : undefined;
+    // What it came through, in the words stored with it; a comment from
+    // before those were stored gets the plain words for its channel.
+    const via = actor && actor.channel !== "web" ? actor.via ?? viaLabel(actor.channel) : undefined;
 
     const { claimCommentCooldown, sendCommentNotice, uidForEmail } = await import("./email/notify");
     for (const email of recipients) {
@@ -2963,7 +2994,7 @@ export const onCommentCreated = onDocumentCreated(
         docTitle: title,
         quote,
         body,
-        viaChannel,
+        via,
         docId,
         versionId,
         ...(suggestion

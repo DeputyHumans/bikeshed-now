@@ -1,6 +1,6 @@
 # 0016 — A change log an agent pulls, one per document
 
-**Status** Accepted · **Spec** §4, §14, §17, §19
+**Status** Accepted · Amended by [0023](0023-attribution-names-the-credential.md): the log now also feeds the Activity panel, and an actor's channel is its credential's · **Spec** §4, §14, §17, §19
 
 ## Context
 

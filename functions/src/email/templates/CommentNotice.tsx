@@ -23,8 +23,12 @@ export interface CommentNoticeProps {
   quote: string;
   body: string;
   url: string;
-  /** Set when the comment arrived through an automation channel (SPEC §17). */
-  viaChannel?: "cli" | "mcp" | "api";
+  /**
+   * Set when the comment did not come from a person in the browser: what it
+   * came through, in the words stored when it acted ("CLI on mbp",
+   * `“Claude” (connected app)`) (SPEC §17, ADR 0023).
+   */
+  via?: string;
   /**
    * Set when this comment opens a suggested edit (SPEC §22). The quote is the
    * text it would change and `replacement` what it would become; empty means
@@ -53,10 +57,9 @@ export function CommentNotice(p: CommentNoticeProps) {
       <Text style={textStyles.heading}>
         {p.authorEmail} {p.suggestion ? "suggested an edit to" : "commented on"} “{p.docTitle}”
       </Text>
-      {p.viaChannel ? (
+      {p.via ? (
         <Text style={{ ...textStyles.paragraph, fontSize: "13px", color: "#55526b" }}>
-          Posted via {p.viaChannel.toUpperCase()} — this comment came from
-          automation, not a person typing.
+          Posted via {p.via}: this came from automation, not a person typing.
         </Text>
       ) : null}
       {p.quote ? <Text style={textStyles.quote}>{p.quote}</Text> : null}
@@ -71,7 +74,7 @@ export function CommentNotice(p: CommentNoticeProps) {
 
 export function commentNoticeText(p: CommentNoticeProps): string {
   return [
-    `${p.authorEmail} ${p.suggestion ? "suggested an edit to" : "commented on"} "${p.docTitle}"${p.viaChannel ? ` (via ${p.viaChannel.toUpperCase()})` : ""}.`,
+    `${p.authorEmail} ${p.suggestion ? "suggested an edit to" : "commented on"} "${p.docTitle}"${p.via ? ` (via ${p.via})` : ""}.`,
     ``,
     p.quote ? `On: "${p.quote}"` : "",
     p.suggestion ? changeLine(p.suggestion) : "",

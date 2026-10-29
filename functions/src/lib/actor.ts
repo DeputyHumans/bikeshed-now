@@ -6,7 +6,7 @@ import type { Request } from "firebase-functions/v2/https";
 import * as cookie from "cookie";
 import { SESSION_COOKIE_NAME } from "../config";
 import { verifySessionCookie, type Principal } from "./auth";
-import { bearerFrom, isTokenShaped, verifyToken } from "./tokens";
+import { CLI_LOGIN_FALLBACK, CLI_LOGIN_PREFIX, bearerFrom, isTokenShaped, verifyToken } from "./tokens";
 
 /**
  * The provenance stamp.
@@ -14,10 +14,12 @@ import { bearerFrom, isTokenShaped, verifyToken } from "./tokens";
  * The split between trustworthy and self-reported is the whole design, and it is
  * stated rather than blurred:
  *
- *   uid, email, channel, tokenId   SERVER-DERIVED from the credential actually
- *                                  presented. A Bearer token cannot claim to be
- *                                  `web`; the /mcp endpoint stamps `mcp`
- *                                  whatever the caller says; and on the direct
+ *   uid, email, channel, tokenId,  SERVER-DERIVED from the credential actually
+ *   via                            presented, never from the endpoint it came
+ *                                  through (ADR 0023). A Bearer token cannot
+ *                                  claim to be `web`; a CLI token reads `cli`
+ *                                  on /mcp as everywhere else; an app connected
+ *                                  by signing in reads `app`. On the direct
  *                                  Firestore write path firestore.rules pins
  *                                  actor.channel == 'web' for the same reason.
  *
@@ -32,16 +34,48 @@ export interface Actor {
    *
    * Null in exactly one case: the OPERATOR scripts, which authenticate with
    * Admin credentials rather than as an account, so there is no uid to record.
-   * They are still identified — `channel: "cli"` with an `email` from the
-   * required `--account` flag and no `tokenId` — and that combination is
-   * exactly what distinguishes an operator action from a user's CLI token.
+   * They say so: `channel: "operator"`, with an `email` from the required
+   * `--account` flag and no `tokenId`.
    */
   uid: string | null;
   email: string;
-  channel: "web" | "cli" | "mcp" | "api";
+  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator";
   tokenId?: string;
+  /**
+   * The credential in words, as it was when it acted: "CLI on mbp",
+   * `“Claude” (connected app)`, `personal token “deploy-bot”`. Stored, not
+   * joined later, so revoking or renaming a token never rewrites who did what.
+   * Absent for `web`, which needs no words.
+   */
+  via?: string;
   client?: string;
   agent?: string;
+}
+
+/**
+ * The words for a credential, written once here and stored with the action.
+ *
+ * Names are the owner's own (a token) or the app's own claim (a connected
+ * app), so they are quoted, and an app is always called one: a client that
+ * registered as "Web" reads `“Web” (connected app)`, never as the browser.
+ */
+export function viaLabel(channel: Actor["channel"], name?: string): string | undefined {
+  const n = sanitizeReported(name);
+  switch (channel) {
+    case "web":
+      return undefined;
+    case "cli":
+      // What `bikeshed login` mints is named for the machine, and reads as one.
+      if (!n || n === CLI_LOGIN_FALLBACK) return "the command line";
+      return n.startsWith(CLI_LOGIN_PREFIX) ? n : `CLI token “${n}”`;
+    case "mcp":
+    case "api":
+      return n ? `personal token “${n}”` : "a personal token";
+    case "app":
+      return n ? `“${n}” (connected app)` : "a connected app";
+    case "operator":
+      return "an operator script";
+  }
 }
 
 /**
@@ -67,23 +101,16 @@ function headerValue(req: Request, name: string): string | undefined {
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
-/**
- * Build the stamp for a request.
- *
- * `channelOverride` exists for the MCP endpoint, which knows more about the
- * channel than the credential does.
- */
-export function actorFrom(
-  principal: Principal,
-  req: Request,
-  channelOverride?: Actor["channel"],
-): Actor {
+/** Build the stamp for a request, from the credential it presented. */
+export function actorFrom(principal: Principal, req: Request): Actor {
   const actor: Actor = {
     uid: principal.uid,
     email: principal.emailLower,
-    channel: channelOverride ?? principal.channel,
+    channel: principal.channel,
   };
   if (principal.tokenId) actor.tokenId = principal.tokenId;
+  const via = viaLabel(principal.channel, principal.credentialName);
+  if (via) actor.via = via;
   const client = sanitizeReported(headerValue(req, "x-bikeshed-client"));
   if (client) actor.client = client;
   const agent = sanitizeReported(headerValue(req, "x-bikeshed-agent"));
@@ -126,6 +153,7 @@ export async function resolveCaller(req: Request): Promise<Principal | null> {
         emailLower: verified.emailLower,
         channel: verified.channel,
         tokenId: verified.tokenId,
+        credentialName: verified.name,
       };
     }
   }

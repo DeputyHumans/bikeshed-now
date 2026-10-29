@@ -12,7 +12,8 @@ import { assertDocumentWriteAuthority, assertWriteAuthority, WriteAuthorityError
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
-import { isAutomated, type Actor } from "./actor";
+import type { Actor } from "./actor";
+import { publishedViaOf } from "./versions";
 import { hashBundleFiles, type BundleFile } from "./hash";
 import { safeRelPath } from "./http";
 import { renderMarkdown } from "./markdown/render";
@@ -69,7 +70,9 @@ export function appendEditSession(existing: unknown, actor: Actor): EditSession[
   const list = Array.isArray(existing) ? (existing as EditSession[]) : [];
   const stamp = Date.now();
   const last = list[list.length - 1];
-  if (last && last.email === actor.email && last.actor?.channel === actor.channel) {
+  // One entry per credential, not per channel: two agents of one person, on
+  // two tokens, are two entries.
+  if (last && last.email === actor.email && last.actor?.channel === actor.channel && last.actor?.tokenId === actor.tokenId) {
     last.to = stamp;
     return list.slice(-50);
   }
@@ -576,7 +579,8 @@ export async function commitDraft(args: {
         contentHash,
         files: files.map((f) => f.rel),
         parentVersion: baseVersion,
-        publishedVia: isAutomated(actor) ? actor.channel : "editor",
+        origin: "edit",
+        publishedVia: publishedViaOf("edit", actor),
         publishedByEmail: args.emailLower,
         publishedBy: actor,
         editSessions,

@@ -30,10 +30,15 @@ test("MCP and CLI publications inherit the saved account default; explicit off, 
       await withFakeAdmin({ db }, async () => {
         const result = await publishNewDocument({
           db, actor: { ...owner, channel: via === "upload" ? "web" : via }, ownerUid: owner.uid, ownerEmail: owner.email,
-          title: "Default marking", folderId: null, parentMembership: null, via, ...(marking === undefined ? {} : { marking }),
+          title: "Default marking", folderId: null, parentMembership: null, ...(marking === undefined ? {} : { marking }),
           compiled: { entry: "index.html", format: "html", files: [{ rel: "index.html", data: Buffer.from("<p>content</p>") }] },
         });
         assert.deepEqual(store.get(`docs/${result.docId}`).marking, expected, `${via}: absent marking inherits, explicit marking wins`);
+        assert.equal(store.get(`docs/${result.docId}`).stats.commits, 1, "its first version is one of the versions published");
+        const v1 = store.get(`docs/${result.docId}/versions/v1`);
+        assert.equal(v1.origin, "upload");
+        // `bikeshed publish` read "upload" here while its update read "cli".
+        assert.equal(v1.publishedVia, via, "the old field follows from the credential");
       });
     }
     // The upload route is also the CLI route: an absent query parameter must

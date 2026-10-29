@@ -145,6 +145,7 @@ which also holds this table to them.
 | `/team-members` | `manageTeamMembers` |
 | `/tokens` | `manageTokens` |
 | `/view` | `recordView` |
+| `/activity` | `recordView` |
 | `/unlock` | `unlockDoc` |
 | `/draft` | `saveDraft` |
 | `/commit` | `commitVersion` |
@@ -517,6 +518,7 @@ own pending proposal, and neither destroys anything.
 - **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
   body for an unlisted document; without a read basis it is the `404` an absent
   id gets, and nothing is counted.
+- **`GET /activity?docId=…&before=…` (`recordView`)** — one page of a document's Activity panel, newest first: `{ items, next }`, editors only, `private, no-store`. See §17.
 - **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version;
   accepts `?k=` as `/content/**` does.
 
@@ -1253,7 +1255,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
+  lib/{auth,acl,access,management,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
@@ -2471,17 +2473,19 @@ is never a guess:
 type Actor = {
   uid: string | null;  // an account, or null for the operator scripts (below)
   email: string;
-  channel: "web" | "cli" | "mcp" | "api";   // SERVER-DERIVED, never client-claimed
-  tokenId?: string; // which PAT, when channel !== "web"
+  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator";   // SERVER-DERIVED, from the credential
+  tokenId?: string; // which personal token or app grant, when channel !== "web"
+  via?: string;     // SERVER-DERIVED: the credential in words, stored when it acted
   client?: string;  // self-reported, e.g. "bikeshed-cli/0.3.1"
   agent?: string;   // self-reported agent or model id
 };
 ```
 
-**What is trustworthy and what is not, stated rather than blurred.** `uid`,
-`email`, `channel` and `tokenId` are derived server-side from the credential
-actually presented — a Bearer token cannot claim to be `web`, and `/mcp` stamps
-`mcp` regardless of what the caller says. On the direct-Firestore write path,
+**What is trustworthy and what is not, stated rather than blurred.** `uid`, `email`, `channel`, `tokenId` and `via` are derived server-side from the credential actually presented, never from the endpoint it arrives at ([ADR 0023](adr/0023-attribution-names-the-credential.md)). A Bearer token cannot claim to be `web`. A personal token reads as the channel it was minted for (`cli`, `mcp` or `api`) on every endpoint, `/mcp` included, so the CLI is the CLI whichever endpoint it calls. An app connected by signing in (§23) reads as `app`. The operator scripts read as `operator`.
+
+**`via` is the credential in words**, written once when it acts and stored with the action, so revoking or renaming a token never rewrites who did what: `CLI on mbp` (what `bikeshed login` mints, named for the machine), `CLI token “deploy-bot”`, `personal token “laptop agent”`, `“Claude” (connected app)`, `an operator script`. Names are their owner's own, or an app's own claim, so they are quoted, and an app is always called one: an app that registered as "Web" reads `“Web” (connected app)`, never as the browser. Absent for `web`. A record written before `via` existed carries only its channel, and the UI gives that plain words (`MCP`, `the command line`).
+
+On the direct-Firestore write path,
 `firestore.rules authoredBySelf()` pins `actor.channel == 'web'` for the same
 reason, and allows the actor no other field: a browser cannot put a `tokenId`,
 `client` or `agent` on its own feedback. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`,
@@ -2492,11 +2496,7 @@ Stamped on: version records (`publishedBy`), annotations and comments (`actor`,
 immutable after create), view sessions, and ACL changes. Not on drafts — see
 `editSessions` in §17.
 
-`uid` is null in exactly one case: the operator scripts in `scripts/`, which
-authenticate with Admin credentials rather than as an account. They remain
-identifiable — `channel: "cli"`, an `email` from the required `--account` flag,
-and no `tokenId` — and that combination is precisely what distinguishes an
-operator action from a user's own CLI token.
+`uid` is null in exactly one case: the operator scripts in `scripts/`, which authenticate with Admin credentials rather than as an account. They say so: `channel: "operator"`, `via: "an operator script"`, an `email` from the required `--account` flag, and no `tokenId`. A version withdrawn by `scripts/delete-version.mjs` is attributed the same way in the change log.
 
 **`tokenId` is the forensic primitive.** If a token leaks, "everything this token
 ever touched" is one query, and revocation is one click without disturbing the
@@ -2521,23 +2521,14 @@ minutes; a later real write may prune entries older than ten minutes. A
 matching receipt still acknowledges the original committed result after that
 new-write deadline. Once the SDK resolves, best-effort cleanup removes only
 that operation's marker. This adds no collection or event stream.
-Comments and highlights
-created through an automation channel carry a visible "via MCP" marker.
+Comments and highlights created through anything but the browser carry a visible marker naming what they came through, `via CLI on mbp`, from `via`. A suggestion decided by an agent says so beside the approver's name.
 
 ### Version, edit and view provenance
 
-- Each version carries `publishedByEmail`, `publishedVia: "cli" | "upload" |
-  "editor" | "mcp" | "fork"` (`"duplicate"` on copies made before §21, which
-  record no lineage), `parentVersion`, and the full `publishedBy`
-  Actor, alongside `contentHash`, `fileCount`, `bytes`, `publishedAt`, `format`
-  and `rendererVersion`.
-- `draft.editSessions` is **withdrawn**. It was appended when the edit lock
-  changed hands, and with the lock gone (§16) there are no hand-offs to record.
-  A version therefore answers "who published this" but not "who wrote which
-  part of it": per-character attribution is still deliberately not built, so
-  `lastEditedByEmail` is now the whole of the answer. Recorded as a loss in
-  [ADR 0010](adr/0010-crdt-for-shared-document-state.md) rather than left to be
-  discovered.
+- Each version carries `publishedByEmail`, the full `publishedBy` Actor, `origin` and `publishedVia`, alongside `parentVersion`, `contentHash`, `fileCount`, `bytes`, `publishedAt`, `format` and `rendererVersion`.
+- `origin` is how the content arrived, kept apart from who sent it: `upload` (bytes sent, from the upload dialog, `bikeshed publish` or `update`, or `publish_document` / `update_document`), `edit` (a draft committed, from the browser or by `commit_draft`, suggestions accepted into it included) or `fork`. A version written before `origin` existed has none; readers derive it from `publishedVia` (`fork` → fork, `editor` → edit, anything else → upload).
+- `publishedVia` is the older single field, still written, and derived from `origin` and the channel so it can no longer disagree with them: `fork` for a fork, the channel (`cli`, `mcp`, `api`, `app`, `operator`) for anything automated, else `upload` or `editor`. Before `origin`, the CLI's first publish read `upload` while its updates read `cli` or `mcp` depending on the file type. `"duplicate"` marks copies made before §21, which record no lineage.
+- `editSessions` on a version committed from a draft lists every credential that saved into that draft, in order: one entry per person and token, with the first and last save time, capped at 50. Two agents of one person on two tokens are two entries. It answers which people and agents wrote into a version, not which characters each wrote: per-character attribution is still deliberately not built ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)). The draft's own `lastEditedByEmail` names only the last.
 - Views record `via: "app" | "unlisted" | "public"`. Anonymous sessions record
   `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never**
   rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees
@@ -2548,11 +2539,11 @@ Sessions are counted; people are not. A deliberate privacy floor.
 
 ### The activity panel
 
-One reverse-chronological feed per document, assembled entirely from collections
-that already exist, with **no new writes**. Gated to `isDocEditor`. The change log
-`get_changes` reads (§19, ADR 0016) is separate and does not feed this panel. The
-panel is opened now and then by an editor; the log is polled every minute or two
-by an agent, and must report what leaves no record of its own.
+One reverse-chronological feed per document from `GET /activity?docId=…&before=…`, gated to `isDocEditor` (a reader who is not an editor gets 403, anyone who cannot read the document the absent id's 404, and an expired document's activity is its owner's alone). It merges the change log `get_changes` reads (§19, ADR 0016) with the reading sessions in `views/`, and is rendered by the same code as `get_changes`, so an agent and a person read the same words for the same event ([ADR 0023](adr/0023-attribution-names-the-credential.md)). It adds **no new writes**.
+
+Every row says who acted, what they did, and through what: the person's address, joined at read time from `users/{uid}` so an account that moved address reads under its new one, and `channel`, `via` and `automated` from the stored actor. A version's row says how it arrived (`origin`) and links to it. An account move reads as an address changing, not as the new address granting itself access. The owner alone sees that a fork was made, never by whom (§21).
+
+The People / Automation filter applies to every row, not only reads. Pages hold 50 rows; the `before` cursor carries an exact position in each of the two sources, so rows that share a timestamp are never repeated or skipped at a page boundary. Responses are `private, no-store`. It is served by the `recordView` function, so it needs no function, and no public invoker grant, of its own.
 
 ---
 
@@ -2717,7 +2708,7 @@ reassess the request; never silently redirect a historical request to it.
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
-| `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs |
+| `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs; each with its `origin` and whether it was `automated`, and for a member `publishedBy`, `channel` and `via` (§17), which a link holder is not told |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
 | `publish_document` | create a document from content, optionally at a chosen `id`, saying whether that id was taken (`requestedId`, `idTaken`, §4), where it is filed and who can read it there (`filedIn`, `access`, §13), and the `cursor` to watch it from |
@@ -2735,7 +2726,7 @@ reassess the request; never silently redirect a historical request to it.
 | `create_folder` | create one, optionally inside another |
 | `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
-| `get_comments` | **unresolved feedback, each with its anchored quote**, oldest thread first, at most 50 with `truncated` when there were more; `awaitingReply` marks a thread a person spoke last in on the current version; `threads` fetches only the named ids; `version` names an earlier version, whose threads any reader of the document may read |
+| `get_comments` | **unresolved feedback, each with its anchored quote**, each comment with its `channel` and, when not from the browser, `via` (§17), oldest thread first, at most 50 with `truncated` when there were more; `awaitingReply` marks a thread a person spoke last in on the current version; `threads` fetches only the named ids; `version` names an earlier version, whose threads any reader of the document may read |
 | `get_changes` | what happened since a cursor, in recorded order: comments, threads, suggestions, versions, and changes to the document's title, folder, visibility, expiry, trust and sharing; `since` is required; with `needsReply` and the document's `state` (ADR 0016) |
 | `add_comment` | start a thread on one passage, found by its quote |
 | `reply_to_comment` | respond in a thread |
@@ -2797,10 +2788,7 @@ the caller's last poll that it has not seen. So an update hands none back.
 **Each response** carries `cursor` (the same value back on a quiet poll), `more`
 (call again now; pages are 100 events, cut on `(at, eventId)`) and `retryAfter`
 in seconds, because there is no rate limiter. It also carries:
-- `events`, in recorded order, each with its `type`, `at` and `channel`, and
-  `by`, the email joined at read time. A comment carries its `body` and `quote`
-  read from the source, and a deleted one drops out. A `fork.created` is dated
-  to the day, never by whom (§21).
+- `events`, in recorded order, each with its `id`, `type`, `at`, `channel`, `automated` and, for anything but a person in the browser, `via` (the credential in words, §17), and `by`, the email joined at read time. A comment carries its `body` and `quote` read from the source, and a deleted one drops out. A `version.published` carries its `origin`. A `fork.created` is dated to the day, never by whom (§21).
 - `needsReply`: the threads in this page a person is waiting on. That means the
   current version, open, with the latest comment that is not a server note
   written in the browser. Never an agent's comment, so two agents cannot keep
@@ -2921,8 +2909,7 @@ agent proposed it may change (`revise_suggestion`) or take back
 (`withdraw_suggestion`) until it is decided — its person's own suggestions, on
 the current version, where every pending one is. Neither erases anything
 (§22). `get_comments` reports
-a suggestion's `replacement`, `state` and `revisions` (each with its `via`
-channel, never its token); `get_document` reports `canSuggest`;
+a suggestion's `replacement`, `state` and `revisions` (each with its `channel` and, when automated, its `via` words, never its token's id); `get_document` reports `canSuggest`;
 and `update_document` from a caller who may only suggest names `suggest_edit`.
 
 **An agent raises points as well as answering them.** `add_comment` finds its
@@ -3592,10 +3579,7 @@ ignored.
 
   A closed gate revokes the grant. A failed lookup is `500 server_error` and
   revokes nothing, because a client told `invalid_grant` discards the connection.
-- **The command line** goes through the same consent and receives an ordinary
-  personal token (channel `cli`, named from the device it reports), with no
-  refresh token. It calls endpoints other than `/mcp`, and parallel processes
-  would trip reuse detection.
+- **The command line** goes through the same consent and receives an ordinary personal token (channel `cli`, named `CLI on <device>` from the device it reports), with no refresh token. It calls `/publish` and `/content` as well as `/mcp`, and parallel processes would trip reuse detection. Wherever it calls, its actions read as `cli` and `via: "CLI on <device>"` (§17, ADR 0023); an app that signed in reads as `app`, under its registered name.
 
 ### The command line
 

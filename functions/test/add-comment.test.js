@@ -142,8 +142,9 @@ test("get_comments returns the new thread with its quote and its words", async (
   assert.equal(threads[0].quote, "Payments moves last.");
   const [comment] = threads[0].comments;
   assert.deepEqual(
-    { author: comment.author, via: comment.via, body: comment.body },
-    { author: VIEWER.emailLower, via: "mcp", body: "Why last?" },
+    { author: comment.author, channel: comment.channel, via: comment.via, body: comment.body },
+    // `via` is the credential in words in every tool; the channel says what kind (ADR 0023).
+    { author: VIEWER.emailLower, channel: "mcp", via: "a personal token", body: "Why last?" },
   );
   // Each comment says which one it is and when it was written.
   assert.equal(typeof comment.id, "string");

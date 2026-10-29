@@ -7,7 +7,6 @@ import {
   doc,
   getDoc as fbGetDoc,
   getDocs,
-  limit as fbLimit,
   onSnapshot,
   orderBy,
   query,
@@ -23,7 +22,6 @@ import {
 import { db } from "./firebase";
 import { TOKENS } from "./brand/tokens";
 import type {
-  AclChange,
   Actor,
   Anchor,
   Annotation,
@@ -36,7 +34,6 @@ import type {
   TeamMeta,
   TokenSummary,
   UserRecord,
-  ViewSession,
   ViewerStat,
 } from "./types";
 
@@ -320,23 +317,6 @@ export async function listDocViewers(docId: string): Promise<ViewerStat[]> {
   return snap.docs.map((d) => ({ ...(d.data() as ViewerStat), uid: d.id }));
 }
 
-export async function listViewSessions(docId: string, max = 50): Promise<ViewSession[]> {
-  const q = query(
-    collection(db, "docs", docId, "views"),
-    orderBy("startedAt", "desc"),
-    fbLimit(max),
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ ...(d.data() as ViewSession), sessionId: d.id }));
-}
-
-/** The ACL change log: who granted whom access, from where (SPEC §17). */
-export async function listAclChanges(docId: string, max = 50): Promise<AclChange[]> {
-  const q = query(collection(db, "docs", docId, "acl"), orderBy("at", "desc"), fbLimit(max));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as AclChange);
-}
-
 // --- Account ---------------------------------------------------------------
 
 export function watchUser(
@@ -410,11 +390,12 @@ export function watchMyTokens(
 
 // --- Formatting ------------------------------------------------------------
 
-export function formatTimestamp(ts: Timestamp | null | undefined): string {
+export function formatTimestamp(ts: Timestamp | number | null | undefined): string {
   // A pending server timestamp reads as null locally. An ellipsis is honest;
   // rendering "now" would be a lie that lasts until the write lands.
-  if (!ts) return "…";
-  return ts.toDate().toLocaleString(undefined, {
+  if (ts == null) return "…";
+  // A number is epoch milliseconds, as a server answer carries a time.
+  return (typeof ts === "number" ? new Date(ts) : ts.toDate()).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });

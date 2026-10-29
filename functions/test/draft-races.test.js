@@ -24,7 +24,7 @@ for (const channel of ["draft", "update"]) {
       const args = { db, docRef: db.doc("docs/d"), baseVersion: "v2", actor };
       const result = channel === "draft"
         ? (await commitDraft({ ...args, draft, emailLower: actor.email })).body
-        : await commitNewVersion({ ...args, authorEmail: actor.email, via: "mcp", compiled: { entry: "index.html", format: "html", files: [{ rel: "index.html", data: Buffer.from(oldHtml) }] } });
+        : await commitNewVersion({ ...args, authorEmail: actor.email, compiled: { entry: "index.html", format: "html", files: [{ rel: "index.html", data: Buffer.from(oldHtml) }] } });
       assert.equal(result.deduped, false, `${channel}: a historical match must publish the requested restoration`);
       assert.equal(result.versionId, "v3");
       assert.equal(store.get("docs/d").currentVersion, "v3");

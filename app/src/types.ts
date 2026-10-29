@@ -15,13 +15,16 @@ export interface Actor {
   uid: string | null;
   email: string;
   /**
-   * SERVER-DERIVED. A Bearer token cannot claim to be "web", the MCP endpoint
-   * stamps "mcp" regardless of what the caller says, and firestore.rules pins
+   * SERVER-DERIVED, from the credential, never the endpoint (ADR 0023). A
+   * Bearer token cannot claim to be "web", the CLI reads "cli" wherever it
+   * acts, an app connected by signing in reads "app", and firestore.rules pins
    * "web" on the direct client write path.
    */
-  channel: "web" | "cli" | "mcp" | "api";
-  /** Which personal access token, when the channel is not "web". */
+  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator";
+  /** Which personal access token or app grant, when the channel is not "web". */
   tokenId?: string;
+  /** SERVER-DERIVED. The credential in words, as it was when it acted (provenance.ts). */
+  via?: string;
   /** SELF-REPORTED. Rendered as such; never presented as verified. */
   client?: string;
   /** SELF-REPORTED agent or model identifier. */
@@ -175,38 +178,6 @@ export interface ViewerStat {
   totalMs: number;
   firstViewedAt?: Timestamp;
   lastViewedAt?: Timestamp;
-}
-
-/**
- * Firestore: docs/{docId}/views/{sessionId} — one reading session.
- *
- * `ms` is absolute accumulated active time, re-set on every heartbeat, so a
- * retried beat can never double-count. An anonymous session records a null uid
- * and is never rolled into viewers/{uid}: sessions are counted, people are not.
- */
-export interface ViewSession {
-  sessionId: string;
-  uid: string | null;
-  email: string | null;
-  versionId: string;
-  ms: number;
-  via: "app" | "unlisted" | "public";
-  automated?: boolean;
-  actor?: Actor;
-  startedAt?: Timestamp;
-  lastBeatAt?: Timestamp;
-}
-
-/** Firestore: docs/{docId}/acl/{entryId} — append-only ACL provenance (SPEC §17). */
-export interface AclChange {
-  at: Timestamp;
-  actor: Actor;
-  added: string[];
-  removed: string[];
-  viewers: string[];
-  editors: string[];
-  suggesters?: string[];
-  approvers?: string[];
 }
 
 /**
@@ -417,7 +388,10 @@ export interface DocVersion {
   files?: string[];
   parentVersion?: string | null;
   /** "duplicate" is the legacy name of "fork", on copies made before lineage was recorded. */
-  publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "fork" | "duplicate";
+  /** How the content arrived, apart from who sent it; absent on a version published before it was stored. */
+  origin?: "upload" | "edit" | "fork";
+  /** The older single field, derived from `origin` and the channel since `origin` exists. */
+  publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "app" | "operator" | "fork" | "duplicate";
   publishedByEmail?: string;
   publishedBy?: Actor;
   /** Carried from the draft: who actually wrote this version (SPEC §17). */

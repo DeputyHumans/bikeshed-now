@@ -4,7 +4,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { actorFrom, isAutomated } = require("../lib/lib/actor.js");
+const { actorFrom, isAutomated, viaLabel } = require("../lib/lib/actor.js");
+const { publishedViaOf } = require("../lib/lib/versions.js");
+const { appendEditSession } = require("../lib/lib/draft.js");
 const { projectPublicDoc, projectReader } = require("../lib/lib/publicdoc.js");
 const { resolveMarking, markingIsVisible, MARKING_OFF } = require("../lib/lib/marking.js");
 const { emailKey } = require("../lib/lib/presence.js");
@@ -19,9 +21,9 @@ test("the channel comes from the credential, never from the request", () => {
   const web = actorFrom({ uid: "u1", emailLower: "a@example.com", channel: "web" }, request());
   assert.equal(web.channel, "web");
 
-  // A token minted as a CLI token reads as "cli" wherever it is presented. The
-  // caller cannot relabel their own traffic, because the label lives in the
-  // token record on the server.
+  // A token minted as a CLI token reads as "cli" wherever it is presented,
+  // /mcp included. The caller cannot relabel their own traffic, because the
+  // label lives in the token record on the server.
   const cli = actorFrom(
     { uid: "u1", emailLower: "a@example.com", channel: "cli", tokenId: "t1" },
     request({ "x-bikeshed-client": "bikeshed-cli/0.5.0" }),
@@ -30,14 +32,52 @@ test("the channel comes from the credential, never from the request", () => {
   assert.equal(cli.tokenId, "t1");
 });
 
-test("an endpoint may override the channel when it knows better", () => {
-  // /mcp stamps mcp whatever the token says: the endpoint is the stronger signal.
-  const actor = actorFrom(
-    { uid: "u1", emailLower: "a@example.com", channel: "cli", tokenId: "t1" },
-    request(),
-    "mcp",
-  );
-  assert.equal(actor.channel, "mcp");
+test("what acted is named in words, from the credential, and stored with the action", () => {
+  // ADR 0023: the CLI, a personal token and an app that signed in all used to
+  // read "mcp" on /mcp, so the Activity panel could not tell them apart.
+  const as = (channel, credentialName) =>
+    actorFrom({ uid: "u1", emailLower: "a@example.com", channel, tokenId: "t1", credentialName }, request());
+  assert.equal(as("cli", "CLI on mbp").via, "CLI on mbp", "what bikeshed login mints reads as itself");
+  assert.equal(as("cli", "Command line").via, "the command line");
+  assert.equal(as("cli", "deploy").via, "CLI token “deploy”", "a CLI token somebody named");
+  assert.equal(as("mcp", "laptop agent").via, "personal token “laptop agent”");
+  assert.equal(as("api", "nightly").via, "personal token “nightly”");
+  assert.equal(as("app", "Claude").via, "“Claude” (connected app)");
+  assert.equal(as("app", "Claude").channel, "app");
+  assert.ok(!("via" in as("web", undefined)), "a person in the browser needs no words");
+});
+
+test("an app is always called an app, whatever name it registered under", () => {
+  // The name is the app's own claim, so it is quoted and marked, never shown bare.
+  assert.equal(viaLabel("app", "Web"), "“Web” (connected app)");
+  assert.equal(viaLabel("app", `Cla${String.fromCharCode(10)}ude`), "“Claude” (connected app)", "no control characters");
+  assert.equal(viaLabel("app", ""), "a connected app");
+  assert.equal(viaLabel("app", "x".repeat(500)).length, "“” (connected app)".length + 120, "bounded");
+  assert.equal(viaLabel("operator"), "an operator script");
+  assert.equal(viaLabel("web", "anything"), undefined);
+});
+
+test("a version says how its content arrived apart from who sent it, and the old field follows from both", () => {
+  const web = { channel: "web" };
+  assert.equal(publishedViaOf("upload", web), "upload");
+  assert.equal(publishedViaOf("edit", web), "editor");
+  assert.equal(publishedViaOf("fork", web), "fork");
+  // `bikeshed publish` used to read "upload", and its update "cli".
+  assert.equal(publishedViaOf("upload", { channel: "cli" }), "cli");
+  assert.equal(publishedViaOf("edit", { channel: "app" }), "app", "an agent's commit of an edit");
+  assert.equal(publishedViaOf("fork", { channel: "mcp" }), "fork", "a fork stays a fork");
+  assert.equal(publishedViaOf("upload", { channel: "operator" }), "operator");
+});
+
+test("a draft's session log keeps two agents of one person apart", () => {
+  // The merge key was email and channel, so two MCP tokens of one person
+  // writing in turn read as one session.
+  const by = (tokenId) => ({ uid: "u1", email: "a@example.com", channel: "mcp", tokenId });
+  let log = appendEditSession([], by("t1"));
+  log = appendEditSession(log, by("t1"));
+  assert.equal(log.length, 1, "the same token extends its own entry");
+  log = appendEditSession(log, by("t2"));
+  assert.deepEqual(log.map((s) => s.actor.tokenId), ["t1", "t2"]);
 });
 
 test("client and agent are self-reported, stored, and bounded", () => {
@@ -71,7 +111,7 @@ test("absent headers produce no key at all, rather than an empty string", () => 
 test("automation is exactly everything that is not the web channel", () => {
   const base = { uid: "u", email: "a@example.com" };
   assert.equal(isAutomated({ ...base, channel: "web" }), false);
-  for (const channel of ["cli", "mcp", "api"]) {
+  for (const channel of ["cli", "mcp", "api", "app", "operator"]) {
     assert.equal(isAutomated({ ...base, channel }), true, channel);
   }
 });

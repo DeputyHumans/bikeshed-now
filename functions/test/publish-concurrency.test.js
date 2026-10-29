@@ -43,7 +43,7 @@ test("concurrent uploads cannot replace the winning version's bytes", async () =
   try {
     await withFakeAdmin({ db }, async () => {
       const update = (text) => commitNewVersion({
-        db, docRef: db.doc("docs/d"), actor, authorEmail: actor.email, baseVersion: "v1", via: "mcp",
+        db, docRef: db.doc("docs/d"), actor, authorEmail: actor.email, baseVersion: "v1",
         compiled: { entry: "index.html", format: "html", files: [{ rel: "index.html", data: Buffer.from(text) }] },
       });
       const results = await Promise.all([update("<p>first upload</p>"), update("<p>second upload</p>")]);

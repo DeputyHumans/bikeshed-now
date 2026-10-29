@@ -7,7 +7,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { jsonBody, rejectMethod } from "../lib/http";
-import { prepareToken, revokeToken } from "../lib/tokens";
+import { cliLoginName, prepareToken, revokeToken } from "../lib/tokens";
 import { CLI_CLIENT_ID } from "./clients";
 import {
   REPLAY_GRACE_MS,
@@ -185,7 +185,7 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
       // The command line gets an ordinary personal token. It calls endpoints
       // other than /mcp, and several of its processes may run at once, which a
       // rotating refresh token would read as theft.
-      const name = stored.device ? `CLI on ${stored.device}` : "Command line";
+      const name = cliLoginName(stored.device);
       const prepared = prepareToken(stored.uid, stored.emailLower, name, "cli");
       tx.set(db.collection("tokens").doc(prepared.tokenId), prepared.record);
       tx.set(db.collection("users").doc(stored.uid).collection("tokens").doc(prepared.tokenId), prepared.mirror);

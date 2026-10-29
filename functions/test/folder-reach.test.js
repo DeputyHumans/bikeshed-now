@@ -161,7 +161,10 @@ function world(extra = {}) {
       editorMembers: [OWNER.emailLower], approverMembers: [OWNER.emailLower],
       createdAt: Timestamp.fromMillis(NOW - DAY), updatedAt: Timestamp.fromMillis(NOW - DAY),
     },
-    "docs/memo/versions/v1": { versionId: "v1", entry: "index.html", format: "html" },
+    "docs/memo/versions/v1": {
+      versionId: "v1", entry: "index.html", format: "html", origin: "upload", publishedByEmail: OWNER.emailLower,
+      publishedBy: { uid: OWNER.uid, email: OWNER.emailLower, channel: "cli", tokenId: "t1", via: "CLI on mbp" },
+    },
     ...extra,
   });
   return { db, store };
@@ -453,7 +456,14 @@ test("an agent holding a folder's key reads what is beneath it, and is told it c
   assert.equal(doc.viaFolder, true);
   assert.deepEqual([doc.canComment, doc.canEdit, doc.canSuggest, doc.cursor], [false, false, false, null]);
   assert.match(doc.source, /two weekends/);
-  assert.equal((await call("list_versions", STRANGER, { id: "memo", k: key })).id, "memo");
+  const listed = await call("list_versions", STRANGER, { id: "memo", k: key });
+  assert.equal(listed.id, "memo");
+  assert.deepEqual([listed.versions[0].origin, listed.versions[0].automated], ["upload", true], "how it arrived, and that no person did it");
+  for (const field of ["publishedBy", "channel", "via"]) {
+    assert.ok(!(field in listed.versions[0]), `a link holder is not told ${field}`);
+  }
+  const own = (await call("list_versions", OWNER, { id: "memo" })).versions[0];
+  assert.deepEqual([own.publishedBy, own.channel, own.via], [OWNER.emailLower, "cli", "CLI on mbp"], "a member is told who, and through what");
 
   // Every write refuses the key, in words rather than as an absent id.
   await assert.rejects(

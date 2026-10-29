@@ -300,7 +300,9 @@ async function rewriteNode(
           type: "access.changed",
           audience: "editors",
           actor: eventActor(audit.actor),
-          data: { added: [to], removed: [from] },
+          // Said as what it is, so the feed shows an address changing, not
+          // the new address granting itself access (SPEC §17).
+          data: { added: [to], removed: [from], reason: "address-moved" },
         }),
       );
     }

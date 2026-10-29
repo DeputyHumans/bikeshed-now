@@ -817,10 +817,7 @@ reparented, documents retained, access recomputed, and no invitation sent.
 
 ## You are visible
 
-Everything done through a token is stamped with the channel it came through
-(`cli`, `mcp` or `api`), derived from the credential you presented rather than
-from anything you send. Your comments show a "via MCP" marker, and your reads are
-counted separately from human reading so they do not distort the statistics.
+Everything done through a token is stamped with what you are, derived from the credential you presented rather than from anything you send: its `channel` (`cli`, `mcp` or `api` for a personal token, as it was minted; `app` for an app that signed in) and, in words, `via`: `CLI on mbp`, `personal token “laptop agent”`, `“Claude” (connected app)`. That holds on every endpoint, `/mcp` included. Your comments show that marker, the document's Activity panel shows it beside everything you did, and your reads are counted separately from human reading so they do not distort the statistics. In `get_comments`, `get_changes` and `list_versions`, `channel` is the kind and `via` the words; `via` is absent for a person in the browser.
 
 This is what makes it reasonable to give an agent write access at all: a
 reviewer can always tell which feedback came from a person, and an owner can

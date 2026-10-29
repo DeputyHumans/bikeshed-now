@@ -29,6 +29,7 @@ import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
 import type { Actor } from "./actor";
+import { publishedViaOf } from "./versions";
 import { hashBundleFiles, type BundleFile } from "./hash";
 import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
 import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
@@ -213,7 +214,6 @@ export async function reviseDocument(args: {
   authorEmail: string;
   k?: string | null;
   editorsOnly?: boolean;
-  via: "cli" | "mcp" | "api" | "upload";
 }): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
@@ -241,7 +241,6 @@ export async function reviseDocument(args: {
     k: args.k,
     editorsOnly: args.editorsOnly,
     baseVersion,
-    via: args.via,
   });
 }
 
@@ -342,8 +341,6 @@ export interface PublishInput {
   folderId: string | null;
   parentMembership: Membership | null;
   marking?: unknown;
-  /** How the content arrived. Recorded on the version and never client-claimed. */
-  via: "upload" | "cli" | "mcp" | "api";
   /**
    * The id the publisher asked for, already checked with `isValidDocId`. If it
    * is taken the document still gets made, under a suffixed id; absent, the id
@@ -412,6 +409,8 @@ export async function publishNewDocument(
     marking,
     createdAt: now(),
     updatedAt: now(),
+    // Its first version is one of the versions published (SPEC §17).
+    stats: { commits: 1 },
   });
   batch.create(docRef.collection("versions").doc(versionId), {
     versionId,
@@ -426,7 +425,8 @@ export async function publishNewDocument(
     contentHash,
     files: compiled.files.map((f) => f.rel),
     parentVersion: null,
-    publishedVia: input.via,
+    origin: "upload",
+    publishedVia: publishedViaOf("upload", input.actor),
     publishedByEmail: input.ownerEmail,
     publishedBy: input.actor,
     publishedAt: now(),
@@ -481,7 +481,6 @@ export async function commitNewVersion(args: {
   k?: string | null;
   editorsOnly?: boolean;
   baseVersion: string | null;
-  via: "cli" | "mcp" | "api" | "editor" | "upload";
 }): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
@@ -595,7 +594,8 @@ export async function commitNewVersion(args: {
       contentHash,
       files: compiled.files.map((f) => f.rel),
       parentVersion: args.baseVersion,
-      publishedVia: args.via,
+      origin: "upload",
+      publishedVia: publishedViaOf("upload", args.actor),
       publishedByEmail: args.authorEmail,
       publishedBy: args.actor,
       publishedAt: now(),

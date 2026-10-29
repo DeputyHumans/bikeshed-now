@@ -9,9 +9,11 @@ export interface Principal {
   uid: string;
   emailLower: string;
   /** Which credential was presented. Server-derived; never taken from the body. */
-  channel: "web" | "cli" | "mcp" | "api";
-  /** The personal access token used, when `channel` is not "web". */
+  channel: "web" | "cli" | "mcp" | "api" | "app";
+  /** The personal access token or app grant used, when `channel` is not "web". */
   tokenId?: string;
+  /** That token's name, or the app's, as provenance shows it. */
+  credentialName?: string;
 }
 
 /**

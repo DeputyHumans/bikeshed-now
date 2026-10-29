@@ -51,6 +51,9 @@ export const ENDPOINTS = [
   { path: "/team-members", fn: "manageTeamMembers", match: "exact" },
   { path: "/tokens", fn: "manageTokens", match: "exact" },
   { path: "/view", fn: "recordView", match: "exact" },
+  // The Activity panel's feed: a read on the function that records views, so
+  // it needs no function, and no invoker grant, of its own.
+  { path: "/activity", fn: "recordView", match: "exact" },
   { path: "/unlock", fn: "unlockDoc", match: "exact" },
   { path: "/draft", fn: "saveDraft", match: "exact" },
   { path: "/commit", fn: "commitVersion", match: "exact" },

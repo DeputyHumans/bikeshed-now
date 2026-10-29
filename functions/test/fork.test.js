@@ -201,8 +201,10 @@ test("a fork copies the version asked for, into a private document the caller ow
   assert.equal(meta.trusted, false, "trust is the source owner's to give, not the fork's");
   assert.equal(meta.forked, true);
   assert.deepEqual(meta.members, [READER.emailLower]);
+  assert.equal(meta.stats.commits, 1, "its first version is one of the versions published");
 
   const v1 = writeTo(commit, "docs/notes/versions/v1").data;
+  assert.equal(v1.origin, "fork");
   assert.equal(v1.publishedVia, "fork");
   assert.equal(v1.contentHash, "h2");
   assert.equal(v1.parentVersion, null);
@@ -238,6 +240,11 @@ test("the original's fork count moves in the same batch as the fork", async () =
   assert.deepEqual(bump.opts, { merge: true });
   assert.ok(bump.data.stats.forks.isEqual(FieldValue.increment(1)));
   assert.ok(!("updatedAt" in bump.data), "a fork is not a publish of the original");
+  const event = w.commits[0].find((x) => x.path.startsWith(`docs/${SRC}/events/`));
+  assert.equal(event.data.type, "fork.created");
+  const forked = w.commits[0].find((x) => x.path.startsWith("forks/")).data.parentVersion;
+  assert.equal(event.data.version, forked, "which version was forked is said");
+  assert.ok(!("actor" in event.data), "who forked it never is (SPEC §21)");
 });
 
 test("a fork defaults to the current version", async () => {

@@ -32,6 +32,7 @@ import {
   type Visibility,
 } from "./acl";
 import type { Actor } from "./actor";
+import { publishedViaOf } from "./versions";
 import { emptyGrants } from "./access";
 import { computeDocMembership, resolveFolderTarget, slugify } from "./folders";
 import { safeSegment } from "./http";
@@ -222,6 +223,8 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
     marking,
     createdAt: now(),
     updatedAt: now(),
+    // Its first version is one of the versions published (SPEC §17).
+    stats: { commits: 1 },
   });
   batch.create(forkRef.collection("versions").doc("v1"), {
     versionId: "v1",
@@ -236,7 +239,8 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
     contentHash: str(v.contentHash, ""),
     ...(Array.isArray(v.files) ? { files: v.files } : {}),
     parentVersion: null,
-    publishedVia: "fork",
+    origin: "fork",
+    publishedVia: publishedViaOf("fork", input.actor),
     publishedByEmail: caller.emailLower,
     publishedBy: input.actor,
     publishedAt: now(),
@@ -251,8 +255,9 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   // clobber the view counters; and no `updatedAt`, which means "published".
   batch.set(srcRef, { stats: { forks: FieldValue.increment(1) } }, { merge: true });
   // On the ORIGINAL's log, for its owner only, with no actor: who forked a
-  // document is never told to its author (SPEC §21).
-  addEvent(batch, srcRef, { type: "fork.created", audience: "owner" });
+  // document is never told to its author (SPEC §21). Which version was forked
+  // is about the document, not the person, so it is said.
+  addEvent(batch, srcRef, { type: "fork.created", audience: "owner", version: versionId });
   await batch.commit();
 
   await syncPresenceAccess(docId, membership.members, membership.editorMembers);

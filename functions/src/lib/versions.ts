@@ -2,6 +2,27 @@
 // Version selection and the transactional boundary between current work and archives (SPEC §4, §19).
 
 import { safeSegment } from "./http";
+import type { Actor } from "./actor";
+
+/**
+ * How a version's content arrived, kept apart from who sent it and through
+ * what (the version's `publishedBy`, SPEC §17). The two used to share one
+ * field, `publishedVia`, which therefore could not say both: an agent's commit
+ * of an edit read "mcp", a fork lost its channel, and `bikeshed publish`
+ * read "upload".
+ */
+export type VersionOrigin = "upload" | "edit" | "fork";
+
+/**
+ * The single field the two replaced, still written for whoever reads it,
+ * derived here so it can no longer disagree with them: the channel for
+ * anything automated, else how a person did it.
+ */
+export function publishedViaOf(origin: VersionOrigin, actor: Pick<Actor, "channel">): string {
+  if (origin === "fork") return "fork";
+  if (actor.channel !== "web") return actor.channel;
+  return origin === "edit" ? "editor" : "upload";
+}
 
 export type VersionConflict = { status: 409; error: string; currentVersion: string };
 

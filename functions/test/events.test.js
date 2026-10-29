@@ -143,7 +143,12 @@ test("a thread's changes record what they mean, a decision once, a deletion not 
 test("a version and a comment record no email, and a server note records nothing", () => {
   const [published] = versionEvents("v2", undefined, { publishedBy: agent(OWNER) });
   assert.deepEqual(published.actor, { uid: OWNER.uid, channel: "mcp", tokenId: "t1" });
-  assert.equal(versionEvents("v1", { versionId: "v1" }, undefined)[0].type, "version.withdrawn");
+  const [withViaLabel] = versionEvents("v3", undefined, { publishedBy: { ...agent(OWNER), via: "CLI on mbp" } });
+  assert.equal(withViaLabel.actor.via, "CLI on mbp", "what acted, in words, rides with the event");
+  const [withdrawn] = versionEvents("v1", { versionId: "v1" }, undefined);
+  assert.equal(withdrawn.type, "version.withdrawn");
+  // Only scripts/delete-version.mjs withdraws a version: an operator, never a person.
+  assert.deepEqual(withdrawn.actor, { uid: null, channel: "operator", via: "an operator script" });
   assert.deepEqual(commentEvents("v1", "t1", "c1", { generated: true, body: "Accepted." }), []);
   assert.equal(commentEvents("v1", "t1", "c1", { body: "Why?", actor: web(ANA) })[0].type, "comment.added");
 });
