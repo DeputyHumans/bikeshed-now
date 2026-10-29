@@ -20,7 +20,8 @@
  *   A20.4          the 401 challenge, invalid_token, no-store, the exposed
  *                  header, 405s
  *   A20.5          X-Bikeshed-Client / -Agent stored verbatim; the channel
- *                  is mcp whatever the token was minted for (SPEC §17)
+ *                  is the one the token was minted for, on /mcp as anywhere,
+ *                  with its name in words (SPEC §17, ADR 0023)
  *   A20.6          `k` opens an unlisted document on the nine tools SPEC §19
  *                  names; A20.6.extra the four more that take it, and the
  *                  five that never do
@@ -723,7 +724,7 @@ scenario("A20.2.suggest_edit opens a pending suggestion on a quoted passage of t
   const r = await ok(s, "suggest_edit", { id: d.id, exact: "lazy dog", replacement: "sleepy cat", note: "Kinder." });
   assert.deepEqual({ version: r.version, quote: r.quote, url: r.url, thread: typeof r.threadId }, { version: "v1", quote: "lazy dog", url: url(d.id), thread: "string" }, "suggest_edit");
   const t = await threadOf(o, d.id, r.threadId);
-  assert.deepEqual({ quote: t?.quote, resolved: t?.resolved, suggestion: t?.suggestion, comments: t?.comments.map((c) => [c.author, c.via, c.body]) }, { quote: "lazy dog", resolved: false, suggestion: { replacement: "sleepy cat", state: "pending" }, comments: [[s.email, "mcp", "Kinder."]] }, "the owner reads it as a pending suggestion");
+  assert.deepEqual({ quote: t?.quote, resolved: t?.resolved, suggestion: t?.suggestion, comments: t?.comments.map((c) => [c.author, c.channel, c.body]) }, { quote: "lazy dog", resolved: false, suggestion: { replacement: "sleepy cat", state: "pending" }, comments: [[s.email, "mcp", "Kinder."]] }, "the owner reads it as a pending suggestion");
 
   ctx.step("a repeated passage, chosen by the words before it");
   const p = await ok(s, "suggest_edit", { id: d.id, exact: "alpha", prefix: "once and", replacement: "beta" });
@@ -757,7 +758,7 @@ scenario("A20.2.revise_suggestion changes its author's pending suggestion and ke
   assert.deepEqual({ threadId: r.threadId, version: r.version, state: r.state, url: r.url }, { threadId: sid, version: "v1", state: "pending", url: url(d.id) }, "revise_suggestion");
   const t = await threadOf(o, d.id, sid);
   assert.deepEqual(
-    { replacement: t?.suggestion?.replacement, state: t?.suggestion?.state, revisions: t?.suggestion?.revisions?.map((x) => [x.replacement, x.via, typeof x.at]) },
+    { replacement: t?.suggestion?.replacement, state: t?.suggestion?.state, revisions: t?.suggestion?.revisions?.map((x) => [x.replacement, x.channel, typeof x.at]) },
     { replacement: "drowsy cat", state: "pending", revisions: [["sleepy cat", "mcp", "string"]] },
     "the revision is kept",
   );
@@ -1115,7 +1116,8 @@ scenario("A20.2.reply_to_comment adds a reply to a thread on the current version
   const r = await ok(o, "reply_to_comment", { id: d.id, threadId: t.threadId, body: "Answer." });
   assert.deepEqual({ threadId: r.threadId, documentId: r.documentId, commentId: typeof r.commentId }, { threadId: t.threadId, documentId: d.id, commentId: "string" }, "reply_to_comment");
   const th = await threadOf(o, d.id, t.threadId);
-  assert.deepEqual(th?.comments.map((c) => [c.author, c.via, c.body]), [[v.email, "mcp", "Question."], [o.email, "mcp", "Answer."]], "the thread, oldest first");
+  assert.deepEqual(th?.comments.map((c) => [c.author, c.channel, c.body]), [[v.email, "mcp", "Question."], [o.email, "mcp", "Answer."]], "the thread, oldest first");
+  assert.deepEqual(th?.comments.map((c) => c.via), [`personal token “e2e a20 ${v.acct.role}”`, `personal token “e2e a20 ${o.acct.role}”`], "each names its token, in words");
 
   ctx.step("refused");
   await refused(o, "reply_to_comment", { id: d.id, threadId: "a20NoSuchThread", body: "x" }, NO_SUCH_THREAD, "an unknown thread");
@@ -1359,7 +1361,7 @@ scenario("A20.4 POST /mcp without a credential is 401 with the Bearer challenge 
 
 // --- A20.5 ----------------------------------------------------------------------------
 
-scenario("A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on the version, the thread, the comment, the reply and the read an MCP call makes; the channel is mcp even for a token minted for the CLI, the tokenId is that token's, and without the headers the actor carries neither", {
+scenario("A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on the version, the thread, the comment, the reply and the read an MCP call makes; a token minted for the CLI acts as the CLI over /mcp too, under its name, the tokenId is that token's, and without the headers the actor carries neither", {
   tiers: BOTH,
   inconclusiveOnStackTimeout: true,
   timeoutMs: 420_000,
@@ -1370,8 +1372,10 @@ scenario("A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on th
   const o = await agentFor(ctx, acct, { channel: "cli", headers: { "x-bikeshed-client": CLIENT, "x-bikeshed-agent": AGENT } });
   const bare = mcpFor(ctx, o.token, "owner-bare", { "x-bikeshed-agent": null });
   await bare.initialize();
-  const want = { uid: acct.uid, email: acct.email, channel: "mcp", tokenId: o.tokenId, client: CLIENT, agent: AGENT };
-  const wantBare = { uid: acct.uid, email: acct.email, channel: "mcp", tokenId: o.tokenId };
+  // The credential, not the endpoint: a CLI token reads as the CLI here too (ADR 0023).
+  const VIA = `CLI token “e2e a20 ${acct.role}”`;
+  const want = { uid: acct.uid, email: acct.email, channel: "cli", tokenId: o.tokenId, via: VIA, client: CLIENT, agent: AGENT };
+  const wantBare = { uid: acct.uid, email: acct.email, channel: "cli", tokenId: o.tokenId, via: VIA };
   ctx.step(`a token minted for the cli (${o.tokenId}), used over /mcp with both headers`);
 
   const d = await publishDoc(o, "provenance");
@@ -1394,8 +1398,8 @@ scenario("A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on th
   const up = await bare.call("update_document", { id: d.id, content: page(`${d.title} two`) });
   assert.equal(up.isError, false, up.text);
   assert.deepEqual((await readDoc(target, `docs/${d.id}/versions/v2`))?.publishedBy, wantBare, "v2.publishedBy without the headers");
-  const via = (await threadOf(o, d.id, t.threadId, { version: "v1" }))?.comments.map((c) => c.via);
-  assert.deepEqual(via, ["mcp", "mcp"], "get_comments says via mcp for both");
+  const acted = (await threadOf(o, d.id, t.threadId, { version: "v1" }))?.comments.map((c) => [c.channel, c.via]);
+  assert.deepEqual(acted, [["cli", VIA], ["cli", VIA]], "get_comments names the CLI token for both");
 });
 
 // --- A20.6 ----------------------------------------------------------------------------

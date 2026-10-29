@@ -1,9 +1,9 @@
 {
-  "oracle": "the actor's channel is the endpoint's (A20.5, SPEC §17): every record an MCP call stamps says mcp, whatever channel the token was minted for",
-  "what": "handleMcp builds the actor from the token record's channel instead of stamping mcp (functions/src/mcp/server.ts), so a token minted for the CLI writes channel cli over /mcp",
+  "oracle": "the actor's channel is the credential's (A20.5, SPEC §17, ADR 0023): a token minted for the CLI stamps cli, with its name in words, on every record an MCP call makes",
+  "what": "mcpPrincipal stamps mcp whatever the credential was minted for (functions/src/mcp/server.ts), the rule before ADR 0023, so a CLI token reads as mcp over /mcp and the Activity panel cannot tell the CLI from a personal token",
   "target": {
     "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
-    "case": "A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on the version, the thread, the comment, the reply and the read an MCP call makes; the channel is mcp even for a token minted for the CLI, the tokenId is that token's, and without the headers the actor carries neither",
+    "case": "A20.5 X-Bikeshed-Client and X-Bikeshed-Agent are stored verbatim on the version, the thread, the comment, the reply and the read an MCP call makes; a token minted for the CLI acts as the CLI over /mcp too, under its name, the tokenId is that token's, and without the headers the actor carries neither",
     "suite": "functional"
   },
   "stack": [],

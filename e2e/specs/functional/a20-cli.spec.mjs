@@ -154,10 +154,10 @@ async function ready(key, { who = "owner", tokens = 1, fresh = false, docs = [] 
 /** Case names, by key: `prepare` makes only what the selected cases need. */
 const NAMES = {
   a: "A20.7a --version --json prints {version} from the CLI's own package.json, and --version alone prints `bikeshed <version>`",
-  b: "A20.7b publish --json stores the file's bytes at the requested --id as v1 (url, cursor, filedIn, access) with provenance channel cli via upload and the CLI's own client header; a taken --id still publishes, under another id, said on stderr only",
+  b: "A20.7b publish --json stores the file's bytes at the requested --id as v1 (url, cursor, filedIn, access) with provenance channel cli (publishedVia cli, named for its token) and the CLI's own client header; a taken --id still publishes, under another id, said on stderr only",
   c: "A20.7c list --json pages newest first with --limit and --cursor, and --all returns all three documents",
   d: "A20.7d get and get --json return the whole source of a document over get_document's 200,000-character cap (truncated false, the uploaded bytes); a pasted ?k= link reads an unlisted document for a non-member, and the bare id answers as an absent one",
-  e: "A20.7e update --json sends an .html through update_document (publishedVia mcp), the same bytes again is deduped, and a stale --base is refused naming the current version, minting nothing",
+  e: "A20.7e update --json sends an .html through update_document, still as the CLI (publishedVia cli), the same bytes again is deduped, and a stale --base is refused naming the current version, minting nothing",
   f: "A20.7f update of a .zip, by name or by its magic bytes, goes up as bytes to /publish?update= (publishedVia cli): every entry, a binary image included, is stored byte for byte, and --base is honoured there too",
   g: "A20.7g fork --json makes the caller's own copy (v1, url, cursor), and lineage --json links the fork to its source and the source to its fork",
   h: "A20.7h comment, reply, resolve, reopen and comments --json (with --all) carry one thread through its life; comment refuses an empty --body before anything is sent",
@@ -569,10 +569,12 @@ scenario(NAMES.b, { tiers: BOTH, timeoutMs: 420_000, inconclusiveOnStackTimeout:
   assert.deepEqual(Object.keys(files), ["index.html"]);
   assert.equal(sha(files["index.html"]), sha(Buffer.from(bytes)), "v1's index.html is the uploaded file");
   assert.deepEqual(
-    { publishedVia: rec.publishedVia, channel: rec.publishedBy?.channel, client: rec.publishedBy?.client, agent: rec.publishedBy?.agent, tokenId: rec.publishedBy?.tokenId, email: rec.publishedByEmail },
-    { publishedVia: "upload", channel: "cli", client: `bikeshed-cli/${cliVersion()}`, agent: agentName(target), tokenId: o.tokens[0].tokenId, email: o.email },
+    { publishedVia: rec.publishedVia, origin: rec.origin, channel: rec.publishedBy?.channel, client: rec.publishedBy?.client, agent: rec.publishedBy?.agent, tokenId: rec.publishedBy?.tokenId, email: rec.publishedByEmail },
+    // `bikeshed publish` read "upload" here while its update read "cli" (ADR 0023).
+    { publishedVia: "cli", origin: "upload", channel: "cli", client: `bikeshed-cli/${cliVersion()}`, agent: agentName(target), tokenId: o.tokens[0].tokenId, email: o.email },
     "version provenance (SPEC §17: channel from the token record, client and agent as reported)",
   );
+  assert.match(rec.publishedBy?.via ?? "", /^CLI token “e2e a20-cli .+”$/, "named for the token it used, in words");
   assert.deepEqual({ currentVersion: holder.currentVersion, title: holder.title }, { currentVersion: "v1", title: o.docs[0].json.title }, "the document holding the id is untouched");
 });
 
@@ -659,8 +661,8 @@ scenario(NAMES.e, { tiers: BOTH, timeoutMs: 420_000, inconclusiveOnStackTimeout:
   ]);
   assert.deepEqual(
     { publishedVia: rec.publishedVia, channel: rec.publishedBy?.channel, client: rec.publishedBy?.client, parentVersion: rec.parentVersion },
-    { publishedVia: "mcp", channel: "mcp", client: `bikeshed-cli/${cliVersion()}`, parentVersion: "v1" },
-    "an .html update goes through update_document",
+    { publishedVia: "cli", channel: "cli", client: `bikeshed-cli/${cliVersion()}`, parentVersion: "v1" },
+    "an .html update goes through update_document, and is still the CLI's (ADR 0023)",
   );
   assert.equal(sha(files["index.html"]), sha(Buffer.from(v2)), "v2 is the file");
   const same = okJson(sameR, "update with identical bytes");
@@ -746,9 +748,10 @@ scenario(NAMES.h, { tiers: BOTH, timeoutMs: 600_000, inconclusiveOnStackTimeout:
 
   const open1 = okJson(await cli(ctx, o, ["comments", id, "--json"]), "comments --json");
   assert.deepEqual(
-    open1.threads.map((th) => ({ threadId: th.threadId, quote: th.quote, resolved: th.resolved, comments: th.comments.map((x) => [x.author, x.via, x.body]) })),
-    [{ threadId: t, quote, resolved: false, comments: [[o.email, "mcp", body], [o.email, "mcp", replyText]] }],
+    open1.threads.map((th) => ({ threadId: th.threadId, quote: th.quote, resolved: th.resolved, comments: th.comments.map((x) => [x.author, x.channel, x.body]) })),
+    [{ threadId: t, quote, resolved: false, comments: [[o.email, "cli", body], [o.email, "cli", replyText]] }],
   );
+  assert.ok(open1.threads[0].comments.every((x) => /^CLI token “e2e a20-cli /.test(x.via)), "each names the CLI token, in words");
 
   okJson(await cli(ctx, o, ["resolve", id, t, "--json"]), "resolve --json");
   const [openAfter, allAfter] = await Promise.all([cli(ctx, o, ["comments", id, "--json"]), cli(ctx, o, ["comments", id, "--all", "--json"], { home: cliHome(target) })]);
@@ -897,8 +900,8 @@ scenario(NAMES.j, { tiers: BOTH, timeoutMs: 720_000, inconclusiveOnStackTimeout:
   assert.deepEqual(
     seen.toSorted((a, b) => a.type.localeCompare(b.type)),
     [
-      { type: "comment.added", by: o.email, channel: "mcp", quote: Q.j },
-      { type: "thread.opened", by: o.email, channel: "mcp", quote: Q.j },
+      { type: "comment.added", by: o.email, channel: "cli", quote: Q.j },
+      { type: "thread.opened", by: o.email, channel: "cli", quote: Q.j },
     ],
     "another credential's thread and comment, each with its quote (SPEC §19)",
   );

@@ -28,8 +28,9 @@
  *        nothing of the kind to a viewer reading the version
  *   A6.8 a comment on SVG text is wrapped in tspan.bshd-hl, never a <mark>,
  *        and the label keeps its painted width
- *   A6.9 an agent's comment carries the "via mcp" badge (title "Posted through
- *        the MCP interface"); a person's reply beside it carries none
+ *   A6.9 an agent's comment carries a badge naming the token it came through
+ *        ("via personal token “…”", ADR 0023); a person's reply beside it
+ *        carries none
  *
  * EMAIL. A comment notifies the owner and the thread's earlier participants
  * (onCommentCreated) unless they opted out. Every account here is cast with
@@ -971,7 +972,7 @@ scenario("A6.8 a comment on SVG text is wrapped in tspan.bshd-hl, never a mark, 
 
 // --- A6.9 ---------------------------------------------------------------------
 
-scenario("A6.9 an agent's comment is labelled via mcp, server-stamped with its token, and a person's reply beside it carries no badge", { tiers: BOTH, timeoutMs: CASE_MS, ...STALL }, async (ctx) => {
+scenario("A6.9 an agent's comment is labelled with the token it came through, server-stamped, and a person's reply beside it carries no badge", { tiers: BOTH, timeoutMs: CASE_MS, ...STALL }, async (ctx) => {
   const { owner, accounts, docId } = await stage(ctx, { name: "a69-via", title: "A6.9 via MCP" });
   const [ownerAcct, viewerAcct] = accounts;
   const QUOTE = quoteIn("e2e-6", "Glacier yarrow anchor delta");
@@ -987,7 +988,7 @@ scenario("A6.9 an agent's comment is labelled via mcp, server-stamped with its t
     "the comment's actor is the server-derived mcp channel and the token that wrote it",
   );
 
-  ctx.step("the viewer opens the document: the passage is drawn exactly, and the agent's comment carries the via mcp badge");
+  ctx.step("the viewer opens the document: the passage is drawn exactly, and the agent's comment carries a badge naming its token");
   const v = await reader(ctx, "viewer", viewerAcct, docId);
   await waitHl(v, T, true);
   assert.equal(((await (await v.frame()).locator(hlSel(T)).allTextContents()).join("")), QUOTE, "the strict anchor highlights exactly the quote");
@@ -997,10 +998,9 @@ scenario("A6.9 an agent's comment is labelled via mcp, server-stamped with its t
   await agentComment0.locator(".comment-body", { hasText: body }).waitFor({ state: "visible", timeout: UI_MS });
   const badge = agentComment0.locator(".comment-head .badge-automated");
   assert.equal(await badge.count(), 1, "one automation badge on the agent's comment");
-  assert.deepEqual(
-    { text: (await badge.textContent()).trim(), title: await badge.getAttribute("title") },
-    { text: "via mcp", title: "Posted through the MCP interface" },
-  );
+  const words = (await badge.textContent()).trim();
+  assert.match(words, /^via personal token “e2e a06 .+”$/, "the credential in words, as the server stored it");
+  assert.equal(await badge.getAttribute("title"), `Posted on ${ownerAcct.email.toLowerCase()}'s behalf by ${words.slice("via ".length)}`);
 
   ctx.step("the viewer replies in the browser: that comment carries no badge");
   const reply = `A6.9 person ${tag()}`;

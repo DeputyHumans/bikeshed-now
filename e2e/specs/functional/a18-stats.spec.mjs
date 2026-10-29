@@ -641,9 +641,12 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   precondition(panel?.readers, "the owner sees the per-person detail");
   const rows = await activityRows(dialog, "Automation");
   ctx.step(`Automation rows: ${JSON.stringify(rows)}`);
-  precondition(rows.some((r) => r.badge === "via cli" && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
-  assert.ok(rows.some((r) => r.badge === "via mcp" && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
-  assert.ok(rows.every((r) => r.badge === "via mcp" || r.badge === "via cli"), "Automation excludes human activity");
+  // Each badge names the token, in the words the server stored when it acted (ADR 0023).
+  const CLI_BADGE = "via CLI token “e2e a18 feed cli”";
+  const MCP_BADGE = "via personal token “e2e a18 feed mcp”";
+  precondition(rows.some((r) => r.badge === CLI_BADGE && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
+  assert.ok(rows.some((r) => r.badge === MCP_BADGE && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
+  assert.ok(rows.every((r) => r.badge === MCP_BADGE || r.badge === CLI_BADGE), "Automation excludes human activity");
   const apiReads = (await statsOf(D.docId)).apiReads;
   precondition(apiReads === 2, "the two automated reads are recorded before inspecting their tile");
   const automationTile = dialog.locator(".stat-tile").filter({ hasText: "automated reads" });
