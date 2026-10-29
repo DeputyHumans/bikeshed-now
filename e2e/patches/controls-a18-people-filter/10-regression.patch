@@ -1,9 +1,11 @@
 --- a/app/src/components/StatsPanel.tsx
 +++ b/app/src/components/StatsPanel.tsx
-@@ -80,5 +80,5 @@
- 
-   const filtered = sessions.filter((s) =>
--    filter === "all" ? true : filter === "automation" ? s.automated : !s.automated,
-+    filter === "all" ? true : filter === "automation" ? s.automated : true,
+@@ -147,7 +147,7 @@
+   // Every row, not only reads: an agent's grant is automation, a person's
+   // publish is not.
+   const shown = items.filter((i) =>
+-    filter === "all" ? true : filter === "automation" ? i.automated === true : i.automated !== true,
++    filter === "all" ? true : filter === "automation" ? i.automated === true : true,
    );
  
+   return (

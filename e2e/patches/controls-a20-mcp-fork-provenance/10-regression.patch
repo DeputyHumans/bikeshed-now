@@ -1,9 +1,11 @@
 --- a/functions/src/lib/fork.ts
 +++ b/functions/src/lib/fork.ts
-@@ -234,5 +234,5 @@
+@@ -240,7 +240,7 @@
      ...(Array.isArray(v.files) ? { files: v.files } : {}),
      parentVersion: null,
--    publishedVia: "fork",
-+    publishedVia: "mcp",
+     origin: "fork",
+-    publishedVia: publishedViaOf("fork", input.actor),
++    publishedVia: publishedViaOf("upload", { channel: "mcp" }),
      publishedByEmail: caller.emailLower,
      publishedBy: input.actor,
+     publishedAt: now(),

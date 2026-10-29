@@ -1,6 +1,10 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -845,3 +845,2 @@
-         via: "mcp",
+@@ -950,7 +950,6 @@
+         extracted,
+         actor: ctx.actor,
+         authorEmail: ctx.caller.emailLower,
 -        k: proof.k,
        });
+       if ("error" in committed) throw new Error(committed.error);
+       // A comment thread stays on the version it was opened on, and this path

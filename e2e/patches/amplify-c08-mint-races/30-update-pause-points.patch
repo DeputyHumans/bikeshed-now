@@ -1,27 +1,27 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -27,6 +27,7 @@
+@@ -29,6 +29,7 @@
  import { MAX_BUNDLE_BYTES, bucketName } from "../config";
  import { emptyGrants } from "./access";
  import type { Actor } from "./actor";
 +import { e2eRaceGate } from "./e2eRaceGate";
+ import { publishedViaOf } from "./versions";
  import { hashBundleFiles, type BundleFile } from "./hash";
  import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
- import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
-@@ -500,6 +501,8 @@
+@@ -510,6 +511,8 @@
    const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");
    if (held) return held;
-
+ 
 +  await e2eRaceGate("update-before-id", docRef.id);
 +
    const allVersions = await versionsRef.get();
    let maxN = 0;
    for (const d of allVersions.docs) {
-@@ -509,6 +512,7 @@
+@@ -519,6 +522,7 @@
    const versionId = `v${maxN + 1}`;
    const storagePrefix = newBundlePrefix(docRef.id);
    await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 +  await e2eRaceGate("update-after-upload", docRef.id);
-
+ 
    const base = args.baseVersion ?? "";
    let replacedDraft: unknown;

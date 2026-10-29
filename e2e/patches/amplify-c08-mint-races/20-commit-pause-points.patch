@@ -1,23 +1,23 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -9,6 +9,7 @@
+@@ -13,6 +13,7 @@
  import { MAX_BUNDLE_BYTES, bucketName } from "../config";
  import { keepsTrust, type DocAclData } from "./acl";
- import { isAutomated, type Actor } from "./actor";
+ import type { Actor } from "./actor";
 +import { e2eRaceGate } from "./e2eRaceGate";
+ import { publishedViaOf } from "./versions";
  import { hashBundleFiles, type BundleFile } from "./hash";
  import { safeRelPath } from "./http";
- import { renderMarkdown } from "./markdown/render";
-@@ -291,6 +292,8 @@
+@@ -465,6 +466,8 @@
    const version = await loadVersionMeta(docRef, baseVersion);
    if (!version) return { status: 409, body: { error: "the base version is missing" } };
-
+ 
 +  await e2eRaceGate("commit-before-read", docId);
 +
    // Assemble: base assets, with anything the draft carries overriding it. That
    // one rule covers both formats — for Markdown the draft carries index.md and
    // index.html, for HTML just the entry — with no branch here.
-@@ -298,6 +301,7 @@
+@@ -472,6 +475,7 @@
    const draftPrefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
    const baseFiles = await readPrefix(basePrefix);
    const draftFiles = await readPrefix(draftPrefix);

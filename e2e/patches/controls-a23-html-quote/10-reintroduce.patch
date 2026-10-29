@@ -1,7 +1,7 @@
 --- a/functions/src/email/templates/CommentNotice.tsx
 +++ b/functions/src/email/templates/CommentNotice.tsx
-@@ -59,7 +59,7 @@
-           automation, not a person typing.
+@@ -62,7 +62,7 @@
+           Posted via {p.via}: this came from automation, not a person typing.
          </Text>
        ) : null}
 -      {p.quote ? <Text style={textStyles.quote}>{p.quote}</Text> : null}

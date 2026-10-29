@@ -1,7 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1503,3 +1503,3 @@
-           case "thread.reopened":
--            out.by = (thread?.resolvedBy as { email?: unknown } | undefined)?.email ?? null;
-+            out.by = thread?.authorEmail ?? null;
-             break;
+--- a/functions/src/lib/changefeed.ts
++++ b/functions/src/lib/changefeed.ts
+@@ -98,7 +98,7 @@
+         break;
+       case "thread.resolved":
+       case "thread.reopened":
+-        item.by = (thread?.resolvedBy as { email?: unknown } | undefined)?.email ?? null;
++        item.by = thread?.authorEmail ?? null;
+         break;
+       case "suggestion.accepted":
+       case "suggestion.rejected":
