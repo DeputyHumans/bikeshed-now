@@ -85,6 +85,7 @@ export function ViewerToolbar({
   onToggleRail,
   onOverview,
   onPresent,
+  onPrint,
   menuEntries,
   pane,
   onPane,
@@ -130,6 +131,8 @@ export function ViewerToolbar({
   onToggleRail: () => void;
   onOverview: () => void;
   onPresent: () => void;
+  /** Absent on a phone, where printing folds into the More menu instead. */
+  onPrint?: () => void;
   menuEntries: MenuEntry[];
   pane: "doc" | "comments";
   onPane: (pane: "doc" | "comments") => void;
@@ -242,6 +245,14 @@ export function ViewerToolbar({
           />
         ) : null}
         <Action icon="present" label="Present" onClick={onPresent} />
+        {/* Out of the More menu because a reader who wants a PDF looks for it
+            by name, and finding it under Download meant opening a menu first.
+            On a phone it goes back into that menu: the bar already fills
+            400px, and printing from a phone is rare enough to sit one tap
+            further away. */}
+        {onPrint ? (
+          <Action icon="print" label="Print" title="Print or save as PDF" onClick={onPrint} />
+        ) : null}
         <MoreMenu entries={menuEntries} />
       </div>
     </div>

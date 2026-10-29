@@ -15,7 +15,7 @@ import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
 import { printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
-import { useIsSingleColumn } from "../hooks/useMediaQuery";
+import { useIsPhone, useIsSingleColumn } from "../hooks/useMediaQuery";
 
 import { useDocument } from "../viewer/useDocument";
 import { useDocumentTitle } from "../viewer/useDocumentTitle";
@@ -128,6 +128,7 @@ export function DocViewer() {
   const toast = useToast();
   const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
+  const phone = useIsPhone();
   const signedIn = gate === "ready" && Boolean(user);
   const linkKey = params.get("k") ?? "";
 
@@ -622,14 +623,6 @@ export function DocViewer() {
     }
   }, [editor, mode, docId, doc.format, navigate, toast, setWantsEdit]);
 
-  /**
-   * Leave the editor without publishing.
-   *
-   * The pending autosave is flushed FIRST. `useInlineEditor`'s cleanup clears
-   * the debounce timer, so leaving within a second of the last keystroke would
-   * otherwise drop that keystroke on the floor — silently, since the draft that
-   * remains looks perfectly healthy.
-   */
   /** The export: a scrubbed, stamped snapshot of what the frame shows (SPEC §20). */
   const printCurrent = useCallback(() => {
     if (!frame.doc) return;
@@ -675,6 +668,14 @@ export function DocViewer() {
   }, []);
   const activeEditor = useRef({ origin: editingOrigin, doc: frame.doc });
   activeEditor.current = { origin: editingOrigin, doc: frame.doc };
+  /**
+   * Leave the editor without publishing.
+   *
+   * The pending autosave is flushed FIRST. `useInlineEditor`'s cleanup clears
+   * the debounce timer, so leaving within a second of the last keystroke would
+   * otherwise drop that keystroke on the floor — silently, since the draft that
+   * remains looks perfectly healthy.
+   */
   const stopEditing = useCallback(async () => {
     const started = activeEditor.current;
     const saved = await editor.flushUnsaved();
@@ -857,8 +858,10 @@ export function DocViewer() {
         },
       });
     }
+    // On a phone the toolbar has no room for Print, so it is listed here; on
+    // anything wider it is a button of its own and is not listed twice.
+    if (phone) entries.push({ id: "pdf", label: "Print or save as PDF", onSelect: printCurrent });
     entries.push(
-      { id: "pdf", label: "Print or save as PDF", onSelect: printCurrent },
       { id: "image", label: "Export an image…", onSelect: () => setDialog("image") },
       { id: "sep1", separator: true },
     );
@@ -905,7 +908,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload]);
+  }, [doc, docId, linkKey, frame.doc, isOwner, emailLower, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
@@ -1025,6 +1028,7 @@ export function DocViewer() {
           onToggleRail={() => setRailOpen((open) => !open)}
           onOverview={() => deck.setOverviewOpen(true)}
           onPresent={startPresenting}
+          onPrint={phone ? undefined : printCurrent}
           menuEntries={menuEntries}
           pane={pane}
           onPane={setPane}

@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- Print from the toolbar. **Print**, just before the More menu, prints the
+  document or saves it as a PDF, stamped with the owner's marking as before;
+  it used to be found only under More → Download. On a phone the toolbar has
+  no room for it, so there it stays in the More menu as *Print or save as PDF*.
+  Cmd/Ctrl+P is unchanged.
+
 ## 0.24.2 — 2026-10-29
 
 ### Fixed

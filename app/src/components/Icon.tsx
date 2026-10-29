@@ -2,9 +2,9 @@
 // The icon set: hand-authored paths, one stroke weight, no icon library.
 
 /**
- * Thirty-one icons is not a dependency. A library would bring a thousand, a build
- * step to shake them, and a second visual language to reconcile with the mark —
- * for the sake of the thirty-one this interface actually uses.
+ * Thirty-seven icons is not a dependency. A library would bring a thousand, a
+ * build step to shake them, and a second visual language to reconcile with the
+ * mark — for the sake of the thirty-seven this interface actually uses.
  *
  * Every path is drawn on a 24-unit grid with a 1.7 stroke and round caps, so
  * they sit together, inherit `currentColor`, and stay crisp at any size.
@@ -29,6 +29,9 @@ const PATHS = {
   comment: "M21 12a8 8 0 0 1-8 8H7l-4 3v-4.6A8 8 0 0 1 5 4h8a8 8 0 0 1 8 8z",
   edit: "M4 20h4l11-11a2.8 2.8 0 1 0-4-4L4 16z",
   download: "M12 3v12m0 0 4-4m-4 4-4-4M4 19h16",
+  // The printer's body, the sheet it takes in above and the one it puts out
+  // below. Print had no mark of its own while it lived only in a menu.
+  print: "M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z",
   // The same arrow through the horizontal. Upload had been borrowing
   // `download`, so the button that sends a file up, the dropzone and the
   // drop hint all pointed down.

@@ -7,7 +7,7 @@ import { useEffect } from "react";
  * Two ways a reader prints, one outcome each.
  *
  * Cmd+P / Ctrl+P is routed to the export — the same scrubbed, stamped snapshot
- * the menu's "Print or save as PDF" produces — instead of the browser's print
+ * the toolbar's Print produces — instead of the browser's print
  * of this page, which is the app's header and toolbar with the document
  * clipped to its on-screen box. Both windows get the listener, as the deck keys
  * do: focus is usually inside the frame, and a parent-only listener is silently

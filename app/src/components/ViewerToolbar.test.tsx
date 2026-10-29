@@ -15,6 +15,7 @@ function renderToolbar(props: {
   onExpiry?: () => void;
   onToggleComments?: () => void;
   expiryOf?: "document" | "folder-link";
+  onPrint?: () => void;
 }) {
   return render(
     <MemoryRouter>
@@ -167,3 +168,23 @@ describe("a reader who came through a folder's link", () => {
     expect(chip.getAttribute("title")).toMatch(/through a shared folder/);
   });
 });
+
+describe("printing from the toolbar", () => {
+  test("is a button of its own, just before the More menu, that says it saves a PDF too", () => {
+    // It lived under More → Download, where somebody who wanted a PDF had to
+    // open a menu to find out it was there at all.
+    const onPrint = vi.fn();
+    renderToolbar({ expiresAt: null, onPrint });
+    const print = screen.getByRole("button", { name: "Print" });
+    expect(print.getAttribute("title")).toBe("Print or save as PDF");
+    expect(print.nextElementSibling?.getAttribute("aria-label")).toBe("More actions");
+    fireEvent.click(print);
+    expect(onPrint).toHaveBeenCalledTimes(1);
+  });
+
+  test("is not on the bar when the viewer has left it to the menu, as it does on a phone", () => {
+    renderToolbar({ expiresAt: null });
+    expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
+  });
+});
+

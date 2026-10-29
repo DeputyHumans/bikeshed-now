@@ -2723,7 +2723,10 @@ cannot parse throws before the action runs.
 
 ```js
 const LOCKED = ["display", "visibility", "opacity" /* … */];
-const rec = await u.capturePrint("Print or save as PDF", {
+// The toolbar's Print; a string is a More-menu label instead, which is where
+// a 400 px phone keeps "Print or save as PDF".
+const print = () => u.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true }).click();
+const rec = await u.capturePrint(print, {
   extract: (doc, locked) => Array.from(doc.querySelectorAll('[class*="bshd-print"]')).map((el) => ({
     className: el.className, text: el.textContent,
     important: locked.filter((p) => el.style.getPropertyPriority(p) === "important"),

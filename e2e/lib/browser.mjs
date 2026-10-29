@@ -205,7 +205,8 @@
  * dismisses the refusals' toasts before each press again: error toasts never
  * go by themselves, and three of them stacked cover a dialog's footer.
  *
- * WHAT THE APP PRINTS. "Print or save as PDF" (app/src/export/pdf.ts printDoc)
+ * WHAT THE APP PRINTS. The toolbar's Print, More → "Print or save as PDF" on a
+ * phone, and Cmd/Ctrl+P (app/src/export/pdf.ts printDoc)
  * appends a sandboxed iframe, writes the snapshot into it, and 250 ms later
  * calls that frame's print(). `capturePrint` puts a MutationObserver on the
  * app's own document first; its callback runs once the click handler has

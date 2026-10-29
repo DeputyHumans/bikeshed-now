@@ -12,7 +12,8 @@
  *                    because both change what the document DOES.
  *   ONE_COLUMN       viewer and workspace collapse to one column; the slide
  *                    rail becomes a drawer; a Doc/Comments toggle appears.
- *   PHONE            condensed header, toolbar overflow menu, rail drawer.
+ *   PHONE            condensed header; Print leaves the toolbar for the More
+ *                    menu; rail drawer.
  *   XS               hide the address and the viewer title; tighter padding.
  */
 export const COMPACT_TOOLBAR_MAX = 1100;

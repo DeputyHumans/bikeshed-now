@@ -3119,6 +3119,11 @@ reading frame untouched. Ancestors and authored styles remain so the selected
 section or diagram keeps its layout. The owner's marking is then applied to
 the exported SVG or PNG, including for public and unlisted readers.
 
+**Where the export is reached.** The viewer toolbar's **Print** button, just
+before the More menu. On a phone (≤ 600 px), where the toolbar has no room for
+it, the More menu's **Print or save as PDF** instead — one or the other, never
+both, decided by the same width test.
+
 **The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
 is routed to it — heard on the frame's window as well as the app's, because
 the reader's focus is usually inside the document. File → Print fires no

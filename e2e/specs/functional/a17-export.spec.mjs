@@ -6,8 +6,10 @@
  * documents (17.2b renders the snapshot 17.2 captured, as smoke's 2b reads
  * 2's version):
  *
- *   17.1  "Print or save as PDF" (and Cmd/Ctrl+P with the focus in the
- *         document or app toolbar) hands print() a frame sandboxed exactly
+ *   17.1  the toolbar's Print (on a 400 px touch phone, where the bar has no
+ *         room for it, More actions → "Print or save as PDF"; and Cmd/Ctrl+P
+ *         with the focus in the document or app toolbar) hands print() a
+ *         frame sandboxed exactly
  *         `allow-same-origin allow-modals`, whose document carries no
  *         decoration (DECOR against v1: no highlight, no injected style), no
  *         script, no on* handler and no javascript: URL, while the author's
@@ -281,8 +283,8 @@ async function sessionFor(ctx, acct) {
  * lib reads it as the stack not answering); signing in is safe to repeat, so
  * untilLanded tries it again. Any other outcome is the case's.
  */
-async function signedIn(ctx, acct, name) {
-  const u = await ctx.users.user({ name });
+async function signedIn(ctx, acct, name, opts = {}) {
+  const u = await ctx.users.user({ name, ...opts });
   const { out: s } = await untilLanded(ctx, `${name}'s sign-in`, () => u.signInUi(acct.email, acct.password, SLOW), null, patience(ctx));
   precondition(s.status === "ok", `${name} signed in through /signup`);
   return u;
@@ -518,6 +520,9 @@ const PRINT_FRAME = '[sandbox~="allow-modals"]';
  * firstChildren, date, year}`. Exactly one frame printed exactly once is the
  * harness's measurement holding, so a miss is a precondition.
  */
+/** The toolbar's own Print button: the way a reader prints, anywhere wider than a phone. */
+const toolbarPrint = (u) => () => u.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true }).click();
+
 async function printOnce(ctx, u, action, what) {
   const rec = await u.capturePrint(action, { extract: printExtract, arg: LOCKED, match: PRINT_FRAME });
   if (rec.ignored.length > 0) ctx.step(`${what}: ${rec.ignored.length} iframe(s) added during the print were not print frames (sandbox ${JSON.stringify(rec.ignored.map((f) => f.sandbox))}): ignored`);
@@ -644,8 +649,8 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   await commentOn(u, "#p-1", P1_QUOTE, `Print probe comment ${t}`);
   await waitHighlights(u, "mark.bshd-hl");
 
-  ctx.step("More actions → Print or save as PDF; the print frame's document is captured when print() is called");
-  const { frame, snap } = await printOnce(ctx, u, "Print or save as PDF", "the menu's print");
+  ctx.step("the toolbar's Print; the print frame's document is captured when print() is called");
+  const { frame, snap } = await printOnce(ctx, u, toolbarPrint(u), "the toolbar's print");
   ctx.ev.text("print-snapshot.html", snap.html);
   ctx.ev.json("print-stamps", snap.stamps);
 
@@ -715,13 +720,22 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   assert.deepEqual(printDecor(await fingerprint(parser, appPrint.html), fp1, { stamps: true }), [], "DECOR: the app shortcut's snapshot");
   assert.deepEqual(appPrint.pageRules, authoredPages, "the app shortcut preserves authored page geometry");
 
+  ctx.step("on a 400 px touch phone Print is not on the toolbar, which has no room for it, and More actions → Print or save as PDF prints the same stamped, scrubbed snapshot");
+  const phone = await signedIn(ctx, accounts[0], "owner-phone", { device: { width: 400, height: 800, touch: true } });
+  await openDoc(ctx, phone, docId);
+  assert.equal(await phone.page.locator(".viewer-toolbar").getByRole("button", { name: "Print", exact: true }).count(), 0, "no Print button on a phone's toolbar");
+  const { frame: phoneFrame, snap: phonePrint } = await printOnce(ctx, phone, "Print or save as PDF", "the phone's More-menu print");
+  assert.equal(phoneFrame.sandbox, "allow-same-origin allow-modals", "the phone's print frame sandbox");
+  assert.deepEqual(phonePrint.stamps.map((s) => [s.className, s.text]), snap.stamps.map((s) => [s.className, s.text]), "the phone's print stamps the same label and footer");
+  assert.deepEqual(await activeContent(parser, phonePrint.html), { scripts: 0, handlers: [], jsUrls: [] }, "the phone's snapshot is scrubbed");
+
   ctx.step("marking off: POST /marking {enabled:false} stores off; after a reload the print has no stamp, and every scrub still holds");
   const off = await setMarking(ctx, owner, docId, { enabled: false, label: "KEEP", footer: "KEEP" });
   assert.deepEqual(off, MARKING_OFF, "a disabled marking is stored as off, its text dropped");
   // Reloaded for a fresh read of docs/{id}.marking; the highlight's DECOR was
   // the first print's, so this one does not wait for the annotations to load.
   await openDoc(ctx, u, docId);
-  const offPrint = await printOnce(ctx, u, "Print or save as PDF", "the print with marking off");
+  const offPrint = await printOnce(ctx, u, toolbarPrint(u), "the print with marking off");
   ctx.ev.text("print-snapshot-off.html", offPrint.snap.html);
   assert.deepEqual(offPrint.snap.stamps, [], "no stamp node with marking off");
   assert.equal(offPrint.frame.sandbox, "allow-same-origin allow-modals", "the sandbox does not depend on marking");
@@ -729,7 +743,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   const fpOff = await fingerprint(parser, offPrint.snap.html);
   assert.deepEqual(printDecor(fpOff, fp1, { stamps: false }), [], "DECOR with marking off");
   assert.deepEqual(foreignMarkers(fpOff), { whatever: 1 }, "the author's own data-bshd survives with marking off");
-  noPageErrors([u]);
+  noPageErrors([u, phone]);
 });
 
 // --- A17.1b -------------------------------------------------------------------------
@@ -768,7 +782,7 @@ scenario("A17.1b an anonymous holder of an unlisted document's link who prints i
   ctx.step("positive control: the owner prints this same document from the More menu and gets both stamps");
   const o = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, o, docId);
-  const ours = await printOnce(ctx, o, "Print or save as PDF", "the owner's print");
+  const ours = await printOnce(ctx, o, toolbarPrint(o), "the owner's print");
   const ownerStamps = ours.snap.stamps.map((s) => [s.className, s.text]);
   ctx.ev.json("owner-stamps", ours.snap.stamps);
   precondition(isDeepStrictEqual(ownerStamps, stamped), `the owner's print of this document carries the marking (the control): ${JSON.stringify(ownerStamps)}`);
@@ -777,7 +791,7 @@ scenario("A17.1b an anonymous holder of an unlisted document's link who prints i
   ctx.step("an anonymous reader opens /d/<id>?k= and prints from the More menu");
   const anon = await ctx.users.user({ name: "link-holder" });
   await openDoc(ctx, anon, docId, { k });
-  const theirs = await printOnce(ctx, anon, "Print or save as PDF", "the link holder's print");
+  const theirs = await printOnce(ctx, anon, toolbarPrint(anon), "the link holder's print");
   ctx.ev.text("print-snapshot.html", theirs.snap.html);
   ctx.ev.json("link-holder-stamps", theirs.snap.stamps);
   precondition(theirs.frame.sandbox === "allow-same-origin allow-modals", `the link holder's print frame is sandboxed allow-same-origin allow-modals (SPEC §20, spec.md:2346-2347), not ${JSON.stringify(theirs.frame.sandbox)}`);
@@ -809,7 +823,7 @@ scenario("A17.1c public readers receive the owner's changed marking and explicit
     assert.deepEqual(projection.marking, marking, "the public mirror follows the owner's latest marking");
     for (const key of ["members", "ownerEmail", "stats", "defaultMarking", "storagePrefix"]) assert.ok(!(key in projection), `${key} is not public`);
     await openDoc(ctx, anon, up.docId);
-    const printed = await printOnce(ctx, anon, "Print or save as PDF", "the public reader's print");
+    const printed = await printOnce(ctx, anon, toolbarPrint(anon), "the public reader's print");
     assert.deepEqual(printed.snap.stamps.map((stamp) => stamp.text), marking.enabled ? [marking.label, marking.footer] : [], "the public reader prints the changed policy, including off");
   }
   await privateAgain(ctx, owner, up.docId);
@@ -866,7 +880,7 @@ async function hostileSnapshot(ctx) {
   ctx.step("the owner prints it; the snapshot print() receives is captured");
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, up.docId);
-  const { snap } = await printOnce(ctx, u, "Print or save as PDF", "the hostile document's print");
+  const { snap } = await printOnce(ctx, u, toolbarPrint(u), "the hostile document's print");
   ctx.ev.text("print-snapshot.html", snap.html);
   precondition(snap.html.includes('id="hostile"') && snap.stamps.length === 2, "the snapshot carries the hostile stylesheet and both stamps");
   hostilePrint.html = snap.html;
@@ -945,7 +959,7 @@ scenario("A17.2c authored html and body containing blocks cannot move or clip th
   await setMarking(ctx, owner, up.docId, { enabled: true, label: SUGGESTED_LABEL, footer: "Visible footer" });
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, up.docId);
-  const { snap } = await printOnce(ctx, u, "Print or save as PDF", "the ancestor-layout document's print");
+  const { snap } = await printOnce(ctx, u, toolbarPrint(u), "the ancestor-layout document's print");
   const openMarks = snap.stamps.filter((s) => s.topLayer).map((s) => s.className);
   ctx.ev.text("ancestor-print.html", snap.html);
   ctx.ev.json("ancestor-print-state", { openMarks });
