@@ -8,9 +8,9 @@
  * Chrome processes.
  *
  * Chrome is found in this order, and never downloaded:
- *   1. the system Chrome (`channel: "chrome"`);
- *   2. `E2E_CHROME`, an executable path;
- *   3. the ms-playwright cache (`chromium.executablePath()`), if it exists.
+ *   1. `E2E_CHROME`, an explicitly configured executable path;
+ *   2. the matching ms-playwright cache (`chromium.executablePath()`), if installed;
+ *   3. the system Chrome (`channel: "chrome"`).
  * No userDataDir is ever passed: every context is a Playwright temp profile.
  * Every Chrome is launched with `--e2e-browser-mark=<…>` on its command line
  * (browsers.mjs), naming the run and the process that launched it, so `reap`
@@ -782,32 +782,28 @@ async function hitAt(page, frame, pagePoint, inner, selector) {
   return { ok: top.isFrame && inside.onTarget, page: top.isFrame ? "frame" : top.desc, frame: inside.desc };
 }
 
+/** Selection only: use the SDK-matched build when installed; never download during a test. */
+export function chromeCandidates({ configured = process.env.E2E_CHROME, cached = chromium.executablePath(), exists = existsSync } = {}) {
+  return [
+    ...(configured ? [{ via: "E2E_CHROME", executablePath: configured }] : []),
+    ...(cached && exists(cached) ? [{ via: "ms-playwright-cache", executablePath: cached }] : []),
+    { via: "channel:chrome", channel: "chrome" },
+  ];
+}
+
 /** Launch Chrome by the documented fallback order. */
 export async function launchChrome({ headless = true, args = [] } = {}) {
   // The mark that lets reap find this Chrome once its run is gone (browsers.mjs).
   const common = { headless, args: [...CHROME_ARGS, ...args, ...browserArgs()] };
   const attempts = [];
-  try {
-    const browser = await chromium.launch({ ...common, channel: "chrome" });
-    return { browser, via: "channel:chrome", version: browser.version() };
-  } catch (err) {
-    attempts.push(`channel chrome: ${err.message.split("\n")[0]}`);
-  }
-  const fromEnv = process.env.E2E_CHROME;
-  if (fromEnv) {
+  for (const { via, ...selection } of chromeCandidates()) {
     try {
-      const browser = await chromium.launch({ ...common, executablePath: fromEnv });
-      return { browser, via: "E2E_CHROME", version: browser.version() };
+      const browser = await chromium.launch({ ...common, ...selection });
+      return { browser, via, version: browser.version() };
     } catch (err) {
-      attempts.push(`E2E_CHROME ${fromEnv}: ${err.message.split("\n")[0]}`);
+      attempts.push(`${via}: ${err.message.split("\n")[0]}`);
     }
   }
-  const cached = chromium.executablePath();
-  if (cached && existsSync(cached)) {
-    const browser = await chromium.launch({ ...common, executablePath: cached });
-    return { browser, via: "ms-playwright-cache", version: browser.version() };
-  }
-  attempts.push(`ms-playwright cache: ${cached} does not exist`);
   throw new Error(`no Chrome could be launched:\n  ${attempts.join("\n  ")}`);
 }
 

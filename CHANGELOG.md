@@ -18,6 +18,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Prefer an explicitly configured or installed Playwright-matched browser before system Chrome, avoiding the measured system-browser shutdown delay without skipping browser cleanup or reducing test coverage.
+
 - Apply the explicitly reviewed ten-participant campaign scope to cloud qualification as well as local runs; retain every N2/N5/N10 trial and defer N20 consistently.
 
 - Await shared browser shutdown before E2E maintenance, retain shutdown failures, and stop measuring after an unusable cleanup boundary. Record phase timings, avoid redundant source hashing, and stage patch-test source once while isolating each control without reducing scenarios or trials.

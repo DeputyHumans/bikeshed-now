@@ -25,6 +25,11 @@ npm run test:e2e -- classify [--merge] <run> <id> <H|E|P|I|U> <note…>
 npm run test:e2e -- controls [<set>…]           # every oracle family red with its patch, green without
 ```
 
+Browser selection uses `E2E_CHROME` when set, then the installed browser matching
+Playwright, then system Chrome. Install the matching build once with
+`node node_modules/playwright-core/cli.js install chromium`; tests never download
+it implicitly. The selected browser and version remain in pool diagnostics.
+
 Self-tests take the same machine-wide shared tier lock as functional runs.
 They wait while a concurrency measurement holds the exclusive lock, and keep
 their shared lock until the test child closes. Interrupting self-tests stops
