@@ -2,6 +2,7 @@
 // The WYSIWYG toolbar, with a palette that depends on the source format (SPEC §6a, §11).
 
 import { useCallback, useEffect, useState } from "react";
+import { watchSelection } from "../viewer/frameWatch";
 import { Icon, type IconName } from "../components/Icon";
 import { EDITOR_FONT_CHOICES } from "../brand/fonts";
 import { TOKENS } from "../brand/tokens";
@@ -242,8 +243,9 @@ export function EditToolbar({
       }
       setActive(next);
     };
-    doc.addEventListener("selectionchange", sync);
-    return () => doc.removeEventListener("selectionchange", sync);
+    // Watched: editing is always sandboxed, and some engines deliver a
+    // sandboxed document no events (viewer/frameWatch.ts).
+    return watchSelection(doc, sync);
   }, [doc]);
 
   const renderControl = (control: Control) => {

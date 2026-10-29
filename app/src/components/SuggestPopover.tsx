@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Writing a suggested edit: the form, and where it floats over the document (SPEC §22).
 
+import { createPortal } from "react-dom";
 import { useEffect, useId, useRef, useState } from "react";
 
 /**
@@ -142,8 +143,21 @@ export function popoverPosition(
 /** The form, floating in the frame's stage: the parent's DOM, never the document's. */
 export function SuggestPopover({
   position,
+  docked = false,
   ...form
-}: Parameters<typeof SuggestForm>[0] & { position: PopoverPosition }) {
+}: Parameters<typeof SuggestForm>[0] & {
+  position: PopoverPosition;
+  /** On a touch screen: a sheet above the docked selection bar, clear of the phone's own menu. */
+  docked?: boolean;
+}) {
+  if (docked) {
+    return createPortal(
+      <div className="suggest-popover suggest-sheet" role="dialog" aria-label="Suggest an edit">
+        <SuggestForm {...form} />
+      </div>,
+      document.body,
+    );
+  }
   return (
     <div
       className="suggest-popover"

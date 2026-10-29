@@ -15,7 +15,7 @@ import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
 import { printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
-import { useIsPhone, useIsSingleColumn } from "../hooks/useMediaQuery";
+import { useCoarsePointer, useIsPhone, useIsSingleColumn } from "../hooks/useMediaQuery";
 
 import { useDocument } from "../viewer/useDocument";
 import { useDocumentTitle } from "../viewer/useDocumentTitle";
@@ -24,6 +24,7 @@ import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
 import { useEditSession } from "../viewer/useEditSession";
+import { refusesListeners } from "../viewer/frameWatch";
 import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
@@ -129,6 +130,8 @@ export function DocViewer() {
   const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
   const phone = useIsPhone();
+  // Touch: the selection controls and the suggestion form dock at the bottom (SelectionFab).
+  const coarsePointer = useCoarsePointer();
   const signedIn = gate === "ready" && Boolean(user);
   const linkKey = params.get("k") ?? "";
 
@@ -325,6 +328,10 @@ export function DocViewer() {
   const shareLive =
     signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
   const remoteChanged = useRef<(() => void) | null>(null);
+  // Where the frame delivers no `input` (viewer/frameWatch.ts), the shared
+  // binding is what tells the editor this person typed: declared before the
+  // editor, so it reaches it through a ref.
+  const noteEdit = useRef<(() => void) | null>(null);
   const shared = useSharedDocument({
     mode,
     doc: frame.doc,
@@ -334,6 +341,9 @@ export function DocViewer() {
     liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
     expectedCausal: editingOrigin?.causal,
     onRemote: () => remoteChanged.current?.(),
+    onLocalChange: () => {
+      if (refusesListeners(frame.doc)) noteEdit.current?.();
+    },
   });
 
   const editor = useInlineEditor({
@@ -346,7 +356,9 @@ export function DocViewer() {
     causalStamp: shared.causalStamp,
     flushShared: shared.flush,
     onStale: () => toast.error("Somebody published a newer version. Reload to continue."),
+    sharedBound: shared.bound,
   });
+  noteEdit.current = editor.markChanged;
 
   remoteChanged.current = editor.markChanged;
 
@@ -1031,7 +1043,12 @@ export function DocViewer() {
           onPrint={phone ? undefined : printCurrent}
           menuEntries={menuEntries}
           pane={pane}
-          onPane={setPane}
+          onPane={(next) => {
+            setPane(next);
+            // The panel shows only while it is open; with no open threads it
+            // starts closed, and choosing the tab showed an empty screen.
+            if (next === "comments") setCommentsOpen(true);
+          }}
           singleColumn={singleColumn}
         />
       )}
@@ -1148,6 +1165,7 @@ export function DocViewer() {
             {suggesting ? (
               <SuggestPopover
                 position={suggesting.position}
+                docked={coarsePointer}
                 exact={suggesting.anchor.exact}
                 initial={suggesting.anchor.exact}
                 submitLabel="Suggest"

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Sole owner of the document iframe (SPEC §6a, §6c).
 
+import { refusesListeners } from "./frameWatch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observeFrameFocus } from "./frameFocus";
 import { captureAssetTags } from "../annotation/highlighter";
@@ -153,7 +154,13 @@ export function useDocFrame(options: {
     const checkpoint = restore.current;
     if (checkpoint) {
       // After layout, or the document is not yet tall enough to scroll to it.
-      frameDoc.defaultView?.requestAnimationFrame(() => {
+      // On the PARENT's frame clock where the document refuses listeners: an
+      // engine that delivers it no events runs none of its animation frames
+      // either (viewer/frameWatch.ts).
+      const nextFrame = refusesListeners(frameDoc)
+        ? (cb: FrameRequestCallback) => window.requestAnimationFrame(cb)
+        : (cb: FrameRequestCallback) => frameDoc.defaultView?.requestAnimationFrame(cb);
+      nextFrame(() => {
         if (identityRef.current !== identity || ref.current?.contentDocument !== frameDoc) return;
         if (checkpoint.selection) {
           const range = rangeFromAnchor(frameDoc, checkpoint.selection);

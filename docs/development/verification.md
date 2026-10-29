@@ -182,12 +182,7 @@ The prompt appears only when the document is sandboxed **and** actually contains
 a `<script>`. That AND is why the two HTML samples differ the way they do, and
 it is what keeps the prompt meaningful when it appears.
 
-The sandbox is also in the bytes (SPEC §2 "The script lock"). Open the scripted
-fork's own address, `/content/<id>/v1/index.html`, in a tab: the page renders
-and `#dot-nav` stays empty, and `curl -sI` shows
-`content-security-policy: sandbox allow-same-origin`. Its run address,
-`/content/!run/<id>/v1/index.html`, is unlocked (`frame-ancestors 'self'` alone)
-only once you have chosen *Run it for me*.
+The sandbox is also in the bytes (SPEC §2 "The script lock"). Open the scripted fork's own address, `/content/<id>/v1/index.html`, in a tab: the page renders and `#dot-nav` stays empty, and `curl -sI` shows `content-security-policy: sandbox allow-same-origin`. Its run address, `/content/!run/<id>/v1/index.html`, is unlocked (`frame-ancestors 'self'` alone) only once you have chosen *Run it for me*.
 
 ### 6 · A highlight opens every collapsed ancestor it needs — and only those
 
@@ -443,6 +438,19 @@ version its user has not seen. What it cannot prove: that a real
 deployment's runtime account may read and clear the Realtime Database. If it
 cannot read it, every update is refused as "could not tell whether anybody is
 editing" (operations overview, "When something is wrong").
+
+### 18 · In Safari's engine, an untrusted document still answers
+
+Chrome delivers every event from the document's frame, so nothing above can fail there for the reason this checks. Open an untrusted document with a thread on it in **Safari** (or on an iPhone, or in any iPhone browser):
+
+1. In the console, on the parent page: dispatch an event into `document.querySelector("iframe.doc-frame").contentDocument` with a listener of your own on it. It is never called: the condition SPEC §6 describes.
+2. Select a word. **Comment** appears, within a moment (the selection is sampled, not heard). On a touch screen it is docked at the bottom.
+3. Tap or click the highlight. Its thread is selected in the panel.
+4. A link to another site opens in a new tab, and the document stays.
+5. **Edit**, type a word: the toolbar says `Saved` within a few seconds, and the draft holds the word.
+6. Known and accepted: arrow keys pressed after clicking inside a deck's slide do nothing until you click outside it.
+
+The same steps can be driven from a script with the system WebKit: a `WKWebView` signed in through the sign-in form, the gestures replaced by the parent selecting, focusing and clicking inside the frame. That is how 0.26.2 was checked, and it found every step above but one: a link clicked from script opened no tab, because a click from script is not a user's gesture, so step 4 with a real tap is checked by hand on a phone. It has no committed harness yet.
 
 ## Automated: `npm run test:e2e`
 

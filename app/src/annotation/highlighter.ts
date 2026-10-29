@@ -15,6 +15,8 @@ import {
   isOwnMarker,
   markOwn,
 } from "../brand/dom";
+import { refusesListeners, watchFocus } from "../viewer/frameWatch";
+import { hasRetargetedLinks, restoreLinks } from "../viewer/outboundLinks";
 import { TOKENS } from "../brand/tokens";
 import { peerColor } from "../brand/tokens";
 import type { Anchor, Annotation } from "../types";
@@ -66,6 +68,11 @@ export function ensureHighlightStyles(doc: Document): void {
     .${HL_CLASS}[data-selected="true"] {
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8),
                   0 0 0 3px var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
+    }
+    /* Focusable only where a tap is how a highlight is heard (attachHighlightClick),
+       and focused only for the moment it opens its thread. */
+    .${HL_CLASS}:focus {
+      outline: none;
     }
     @media (hover: none), (pointer: coarse) {
       .${HL_CLASS} {
@@ -150,9 +157,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * prose into a figure gets the right wrapper for each part.
  */
 function wrapperFor(doc: Document, text: Text): HTMLElement | SVGElement {
-  return text.parentElement?.namespaceURI === SVG_NS
-    ? doc.createElementNS(SVG_NS, "tspan")
-    : doc.createElement("mark");
+  const wrapper =
+    text.parentElement?.namespaceURI === SVG_NS
+      ? doc.createElementNS(SVG_NS, "tspan")
+      : doc.createElement("mark");
+  // Where no click is delivered, a tap is heard as focus (attachHighlightFocus).
+  if (refusesListeners(doc)) wrapper.setAttribute("tabindex", "-1");
+  return wrapper;
 }
 
 /**
@@ -365,6 +376,10 @@ export function stripDecoration(root: Element): void {
   }
   root.normalize();
 
+  // A link the viewer pointed at a new tab, where clicks are not delivered,
+  // gets the author's own target and rel back.
+  restoreLinks(root);
+
   for (const el of Array.from(root.querySelectorAll(`[${EMPTY_ATTR}]`))) {
     el.removeAttribute(EMPTY_ATTR);
   }
@@ -386,6 +401,7 @@ export function assertNoDecoration(doc: Document, context: string): void {
   if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
   if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
+  if (hasRetargetedLinks(doc)) found.push("retargeted link");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     if (isOwnMarker(el)) found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
   }
@@ -458,6 +474,7 @@ export function attachHighlightClick(
   doc: Document,
   onClick: (annId: string) => void,
 ): () => void {
+  if (refusesListeners(doc)) return attachHighlightFocus(doc, onClick);
   const handler = (e: Event) => {
     const target = e.target as Element | null;
     const mark = target?.closest?.(HL_SELECTOR) as Element | null;
@@ -472,4 +489,31 @@ export function attachHighlightClick(
   // handlers cannot make its highlights unclickable.
   doc.addEventListener("click", handler, true);
   return () => doc.removeEventListener("click", handler, true);
+}
+
+/**
+ * Where the frame delivers no clicks (viewer/frameWatch.ts), a tap is heard by
+ * what it does to focus: every highlight is focusable, though never in the tab
+ * order (`tabindex="-1"`), and its thread opens when one takes focus, which is
+ * then given back so the same highlight can be tapped again. The attribute is
+ * on our own wrapper, which the strip unwraps, so it never reaches a version;
+ * the text is untouched, so no anchor moves.
+ */
+function attachHighlightFocus(doc: Document, onClick: (annId: string) => void): () => void {
+  // Highlights drawn from now on are made focusable as they are made
+  // (wrapperFor); any already drawn, here.
+  for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
+    if (!mark.hasAttribute("tabindex")) mark.setAttribute("tabindex", "-1");
+  }
+  const stop = watchFocus(doc, (el) => {
+    const mark = el.closest(HL_SELECTOR);
+    const id = mark?.getAttribute(ANN_ATTR);
+    if (!mark || !id) return;
+    onClick(id);
+    (mark as HTMLElement).blur?.();
+  });
+  return () => {
+    stop();
+    for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) mark.removeAttribute("tabindex");
+  };
 }

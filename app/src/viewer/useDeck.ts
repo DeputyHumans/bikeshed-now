@@ -2,6 +2,7 @@
 // Moving through a deck: position, paging, and the keys that drive it (SPEC §6d).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { watchResize, watchScroll } from "./frameWatch";
 
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import {
@@ -179,8 +180,10 @@ export function useDeck({
       );
     };
     measure();
-    view.addEventListener("scroll", measure, { passive: true });
-    view.addEventListener("resize", measure);
+    // Watched: an engine that delivers a sandboxed deck no events would
+    // otherwise never move the rail off its first slide (viewer/frameWatch.ts).
+    const stopScroll = watchScroll(view.document, measure);
+    const stopResize = watchResize(view.document, measure);
     // Attributes change when motion starts, while the outgoing slide can
     // still paint. Completion changes computed styles without DOM mutation.
     const motionEvents = ["transitionend", "transitioncancel", "animationend", "animationcancel"];
@@ -192,8 +195,8 @@ export function useDeck({
       attributeFilter: ["class", "style", "hidden", "aria-hidden"],
     });
     return () => {
-      view.removeEventListener("scroll", measure);
-      view.removeEventListener("resize", measure);
+      stopScroll();
+      stopResize();
       if (stacked) for (const event of motionEvents) doc.removeEventListener(event, measure, true);
       observer?.disconnect();
     };

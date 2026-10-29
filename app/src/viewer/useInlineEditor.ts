@@ -15,6 +15,8 @@ import {
   markGeneratedContainers,
 } from "../wysiwyg/placeholders";
 import { rewriteLegacyFontTags } from "../wysiwyg/EditToolbar";
+import { refusesListeners } from "./frameWatch";
+import { HL_SELECTOR, OWN_ATTR, OWN_SELECTOR } from "../brand/dom";
 import { StaleVersionError, saveDraft } from "../edit";
 import { ConflictError } from "../api";
 import type { CausalStamp } from "../crdt/causal";
@@ -49,8 +51,16 @@ export function useInlineEditor(options: {
   flushShared?: () => Promise<void>;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
+  /**
+   * The editing host is bound to the shared document (useSharedDocument), so
+   * an edit typed here is reported by the binding, through `markChanged`, and
+   * a peer's edit applied to this host is not this person's to save.
+   */
+  sharedBound?: boolean;
 }) {
   const { mode, doc, epoch, docId, authoredAssets, onStale, ready = true } = options;
+  const sharedBound = useRef(false);
+  sharedBound.current = options.sharedBound === true;
   // There is no longer a state in which somebody may open the editor and not
   // type in it: edits merge (SPEC §6b), so the mode is the whole condition.
   const readyRef = useRef(ready);
@@ -216,11 +226,26 @@ export function useInlineEditor(options: {
     // override alone cannot prevent their input while the shared host joins.
     const beforeInput = (event: Event) => { if (!readyRef.current) event.preventDefault(); };
     doc.addEventListener("beforeinput", beforeInput, true);
-    doc.addEventListener("input", onInput);
     changedRef.current = onInput;
+
+    // Where the frame delivers no events (viewer/frameWatch.ts) there is no
+    // `input`, and typing is seen instead: by the shared binding when there is
+    // one (it calls `markChanged`), else by observing the body. A frame-realm
+    // observer, because a cross-realm one observes nothing; our own
+    // decoration, and the attributes this effect itself sets, are not an edit.
+    const watched = refusesListeners(doc);
+    const observer = watched
+      ? new MO((records) => {
+          if (sharedBound.current || !readyRef.current) return;
+          if (records.some(isAuthorsChange)) onInput();
+        })
+      : null;
+    observer?.observe(body, { subtree: true, childList: true, characterData: true, attributes: true });
+    if (!watched) doc.addEventListener("input", onInput);
 
     return () => {
       session.current += 1;
+      observer?.disconnect();
       doc.removeEventListener("input", onInput);
       changedRef.current = null;
       doc.removeEventListener("beforeinput", beforeInput, true);
@@ -293,4 +318,30 @@ export function useInlineEditor(options: {
     /** True when the last save failed: a commit must not proceed. */
     saveFailed: () => lastSaveFailed.current,
   };
+}
+
+/** Attributes this app sets on the editing host or its decoration, never the author's edit. */
+const OWN_ATTRS = new Set(["contenteditable", "spellcheck", "tabindex"]);
+
+/** By node type: a node from the frame is an Element of the frame's realm, not this one's. */
+function isElement(node: Node | null | undefined): node is Element {
+  return node?.nodeType === 1;
+}
+
+/** Is `node`, or something it sits in, this app's own decoration? */
+function isDecorationNode(node: Node | null): boolean {
+  const el = isElement(node) ? node : node?.parentElement ?? null;
+  return el?.closest(`${OWN_SELECTOR}, ${HL_SELECTOR}`) != null;
+}
+
+/** Did this mutation change what the author wrote, as opposed to what this app drew over it? */
+function isAuthorsChange(record: MutationRecord): boolean {
+  if (isDecorationNode(record.target)) return false;
+  if (record.type === "attributes") {
+    const name = record.attributeName ?? "";
+    return !OWN_ATTRS.has(name) && !name.startsWith(OWN_ATTR);
+  }
+  if (record.type === "characterData") return true;
+  const nodes = [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)];
+  return nodes.length === 0 || nodes.some((n) => !(isElement(n) && isDecorationNode(n)));
 }

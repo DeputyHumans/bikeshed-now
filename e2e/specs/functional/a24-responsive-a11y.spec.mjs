@@ -1524,3 +1524,60 @@ scenario("A24.5c all 11 screens and 2 dialogs have AA text contrast, computed ac
     assert.deepEqual(accessibility.issues.focusPaint, [], `${name}: --color-focus is painted only by a focused indicator`);
   }
 });
+
+scenario("A24.4c on a touch phone, a long press selects a word and the selection toolbar docks at the bottom of the screen, clear of the selection, and its Comment starts a thread the reader is shown", {
+  tiers: BOTH,
+  timeoutMs: 180_000,
+  inconclusiveOnCaseTimeout: true,
+}, async (ctx) => {
+  const { u, docId } = await touchCase(ctx, PHONE, "touch-phone-dock");
+  precondition((await u.page.locator(".viewer").getAttribute("data-pane")) === "doc", "the phone shows the document pane");
+
+  ctx.step('a long press (a touch held 1.2 s) on "lanterns": the word is selected');
+  const at = await quotePoint(u, "#a24-2", "lanterns");
+  await u.tap(at, { durationMs: 1_200 });
+  const word = await eventually(async () => (await selectionText(await u.frame())).trim() || false, { timeout: 5_000, message: "the long press selected text" });
+  assert.equal(word, "lanterns", "the long press selected the word under the finger");
+
+  ctx.step("the toolbar is docked at the bottom, on screen, uncovered, and nowhere near the selection the phone's own menu sits over");
+  const dock = u.page.locator(".selection-dock");
+  await dock.waitFor({ state: "visible", timeout: 5_000 });
+  const comment = dock.locator(".selection-fab", { hasText: "Comment" });
+  const place = await comment.evaluate(placementInPage);
+  assert.deepEqual({ inside: place.inside, onTop: place.onTop }, { inside: true, onTop: true }, `the docked Comment is on screen and uncovered: ${JSON.stringify(place)}`);
+  const vh = await u.page.evaluate(() => window.innerHeight);
+  assert.ok(place.box[3] >= vh - 80, `the toolbar sits at the bottom of the screen (its bottom at ${place.box[3]} of ${vh})`);
+  assert.ok(place.box[1] > at.y + 40, `the toolbar is below the selection, clear of the phone's own menu over it (toolbar top ${place.box[1]}, selection at ${Math.round(at.y)})`);
+  const target44 = await comment.evaluate((el) => el.getBoundingClientRect().height);
+  assert.ok(target44 >= 44, `the docked Comment is a 44px target (${target44})`);
+
+  ctx.step('tap Comment: a thread on "lanterns" is created and the comments pane shows it');
+  const box = await comment.boundingBox();
+  await u.tap({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  await eventually(async () => (await readCollection(target, `docs/${docId}/versions/v1/annotations`)).some((r) => r.data.anchor?.exact === "lanterns") || false, { timeout: SERVER_MS, message: 'an annotation on "lanterns"' });
+  await eventually(async () => {
+    const x = await u.page.evaluate(selectedThreadInPage);
+    return (x.selected && x.shown && x.quote?.includes("lanterns")) || false;
+  }, { timeout: LISTEN_MS, message: "the new thread is selected and shown" });
+});
+
+scenario("A24.4d on a phone, the Comments tab of a document with no open threads shows the comments panel and how to start one, not an empty screen", {
+  tiers: BOTH,
+  timeoutMs: 150_000,
+  inconclusiveOnCaseTimeout: true,
+}, async (ctx) => {
+  const { u, owner } = await ownerOnPage(ctx, { device: PHONE, name: "phone-comments-tab" });
+  const { docId } = await publishPlain(owner, "phone-comments-tab");
+  await quietDoc(target, docId);
+  await openDoc(ctx, u, docId);
+  precondition((await u.page.locator(".viewer").getAttribute("data-pane")) === "doc", "the phone shows the document pane");
+
+  ctx.step("choose the Comments tab");
+  await u.page.getByRole("button", { name: "Comments", exact: true }).first().click();
+  await eventually(async () => (await u.page.locator(".viewer").getAttribute("data-pane")) === "comments" || false, { timeout: 5_000, message: "the comments pane is chosen" });
+  const panel = u.page.locator(".comments-panel");
+  await panel.waitFor({ state: "visible", timeout: 10_000 });
+  const place = await panel.evaluate(placementInPage);
+  assert.ok(place.box[2] - place.box[0] > 0 && place.box[3] - place.box[1] > 0, `the panel is drawn (${JSON.stringify(place)})`);
+  await u.page.getByText("Select any passage in the document to comment on it.").waitFor({ state: "visible", timeout: 5_000 });
+});

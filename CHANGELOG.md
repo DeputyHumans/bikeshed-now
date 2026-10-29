@@ -14,13 +14,21 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## 0.26.2 — 2026-10-29
+## Unreleased
 
 ### Fixed
 
 - Preserve the acknowledgement-cleanup negative control beside the new comment retry option.
 - Give concurrent comments and suggestions up to ten native Firestore transaction attempts, retaining backoff, atomic writes and acknowledgement receipts.
 - Run one complete local C15 email storm per trial instead of repeating an impossible automatic-trigger overlap three times. Keep every participant/trial, ordinary safety assertion, explicit inconclusive result and separate cloud qualification requirement; retain historical three-attempt evidence.
+
+## 0.26.2 — 2026-10-29
+
+### Fixed
+
+- **Commenting works on an iPhone and in Safari.** Safari's engine, which every iPhone browser uses, never passes the viewer an event from inside a sandboxed document, and most documents are sandboxed. Selecting text there offered no Comment or Suggest edit, tapping a highlight did nothing, links out of the document stayed put, the editor never autosaved, and presence, read tracking and the deck rail stood still. The viewer now asks each document whether it hears it, and where it does not, it watches the selection, scroll and focus instead, learns of typing from the live-editing binding, and points links that leave the document at a new tab (SPEC §6). Arrow keys pressed with focus inside a slide still do nothing there.
+- **On a phone, the selection buttons are no longer hidden under the phone's own menu.** On a touch screen they sit at the bottom of the screen, and the suggestion form opens above them (SPEC §7).
+- On a phone, the Comments tab of a document with no open comments showed an empty screen. It shows the comments panel and how to start one.
 
 ## 0.26.1 — 2026-10-29
 
@@ -46,25 +54,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Security
 
-- **A document's scripts no longer run when its file is opened directly.**
-  The sandbox that kept an untrusted page's scripts off belonged to the
-  viewer's frame, not to the page. The same `/content/…` address pasted into a
-  tab, opened as a popup or embedded with `<object>` ran the page's scripts on
-  this origin, as whoever opened it, able to act for them. Every content and
-  draft response a browser renders as a scripted document now carries the
-  sandbox itself (`Content-Security-Policy: sandbox allow-same-origin`). A
-  page's script runs only at its run address, `/content/[~k/]!run/…`, which the
-  server unlocks only for a reader who chose to run it or a document trusted
-  for everyone. That answer is never cached and only this site may frame it. No
-  page may register a service worker, and a draft never runs its scripts
-  (SPEC §2, §6c; ADR 0021).
-- **Only a superadmin may trust a document for everyone.** Doing so lets the
-  page's author act as every reader, and any owner could do it to their own
-  page. Now it takes an owner listed in the deployment's `BIKESHED_SUPERADMINS`,
-  which is never committed. Every reader can still run a page's scripts for
-  themselves. A document with no trust flag is now untrusted, where it used to
-  count as trusted. `scripts/reconcile-trust.mjs` withdraws trust granted
-  under the old rule (docs/operations/overview.md).
+- **A document's scripts no longer run when its file is opened directly.** The sandbox that kept an untrusted page's scripts off belonged to the viewer's frame, not to the page. The same `/content/…` address pasted into a tab, opened as a popup or embedded with `<object>` ran the page's scripts on this origin, as whoever opened it, able to act for them. Every content and draft response a browser renders as a scripted document now carries the sandbox itself (`Content-Security-Policy: sandbox allow-same-origin`). A page's script runs only at its run address, `/content/[~k/]!run/…`, which the server unlocks only for a reader who chose to run it or a document trusted for everyone. That answer is never cached and only this site may frame it. No page may register a service worker, and a draft never runs its scripts (SPEC §2, §6c; ADR 0021).
+- **Only a superadmin may trust a document for everyone.** Doing so lets the page's author act as every reader, and any owner could do it to their own page. Now it takes an owner listed in the deployment's `BIKESHED_SUPERADMINS`, which is never committed. Every reader can still run a page's scripts for themselves. A document with no trust flag is now untrusted, where it used to count as trusted. `scripts/reconcile-trust.mjs` withdraws trust granted under the old rule (docs/operations/overview.md).
 
 ## 0.25.0 — 2026-10-29
 

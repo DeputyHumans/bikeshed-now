@@ -252,10 +252,7 @@ the text and none of its images or stylesheets. A path segment is inherited by
 every relative reference. A document id never starts with `~`, so the segment
 is unambiguous (`contentPath` in `lib/http.ts`).
 
-After the key may come `!run`, the **run variant**: the only address at which
-a document's own script may run (§6c, [ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)).
-It is a path segment for the same reason the key is, and `!` never begins a
-document id. Asking is not being granted.
+After the key may come `!run`, the **run variant**: the only address at which a document's own script may run (§6c, [ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). It is a path segment for the same reason the key is, and `!` never begins a document id. Asking is not being granted.
 
 1. Resolve the caller: `__session` cookie, else anonymous.
 2. Load `docs/{docId}`. If absent → `404`.
@@ -271,21 +268,9 @@ Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
 with `k` — because a grant's URL carries no key and a shared cache keys on the
 URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
 
-**The script lock** (`lib/scriptlock.ts`). A response of a type a browser
-renders as a scripted document — `text/html`, `application/xhtml+xml`,
-`image/svg+xml`, `application/xml`, `text/xml` — carries
-`Content-Security-Policy: sandbox allow-same-origin`, whatever the document's
-trust, so its bytes opened any way but the app's frame (a pasted address, a
-popup, an `<object>`) render inert. Inside the frame it is the frame's own
-sandbox, and changes nothing. The run variant lifts it only when the document
-is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a
-scriptable answer there is always `private, no-store`, because it depends on
-who asked, and the run variant always carries `frame-ancestors 'self'`. A
-request carrying `Service-Worker: script` is a `404`: a worker would outlive
-the page and serve without the lock.
+**The script lock** (`lib/scriptlock.ts`). A response of a type a browser renders as a scripted document — `text/html`, `application/xhtml+xml`, `image/svg+xml`, `application/xml`, `text/xml` — carries `Content-Security-Policy: sandbox allow-same-origin`, whatever the document's trust, so its bytes opened any way but the app's frame (a pasted address, a popup, an `<object>`) render inert. Inside the frame it is the frame's own sandbox, and changes nothing. The run variant lifts it only when the document is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a scriptable answer there is always `private, no-store`, because it depends on who asked, and the run variant always carries `frame-ancestors 'self'`. A request carrying `Service-Worker: script` is a `404`: a worker would outlive the page and serve without the lock.
 
-Never send `X-Frame-Options`, nor `frame-ancestors` other than the run
-variant's `'self'` — the content must embed same-origin in the app's iframe.
+Never send `X-Frame-Options`, nor `frame-ancestors` other than the run variant's `'self'` — the content must embed same-origin in the app's iframe.
 
 Streamed with `file.createReadStream()`; large files are never buffered whole.
 
@@ -794,6 +779,17 @@ are read-only archives (§24). A pinned reader can open the latest version to
 comment. MCP `add_comment` selects the current head and rechecks it atomically
 (§19).
 
+**An engine may deliver the parent no events from the frame.** WebKit (Safari, and every browser on an iPhone) never calls a listener the parent adds to a document whose frame is sandboxed without `allow-scripts`, which is every untrusted document: not `selectionchange`, `click`, `input`, `keydown`, nor a custom event. Measured in the system WebKit of Safari 27, where all of them went unheard and a reader who selected text on an iPhone was offered nothing. Chrome delivers them all. What WebKit still allows is reading, and a MutationObserver made from the frame's own window. So `viewer/frameWatch.ts` asks each loaded document once, by dispatching a probe its own listener should hear, and where it is not heard every watch samples instead from the parent's timer (`SAMPLE_MS`, 150 ms): the selection, the scroll, the viewport, focus. Each consumer then gets the same callback either way. The few signals that are gestures and nothing else are recovered from what a gesture does:
+
+| Signal | Where no event arrives |
+|---|---|
+| A selection (Comment, Suggest edit, presence, the edit toolbar) | the selection, sampled |
+| Typing in the editor | the shared binding's local edits (`onLocalChange`), else a frame-realm observer that ignores our own decoration |
+| A tap on a highlight | highlights are focusable (`tabindex="-1"`, never in the tab order); focus opens the thread and is given back |
+| A link that leaves the document | it is pointed at a new tab (`target="_blank" rel="noopener noreferrer"`), the author's own values saved in `data-bshd-link` and restored by every strip; the reading sandbox allows popups that escape it, which the script lock makes safe (§2) |
+| Scroll and resize (the deck rail, presence, read tracking) | sampled |
+| Arrow keys with focus inside a slide, a file dropped onto the document | **not recovered**: the deck's own controls and the upload dialog remain |
+
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
   `dom-anchor-text-position` as the fallback, both scoped to the **nearest
@@ -1026,15 +1022,9 @@ effectively trusted. Same-origin is retained so the parent can still drive
 annotation and editing; scripts are disabled so an untrusted bundle cannot
 exfiltrate the token.
 
-**Two trust scopes, split by who bears the risk.** Effective trust for a reader
-is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
+**Two trust scopes, split by who bears the risk.** Effective trust for a reader is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
 
-- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader,
-  which lets the document's author act as each of them. So it is a
-  **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment
-  configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)).
-  Any owner may restore the sandbox. `GET /trust?docId=` tells an owner whether
-  they may lift it; the dialog offers it only then.
+- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader, which lets the document's author act as each of them. So it is a **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). Any owner may restore the sandbox. `GET /trust?docId=` tells an owner whether they may lift it; the dialog offers it only then.
 - **PERSONAL** (`docs/{docId}/trust/{uid}`) — un-sandboxes only in the granting
   user's own browser. The sole session exposed to that bundle's JS is their own,
   so **any reader may grant it to themselves**. Client-written under an own-uid
@@ -1080,13 +1070,7 @@ line: `/draft` stores whatever HTML a `canEdit` caller sends, so on a trusted
 document with open editing any signed-in account could commit a `<script>` that
 then ran, same-origin with the app, in every reader's session.
 
-**The frame's sandbox is not the only lock.** Every scriptable content
-response carries the same sandbox as a header (§2 "The script lock"), so the
-bytes opened outside the frame run nothing either. An unsandboxed frame loads
-the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only
-for global trust or this reader's own grant, which is why a grant counts in
-the viewer only once the server has it. **A draft never runs its script**, for
-anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
+**The frame's sandbox is not the only lock.** Every scriptable content response carries the same sandbox as a header (§2 "The script lock"), so the bytes opened outside the frame run nothing either. An unsandboxed frame loads the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only for global trust or this reader's own grant, which is why a grant counts in the viewer only once the server has it. **A draft never runs its script**, for anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
 
 A sandboxed document may therefore be one whose scripts were the only thing
 that would have BUILT it. The viewer distinguishes "this document has no
@@ -1257,6 +1241,8 @@ closed. Reduced motion applies to every app-driven scroll, including review
 navigation and the slide rail. Presence mode shapes remain visibly painted in
 forced colours. Brand chrome only — **never restyle embedded document content.**
 
+**On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet above it. In one column, a tapped highlight's thread and the Comments tab both open the comments pane.
+
 ---
 
 ## 8. Functions ownership
@@ -1306,10 +1292,7 @@ functions/src/
 - `lib/html.ts` — escaping for markup the functions emit into the app shell;
   separate from the Markdown renderer's escaper, whose bytes are part of the
   content hash.
-- `lib/scriptlock.ts` — whether a document's own script may run in a
-  response: the lock every scriptable content and draft response carries,
-  the run variant that alone can lift it, and who may trust a document for
-  everyone (§2, §6c; ADR 0021).
+- `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
 - `lib/shell.ts` — the `docShell` decision, the page composed from it, the
   splice into the shell template, and the runtime fetch of the shell from
   Hosting; the handler in `index.ts` is glue.
@@ -3159,18 +3142,7 @@ before the More menu. On a phone (≤ 600 px), where the toolbar has no room for
 it, the More menu's **Print or save as PDF** instead — one or the other, never
 both, decided by the same width test.
 
-**The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
-is routed to it — heard on the frame's window as well as the app's, because
-the reader's focus is usually inside the document. File → Print fires no
-event that could be redirected, so the page prints acceptably by itself: the
-chrome presentation mode hides is hidden on paper, and the frame is opened to
-its content's full height on `beforeprint` so the document paginates rather
-than printing as one clipped box, then closed again with the reader's scroll
-position restored. That path carries **no stamp** and prints what is on
-screen, highlights included. It grants nothing the reader lacked: the content
-proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may
-read it, and "Download the HTML" hands them the file. The marking is a property
-of the export path, not an access control.
+**The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page is routed to it — heard on the frame's window as well as the app's, because the reader's focus is usually inside the document. File → Print fires no event that could be redirected, so the page prints acceptably by itself: the chrome presentation mode hides is hidden on paper, and the frame is opened to its content's full height on `beforeprint` so the document paginates rather than printing as one clipped box, then closed again with the reader's scroll position restored. That path carries **no stamp** and prints what is on screen, highlights included. Where the engine delivers no events from the frame (§6), Cmd+P with focus inside the document is this path too. It grants nothing the reader lacked: the content proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may read it, and "Download the HTML" hands them the file. The marking is a property of the export path, not an access control.
 
 Residual risk, accepted: a bundle could blank its own entire document, yielding
 an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed

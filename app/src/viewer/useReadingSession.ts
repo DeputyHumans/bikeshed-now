@@ -2,6 +2,7 @@
 // Starts and stops the reading clock (SPEC §4).
 
 import { useEffect, useRef } from "react";
+import { refusesListeners, watchScroll, watchSelection } from "./frameWatch";
 import { trackView, type ViewTracker } from "../stats";
 
 /**
@@ -37,6 +38,14 @@ export function useReadingSession(options: {
   useEffect(() => {
     if (!doc || !tracker.current) return;
     const mark = () => tracker.current?.markActive();
+    // Where no gesture is delivered (viewer/frameWatch.ts), what a reader does
+    // to the page is what can be seen of it: a scroll, or a selection.
+    if (refusesListeners(doc)) {
+      const stops = [watchScroll(doc, mark), watchSelection(doc, mark)];
+      return () => {
+        for (const stop of stops) stop();
+      };
+    }
     const events = ["pointerdown", "keydown", "scroll", "wheel"] as const;
     for (const type of events) {
       doc.addEventListener(type, mark, { passive: true });

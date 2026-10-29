@@ -162,6 +162,34 @@ describe("remote edits reach the DOM", () => {
   });
 });
 
+describe("telling the editor this person typed", () => {
+  it("reports an edit typed here, and never a peer's applied here", async () => {
+    // Where the frame delivers no `input` event (viewer/frameWatch.ts) this
+    // is how the editor knows to save. A peer's keystroke reported as this
+    // person's would make every peer save every other peer's typing.
+    const a = peer(`<p>x</p>`);
+    const bDoc = document.implementation.createHTMLDocument("");
+    const by = new Y.Doc();
+    Y.applyUpdate(by, Y.encodeStateAsUpdate(a.y));
+    let local = 0;
+    bindSync(by.getXmlFragment("body"), bDoc.body, undefined, () => (local += 1));
+    const b = { y: by, body: bDoc.body };
+    await flush();
+    expect(local).toBe(0);
+
+    a.body.querySelector("p")!.firstChild!.nodeValue = "xy";
+    await flush();
+    exchange(a, b);
+    await flush();
+    expect(b.body.innerHTML).toBe(`<p>xy</p>`);
+    expect(local, "a peer's edit is not this person's").toBe(0);
+
+    b.body.querySelector("p")!.firstChild!.nodeValue = "xyz";
+    await flush();
+    expect(local, "this person's own edit").toBe(1);
+  });
+});
+
 describe("simultaneous typing", () => {
   it("keeps both people's words in the same paragraph", async () => {
     const a = peer(`<p id="p">The fox.</p>`);

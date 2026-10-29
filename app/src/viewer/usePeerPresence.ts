@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { describeFocusFromSelection } from "../annotation/anchor";
+import { refusesListeners, watchResize, watchScroll, watchSelection } from "./frameWatch";
 import {
   createPeerOverlay,
   scrollFraction,
@@ -98,13 +99,13 @@ export function usePeerPresence(options: {
     };
     const onResize = () => overlay.current?.reflow();
 
-    doc.addEventListener("selectionchange", onSelectionChange);
-    doc.defaultView?.addEventListener("scroll", onScroll, { passive: true });
-    doc.defaultView?.addEventListener("resize", onResize);
+    const stops = [
+      watchSelection(doc, onSelectionChange),
+      watchScroll(doc, onScroll),
+      watchResize(doc, onResize),
+    ];
     return () => {
-      doc.removeEventListener("selectionchange", onSelectionChange);
-      doc.defaultView?.removeEventListener("scroll", onScroll);
-      doc.defaultView?.removeEventListener("resize", onResize);
+      for (const stop of stops) stop();
     };
   }, [enabled, doc, epoch]);
 
@@ -128,6 +129,10 @@ export function usePeerPresence(options: {
       // effect above must not cancel the thing that caused it.
       if (e.isTrusted) setFollowing(null);
     };
+    // Where no gesture is delivered (viewer/frameWatch.ts), a selection the
+    // reader makes is the gesture: following never moves the selection, so a
+    // change to it is theirs. A scroll would not do: following scrolls.
+    if (refusesListeners(doc)) return watchSelection(doc, () => setFollowing(null));
     doc.defaultView?.addEventListener("wheel", release, { passive: true });
     doc.addEventListener("keydown", release);
     doc.addEventListener("pointerdown", release);

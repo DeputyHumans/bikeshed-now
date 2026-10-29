@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A personally trusted document loads once, unsandboxed (SPEC §6c).
 
+import { READING_SANDBOX } from "./frameMode";
 import { act, fireEvent, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FrameMode } from "./frameMode";
@@ -237,14 +238,14 @@ describe("a personally trusted document", () => {
 
     const frames = container.querySelectorAll("iframe");
     expect(frames).toHaveLength(1);
-    expect(frames[0].getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(frames[0].getAttribute("sandbox")).toBe(READING_SANDBOX);
   });
 
   it("keeps the frame a reader signs in from, until a grant says otherwise", () => {
     const { container, rerender } = render(<Viewer resolved docTrusted={false} uid={null} />);
     const first = container.querySelector("iframe");
     if (!first) throw new Error("an anonymous reader's frame should not wait");
-    expect(first.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(first.getAttribute("sandbox")).toBe(READING_SANDBOX);
     fireEvent.load(first);
 
     rerender(<Viewer resolved docTrusted={false} uid="u1" />);
