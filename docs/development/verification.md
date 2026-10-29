@@ -439,6 +439,19 @@ deployment's runtime account may read and clear the Realtime Database. If it
 cannot read it, every update is refused as "could not tell whether anybody is
 editing" (operations overview, "When something is wrong").
 
+### 18 · In Safari's engine, an untrusted document still answers
+
+Chrome delivers every event from the document's frame, so nothing above can fail there for the reason this checks. Open an untrusted document with a thread on it in **Safari** (or on an iPhone, or in any iPhone browser):
+
+1. In the console, on the parent page: dispatch an event into `document.querySelector("iframe.doc-frame").contentDocument` with a listener of your own on it. It is never called: the condition SPEC §6 describes.
+2. Select a word. **Comment** appears, within a moment (the selection is sampled, not heard). On a touch screen it is docked at the bottom.
+3. Tap or click the highlight. Its thread is selected in the panel.
+4. A link to another site opens in a new tab, and the document stays.
+5. **Edit**, type a word: the toolbar says `Saved` within a few seconds, and the draft holds the word.
+6. Known and accepted: arrow keys pressed after clicking inside a deck's slide do nothing until you click outside it.
+
+The same steps can be driven from a script with the system WebKit: a `WKWebView` signed in through the sign-in form, the gestures replaced by the parent selecting, focusing and clicking inside the frame. That is how 0.26.2 was checked, and it found every step above but one: a link clicked from script opened no tab, because a click from script is not a user's gesture, so step 4 with a real tap is checked by hand on a phone. It has no committed harness yet.
+
 ## Automated: `npm run test:e2e`
 
 The suite in `e2e/` runs most of this walkthrough by itself. It builds a copy

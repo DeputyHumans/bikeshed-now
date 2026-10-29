@@ -10,7 +10,7 @@ import { useInlineEditor } from "./useInlineEditor";
 import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
 import { useSuggestionReview } from "./useSuggestionReview";
-import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, INS_ATTR, OWN_ATTR, SUG_ATTR } from "../brand/dom";
+import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, INS_ATTR, LINK_ATTR, OWN_ATTR, SUG_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -222,6 +222,7 @@ function decorationIn(doc: Document): string[] {
   if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
   if (doc.body.textContent?.includes(REPLACEMENT)) found.push("suggested text in the document");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
+  if (doc.querySelector(`[${LINK_ATTR}]`)) found.push("retargeted link");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
   }
@@ -269,6 +270,31 @@ describe("the decoration invariant", () => {
 
     expect(decorationIn(doc)).toEqual([]);
     expect(doc.body.getAttribute("contenteditable")).toBe("true");
+  });
+
+  it("leaves nothing behind either where the document delivers no events: no retargeted link, no focusable highlight", () => {
+    // WebKit delivers the viewer no events from a sandboxed frame, so there
+    // the annotation layer also points a leaving link at a new tab and makes
+    // highlights focusable (viewer/frameWatch.ts). Both are decoration.
+    const doc = makeDoc();
+    doc.body.insertAdjacentHTML("beforeend", `<p><a id="out" href="https://example.com/x" rel="author">out</a></p>`);
+    Object.defineProperty(doc, "addEventListener", { configurable: true, value: () => {} });
+    const { rerender } = render(
+      <Harness
+        doc={doc}
+        mode={{ kind: "reading", versionId: "v1", draft: false, sandboxed: true }}
+      />,
+    );
+    const out = doc.getElementById("out")!;
+    expect(out.getAttribute("target")).toBe("_blank");
+    expect(doc.querySelector(HL_SELECTOR)?.getAttribute("tabindex")).toBe("-1");
+
+    act(() => {
+      rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} />);
+    });
+
+    expect(decorationIn(doc)).toEqual([]);
+    expect([out.getAttribute("rel"), out.hasAttribute("target")]).toEqual(["author", false]);
   });
 
   it("does not tear down the editing host when the parent re-renders", async () => {

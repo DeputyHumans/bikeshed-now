@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // The "comment on this" and "suggest an edit" affordance that follows a selection (SPEC §6, §22).
 
+import { createPortal } from "react-dom";
+import { useCoarsePointer } from "../hooks/useMediaQuery";
 import { useEffect, useState } from "react";
+import { watchScroll, watchSelection } from "../viewer/frameWatch";
 import { suggestibleRange, trimToText } from "../annotation/exact";
 import { Icon } from "./Icon";
 
@@ -55,6 +58,10 @@ export function SelectionFab({
 }) {
   const [position, setPosition] = useState<FabPosition | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // On a touch screen the phone's own Copy/Share menu sits just above the
+  // selection, exactly where this would float, and covers it. There the
+  // controls dock at the bottom of the screen instead, clear of it.
+  const docked = useCoarsePointer();
 
   useEffect(() => {
     if (!enabled || !doc) {
@@ -85,11 +92,13 @@ export function SelectionFab({
         ),
       );
     };
-    doc.addEventListener("selectionchange", update);
-    doc.defaultView?.addEventListener("scroll", update, { passive: true });
+    // Watched rather than listened for: an engine that delivers a sandboxed
+    // document no events would otherwise never show this at all.
+    const stopSelection = watchSelection(doc, update);
+    const stopScroll = watchScroll(doc, update);
     return () => {
-      doc.removeEventListener("selectionchange", update);
-      doc.defaultView?.removeEventListener("scroll", update);
+      stopSelection();
+      stopScroll();
     };
   }, [enabled, doc, epoch, suggest !== undefined]);
 
@@ -110,7 +119,7 @@ export function SelectionFab({
     <button
       type="button"
       className="selection-fab"
-      style={suggest ? undefined : { top: position.top, left: position.left }}
+      style={suggest || docked ? undefined : { top: position.top, left: position.left }}
       onPointerDown={(e) => {
         e.preventDefault();
         onComment();
@@ -121,24 +130,37 @@ export function SelectionFab({
       {label}
     </button>
   );
+  const suggestButton = suggest ? (
+    <button
+      type="button"
+      className="selection-fab"
+      aria-disabled={refusal ? true : undefined}
+      title={refusal ?? undefined}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        trySuggest();
+      }}
+      onClick={keyboardOnly(trySuggest)}
+    >
+      <Icon name="edit" size={14} />
+      Suggest edit
+    </button>
+  ) : null;
+  if (docked) {
+    // Into <body>, so no ancestor's layout can move a bar fixed to the screen.
+    return createPortal(
+      <div className="selection-fab-bar selection-dock" role="toolbar" aria-label="Selection">
+        {commentButton}
+        {suggestButton}
+      </div>,
+      document.body,
+    );
+  }
   if (!suggest) return commentButton;
   return (
     <div className="selection-fab-bar" role="toolbar" aria-label="Selection" style={{ top: position.top, left: position.left }}>
       {commentButton}
-      <button
-        type="button"
-        className="selection-fab"
-        aria-disabled={refusal ? true : undefined}
-        title={refusal ?? undefined}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          trySuggest();
-        }}
-        onClick={keyboardOnly(trySuggest)}
-      >
-        <Icon name="edit" size={14} />
-        Suggest edit
-      </button>
+      {suggestButton}
     </div>
   );
 }

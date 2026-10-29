@@ -63,6 +63,11 @@ describe("frameSandbox", () => {
     // contentDocument, so a cross-origin frame breaks the entire product.
     expect(frameSandbox(READING)).toContain("allow-same-origin");
     expect(frameSandbox(EDITING)).toContain("allow-same-origin");
+    // No popups while editing: a click there places the caret.
+    expect(frameSandbox(EDITING)).toBe("allow-same-origin");
+    // Popups while reading, for a link that must open its own tab where the
+    // viewer hears no clicks; never scripts (ADR 0021, outboundLinks.ts).
+    expect(frameSandbox(READING)).toBe("allow-same-origin allow-popups allow-popups-to-escape-sandbox");
   });
 
   it("NEVER allows scripts while editing, whatever the document's trust says", () => {

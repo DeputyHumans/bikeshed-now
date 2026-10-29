@@ -779,6 +779,17 @@ are read-only archives (§24). A pinned reader can open the latest version to
 comment. MCP `add_comment` selects the current head and rechecks it atomically
 (§19).
 
+**An engine may deliver the parent no events from the frame.** WebKit (Safari, and every browser on an iPhone) never calls a listener the parent adds to a document whose frame is sandboxed without `allow-scripts`, which is every untrusted document: not `selectionchange`, `click`, `input`, `keydown`, nor a custom event. Measured in the system WebKit of Safari 27, where all of them went unheard and a reader who selected text on an iPhone was offered nothing. Chrome delivers them all. What WebKit still allows is reading, and a MutationObserver made from the frame's own window. So `viewer/frameWatch.ts` asks each loaded document once, by dispatching a probe its own listener should hear, and where it is not heard every watch samples instead from the parent's timer (`SAMPLE_MS`, 150 ms): the selection, the scroll, the viewport, focus. Each consumer then gets the same callback either way. The few signals that are gestures and nothing else are recovered from what a gesture does:
+
+| Signal | Where no event arrives |
+|---|---|
+| A selection (Comment, Suggest edit, presence, the edit toolbar) | the selection, sampled |
+| Typing in the editor | the shared binding's local edits (`onLocalChange`), else a frame-realm observer that ignores our own decoration |
+| A tap on a highlight | highlights are focusable (`tabindex="-1"`, never in the tab order); focus opens the thread and is given back |
+| A link that leaves the document | it is pointed at a new tab (`target="_blank" rel="noopener noreferrer"`), the author's own values saved in `data-bshd-link` and restored by every strip; the reading sandbox allows popups that escape it, which the script lock makes safe (§2) |
+| Scroll and resize (the deck rail, presence, read tracking) | sampled |
+| Arrow keys with focus inside a slide, a file dropped onto the document | **not recovered**: the deck's own controls and the upload dialog remain |
+
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
   `dom-anchor-text-position` as the fallback, both scoped to the **nearest
@@ -1229,6 +1240,8 @@ when a focused control is disabled or removed, and restore their opener when
 closed. Reduced motion applies to every app-driven scroll, including review
 navigation and the slide rail. Presence mode shapes remain visibly painted in
 forced colours. Brand chrome only — **never restyle embedded document content.**
+
+**On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet above it. In one column, a tapped highlight's thread and the Comments tab both open the comments pane.
 
 ---
 
@@ -3129,18 +3142,7 @@ before the More menu. On a phone (≤ 600 px), where the toolbar has no room for
 it, the More menu's **Print or save as PDF** instead — one or the other, never
 both, decided by the same width test.
 
-**The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
-is routed to it — heard on the frame's window as well as the app's, because
-the reader's focus is usually inside the document. File → Print fires no
-event that could be redirected, so the page prints acceptably by itself: the
-chrome presentation mode hides is hidden on paper, and the frame is opened to
-its content's full height on `beforeprint` so the document paginates rather
-than printing as one clipped box, then closed again with the reader's scroll
-position restored. That path carries **no stamp** and prints what is on
-screen, highlights included. It grants nothing the reader lacked: the content
-proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may
-read it, and "Download the HTML" hands them the file. The marking is a property
-of the export path, not an access control.
+**The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page is routed to it — heard on the frame's window as well as the app's, because the reader's focus is usually inside the document. File → Print fires no event that could be redirected, so the page prints acceptably by itself: the chrome presentation mode hides is hidden on paper, and the frame is opened to its content's full height on `beforeprint` so the document paginates rather than printing as one clipped box, then closed again with the reader's scroll position restored. That path carries **no stamp** and prints what is on screen, highlights included. Where the engine delivers no events from the frame (§6), Cmd+P with focus inside the document is this path too. It grants nothing the reader lacked: the content proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may read it, and "Download the HTML" hands them the file. The marking is a property of the export path, not an access control.
 
 Residual risk, accepted: a bundle could blank its own entire document, yielding
 an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed

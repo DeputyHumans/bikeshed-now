@@ -160,6 +160,25 @@ export const PREVIEW_ATTR = "data-bshd-preview";
  */
 export const REVEAL_ATTR = "data-bshd-reveal";
 
+/**
+ * On a link that leaves the document, in an engine that delivers the viewer no
+ * clicks from a sandboxed frame: the author's own `target` and `rel`, saved as
+ * JSON (`{"target": …, "rel": …}`, null for an attribute that was absent)
+ * while the viewer has set them to open the link beside the document. The
+ * strip legs RESTORE them from it and remove it, so it is outside
+ * `OWN_MARKERS` for the same reason as `SUG_ATTR`: it sits on the author's
+ * element, which must never be deleted.
+ */
+export const LINK_ATTR = "data-bshd-link";
+
+/**
+ * The event the viewer dispatches into a document it has just loaded, to learn
+ * whether a listener it adds there is ever called (viewer/frameWatch.ts).
+ * Never seen by the document's own script, which a document that refuses
+ * listeners runs none of; a trusted one may see it, and nothing follows from it.
+ */
+export const FRAME_PROBE_EVENT = "bshd-frame-probe";
+
 // --- Export stamps ---------------------------------------------------------
 
 export const PRINT_MARK_CLASS = "bshd-print-mark";

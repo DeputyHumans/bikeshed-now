@@ -311,6 +311,37 @@
 .selection-fab-bar .selection-fab { position: static; }
 .selection-fab[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
 
+/*
+ * On a touch screen: docked at the bottom of the screen, because the phone's
+ * own Copy/Share menu appears just above a selection, where the floating bar
+ * would sit, and covers it. In <body> (a portal), clear of the home indicator.
+ */
+.selection-dock {
+  position: fixed;
+  left: var(--s-3);
+  right: var(--s-3);
+  bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  justify-content: center;
+  gap: var(--s-2);
+}
+.selection-dock .selection-fab {
+  height: auto;
+  min-height: 44px;
+  padding: 0 var(--s-4);
+}
+
+/* The suggestion form, as a sheet above the docked bar. */
+.suggest-sheet {
+  position: fixed;
+  left: var(--s-3);
+  right: var(--s-3);
+  bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  z-index: 31;
+  max-height: 60vh;
+  overflow: auto;
+}
+
 /* The suggestion form, over the frame: the parent's DOM, never the document's. */
 .suggest-popover {
   position: absolute;

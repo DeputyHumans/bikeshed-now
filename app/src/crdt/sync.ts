@@ -46,7 +46,18 @@ function isDecoration(el: Element): boolean {
 // the fragment. A descendant's contenteditable belongs to the author.
 const INJECTED_ATTRS = new Set([EMPTY_ATTR]);
 
-export function bindSync(fragment: Y.XmlFragment, host: Element, onRemote?: () => void): Sync {
+export function bindSync(
+  fragment: Y.XmlFragment,
+  host: Element,
+  onRemote?: () => void,
+  /**
+   * Called after an edit typed HERE has changed the shared document: never
+   * for a peer's edit applied to this host, nor for decoration, which never
+   * enters it. What the editor counts as "this person changed something"
+   * where the frame delivers it no `input` events (viewer/frameWatch.ts).
+   */
+  onLocalChange?: () => void,
+): Sync {
   const doc = host.ownerDocument;
   const win = doc.defaultView;
   const ORIGIN = Symbol("local");
@@ -386,7 +397,10 @@ export function bindSync(fragment: Y.XmlFragment, host: Element, onRemote?: () =
   host.addEventListener("input", afterInput);
 
   const onDeep = (events: Y.YEvent<any>[], tx: Y.Transaction) => {
-    if (tx.origin === ORIGIN) return;
+    if (tx.origin === ORIGIN) {
+      onLocalChange?.();
+      return;
+    }
     // Anything the observer has queued but not delivered describes the DOM as
     // it was BEFORE this remote patch, so acting on it afterwards would replay
     // stale structure into the shared document.

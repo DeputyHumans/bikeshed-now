@@ -14,6 +14,14 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Commenting works on an iPhone and in Safari.** Safari's engine, which every iPhone browser uses, never passes the viewer an event from inside a sandboxed document, and most documents are sandboxed. Selecting text there offered no Comment or Suggest edit, tapping a highlight did nothing, links out of the document stayed put, the editor never autosaved, and presence, read tracking and the deck rail stood still. The viewer now asks each document whether it hears it, and where it does not, it watches the selection, scroll and focus instead, learns of typing from the live-editing binding, and points links that leave the document at a new tab (SPEC §6). Arrow keys pressed with focus inside a slide still do nothing there.
+- **On a phone, the selection buttons are no longer hidden under the phone's own menu.** On a touch screen they sit at the bottom of the screen, and the suggestion form opens above them (SPEC §7).
+- On a phone, the Comments tab of a document with no open comments showed an empty screen. It shows the comments panel and how to start one.
+
 ## 0.26.1 — 2026-10-29
 
 ### Fixed

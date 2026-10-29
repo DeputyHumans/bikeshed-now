@@ -40,8 +40,12 @@ export function useSharedDocument(options: {
   liveEpoch?: string;
   onRemote?: () => void;
   expectedCausal?: CausalStamp;
+  /** An edit typed here changed the shared document (crdt/sync.ts `onLocalChange`). Read through a ref, so it may change identity freely. */
+  onLocalChange?: () => void;
 }) {
   const { mode, doc, epoch, docId, enabled, liveEpoch = "initial", onRemote, expectedCausal } = options;
+  const localChange = useRef(options.onLocalChange);
+  localChange.current = options.onLocalChange;
   const editing = mode.kind === "editing";
   const [state, setState] = useState<ShareState>("off");
   // Whether the host is bound yet. "off" alone cannot say: it is also what
@@ -117,7 +121,7 @@ export function useSharedDocument(options: {
         return;
       }
       if (cancelled || !doc.body) return;
-      bound = bindSync(ydoc.getXmlFragment("body"), doc.body, () => remote.current?.());
+      bound = bindSync(ydoc.getXmlFragment("body"), doc.body, () => remote.current?.(), () => localChange.current?.());
       sync.current = bound;
       setBound(true);
       setState(shared ? "shared" : "off");

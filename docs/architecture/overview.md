@@ -137,7 +137,7 @@ a written argument in a pull request, not a dependency.
   directory sync, you need a different product, and the README says so.
 - **No search index.** The workspace filter is client-side over a set that fits
   in memory.
-- **No mobile app.** The web app is responsive to 400px and touch-parity-tested.
+- **No mobile app.** The web app is responsive to 400px and touch-parity-tested, in Chrome and in WebKit, whose sandboxed frames deliver no events (SPEC §6).
 - **No admin console.** The CLIs are the admin surface, and they are auditable.
 - **No rate limiter.** CDN caching is the cost defence for public documents;
   App Check is the named hook if abuse appears.

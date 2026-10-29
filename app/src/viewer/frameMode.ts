@@ -77,8 +77,15 @@ export function frameKey(mode: FrameMode, trustToken: string, epoch: number): st
  */
 export function frameSandbox(mode: FrameMode): string | undefined {
   if (mode.kind === "editing") return "allow-same-origin";
-  return mode.sandboxed ? "allow-same-origin" : undefined;
+  // Popups, for a link that leaves the document where the viewer hears no
+  // clicks and the link must open its own tab (outboundLinks.ts). Safe because
+  // every document response is locked by its own header (ADR 0021): a popup of
+  // one runs nothing, and only the run variant, with the reader's consent, can.
+  return mode.sandboxed ? READING_SANDBOX : undefined;
 }
+
+/** The reading frame's sandbox: no `allow-scripts`, ever. */
+export const READING_SANDBOX = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
 
 /**
  * The path segment that asks the server to let a document's own script run,
