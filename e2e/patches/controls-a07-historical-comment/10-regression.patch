@@ -1,11 +1,11 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -175,7 +175,7 @@
-   // required, on every document, whatever its owner chose.
-   const headVersion = doc.meta?.currentVersion ?? doc.publicDoc?.currentVersion ?? "";
-   const isCurrent = Boolean(headVersion) && doc.currentVersion === headVersion;
--  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt);
-+  const canWrite = !isExpired(doc.meta?.expiresAt);
+@@ -181,7 +181,7 @@
+   // nothing else: the rules hold no grant for them, so no thread, no presence
+   // and no edit is theirs, signed in or not (SPEC §17 "A folder's reach").
+   const throughFolder = !doc.meta && doc.publicDoc?.viaFolder === true;
+-  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt) && !throughFolder;
++  const canWrite = !isExpired(doc.meta?.expiresAt) && !throughFolder;
    const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
    // The real editor set, as the server asks of an upload (SPEC §2).
    const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);

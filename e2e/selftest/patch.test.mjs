@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { E2E_TMP, REPO_ROOT, ensureDir } from "../lib/paths.mjs";
 import { BLOCK_SIZE, namePorts } from "../lib/ports.mjs";
@@ -14,6 +14,7 @@ import {
 } from "../lib/patch.mjs";
 import { assertTargetDeclared, controlVerdict, greenGroups, grepFor, listControlSets, readControl } from "../lib/controls.mjs";
 import { installEgressGuard } from "../lib/egress.mjs";
+import { installStorageShimPreload } from "../lib/storage-shim.mjs";
 
 const PORTS = namePorts(Array.from({ length: BLOCK_SIZE }, (_, i) => 34560 + i));
 const realConfig = () => readFileSync(join(REPO_ROOT, "app", "src", "config.ts"), "utf8");
@@ -137,30 +138,42 @@ test("NEGATIVE: a set with one patch that does not apply is a harness error and 
   }
 });
 
-test("every committed patch set applies to HEAD, each on its own fresh copy", async () => {
+test("every committed patch set applies independently to staged HEAD with its declared overlays", async () => {
   const sets = readdirSync(join(REPO_ROOT, "e2e", "patches")).filter((n) => statSync(join(REPO_ROOT, "e2e", "patches", n)).isDirectory()).sort();
   assert.ok(sets.includes("amplify"), sets.join(", "));
+  const controls = new Set(listControlSets());
+  const dir = scratch();
   let applied = 0;
-  for (const set of sets) {
-    const files = listPatchSet(set);
-    if (files.length === 0) continue;
-    const dir = scratch();
-    try {
-      const { treeDir } = await materializeTree({ runId: "selftest-patchsets", tree: "HEAD", dest: join(dir, "tree"), linkModules: false });
-      // What startStack stages into a tree before any patch set, in its order: a
-      // control may patch any of it (controls-a03-nosniff patches the rewritten
-      // firebase.json, whose lines are not the checkout's).
-      const ports = namePorts(Array.from({ length: BLOCK_SIZE }, (_, i) => 30000 + i));
-      const fb = patchFirebaseJson(treeDir, ports);
-      patchAppConfig(treeDir, ports, fb.defaults);
-      writeFunctionsEnv(treeDir, ports);
-      installEgressGuard(treeDir);
-      const r = applyPatchSet(treeDir, set);
-      applied += r.applied.length;
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+  try {
+    // Extract and stage immutable HEAD once. Each set still receives new files:
+    // git apply only reads paths declared by its diffs, not the rest of the repo.
+    const { treeDir: base } = await materializeTree({ runId: "selftest-patchsets", tree: "HEAD", dest: join(dir, "base"), linkModules: false });
+    const ports = namePorts(Array.from({ length: BLOCK_SIZE }, (_, i) => 30000 + i));
+    const fb = patchFirebaseJson(base, ports);
+    patchAppConfig(base, ports, fb.defaults);
+    writeFunctionsEnv(base, ports);
+    installEgressGuard(base);
+    installStorageShimPreload(base);
+    for (const set of sets) {
+      if (listPatchSet(set).length === 0) continue;
+      const overlays = [];
+      const stack = controls.has(set) ? readControl(set).stack : [];
+      for (let i = 0; i < stack.length; i++) if (stack[i] === "--patches") overlays.push(stack[++i]);
+      const sequence = [...overlays, set];
+      const paths = new Set(sequence.flatMap(name => listPatchSet(name).flatMap(file =>
+        [...readFileSync(file, "utf8").matchAll(/^(?:---|\+\+\+) [ab]\/([^\t\n]+)/gm)].map(match => match[1].split("\t")[0]))));
+      const tree = join(dir, "case");
+      mkdirSync(tree);
+      try {
+        for (const path of paths) {
+          if (!existsSync(join(base, path))) continue;
+          mkdirSync(dirname(join(tree, path)), { recursive: true });
+          copyFileSync(join(base, path), join(tree, path));
+        }
+        for (const name of sequence) applied += applyPatchSet(tree, name).applied.length;
+      } finally { rmSync(tree, { recursive: true, force: true }); }
     }
-  }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
   assert.ok(applied >= listControlSets().length, `${applied} patch(es) applied`);
 });
 

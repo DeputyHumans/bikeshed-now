@@ -1,14 +1,7 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -3140,5 +3140,4 @@
-   // Before anything can answer: a GET's 405 and every 401 would otherwise
-   // inherit Hosting's default max-age=600.
--  noStore(res);
-   const { handleMcp } = await import("./mcp/server");
-   await handleMcp(req, res);
 --- a/firebase.json
 +++ b/firebase.json
-@@ -178,8 +178,4 @@
+@@ -185,10 +185,6 @@
+         "source": "/mcp",
          "headers": [
            {
 -            "key": "Cache-Control",
@@ -17,6 +10,7 @@
 -          {
              "key": "Access-Control-Expose-Headers",
              "value": "WWW-Authenticate"
+           }
 --- a/functions/src/lib/mcp-transport.ts
 +++ b/functions/src/lib/mcp-transport.ts
 @@ -11,6 +11,5 @@
@@ -25,4 +19,14 @@
    if (process.env.FUNCTION_TARGET !== "mcp" && path !== "/mcp" && path !== "/mcp/") return;
 -  response.setHeader("Cache-Control", "private, no-store");
    response.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
+ });
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2978,7 +2978,6 @@
+ export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
+   // Before anything can answer: a GET's 405 and every 401 would otherwise
+   // inherit Hosting's default max-age=600.
+-  noStore(res);
+   const { handleMcp } = await import("./mcp/server");
+   await handleMcp(req, res);
  });

@@ -143,6 +143,7 @@ import { test } from "node:test";
 import { AssertionError } from "node:assert";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { timePhase } from "./timing.mjs";
 import { BrowserPool, poolWaitMs } from "./browser.mjs";
 import { GIB, LIVE_RESERVE_MIN_N, admitLive } from "./load.mjs";
 import { PLAN_TRIALS, caseTimeoutDefault, isConcurrencySpec } from "./budget.mjs";
@@ -156,6 +157,7 @@ import { CoverageBoundary, recycleRtdbCoverage } from "./rtdb-coverage.mjs";
 import { recycleFirestoreCoverage } from "./firestore-coverage.mjs";
 
 const coverageBoundary = new CoverageBoundary();
+let maintenanceFailed = false;
 
 async function optional(rel) {
   try {
@@ -1438,12 +1440,18 @@ export async function captureUsers(ev, users, { deadline = Infinity } = {}) {
 }
 
 async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeoutMs }) {
+  if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1" && (maintenanceFailed || coverageBoundary.unsafe)) {
+    t.skip("NOT RUN: prior maintenance or cleanup failed; a fresh stack is required");
+    return;
+  }
+  const phase = (name, fn) => timePhase(process.env.E2E_INVOCATION_DIR, name, fn, { caseName: c.name });
   const startedAt = Date.now(); // node:test's timeout of the case runs from about here
   const ev = new Evidence({ runDir: evidenceRoot(target), slug: c.name, name: c.name });
   ev.rerun = rerunCommand(target.runId, file, c.name);
   if (defect) ev.step(`known defect ${defect}: only this defect's own oracle failing is reported as TODO; anything else fails`);
   const sink = ev.httpSink();
   let pool = null;
+  let maintaining = false;
   let settled = false; // the body finished (normally or not) before any abort
   let aborted = false; // node:test already reported this case (timeout, cancel)
   let abandoned = null; // why caseBudget abandoned the body: the late body makes no new users
@@ -1630,13 +1638,15 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
   };
   const body = async () => {
     if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1" && coverageBoundary.needed) {
-      const firestore = await recycleFirestoreCoverage(target, { boundary: coverageBoundary, caseName: c.name });
+      maintaining = true;
+      const firestore = await phase("firestore-maintenance", () => recycleFirestoreCoverage(target, { boundary: coverageBoundary, caseName: c.name }));
       t.diagnostic(`maintenance: archived ${firestore.coverage.sourceBytes} bytes of Firestore rule coverage and reapplied identical rules ${firestore.rulesSha256}; ${firestore.coverage.artifact}`);
-      const recycled = await recycleRtdbCoverage(target, { boundary: coverageBoundary, caseName: c.name });
+      const recycled = await phase("rtdb-maintenance", () => recycleRtdbCoverage(target, { boundary: coverageBoundary, caseName: c.name }));
       t.diagnostic(`maintenance: archived ${recycled.coverage.sourceBytes} bytes of RTDB rule coverage and restored exact rules ${recycled.rulesSha256} after a whitespace-only round trip; ${recycled.coverage.artifact}`);
     }
-    await reserveLive();
-    return fn(ctx);
+    maintaining = false;
+    await phase("case-admission", reserveLive);
+    return phase("case-body", () => fn(ctx));
   };
   const scoped = () => (grantMod?.withWindowScope ? grantMod.withWindowScope(windows, body) : body());
   const run = () => (httpMod?.withEvidenceSink ? httpMod.withEvidenceSink(sink, scoped) : scoped());
@@ -1651,6 +1661,7 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
     if (defect) t.todo(`known defect ${defect}`); // reported as "passed unexpectedly"
     if (ev.always) t.diagnostic(`evidence=${ev.flush()}`);
   } catch (caught) {
+    if (maintaining) maintenanceFailed = true;
     settled = true;
     if (aborted) throw caught; // already reported, with its evidence
     let err = caught;
@@ -1702,7 +1713,7 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
     // waited for, or node:test's timeout would report over that outcome.
     try {
       if (!aborted && abandoned) void pool?.close().catch(() => undefined);
-      else if (!aborted) await pool?.close();
+      else if (!aborted) await phase("browser-cleanup", () => pool?.close());
     } finally {
       coverageBoundary.leave({ settled: settled && !aborted && !abandoned, closed: !pool || (pool.closed && !aborted && !abandoned), usedBrowsers: !!pool, pending: httpMod?.pendingRequests?.(sink)?.length ?? 0 });
     }

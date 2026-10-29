@@ -706,3 +706,16 @@ test("ten-participant scope cannot erase its deferred coverage", () => {
   const c=structuredClone(imported);c.acceptance.deferredRequirements.pop();
   assert.match(checkCampaign(c,{validateOnly:true}).errors.join('\n'),/retain all nine deferred/);
 });
+
+test("release cloud qualification uses the same reviewed ten-participant scope as local acceptance", t => {
+  const { c, root } = fixture(t), cloud = cloudQualificationFixture(root, version);
+  c.acceptance.concurrencyScope = structuredClone(imported.acceptance.concurrencyScope);
+  c.acceptance.deferredRequirements = c.acceptance.requirements.filter(r => r.n === 20);
+  c.acceptance.requirements = c.acceptance.requirements.filter(r => r.n !== 20);
+  cloud.manifest.trials = cloud.manifest.trials.filter(row => row.n <= 10);
+  c.acceptance.raceEvidencePolicy = { mode: "controlled-with-red-green", reason: "Explicit synthetic controlled-race approval", cloud: cloud.save(), reviewedOverlays: cloud.reviewedOverlays };
+  const result = checkCampaign(c, { root });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.releaseComplete, true);
+  assert.equal(result.releaseQualification.trials, 18);
+});

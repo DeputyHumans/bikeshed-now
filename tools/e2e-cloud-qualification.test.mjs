@@ -27,3 +27,23 @@ for (const [name, change, pattern] of [
   ["another runtime revision", x => { const r = x.manifest.trials[0].controlled, t = x.read(r); t.deployment.revision += "-other"; x.manifest.trials[0].controlled = x.put("wrong-revision.json", t); }, /another deployed build/],
   ["natural safety failure hidden by timing", x => { const r = x.manifest.trials[0].natural[0], t = x.read(r); t.messages.push({ ...t.messages[0], id: "extra" }); x.manifest.trials[0].natural[0] = x.put("unsafe.json", t); }, /natural safety failure/],
 ]) test(`refuses ${name}`, t => { const x = fixture(t); change(x); assert.throws(() => verifyCloudQualification(x.save(), x), pattern); });
+
+const reviewedScope = { maxParticipants: 10, authorization: "user-2026-10-26", reason: "User explicitly limited this release concurrency qualification to at most ten participants; twenty-participant coverage is deferred, not passed." };
+test("reviewed ten-participant scope retains every N2/N5/N10 trial and requires no N20 trial", t => {
+  const x = fixture(t);
+  x.concurrencyScope = reviewedScope;
+  x.manifest.trials = x.manifest.trials.filter(row => row.n <= 10);
+  assert.deepEqual(verifyCloudQualification(x.save(), x), { natural: 17, controlled: 1, trials: 18, redGreen: true });
+});
+test("reviewed ten-participant scope still refuses a missing N10 trial", t => {
+  const x = fixture(t);
+  x.concurrencyScope = reviewedScope;
+  x.manifest.trials = x.manifest.trials.filter(row => row.n <= 10);
+  x.manifest.trials.pop();
+  assert.throws(() => verifyCloudQualification(x.save(), x), /matrix differs/);
+});
+test("a smaller or unreviewed cloud scope cannot remove obligations", t => {
+  const x = fixture(t);
+  x.concurrencyScope = { ...reviewedScope, maxParticipants: 5 };
+  assert.throws(() => verifyCloudQualification(x.ref, x), /unreviewed concurrency scope/);
+});

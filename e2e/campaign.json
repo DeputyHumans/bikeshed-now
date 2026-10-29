@@ -15410,6 +15410,98 @@
       "mustNotDo": [
         "Do not treat the original gate-timeout inconclusives as passing or relax any winner, refusal or draft-preservation assertion."
       ]
+    },
+    {
+      "id": "resume-browser-shutdown-boundary",
+      "state": "in-progress",
+      "classification": "local-harness-runtime",
+      "claim": "Concurrent pool close callers could return before browser exit, shutdown errors were swallowed, and a renderer waiting for memory could launch after shutdown. Await shared shutdown and refuse later measurement after an unsafe maintenance boundary.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/pool-close-before.log",
+        "e2e/.out/campaign-resume/renderer-admission-red.log",
+        "e2e/.out/campaign-resume/maintenance-stop-red.log",
+        "e2e/.out/campaign-resume/browser-matched-lifecycle.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
+    },
+    {
+      "id": "resume-integrated-control-preflight",
+      "state": "in-progress",
+      "classification": "local-harness-coverage",
+      "claim": "Integrated OAuth declarations contained duplicate bindings and stale capability disclosure; mutation patches drifted from current source and the staged Hosting configuration. Reject invalid syntax before startup and validate independent controls with their declared overlays and refreshed disclosure oracles.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/selftest.log",
+        "e2e/.out/campaign-resume/control-overlay-audit-v4.log",
+        "e2e/.out/campaign-resume/control-compile.log",
+        "e2e/.out/campaign-resume/control-compile-repaired.log",
+        "e2e/.out/campaign-resume/oauth-area-final.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
+    },
+    {
+      "id": "resume-cloud-participant-scope",
+      "state": "in-progress",
+      "classification": "local-harness-acceptance",
+      "claim": "Cloud qualification still demanded twenty-participant trials after local acceptance adopted the reviewed ten-participant cap. Share the exact validated scope while retaining every N2/N5/N10 trial and the original unscoped matrix.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/cloud-scope-red.log",
+        "e2e/.out/campaign-resume/cloud-scope-green.log",
+        "e2e/.out/campaign-resume/cloud-scope-integration-red.log",
+        "e2e/.out/campaign-resume/cloud-scope-integration-restored.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
+    },
+    {
+      "id": "resume-print-baseline-settle",
+      "state": "in-progress",
+      "classification": "local-harness-coverage",
+      "claim": "The print comparison baseline relied on screenshot timing to include two animation frames after element removal. The Playwright-matched browser exposed an unpainted baseline. Explicitly settle after removal and retain the same pixel assertion.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/print-settle-red.log",
+        "e2e/.out/campaign-resume/print-settle-restored.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
+    },
+    {
+      "id": "resume-response-delay-deadline",
+      "state": "in-progress",
+      "classification": "local-harness-coverage",
+      "claim": "A response-delay timer could wake just before its requested duration. Recheck a monotonic deadline before releasing a completed backend response, while preserving explicit restore and request ordering.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/response-delay-deadline-valid-red.log",
+        "e2e/.out/campaign-resume/integration-repairs-final-green.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
+    },
+    {
+      "id": "resume-accessibility-touch-fixture",
+      "state": "in-progress",
+      "classification": "local-harness-coverage",
+      "claim": "A fresh Chromium blank document could retain desktop pointer media despite a touch context. Navigate the synthetic accessibility fixture before checking its touch identity and preserve every product target-size and focus assertion.",
+      "requiredCases": [],
+      "evidence": [
+        "e2e/.out/campaign-resume/touch-css-diagnostic.log",
+        "e2e/.out/campaign-resume/touch-context-red.log",
+        "e2e/.out/campaign-resume/integration-repairs-final-green.log"
+      ],
+      "remaining": [
+        "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
+      ]
     }
   ],
   "acceptance": {

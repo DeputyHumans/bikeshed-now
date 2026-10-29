@@ -358,7 +358,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
       "Read what you can read", "Publish, revise and rename documents", "Comment, reply, suggest edits and resolve threads",
       "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
       "Manage sharing on documents and folders you own, sending invitations to new readers",
-      "Change visibility, open editing and expiry on documents you own",
+      "Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own",
       "Rename and move folders you can edit; delete folders you own while keeping their contents",
     ], "consent discloses every allowed capability");
     assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
@@ -426,12 +426,12 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const listed = ((await listTokens(session)).json?.tokens ?? []).filter((x2) => x2.tokenId === tokenId);
     assert.deepEqual(listed.map((l) => ({ kind: l.kind, name: l.name, channel: l.channel, clientHost: l.clientHost, registration: l.registration, revoked: l.revoked })), [{ kind: "oauth", name: cleanName, channel: "mcp", clientHost: null, registration: "dcr", revoked: false }], "the account's token list carries the grant");
 
-    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (32); at /publish it is not a credential");
+    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (33); at /publish it is not a credential");
     const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
-    assert.equal(viaGrant.length, 32, viaGrant.join(", "));
-    assert.deepEqual(viaGrant, viaPersonal, "the same 32 tools as a personal token");
+    assert.equal(viaGrant.length, 33, viaGrant.join(", "));
+    assert.deepEqual(viaGrant, viaPersonal, "the same 33 tools as a personal token");
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
 
@@ -485,44 +485,6 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
       "Cancel's redirect: access_denied with state and iss, and no code (RFC 6749 §4.1.2.1, RFC 9207)",
     );
 
-    ctx.step("the code from card 1 exchanges for a bsa_ good for one hour and a bsr_ of the same grant; no-store, no-cache");
-    const x = await exchangeCode(http, { code: back1.code, verifier: p1.verifier, clientId: reg.clientId, redirectUri: r1.redirectUri });
-    assert.equal(x.status, 200, JSON.stringify(x.json));
-    assertHeaderMatrix([{ label: "POST /oauth/token", res: x.response, expect: { "cache-control": "private, no-store", pragma: "no-cache" } }]);
-    assert.deepEqual(Object.keys(x.json).sort(), ["access_token", "expires_in", "refresh_token", "token_type"]);
-    assert.equal(x.json.token_type, "Bearer");
-    const am = ACCESS_RE.exec(x.json.access_token);
-    const rm = REFRESH_RE.exec(x.json.refresh_token);
-    assert.ok(am && rm && am[1] === rm[1], "bsa_<tokenId>.<secret> and bsr_<same tokenId>.<secret>");
-    assert.ok(x.json.expires_in > 3590 && x.json.expires_in <= 3600, `expires_in ${x.json.expires_in}: one hour`);
-    const tokenId = am[1];
-    appendLedger(target, { kind: "oauth", tokenId, uid: session.uid, clientId: reg.clientId });
-    if (target.kind === "local") {
-      const rec = await readDoc(target, `oauthCodes/${sha256(back1.code)}`);
-      assert.equal(await readDoc(target, `oauthCodes/${back1.code}`), null, "the code itself is never a key");
-      assert.deepEqual(
-        { uid: rec?.uid, clientId: rec?.clientId, redirectUri: rec?.redirectUri, challenge: rec?.codeChallenge, resource: rec?.resource, life: rec?.expiresAt.toMillis() - rec?.createdAt.toMillis(), spent: Boolean(rec?.usedAt), tokenId: rec?.tokenId },
-        { uid: session.uid, clientId: reg.clientId, redirectUri: r1.redirectUri, challenge: p1.challenge, resource: RESOURCE(), life: 120_000, spent: true, tokenId },
-        "Approve wrote oauthCodes/{sha256(code)}, valid for two minutes, spent by the exchange (SPEC §23 Consent)",
-      );
-      const g = await readDoc(target, `tokens/${tokenId}`);
-      assert.deepEqual(
-        { kind: g.kind, channel: g.channel, hasHash: "hash" in g, life: g.accessExpiresAt.toMillis() - g.createdAtMs, resource: g.resource, client: g.client, generation: g.generation, revokedAt: g.revokedAt },
-        { kind: "oauth", channel: "mcp", hasHash: false, life: 3_600_000, resource: RESOURCE(), client: { id: reg.clientId, host: null, verified: false, registration: "dcr" }, generation: 0, revokedAt: null },
-        "tokens/{id}: an oauth grant, never with a personal token's hash (SPEC §23 Tokens)",
-      );
-    }
-    const listed = ((await listTokens(session)).json?.tokens ?? []).filter((x2) => x2.tokenId === tokenId);
-    assert.deepEqual(listed.map((l) => ({ kind: l.kind, name: l.name, channel: l.channel, clientHost: l.clientHost, registration: l.registration, revoked: l.revoked })), [{ kind: "oauth", name: cleanName, channel: "mcp", clientHost: null, registration: "dcr", revoked: false }], "the account's token list carries the grant");
-
-    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (31); at /publish it is not a credential");
-    const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
-    const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
-    const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
-    assert.equal(viaGrant.length, 33, viaGrant.join(", "));
-    assert.deepEqual(viaGrant, viaPersonal, "the same 33 tools as a personal token");
-    const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
-    assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
   } finally {
     await r1.close();
     await r2.close();

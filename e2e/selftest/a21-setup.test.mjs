@@ -66,22 +66,28 @@ async function audience(kind, corrupt = () => {}) {
   const events = [
     { type: "version.published", at },
     ...(kind === "local" ? accounts.slice(1).map((a) => ({ type: "access.changed", channel: "web", added: [a.email], removed: [], by: accounts[0].email, at })) : []),
-    { type: "doc.trust", at }, { type: "doc.visibility", at }, { type: "doc.visibility", at }, { type: "doc.moved", at },
+    { type: "doc.visibility", at }, { type: "doc.visibility", at }, { type: "doc.moved", at },
     { type: "thread.opened", at }, { type: "comment.added", at }, { type: "fork.created", at: "2026-10-15" },
   ];
   corrupt(events);
   const counts = (types) => Object.fromEntries(Object.entries(types.reduce((m, t) => ({ ...m, [t]: (m[t] ?? 0) + 1 }), {})).sort());
   const draft = { updatedByEmail: accounts[2].email, updatedAt: { toDate: () => new Date(at) } };
   const expectedDraft = { exists: true, lastEditedBy: accounts[2].email, lastEditedAt: at };
+  let operatorTrusted = false;
   const http = { postJson: async (path, payload) => {
     assert.ok(["/trust", "/draft"].includes(path), "no direct mail-sending grant bypass");
-    if (path === "/trust" && payload.trusted === false) events.push({ type: "doc.trust", at: "2026-10-15T00:00:01.000Z" });
+    if (path === "/trust" && payload.trusted === false) {
+      assert.equal(operatorTrusted, true, "the operator trusts before the owner restores the sandbox");
+      operatorTrusted = false;
+      events.push({ type: "doc.trust", at: "2026-10-15T00:00:01.000Z" });
+    }
     return { status: 200 };
   } };
   let run;
   const target = { kind };
   const context = {
     assert: { ...assert, deepEqual: (a, b, message) => assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)), message) },
+    trustAsOperator: async (t, docId) => { assert.equal(t, target); assert.equal(docId, "doc"); operatorTrusted = true; },
     target, accounts, DAY: /^\d{4}-\d{2}-\d{2}$/,
     scenario: (_name, _options, fn) => { run = fn; },
     tag: () => "scope", FIXTURE_HTML: "<body>text</body>",

@@ -1,7 +1,11 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -627,3 +627,3 @@
+@@ -722,7 +722,7 @@
+         // Where get_changes starts, for watching a document you did not
          // publish. Saved as "last" only if this credential has none for it.
--        cursor: await startingCursor(ctx, ref, "ifNone"),
-+        cursor: await startingCursor(ctx, ref, "always"),
+         // Not for a folder's reader: get_changes reads threads, which are not theirs.
+-        cursor: viaFolder ? null : await startingCursor(ctx, ref, "ifNone"),
++        cursor: viaFolder ? null : await startingCursor(ctx, ref, "always"),
          // Ahead of the source, not after it: an agent reads this result as JSON
+         // text in key order, and a flag after 200,000 characters of source is a
+         // flag it may never reach.

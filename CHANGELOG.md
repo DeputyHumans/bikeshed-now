@@ -14,6 +14,26 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## 0.26.1 — 2026-10-29
+
+### Fixed
+
+- Rebase campaign controls and trust fixtures onto reader-approved script execution, establish touch media before synthetic accessibility checks, and prevent early timers from shortening injected response delays.
+
+- Retain all four resumed-campaign discoveries in the exact identity and claim inventory guard.
+
+- Explicitly settle print comparison frames after removing elements instead of relying on browser-dependent screenshot timing.
+
+- Align the OAuth consent E2E expectation with folder visibility and expiry authority and detect its removal with a dedicated disclosure control.
+
+- Prefer an explicitly configured or installed Playwright-matched browser before system Chrome, avoiding the measured system-browser shutdown delay without skipping browser cleanup or reducing test coverage.
+
+- Apply the explicitly reviewed ten-participant campaign scope to cloud qualification as well as local runs; retain every N2/N5/N10 trial and defer N20 consistently.
+
+- Await shared browser shutdown before E2E maintenance, retain shutdown failures, and stop measuring after an unusable cleanup boundary. Record phase timings, avoid redundant source hashing, and stage patch-test source once while isolating each control without reducing scenarios or trials.
+- Align framing checks with shared-folder routing, refresh header controls after the Hosting hotfix, and check successful document bytes and actual viewer rendering.
+- Repair duplicated OAuth scenario setup and stale control patches after integration; reject invalid spec syntax before starting emulators.
+
 ## 0.26.0 — 2026-10-29
 
 ### Security

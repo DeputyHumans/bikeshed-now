@@ -18,14 +18,13 @@
 +    for (const doc of docs.docs) await persistDocMembership(db, doc.ref, undefined, undefined, opts, true);
      const children = await db.collection("folders").where("parentId", "==", folderId).get();
      for (const child of children.docs) queue.push(child.id);
-@@ -449,5 +452,7 @@
+@@ -449,4 +452,6 @@
    events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
    opts: RecomputeOptions = {},
 +  e2eFromCascade = false,
  ): Promise<Membership> {
 +  if (!e2eFromCascade) await e2eAccessGate("doc-membership-before-write", docRef.id);
    const receipt = change ? freshReceiptId() : null;
-   const membership = await db.runTransaction(async (tx) => {
 @@ -481,4 +486,5 @@
    });
    if (receipt) await clearReceipt(docRef, receipt);

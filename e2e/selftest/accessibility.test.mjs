@@ -11,7 +11,14 @@ import { inspectUi, spokenText } from '../lib/accessibility.mjs';
 const target = { kind: 'local', runId: 'selftest-accessibility', origin: 'http://127.0.0.1:1', stack: { ports: { hosting: 1 } }, capabilities: new Set(['local']) };
 let pool;
 let u;
-before(async () => { pool = new BrowserPool({ target }); u = await pool.user({ device: { width: 400, height: 800, touch: true } }); });
+before(async () => {
+  pool = new BrowserPool({ target });
+  u = await pool.user({ device: { width: 400, height: 800, touch: true } });
+  // Navigate before document.write-based fixtures: Chromium can leave its initial
+  // blank document with desktop pointer media despite the context's touch setting.
+  await u.page.goto('data:text/html,<!doctype html><title>Accessibility fixture</title>');
+  assert.equal(await u.page.evaluate(() => navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches), true, 'accessibility fixture is a real touch context');
+});
 after(async () => pool?.close());
 const html = (body, css = '') => `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--color-focus:rgb(0,118,155)}body{font:16px Arial;color:#111;background:#fff}button,input,select,a{min-width:44px;min-height:44px} ${css}</style>${body}`;
 

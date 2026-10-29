@@ -49,10 +49,19 @@
  */
 
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { blankSource } from "./budget.mjs";
 import { E2E_DIR, OUT_DIR, REPO_ROOT, SPECS_DIR, assertPath } from "./paths.mjs";
+
+/** Parse without evaluating imports or scenario bodies, before paying to start a stack. */
+export function assertSpecsParse(files, node = process.execPath) {
+  for (const file of new Set(files)) {
+    const result = spawnSync(node, ["--check", file], { encoding: "utf8", timeout: 10_000 });
+    if (result.error || result.status !== 0) throw new Error(`spec syntax preflight failed: ${file}\n${result.error?.message ?? result.stderr}`);
+  }
+}
 
 /** The tiers a --spec-file may run in: the suites that are exactly one tier of spec files. */
 export const SPEC_FILE_SUITES = Object.freeze(["functional", "concurrency"]);

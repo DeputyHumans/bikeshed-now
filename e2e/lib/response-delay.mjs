@@ -27,7 +27,13 @@ export async function delayHostingResponse(user, path, { delayMs, method = 'POST
       if (!restored) await new Promise((resolve) => {
         let timer;
         const release = (why) => { clearTimeout(timer); waiting.delete(release); row.release = why; resolve(); };
-        waiting.add(release); timer = setTimeout(() => release('delay'), delayMs);
+        const deadline = performance.now() + delayMs;
+        const elapsed = () => {
+          const remaining = deadline - performance.now();
+          if (remaining > 0) timer = setTimeout(elapsed, Math.ceil(remaining));
+          else release('delay');
+        };
+        waiting.add(release); timer = setTimeout(elapsed, delayMs);
       });
       row.release ??= 'restore'; row.releasedAt = Date.now();
       await route.fulfill({ response });

@@ -2,6 +2,6 @@
 +++ b/firebase.json
 @@ -176,3 +176,3 @@
        {
--        "source": "!/{content,draft,thumb}/**",
+-        "source": "!/@(content|draft|thumb)/**",
 +        "source": "/__frame_control_unused__/**",
          "headers": [

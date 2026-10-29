@@ -1,7 +1,12 @@
 --- a/app/src/styles/dialogs.css
 +++ b/app/src/styles/dialogs.css
-@@ -295 +295,4 @@
+@@ -294,6 +294,9 @@
+ .expiry-row .link-row { margin-top: var(--s-2); }
  .expiry-row input[type="date"] { flex: 0 1 auto; }
-+
+
 +.modal-foot { position: relative; }
 +.modal-foot::after { content: ""; position: absolute; inset: 0; z-index: 10; }
++
+ /* Folders above whose link or public level reaches this document: read-only
+    lines under the levels, the way inherited grants sit under the people. */
+ .reach-list { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-1); }

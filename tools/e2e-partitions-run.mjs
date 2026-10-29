@@ -44,7 +44,7 @@ export async function runPartitions(campaign, cellId, directory, { root = ROOT }
   const plan = planPartitions(campaign, cellId, snapshot(), concurrencyInventory(root), { root });
   mkdirSync(out, { recursive: true });
   const statePath = resolve(out, "state.json");
-  const guard = () => { for (const field of ["revision", "version", "fingerprint"]) need(snapshot()[field] === plan.source[field], `source changed during measurement: ${field}`); };
+  const guard = () => { const current = snapshot(); for (const field of ["revision", "version", "fingerprint"]) need(current[field] === plan.source[field], `source changed during measurement: ${field}`); };
   let child, signal;
   const lock = resolve(out, "runner.lock");
   writeFileSync(lock, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }) + "\n", { flag: "wx" });

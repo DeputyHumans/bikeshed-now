@@ -1,9 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2237,5 +2237,5 @@
-     basis === "member" ? "app" : basis === "public" ? "public" : "unlisted";
- 
+@@ -1941,7 +1941,7 @@
+   const via: "app" | "unlisted" | "public" =
+     basis === "member" ? "app" : basis === "public" || basis === "folder-public" ? "public" : "unlisted";
+
 -  const rawMs = typeof body?.ms === "number" && Number.isFinite(body.ms) ? body.ms : 0;
 +  const rawMs = Number.isFinite(Number(body?.ms)) ? Number(body?.ms) : 0;
    const claimedMs = automated
      ? 0
+     : Math.min(Math.max(0, Math.floor(rawMs)), MAX_SESSION_MS);

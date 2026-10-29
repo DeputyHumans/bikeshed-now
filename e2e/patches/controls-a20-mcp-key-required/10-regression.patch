@@ -1,9 +1,11 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -273,5 +273,5 @@
+@@ -311,7 +311,7 @@
+   if (!snap.exists) throw new Error(`no document with id "${slug}"`);
    const data = snap.data() as DocAclData & Record<string, unknown>;
    const proof = await linkProofFor(ref, data, ctx.caller, k);
--  if (!canRead(data, ctx.caller, proof)) throw new Error(`no document with id "${slug}"`);
-+  if (!canRead(data, ctx.caller, proof) && data.visibility !== "unlisted") throw new Error(`no document with id "${slug}"`);
-   // An expired document reads as absent to everyone but its owner — the same
-   // answer a document they may not read gives, so expiry cannot be used to
+-  const access = await loadReadAccess(ctx.db, data, ctx.caller, proof);
++  const access = await loadReadAccess(ctx.db, data, ctx.caller, proof) ?? (data.visibility === "unlisted" ? { basis: "link" as const } : null);
+   if (access === null) throw new Error(`no document with id "${slug}"`);
+   if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
+     throw new Error(`no document with id "${slug}"`);
