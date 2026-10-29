@@ -435,6 +435,20 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
 
+    if (target.kind === "local") {
+      // A document made here could never be deleted on production, so only locally.
+      ctx.step("what the app does is the app's: a version it publishes reads channel app, under the name it registered (ADR 0023)");
+      const app = ctx.mcp({ token: x.json.access_token, actor: "oauth-app", cutoffError: true });
+      await app.initialize();
+      const made = await app.call("publish_document", { title: `e2e a22 app ${t}`, content: `<!doctype html><title>e2e a22 app ${t}</title><p>Made by an app.</p>`, format: "html" });
+      precondition(made.isError === false, `publish_document through the app: ${made.text}`);
+      const v1 = await readDoc(target, `docs/${made.json.docId}/versions/v1`);
+      assert.deepEqual(
+        { channel: v1?.publishedBy?.channel, via: v1?.publishedBy?.via, tokenId: v1?.publishedBy?.tokenId, publishedVia: v1?.publishedVia },
+        { channel: "app", via: `“${cleanName}” (connected app)`, tokenId, publishedVia: "app" },
+        "the version names the app, quoted and marked, and its grant",
+      );
+    }
 
     ctx.step("card 2 (an https redirect): the title leads with the redirect's host, then the self-chosen name, unchecked, with the any-name warning");
     const p3 = pkce();

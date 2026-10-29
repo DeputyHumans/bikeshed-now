@@ -1,0 +1,11 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -230,7 +230,7 @@
+ 
+   // An app reads as an app wherever it acts, under the name it registered.
+   // The record's own `channel` stays "mcp" for the account screen's list.
+-  return { tokenId, uid: g.uid, emailLower: g.email, channel: "app", name: typeof g.name === "string" ? g.name : "" };
++  return { tokenId, uid: g.uid, emailLower: g.email, channel: "mcp", name: typeof g.name === "string" ? g.name : "" };
+ }
+ 
+ /**
