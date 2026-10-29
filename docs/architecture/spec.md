@@ -627,7 +627,7 @@ server, through the Admin SDK.
   `suggestion.accepted`, `version.withdrawn`, `doc.renamed` or `access.changed`;
 - `audience`: `readers`, `editors` or `owner`;
 - optionally `version`, `threadId` and `commentId`;
-- `actor`: `{ uid, channel, tokenId? }`, with no email;
+- `actor`: `{ uid, channel, tokenId?, via? }`, with no email (`via` is the credential in words, §17; a withdrawal's actor is `operator`);
 - `data`: small values, never a body.
 
 How events are written:
