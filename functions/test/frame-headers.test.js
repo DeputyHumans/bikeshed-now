@@ -8,7 +8,10 @@ const { join } = require('node:path');
 
 test('Hosting denies frames for the app shell including aliases, without restricting document iframe routes', () => {
   const config = JSON.parse(readFileSync(join(__dirname, '../../firebase.json'), 'utf8'));
-  const source = '!/{content,draft,thumb}/**';
+  // Hosting expands negated brace alternatives differently from its emulator:
+  // the old brace pattern sent DENY even on successful content responses.
+  // Keep one extglob alternative group; verify it against real Hosting.
+  const source = '!/@(content|draft|thumb)/**';
   const rule = config.hosting.headers.find((entry) => entry.source === source);
   assert.ok(rule, 'all shell paths, including unknown paths that client-side redirect, need frame headers');
   const headers = Object.fromEntries(rule.headers.map((header) => [header.key, header.value]));
