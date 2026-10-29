@@ -137,11 +137,15 @@ test("pinned to the product: encodeCursor's fields and version, decodeCursor's s
   assert.match(events, /v: CURSOR_VERSION,\s*d: c\.docId,\s*\.\.\.\(c\.at && c\.id \? \{ s: c\.at\.seconds, n: c\.at\.nanoseconds, e: c\.id \} : \{\}\),/);
   assert.match(events, /if \(parsed\.s === undefined\) \{\s*return parsed\.n === undefined && parsed\.e === undefined\s*\? \{ docId, at: null, id: null \}\s*:\s*\{ error: "that is not a cursor this server gave out" \};\s*\}/, "only a cursor with no position fields denotes the start");
   assert.match(events, /q = q\.startAfter\(cursor\.at, cursor\.id\)/, "the product reads strictly after the cursor");
+  // Each event's words are rendered in lib/changefeed.ts, shared with the
+  // Activity panel (ADR 0023); get_changes keeps the cursor it hands back.
+  const feed = readFileSync(join(REPO_ROOT, "functions/src/lib/changefeed.ts"), "utf8");
+  assert.match(feed, /at: v\.type === "fork\.created" && at \? at\.slice\(0, 10\) : at,/);
+  assert.match(feed, /\.\.\.\(v\.version \? \{ version: v\.version \} : \{\}\),\s*\.\.\.\(v\.threadId \? \{ threadId: v\.threadId \} : \{\}\),/);
+  assert.match(feed, /Object\.assign\(item, \{ commentId: v\.commentId, by: c\.authorEmail, body: c\.body \}\);/);
+  assert.match(feed, /const at = \(v\.at as admin\.firestore\.Timestamp \| undefined\)\?\.toDate\?\.\(\)\.toISOString\(\) \?\? null;/);
   const tools = readFileSync(join(REPO_ROOT, "functions/src/mcp/tools.ts"), "utf8");
-  assert.match(tools, /at: v\.type === "fork\.created" && at \? at\.slice\(0, 10\) : at,/);
-  assert.match(tools, /\.\.\.\(v\.version \? \{ version: v\.version \} : \{\}\),\s*\.\.\.\(v\.threadId \? \{ threadId: v\.threadId \} : \{\}\),/);
-  assert.match(tools, /Object\.assign\(out, \{ commentId: v\.commentId, by: c\.authorEmail, body: c\.body \}\);/);
-  assert.match(tools, /const at = \(v\.at as admin\.firestore\.Timestamp \| undefined\)\?\.toDate\?\.\(\)\.toISOString\(\) \?\? null;/);
+  assert.match(tools, /const events = await describeEvents\(ctx\.db, ref, ctx\.caller, visible, read\);/, "get_changes renders through the shared feed");
   assert.match(tools, /const cursor = encodeCursor\(last \? \{ docId: ref\.id, at: last\.data\(\)\.at, id: last\.id \} : from\);/, "a quiet poll gives back the cursor it was given");
   assert.deepEqual([POLL_INTERVAL_MS, POLL_FINISH_MS], [400, 60_000]);
 });
