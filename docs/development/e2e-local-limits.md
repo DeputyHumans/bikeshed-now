@@ -158,3 +158,11 @@ the proposal. Control tree selectors may be `HEAD`, a revision or `worktree`;
 the immutable commit and both actual stack fingerprints establish their source.
 The default checker still exits unsuccessfully while the original observation
 remains incomplete. Only `--local-only` can report the separate local acceptance.
+
+Local C15 runs perform one complete natural storm per plan trial. Repeating
+that storm cannot create automatic-handler overlap in the pinned serialized
+publisher. The measurement records its declared attempt limit and retains the
+missed window; qualification still requires every N/trial, all ordinary safety
+assertions, the exact emulator boundary probe, and separate cloud evidence.
+Historical runs retain all three attempts. An incomplete declared attempt list
+never qualifies, and neither path turns the overlap observation into a pass.

@@ -45,3 +45,15 @@ test("a refused review allows only an unchanged remote autosave and no local edi
   assert.throws(() => assertRefusedReview({ ...clean, requests: [{ path: "/draft", text: "locally changed", status: 200 }] }), /only the unchanged remote merge/);
   assert.throws(() => assertRefusedReview({ ...clean, requests: [{ path: "/draft", text: "merged", status: 500 }] }), /stored or explicitly refused/);
 });
+
+test("a single natural attempt retains a missed window rather than claiming success", async () => {
+  const records = [];
+  let calls = 0;
+  const result = await naturalRaceAttempts({ max: 1,
+    run: async () => { calls++; return { achieved: false, diagnostic: "serialized delivery" }; },
+    record: rows => records.push(structuredClone(rows)),
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.achieved, false);
+  assert.deepEqual(records, [[{ attempt: 1, outcome: "window-missed", diagnostic: "serialized delivery" }]]);
+});

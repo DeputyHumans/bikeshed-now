@@ -1359,14 +1359,19 @@ async function warmCommentTriggers(ctx) {
 async function c15Storm(ctx, { ref, email }) {
   if (!email) return c15StormAttempt(ctx, { ref, email });
   await warmCommentTriggers(ctx);
+  // The pinned local emulator serializes automatic trigger delivery. Repeating
+  // a fully judged storm cannot create overlap; retain its missed window and
+  // require the independent pinned-boundary and cloud evidence for I11.
+  const naturalAttemptLimit = ctx.target.kind === "local" ? 1 : 3;
   const result = await naturalRaceAttempts({
+    max: naturalAttemptLimit,
     run: async attempt => {
       await c15StormAttempt({ ...attemptContext(ctx, attempt), logSince: logMark({ target: ctx.target }) }, { ref, email });
       const obs = observed.get(keyOf(ref, ctx));
       return { achieved: (obs.i11.triggerRuns?.peak.onCommentCreated ?? 0) >= 2,
         diagnostic: { triggerRuns: obs.i11.triggerRuns, messages: obs.i11.messages, eligible: obs.i11.eligible } };
     },
-    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref, naturalAttempts: attempts }); },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref, naturalAttempts: attempts, naturalAttemptLimit }); },
   });
   ctx.step(`natural trigger overlap: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
 }

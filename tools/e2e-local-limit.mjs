@@ -78,8 +78,12 @@ export function verifyLocalLimit(campaign, proof, loaded, { root }) {
     const c = judges[0];
     if (pass(c)) continue;
     need(c.status === "inconclusive" && !c.error && !c.todo && !c.notReproduced && !c.skipReason && !c.outcome && /^the sync precondition did not hold: no two onCommentCreated runs overlapped while C15 ran \(\d+ run\(s\), peak 1 at once;.*; 0 failure line\(s\)\)/.test(c.inconclusive), "unrelated incomplete outcome cannot use this limitation");
-    const attempts = rows.filter(r => r.ref === "C15" && r.n === n && r.trial === trial && r.case === work[0].name && r.naturalAttempts).at(-1)?.naturalAttempts;
-    need(Array.isArray(attempts) && attempts.length === 3, "all three natural attempts must be retained");
+    const measured = rows.filter(r => r.ref === "C15" && r.n === n && r.trial === trial && r.case === work[0].name && r.naturalAttempts).at(-1);
+    const attempts = measured?.naturalAttempts;
+    // Older runs attempted three storms. New local runs declare one, since
+    // the separately verified pinned publisher cannot deliver them in parallel.
+    const limit = measured?.naturalAttemptLimit ?? 3;
+    need((limit === 1 || limit === 3) && Array.isArray(attempts) && attempts.length === limit, "every declared natural attempt must be retained");
     for (const [i, attempt] of attempts.entries()) {
       const runs = attempt.diagnostic?.triggerRuns;
       need(attempt.attempt === i + 1 && attempt.outcome === "window-missed" && runs?.exact === true && runs.peak?.onCommentCreated === 1 && runs.runs?.onCommentCreated > 0 && runs.failed === 0 && Object.keys(runs.open ?? {}).length === 0, "attempt does not establish exact serial trigger delivery");

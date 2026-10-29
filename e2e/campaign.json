@@ -15502,6 +15502,34 @@
       "remaining": [
         "Import exact-source positive and negative-control evidence and complete the resumed campaign before closure."
       ]
+    },
+    {
+      "id": "resume-comment-storm-contention",
+      "state": "in-progress",
+      "classification": "unresolved-product-vs-emulator-boundary",
+      "claim": "A full N5 C15 trial refused four concurrent MCP comments with ABORTED Transaction lock timeout while suggestions and replies succeeded. Preserve the failure, test bounded native retries without replaying committed feedback, and distinguish emulator contention from deployed behavior.",
+      "requiredCases": [
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+          "n": 2
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+          "n": 5
+        },
+        {
+          "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+          "n": 10
+        }
+      ],
+      "evidence": [
+        "e2e/.out/contention-diagnostic/baseline-red.log",
+        "e2e/.out/contention-diagnostic/candidate-focused.log"
+      ],
+      "remaining": [
+        "Complete native retry controls and all N2/N5/N10 C15 trials on the candidate.",
+        "Verify concurrent comments against the isolated cloud deployment before classifying the production boundary."
+      ]
     }
   ],
   "acceptance": {

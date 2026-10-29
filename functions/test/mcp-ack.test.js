@@ -90,3 +90,22 @@ for (const removed of ["thread", "comment", "both"]) test(`MCP add_comment prese
   assert.deepEqual(count(), { failures: 1, callbackCalls: 2 });
   assert.deepEqual(Object.keys(w.store.get("docs/d").transactionReceipts ?? {}), [], "the deleted-feedback call clears its own bounded receipt");
 });
+
+for (const abortCommits of [5, 8]) test(`MCP comment survives ${abortCommits} contended commits and a lost acknowledgement`, async () => {
+  const w = world();
+  const count = loseFirstTransactionAcknowledgement(w.db, { abortCommits });
+  const answer = await w.call("add_comment", { exact: "Old phrase.", body: "Concurrent feedback." });
+  assert.equal(answer.threadId, annotations(w)[0]?.[1].annId);
+  assert.equal(annotations(w).length, 1);
+  assert.equal(comments(w).length, 1);
+  assert.deepEqual(count(), { failures: 1, callbackCalls: abortCommits + 2 });
+});
+
+test("MCP comment contention still has a finite retry budget and leaves no partial feedback", async () => {
+  const w = world();
+  const count = loseFirstTransactionAcknowledgement(w.db, { abortCommits: 10 });
+  await assert.rejects(w.call("add_comment", { exact: "Old phrase.", body: "Concurrent feedback." }), { code: 10 });
+  assert.deepEqual(count(), { failures: 0, callbackCalls: 10 });
+  assert.equal(annotations(w).length, 0);
+  assert.equal(comments(w).length, 0);
+});
