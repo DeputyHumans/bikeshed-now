@@ -1,0 +1,9 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -133,5 +133,5 @@
+     await sendEmail({
+       to: target.email,
+-      subject: `${inviterEmail} shared “${subject.title}” with you`,
++      subject: `Someone shared a document with you`,
+       body: React.createElement(Invite, props),
+       text: inviteText(props),

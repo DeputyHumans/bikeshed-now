@@ -29,7 +29,7 @@
  * stopAt}}) sends a grant the stack did not answer again, through
  * lib/test.mjs untilLanded, after looking for its effect in the record:
  * POST /access writes the grant lists into docs/<id> (with a new `updatedAt`)
- * in one batch, then the RTDB mirrors, then answers (functions/src/lib/
+ * in one transaction, then the RTDB mirrors, then answers (functions/src/lib/
  * folders.ts persistDocMembership). The effect is the record's `updatedAt`
  * moved since just before the first request and the principal in
  * docs/<id>[GRANT_LIST[role]] and in no other role's list (a principal holds
@@ -139,22 +139,13 @@
  * presence and every write it makes to the live log while it shows
  * "Shared". The plan ("Sharing without email"): record the finding, then
  * write the mirror the way functions/src/lib/presence.ts syncPresenceAccess
- * does, for run documents only. writeMirror(target, {doc}) reads docs/<id>
- * through Admin and writes ONE multi-path update at the database root,
- * {"presenceAccess/<id>": its members keyed, "editAccess/<id>": its
- * editorMembers keyed} (mirrorUpdate: what the grant path,
- * persistDocMembership, and set-access.mjs's own twin would have written;
- * no open-edit key), as the database's admin (the emulator's `Bearer
- * owner` on a local stack, the operator's ADC elsewhere). It goes through
- * createHttp (the isolation check, a redacted row in the case's http.jsonl)
- * with its own narrow guard, mirrorWriteVerdict, in place of the zero-email
- * guard (whose RTDB_REST lets a run write only under status/<run doc>): a
- * PATCH of the database root, with the target's own query, of exactly the
- * two nodes of a document in the run's ledger, naming run accounts only.
- * Anything else is E2E_GUARD with nothing sent, on every target. A write
- * made is recorded in findings.jsonl ({kind: "mirror-written", suspect:
- * "S16"}) beside share()'s "mirror-missing". live.mjs grantEditors calls
- * it with `mirror: "write-missing"`, on the operator path only.
+ * does, for run documents only. writeMirror reads the document and its commit
+ * revision, then uses guarded per-node ETag GET/conditional PUT requests.
+ * A newer revision wins, so a delayed harness repair cannot restore revoked
+ * access. The admin credential is traced redacted; all grants must belong to
+ * run accounts (plus public editing when the source enables it). Successful
+ * repair is recorded beside the missing-mirror finding. The helper is opt-in
+ * through mirror: "write-missing" on the operator path only.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -419,22 +410,7 @@ function mirrorError(code, message, extra = {}) {
   return err;
 }
 
-/**
- * The mirror of `docId` as functions/src/lib/presence.ts syncPresenceAccess
- * writes it on a grant (persistDocMembership; scripts/lib/presence.mjs, the
- * twin set-access.mjs calls, the same): ONE multi-path update,
- * {"presenceAccess/<docId>": {<key>: true} for each of `members`,
- * "editAccess/<docId>": the same for `editorMembers`}, a key being the
- * address lower-cased with its dots made commas; an entry whose key is
- * empty is left out, and an empty list is {} (which removes the node, as
- * the product's does). No open-edit key ("*"): the grant path never passes
- * publicEdit. TypeError for a docId that is not one RTDB key, or a list
- * that is not an array of strings.
- *
- * @param {string} docId
- * @param {{members?: string[], editorMembers?: string[]}} [lists]
- * @returns {{[path: string]: {[key: string]: true}}}
- */
+/** Build the two access maps; writeMirror adds the authoritative revision fence. */
 export function mirrorUpdate(docId, { members = [], editorMembers = [] } = {}) {
   if (typeof docId !== "string" || !MIRROR_KEY_RE.test(docId)) throw new TypeError(`mirrorUpdate: docId is one RTDB key (no . $ # [ ] /), got ${JSON.stringify(docId)}`);
   const keyed = (list, what) => {
@@ -474,67 +450,39 @@ function mirrorRootUrl(target) {
   return u.toString();
 }
 
-/**
- * The harness's own guard for its one write outside status/<run doc>: may
- * this request go as the mirror write? Pure. Asked by writeMirror before it
- * fetches a credential, and again (through createHttp) on the request as it
- * is sent, on EVERY target, local included.
- *
- *   req       {method, url, body} (createHttp's: the body as the JSON string sent)
- *   target    its databaseURL is the one database the write may reach
- *   docs      the run's documents (ledger.mjs ledgerDocIds)
- *   accounts  the run accounts' addresses (ledger.mjs ledgerAccounts, or its keys)
- *   docId     when given, the one document the write may be about
- *
- * Allowed only as a PATCH of `<origin of databaseURL>/.json` with exactly
- * the databaseURL's own query (rule "mirror-url"; another method
- * "mirror-method") whose JSON body is an object of exactly the keys
- * presenceAccess/<d> and editAccess/<d> for ONE document d ("mirror-body"),
- * which is `docId` when given and a document of the run's ledger
- * ("mirror-ledger"), each value an object of `<key>: true` ("mirror-body")
- * whose every key is a run account's ("mirror-account": a reason that
- * counts the others and never names them, since they would be people
- * outside the run). → {allow: true, rule: "mirror-write"} or {allow: false,
- * rule, reason}.
- */
-export function mirrorWriteVerdict(req, { target, docs, accounts, docId = null } = {}) {
+/** Guard each ETag read and conditional node replacement, scoped to this run. */
+export function mirrorWriteVerdict(req, { target, docs, accounts, docId = null, publicEdit = false } = {}) {
   const refuse = (rule, reason) => ({ allow: false, rule, reason: `the harness's mirror write: ${reason}` });
-  if (!(docs instanceof Set)) throw new TypeError("mirrorWriteVerdict: docs is the Set of the run's document ids (ledgerDocIds)");
-  if (accounts === null || typeof accounts?.[Symbol.iterator] !== "function") throw new TypeError("mirrorWriteVerdict: accounts is the run accounts' addresses (an iterable)");
+  if (!(docs instanceof Set)) throw new TypeError("mirrorWriteVerdict: docs is the Set of run document ids");
+  if (accounts === null || typeof accounts?.[Symbol.iterator] !== "function") throw new TypeError("mirrorWriteVerdict: accounts is iterable");
   const method = String(req?.method ?? "").toUpperCase();
-  if (method !== "PATCH") return refuse("mirror-method", `${method || "(no method)"} is not the one multi-path update (PATCH)`);
-  let u;
-  let want;
-  try {
-    u = new URL(req.url);
-    want = new URL(mirrorRootUrl(target));
-  } catch (err) {
-    return refuse("mirror-url", `${String(err?.message ?? err).split("\n")[0]}`);
-  }
-  const query = (x) => JSON.stringify([...x.searchParams].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-  if (u.origin !== want.origin || u.pathname !== "/.json" || query(u) !== query(want) || u.hash) {
-    return refuse("mirror-url", `${u.origin}${u.pathname} with its query is not this target's database root (${want.origin}/.json with its own query)`);
-  }
+  if (method !== "GET" && method !== "PUT") return refuse("mirror-method", "only ETag GET and conditional PUT are allowed");
+  let u, want;
+  try { u = new URL(req.url); want = new URL(mirrorRootUrl(target)); }
+  catch { return refuse("mirror-url", "invalid target URL"); }
+  const query = (x) => JSON.stringify([...x.searchParams].sort(([a], [b]) => a.localeCompare(b)));
+  const match = /^\/(presenceAccess|editAccess)\/([^/]+)\.json$/.exec(u.pathname);
+  if (u.origin !== want.origin || query(u) !== query(want) || u.hash || !match) return refuse("mirror-url", "not one of this target's document access nodes");
+  const [, root, d] = match;
+  if (!MIRROR_KEY_RE.test(d) || (docId !== null && d !== docId)) return refuse("mirror-body", "not the requested document");
+  if (!docs.has(d)) return refuse("mirror-ledger", "not a document this run created");
+  if (method === "GET") return { allow: true, rule: "mirror-write" };
+  const headers = new Headers(req.headers ?? {});
+  if (!/^"[^"\r\n]+"$/.test(headers.get("if-match") ?? "")) return refuse("mirror-condition", "PUT requires the ETag returned by a node read");
   const body = mirrorBodyOf(req.body);
-  if (body === null || body === undefined || typeof body !== "object" || Array.isArray(body)) return refuse("mirror-body", "the body is not a JSON object");
-  const keys = Object.keys(body);
-  const ids = new Set(keys.map((k) => /^(?:presenceAccess|editAccess)\/(.+)$/.exec(k)?.[1] ?? null));
-  const d = ids.size === 1 ? [...ids][0] : null;
-  if (d === null || !MIRROR_KEY_RE.test(d) || keys.length !== 2 || !MIRROR_ROOTS.every((root) => Object.hasOwn(body, `${root}/${d}`))) {
-    return refuse("mirror-body", `the body names ${JSON.stringify(keys.slice(0, 4))}, not exactly presenceAccess/<d> and editAccess/<d> of one document`);
-  }
-  if (docId !== null && d !== docId) return refuse("mirror-body", `the body is about ${d}, not ${docId}`);
-  if (!docs.has(d)) return refuse("mirror-ledger", `${d} is not a document this run created`);
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.__revision !== "string" || !/^\d{12}:\d{9}$/.test(body.__revision)) return refuse("mirror-body", "a map with a valid revision fence is required");
+  if (!Number.isFinite(body.__expiresAt) || body.__expiresAt < 0 || typeof body.__owner !== "string" || body.__owner !== body.__owner.toLowerCase() || !/^[^@\s]+@[^@\s]+$/.test(body.__owner)) return refuse("mirror-body", "a valid deadline and normalized owner are required");
+  if (body.__liveEpoch !== undefined && (typeof body.__liveEpoch !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(body.__liveEpoch))) return refuse("mirror-body", "a valid live epoch is required");
   const runKeys = new Set([...(accounts instanceof Map ? accounts.keys() : accounts)].map(mirrorKey));
+  if (!runKeys.has(mirrorKey(body.__owner))) return refuse("mirror-account", "the owner is not a run account");
   let others = 0;
-  for (const root of MIRROR_ROOTS) {
-    const node = body[`${root}/${d}`];
-    if (node === null || typeof node !== "object" || Array.isArray(node) || Object.values(node).some((v) => v !== true)) {
-      return refuse("mirror-body", `${root}/${d} is not an object of <key>: true`);
-    }
-    others += Object.keys(node).filter((k) => !runKeys.has(k)).length;
+  for (const [key, value] of Object.entries(body)) {
+    if (["__revision", "__expiresAt", "__owner", "__liveEpoch"].includes(key)) continue;
+    if (value !== true) return refuse("mirror-body", "access grants must be true");
+    if (key === "*" && root === "editAccess" && publicEdit) continue;
+    if (!runKeys.has(key)) others += 1;
   }
-  if (others > 0) return refuse("mirror-account", `${others} key(s) of ${d}'s mirror are not run accounts, and the harness grants nobody outside the run`);
+  if (others) return refuse("mirror-account", `${others} key(s) are not run accounts`);
   return { allow: true, rule: "mirror-write" };
 }
 
@@ -547,77 +495,75 @@ async function databaseAdminAuthorization(target) {
 }
 
 /**
- * Write `doc`'s RTDB mirror from its record, as the product would have:
- * see THE MIRROR, WRITTEN BY THE HARNESS in the header. In order, and
- * nothing is sent unless every check holds:
- *   1. `doc` is in the run's ledger (else E2E_GUARD, rule "mirror-ledger");
- *   2. docs/<id> is read through Admin; a record that is missing, or whose
- *      members/editorMembers are not lists of addresses, is E2E_MIRROR;
- *   3. mirrorUpdate(id, record) is asked of mirrorWriteVerdict (E2E_GUARD
- *      with its rule: a member who is not a run account is "mirror-account");
- *   4. the credential (databaseAdminAuthorization);
- *   5. ONE PATCH of the database root through createHttp, whose guard is
- *      mirrorWriteVerdict again (so the request as sent is the one judged),
- *      traced as `actor`; an answer that is not 200, or no answer, is
- *      E2E_MIRROR (`status`, `cause`);
- *   6. a findings.jsonl row {kind: "mirror-written", suspect: "S16", docId,
- *      members, editors (counts), by: "harness"}.
- * Resolves {docId, members, editorMembers, update, status}: the record's
- * lists as written, and the update sent. It writes what the record says
- * whatever the mirror holds now (a whole-node replace, as the product's):
- * call it after the grants, not between them.
- *
- * @param {object} target
- * @param {object} o
- * @param {string|object} o.doc        docId or {docId}
- * @param {string} [o.actor]           the trace label ("operator-mirror")
- * @param {*} [o.evidence]             createHttp's evidence (default: the running case's sink)
- * @param {number} [o.timeoutMs]       the PATCH's timeout (60 s)
- * @param {{readDoc: Function, authorization?: Function}|null} [o.admin]
- *        a self-test's stand-in for lib/admin.mjs's readDoc, and for the credential (`authorization(target)` → the header value)
- * @param {Function|null} [o.fetchImpl] createHttp's fetch (a self-test's)
- * @returns {Promise<{docId, members, editorMembers, update, status}>}
+ * Repair run-owned mirrors using the current Firestore commit revision and
+ * per-node REST ETag compare-and-set. Writes withdraw edit access before read
+ * access. A newer mirror wins; a concurrent node change retries at most five
+ * times. Every read/write is guarded and traced, with no root database read.
  */
 export async function writeMirror(target, { doc, actor = "operator-mirror", evidence = undefined, timeoutMs = 60_000, admin = null, fetchImpl = null } = {}) {
   const docId = typeof doc === "string" ? doc : doc?.docId;
-  if (typeof docId !== "string" || !MIRROR_KEY_RE.test(docId)) throw new TypeError(`writeMirror: doc is a document id (or {docId}), got ${JSON.stringify(doc)}`);
-  if (admin !== null && (typeof admin?.readDoc !== "function" || (admin.authorization !== undefined && typeof admin.authorization !== "function"))) {
-    throw new TypeError("writeMirror: admin is a stand-in {readDoc, authorization?} for lib/admin.mjs (self-tests), or null");
-  }
-  if (fetchImpl !== null && typeof fetchImpl !== "function") throw new TypeError("writeMirror: fetchImpl is a fetch (self-tests), or null");
+  if (typeof docId !== "string" || !MIRROR_KEY_RE.test(docId)) throw new TypeError("writeMirror: doc is one document id");
+  if (admin !== null && (typeof admin?.readDocRevision !== "function" || (admin.authorization !== undefined && typeof admin.authorization !== "function"))) throw new TypeError("writeMirror: admin provides readDocRevision and optional authorization");
+  if (fetchImpl !== null && typeof fetchImpl !== "function") throw new TypeError("writeMirror: fetchImpl is a fetch");
   if (typeof actor !== "string" || !actor) throw new TypeError("writeMirror: actor is a non-empty trace label");
   const docs = ledgerDocIds(target);
-  if (!docs.has(docId)) {
-    throw mirrorError("E2E_GUARD", `writeMirror: ${docId} is not a document this run created (the ledger), so the harness writes no mirror for it`, { rule: "mirror-ledger" });
-  }
+  if (!docs.has(docId)) throw mirrorError("E2E_GUARD", "writeMirror: not a document this run created", { rule: "mirror-ledger" });
   const reader = admin ?? (await import("./admin.mjs"));
-  const record = await reader.readDoc(target, `docs/${docId}`);
-  if (record === null || record === undefined) throw mirrorError("E2E_MIRROR", `writeMirror: docs/${docId} does not exist, so there is no membership to mirror`);
+  const snapshot = await reader.readDocRevision(target, `docs/${docId}`);
+  if (!snapshot) throw mirrorError("E2E_MIRROR", `writeMirror: docs/${docId} does not exist`);
+  const { data: record, revision } = snapshot;
+  if (typeof revision !== "string" || !/^\d{12}:\d{9}$/.test(revision)) throw mirrorError("E2E_MIRROR", "writeMirror: missing or invalid source revision");
   const lists = {};
   for (const field of ["members", "editorMembers"]) {
-    const v = record[field] ?? [];
-    if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) throw mirrorError("E2E_MIRROR", `writeMirror: docs/${docId}.${field} is not a list of addresses`);
-    lists[field] = [...v];
+    const values = record[field] ?? [];
+    if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) throw mirrorError("E2E_MIRROR", `writeMirror: ${field} is not a list of addresses`);
+    lists[field] = [...values];
   }
   const update = mirrorUpdate(docId, lists);
-  const url = mirrorRootUrl(target);
-  const judge = { target, docs, accounts: [...ledgerAccounts(target).keys()], docId };
-  const before = mirrorWriteVerdict({ method: "PATCH", url, body: JSON.stringify(update) }, judge);
-  if (!before.allow) throw mirrorError("E2E_GUARD", `writeMirror: ${before.reason}`, { rule: before.rule, verdict: before });
+  const rawExpiry = typeof record.expiresAt === "number" ? record.expiresAt : record.expiresAt?.toMillis?.();
+  for (const node of Object.values(update)) {
+    node.__revision = revision;
+    node.__expiresAt = Number.isFinite(rawExpiry) ? rawExpiry : 0;
+    node.__owner = String(record.ownerEmail ?? "").toLowerCase();
+    node.__liveEpoch = typeof record.liveEpoch === "string" ? record.liveEpoch : "initial";
+  }
+  const publicEdit = record.visibility === "public" && record.publicEdit === true;
+  if (publicEdit) update[`editAccess/${docId}`]["*"] = true;
+  const urlFor = (root) => { const url = new URL(mirrorRootUrl(target)); url.pathname = `/${root}/${docId}.json`; return url.toString(); };
+  const judge = { target, docs, accounts: [...ledgerAccounts(target).keys()], docId, publicEdit };
+  // Validate all intended grants before fetching credentials or touching RTDB.
+  for (const root of MIRROR_ROOTS) {
+    const verdict = mirrorWriteVerdict({ method: "PUT", url: urlFor(root), headers: { "if-match": '"preflight"' }, body: update[`${root}/${docId}`] }, judge);
+    if (!verdict.allow) throw mirrorError("E2E_GUARD", `writeMirror: ${verdict.reason}`, { rule: verdict.rule });
+  }
   const authorization = admin?.authorization ? await admin.authorization(target) : await databaseAdminAuthorization(target);
   const http = createHttp(target, { actor, evidence, timeoutMs, guard: { check: async (req) => mirrorWriteVerdict(req, judge) }, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
-  let r;
-  try {
-    r = await http.request("PATCH", url, { json: update, headers: { authorization, cookie: null }, noCookies: true });
-  } catch (err) {
-    if (err?.code === "E2E_GUARD" || err?.code === "E2E_ISOLATION" || err?.code === "E2E_REDACTION") throw err;
-    throw mirrorError("E2E_MIRROR", `writeMirror: PATCH of ${MIRROR_ROOTS.map((root) => `${root}/${docId}`).join(" and ")} got no answer: ${String(err?.message ?? err).split("\n")[0]}`, { status: null, cause: err });
-  }
-  if (r.status !== 200) {
-    throw mirrorError("E2E_MIRROR", `writeMirror: PATCH of ${MIRROR_ROOTS.map((root) => `${root}/${docId}`).join(" and ")} answered ${r.status}: ${String(r.text ?? "").slice(0, 200)}`, { status: r.status });
+  const request = async (method, url, options) => {
+    let response;
+    try { response = await http.request(method, url, { ...options, headers: { authorization, cookie: null, ...options.headers }, noCookies: true }); }
+    catch (error) {
+      if (["E2E_GUARD", "E2E_ISOLATION", "E2E_REDACTION"].includes(error?.code)) throw error;
+      throw mirrorError("E2E_MIRROR", `writeMirror: ${method} got no answer`, { status: null, cause: error });
+    }
+    if (response.status !== 200 && response.status !== 412) throw mirrorError("E2E_MIRROR", `writeMirror: ${method} answered ${response.status}`, { status: response.status });
+    return response;
+  };
+  for (const root of ["editAccess", "presenceAccess"]) {
+    let done = false;
+    for (let attempt = 0; attempt < 5 && !done; attempt += 1) {
+      const url = urlFor(root);
+      const current = await request("GET", url, { headers: { "x-firebase-etag": "true" } });
+      const prior = current.json?.__revision;
+      if (typeof prior === "string" && /^\d{12}:\d{9}$/.test(prior) && prior > revision) { done = true; break; }
+      const etag = current.headers.get("etag");
+      if (!etag) throw mirrorError("E2E_MIRROR", "writeMirror: node read returned no ETag");
+      const written = await request("PUT", url, { json: update[`${root}/${docId}`], headers: { "if-match": etag } });
+      done = written.status === 200;
+    }
+    if (!done) throw mirrorError("E2E_MIRROR", "writeMirror: concurrent mirror changes exhausted retries");
   }
   recordFinding(target, { kind: "mirror-written", suspect: "S16", docId, members: lists.members.length, editors: lists.editorMembers.length, by: "harness", via: "lib/grant.mjs writeMirror" });
-  return { docId, members: lists.members, editorMembers: lists.editorMembers, update, status: r.status };
+  return { docId, members: lists.members, editorMembers: lists.editorMembers, update, status: 200 };
 }
 
 // --- Folders and teams (SPEC §13, §18) -----------------------------------------

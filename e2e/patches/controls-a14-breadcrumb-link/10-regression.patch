@@ -1,0 +1,11 @@
+--- a/app/src/components/Breadcrumb.tsx
++++ b/app/src/components/Breadcrumb.tsx
+@@ -44,7 +44,7 @@
+           {!current && i === trail.length - 1 ? (
+             <span aria-current="page">{folder.name}</span>
+           ) : (
+-            <Link to={`/folder/${folder.folderId}`}>{folder.name}</Link>
++            <Link to="/">{folder.name}</Link>
+           )}
+         </Fragment>
+       ))}

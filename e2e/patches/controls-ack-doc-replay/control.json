@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK doc membership: original retry preserves the later revocation and exact events",
+  "what": "Break doc membership ACK receipt recognition so an old grant overwrites a newer revoke.",
+  "target": {
+    "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+    "case": "A14.8b a document grant ACK retry retains its invitation and one event without regranting access revoked by a later request",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK doc membership: original retry preserves the later revocation and exact events"
+  }
+}

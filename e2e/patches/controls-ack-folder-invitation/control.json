@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK folder membership: original invitation delta sends exactly one message",
+  "what": "Break folder membership ACK receipt invitation delta while preserving the newer grant state.",
+  "target": {
+    "spec": "e2e/specs/functional/a14-membership-ack.spec.mjs",
+    "case": "A14.8a a folder grant ACK retry retains its invitation delta without regranting access revoked by a later request",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK folder membership: original invitation delta sends exactly one message"
+  }
+}

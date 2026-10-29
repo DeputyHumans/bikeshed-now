@@ -17,7 +17,8 @@
  * that aborts if anything published mid-run, because the viewer resolves a bare
  * /d/{docId} from that field — deleting first strands every reader on a version
  * that no longer exists. The same transaction clears a `thumb` record naming
- * the version. Then the Storage bytes (the version record's storagePrefix is
+ * the version. The same transaction repoints an existing public projection,
+ * or removes a stale private one, and refuses a changed draft. Then the Storage bytes (the version record's storagePrefix is
  * the only pointer to them) and the thumbnails captured from them, then the
  * Firestore record.
  *
@@ -27,10 +28,12 @@
  */
 
 import { parse, fail } from "./lib/args.mjs";
+import { withdrawalPrefix, repointWithdrawal } from "./lib/withdraw-version.mjs";
+import { finishOperatorReplacement } from "./lib/operator-writes.mjs";
 import {
-  FieldValue,
   getBucket,
   getBucketName,
+  closeAdmin,
   getDb,
   getProjectId,
 } from "./lib/firebase.mjs";
@@ -214,12 +217,7 @@ async function main() {
     }
   }
 
-  const storedPrefix = target.storagePrefix ?? `docs/${docId}/${doomed}`;
-  if (typeof storedPrefix !== "string" || !storedPrefix.startsWith(`docs/${docId}/`) ||
-      storedPrefix.split("/").some((part) => !part || part === "." || part === "..") || storedPrefix.includes("\\")) {
-    fail("invalid version storage prefix");
-  }
-  const prefix = `${storedPrefix}/`;
+  const prefix = withdrawalPrefix(docId, doomed, target);
   const [objects] = await bucket.getFiles({ prefix });
   const files = objects.filter((o) => !o.name.endsWith("/"));
   const totalBytes = files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);
@@ -279,52 +277,15 @@ async function main() {
 
   console.log("");
   console.log(`  repointing currentVersion -> ${repoint} ...`);
-  let removedDraftPrefix = null;
-  await db.runTransaction(async (tx) => {
-    const fresh = await tx.get(docRef);
-    if (!fresh.exists) throw new Error("the document disappeared mid-run");
-    const cur = fresh.data().currentVersion;
-    if (cur !== meta.currentVersion) {
-      throw new Error(
-        `currentVersion changed mid-run (${meta.currentVersion} -> ${cur}); ` +
-          "aborted without deleting anything",
-      );
-    }
-    const update = {
-      currentVersion: repoint,
-      // A withdrawal is not a publish, so updatedAt goes BACK to the repoint
-      // target's publish time rather than forward to now.
-      updatedAt: versions.find((v) => v.id === repoint).publishedAt,
-    };
-    const removedDraft = fresh.data().draft;
-    if (removedDraft) {
-      if (!values["drop-draft"]) throw new Error("A draft appeared mid-run; refused without --drop-draft.");
-      const prefix = removedDraft.storagePrefix ?? `docs/${docId}/draft`;
-      if (typeof prefix !== "string" || !(prefix === `docs/${docId}/draft` ||
-          prefix.startsWith(`docs/${docId}/drafts/`) && /^[a-zA-Z0-9-]+$/.test(prefix.slice(`docs/${docId}/drafts/`.length)))) {
-        throw new Error("Invalid draft storage prefix");
-      }
-      removedDraftPrefix = `${prefix}/`;
-      update.draft = FieldValue.delete();
-    }
-    // Read fresh: a capture can land between the plan and this transaction.
-    if (fresh.data().thumb?.versionId === doomed) update.thumb = FieldValue.delete();
-    if (!values["keep-stats"]) {
-      update["stats.commits"] = nextCommits;
-      if (nextCommits === 0) {
-        update["stats.lastEditedAt"] = FieldValue.delete();
-        update["stats.lastEditedByEmail"] = FieldValue.delete();
-      }
-    }
-    tx.update(docRef, update);
+  const result = await repointWithdrawal(db, docRef, {
+    currentVersion: meta.currentVersion, doomed, repoint, version: target,
+    draft: meta.draft ?? null, keepStats: values["keep-stats"],
   });
   console.log("    done.");
 
-  if (removedDraftPrefix) {
-    console.log("  deleting draft objects ...");
-    await bucket.deleteFiles({ prefix: removedDraftPrefix, force: true });
-    console.log("    done.");
-  }
+  console.log("  retiring the old live editing session and captured draft objects ...");
+  await finishOperatorReplacement(docId, result, { bucket, project: values.project });
+  console.log("    done.");
   console.log(`  deleting gs://${bucketName}/${prefix} ...`);
   await bucket.deleteFiles({ prefix, force: true });
   console.log("    done.");
@@ -358,4 +319,4 @@ async function main() {
   console.log(`withdrew ${docId}/${doomed}; currentVersion is now ${repoint}.`);
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

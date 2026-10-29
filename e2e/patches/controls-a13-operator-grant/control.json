@@ -1,0 +1,13 @@
+{
+  "oracle": "operator grant installs both member mirrors",
+  "what": "Skip operator grant mirror synchronization while retaining its Firestore membership transaction",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.9 local operator set-access grants and revokes an editor in Firestore and both RTDB mirrors, changing their actual reads and writes",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "operator grant installs both member mirrors"
+  }
+}

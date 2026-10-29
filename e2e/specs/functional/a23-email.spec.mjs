@@ -19,13 +19,15 @@
  *          agent's says "via MCP"
  *   A23.2b a participant whose access was REMOVED is told nothing of later
  *          comments (the notice carries the passage and the comment): the
- *          known defect X-a23-email-1, class I (it matches SPEC §14's
- *          recipient rule and is harmful; the case says why)
+ *          X-a23-email-1 regression
  *   A23.3  a suggestion notice: the owner and every approver, less the author
  *   A23.4  cooldowns: per recipient and document, comments and suggestions
  *          apart; a second of either inside 30 min sends nothing
+ *   A23.4b cooldown expiry permits later comments and suggestions independently
  *   A23.5  a decision (reject, accept, withdraw) is mailed as a comment
  *   A23.6  a send the provider refuses (shim 500) never fails the request
+ *   A23.6b verification uses the same failure boundary
+ *   A23.6c/d an unanswered provider and an incomplete body are cancelled at one send deadline
  *   A23.7  email off (its own stack, --email-off): nothing reaches the shim
  *          or Mailpit, each send is the product's logged no-op, and every
  *          operation still answers as it does with email on
@@ -58,10 +60,10 @@
  * or its 60 s limit beside Hosting's 504s), end a case INCONCLUSIVE, never
  * PASS. A mailbox holding anything EXTRA is never excused, nor is any
  * assertion. A response this spec reads itself goes through `answered()`
- * first. A23.6 judges a cut-off on its own three requests by the send under
- * test: INCONCLUSIVE only when the refusal cannot have caused it (the
- * provider had not been asked for the send when the request was cut off);
- * FAIL otherwise.
+ * first. A23.6 keeps actual non-200 application responses as FAIL. A Hosting
+ * or client cutoff is INCONCLUSIVE regardless of refusal timing: correlation
+ * on a loaded shared stack cannot prove that the refused send caused it.
+ * The shim timestamps remain evidence; a cutoff never becomes PASS.
  *
  * Cooldowns are 30 min (COMMENT_EMAIL_COOLDOWN_MS): every case makes its own
  * accounts and documents, so a rerun inside the window starts clean.
@@ -70,25 +72,26 @@
  * red), controls-a23-recipients (a participant with no users/{uid} mailed:
  * A23.2 red), controls-a23-plaintext (the body rendered as markup: A23.2 red).
  * A23.7 turns red on a --email-off stack built with controls-email-off.
- * A23.2b's oracle passes on a stack built with a23-fix-removed-participant
- * (the fix direction: mail only current members), so its red is the product.
- * A23.6's judgement of an unanswered request was checked by mutating a copy:
- * a refusal recorded before the cut-off FAILS, a cut-off before the send is
- * INCONCLUSIVE; and a notice that never comes on a quiet stack FAILS.
+ * A23.2b catches a recipient path that omits the current read-access check.
+ * lib/mail/outcome.mjs is self-tested against early, late and absent refusals:
+ * cutoffs stay INCONCLUSIVE and real non-200 application answers stay FAIL.
+ * A notice that never comes on a quiet stack still FAILS.
  */
 
 import assert from "node:assert/strict";
 import { after } from "node:test";
+import { eventually } from "../../lib/assert.mjs";
 import { answered, currentTarget, isHostingCutoff, precondition, scenario } from "../../lib/test.mjs";
 import { cast, castUnverified, localEmail, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, mintToken, openSession } from "../../lib/session.mjs";
 import { createFolder, createTeam, publish, readFixture, updateUpload } from "../../lib/seed.mjs";
 import { shareFolder, shareMany, teamMembers, unshare } from "../../lib/grant.mjs";
-import { closeAdmin, readDoc } from "../../lib/admin.mjs";
+import { adminFor, closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { logMark, waitForLog } from "../../lib/logs.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
+import { judgeProviderFailureResponse } from "../../lib/mail/outcome.mjs";
 import { anchorIn as anchorInText, webReply, webThread as webThreadAt } from "../../lib/web.mjs";
 
 const target = currentTarget();
@@ -230,6 +233,10 @@ const idsFor = (prefix) => {
 /** A message's text part as lines (CRLF folded). */
 const linesOf = (msg) => String(msg?.Text ?? "").replace(/\r\n/g, "\n").split("\n").map((l) => l.trimEnd());
 const htmlOf = (msg) => String(msg?.HTML ?? "");
+/** React may place comment separators between text nodes; content must still survive in HTML. */
+const htmlText = (msg) => htmlOf(msg).replace(/<!--[\s\S]*?-->/g, "");
+const escaped = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
+const htmlContains = (msg, text, what) => assert.ok(htmlText(msg).includes(escaped(text)), `the HTML notice carries ${what}`);
 
 /**
  * The newest message with exactly this subject to `to`, once it has arrived
@@ -309,6 +316,10 @@ scenario("A23.1 one invitation per new member for a document, a folder and a tea
   assert.equal(fshare.status, 200, `POST /folder-access: ${fshare.text.slice(0, 200)}`);
   assert.ok((await readDoc(target, `docs/${filed}`)).members.includes(iFolder), "the filed document reached the folder's new reader");
   assert.deepEqual(await sends(iFolder), [[sharedSubject(me, fname), 200]], "one invitation, the folder's: the filed document sends none of its own");
+  ctx.step("publish another document into the already shared folder: the existing reader gains access, with no new invitation");
+  const filedAfter = await newDoc(O, "a231-filed-after", `A23.1 filed after share ${t}`, { folderId });
+  assert.ok((await readDoc(target, `docs/${filedAfter}`)).members.includes(iFolder), "publishing into a shared folder reaches its existing reader");
+  assert.deepEqual(await sends(iFolder), [[sharedSubject(me, fname), 200]], "filing into an already shared folder sends no document invitation");
   const fagain = answered(await folderGrant(O, folderId, iFolder), "the repeated POST /folder-access");
   assert.equal(fagain.status, 200, `the folder re-grant: ${fagain.text.slice(0, 200)}`);
   assert.equal((await sends(iFolder)).length, 1, "a folder re-grant sent another invitation");
@@ -426,6 +437,8 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
   assert.ok(l1.includes(`Reply in context: ${target.origin}/d/${docId}/v2`), `the link is /d/<doc>/<version>: ${JSON.stringify(l1)}`);
   assert.ok(htmlOf(m1).includes(`href="${target.origin}/d/${docId}/v2"`), "the HTML button links to /d/<doc>/<version>");
   assert.ok(!/Posted via/.test(htmlOf(m1)), "a web comment's HTML carries no via line");
+  htmlContains(m1, QUOTE, "the quoted passage");
+  htmlContains(m1, opening, "the comment body");
 
   ctx.step("an agent's notice: via MCP in both parts, <b>x</b> literal in the text part and escaped in the HTML part");
   const l2 = linesOf(m2);
@@ -434,6 +447,7 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
   assert.ok(l2.includes(agentBody), `the text part carries the body literally, <b>x</b> included: ${JSON.stringify(l2)}`);
   assert.ok(!htmlOf(m2).includes("<b>x</b>"), "the HTML part carries <b>x</b> as markup: a comment body was rendered as HTML");
   assert.ok(htmlOf(m2).includes("&lt;b&gt;x&lt;/b&gt;"), "the HTML part shows <b>x</b> escaped, as text");
+  htmlContains(m2, agentBody, "the complete escaped agent body");
   assert.ok(l2.includes(`Reply in context: ${target.origin}/d/${doc2}/v1`), `the agent's notice links to /d/<doc>/<version>: ${JSON.stringify(l2)}`);
 
   ctx.step("Q opens another thread on D; W, then K reply in P2's thread on D and in P3's on D3");
@@ -472,43 +486,11 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
 
 // --- A23.2b ---------------------------------------------------------------------
 
-/**
- * X-a23-email-1 is CLASS I: the product matches the SPEC, and the result is
- * harmful. It is not a P, because no SPEC sentence excludes a participant
- * who was removed:
- *   SPEC §14 spec.md:1372-1373 "recipients = owner + prior thread participants −
- *     the author" names prior participants without exception, and spec.md:1381-1382
- *     has a withdrawal reach "the owner and everybody who has written in the
- *     thread". onCommentCreated does exactly that: functions/src/index.ts:2972-2975
- *     adds every sibling comment's author and never reads doc.members for them.
- *   The only thing the SPEC lets a removed member keep is in §17 (Caching), not §6:
- *     spec.md:1763-1764 "what the window concedes is that someone removed from a
- *     document keeps, for up to a day, the images their own browser already
- *     held" (the same point in §2 GET /thumb, spec.md:265-266). Those are images
- *     the browser already held. New content is not among them.
- * The harm is concrete, and it crosses the read boundary the SPEC draws
- * elsewhere: SPEC §4 spec.md:539 "`members` is the EFFECTIVE read set", and
- * SPEC §17 spec.md:1599-1601, where who can read a private document's bytes is
- * "owner + members". The threat model's asset table states the protection
- * (it is not normative): threat-model.md:9 "Document bytes … owner + `members`"
- * and :11 "Reviewer identities (annotations, comments) … anyone with an account
- * who can read the document". After POST /access removes R, GET /content
- * answers R 404. Yet every later reply's notice mails R up to 300 characters
- * of the anchored passage (index.ts:2979), up to 2000 characters of the new
- * comment (index.ts:2982-2983) and, in its subject, the commenter's address.
- * Making it a P needs §14 to add "− anyone who can no longer read the
- * document", which changes normative behaviour: that is the ask. The
- * oracle is the last assertion alone. Everything before it is setup: a
- * precondition, a wait or an answered() response, so a broken step FAILS
- * or ends INCONCLUSIVE, and none of it can be booked as this defect. With
- * e2e/patches/a23-fix-removed-participant (mail sibling authors only while
- * they are in doc.members), it reports "passed unexpectedly".
- */
+/** Notices carry private content, so a former participant must still be able to read it (SPEC §14, §17). */
 scenario("A23.2b a participant whose access to the document was removed is told nothing of later comments in their thread (a notice carries the passage and the comment)", {
   tiers: LOCAL,
   effects: ["email:POST /access", "email:comment"],
   needs: ["email", "mailpit"],
-  defect: "X-a23-email-1",
   timeoutMs: 600_000,
   inconclusiveOnFunctionKill: true,
 }, async (ctx) => {
@@ -550,7 +532,7 @@ scenario("A23.2b a participant whose access to the document was removed is told 
     leaked.push({ subject: m.Subject, quotesThePassage: text.includes(QUOTE), carriesALaterComment: later.some((b) => text.includes(b)) });
   }
   ctx.ev.json("removed-participant-mail", leaked);
-  assert.deepEqual(leaked, [], "X-a23-email-1, class I (matches the SPEC, harmful): a reader removed from the document, to whom GET /content now answers 404, was mailed the thread's later comments, with the passage and the commenter's address. It matches SPEC §14 spec.md:1372-1373 \"recipients = owner + prior thread participants − the author\", which excludes no one who was removed. It crosses SPEC §4 spec.md:539 \"`members` is the EFFECTIVE read set\" and §17 spec.md:1599-1601 (a private document's bytes: \"owner + members\"). The only thing the SPEC lets a removed member keep is §17 spec.md:1763-1764: the images their browser already held, for up to a day");
+  assert.deepEqual(leaked, [], "a removed reader receives no later comments or quoted document bytes");
 });
 
 // --- A23.3 ----------------------------------------------------------------------
@@ -600,6 +582,10 @@ scenario("A23.3 a suggestion notice reaches the owner and every approver, less i
     assert.ok(l.includes(note), `the author's note: ${JSON.stringify(l)}`);
     assert.ok(l.includes(`Review it in context: ${target.origin}/d/${docId}/v1`), `the link: ${JSON.stringify(l)}`);
     assert.ok(htmlOf(m).includes("You received this because you can accept or reject edits to this document."), "the suggestion branch's footnote");
+    htmlContains(m, QUOTE, "the suggestion quote");
+    htmlContains(m, `Suggested replacement: ${replacement}`, "the suggested replacement");
+    htmlContains(m, note, "the suggestion author's note");
+    assert.ok(htmlOf(m).includes(`href="${target.origin}/d/${docId}/v1"`), "the HTML suggestion links to its version");
   }
 
   ctx.step("the approver's deletion: the owner and the other approver are told, via MCP, with no generated restatement as its body");
@@ -609,6 +595,9 @@ scenario("A23.3 a suggestion notice reaches the owner and every approver, less i
     assert.ok(l.includes(`On: "${DEL}"`), `the quote: ${JSON.stringify(l)}`);
     assert.ok(l.includes("Suggested: delete this."), `a deletion says so: ${JSON.stringify(l)}`);
     assert.ok(!l.some((x) => x.startsWith("Suggested deleting")), `the generated opener is not repeated as a body: ${JSON.stringify(l)}`);
+    htmlContains(m, DEL, "the deletion quote");
+    htmlContains(m, "Suggested: delete this.", "the deletion instruction");
+    assert.ok(!htmlText(m).includes("Suggested deleting"), "the HTML deletion does not repeat the generated opener");
   }
 
   ctx.step("held 10 s: an editor, a viewer and the suggester are told nothing; the approver who suggested is not told of their own suggestion");
@@ -682,6 +671,58 @@ scenario("A23.4 cooldowns: a second comment on a document within 30 min sends th
   assert.deepEqual(keys, [d1, `${d1}:suggestions`, d2].sort(), "the owner's cooldown keys");
 });
 
+// --- A23.4b ---------------------------------------------------------------------
+
+scenario("A23.4b an expired comment or suggestion cooldown permits a new notice on the same document", {
+  tiers: LOCAL,
+  effects: ["email:POST /access", "email:comment", "email:suggestion"],
+  needs: ["email", "mailpit", "admin-emulator"],
+  timeoutMs: 600_000,
+  inconclusiveOnFunctionKill: true,
+}, async (ctx) => {
+  const t = tag();
+  const { owner: O, before: C, after: W } = await people(["owner", "before", "after"]);
+  const title = `A23.4b expires ${t}`;
+  const docId = await newDoc(O, "a234b-expiry", title);
+  await shareAll(O, docId, [{ account: C.account, role: "suggester" }, { account: W.account, role: "suggester" }]);
+  const box = mailbox(target, { http: ctx.http({ actor: "mailpit" }) });
+  const [fsC, fsW] = await Promise.all([webClient(ctx, C.account), webClient(ctx, W.account)]);
+  const comment = (fs, who, label) => webThread(fs, who.account, { docId, versionId: "v1", elementId: "e2e-7", exact: "Garnet delta orchard hollow", body: `A23.4b ${label} ${t}`, annId: `a234b${rand4()}${rand4()}` });
+  ctx.step("first notices claim both cooldowns through real comment and suggestion requests");
+  await comment(fsC, C, "before expiry");
+  await arrived(ctx, box, O.account.email, commentedSubject(C.account.email, title));
+  await webSuggest(C, { docId, elementId: "e2e-8", exact: "Basil walnut quarry jasper", replacement: "Basil walnut quarry agate" });
+  await arrived(ctx, box, O.account.email, suggestedSubject(C.account.email, title));
+
+  // Local fixture clock movement only: every new notice below still traverses
+  // the real trigger, access check, cooldown transaction, template and provider.
+  // Age one key at a time so pruning cannot hide a never-expires suggestion bug.
+  const ref = adminFor(target).db.doc(`users/${O.uid}`);
+  const expire = async (key) => {
+    const data = await readDoc(target, `users/${O.uid}`);
+    precondition(typeof data?.emailCooldowns?.[key] === "number", "the real trigger claimed the cooldown before it is aged");
+    const aged = Date.now() - 31 * 60 * 1000;
+    await ref.update({ emailCooldowns: { ...data.emailCooldowns, [key]: aged } });
+    return aged;
+  };
+  ctx.step("age this account's comment cooldown past 30 minutes, then post a new comment on the same document");
+  const oldComment = await expire(docId);
+  await comment(fsW, W, "after expiry");
+  await arrived(ctx, box, O.account.email, commentedSubject(W.account.email, title));
+  assert.ok((await readDoc(target, `users/${O.uid}`)).emailCooldowns[docId] > oldComment, "the expired comment cooldown is claimed again");
+
+  ctx.step("age the suggestion cooldown independently, then propose another edit on the same document");
+  const oldSuggestion = await expire(`${docId}:suggestions`);
+  await webSuggest(W, { docId, elementId: "e2e-10", exact: "Basil marble saffron lantern", replacement: "Basil marble saffron candle" });
+  await arrived(ctx, box, O.account.email, suggestedSubject(W.account.email, title));
+  assert.ok((await readDoc(target, `users/${O.uid}`)).emailCooldowns[`${docId}:suggestions`] > oldSuggestion, "the expired suggestion cooldown is claimed again");
+  await settleAll(box, {
+    [O.account.email]: [commentedSubject(C.account.email, title), suggestedSubject(C.account.email, title), commentedSubject(W.account.email, title), suggestedSubject(W.account.email, title)],
+    [C.account.email]: [sharedSubject(O.account.email, title)],
+    [W.account.email]: [sharedSubject(O.account.email, title)],
+  });
+});
+
 // --- A23.5 ----------------------------------------------------------------------
 
 scenario("A23.5 a decision is mailed as a comment: a rejection reaches the suggester with its reason, an agent's acceptance says via MCP, a withdrawal reaches the owner; none as a suggestion notice, none to the decider", {
@@ -721,12 +762,14 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   const [mr, ma] = await Promise.all([arrived(ctx, box, S.account.email, commentedSubject(me, title)), arrived(ctx, box, S.account.email, commentedSubject(me, t2))]);
   const lr = linesOf(mr);
   assert.equal(lr[0], `${me} commented on "${title}".`, "a rejection is a comment notice, from the decider, with no via marker");
+  htmlContains(mr, `Rejected: ${reason}`, "the rejection and reason");
   assert.ok(lr.includes(`Rejected: ${reason}`), `the decision note and its reason: ${JSON.stringify(lr)}`);
   assert.ok(lr.includes(`Reply in context: ${target.origin}/d/${docId}/v1`), `the comment branch's link: ${JSON.stringify(lr)}`);
   assert.ok(!lr.some((l) => l.startsWith("Suggested")), `no suggestion line in a decision: ${JSON.stringify(lr)}`);
   assert.ok(htmlOf(mr).includes("You received this because you own this document or replied in this thread."), "the comment branch's footnote");
   const la = linesOf(ma);
   assert.equal(la[0], `${me} commented on "${t2}" (via MCP).`, "an agent's acceptance is a comment notice that says via MCP");
+  htmlContains(ma, "Accepted.", "the acceptance");
   assert.ok(la.includes("Accepted."), `the decision note: ${JSON.stringify(la)}`);
   assert.ok(la.includes(`Reply in context: ${target.origin}/d/${doc2}/v1`), `the link: ${JSON.stringify(la)}`);
 
@@ -736,6 +779,7 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   assert.deepEqual({ status: wd.status, state: wd.json?.state }, { status: 200, state: "withdrawn" }, `withdraw: ${wd.text.slice(0, 200)}`);
   const mw = await arrived(ctx, box, me, commentedSubject(S.account.email, title));
   const lw = linesOf(mw);
+  htmlContains(mw, "Withdrawn.", "the withdrawal");
   assert.ok(lw.includes("Withdrawn."), `the withdrawal note: ${JSON.stringify(lw)}`);
   assert.ok(lw.includes(`Reply in context: ${target.origin}/d/${docId}/v1`), `the link: ${JSON.stringify(lw)}`);
 
@@ -747,36 +791,6 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
 });
 
 // --- A23.6 ----------------------------------------------------------------------
-
-/**
- * A23.6's own requests: a status that is not 200 FAILS, but for Hosting's
- * cut-off, which `timedOut` judges. An assertion: the lib never excuses one.
- */
-function notAnswered200(r, what) {
-  return new assert.AssertionError({ message: `${what} answered ${r.status} when the provider refused the send: ${r.text.slice(0, 200)}`, actual: r.status, expected: 200, operator: "strictEqual" });
-}
-
-/**
- * One of A23.6's requests got no answer (Hosting's cut-off 504 at 60 s, or
- * http.mjs's deadline): could the refused send have caused it? Only if the
- * provider refused it BEFORE the request was cut off. So the cut-off is the
- * stack's load, and the case INCONCLUSIVE, when the shim had seen no send to
- * the refused recipient by the time the request was answered (the product had
- * not reached the send under test: setAccess grants, then awaits the
- * invitations, then answers). A refusal the shim recorded before that FAILS
- * the case: the request was refused a send and then not answered for the rest
- * of the 60 s. This is why A23.6 never passes these three through answered().
- * @returns {Promise<string>} why the cut-off is INCONCLUSIVE
- */
-async function timedOut({ shim, to, what, sentAt, answeredAt }) {
-  const seen = await shim.requests({ to });
-  const before = seen.filter((x) => Date.parse(x.at) <= answeredAt);
-  if (before.length === 0) {
-    const later = seen.length ? `${Math.round((Date.parse(seen[0].at) - answeredAt) / 1000)} s after the cut-off` : "not at all yet";
-    return `${what}: no answer after ${Math.round((answeredAt - sentAt) / 1000)} s (Hosting's cut-off 504 or http.mjs's deadline), and the product had not yet reached the send under test (the shim saw it ${later})`;
-  }
-  throw new assert.AssertionError({ message: `${what} got no answer (Hosting's cut-off 504 or http.mjs's deadline): the provider refused its send ${Math.round((Date.parse(before[0].at) - sentAt) / 1000)} s in, and the request was not answered by ${Math.round((answeredAt - sentAt) / 1000)} s`, actual: 504, expected: 200, operator: "strictEqual" });
-}
 
 scenario("A23.6 when the provider refuses a send (shim 500), POST /access, /folder-access and /team-members still answer 200 with the grant made, the next recipient in the same request still gets theirs, and the product logs the failure", {
   tiers: LOCAL,
@@ -821,10 +835,12 @@ scenario("A23.6 when the provider refuses a send (shim 500), POST /access, /fold
       await timed("POST /team-members", fTeam, () => teamAdd(O, teamId, [fTeam])),
     ];
     const gaveUp = (a) => a.clientTimeout === true || isHostingCutoff(a.res);
-    for (const a of asked) if (a.res.status !== 200 && !gaveUp(a)) throw notAnswered200(a.res, a.what);
     const load = [];
-    for (const a of asked) if (gaveUp(a)) load.push(await timedOut({ shim, ...a }));
-    if (load.length > 0) ctx.inconclusive(`the stack's load, not the refusal: ${load.join("; ")}`);
+    for (const a of asked) {
+      const outcome = judgeProviderFailureResponse({ ...a, cutOff: gaveUp(a), requests: gaveUp(a) ? await shim.requests({ to: a.to }) : [] });
+      if (outcome.verdict === "INC") load.push(outcome.reason);
+    }
+    if (load.length > 0) ctx.inconclusive(`provider-failure response not measured: ${load.join("; ")}`);
     const [r, , tr] = asked.map((a) => a.res);
     assert.ok(r.json.members.includes(fDoc) && r.json.members.includes(okDoc), `both were granted: ${JSON.stringify(r.json.members)}`);
     assert.ok((await readDoc(target, `docs/${docId}`)).members.includes(fDoc), "the stored record holds the refused recipient's grant");
@@ -850,6 +866,88 @@ scenario("A23.6 when the provider refuses a send (shim 500), POST /access, /fold
     for (const to of failing) await shim.clear(to).catch(() => undefined);
   }
 });
+
+// --- A23.6b ---------------------------------------------------------------------
+
+scenario("A23.6b a refused verification send still answers 200, stores the verification attempt and logs the provider failure", {
+  tiers: LOCAL,
+  effects: ["email:POST /verify/start"],
+  needs: ["email", "mailpit", "mail-fail-recipient", "logs"],
+  timeoutMs: 300_000,
+  inconclusiveOnFunctionKill: true,
+}, async (ctx) => {
+  const U = await castUnverified(target, "failverify");
+  const http = ctx.http({ actor: "failverify" });
+  const box = mailbox(target, { http: ctx.http({ actor: "mailpit" }) });
+  const shim = shimControl(target, { http: ctx.http({ actor: "shim" }) });
+  const failure = `e2e A23.6b ${tag()} injected`;
+  const mark = logMark({ target });
+  try {
+    await shim.failRecipient(U.email, { status: 500, count: 1, body: { statusCode: 500, name: "application_error", message: failure } });
+    const start = answered(await http.postJson("/verify/start", {}, { headers: { authorization: `Bearer ${await idToken(target, U, { http })}` }, ...SLOW }), "POST /verify/start after provider refusal");
+    assert.deepEqual({ status: start.status, json: start.json }, { status: 200, json: { sent: true, email: U.email } }, "a refused verification send does not fail the request");
+    const record = (await readDoc(target, `users/${U.uid}`))?.verification;
+    assert.ok(record?.email === U.email && /^[a-f0-9]{64}$/.test(record.hash) && record.attempts === 0 && record.expiresAt > record.sentAt, "the verification attempt remains stored without exposing the code");
+    const requests = await shim.requests({ to: U.email });
+    assert.deepEqual(requests.map((r) => [r.status, r.injected, r.injectedFor]), [[500, true, U.email]], "the verification send reached the provider and consumed the injected refusal once");
+    assert.equal(await shim.pending(U.email), 0, "the verification failure was consumed");
+    await waitForLog(new RegExp(`\\[email\\] send failed: ${escapeRe(failure)}`), { target, since: mark, timeout: LOG_MS });
+    await settleAll(box, { [U.email]: [] });
+  } finally {
+    await shim.clear(U.email).catch(() => undefined);
+  }
+});
+
+/** A provider that never answers must not hold a persisted grant's response indefinitely. */
+async function heldProvider(ctx, stage) {
+  const { owner: O } = await people(["owner"]);
+  const t = tag();
+  const title = `Held provider ${stage} ${t}`;
+  const docId = await newDoc(O, `a236-${stage}`, title);
+  const held = localEmail(target, `held-${stage}`);
+  const next = localEmail(target, `after-held-${stage}`);
+  const shim = shimControl(target, { http: ctx.http({ actor: "shim" }) });
+  const box = mailbox(target, { http: ctx.http({ actor: "mailpit" }) });
+  const mark = logMark({ target });
+  await shim.holdRecipient(held, { stage });
+  let pending;
+  try {
+    const started = Date.now();
+    pending = access(O, docId, [{ account: held }, { account: next }]);
+    pending.catch(() => undefined);
+    await eventually(async () => (await shim.held(held)).received === 1, { timeout: 90_000, interval: 100, message: "the provider has actually received the held send" });
+    // The product's ten-second provider clock starts before this observation.
+    // A very late cold start leaves no Hosting budget to measure the deadline.
+    if (Date.now() - started > 35_000) ctx.inconclusive("the held send arrived too late to measure its deadline before Hosting's cutoff");
+    let timer;
+    const timedOut = Symbol("provider still held");
+    let result;
+    try {
+      result = await Promise.race([pending, new Promise((resolve) => { timer = setTimeout(() => resolve(timedOut), 25_000); })]);
+    } finally { clearTimeout(timer); }
+    assert.notEqual(result, timedOut, "the persisted grant answers while the provider is still held, within the provider deadline and response allowance");
+    assert.equal(result.status, 200, "a provider timeout does not fail the grant request");
+    assert.ok(result.json.members.includes(held) && result.json.members.includes(next), "both recipients retain the granted access");
+    const state = await eventually(async () => { const state = await shim.held(held); return state.closed === 1 ? state : false; }, { timeout: 5000, message: "the timed-out provider connection was cancelled" });
+    assert.deepEqual({ armed: state.armed, received: state.received, closed: state.closed, pending: state.pending }, { armed: true, received: 1, closed: 1, pending: 0 }, "the request completed by cancelling the still-armed provider, without releasing it");
+    assert.deepEqual((await shim.requests({ to: next })).map((request) => request.status), [200], "the next recipient still receives their invitation after the timeout");
+    await waitForLog(/\[email\] send failed: provider timed out after 10000 ms/, { target, since: mark, timeout: LOG_MS });
+    await settleAll(box, { [held]: [], [next]: [sharedSubject(O.account.email, title)] });
+  } finally {
+    await shim.release(held).catch(() => undefined);
+    await pending?.catch(() => undefined);
+  }
+}
+
+scenario("A23.6c an unanswered provider request is cancelled and the grant answers 200 while the provider is still held", {
+  tiers: LOCAL, effects: ["email:POST /access"], needs: ["email", "mailpit", "mail-fail-recipient", "mail-hold-recipient", "logs"],
+  timeoutMs: 420_000, inconclusiveOnFunctionKill: true,
+}, async (ctx) => heldProvider(ctx, "headers"));
+
+scenario("A23.6d an incomplete provider response body shares the send deadline and cannot hold the grant response", {
+  tiers: LOCAL, effects: ["email:POST /access"], needs: ["email", "mailpit", "mail-fail-recipient", "mail-hold-recipient", "logs"],
+  timeoutMs: 420_000, inconclusiveOnFunctionKill: true,
+}, async (ctx) => heldProvider(ctx, "body"));
 
 // --- A23.7 ----------------------------------------------------------------------
 

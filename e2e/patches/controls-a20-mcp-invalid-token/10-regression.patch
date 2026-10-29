@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -231,5 +231,5 @@
+     // `resource_metadata` is what lets an OAuth-capable client find the
+     // sign-in; Claude starts it only from a 401 that carries it.
+-    res.setHeader("WWW-Authenticate", challenge(req, token !== null));
++    res.setHeader("WWW-Authenticate", challenge(req, false));
+     res
+       .status(401)

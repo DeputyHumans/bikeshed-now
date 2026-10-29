@@ -1,0 +1,13 @@
+{
+  "oracle": "^I2:",
+  "what": "c02 caret",
+  "target": {
+    "spec": "e2e/specs/concurrency/c01-typing.spec.mjs",
+    "case": "C2 same-paragraph typing: N editors type tokens at the end of one paragraph at once, past the live log's compaction; every peer converges (I1) and the document keeps its shape (I3) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^I2:"
+  }
+}

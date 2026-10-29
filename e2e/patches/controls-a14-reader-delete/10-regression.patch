@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -491,7 +491,7 @@
+         id: "delete",
+         label: "Delete folder",
+         danger: true,
+-        disabled: !isOwner,
++        disabled: false,
+         reason: `Only ${folder.ownerEmail} can delete this folder.`,
+         onSelect: () => {
+           // Worth confirming, and worth saying what actually happens: nothing

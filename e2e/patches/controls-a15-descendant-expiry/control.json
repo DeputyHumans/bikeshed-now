@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.3b a key opens only the document it was presented for: a parent reached only by its key is hidden from the fork's lineage, even with that key in the request, until the caller holds the parent's link grant",
+  "what": "Keep expired public descendants visible in the owner inventory.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.3b a key opens only the document it was presented for: a parent reached only by its key is hidden from the fork's lineage, even with that key in the request, until the caller holds the parent's link grant",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^an expired public descendant is counted but hidden"
+  }
+}

@@ -1,0 +1,8 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -343,5 +343,4 @@
+    descendant selector. When it lived on .viewer, the first never matched — the
+    header is a sibling of <main> — and presenting left it on screen. */
+-.is-presenting .app-header,
+ .is-presenting .viewer-toolbar,
+ .is-presenting .viewer-banners,

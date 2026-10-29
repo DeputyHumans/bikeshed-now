@@ -19,11 +19,9 @@
  *           opens it too. Escape closes the
  *           overview and nothing else, even while presenting; with the
  *           overview shut it is left untouched (not defaultPrevented).
- *   A16.1b  "the navigator appears only above two slides" (SPEC §6d), read
- *           literally: a deck of exactly two viewport-tall slides gets no
- *           navigator. Tagged X-a16-decks-2: DocViewer.tsx gates on
- *           `slides.length > 1`, so two slides do get one. A SPEC question as
- *           much as a defect: either the sentence or the code has to move.
+ *   A16.1b  a recognized two-slide deck keeps its rail and navigation; a
+ *           single slide has no navigator. X-a16-decks-2 was a specification
+ *           mismatch: useful two-slide navigation is retained (SPEC §6d).
  *   A16.2   flat Q: every paging key on the parent scrolls the frame to the
  *           right slide and the rail follows; a key inside the frame too.
  *           Stacked D (trusted): a parent ArrowRight, a rail click, End and
@@ -391,10 +389,22 @@ scenario("A16.1 the rail and the slide buttons appear for viewport-tall decks of
     const s = await openDeck(o, docs[key], { expectRail: false });
     assert.deepEqual({ rail: s.rail, slidesButton: s.slidesButton, allSlidesButton: s.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, `${why}: no navigator`);
     await focusParent(o);
+    await o.page.evaluate(() => {
+      window.__e2eUnpagedKeys = [];
+      const heard = (event) => {
+        if (!["o", "ArrowDown"].includes(event.key)) return;
+        queueMicrotask(() => {
+          window.__e2eUnpagedKeys.push({ key: event.key, prevented: event.defaultPrevented });
+          if (window.__e2eUnpagedKeys.length === 2) window.removeEventListener("keydown", heard);
+        });
+      };
+      window.addEventListener("keydown", heard);
+    });
     await o.page.keyboard.press("o");
     await o.page.keyboard.press("ArrowDown");
     const after = await eventually(async () => ({ v: await viewerState(o), f: await frameState(o) }), { timeout: 3_000, interval: 150, stableSamples: 5, message: `${why}: steady after o and ArrowDown` });
     assert.deepEqual({ overview: after.v.overview, y: after.f.y }, { overview: 0, y: 0 }, `${why}: o drew no overview and ArrowDown did not page the frame`);
+    assert.deepEqual(await o.page.evaluate(() => window.__e2eUnpagedKeys), [{ key: "o", prevented: false }, { key: "ArrowDown", prevented: false }], "unpaged sections keep their overview and paging keys");
   }
 
   ctx.step("Q again: o on the parent opens the overview (eight cards, focus on the current one); O closes it");
@@ -463,9 +473,8 @@ scenario("A16.1 the rail and the slide buttons appear for viewport-tall decks of
   noPageErrors([o]);
 });
 
-scenario("A16.1b a deck of exactly two viewport-tall slides gets no navigator: \"the navigator appears only above two slides\" (SPEC §6d)", {
+scenario("A16.1b a recognized two-slide deck has a navigator that reaches both slides; a single slide has none (SPEC §6d)", {
   tiers: ["local", "prod"],
-  defect: "X-a16-decks-2",
   timeoutMs: 300_000,
   ...STALLS,
 }, async (ctx) => {
@@ -473,16 +482,34 @@ scenario("A16.1b a deck of exactly two viewport-tall slides gets no navigator: \
   const t = tag();
   const three = (await publish(owner.http, { body: sectionsDoc({ n: 3, minHeight: "100vh" }), filename: "index.html", title: `Three ${t}`, name: "a161b-three", patient: { ctx, stopAt: "budget" } })).docId;
   const two = (await publish(owner.http, { body: sectionsDoc({ n: 2, minHeight: "100vh" }), filename: "index.html", title: `Two ${t}`, name: "a161b-two", patient: { ctx, stopAt: "budget" } })).docId;
+  const one = (await publish(owner.http, { body: sectionsDoc({ n: 1, minHeight: "100vh" }), filename: "index.html", title: `One ${t}`, name: "a161b-one", patient: { ctx, stopAt: "budget" } })).docId;
   const o = await ownerBrowser(ctx, accounts[0]);
 
   ctx.step("control: the same slides, three of them, get the navigator (so the slides are detected and measured paged)");
   const s3 = await openDeck(o, three);
   precondition(s3.rail === 3 && s3.slidesButton, `three viewport-tall slides get a rail of three (got ${JSON.stringify({ rail: s3.rail, slidesButton: s3.slidesButton })})`);
 
-  ctx.step("two of them: no rail, no Slides, no All slides");
+  ctx.step("two of them: both rail entries, Slides and All slides remain available");
   const s2 = await openDeck(o, two, { expectRail: false });
   ctx.ev.json("two-slides", s2);
-  assert.deepEqual({ rail: s2.rail, slidesButton: s2.slidesButton, allSlidesButton: s2.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, "two slides are not above two: no navigator");
+  assert.deepEqual({ rail: s2.rail, slidesButton: s2.slidesButton, allSlidesButton: s2.allSlidesButton }, { rail: 2, slidesButton: true, allSlidesButton: true }, "a recognized two-slide deck has its navigator");
+  const layout = await frameState(o);
+  precondition(layout.offsets.length === 2 && layout.offsets[1] > layout.offsets[0], "the two slides occupy separate pages");
+  const reaches = async (index) => eventually(async () => {
+    const frame = await frameState(o);
+    const viewer = await viewerState(o);
+    return Math.abs(frame.y - layout.offsets[index]) <= 2 && viewer.current === index;
+  }, { timeout: 5_000, interval: 100, stableSamples: 3, message: `two-slide navigation reaches ${index + 1}` }).catch(() => false);
+  await o.page.locator(".slide-rail .slide-thumb").nth(1).click();
+  assert.equal(await reaches(1), true, "the two-slide navigator reaches the second slide");
+  await focusParent(o);
+  await o.page.keyboard.press("Home");
+  assert.equal(await reaches(0), true, "the two-slide navigator returns to the first slide");
+
+  ctx.step("a single recognized slide needs no navigator");
+  const s1 = await openDeck(o, one, { expectRail: false });
+  assert.deepEqual({ rail: s1.rail, slidesButton: s1.slidesButton, allSlidesButton: s1.allSlidesButton }, { rail: 0, slidesButton: false, allSlidesButton: false }, "a single slide has no navigator");
+  noPageErrors([o]);
 });
 
 // --- A16.2 ----------------------------------------------------------------------
@@ -542,14 +569,21 @@ scenario("A16.2 keys scroll a flat deck and the rail follows; on a stacked trust
   precondition(d0.offsets.every((top) => top === d0.offsets[0]), `D's slides share one top (stacked): ${JSON.stringify(d0.offsets)}`);
   precondition((await o.page.evaluate(() => document.querySelector("iframe.doc-frame").getAttribute("sandbox"))) === null, "the trusted deck's frame is unsandboxed");
   await settleFrame(o, ".deck > section", "D at load");
+  await (await o.frame()).evaluate(() => {
+    window.__a16Keys = [];
+    document.addEventListener("keydown", (e) => window.__a16Keys.push({ key: e.key, trusted: e.isTrusted }), true);
+  });
 
   // Act, wait until the deck moved at all, let its transition finish, then say where it is.
   const dStep = async (what, act, want, message = `${what}: D shows slide ${want + 1} and the frame did not scroll`) => {
     const from = (await frameState(o, ".deck > section")).active;
+    const keyMark = await (await o.frame()).evaluate(() => window.__a16Keys.length);
     await act();
     await eventually(async () => (await frameState(o, ".deck > section")).active !== from, { timeout: 5_000, message: `${what}: the deck moved off slide ${from + 1}` });
     const s = await settleFrame(o, ".deck > section", what);
     assert.deepEqual(s, { y: 0, active: want }, message);
+    const keys = await (await o.frame()).evaluate((mark) => window.__a16Keys.slice(mark), keyMark);
+    if (!what.includes("inside the frame")) assert.deepEqual(keys, Array.from({ length: Math.abs(want - from) }, () => ({ key: want > from ? "ArrowRight" : "ArrowLeft", trusted: false })), `${what}: stacked navigation dispatches the exact synthetic deck keys`);
   };
   await focusParent(o);
   await dStep("ArrowRight on the parent", () => o.page.keyboard.press("ArrowRight"), 1);
@@ -586,40 +620,9 @@ scenario("A16.2 keys scroll a flat deck and the rail follows; on a stacked trust
   noPageErrors([o]);
 });
 
-/**
- * X-a16-decks-1, CLASS I: the product does what SPEC §6d says, and the harm is
- * concrete. Ask at G1: any fix (re-reading once the deck's transitions end, or
- * not letting the observer overwrite goTo's position) changes normative text.
- *
- * SPEC §6d spec.md:891-895: "When every slide's rect shares a top, navigation
- * instead presses the arrow keys the deck already answers to, dispatched into
- * the frame, and reads position from which slide is *shown* (`display`,
- * `visibility`, `opacity`, a translating `transform` — the same four the
- * preview undoes) with the deck's own attribute changes as the signal, since
- * nothing scrolls." useDeck does exactly that: a MutationObserver on class and
- * style (useDeck.ts:184-189) runs measure() (:174-180), which reads shownSlide
- * (:67-69; deck.ts isShown :318-326, shownIndex :333-336). At that mutation
- * D's incoming slide is at opacity 0 and the outgoing one stays visible for
- * 0.35 s (content/deck-animated/bundle/index.html:113, :118), so by the SPEC's
- * own four properties the outgoing slide IS the one shown, and that read
- * overwrites goTo's setCurrent (useDeck.ts:237-238). The SPEC names no later
- * signal, and the transition's end changes no attribute. No SPEC sentence
- * says one press moves one slide.
- *
- * The harm, on the repo's own animated sample: every other parent ArrowRight
- * presses nothing (next() aims at current + 1, which is the slide already
- * shown), and in between the rail marks the previous slide; the overview and
- * the presentation counter read the same `current` (DocViewer.tsx:1012,
- * :1087-1088, :1094).
- *
- * The oracle is the last assertion alone. The no-transitions twin is a
- * precondition, and every wait is setup: a deck that never settles FAILS (or
- * is INCONCLUSIVE on a stalled stack), so only [shown, marked] after the four
- * presses can make this case a TODO.
- */
+/** Computed visibility can finish moving after the deck's last attribute change. */
 scenario("A16.2b on the animated deck, trusted (stacked), four ArrowRight presses on the parent show slides 2 to 5 and the rail marks each", {
   tiers: ["local", "prod"],
-  defect: "X-a16-decks-1",
   timeoutMs: 300_000,
   ...STALLS,
 }, async (ctx) => {
@@ -668,7 +671,7 @@ scenario("A16.2b on the animated deck, trusted (stacked), four ArrowRight presse
   precondition(JSON.stringify(control) === JSON.stringify(want), `control: the stacked deck without transitions is driven one slide per press and the rail follows (got ${JSON.stringify(control)})`);
   const animated = await presses(docs.d, "D");
   ctx.ev.json("presses", { control, animated });
-  assert.deepEqual(animated, want, "X-a16-decks-1, CLASS I (the product does what SPEC §6d says; ask at G1): [slide shown, slide the rail marks] after each parent ArrowRight on the animated deck. SPEC §6d spec.md:891-895 reads position \"from which slide is *shown* … with the deck's own attribute changes as the signal\", and at that change D's outgoing slide is still the one shown (its 0.35 s opacity transition), so the read overwrites goTo's position (useDeck.ts:184-189, :237-238). Harm: every other press moves nothing, and the rail marks the previous slide on the repo's own animated sample. No SPEC sentence says one press moves one slide");
+  assert.deepEqual(animated, want, "the settled animated deck and its navigator advance once per ArrowRight");
 });
 
 // --- A16.3 ----------------------------------------------------------------------
@@ -697,11 +700,18 @@ scenario("A16.3 Present hides the chrome and shows a counter that follows the de
 }, async (ctx) => {
   const { owner, accounts } = await castWithOwner(ctx, []);
   const q = readSample(target, "deck-quarter-review");
-  const docId = (await publish(owner.http, { body: q.bytes, filename: q.filename, title: `Q ${tag()}`, name: "a163-q", patient: { ctx, stopAt: "budget" } })).docId;
+  const withScript = Buffer.from(q.bytes.toString("utf8").replace("</body>", "<script>window.a16Blocked = true;</script></body>"));
+  const docId = (await publish(owner.http, { body: withScript, filename: q.filename, title: `Q ${tag()}`, name: "a163-q", patient: { ctx, stopAt: "budget" } })).docId;
   const o = await ownerBrowser(ctx, accounts[0]);
   await openDeck(o, docId);
+  const heading = await (await o.frame()).locator("h1").first().textContent();
+  precondition(heading?.trim(), "the deck has a title to attach a real comment to");
+  await o.selectText("h1", heading.trim());
+  await o.comment("A16 presentation keeps this thread when leaving fullscreen");
+  await o.openComments();
+  await o.page.locator(".comments-panel .thread").first().waitFor({ state: "visible" });
   const before = await chromeState(o);
-  precondition(before.header === true && before.toolbar === true && before.rail === true, `the header, toolbar and rail are on screen before presenting: ${JSON.stringify(before)}`);
+  precondition(Object.values(before).every((value) => value === true), `the header, toolbar, script banner, comment thread and rail are on screen before presenting: ${JSON.stringify(before)}`);
   const hidden = (c) => ({ header: c.header, toolbar: c.toolbar, banners: c.banners === true, comments: c.comments === true, rail: c.rail });
   const allHidden = { header: false, toolbar: false, banners: false, comments: false, rail: false };
 
@@ -776,7 +786,7 @@ scenario("A16.4 the owner's browser posts Q's cover, then its slides, once each;
 }, async (ctx) => {
   const REV = Number(treeConstant(target, "functions/src/lib/thumbs.ts", "THUMB_REVISION"));
   const SETTLE_MS = Number(treeConstant(target, "app/src/viewer/useThumbCapture.ts", "SETTLE_MS"));
-  const CACHE_S = Number(treeConstant(target, "functions/src/lib/thumbs.ts", "THUMB_CACHE_SECONDS"));
+  const CACHE_S = 86_400; // SPEC §6d: one day; do not follow a regressed product constant.
 
   ctx.step("cast an owner, a viewer and a stranger; the owner publishes Q and shares it with the viewer");
   const { owner, accounts } = await castWithOwner(ctx, ["viewer", "stranger"]);
@@ -860,8 +870,11 @@ scenario("A16.4 the owner's browser posts Q's cover, then its slides, once each;
   await focusParent(v);
   await v.page.keyboard.press("o");
   const overview = await eventually(() => v.page.evaluate(() => {
+    // Opening is independent of the image renderer: a live-preview regression
+    // must reach the stored-image assertion rather than masquerade as no modal.
+    if (!document.querySelector(".slide-overview")) return false;
     const imgs = Array.from(document.querySelectorAll(".slide-overview .slide-overview-item img.slide-thumb-image")).map((i) => i.getAttribute("src"));
-    return imgs.length ? { imgs, frames: document.querySelectorAll(".slide-overview iframe.slide-thumb-frame").length } : false;
+    return { imgs, frames: document.querySelectorAll(".slide-overview iframe.slide-thumb-frame").length };
   }), { timeout: 5_000, message: "the overview opened" });
   assert.deepEqual(overview, { imgs: want, frames: 0 }, "the overview shows the same stored images");
   assert.deepEqual(thumbPosts(vWatch), [], "the viewer still posted nothing");
@@ -924,6 +937,7 @@ scenario("A16.5 POST /thumb refuses an r other than the deployment's, a version 
     ["r one above the deployment's", { doc: docId, v: "v2", kind: "cover", images: [tiny], r: REV + 1 }, 409, "captured by an older version of the app"],
     ["no r at all", { doc: docId, v: "v2", kind: "cover", images: [tiny] }, 409, "captured by an older version of the app"],
     ["a version that is not current", { doc: docId, v: "v1", kind: "cover", images: [tiny], r: REV }, 409, "not the current version"],
+    ["two images for one cover", { doc: docId, v: "v2", kind: "cover", images: [tiny, tiny], r: REV }, 400, "a cover is one image"],
     ["a PNG", { doc: docId, v: "v2", kind: "cover", images: [png], r: REV }, 400, "not a JPEG"],
     [`a JPEG of ${MAX_BYTES + 1} bytes`, { doc: docId, v: "v2", kind: "cover", images: [jpeg({ width: 1280, height: 720, total: MAX_BYTES + 1 })], r: REV }, 400, "image too large"],
     [`a JPEG ${MAX_SIDE + 1} px wide`, { doc: docId, v: "v2", kind: "cover", images: [jpeg({ width: MAX_SIDE + 1, height: 720 })], r: REV }, 400, "image too large"],

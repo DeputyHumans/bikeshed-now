@@ -1,0 +1,12 @@
+{
+  "oracle": "Untouched empty shared histories can be saved",
+  "what": "Reject an empty insertion vector even when the real shared body has never contained any CRDT items",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.14 an untouched empty shared body can save its empty causal history before publication",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "A11 empty history: the real editor's empty causal history must be accepted"
+  }
+}

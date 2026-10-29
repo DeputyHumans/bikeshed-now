@@ -1,0 +1,13 @@
+{
+  "oracle": "Apply expiry to existing feedback reads, breaking the documented read/list exception",
+  "what": "Apply expiry to existing feedback reads, breaking the documented read/list exception",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c6.Exp-V a viewer may not create, change or delete annotations and comments after expiry: DENY",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "c6 Exp-V: existing feedback remains readable under the member policy"
+  }
+}

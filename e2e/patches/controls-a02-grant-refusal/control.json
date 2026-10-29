@@ -1,0 +1,13 @@
+{
+  "oracle": "A2.grant-owner-only a link-grant holder may read, so the owner-only endpoints and /thumb refuse them 403, not 404",
+  "what": "controls-a02-grant-refusal",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-http.spec.mjs",
+    "case": "A2.grant-owner-only a link-grant holder may read, so the owner-only endpoints and /thumb refuse them 403, not 404",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "grant-holder owner-only:[\\s\\S]*want 403, got 404"
+  }
+}

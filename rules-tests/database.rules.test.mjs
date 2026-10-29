@@ -2,6 +2,7 @@
 // Presence is gated by a server-maintained mirror, not by the identity gate (SPEC §16).
 
 import { after, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { ref, get, set, serverTimestamp } from "firebase/database";
+import { ref, get, set, serverTimestamp, onDisconnect, goOffline } from "firebase/database";
 
 import { renderDatabaseRules } from "../config/policy.mjs";
 
@@ -71,7 +72,7 @@ describe("realtime database rules", () => {
 
   it("a member of the document may read presence", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(get(ref(db, "status/doc1")));
+    await assertSucceeds(get(ref(db, "status/doc1/peers")));
   });
 
   it("a signed-in stranger reads nothing, which is the whole point", async () => {
@@ -115,6 +116,95 @@ describe("realtime database rules", () => {
     );
   });
 
+  it("session records have immutable authenticated ownership while sibling tabs remain independent", async () => {
+    const memberDb = verified(env, MEMBER).database();
+    const otherDb = verified(env, OTHER).database();
+    const payload = (uid, email, mode = "edit") => ({ uid, email, mode, lastChanged: serverTimestamp() });
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-a"), payload(MEMBER.uid, MEMBER.email)));
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-b"), payload(MEMBER.uid, MEMBER.email, "view")));
+    await assertFails(set(ref(otherDb, "status/doc1/peers/session-a"), payload(OTHER.uid, OTHER.email, "view")));
+    await assertFails(set(ref(otherDb, "status/doc1/peers/session-a"), null));
+    await assertFails(set(ref(memberDb, "status/doc1/peers/session-forged"), payload(OTHER.uid, MEMBER.email)));
+    await assertFails(set(ref(memberDb, "status/doc1/peers/session-anonymous"), { email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() }));
+    await assertSucceeds(set(ref(memberDb, "status/doc1/peers/session-b"), null));
+    await assertSucceeds(get(ref(memberDb, "status/doc1/peers/session-a")));
+    const a = await get(ref(memberDb, "status/doc1/peers/session-a"));
+    if (a.val()?.mode !== "edit") throw new Error("the other tab's editor record must survive");
+  });
+
+  it("a new session can arm disconnect cleanup before its first presence write", async () => {
+    const db = verified(env, MEMBER).database();
+    const path = "status/doc1/peers/armed-before-write";
+    await assertSucceeds(onDisconnect(ref(db, path)).remove());
+    await assertSucceeds(set(ref(db, path), { uid: MEMBER.uid, email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() }));
+    goOffline(db);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      const deadline = Date.now() + 5000;
+      while ((await get(ref(adminDb, path))).exists() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal((await get(ref(adminDb, path))).exists(), false, "disconnect removes the newly announced reader");
+    });
+  });
+
+  it("disconnect cleanup rechecks ownership after an absent path is claimed by another account", async () => {
+    const attacker = verified(env, OTHER).database();
+    const member = verified(env, MEMBER).database();
+    const victim = "status/doc1/peers/claimed-after-arm";
+    const marker = "status/doc1/peers/disconnect-marker";
+    await assertSucceeds(onDisconnect(ref(attacker, victim)).remove());
+    await set(ref(member, victim), { uid: MEMBER.uid, email: MEMBER.email, mode: "view", lastChanged: serverTimestamp() });
+    await onDisconnect(ref(attacker, marker)).remove();
+    await set(ref(attacker, marker), { uid: OTHER.uid, email: OTHER.email, mode: "view", lastChanged: serverTimestamp() });
+    goOffline(attacker);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      const deadline = Date.now() + 5000;
+      while ((await get(ref(adminDb, marker))).exists() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal((await get(ref(adminDb, marker))).exists(), false, "the disconnect request reached the server");
+      assert.equal((await get(ref(adminDb, victim))).val()?.uid, MEMBER.uid, "a queued cleanup cannot remove another person's session");
+    });
+  });
+
+  it("revocation and expiry allow only deleting one's existing session or legacy record", async () => {
+    const doc = "revoked-presence";
+    const db = verified(env, MEMBER).database();
+    const otherDb = verified(env, OTHER).database();
+    const payload = { uid: MEMBER.uid, email: MEMBER.email, mode: "edit", lastChanged: serverTimestamp() };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.database();
+      await set(ref(adminDb, `presenceAccess/${doc}`), { [key(MEMBER.email)]: true, [key(OTHER.email)]: true, __expiresAt: Date.now() - 1 });
+      await set(ref(adminDb, `status/${doc}/peers/session`), { ...payload, lastChanged: 1 });
+      await set(ref(adminDb, `status/${doc}/peers/${MEMBER.uid}`), { email: MEMBER.email, mode: "edit", lastChanged: 1 });
+      await set(ref(adminDb, `status/${doc}/peers/${OTHER.uid}`), { uid: MEMBER.uid, email: MEMBER.email, mode: "edit", lastChanged: 1 });
+    });
+    await assertFails(set(ref(db, `status/${doc}/peers/session`), payload));
+    await assertFails(set(ref(otherDb, `status/${doc}/peers/${OTHER.uid}`), null));
+    await assertFails(set(ref(otherDb, `status/${doc}/peers/session`), null));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/session`), null));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `presenceAccess/${doc}/${key(MEMBER.email)}`), null);
+    });
+    await assertFails(set(ref(db, `status/${doc}/peers/new-session`), payload));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/${MEMBER.uid}`), null));
+  });
+
+  it("only current editors may announce edit, including after a same-person tab is downgraded", async () => {
+    const viewerDb = verified(env, OTHER).database();
+    const payload = { uid: OTHER.uid, email: OTHER.email, mode: "view", lastChanged: serverTimestamp() };
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), payload));
+    await assertFails(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), { ...payload, mode: "edit" }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `editAccess/doc1/${key(OTHER.email)}`), true);
+    });
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/editor-tab"), { ...payload, mode: "edit" }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), `editAccess/doc1/${key(OTHER.email)}`), null);
+    });
+    await assertFails(set(ref(viewerDb, "status/doc1/peers/editor-tab"), { ...payload, mode: "edit" }));
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/viewer-tab"), payload));
+    await assertSucceeds(set(ref(viewerDb, "status/doc1/peers/editor-tab"), null));
+  });
+
   it("a presence payload cannot lie about its address or its mode", async () => {
     const db = verified(env, MEMBER).database();
     await assertFails(
@@ -152,7 +242,7 @@ describe("realtime database rules", () => {
 
   it("an editor may append to the shared document", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(set(ref(db, "status/doc1/y/e1"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e1"), "AQIDBA=="));
   });
 
   it("a READ-ONLY member may not, which is the escalation this gate exists for", async () => {
@@ -161,7 +251,7 @@ describe("realtime database rules", () => {
     // push content into an editor's browser, which that editor then autosaves
     // and publishes: read escalated to write through a channel nobody audits.
     const db = verified(env, OTHER).database();
-    await assertFails(set(ref(db, "status/doc1/y/e2"), "AQIDBA=="));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e2"), "AQIDBA=="));
   });
 
   it("an open-editing document admits any verified account", async () => {
@@ -175,25 +265,109 @@ describe("realtime database rules", () => {
       await set(ref(db, "editAccess/doc2/*"), true);
     });
     const db = verified(env, OTHER).database();
-    await assertSucceeds(set(ref(db, "status/doc2/y/e1"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc2/y/initial/e1"), "AQIDBA=="));
+  });
+
+  it("a viewer reads presence but cannot read the unpublished shared document", async () => {
+    const db = verified(env, OTHER).database();
+    await assertSucceeds(get(ref(db, "status/doc1/peers")));
+    await assertFails(get(ref(db, "status/doc1/y/initial")));
+    await assertFails(get(ref(db, "status/doc1")), "a parent read cannot bypass the draft boundary");
+  });
+
+  it("a public open editor reads the shared log without learning peer presence", async () => {
+    const db = verified(env, STRANGER).database();
+    await assertSucceeds(set(ref(db, "status/doc2/y/initial/stranger"), "AQIDBA=="));
+    await assertSucceeds(get(ref(db, "status/doc2/y/initial")));
+    await assertFails(get(ref(db, "status/doc2/peers")));
+    await assertFails(get(ref(db, "status/doc2")));
+  });
+
+  it("the server clock freezes the log at expiry; only its owner still reads, and clearing restores access", async () => {
+    const expiry = Date.now() + 2_000;
+    const maps = { __revision: "000000000001:000000000", __expiresAt: expiry, __owner: MEMBER.email, [key(MEMBER.email)]: true, [key(OTHER.email)]: true };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, "presenceAccess/expiring"), maps);
+      await set(ref(db, "editAccess/expiring"), { ...maps, "*": true });
+    });
+    const ownerDb = verified(env, MEMBER).database();
+    const editorDb = verified(env, OTHER).database();
+    const publicDb = verified(env, STRANGER).database();
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/initial/before"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y/initial")));
+    await assertSucceeds(get(ref(publicDb, "status/expiring/y/initial")));
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, expiry + 100 - Date.now())));
+    await assertFails(set(ref(editorDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(set(ref(ownerDb, "status/expiring/y/initial"), null));
+    await assertFails(set(ref(publicDb, "status/expiring/y/initial/after"), "AQIDBA=="));
+    await assertFails(get(ref(editorDb, "status/expiring/y/initial")));
+    await assertFails(get(ref(editorDb, "status/expiring/peers")));
+    await assertFails(get(ref(publicDb, "status/expiring/y/initial")));
+    await assertSucceeds(get(ref(ownerDb, "status/expiring/y/initial")));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, "presenceAccess/expiring/__expiresAt"), 0);
+      await set(ref(db, "editAccess/expiring/__expiresAt"), 0);
+    });
+    await assertSucceeds(set(ref(editorDb, "status/expiring/y/initial/restored"), "AQIDBA=="));
+    await assertSucceeds(get(ref(editorDb, "status/expiring/y/initial")));
   });
 
   it("a stranger may neither read nor write the shared document", async () => {
     const db = verified(env, STRANGER).database();
-    await assertFails(get(ref(db, "status/doc1/y")));
-    await assertFails(set(ref(db, "status/doc1/y/e3"), "AQIDBA=="));
+    await assertFails(get(ref(db, "status/doc1/y/initial")));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e3"), "AQIDBA=="));
   });
 
   it("an editor may remove entries, because compaction has to", async () => {
     const db = verified(env, MEMBER).database();
-    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), "AQIDBA=="));
-    await assertSucceeds(set(ref(db, "status/doc1/y/e4"), null));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e4"), "AQIDBA=="));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/e4"), null));
+  });
+
+  it("an editor can retire the entire log but cannot replace it; a viewer cannot retire it", async () => {
+    const editorDb = verified(env, MEMBER).database();
+    const viewerDb = verified(env, OTHER).database();
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y/initial/retire"), "AQIDBA=="));
+    await assertFails(set(ref(viewerDb, "status/doc1/y/initial"), null));
+    await assertFails(set(ref(editorDb, "status/doc1/y/initial"), { replacement: "AQIDBA==" }));
+    await assertSucceeds(set(ref(editorDb, "status/doc1/y/initial"), null));
+  });
+
+  it("epoch rotation rejects delayed writes and editor claims while retirement preserves the new log", async () => {
+    const doc = "epoch-fence";
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, `editAccess/${doc}`), { [key(MEMBER.email)]: true, __liveEpoch: "initial" });
+      await set(ref(db, `presenceAccess/${doc}`), { [key(MEMBER.email)]: true });
+    });
+    const db = verified(env, MEMBER).database();
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial/_seed`), "seed"));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial/delta`), "delta"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/_seed`), "different"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/_seed`), null));
+    const peer = (liveEpoch) => ({ uid: MEMBER.uid, email: MEMBER.email, mode: "edit", liveEpoch, lastChanged: serverTimestamp() });
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/tab`), peer("initial")));
+    await env.withSecurityRulesDisabled(async (ctx) => set(ref(ctx.database(), `editAccess/${doc}/__liveEpoch`), "next"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/late`), "late"));
+    await assertFails(set(ref(db, `status/${doc}/y/initial/delta`), null));
+    await assertFails(set(ref(db, `status/${doc}/y/flat`), "legacy"));
+    await assertFails(set(ref(db, `status/${doc}/peers/tab`), peer("initial")));
+    await assertSucceeds(set(ref(db, `status/${doc}/peers/tab`), peer("next")));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/next/_seed`), "current"));
+    await assertSucceeds(set(ref(db, `status/${doc}/y/initial`), null));
+    const current = await assertSucceeds(get(ref(db, `status/${doc}/y/next/_seed`)));
+    if (current.val() !== "current") throw new Error("old epoch retirement changed the new seed");
+    await assertFails(set(ref(db, `status/${doc}/y`), null));
   });
 
   it("rejects an entry that is not a bounded string", async () => {
     const db = verified(env, MEMBER).database();
-    await assertFails(set(ref(db, "status/doc1/y/e5"), { not: "a string" }));
-    await assertFails(set(ref(db, "status/doc1/y/e6"), "x".repeat(200_001)));
+    await assertSucceeds(set(ref(db, "status/doc1/y/initial/boundary"), "x".repeat(2 * 1024 * 1024)));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e5"), { not: "a string" }));
+    await assertFails(set(ref(db, "status/doc1/y/initial/e6"), "x".repeat(2 * 1024 * 1024 + 1)));
   });
 
   it("the withdrawn lock node is rejected outright", async () => {

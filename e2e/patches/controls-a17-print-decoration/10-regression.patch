@@ -1,0 +1,12 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -142,7 +142,8 @@
+   // No authoredAssets here, deliberately: the export path snapshots a
+   // POST-script DOM, where a stylesheet the document's own script injected is
+   // load-bearing rather than contamination.
+-  const raw = serializeCleanHtml(sourceDoc);
++  void serializeCleanHtml; // regression: retain the imported serializer without using it.
++  const raw = sourceDoc.documentElement.outerHTML;
+   const parsed = new DOMParser().parseFromString(raw, "text/html");
+
+   parsed.querySelectorAll("script").forEach((s) => s.remove());

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The workspace never calls itself empty while it is still loading, and says when it is busy (SPEC §5, §13).
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,13 +12,14 @@ import type { DocMeta, FolderMeta } from "../types";
  * snapshot has landed — the order is the whole point, since the two arrive
  * independently and either can be first.
  */
-const { listeners, createFolder, forkDoc } = vi.hoisted(() => ({
+const { listeners, createFolder, forkDoc, uploadDoc } = vi.hoisted(() => ({
   listeners: {
     docs: null as ((docs: DocMeta[]) => void) | null,
     folders: null as ((folders: FolderMeta[]) => void) | null,
   },
   createFolder: vi.fn(),
   forkDoc: vi.fn(),
+  uploadDoc: vi.fn(async () => ({ docId: "new", title: "From the document", format: "html" })),
 }));
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
@@ -46,6 +47,7 @@ vi.mock("../folders", () => ({
   setFolderAccess: vi.fn(),
 }));
 vi.mock("../forks", () => ({ forkDoc }));
+vi.mock("../upload", async () => ({ ...await vi.importActual<typeof import("../upload")>("../upload"), uploadDoc }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
 const { backfill } = vi.hoisted(() => ({ backfill: vi.fn() }));
 vi.mock("../hooks/useCoverBackfill", () => ({ useCoverBackfill: backfill }));
@@ -71,6 +73,7 @@ beforeEach(() => {
   listeners.folders = null;
   createFolder.mockReset();
   forkDoc.mockReset();
+  uploadDoc.mockClear();
 });
 
 afterEach(() => {
@@ -309,6 +312,22 @@ describe("uploading a new version from the workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByRole("menuitem", { name: "Upload a new version…" })).toBeNull();
+  });
+});
+
+
+describe("dropping a new document", () => {
+  it("leaves title and address absent so document metadata controls both", async () => {
+    const { container } = mount();
+    act(() => { listeners.docs!([]); listeners.folders!([]); });
+    const file = new File(["<title>Quarterly review</title>"], "q3.html", { type: "text/html" });
+    fireEvent.drop(container.querySelector(".workspace-main")!, { dataTransfer: { types: ["Files"], files: [file] } });
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
+    const [actual, options] = uploadDoc.mock.calls[0] as unknown as [File, { title?: string; id?: string; folderId?: string }];
+    expect(actual).toBe(file);
+    expect(options.title).toBeUndefined();
+    expect(options.id).toBeUndefined();
+    expect(options.folderId).toBeNull();
   });
 });
 

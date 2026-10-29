@@ -1,0 +1,13 @@
+{
+  "oracle": "^a reader cannot remove another session",
+  "what": "a11 delete ownership",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.11b a reader can announce view but cannot claim editing or remove another session",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a reader cannot remove another session"
+  }
+}

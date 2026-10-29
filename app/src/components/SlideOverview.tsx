@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 
 import { Icon } from "./Icon";
+import { containModalFocus, trapModalTab } from "./modalFocus";
 import { SlideThumb } from "./SlideThumb";
 import { slideStateTokens } from "../viewer/preview";
 import type { Slide, StageSize } from "../viewer/deck";
@@ -35,6 +36,7 @@ export function SlideOverview({
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   // Every render, as in the rail: see `SlidePanel`.
   const state = slideStateTokens(slides);
 
@@ -49,16 +51,25 @@ export function SlideOverview({
    * at the beginning.
    */
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     const grid = panel.current;
     const target =
       grid?.querySelector<HTMLElement>('[aria-current="true"]') ??
       grid?.querySelector<HTMLElement>("button");
     target?.focus();
+    const release = dialog.current ? containModalFocus(dialog.current) : () => {};
+    return () => {
+      release();
+      opener?.focus();
+    };
   }, []);
 
   return (
     <div
       className="slide-overview"
+      ref={dialog}
+      tabIndex={-1}
+      onKeyDown={(e) => trapModalTab(e, e.currentTarget)}
       role="dialog"
       aria-modal="true"
       aria-label="All slides"

@@ -11,14 +11,10 @@
  *         code mail, /verify/complete {verified:true}, the next /session "ok"
  *         with the cookie attributes §2 names, users/{uid} = {uid, email}. The
  *         account is created with accounts:signUp (what the SDK's
- *         createUserWithEmailAndPassword sends), because:
- *   A1.2b the form's "Create account" never enables against the Auth
- *         emulator, which answers the password-policy fetch 501 (suspected
- *         defect X-a01-identity-1). Any failed fetch does the same: the form
- *         then holds no requirements, and allMet([]) is false
- *         (app/src/passwordPolicy.ts), though PasswordForm's catch says the
- *         server still enforces the policy on submit. A served policy enables
- *         it, so where the fetch succeeds this case passes
+ *         createUserWithEmailAndPassword sends); A1.2b covers the browser form.
+ *   A1.2b the form enables after a rejected policy request and creates an
+ *         unverified account locally through the real browser Auth SDK. This
+ *         guards X-a01-identity-1: allMet([]) formerly disabled it forever.
  *   A1.3  five wrong codes are each 400; the sixth attempt — the RIGHT code —
  *         is 429 and the verification is deleted; the account stays unverified
  *   A1.4  a second start inside 60 s is 429 and the mail count holds at 1; the
@@ -38,21 +34,20 @@
  *         the SDK goes offline and the empty state comes from its cache: that
  *         run measured A1.8b's path, not this one, and is INCONCLUSIVE
  *   A1.8b the same, with the Listen channel held past the SDK's 10 s on
- *         purpose: the workspace announces "Nothing here yet" from the offline
- *         cache before it lists the shared document (suspected defect
- *         X-a01-identity-3)
+ *         purpose: no false empty state from the offline cache before it lists
+ *         the shared document (regression X-a01-identity-3)
+ *   A1.8c the owner's existing document, under the same delayed first listen:
+ *         no false empty state before the server's card (X-a14-workspace-2)
  *   A1.9  /connect and /signup send X-Frame-Options: DENY and
  *         frame-ancestors 'none' (§23 Consent)
- *   A1.9b /SIGNUP, /Signup, /CONNECT and /Connect render the same sign-in page
- *         (the router matches case-insensitively), and a plain anonymous GET of
- *         each is answered without those headers (suspected defect
- *         X-a01-identity-2). Response headers are what the emulator cannot
- *         vouch for (CLAUDE.md): whether production Hosting matches the
- *         /signup and /connect header sources case-sensitively is exactly what
- *         this case, prod-safe, is there to measure
+ *   A1.9b mixed case, trailing slash and encoded routes, and protected account
+ *         and folder routes, render sign-in and carry the same frame headers.
+ *         Production Hosting headers require a production observation; local
+ *         execution proves only the emulator (X-a01-identity-2).
  *   A1.9c the framing proof, local only (it needs a stack spare port for the
- *         other origin): such a page can frame each variant with the sign-in
- *         form showing, though not /signup itself (X-a01-identity-2)
+ *         other origin): another origin cannot show sign-in in any variant.
+ *   A1.9d every app-shell entry path, including paths that client-redirect,
+ *         carries frame headers; document byte routes remain embeddable.
  *   A1.10 an address Google renamed (§14, ADR 0020), local only (the Auth
  *         emulator's unsigned Google tokens): a Google account signed up as
  *         one address, renamed to another under the same `sub`, still gets
@@ -81,6 +76,7 @@ import { after } from "node:test";
 import { answered, caseBudget, currentTarget, functionKill, onAnsweringStack, pageStall, precondition, scenario, untilLanded } from "../../lib/test.mjs";
 import { FIRESTORE_LISTEN_PATH } from "../../lib/browser.mjs";
 import { cast, castUnverified, localEmail, passwordFor, rand4, runTag } from "../../lib/accounts.mjs";
+import { appendLedger } from "../../lib/ledger.mjs";
 import { closeSession, idToken, openSession } from "../../lib/session.mjs";
 import { createFolder, createTeam, publish } from "../../lib/seed.mjs";
 import { share, shareFolder, teamMembers } from "../../lib/grant.mjs";
@@ -336,7 +332,6 @@ scenario("A1.2 password sign-up at /signup: unverified, one code mail, /verify/c
 
 scenario("A1.2b Create account enables at /signup for a password the deployment's policy accepts, so a person can sign up there", {
   tiers: ["local", "prod"],
-  defect: "X-a01-identity-1",
   timeoutMs: 60_000,
 }, async (ctx) => {
   const email = localEmail(target, "create");
@@ -359,6 +354,22 @@ scenario("A1.2b Create account enables at /signup for a password the deployment'
       throw new Error(`Create account never enabled for a policy-satisfying password within 15 s: the password-policy fetch answered ${JSON.stringify(policyFetch())} and the form shows ${shown} requirement(s) and no reason`);
     }
   });
+  if (target.kind === "local") {
+    ctx.step("Create account submits to Auth and reaches the unverified account gate");
+    const created = u.page.waitForResponse((r) => /\/accounts:signUp$/.test(new URL(r.url()).pathname) && r.request().method() === "POST", { timeout: 20_000 });
+    const session = u.page.waitForResponse((r) => new URL(r.url()).pathname === "/session" && r.request().method() === "POST", { timeout: 20_000 });
+    await create.click();
+    const response = await created;
+    const data = await response.json();
+    assert.equal(response.status(), 200, "the enabled signup form creates the account");
+    assert.equal(typeof data.localId, "string", "Auth returned the new account uid");
+    appendLedger(target, { kind: "account", role: "create", email, uid: data.localId, tier: "local", verified: false, via: "browser-signup" });
+    const answer = await session;
+    assert.deepEqual(await answer.json(), { status: "unverified" }, "creating an account never bypasses email verification");
+    assert.equal((await adminFor(target).auth.getUser(data.localId)).emailVerified, false);
+    await u.page.locator(".auth-step[aria-current=step]", { hasText: "3. Verify" }).waitFor({ state: "visible", timeout: 15_000 });
+    assert.equal(await u.sessionCookie(), null, "an unverified signup receives no session cookie");
+  }
 });
 
 // --- A1.3 ---------------------------------------------------------------------
@@ -877,28 +888,26 @@ function afterHold(err, ctx) {
   return pageStall(err, { usersSoFar: users });
 }
 
-scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {
-  tiers: ["local"],
-  effects: ["email:POST /access"],
-  defect: "X-a01-identity-3",
-  timeoutMs: 600_000,
-}, budgeted(600_000, async (ctx) => {
+async function slowWorkspaceInitialListen(ctx, ownerOnly) {
   const setupBy = Date.now() + SETUP_MS;
-  const [ownerAcct, inviteeAcct] = await cast(target, ["owner", "invitee"]);
+  const [ownerAcct, inviteeAcct] = await cast(target, ownerOnly ? ["owner"] : ["owner", "invitee"]);
   const owner = await sessionFor(ctx, ownerAcct, "owner", setupBy);
-  const title = `A1.8b shared before sign-in ${runTag(target.runId)}-${rand4()}`;
+  const title = `${ownerOnly ? "A1.8c owned" : "A1.8b shared"} before sign-in ${runTag(target.runId)}-${rand4()}`;
   const up = await publish(owner.http, { fixture: "crdt-paragraphs.html", title, name: "a18b-slow", patient: { ctx, stopAt: setupBy } });
-  ctx.step(`the owner shares with ${inviteeAcct.email}, who has never signed in`);
-  const granted = await share(target, { owner, doc: up.docId, account: inviteeAcct, role: "viewer" });
-  precondition(granted.members?.includes(inviteeAcct.email), `members: ${JSON.stringify(granted.members)}`);
+  if (!ownerOnly) {
+    ctx.step(`the owner shares with ${inviteeAcct.email}, who has never signed in`);
+    const granted = await share(target, { owner, doc: up.docId, account: inviteeAcct, role: "viewer" });
+    precondition(granted.members?.includes(inviteeAcct.email), `members: ${JSON.stringify(granted.members)}`);
+  }
 
-  ctx.step(`the invitee signs in while every Firestore Listen request is held ${LISTEN_HOLD_MS} ms (a backend slower than the SDK's 10 s), watched from the first document on`);
-  const u = await ctx.users.user({ name: "invitee" });
+  const who = ownerOnly ? "owner" : "invitee", account = ownerOnly ? ownerAcct : inviteeAcct;
+  ctx.step(`the ${who} signs in while every Firestore Listen request is held ${LISTEN_HOLD_MS} ms (a backend slower than the SDK's 10 s), watched from the first document on`);
+  const u = await ctx.users.user({ name: who });
   await u.page.addInitScript(workspaceObserver);
   const hold = await holdListen(u, LISTEN_HOLD_MS);
   holds.set(ctx, hold);
   try {
-    await u.signInUi(inviteeAcct.email, inviteeAcct.password, { timeout: ANSWER_MS });
+    await u.signInUi(account.email, account.password, { timeout: ANSWER_MS });
     await u.page.locator(".doc-card .doc-card-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
   } finally {
     await hold.restore();
@@ -912,8 +921,18 @@ scenario("A1.8b a document shared before sign-in is listed even when the backend
   ctx.ev.json("workspace-renders", { seen, held, offlineAt: offline?.t ?? null });
   if (!offline) ctx.inconclusive(`holding the Listen channel ${LISTEN_HOLD_MS} ms did not take the page's Firestore client offline: the path under test never ran`);
   ctx.step(`${held.length} Listen POST(s) held (${JSON.stringify(held.map((h) => h.heldMs))} ms); the SDK went offline ${offline.t - held[0].t} ms after the first; empty states at ${JSON.stringify(seen.empty.map((e) => e.t - offline.t))} ms and the first card at ${seen.cards[0] ? seen.cards[0].t - offline.t : null} ms from then`);
-  await ctx.oracle(() => assert.deepEqual(seen.empty, [], "the workspace told the invitee \"Nothing here yet\" from its offline cache before listing the document shared with them"));
-}, { pages: afterHold }));
+  await ctx.oracle(() => assert.deepEqual(seen.empty, [], ownerOnly
+    ? "the workspace told its owner \"Nothing here yet\" from its offline cache before listing their existing document"
+    : "the workspace told the invitee \"Nothing here yet\" from its offline cache before listing the document shared with them"));
+}
+
+scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {
+  tiers: ["local"], effects: ["email:POST /access"], timeoutMs: 600_000,
+}, budgeted(600_000, (ctx) => slowWorkspaceInitialListen(ctx, false), { pages: afterHold }));
+
+scenario("A1.8c an owner's existing document is listed after a delayed first workspace listen, without a false empty state from the offline cache", {
+  tiers: ["local"], timeoutMs: 600_000,
+}, budgeted(600_000, (ctx) => slowWorkspaceInitialListen(ctx, true), { pages: afterHold }));
 
 // --- A1.9 ---------------------------------------------------------------------
 
@@ -961,12 +980,12 @@ async function framedShowsSignIn(u, framerOrigin, url) {
   }, { timeout: 15_000, interval: 200, message: `the framed ${url} settled` });
 }
 
-/** The variant paths: the same app routes, matched case-insensitively by the router. */
-const FRAME_VARIANTS = Object.freeze(["/SIGNUP", "/Signup", "/CONNECT", "/Connect"]);
+/** Alternate and protected routes that render sign-in at the requested path. */
+const FRAME_VARIANTS = Object.freeze(["/SIGNUP", "/Signup", "/CONNECT", "/Connect", "/signup/", "/CONNECT/", "/%73ignup", "/account", "/folder/e2e-framing"]);
 
 /** Did each variant, in an anonymous browser, show the sign-in form at its own path? Throws a precondition when one did not: the case's premise. */
 async function variantsRenderSignIn(ctx, u) {
-  ctx.step("each variant renders the same sign-in page as /signup, at its own path (the router matches paths case-insensitively)");
+  ctx.step("each alternate or protected route renders sign-in at its own path");
   for (const p of FRAME_VARIANTS) {
     await u.goto(p);
     await u.page.locator("#auth-password").waitFor({ state: "visible", timeout: 15_000 });
@@ -979,7 +998,6 @@ const framesDenied = (h) => h.xfo === "DENY" && h.ancestors === "frame-ancestors
 
 scenario("A1.9b case variants of /signup and /connect (/SIGNUP, /Signup, /CONNECT, /Connect) render the sign-in page, so a GET of each is answered with X-Frame-Options: DENY and frame-ancestors 'none' too", {
   tiers: ["local", "prod"],
-  defect: "X-a01-identity-2",
   timeoutMs: 120_000,
 }, budgeted(120_000, async (ctx) => {
   const http = httpFor(ctx, "anonymous");
@@ -1012,7 +1030,6 @@ scenario("A1.9b case variants of /signup and /connect (/SIGNUP, /Signup, /CONNEC
 scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNUP, /Signup, /CONNECT or /Connect, as it cannot frame /signup itself", {
   tiers: ["local"],
   needs: ["spare-pool"],
-  defect: "X-a01-identity-2",
   timeoutMs: 120_000,
 }, budgeted(120_000, async (ctx) => {
   const u = await ctx.users.user({ name: "anonymous" });
@@ -1041,6 +1058,27 @@ scenario("A1.9c a page on another origin cannot frame the sign-in page at /SIGNU
   ctx.step(`framed by another origin with the sign-in form showing: ${JSON.stringify(framed)}`);
   const exposed = FRAME_VARIANTS.filter((p) => framed[p]);
   assert.deepEqual(exposed, [], `variant paths another origin framed with the sign-in form showing, though it could not frame /signup: ${exposed.join(", ")}`);
+}));
+
+scenario("A1.9d every app-shell entry path denies framing before client navigation, while content byte routes remain embeddable", {
+  tiers: ["local", "prod"], timeoutMs: 60_000,
+}, budgeted(60_000, async (ctx) => {
+  const http = httpFor(ctx, "anonymous");
+  const paths = ["/", "/index.html", "/terms", "/privacy", "/e2e-unknown-shell", "/content", "/%73ignup", "/SIGNUP/", "/account", "/folder/e2e-framing"];
+  const exposed = [];
+  for (const path of paths) {
+    const response = answered(await http.get(path));
+    const h = frameHeaders(response);
+    if (h.status !== 200 || !framesDenied(h)) exposed.push({ path, ...h });
+  }
+  assert.deepEqual(exposed, [], `app-shell paths missing frame protection: ${JSON.stringify(exposed)}`);
+  // These are absent documents, so no protected bytes need to be fetched to
+  // prove the Hosting rule leaves the application's iframe routes alone.
+  for (const prefix of ["content", "draft", "thumb"]) {
+    const h = frameHeaders(answered(await http.get(`/${prefix}/e2e-absent-framing/v1/index.html`)));
+    assert.equal(h.xfo, null, `${prefix} remains embeddable`);
+    assert.equal(h.ancestors, null, `${prefix} remains embeddable`);
+  }
 }));
 
 // --- A1.10 --------------------------------------------------------------------

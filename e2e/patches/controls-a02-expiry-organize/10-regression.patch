@@ -1,0 +1,14 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1913,11 +1913,6 @@
+       return;
+     }
+
+-    if (isExpired(data, Date.now())) {
+-      res.status(409).json({ error: EXPIRED_WRITE });
+-      return;
+-    }
+-
+     if (op === "delete") {
+       badRequest(res, "deleting documents is not supported");
+       return;

@@ -451,6 +451,14 @@ bikeshed commit storage-migration
 Over MCP the same are `accept_suggestion`, `reject_suggestion` and
 `commit_draft`.
 
+If a browser reports that a saved draft contains changes missing from live
+editing, first keep any original editing tab open so its updates can finish.
+If that tab is gone, ask everyone to leave editing, including the blocked tab's
+**Leave editing** action. Then use `bikeshed commit <document>` or MCP
+`commit_draft` to publish the saved draft through the usual review gates. Read
+and confirm the recovered version before opening a new editing session. Do not
+replace the document with an older download to clear the warning.
+
 **Accepting makes the change in the draft, not a new version.** A review's
 decisions gather in the draft, and `commit` publishes them as one version, as
 "Save as new version" does in the app, under the same rule: every thread on the

@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2972,7 +2972,7 @@
+       const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+       if (e) recipients.add(e);
+     }
+-    recipients.delete(authorEmail);
++    if (false) recipients.delete(authorEmail);
+     if (recipients.size === 0) return;
+
+     const quote = String(annSnap.data()?.anchor?.exact ?? "").slice(0, 300);

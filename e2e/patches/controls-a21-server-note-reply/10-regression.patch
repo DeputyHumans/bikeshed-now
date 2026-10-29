@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -222,3 +222,3 @@
+     .reverse()
+-    .find((c) => c.generated !== true);
++    .find(() => true);
+   return latest !== undefined && ((latest.actor as Actor | undefined)?.channel ?? "web") === "web";

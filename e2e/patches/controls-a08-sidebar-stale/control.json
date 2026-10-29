@@ -1,0 +1,13 @@
+{
+  "oracle": "the sidebar marks the rewritten quote stale",
+  "what": "Regress sidebar stale",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.4 a suggestion the draft has already rewritten is stale in the pass, Accept greyed out and nothing claimed; one turning stale under the click is refused before any claim; a stale suggestion is still rejectable",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the sidebar marks the rewritten quote stale"
+  }
+}

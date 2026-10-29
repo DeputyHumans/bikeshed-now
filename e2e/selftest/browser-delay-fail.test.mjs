@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { BrowserPool, FAIL_BODY } from "../lib/browser.mjs";
 
-/** Every request the stand-in stack received: {label, method, path, at (Date.now())}. */
+/** Every request the stand-in stack received, on both wall and monotonic clocks. */
 const arrivals = [];
 /** Every request the other server received (none should). */
 const elsewhere = [];
@@ -43,7 +43,7 @@ before(async () => {
       } catch {
         label = body || null;
       }
-      arrivals.push({ label, method: req.method, path: url.pathname, at: Date.now() });
+      arrivals.push({ label, method: req.method, path: url.pathname, at: Date.now(), monotonicAt: performance.now() });
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ ok: true, label }));
     });
@@ -110,37 +110,52 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("delayRequests: a number holds that request so many ms before the stack sees it, in order; past the list and other methods go at once", { timeout: 60_000 }, async () => {
   const u = await user("ms");
-  const d = await u.delayRequests("/draft", { rules: [700] });
+  const gate = Promise.withResolvers();
+  const routeStarts = new Map();
+  const d = await u.delayRequests("/draft", {
+    rules: [() => gate.promise, 700],
+    match: (request) => {
+      routeStarts.set(request.postJson?.label, performance.now());
+      return true;
+    },
+  });
+  const observed = (label) => arrived(label).length || routeStarts.has(label);
   try {
+    await send(u, "ms-gated");
+    await u.poll(() => observed("ms-gated"), { what: "the first POST reached its route or the server" });
     await send(u, "ms-1");
-    await sleep(50);
+    await u.poll(() => observed("ms-1"), { what: "the numeric POST reached its route or the server" });
     await send(u, "ms-2");
     await send(u, "ms-get", { url: "/draft/doc/index.html", method: "GET" });
     const two = await answered(u, "ms-2");
-    assert.equal(two.status, 200, "the second POST, past the list, went at once");
+    assert.equal(two.status, 200, "the third POST, past the list, bypassed the held first POST");
     await answered(u, "ms-get");
-    assert.deepEqual(arrived("ms-1"), [], "the first is still held: the stack has not seen it");
+    assert.deepEqual(arrived("ms-gated"), [], "the first is still held while past-list POST and GET finish: the stack has not seen it");
+    gate.resolve();
+    assert.equal((await answered(u, "ms-gated")).status, 200, "releasing the gate forwards the first POST");
     const one = await answered(u, "ms-1");
     assert.equal(one.status, 200);
     const [a1] = arrived("ms-1");
-    const [a2] = arrived("ms-2");
-    assert.ok(a1.at - a2.at >= 550, `the held one reached the stack ${a1.at - a2.at} ms after the one sent 50 ms later (held 700)`);
+    const serverDelay = a1.monotonicAt - routeStarts.get("ms-1");
+    assert.ok(serverDelay >= 690, `the server received the numeric POST ${serverDelay} ms after its own route entry (held 700)`);
     assert.deepEqual(
       d.rows.map(({ seq, method, path, postJson, rule, ms, released, ruleError }) => ({ seq, method, path, postJson, rule, ms, released, ruleError })),
       [
-        { seq: 0, method: "POST", path: "/draft", postJson: { label: "ms-1" }, rule: "ms", ms: 700, released: "rule", ruleError: null },
-        { seq: 1, method: "POST", path: "/draft", postJson: { label: "ms-2" }, rule: "none", ms: null, released: "at-once", ruleError: null },
+        { seq: 0, method: "POST", path: "/draft", postJson: { label: "ms-gated" }, rule: "until", ms: null, released: "rule", ruleError: null },
+        { seq: 1, method: "POST", path: "/draft", postJson: { label: "ms-1" }, rule: "ms", ms: 700, released: "rule", ruleError: null },
+        { seq: 2, method: "POST", path: "/draft", postJson: { label: "ms-2" }, rule: "none", ms: null, released: "at-once", ruleError: null },
       ],
       "one row per matching POST, in arrival order; the GET of /draft/<doc>/<file> is not one",
     );
-    assert.ok(d.rows[0].releasedAt - d.rows[0].heldAt >= 690, `held ${d.rows[0].releasedAt - d.rows[0].heldAt} ms on this process's clock`);
-    assert.equal(d.seen(), 2);
+    assert.ok(d.rows[1].releasedAt - d.rows[1].heldAt >= 690, `held ${d.rows[1].releasedAt - d.rows[1].heldAt} ms on this process's clock`);
+    assert.equal(d.seen(), 3);
   } finally {
+    gate.resolve();
     await d.restore();
   }
   await send(u, "ms-after");
   assert.equal((await answered(u, "ms-after")).status, 200);
-  assert.equal(d.seen(), 2, "after restore() nothing more is taken");
+  assert.equal(d.seen(), 3, "after restore() nothing more is taken");
 });
 
 test("delayRequests: a function holds until its promise settles, so two saves reach the stack in the order a slow network delivers them; restore() lets a held one go; maxMs caps", { timeout: 60_000 }, async () => {

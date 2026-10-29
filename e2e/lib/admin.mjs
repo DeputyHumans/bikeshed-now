@@ -84,6 +84,17 @@ export async function readDoc(target, path) {
   return snap.exists ? snap.data() : null;
 }
 
+/** A document and its commit revision, for version-fenced mirror repair. */
+export async function readDocRevision(target, path) {
+  const snap = await adminFor(target).db.doc(path).get();
+  if (!snap.exists) return null;
+  if (!snap.updateTime) throw new Error(`readDocRevision ${path}: missing updateTime`);
+  return {
+    data: snap.data(),
+    revision: `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`,
+  };
+}
+
 /** Every document in a collection: [{id, data}]. */
 export async function readCollection(target, path) {
   const snap = await adminFor(target).db.collection(path).get();
@@ -142,6 +153,22 @@ export async function queryCollection(target, path, filters = [], { db } = {}) {
   for (const [field, op, value] of filters) query = query.where(field, op, value);
   const snap = await query.get();
   return snap.docs.map((d) => ({ id: d.id, data: d.data() }));
+}
+
+/** The selected immutable draft snapshot; old records retain their legacy prefix. */
+export function draftStoragePrefix(docId, draft) {
+  const prefix = draft?.storagePrefix ?? `docs/${docId}/draft`;
+  if (typeof prefix !== "string" || !prefix.startsWith(`docs/${docId}/`) || prefix.endsWith("/") || prefix.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw new Error("draft storage prefix must belong to its document");
+  }
+  return prefix;
+}
+
+/** Read the entry selected by current draft metadata, without falling back to a published version. */
+export async function readDraftObject(target, docId, rel) {
+  const data = await readDoc(target, `docs/${docId}`);
+  if (!data?.draft) return null;
+  return readObject(target, `${draftStoragePrefix(docId, data.draft)}/${rel}`);
 }
 
 /** A Storage object's bytes, or null when it does not exist. */

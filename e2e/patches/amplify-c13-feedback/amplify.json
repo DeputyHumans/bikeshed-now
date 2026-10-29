@@ -1,10 +1,10 @@
 {
-  "what": "Three server pause points for feedback racing a publish and the twenty-pending limit (c13-feedback): in createSuggestion between the pending count and the transaction that writes the suggestion (C13, S7: every caller counted before any wrote), in add_comment between reading the current version and writing the thread (C14, S12: a publish made while the thread is in flight), and in commitDraft between its open-thread check and upload and the transaction that asks again (C14: feedback landing while a version uploads). Stands alone: it adds its own functions/src/lib/e2eGate.ts, so it is not applied together with another amplify set.",
+  "what": "Three server pause points for feedback racing a publish and the twenty-pending limit (c13-feedback): in createSuggestion after an observational pre-admission count and before the transaction that rechecks the limit and writes the suggestion (C13: every caller is ready before any writes), in add_comment between reading the current version and writing the thread (C14, S12: a publish made while the thread is in flight), and in commitDraft between its open-thread check and upload and the transaction that asks again (C14: feedback landing while a version uploads). Shares the identical e2eGate helper with compatible amplifier sets; do not combine with amplify-mint-join, which changes the same draft commit section.",
   "gates": [
     {
       "name": "suggest-after-count",
       "side": "server",
-      "where": "functions/src/lib/suggestions.ts createSuggestion: after the author's pending count is checked against the limit of twenty, before the transaction that reads the document and creates the suggestion",
+      "where": "functions/src/lib/suggestions.ts createSuggestion: after a test-only pre-admission count, before its transaction rechecks the limit and creates a suggestion",
       "key": "docId"
     },
     {

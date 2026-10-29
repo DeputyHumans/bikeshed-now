@@ -1,0 +1,11 @@
+--- a/app/src/components/UploadDialog.tsx
++++ b/app/src/components/UploadDialog.tsx
+@@ -41,7 +41,7 @@
+         title: title.trim() || undefined,
+         id: id.trim() || undefined,
+         folderId,
+-        marking,
++        marking: { ...marking, enabled: false },
+         onProgress: setProgress,
+       });
+       logEvent({

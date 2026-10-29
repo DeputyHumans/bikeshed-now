@@ -28,6 +28,8 @@
  * its callers, a presence that never showed) is INCONCLUSIVE, never FAIL.
  */
 
+import { sessionsFor } from "../../lib/presence.mjs";
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
@@ -291,7 +293,7 @@ scenario("canary I3: an editor who joins after another has seeded adopts the liv
   ctx.step("p1 enters edit alone and seeds the live log");
   await users[0].enterEdit({ waitShared: true, timeout: 90_000 });
   const entries = await eventually(async () => {
-    const y = await rtdbGet(ctx.target, `status/${docId}/y`);
+    const y = await readLiveLogs(ctx.target, docId);
     return y && Object.keys(y).length > 0 ? Object.keys(y).length : false;
   }, { timeout: 30_000, message: "p1's seed in the live log" }).catch(() => ctx.inconclusive("the sync precondition did not hold: p1's seed never reached the live log"));
   ctx.step(`the live log holds ${entries} entr(ies); p2 joins it`);
@@ -320,8 +322,9 @@ scenario("canary I6: a commit paused before choosing its version id while anothe
     assert.equal((await owner.http.postJson("/draft", { docId, baseVersion: "v1", html: draftHtml("owner-draft") }, { timeoutMs: 60_000 })).status, 200);
     const first = owner.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: 120_000 });
     await requireHeld(ctx, g, "mint-before-id", 1, { key: docId, timeoutMs: 60_000 });
-    ctx.step("the editor saves another draft on v1 and commits it: held too, past the endpoint's base check");
-    assert.equal((await editor.http.postJson("/draft", { docId, baseVersion: "v1", html: draftHtml("editor-draft") }, { timeoutMs: 60_000 })).status, 200);
+    // Both commits capture the same saved draft: replacing it here correctly
+    // invalidates the first commit before the stale-base race can occur.
+    ctx.step("the editor commits the same saved draft on v1: held too, past the endpoint's base check");
     const second = editor.http.postJson("/commit", { docId, baseVersion: "v1" }, { timeoutMs: 120_000 });
     await requireHeld(ctx, g, "mint-before-id", 2, { key: docId, timeoutMs: 60_000 });
     ctx.step("release the owner's commit alone, and let it publish");
@@ -362,7 +365,7 @@ scenario("canary I12: when both editors leave the document in the app, status/{d
   const uids = accounts.map((a) => a.uid).sort();
   await eventually(async () => {
     const peers = (await rtdbGet(ctx.target, `status/${docId}/peers`)) ?? {};
-    return uids.every((u) => u in peers);
+    return uids.every((uid) => sessionsFor(peers, uid).length > 0);
   }, { timeout: 30_000, message: "both readers present" }).catch(() => ctx.inconclusive("the sync precondition did not hold: both readers never showed in status/{d}/peers"));
   ctx.step("both readers are present; both leave through the app's home link");
   await Promise.all(users.map(leaveInApp));

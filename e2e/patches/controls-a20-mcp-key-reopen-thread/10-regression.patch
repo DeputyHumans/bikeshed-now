@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1757,4 +1757,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       return changeThread(ctx, args, false);
+     },

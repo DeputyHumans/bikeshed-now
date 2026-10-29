@@ -91,15 +91,34 @@ test("find() reads every page, not only the first", async () => {
   assert.equal((await box().find({ to: "bulk@x.com" })).length, 450);
 });
 
-test("expectMail: one message that stays one resolves after the whole settle", async () => {
-  reset();
-  put({ to: ["one@x.com"], subject: "hello" });
-  const t0 = Date.now();
-  const r = await box().expectMail({ to: "one@x.com", count: 1, settleMs: 600, interval: 50, allowShort: true });
+test("expectMail: one message that stays one resolves after the whole settle", async (t) => {
+  // HTTP matching/paging has real-server tests above. Drive this clock and
+  // reader together: a busy machine must not turn a 600 ms window into only
+  // two polls and make its scheduling speed part of the oracle.
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  const reads = [];
+  const message = { ID: "one", To: [{ Address: "one@x.com" }], Subject: "hello" };
+  const reader = mailbox(target, { http: { async get() {
+    reads.push(Date.now());
+    return { json: { messages: [message], messages_count: 1 } };
+  } } });
+  let finished = false;
+  const pending = reader.expectMail({ to: "one@x.com", count: 1, settleMs: 600, interval: 50, allowShort: true }).then((r) => { finished = true; return r; });
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
+  await flush();
+  for (let elapsed = 50; elapsed < 600; elapsed += 50) {
+    t.mock.timers.tick(50);
+    await flush();
+    assert.equal(finished, false, `the settle cannot finish at ${elapsed} ms`);
+  }
+  t.mock.timers.tick(50);
+  await flush();
+  assert.equal(finished, true, "the settle finishes at 600 ms");
+  const r = await pending;
   assert.equal(r.messages.length, 1);
   assert.equal(r.messages[0].Subject, "hello");
-  assert.ok(Date.now() - t0 >= 600, "it held the count for the settle");
-  assert.ok(r.reads >= 5, `it kept reading during the settle (reads ${r.reads})`);
+  assert.deepEqual(reads, Array.from({ length: 13 }, (_, i) => i * 50), "every interval, including the final boundary, was read");
+  assert.equal(r.reads, reads.length, "the result counts the reads actually made");
 });
 
 test("NEGATIVE: a duplicate that lands during the settle fails 'exactly one'", async () => {

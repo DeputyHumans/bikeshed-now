@@ -117,14 +117,17 @@
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
 import { E2E_DIR, STACKS_DIR, LOCKS_DIR, ensureDir, logsDir, newRunId, runDir as runDirFor, stackDir as stackDirFor } from "./paths.mjs";
 import { allocateBlock, isPidAlive, lockIsLive, updateLockFile, releaseLockFile } from "./ports.mjs";
 import { materializeTree, removeTree } from "./tree.mjs";
 import { BUCKET, PROJECT_ID, applyPatchSet, parseDotenv, patchAppConfig, patchFirebaseJson, writeFunctionsEnv } from "./patch.mjs";
-import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, nodeVersion, processTable, processesUnder, requireTool, resolveNodeBin, rssBytes, run, spawnDetached } from "./proc.mjs";
+import { STACK_MARK_KEY, SYSTEM_PATH, buildEnv, descendants, envValues, environments, groupAlive, groupOwnership, killGroup, killMarkedPids, markedProcesses, newStackMark, processStartSecs, processTable, processesUnder, requireTool, rssBytes, run, spawnDetached } from "./proc.mjs";
+import { firebaseTools, node24 } from "./prerequisites.mjs";
+import { captureRtdbRuntime, prepareRtdbRuntime } from "./rtdb-runtime.mjs";
 import { tailLog } from "./logs.mjs";
 import { localTarget, writeTarget } from "./target.mjs";
 import { describeGuard, egressEnv, installEgressGuard } from "./egress.mjs";
@@ -610,9 +613,12 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
   const lifetime = lifetimeConfig({ ttlHours });
   const debugMaxBytes = debugLogMaxBytes();
   const pollMs = watchdogPollMs();
-  const nodeBin = resolveNodeBin();
-  const nodeV = nodeVersion(nodeBin);
-  const firebaseBin = requireTool("firebase", "E2E_FIREBASE_BIN");
+  const node = node24();
+  const nodeBin = node.bin;
+  const nodeV = node.version;
+  const firebase = firebaseTools();
+  const firebaseBin = firebase.bin;
+  say(log, `toolchain: ${JSON.stringify({ node, firebase })}`);
   const mailpitBin = requireTool("mailpit", "E2E_MAILPIT_BIN");
   const javaBin = requireTool("java", "E2E_JAVA_BIN");
 
@@ -672,6 +678,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     lockPath: block.lockPath,
     node: { bin: nodeBin, version: nodeV },
     tools: { firebase: firebaseBin, mailpit: mailpitBin, java: javaBin },
+    toolchain: { node, firebase },
     logs: {
       emulators: join(ld, "emulators.log"),
       mailpit: join(ld, "mailpit.log"),
@@ -794,7 +801,12 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     if (existsSync(jars)) emuSet.FIREBASE_EMULATORS_PATH = jars;
     // Every JVM firebase-tools starts goes through the stack's java (heap caps), and
     // the per-emulator debug logs it would write without limit are /dev/null.
-    const wrapper = installJavaWrapper({ stackDir: sd, realJava: javaBin, heap, runId });
+    const require = createRequire(join(firebase.root, "package.json"));
+    const database = require(join(firebase.root, "lib/emulator/downloadableEmulators.js")).getDownloadDetails("database");
+    const sourcePath = existsSync(jars) ? join(jars, basename(database.downloadPath)) : database.downloadPath;
+    rec.rtdbEngine = prepareRtdbRuntime({ firebase: firebase.version, database: database.version, sourcePath, stackDir: sd, runDir: rd });
+    say(log, `runtime: ${rec.rtdbEngine.label}; profile ${rec.rtdbEngine.profileSha256}`);
+    const wrapper = installJavaWrapper({ stackDir: sd, realJava: javaBin, heap, runId, rtdbEngine: rec.rtdbEngine });
     rec.debugLogs.nulled = prepareDebugLogs(rec.treeDir);
     saveRecord(rec);
     const emu = spawnDetached(firebaseBin, [
@@ -817,6 +829,7 @@ export async function startStack({ runId = newRunId(), tree = "HEAD", install = 
     updateLockFile(rec.lockPath, runId, { pid: emu.pid, pids: rec.processes.map((x) => x.pid), stackDir: sd });
 
     rec.ready = await waitReady(rec, { log });
+    rec.rtdbEngine.live = await captureRtdbRuntime(rec);
     trackChildren(rec);
     updateLockFile(rec.lockPath, runId, { pid: emu.pid, pids: rec.processes.map((x) => x.pid), stackDir: sd });
     rec.state = "ready";
@@ -974,7 +987,12 @@ export async function stopStack(recOrRunId, { keepTree = false, log, graceMs } =
   table = processTable();
   mine = selfAndAncestors(table);
   const stillMarked = markedProcesses(rec.mark, table).filter((p) => !mine.has(p.pid));
+  // A leader born after this group was recorded proves its ID was recycled.
+  // Unknown start times and leaderless groups remain unverified; never signal
+  // an unrelated process just because its ID appears in an old stack record.
+  const leaderStarts = processStartSecs(procs.map(p => p.pgid));
   const unverified = procs
+    .filter(p => !(leaderStarts.get(p.pgid) * 1000 > Date.parse(p.startedAt) + 2000))
     .filter((p) => groupAlive(p.pgid) && !own.has(p.pgid) && !own.has(p.pid))
     .map((p) => ({ name: p.name, pgid: p.pgid, ...groupOwnership(p.pgid, rec.mark) }))
     .filter((g) => !g.owned)
@@ -1199,7 +1217,7 @@ export async function reap({ all = false, runIds = [], auto = false, log, now = 
       rec.state = "reaped";
       rec.reapedAt = new Date().toISOString();
       try {
-        writeFileSync(join(rec.runDir, "stack.json"), JSON.stringify(rec, null, 2) + "\n");
+        writeAtomic(join(rec.runDir, "stack.json"), JSON.stringify(rec, null, 2) + "\n");
       } catch {}
       // An automatic reap keeps a failed stack's tree: somebody may be reading it.
       if (!(auto && r.state === "failed") && existsSync(rec.stackDir)) removeTree(rec.stackDir);

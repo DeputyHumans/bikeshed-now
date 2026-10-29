@@ -1,0 +1,11 @@
+--- a/app/src/components/ViewerBanners.tsx
++++ b/app/src/components/ViewerBanners.tsx
+@@ -105,7 +105,7 @@
+         <span>
+           {props.orphanedCount} comment{props.orphanedCount === 1 ? "" : "s"} no longer
+           {props.orphanedCount === 1
+-            ? " matches the text it was written about. It is still in the panel."
++            ? " match the text they were written about. They are still in the panel."
+             : " match the text they were written about. They are still in the panel."}
+         </span>
+       </div>,

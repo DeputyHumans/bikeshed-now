@@ -1,0 +1,13 @@
+{
+  "oracle": "the record holds no secret",
+  "what": "personal-secret-storage",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.5 personal tokens: a name is required; bsk_ is shown once and stored only as a hash no client can read; first use sets lastUsedAt; Revoke makes /mcp answer 401 with error=\"invalid_token\"",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the record holds no secret"
+  }
+}

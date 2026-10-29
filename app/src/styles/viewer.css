@@ -20,6 +20,7 @@
  */
 .viewer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   height: calc(100vh - var(--header-h));
   height: calc(100dvh - var(--header-h));
@@ -119,9 +120,8 @@
  * Add either and this needs an explicit `data-rail` attribute the way
  * `.viewer-body` needs `data-comments`. Until then the DOM already says it.
  *
- * Do NOT add transform, filter, contain or will-change here: the <=860px rail
- * is `position: fixed`, and any of them silently re-anchors it (consent.css
- * carries the same warning for the same reason).
+ * The mobile rail is anchored here so its drawer starts below the toolbar
+ * even when the toolbar wraps or editing adds another row.
  */
 .doc-frame-wrap {
   position: relative;
@@ -212,9 +212,13 @@
   display: flex;
   align-items: center;
   gap: var(--s-1);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .presence-chip {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   height: 26px;
@@ -237,6 +241,9 @@
   border-radius: 50%;
   background: currentColor;
   flex: none;
+}
+@media (forced-colors: active) {
+  .presence-dot { background: CanvasText; forced-color-adjust: none; }
 }
 .presence-dot[data-mode="edit"] {
   border-radius: 2px;
@@ -370,7 +377,8 @@
   .frame-loading,
   .present-counter,
   .present-exit {
-    display: none;
+    /* Printing hides chrome even when a later feature stylesheet defines its display. */
+    display: none !important;
   }
   .viewer { height: auto; }
   .viewer-body { grid-template-columns: minmax(0, 1fr); }
@@ -446,6 +454,9 @@
 }
 
 @media (max-width: 860px) {
+  .viewer-toolbar { flex-wrap: wrap; overflow-x: visible; }
+  .viewer-toolbar .presence-bar { flex-basis: 100%; order: 1; }
+  .viewer-toolbar-actions { flex-wrap: wrap; max-width: 100%; }
   .viewer-body { grid-template-columns: minmax(0, 1fr); }
   .viewer-title { max-width: 24ch; }
   /* The trail collapses to its two ends — the workspace and this document —

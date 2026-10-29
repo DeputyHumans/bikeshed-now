@@ -1,0 +1,11 @@
+--- a/functions/src/lib/markdown/render.ts
++++ b/functions/src/lib/markdown/render.ts
+@@ -222,7 +222,5 @@
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>${escapeText(title)}</title>
+-<style id="${MARKDOWN_THEME_ID}">
+-${MARKDOWN_THEME_CSS}
+-</style>
++<!-- omitted theme ${MARKDOWN_THEME_ID}: ${MARKDOWN_THEME_CSS.length} bytes -->
+ </head>
+ <body>

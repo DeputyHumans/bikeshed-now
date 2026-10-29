@@ -23,7 +23,7 @@
  *   crdt/log.ts:36-39 ("two people opening the editor in the same second
  *   would both seed and the document would appear twice").
  *
- * S1 (C4). Joining is connect → `await log.ready()` → bindSync
+ * S1 regression (C4). Before atomic seed election, joining was connect → `await log.ready()` → bindSync
  *   (useSharedDocument.ts:66-72). ready() is the log's first value event
  *   (crdt/rtdb.ts:26-40): "everything already here", never "nobody else is
  *   seeding". bindSync seeds the loaded DOM into an EMPTY fragment
@@ -33,14 +33,12 @@
  *   log empty and seeds too: Yjs merges both inserts, and every copy
  *   converges on the body twice (N joiners: N times).
  *
- * S27 (C4b). A non-member on a PUBLIC open-editing document is let into the
- *   live log (DocViewer.tsx:305-315 shareLive; useSharedDocument.ts:77 shows
- *   "Shared" whenever there is a log). Its WRITES pass (database.rules.json:100,
- *   editAccess/{d}/* from presence.ts:101-110), its READ of status/{d} does
- *   not (database.rules.json:56 needs presenceAccess, which mirrors members
- *   only), and a denied read resolves ready() as if the log were empty
- *   (crdt/rtdb.ts:33-38). So it seeds a second body into every member's copy
- *   and never receives a member's keystroke.
+ * S27 regression (C4b). Public open-edit non-members previously passed
+ *   the log's write gate while its read gate required membership. A denied
+ *   read looked like an empty log, so the joiner seeded a duplicate body
+ *   and never received members' keystrokes. Both epoch-scoped gates now
+ *   honor the public edit grant, and an initialization failure keeps the
+ *   editor disabled. This case proves shared log identity and both directions.
  *
  * THE SCENARIOS (each with n: [2, 5, 10, 20]; K trials per N by the plan)
  *   C4 client gate        SYNC-G, deterministic: amplify-mint-join's
@@ -132,20 +130,14 @@
  *                         its own seed, are not.
  *   C4b positive control  the same N (n: N_ALL), the same members and the
  *                         same membersEnter path, with the joiner granted
- *                         editor after open editing (a member, so it may read
- *                         the log): must PASS. The grant comes after open
- *                         editing, as the C4b joiner meets the document; that
- *                         share drops editAccess/{d}/* (X-a11-live-3,
- *                         folders.ts:453 calls syncPresenceAccess without
- *                         publicEdit), which the row records as star:false.
- *                         It is immaterial here: every member, the joiner
- *                         included, writes through its own key
- *                         (database.rules.json:100), and `*` is only a
- *                         non-member's. It is the target of three controls:
- *                         controls-c04-open-edit-read (write without read:
- *                         a second body, the member's keys never arrive),
- *                         controls-c04-joiner-write (read without write: the
- *                         joiner's keys never reach the members, I3 holds)
+ *                         editor after open editing: must PASS. An authenticated
+ *                         read and valid empty-update append check each direction
+ *                         before a refused join can stop the browser editor.
+ *                         The remaining I3/I13 checks still exercise real peers.
+ *                         It targets controls-c04-open-edit-read (only that
+ *                         editor's log reads denied) and controls-c04-joiner-write
+ *                         (only that editor's log appends denied), using test-only
+ *                         authoritative mirror tags plus directional rules,
  *                         and controls-c04-joiner-alone (shareLive off for
  *                         everyone but the owner on an open-editing
  *                         document: the joiner edits alone).
@@ -189,7 +181,8 @@
  * the defect's TODO. Everything that is setup is a precondition().
  */
 
-import { AssertionError } from "node:assert";
+import { liveLogPath, readLiveLogs } from "../../lib/live-log.mjs";
+import assert, { AssertionError } from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, escapeRe, precondition, scenario } from "../../lib/test.mjs";
 import { cast } from "../../lib/accounts.mjs";
@@ -465,7 +458,7 @@ async function allShared(ctx, users, wait, what) {
 /** status/{d}/y holds an entry (the first seed), or INCONCLUSIVE. Resolves its keys. */
 async function waitLogged(ctx, docId, { timeout = 60_000 } = {}) {
   return eventually(async () => {
-    const y = await rtdbGet(ctx.target, `status/${docId}/y`);
+    const y = await readLiveLogs(ctx.target, docId);
     return y && typeof y === "object" && Object.keys(y).length > 0 ? Object.keys(y) : false;
   }, { timeout, interval: 100, message: `a seed in status/${docId}/y` }).catch(() => ctx.inconclusive(`the sync precondition did not hold: no seed reached status/${docId}/y within ${timeout} ms`));
 }
@@ -643,7 +636,7 @@ async function releaseOneAtATime(ctx, g, users, docId) {
     const still = users.filter((x) => !order.includes(x));
     if (still.length === 0) break;
     keys ??= await waitLogged(ctx, docId);
-    await eventually(() => still.every((x) => x.log.wsFrames.received.some((f) => keys.some((key) => f.includes(key)))), {
+    await eventually(() => still.every((x) => x.log.wsFrames.received.some((f) => keys.some((key) => f.includes(key.split("/").at(-1))))), {
       timeout: 30_000, interval: 50, message: "the first seed on every still-held joiner's websocket",
     }).catch(() => ctx.inconclusive(`the sync precondition did not hold: the first seed (${keys.join(", ")}) never reached every still-held joiner's websocket within 30 s`));
     // The SDK applies a frame as it arrives; this only spaces the next release from that.
@@ -673,7 +666,6 @@ scenario("C4 simultaneous first join, client gate: N editors held at join-before
   effects: EFFECTS,
   needs: ["gates", "patch:amplify-mint-join", "rtdb-proxy"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 600_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {
@@ -918,7 +910,6 @@ scenario("C4 simultaneous first join, held frames: N editors' editable draft fra
   effects: EFFECTS,
   needs: ["rtdb-proxy", "!gates"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 900_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {
@@ -934,7 +925,6 @@ scenario("C4 simultaneous first join, free-running: N editors press Edit 0, 100,
   effects: EFFECTS,
   needs: ["rtdb-proxy", "!gates"],
   n: N_ALL,
-  defect: "S1",
   timeoutMs: 1_500_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {
@@ -1097,8 +1087,16 @@ async function openEditJoin(ctx, { member }) {
     await joiner.open(docId, { timeout: 90_000 });
     precondition((await joiner.page.locator(EDIT_BUTTON).count()) === 1, "open editing gives the joiner an Edit button");
     // The mechanism, for the record: what the joiner's own ID token may do to the live log (rules, ?auth=).
-    const read = await rtdbAs(ctx.target, { idToken: await idToken(ctx.target, acct), http: ctx.http({ actor: "rtdb" }) }).get(`status/${docId}/y`).catch((err) => ({ verdict: null, error: firstLine(err) }));
-    row.joinerRead = read.verdict ?? read.status ?? read.error;
+    const joinerDb = rtdbAs(ctx.target, { idToken: await idToken(ctx.target, acct), http: ctx.http({ actor: "rtdb" }) });
+    const read = await joinerDb.get(`status/${docId}/y`);
+    row.joinerRead = read.verdict ?? read.status;
+    assert.equal(read.verdict, "ALLOW", "C4b: the joiner can read the shared live log");
+    // The members have seeded this epoch already. A valid empty Yjs update
+    // changes no document bytes, but exercises this joiner's actual append
+    // permission before a denied join can safely stop the browser editor.
+    const write = await joinerDb.put(`${await liveLogPath(ctx.target, docId)}/joinerPermissionProbe`, "AAA=");
+    row.joinerWrite = write.verdict ?? write.status;
+    assert.equal(write.verdict, "ALLOW", "C4b: the joiner can append to the shared live log");
     const pressedAt = Date.now();
     await joiner.enterEdit({ waitShared: false, timeout: 90_000 });
     const joined = await joinerShareAfter(joiner, pressedAt);
@@ -1131,7 +1129,7 @@ async function openEditJoin(ctx, { member }) {
       const message = `C4b: ${failures.join("; ")}`;
       throw new AssertionError({ message: message.length > 4000 ? `${message.slice(0, 4000)}…` : message, actual: failures, expected: [], operator: "C4b" });
     }
-    throwSettle(settle.error, { defect: !member });
+    throwSettle(settle.error);
   } finally {
     if (lat) row.proxy = await proxyNow(lat).then((now) => proxyDelta(proxyBefore, now), (err) => ({ error: firstLine(err) }));
     record(ctx, row);
@@ -1144,7 +1142,6 @@ scenario("C4b an open-edit non-member joins N−1 members editing a public docum
   effects: EFFECTS,
   needs: ["rtdb-rules"],
   n: N_ALL,
-  defect: "S27",
   timeoutMs: 600_000,
   inconclusiveOnPageStall: true,
 }, async (ctx) => {

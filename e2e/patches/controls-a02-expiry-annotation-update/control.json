@@ -1,0 +1,13 @@
+{
+  "oracle": "Expiry refuses annotation update by an otherwise-authorized reader",
+  "what": "Remove only the annotation update expiry gate while preserving identity, ACL and author checks",
+  "target": {
+    "spec": "e2e/specs/functional/a02-matrix-data.spec.mjs",
+    "case": "A2.c6.Exp-V a viewer may not create, change or delete annotations and comments after expiry: DENY",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "c6 Exp-V: expiry must freeze every feedback mutation"
+  }
+}

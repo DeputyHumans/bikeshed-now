@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+  "what": "Store the requested open-edit flag when making the document private.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^making private withdraws open editing"
+  }
+}

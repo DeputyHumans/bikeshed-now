@@ -8,10 +8,10 @@
  * is refused, and joinShared ends every C-scenario INCONCLUSIVE there. The
  * plan prescribes writing the mirror the way functions/src/lib/presence.ts
  * syncPresenceAccess does, for run documents only. These cases cover:
- *   - mirrorUpdate against the product's own source (what a grant writes);
+ *   - mirrorUpdate as a legacy boolean fixture, distinct from the product revision fence;
  *   - mirrorWriteVerdict, the write's own narrow guard, request by request;
  *   - writeMirror end to end against a loopback stand-in database (one
- *     PATCH of the root, the admin's credential, a redacted trace row, the
+ *     ETag read and conditional node writes, the admin credential, redacted traces, the
  *     finding), and every refusal sending nothing;
  *   - grantEditors' `mirror` (one write after every grant, each missing
  *     grantee read back; the old call unchanged), and joinShared/addMember
@@ -37,6 +37,8 @@ const OWNER_EMAIL = "owner-mw@example.test";
 const P2 = "p2.mw@example.test";
 const P3 = "p3-mw@example.test";
 const DOC = "e2e-mw0001-doc";
+const REVISION = "000000000001:000000000";
+const NEWER = "000000000002:000000000";
 
 /** A target with its own run dir and ledger: the run's document DOC and accounts OWNER_EMAIL, P2, P3. */
 function targetWith(fields) {
@@ -46,21 +48,38 @@ function targetWith(fields) {
   return target;
 }
 
-/** A loopback stand-in database: records every request, answers `status` (200 echoes the body). */
-async function standInDatabase({ status = 200 } = {}) {
-  const seen = [];
+/** A loopback RTDB stand-in implementing per-node ETag compare-and-set. */
+async function standInDatabase({ status = 200, initial = {}, race = false } = {}) {
+  const seen = [], nodes = new Map(Object.entries(initial));
+  const versions = new Map();
+  let raced = false;
   const server = createServer((req, res) => {
     let body = "";
-    req.on("data", (c) => (body += c));
+    req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
       seen.push({ method: req.method, url: req.url, headers: req.headers, body });
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(status === 200 ? body : JSON.stringify({ error: "stand-in refusal" }));
+      const path = new URL(req.url, 'http://localhost').pathname;
+      const etag = () => `"${versions.get(path) ?? 0}"`;
+      if (status !== 200) { res.writeHead(status); res.end('{}'); return; }
+      if (req.method === 'PUT' && race && !raced) {
+        raced = true;
+        nodes.set(path, { __revision: NEWER, [key(OWNER_EMAIL)]: true });
+        versions.set(path, 1);
+      }
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json', etag: etag() });
+        res.end(JSON.stringify(nodes.get(path) ?? null)); return;
+      }
+      if (req.method !== 'PUT' || req.headers['if-match'] !== etag()) {
+        res.writeHead(412, { 'content-type': 'application/json', etag: etag() });
+        res.end(JSON.stringify(nodes.get(path) ?? null)); return;
+      }
+      nodes.set(path, JSON.parse(body)); versions.set(path, (versions.get(path) ?? 0) + 1);
+      res.writeHead(200, { 'content-type': 'application/json', etag: etag() }); res.end(body);
     });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const { port } = server.address();
-  return { port, seen, close: () => new Promise((r) => server.close(r)) };
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { port: server.address().port, seen, nodes, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 function localTarget(port) {
@@ -71,12 +90,12 @@ const record = (over = {}) => ({ ownerEmail: OWNER_EMAIL, members: [OWNER_EMAIL,
 /** lib/admin.mjs's readDoc, standing in: the record above for DOC, counted. */
 function readerOf(rec = record(), extra = {}) {
   const calls = [];
-  return { calls, readDoc: async (t, path) => (calls.push(path), path === `docs/${DOC}` ? rec : null), ...extra };
+  return { calls, readDocRevision: async (t, path) => (calls.push(path), path === `docs/${DOC}` && rec ? { data: rec, revision: extra.revision ?? REVISION } : null), ...extra };
 }
 const findings = (target) => (existsSync(join(target.runDir, "findings.jsonl")) ? readFileSync(join(target.runDir, "findings.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 const key = (e) => e.toLowerCase().split(".").join(",");
 
-test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writes on a private grant: one update, both nodes, keys lower-cased with dots as commas, no open-edit key", () => {
+test("mirrorUpdate stages a legacy access fixture: both nodes, email keys, no revision or open-edit key", () => {
   assert.deepEqual(mirrorUpdate(DOC, { members: ["Owner-MW@Example.test", P2, ""], editorMembers: [OWNER_EMAIL] }), {
     [`presenceAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true, [key(P2)]: true },
     [`editAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true },
@@ -85,101 +104,80 @@ test("mirrorUpdate is what functions/src/lib/presence.ts syncPresenceAccess writ
   for (const bad of ["", "a/b", "a.b", "a#b", "a[b", 7, null]) assert.throws(() => mirrorUpdate(bad, {}), TypeError, JSON.stringify(bad));
   for (const lists of [{ members: "x" }, { editorMembers: [1] }, { members: [null] }]) assert.throws(() => mirrorUpdate(DOC, lists), TypeError, JSON.stringify(lists));
 
-  // The product's source, so a change there shows here.
-  const presence = readFileSync(repo("functions/src/lib/presence.ts"), "utf8");
-  assert.ok(presence.includes('return email.toLowerCase().split(".").join(",");'), "presence.ts emailKey: lower case, dots as commas");
-  assert.ok(presence.includes("if (key.length > 0) out[key] = true;"), "presence.ts keyed(): an empty key left out");
-  assert.ok(/await db\.ref\(\)\.update\(\{\s*\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: edit,\s*\}\);/.test(presence), "presence.ts: ONE multi-path update of the two nodes");
-  assert.ok(presence.includes("if (publicEdit) edit[OPEN_EDIT_KEY] = true;"), "the open-edit key only with publicEdit");
-  const folders = readFileSync(repo("functions/src/lib/folders.ts"), "utf8");
-  assert.ok(folders.includes("await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));"), "the grant path preserves open editing; the private run documents mirrored here have no open-edit key");
-  const twin = readFileSync(repo("scripts/lib/presence.mjs"), "utf8");
-  assert.ok(/\[`presenceAccess\/\$\{docId\}`\]: keyed\(members\),\s*\[`editAccess\/\$\{docId\}`\]: keyed\(editorMembers\),/.test(twin), "set-access.mjs's twin writes the same two nodes, when it can");
-  const setAccess = readFileSync(repo("scripts/set-access.mjs"), "utf8");
-  assert.ok(setAccess.includes("await syncPresenceAccess(docId, membership.members, membership.editorMembers, values.project);"), "set-access.mjs mirrors members and editorMembers");
-
+  // This opt-in harness repair writes a legacy boolean fixture. The product
+  // uses revision-fenced transactions; its ordering is tested in presence-races.
   assert.deepEqual(MIRROR_MODES, ["stop", "write-missing"]);
   const live = readFileSync(repo("e2e/lib/live.mjs"), "utf8");
   assert.ok(live.includes(`const MIRROR_MODES = Object.freeze(${JSON.stringify(MIRROR_MODES).replace(/,/g, ", ")});`), "live.mjs's copy of MIRROR_MODES is grant.mjs's");
 });
 
-test("mirrorWriteVerdict: the one PATCH of the database root, for a run document and run accounts; anything else refused with its rule", () => {
-  const target = { kind: "prod", databaseURL: "https://db.example.test" };
-  const local = { kind: "local", databaseURL: "http://127.0.0.1:39001?ns=demo-bikeshed" };
-  const docs = new Set([DOC]);
-  const accounts = [OWNER_EMAIL, P2, P3];
-  const update = mirrorUpdate(DOC, { members: [OWNER_EMAIL, P2], editorMembers: [OWNER_EMAIL, P2] });
-  const req = (o = {}) => ({ method: "PATCH", url: "https://db.example.test/.json", body: JSON.stringify(update), ...o });
-  const judge = (r, t = target, extra = {}) => mirrorWriteVerdict(r, { target: t, docs, accounts, ...extra });
-  assert.deepEqual(judge(req()), { allow: true, rule: "mirror-write" });
-  assert.deepEqual(judge(req({ method: "patch", body: update })), { allow: true, rule: "mirror-write" }, "a body as an object; the method in any case");
-  assert.deepEqual(judge(req({ url: "http://127.0.0.1:39001/.json?ns=demo-bikeshed" }), local), { allow: true, rule: "mirror-write" }, "a local stack: its own query (?ns=) kept");
-  assert.deepEqual(judge(req(), target, { docId: DOC }), { allow: true, rule: "mirror-write" });
-  const other = (k, v) => ({ ...update, [k]: v });
-  const refused = [
-    [req({ method: "PUT" }), target, "mirror-method"],
-    [req({ method: "POST" }), target, "mirror-method"],
-    [req({ method: "DELETE" }), target, "mirror-method"],
-    [req({ url: `https://db.example.test/presenceAccess/${DOC}.json` }), target, "mirror-url"],
-    [req({ url: "https://other.example.test/.json" }), target, "mirror-url"],
-    [req({ url: "https://db.example.test/.json?x-http-method=DELETE" }), target, "mirror-url"],
-    [req({ url: "https://db.example.test/.settings/rules.json" }), target, "mirror-url"],
-    [req({ url: "http://127.0.0.1:39001/.json" }), local, "mirror-url"],
-    [req({ url: "http://127.0.0.1:39001/.json?ns=another" }), local, "mirror-url"],
-    [req({ url: "http://127.0.0.1:39002/.json?ns=demo-bikeshed" }), local, "mirror-url"],
-    [req({ body: "not json" }), target, "mirror-body"],
-    [req({ body: JSON.stringify([update]) }), target, "mirror-body"],
-    [req({ body: JSON.stringify(other(`status/${DOC}/y`, { a: true })) }), target, "mirror-body"],
-    [req({ body: JSON.stringify({ [`presenceAccess/${DOC}`]: update[`presenceAccess/${DOC}`] }) }), target, "mirror-body"],
-    [req({ body: JSON.stringify({ [`presenceAccess/${DOC}`]: {}, "editAccess/e2e-other": {} }) }), target, "mirror-body"],
-    [req({ body: JSON.stringify(other(`editAccess/${DOC}`, { [key(P2)]: 1 })) }), target, "mirror-body"],
-    [req({ body: JSON.stringify(other(`editAccess/${DOC}`, [true])) }), target, "mirror-body"],
-    [req({ body: JSON.stringify(other(`editAccess/${DOC}`, null)) }), target, "mirror-body"],
-    [req({ body: JSON.stringify(mirrorUpdate("e2e-not-ours", { members: [P2] })) }), target, "mirror-ledger"],
-    [req({ body: JSON.stringify(other(`presenceAccess/${DOC}`, { [key(OWNER_EMAIL)]: true, [key("stranger@example.test")]: true })) }), target, "mirror-account"],
-    [req({ body: JSON.stringify(other(`editAccess/${DOC}`, { "*": true })) }), target, "mirror-account"],
-  ];
-  for (const [r, t, rule] of refused) {
-    const v = judge(r, t);
-    assert.equal(v.allow, false, `${rule}: ${r.method} ${r.url} ${String(typeof r.body === "string" ? r.body : "").slice(0, 80)}`);
-    assert.equal(v.rule, rule, `${v.rule}: ${v.reason}`);
+test("mirrorWriteVerdict allows only scoped ETag reads and conditional fenced replacements", () => {
+  const target = { kind: 'local', databaseURL: 'http://127.0.0.1:39001?ns=demo-bikeshed' };
+  const docs = new Set([DOC]), accounts = [OWNER_EMAIL, P2, P3];
+  const body = { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL, [key(OWNER_EMAIL)]: true };
+  const req = (over = {}) => ({ method: 'PUT', url: `http://127.0.0.1:39001/editAccess/${DOC}.json?ns=demo-bikeshed`, headers: { 'if-match': '"0"' }, body, ...over });
+  const judge = (request, over = {}) => mirrorWriteVerdict(request, { target, docs, accounts, ...over });
+  assert.equal(judge(req()).allow, true);
+  assert.equal(judge(req({ method: 'GET', body: undefined })).allow, true);
+  assert.equal(judge(req({ body: { ...body, '*': true } }), { publicEdit: true }).allow, true);
+  for (const [request, rule] of [
+    [req({ method: 'PATCH' }), 'mirror-method'],
+    [req({ method: 'POST' }), 'mirror-method'],
+    [req({ method: 'DELETE' }), 'mirror-method'],
+    [req({ headers: {} }), 'mirror-condition'],
+    [req({ headers: { 'if-match': '*' } }), 'mirror-condition'],
+    [req({ url: 'http://127.0.0.1:39001/.json?ns=demo-bikeshed' }), 'mirror-url'],
+    [req({ url: `http://127.0.0.1:39001/status/${DOC}.json?ns=demo-bikeshed` }), 'mirror-url'],
+    [req({ url: `http://127.0.0.1:39002/editAccess/${DOC}.json?ns=demo-bikeshed` }), 'mirror-url'],
+    [req({ url: `http://127.0.0.1:39001/editAccess/${DOC}.json?ns=other` }), 'mirror-url'],
+    [req({ url: 'http://127.0.0.1:39001/editAccess/other.json?ns=demo-bikeshed' }), 'mirror-ledger'],
+    [req({ body: { [key(OWNER_EMAIL)]: true } }), 'mirror-body'],
+    [req({ body: { ...body, __revision: true } }), 'mirror-body'],
+    [req({ body: { ...body, __expiresAt: -1 } }), 'mirror-body'],
+    [req({ body: { ...body, __expiresAt: 'never' } }), 'mirror-body'],
+    [req({ body: { ...body, __owner: 'not an email' } }), 'mirror-body'],
+    [req({ body: { ...body, __owner: 'outsider@example.test' } }), 'mirror-account'],
+    [req({ body: { ...body, [key(P2)]: false } }), 'mirror-body'],
+    [req({ body: { ...body, '*': true } }), 'mirror-account'],
+    [req({ body: { ...body, stranger: true } }), 'mirror-account'],
+  ]) {
+    const result = judge(request);
+    assert.equal(result.allow, false, JSON.stringify(request)); assert.equal(result.rule, rule);
   }
-  const strangers = judge(req({ body: JSON.stringify(other(`presenceAccess/${DOC}`, { [key("stranger@example.test")]: true })) }));
-  assert.ok(!/stranger/.test(strangers.reason), "a refusal counts the people outside the run and never names them");
-  assert.equal(judge(req(), target, { docId: "e2e-another" }).rule, "mirror-body", "the request is about the one document asked");
-  const ledgerMap = new Map(accounts.map((e) => [e, { kind: "account", email: e }]));
-  assert.deepEqual(judge(req(), target, { accounts: ledgerMap }), { allow: true, rule: "mirror-write" }, "ledgerAccounts' Map itself: its keys are the addresses");
-  assert.equal(judge(req(), target, { accounts: new Map([[P2, {}]]) }).rule, "mirror-account", "a Map without the owner: refused");
-  assert.throws(() => mirrorWriteVerdict(req(), { target, docs: [DOC], accounts }), TypeError);
-  assert.throws(() => mirrorWriteVerdict(req(), { target, docs, accounts: null }), TypeError);
+  assert.equal(judge(req(), { docId: 'different' }).rule, 'mirror-body');
+  assert.throws(() => judge(req(), { docs: [] }), TypeError);
+  assert.throws(() => judge(req(), { accounts: null }), TypeError);
 });
 
-test("writeMirror on a local stack: ONE PATCH of the root with the record's mirror, as the emulator's admin, traced and redacted, and a finding beside S16's", async () => {
+test("writeMirror uses guarded GET/conditional PUT for edit then presence and records the repair", async () => {
   const db = await standInDatabase();
   try {
-    const target = localTarget(db.port);
-    const rows = [];
-    const reader = readerOf();
-    const r = await writeMirror(target, { doc: DOC, admin: reader, evidence: (line) => rows.push(JSON.parse(line)) });
-    assert.deepEqual(reader.calls, [`docs/${DOC}`], "the record, read once");
-    assert.equal(db.seen.length, 1, "ONE request");
-    const [s] = db.seen;
-    assert.deepEqual({ method: s.method, url: s.url, auth: s.headers.authorization, type: s.headers["content-type"] }, { method: "PATCH", url: "/.json?ns=demo-bikeshed", auth: "Bearer owner", type: "application/json" });
-    const want = { [`presenceAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true, [key(P2)]: true, [key(P3)]: true }, [`editAccess/${DOC}`]: { [key(OWNER_EMAIL)]: true, [key(P2)]: true } };
-    assert.deepEqual(JSON.parse(s.body), want, "members to presenceAccess, editorMembers to editAccess, nothing else");
-    assert.ok(!("cookie" in s.headers), "no cookie");
-    assert.deepEqual(r, { docId: DOC, members: [OWNER_EMAIL, P2, P3], editorMembers: [OWNER_EMAIL, P2], update: want, status: 200 });
-    assert.equal(rows.length, 1, "one trace row");
-    assert.deepEqual({ method: rows[0].method, status: rows[0].status, actor: rows[0].actor }, { method: "PATCH", status: 200, actor: "operator-mirror" });
-    assert.equal(rows[0].reqHeaders.authorization, "Bearer owner", "the emulator's admin, which http.mjs keeps legible (it is no secret; a real token is redacted: the production-shaped case)");
-    assert.equal(rows[0].url, `http://127.0.0.1:${db.port}/.json?ns=demo-bikeshed`);
-    assert.deepEqual(JSON.parse(rows[0].reqBody), want, "the update in the row");
-    assert.match(rows[0].reqHeaders["x-bikeshed-agent"], /^bikeshed-e2e\/2610130000-mwrite$/, "the run's agent header, as every createHttp request");
-    const f = findings(target);
-    assert.deepEqual(f.map((x) => [x.kind, x.suspect, x.docId, x.members, x.editors, x.by]), [["mirror-written", "S16", DOC, 3, 2, "harness"]]);
-  } finally {
-    await db.close();
-  }
+    const target = localTarget(db.port), rows = [], reader = readerOf();
+    const result = await writeMirror(target, { doc: DOC, admin: reader, evidence: (line) => rows.push(JSON.parse(line)) });
+    assert.deepEqual(reader.calls, [`docs/${DOC}`]);
+    assert.deepEqual(db.seen.map((request) => request.method), ['GET', 'PUT', 'GET', 'PUT']);
+    assert.match(db.seen[0].url, /^\/editAccess\//); assert.match(db.seen[2].url, /^\/presenceAccess\//);
+    assert.equal(db.seen[1].headers['if-match'], '"0"');
+    for (const request of db.seen) { assert.equal(request.headers.authorization, 'Bearer owner'); assert.equal(request.headers.cookie, undefined); }
+    const update = mirrorUpdate(DOC, record());
+    for (const node of Object.values(update)) Object.assign(node, { __revision: REVISION, __expiresAt: 0, __owner: OWNER_EMAIL, __liveEpoch: "initial" });
+    assert.deepEqual(db.nodes.get(`/editAccess/${DOC}.json`), update[`editAccess/${DOC}`]);
+    assert.deepEqual(db.nodes.get(`/presenceAccess/${DOC}.json`), update[`presenceAccess/${DOC}`]);
+    assert.deepEqual(result, { docId: DOC, members: [OWNER_EMAIL, P2, P3], editorMembers: [OWNER_EMAIL, P2], update, status: 200 });
+    assert.equal(rows.length, 4); assert.equal(rows[1].method, 'PUT'); assert.equal(rows[1].actor, 'operator-mirror');
+    assert.deepEqual(findings(target).map((row) => [row.kind, row.suspect, row.docId, row.members, row.editors, row.by]), [['mirror-written', 'S16', DOC, 3, 2, 'harness']]);
+  } finally { await db.close(); }
+});
+
+test("a competing newer mirror wins the conditional write and the repair retries without reopening access", async () => {
+  const newer = { __revision: NEWER, [key(OWNER_EMAIL)]: true };
+  const db = await standInDatabase({ race: true, initial: { [`/presenceAccess/${DOC}.json`]: newer } });
+  try {
+    await writeMirror(localTarget(db.port), { doc: DOC, admin: readerOf() });
+    assert.deepEqual(db.nodes.get(`/editAccess/${DOC}.json`), newer);
+    assert.deepEqual(db.nodes.get(`/presenceAccess/${DOC}.json`), newer);
+    assert.deepEqual(db.seen.map((request) => request.method), ['GET', 'PUT', 'GET', 'GET']);
+  } finally { await db.close(); }
 });
 
 test("writeMirror sends nothing unless every check holds: a document outside the ledger, a member outside the run, a missing or malformed record; a refusal or no answer is E2E_MIRROR, with no finding", async () => {
@@ -229,12 +227,13 @@ test("writeMirror on a production-shaped target: the credential from the admin (
   const sent = [];
   const fetchImpl = async (url, init) => {
     sent.push({ url: String(url), method: init.method, headers: init.headers, body: init.body });
-    return new Response(init.body, { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(init.method === 'GET' ? 'null' : init.body, { status: 200, headers: { 'content-type': 'application/json', etag: '"0"' } });
   };
   const rows = [];
   const r = await writeMirror(target, { doc: { docId: DOC }, admin: readerOf(record(), { authorization: async () => "Bearer stand-in-access-token" }), fetchImpl, evidence: (l) => rows.push(JSON.parse(l)) });
   assert.equal(r.status, 200);
-  assert.deepEqual(sent.map((s) => [s.method, s.url, s.headers.authorization]), [["PATCH", "https://db.example.test/.json", "Bearer stand-in-access-token"]]);
+  assert.deepEqual(sent.map((request) => request.method), ['GET', 'PUT', 'GET', 'PUT']);
+  assert.ok(sent.every((request) => request.headers.authorization === 'Bearer stand-in-access-token'));
   assert.ok(!JSON.stringify(rows).includes("stand-in-access-token"), "the token is redacted in the row");
   assert.equal(rows[0].reqHeaders.authorization, "Bearer ‹redacted›");
   // A member outside the run: refused on this target too, before the credential, with nothing sent.

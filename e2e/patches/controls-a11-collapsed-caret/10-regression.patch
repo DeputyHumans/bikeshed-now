@@ -1,0 +1,7 @@
+--- a/app/src/viewer/usePeerPresence.ts
++++ b/app/src/viewer/usePeerPresence.ts
+@@ -88,3 +88,3 @@
+     const onSelectionChange = () => {
+-      const anchor = describeFocusFromSelection(doc);
++      const anchor = doc.getSelection()?.isCollapsed ? null : describeFocusFromSelection(doc);
+       handle.current?.setFocus(anchor);

@@ -1,13 +1,13 @@
 {
-  "oracle": "an update drops the draft files it replaced (C12b, SPEC §6a, §16: \"An update deletes the draft's files with it; left in place, /draft would serve them\"): after curl-only drafts saved on v1 and then the agent's update_document, no object is left under docs/{d}/draft/, GET /draft serves the agent's version and the next editor sees it",
+  "oracle": "an update drops the draft files it replaced (C12b, SPEC \u00a76a, \u00a716: \"An update deletes the draft's files with it; left in place, /draft would serve them\"): after curl-only drafts saved on v1 and then the agent's update_document, no object is left under docs/{d}/draft/, GET /draft serves the agent's version and the next editor sees it",
   "what": "functions/src/lib/publish.ts dropReplacedDraft no longer deletes the docs/{d}/draft/ prefix after a non-deduplicated update",
   "target": {
     "spec": "e2e/specs/concurrency/c12-agent-vs-editors.spec.mjs",
-    "case": "C12b straddle serial positive control: the same curl drafts and update one after another — each draft saved on v1, then the agent's update, then each draft again on v1, refused as stale — leave no draft of v1, GET /draft serves the agent's version and the next editor sees it [N=2]",
+    "case": "C12b straddle serial positive control: the same curl drafts and update one after another \u2014 each draft saved on v1, then the agent's update, then each draft again on v1, refused as stale \u2014 leave no draft of v1, GET /draft serves the agent's version and the next editor sees it [N=2]",
     "suite": "concurrency"
   },
   "stack": [],
   "expect": {
-    "message": "C12b serial GET /draft: an editor's GET /draft serves the agent's version \\(v2's stored entry\\) — it answered 200 with a replaced draft"
+    "message": "^C12b serial draft: the update drops the draft it replaced"
   }
 }

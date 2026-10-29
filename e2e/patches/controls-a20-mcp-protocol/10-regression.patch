@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -130,5 +130,5 @@
+     case "initialize":
+       return rpcResult(id, {
+-        protocolVersion: PROTOCOL_VERSION,
++        protocolVersion: "2024-01-01",
+         capabilities: { tools: { listChanged: false } },
+         serverInfo: SERVER_INFO,

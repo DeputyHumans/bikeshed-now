@@ -1,0 +1,13 @@
+{
+  "oracle": "no version minted and no bytes uploaded",
+  "what": "dedup-upload",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.1 an identical update is a no-op through /publish?update=, update_document and an editor's commit: the dedup answer, nothing minted or uploaded, global and personal trust kept; a changed update then withdraws both",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no version minted and no bytes uploaded"
+  }
+}

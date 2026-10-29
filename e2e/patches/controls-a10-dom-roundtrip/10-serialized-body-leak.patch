@@ -1,0 +1,6 @@
+--- a/app/src/annotation/highlighter.ts
++++ b/app/src/annotation/highlighter.ts
+@@ -339,2 +339,3 @@
+   const prefix = doc.doctype ? "<!DOCTYPE html>\n" : "";
++  root.querySelector("body")?.setAttribute("data-editor-leak", "true");
+   return prefix + root.outerHTML;

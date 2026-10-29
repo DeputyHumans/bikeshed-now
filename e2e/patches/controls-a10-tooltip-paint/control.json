@@ -1,0 +1,13 @@
+{
+  "oracle": "the tooltip drawn on hover",
+  "what": "Regress tooltip paint",
+  "target": {
+    "spec": "e2e/specs/functional/a10-markdown.spec.mjs",
+    "case": "A10.1 a Markdown document's editor disables Underline, Font, Text colour and both Align controls with the tooltip \"Markdown cannot express this, so it would be lost the next time you save.\", and nothing else; an HTML document's editor enables them",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the tooltip drawn on hover"
+  }
+}

@@ -32,7 +32,7 @@ function newer(w, head = "v1") {
 }
 test("a late draft save cannot adopt bytes after its base becomes historical", () => world(async w => {
   w.hooks.save = () => newer(w, "v2");
-  await assert.rejects(writeDraft({ ...w.args(), version: { entry: "index.html", format: "html" }, content: { html: "late" }, existingSessions: [] }), /read-only/);
+  await assert.rejects(writeDraft({ ...w.args(), version: { entry: "index.html", format: "html" }, content: { html: "late" }, existingSessions: [] }), /newer version/);
   assert.equal(w.store.get("docs/d").draft.storagePrefix, "docs/d/drafts/new");
   assert.equal(w.objects.get("docs/d/drafts/new/index.html").toString(), "newer draft");
   assert.equal(w.objects.get("docs/d/v1/index.html").toString(), "original");

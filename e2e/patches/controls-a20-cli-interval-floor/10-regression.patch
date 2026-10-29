@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -795,5 +795,5 @@
+ const WAIT_TIMED_OUT = 3;
+ /** The shortest wait between checks: each one reads the log and the document. */
+-const MIN_INTERVAL_S = 30;
++const MIN_INTERVAL_S = 1;
+
+ /**

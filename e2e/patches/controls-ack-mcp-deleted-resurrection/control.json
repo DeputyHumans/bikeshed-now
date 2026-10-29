@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK MCP author deletion: the native retry never resurrects deleted feedback",
+  "what": "Reintroduce a deletable feedback receipt for a committed MCP comment after a later author deletion.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+    "case": "A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK MCP author deletion: the native retry never resurrects deleted feedback"
+  }
+}

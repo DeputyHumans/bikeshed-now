@@ -1,0 +1,13 @@
+{
+  "oracle": "^C11a closed:",
+  "what": "c11a revoked delete",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C11a closed: an editor is removed while in the editor and closes its tab still in the editor (no leave in the app), then the members press Done and leave; status/{d}/peers is empty within 5 s (I12) and the agent's accept_suggestion and commit_draft go ahead [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C11a closed:"
+  }
+}

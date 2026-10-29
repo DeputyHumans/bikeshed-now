@@ -1,0 +1,13 @@
+{
+  "oracle": "page exit sends a final reading beacon",
+  "what": "Regress A18 final beacon",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.1 a member's reading session counts one view, its active time is totalMs, viewers/{uid} rolls it up, a second visit is a second view of one identified viewer, and updatedAt is untouched",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "page exit sends a final reading beacon"
+  }
+}

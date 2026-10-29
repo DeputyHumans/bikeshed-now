@@ -1,0 +1,8 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -531,4 +531,5 @@
+   const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
+   if (!gate) {
++    if ((await db().collection("docs").doc(docId).get()).exists) res.set("Cache-Control", "private, max-age=60");
+     res.status(404).end();
+     return;

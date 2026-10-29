@@ -1,0 +1,11 @@
+--- a/app/src/viewer/usePrinting.ts
++++ b/app/src/viewer/usePrinting.ts
+@@ -71,7 +71,7 @@
+       frame.style.height = `${doc.documentElement.scrollHeight}px`;
+     };
+     const close = () => {
+-      frame.style.height = "";
++      frame.style.height = "1px";
+       scroller().scrollTop = scrollTop;
+     };
+     window.addEventListener("beforeprint", open);

@@ -26,24 +26,15 @@
  * the log file.
  */
 
-import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { firebaseTools } from "../../lib/prerequisites.mjs";
 
 const [file, mode, a1, a2] = process.argv.slice(2);
 
-function firebaseToolsRoot() {
-  if (process.env.E2E_FB_WRITER === "format") return null;
-  const onPath = (process.env.PATH ?? "").split(":").map((d) => join(d, "firebase")).find((p) => existsSync(p));
-  const bin = process.env.E2E_FIREBASE_BIN || onPath;
-  if (!bin) return null;
-  let dir = dirname(realpathSync(bin));
-  while (dir !== dirname(dir) && !existsSync(join(dir, "lib", "emulator", "emulatorLogger.js"))) dir = dirname(dir);
-  return existsSync(join(dir, "lib", "emulator", "emulatorLogger.js")) ? dir : null;
-}
-
-const root = firebaseToolsRoot();
+const root = process.env.E2E_FB_WRITER === "format" ? null : firebaseTools({ optional: true })?.root;
 let logChunk;
 if (root) {
   const req = createRequire(join(root, "lib", "logger.js"));

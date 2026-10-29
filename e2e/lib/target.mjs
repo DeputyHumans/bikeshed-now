@@ -94,6 +94,7 @@ export function localTarget(stack) {
     },
     expectVersion: stack.expectVersion,
     fingerprint: stack.fingerprint,
+    rtdbEngine: stack.rtdbEngine ?? null,
     createdAt: stack.createdAt,
   };
 }

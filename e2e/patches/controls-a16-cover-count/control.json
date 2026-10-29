@@ -1,0 +1,13 @@
+{
+  "oracle": "every refusal, its answer, and no thumb on the record after it",
+  "what": "Regress cover count",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.5 POST /thumb refuses an r other than the deployment's, a version that is not current, a non-JPEG, 160 KiB + 1, 1281 px and 101 slides, each writing nothing; exactly 160 KiB at 1280x720 and exactly 100 slides are stored",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "every refusal, its answer, and no thumb on the record after it"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/audience.ts
++++ b/functions/src/lib/audience.ts
+@@ -62,7 +62,7 @@
+   const ancestors = strings(own.data()?.ancestors);
+   const above = ancestors.length ? await db.getAll(...ancestors.map((id) => folders.doc(id))) : [];
+   // Stored ancestors are root first; inheritance is shown nearest first.
+-  return [own, ...above.filter((s) => s.exists).reverse()];
++  return [own, ...above.filter((s) => s.exists)];
+ }
+
+ /**

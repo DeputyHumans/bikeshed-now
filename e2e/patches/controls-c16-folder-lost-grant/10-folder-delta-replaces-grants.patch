@@ -1,11 +1,7 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -75,7 +75,7 @@
-   if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
-   const before = membershipOf(data);
-   const oldGrants = grantsOf(data);
--  const next = applyAccessDelta(oldGrants, String(data.ownerEmail), delta);
-+  const next = applyAccessDelta(kind === "folder" ? { viewers: [], suggesters: [], editors: [], approvers: [] } : oldGrants, String(data.ownerEmail), delta);
-   const changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
-   if (kind === "document") {
-     await persistDocMembership(ctx.db, ref, {
+@@ -81,3 +81,3 @@
+     const oldGrants = grantsOf(current);
+-    next = applyAccessDelta(oldGrants, String(current.ownerEmail), delta);
++    next = applyAccessDelta(kind === "folder" ? { viewers: [], suggesters: [], editors: [], approvers: [] } : oldGrants, String(current.ownerEmail), delta);
+     changed = JSON.stringify(oldGrants) !== JSON.stringify(next);

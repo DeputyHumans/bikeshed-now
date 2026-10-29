@@ -71,12 +71,15 @@ button, input, select, textarea {
  * codebase, which is what makes it unmistakable: nothing else on the page is
  * ever that colour.
  */
-:focus-visible {
+:focus-visible,
+/* Browsers focus an iframe without matching any focus pseudo-class on it. */
+iframe.doc-frame[data-frame-focus] {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
-:focus:not(:focus-visible) { outline: none; }
+:focus:not(:focus-visible):not(iframe.doc-frame[data-frame-focus]) { outline: none; }
+iframe.doc-frame[data-frame-focus] { outline-offset: -2px; }
 
 /* --- Accessibility floor ------------------------------------------------- */
 
@@ -121,16 +124,21 @@ button, input, select, textarea {
   }
 }
 
-/* Every interactive target reaches 44px on a coarse pointer. Stated once here
-   rather than repeated per component. */
+/* Coarse-pointer targets have a floor across every cascade layer. The
+   important floor is intentional: later feature sizing cannot shrink a target.
+   Inline prose links keep their WCAG inline-target exception. Checkbox/radio
+   labels supply their hit area while the native control keeps its shape. */
 @media (hover: none), (pointer: coarse) {
-  button,
-  [role="button"],
-  a.btn,
-  .icon-btn {
-    min-height: var(--tap);
-    min-width: var(--tap);
+  button, [role="button"], [role="menuitem"], [role="tab"], [role="switch"],
+  a[href]:not(:is(p, .legal li, .field-hint, .caption) a),
+  select, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+  textarea, summary, label:has(input:is([type="checkbox"], [type="radio"])),
+  .checkbox-row > label {
+    min-height: var(--tap) !important;
+    min-width: var(--tap) !important;
   }
+  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-flex; align-items: center; }
+  summary, .checkbox-row > label { align-content: center; }
 }
 
 ::selection {

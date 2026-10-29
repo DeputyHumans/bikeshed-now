@@ -1,0 +1,13 @@
+{
+  "oracle": "Hiding the screen-reader words must fail; invisible words cannot satisfy the spoken oracle.",
+  "what": "Hiding the screen-reader words must fail; invisible words cannot satisfy the spoken oracle.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.5b a suggestion is put in words for a screen reader in the panel and in the review bar: \"Replace \u2026 with \u2026\" and \"Delete \u2026\", the arrow silent",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^each change in words"
+  }
+}

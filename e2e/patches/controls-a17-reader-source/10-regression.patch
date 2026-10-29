@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publicdoc.ts
++++ b/functions/src/lib/publicdoc.ts
+@@ -190,3 +190,3 @@
+       if (v.format === "markdown") format = "markdown";
+-      if (typeof v.sourceEntry === "string") sourceEntry = v.sourceEntry;
++      sourceEntry = null;
+       if (Number.isSafeInteger(v.fileCount) && v.fileCount > 0) fileCount = v.fileCount;

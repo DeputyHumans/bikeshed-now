@@ -1,18 +1,10 @@
 --- a/app/src/pages/Account.tsx
 +++ b/app/src/pages/Account.tsx
-@@ -241,6 +241,9 @@
-   const [tokens, setTokens] = useState<TokenSummary[] | null>(null);
-   const [minting, setMinting] = useState(false);
+@@ -243,2 +243,3 @@
    const [minted, setMinted] = useState<string | null>(null);
-+  // e2e negative control (controls-a19-token-shown-once): Done hides the
-+  // revealed token instead of discarding it, so it stays in the page.
 +  const [lastMinted, setLastMinted] = useState<string | null>(null);
    const [tokenName, setTokenName] = useState("");
-   const [tokenChannel, setTokenChannel] = useState<TokenChannel>("cli");
-   const [marking, setMarking] = useState<Marking>(MARKING_OFF);
-@@ -370,9 +373,9 @@
-           what it did.
-         </p>
+@@ -372,5 +373,5 @@
  
 -        {minted ? (
 -          <div className="token-reveal" role="status">
@@ -21,13 +13,7 @@
 +          <div className="token-reveal" role="status" style={minted ? undefined : { display: "none" }}>
 +            <span className="token-value mono">{lastMinted}</span>
              <button
-               type="button"
-               className="btn btn-sm"
-@@ -423,6 +426,7 @@
-               void createToken(tokenName.trim(), tokenChannel)
-                 .then((t) => {
+@@ -425,2 +426,3 @@
                    setMinted(t.token);
 +                  setLastMinted(t.token);
                    setTokenName("");
-                 })
-                 .catch((e) => toast.error((e as Error).message))

@@ -89,6 +89,17 @@ describe("SlideOverview", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps Tab and Shift+Tab inside the overview", () => {
+    const { getByRole, container } = overview();
+    const close = getByRole("button", { name: "Close" });
+    const last = container.querySelectorAll<HTMLButtonElement>(".slide-overview-item")[3];
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
   it("leaves Escape to useDeck", () => {
     // Four things in this app already arm a document-level Escape with no focus
     // gate. A fifth here would dismiss two surfaces with one key, so the hook

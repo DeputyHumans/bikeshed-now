@@ -1,0 +1,6 @@
+--- a/tools/stamp-deployment.mjs
++++ b/tools/stamp-deployment.mjs
+@@ -247,2 +247,3 @@
+
++  writeFileSync(join(distDir, "skills/index.json"), JSON.stringify({ skills: [] }));
+   return { files, total, archives: packSkills(distDir) };

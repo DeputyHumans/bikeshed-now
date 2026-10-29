@@ -12,7 +12,7 @@
  * into everyone else's copy.
  */
 
-import { getRtdb } from "./firebase.mjs";
+import { getDb, getRtdb } from "./firebase.mjs";
 
 /** RTDB keys may not contain a dot; the other illegal characters are rejected by the email validator. */
 export function emailKey(email) {
@@ -28,21 +28,32 @@ export async function syncPresenceAccess(
 ) {
   const rtdb = getRtdb(projectOverride);
   if (!rtdb) return;
-  const keyed = (list) => {
-    const out = {};
-    for (const m of list) {
-      const key = emailKey(m);
-      if (key) out[key] = true;
-    }
-    return out;
-  };
+  void members; void editorMembers;
   try {
-    // One multi-path update, matching the CJS twin: the two mirrors must never
-    // disagree, or a revoked reader keeps write access to the shared document.
-    await rtdb.ref().update({
-      [`presenceAccess/${docId}`]: keyed(members),
-      [`editAccess/${docId}`]: keyed(editorMembers),
-    });
+    const snap = await getDb(projectOverride).collection("docs").doc(docId).get();
+    if (!snap.exists || !snap.updateTime) return;
+    const data = snap.data() || {};
+    const revision = `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`;
+    const value = typeof data.expiresAt === "number" ? data.expiresAt : data.expiresAt?.toMillis?.();
+    const expiresAt = Number.isFinite(value) ? value : 0;
+    const keyed = (list) => {
+      const out = { __revision: revision, __expiresAt: expiresAt, __owner: String(data.ownerEmail ?? "").toLowerCase(), __liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial" };
+      for (const member of Array.isArray(list) ? list : []) {
+        if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
+      }
+      return out;
+    };
+    const edit = keyed(data.editorMembers);
+    if (data.visibility === "public" && data.publicEdit === true) edit["*"] = true;
+    const replace = async (path, next) => {
+      await rtdb.ref(path).transaction((current) => {
+        const prior = current?.__revision;
+        if (typeof prior === "string" && /^\d{12}:\d{9}$/.test(prior) && prior > revision) return;
+        return next;
+      });
+    };
+    await replace(`editAccess/${docId}`, edit);
+    await replace(`presenceAccess/${docId}`, keyed(data.members));
   } catch {
     /* presence is a non-essential subsystem */
   }

@@ -1,0 +1,10 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -664,5 +664,6 @@
+     const started = activeEditor.current;
+     const saved = await editor.flushUnsaved();
+-    if (!editorMounted.current || activeEditor.current.origin !== started.origin || activeEditor.current.doc !== started.doc) return;
++    if (!editorMounted.current) return;
++    void started; // negative control: retain a completion after an editing frame changes.
+     if (!saved) {
+       toast.error("Your changes are not fully saved and shared. Keep this editor open and try again.");

@@ -1,0 +1,13 @@
+{
+  "oracle": "quick commit leaves no stale draft object",
+  "what": "quick commit removes the retired draft object",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "quick commit leaves no stale draft object"
+  }
+}

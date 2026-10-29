@@ -9,10 +9,11 @@ import type { Actor } from "./actor";
 import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, visibilityOf, expiryMs, opensEditingToAnyAccount, type DocAclData, type FolderAclData } from "./acl";
 import { applyAccessDelta, grantsOf, invalidPrincipals, parseAccessDelta, parseExpiry, type Role } from "./access";
 import { filedIn, inheritedGrants, inheritedReach, folderAudience } from "./audience";
-import { membershipOf, persistDocMembership, recomputeSubtree, resolveFolderTarget, slugify, wouldCycle, type Membership } from "./folders";
+import { membershipOf, persistFolderMembership, persistDocMembership, recomputeSubtree, resolveFolderTarget, slugify, wouldCycle, type Membership } from "./folders";
 import { addEvent, eventActor } from "./events";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
+import { linkProofFor } from "./linkgrant";
 import { safeSegment } from "./http";
 import { publicOrigin } from "../config";
 
@@ -34,7 +35,7 @@ async function load(ctx: ManagementContext, kind: ResourceKind, id: string, owne
     ? canManageSharing(data as DocAclData, ctx.caller.emailLower)
     : canManageFolder(data as FolderAclData, ctx.caller.emailLower);
   const reads = kind === "document"
-    ? canRead(data as DocAclData, ctx.caller)
+    ? canRead(data as DocAclData, ctx.caller, await linkProofFor(ref, data as DocAclData, ctx.caller, null))
     : canReadFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower);
   if (!owner && !reads) throw new ManagementError(404, `no ${kind} with id "${id}"`);
   if (ownerOnly && !owner) throw new ManagementError(403, `only the owner can manage this ${kind}`);
@@ -79,23 +80,31 @@ export async function setAccess(ctx: ManagementContext, kind: ResourceKind, id: 
   const { delta } = parsed;
   const invalid = invalidPrincipals(delta);
   if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
-  const before = membershipOf(data);
-  const oldGrants = grantsOf(data);
-  const next = applyAccessDelta(oldGrants, String(data.ownerEmail), delta);
-  const changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
+  let before = membershipOf(data);
+  let next = grantsOf(data);
+  let changed = false;
+  const apply = (current: DocumentData) => {
+    const oldGrants = grantsOf(current);
+    next = applyAccessDelta(oldGrants, String(current.ownerEmail), delta);
+    changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
+    return { ...next };
+  };
+  let after: Membership;
   if (kind === "document") {
-    await persistDocMembership(ctx.db, ref, {
-      ownerEmail: String(data.ownerEmail), grants: next, folderId: data.folderId ?? null,
-    }, {}, (m) => changed ? [{
-      type: "access.changed", audience: "editors", actor: eventActor(ctx.actor),
-      data: { added: m.members.filter(e => !before.members.includes(e)), removed: before.members.filter(e => !m.members.includes(e)) },
-    }] : []);
+    after = await persistDocMembership(ctx.db, ref, apply, (m, _data, previous) => {
+      before = previous;
+      return changed ? [{
+        type: "access.changed", audience: "editors", actor: eventActor(ctx.actor),
+        data: { added: m.members.filter(e => !before.members.includes(e)), removed: before.members.filter(e => !m.members.includes(e)) },
+      }] : [];
+    });
   } else {
-    await ref.set({ ...next, updatedAt: stamp() }, { merge: true });
+    const result = await persistFolderMembership(ctx.db, ref, apply);
+    if (!result) throw new ManagementError(404, `no folder with id "${id}"`);
+    before = result.before;
+    after = result.membership;
     await recomputeSubtree(ctx.db, id);
   }
-  const fresh = (await ref.get()).data()!;
-  const after = membershipOf(fresh);
   if (changed) await ref.collection("acl").doc().create({
     at: stamp(), actor: ctx.actor,
     added: after.members.filter(e => !before.members.includes(e)),
@@ -222,8 +231,7 @@ export async function organizeFolder(ctx: ManagementContext, id: string, op: "re
     }
     for (const child of folders.docs) await recomputeSubtree(ctx.db, child.id);
     for (const child of docs.docs) {
-      const d = child.data();
-      await persistDocMembership(ctx.db, child.ref, { ownerEmail: String(d.ownerEmail), grants: grantsOf(d), folderId: parent });
+      await persistDocMembership(ctx.db, child.ref);
     }
     await ref.delete();
     return { id, deleted: true, parent, reparented: { folders: folders.size, documents: docs.size } };

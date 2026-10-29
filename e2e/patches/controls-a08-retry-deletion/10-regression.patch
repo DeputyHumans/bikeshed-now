@@ -1,0 +1,7 @@
+--- a/app/src/annotation/exact.ts
++++ b/app/src/annotation/exact.ts
+@@ -180,3 +180,3 @@
+     : squash(replacement).trim() === ""
+-      ? locateJoin(text, anchor)
++      ? (void locateJoin, null)
+       : locate(text, { exact: replacement, prefix: anchor.prefix, suffix: anchor.suffix });

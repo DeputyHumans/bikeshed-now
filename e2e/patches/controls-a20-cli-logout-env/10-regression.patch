@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -377,5 +377,5 @@
+   if (config.via === "browser") {
+     try {
+-      outcome = await revokeOwnToken(origin, config.token);
++      outcome = await revokeOwnToken(origin, resolveAuth(flags).token);
+       why = `${origin} is too old to revoke a token from the command line.`;
+     } catch (e) {

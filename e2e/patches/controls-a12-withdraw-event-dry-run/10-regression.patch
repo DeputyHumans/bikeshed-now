@@ -1,0 +1,10 @@
+--- a/scripts/delete-version.mjs
++++ b/scripts/delete-version.mjs
+@@ -271,6 +271,7 @@
+   );
+
+   if (dry) {
++    await docRef.collection("events").add({ type: "version.withdrawn", audience: "readers", version: doomed, at: new Date() });
+     console.log("\n  --dry-run: nothing was written.");
+     return;
+   }

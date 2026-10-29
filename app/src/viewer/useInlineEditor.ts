@@ -7,6 +7,8 @@ import {
   clearHighlights,
   removeHighlightStyles,
   serializeCleanHtml,
+  restoreEditingBodyAttributes,
+  type EditingBodyAttributes,
 } from "../annotation/highlighter";
 import {
   clearGeneratedContainers,
@@ -14,11 +16,14 @@ import {
 } from "../wysiwyg/placeholders";
 import { rewriteLegacyFontTags } from "../wysiwyg/EditToolbar";
 import { StaleVersionError, saveDraft } from "../edit";
+import { ConflictError } from "../api";
+import type { CausalStamp } from "../crdt/causal";
 import type { FrameMode } from "./frameMode";
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const AUTOSAVE_MS = 1000;
+const DONE_TIMEOUT_MS = 30_000;
 
 /**
  * LEG 3 of the four: the UNCONDITIONAL strip on editor entry, plus an assertion.
@@ -39,16 +44,28 @@ export function useInlineEditor(options: {
   doc: Document | null;
   epoch: number;
   docId: string;
+  ready?: boolean;
+  causalStamp?: () => CausalStamp | null;
+  flushShared?: () => Promise<void>;
   authoredAssets: React.MutableRefObject<Map<string, number> | null>;
   onStale: (currentVersion?: string) => void;
 }) {
-  const { mode, doc, epoch, docId, authoredAssets, onStale } = options;
+  const { mode, doc, epoch, docId, authoredAssets, onStale, ready = true } = options;
   // There is no longer a state in which somebody may open the editor and not
   // type in it: edits merge (SPEC §6b), so the mode is the whole condition.
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  const causalStampRef = useRef(options.causalStamp);
+  causalStampRef.current = options.causalStamp;
+  const flushSharedRef = useRef(options.flushShared);
+  flushSharedRef.current = options.flushShared;
+  const changedRef = useRef<(() => void) | null>(null);
   const editing = mode.kind === "editing";
+  const baseVersion = mode.kind === "editing" ? mode.baseVersion : null;
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [reloadRequired, setReloadRequired] = useState(false);
   /**
    * A commit is REFUSED when the last draft save failed. Publishing anyway
    * would promote the PREVIOUS draft bytes as a new version while reporting
@@ -64,6 +81,10 @@ export function useInlineEditor(options: {
    */
   const unsaved = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyAttributes = useRef<EditingBodyAttributes | undefined>(undefined);
+  const session = useRef(0);
+  const writeSession = useRef<{ liveEpoch: string; draftRevision?: string }>({ liveEpoch: "initial" });
+  const inFlight = useRef<{ session: number; promise: Promise<boolean> } | null>(null);
 
   /**
    * `onStale` is held in a ref so it cannot destabilise `flush`.
@@ -83,34 +104,63 @@ export function useInlineEditor(options: {
   const onStaleRef = useRef(onStale);
   onStaleRef.current = onStale;
 
-  /** Save the draft; true when it is saved. */
+  /** Save in order and wait until this session's latest edit is durable. */
   const flush = useCallback(async (): Promise<boolean> => {
-    if (!doc || mode.kind !== "editing") return false;
-    setSaveState("saving");
-    // Cleared before the save rather than after it: an edit typed while this
-    // save is in flight is not in these bytes, and must still count as unsaved.
-    unsaved.current = false;
-    try {
-      const html = serializeCleanHtml(doc, {
-        authoredAssets: authoredAssets.current ?? undefined,
-      });
-      await saveDraft(docId, mode.baseVersion, html);
-      lastSaveFailed.current = false;
-      setSaveState("saved");
-      setSaveError(null);
-      return true;
-    } catch (e) {
-      unsaved.current = true;
-      lastSaveFailed.current = true;
-      setSaveState("error");
-      if (e instanceof StaleVersionError) {
-        onStaleRef.current(e.currentVersion);
-        setSaveError(e.message);
-      } else {
-        setSaveError((e as Error).message);
-      }
-      return false;
+    if (!doc || mode.kind !== "editing" || !readyRef.current) return false;
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
     }
+    const currentSession = session.current;
+    if (inFlight.current?.session === currentSession) return inFlight.current.promise;
+    const flight = { session: currentSession, promise: Promise.resolve(false) };
+    const run = async (): Promise<boolean> => {
+      do {
+        if (session.current !== currentSession) return false;
+        // An input may arm the debounce while the previous snapshot is saving.
+        // This ordered drain owns that edit now; the timer must not save it again.
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        setSaveState("saving");
+        unsaved.current = false;
+        try {
+          // Flush queued DOM mutations before taking both history and HTML in
+          // the same synchronous turn: the stamp must describe these bytes.
+          const causal = causalStampRef.current?.() ?? undefined;
+          const html = serializeCleanHtml(doc, {
+            authoredAssets: authoredAssets.current ?? undefined,
+            authoredBodyAttributes: bodyAttributes.current,
+          });
+          const saved = await saveDraft(docId, mode.baseVersion, html, { ...writeSession.current, ...(causal ? { causal } : {}) });
+          if (session.current !== currentSession) return false;
+          if (saved.draftRevision) writeSession.current.draftRevision = saved.draftRevision;
+          if (saved.liveEpoch) writeSession.current.liveEpoch = saved.liveEpoch;
+          lastSaveFailed.current = false;
+          setSaveError(null);
+          setReloadRequired(false);
+        } catch (e) {
+          if (session.current !== currentSession) return false;
+          unsaved.current = true;
+          lastSaveFailed.current = true;
+          setSaveState("error");
+          if (e instanceof StaleVersionError) onStaleRef.current(e.currentVersion);
+          setSaveError((e as Error).message);
+          setReloadRequired(e instanceof StaleVersionError || (e instanceof ConflictError && (e.detail.reloadRequired === true || e.detail.liveReset === true)));
+          return false;
+        }
+      } while (unsaved.current);
+      setSaveState("saved");
+      return true;
+    };
+    // Every caller (autosave, Done, publish) joins one ordered save. A later
+    // snapshot cannot arrive before an older request and then be overwritten.
+    flight.promise = run().finally(() => {
+      if (inFlight.current === flight) inFlight.current = null;
+    });
+    inFlight.current = flight;
+    return flight.promise;
   }, [doc, mode, docId, authoredAssets]);
 
   /** Held in a ref for the same reason, so the effect can close over it safely. */
@@ -119,6 +169,13 @@ export function useInlineEditor(options: {
 
   useEffect(() => {
     if (!editing || !doc) return;
+    session.current += 1;
+    writeSession.current = mode.kind === "editing" ? { liveEpoch: mode.liveEpoch ?? "initial", ...(mode.draftRevision ? { draftRevision: mode.draftRevision } : {}) } : { liveEpoch: "initial" };
+    unsaved.current = false;
+    lastSaveFailed.current = false;
+    setSaveState("idle");
+    setSaveError(null);
+    setReloadRequired(false);
 
     // Strip FIRST, unconditionally, before contentEditable is set. Anything
     // still here would be serialized into the next version.
@@ -128,12 +185,22 @@ export function useInlineEditor(options: {
 
     const body = doc.body;
     if (!body) return;
-    // setAttribute rather than the property: the ATTRIBUTE is what the
-    // serializer strips and what a test can observe, and jsdom does not reflect
-    // the property onto it.
-    body.setAttribute("contenteditable", "true");
+    // Retain both absence and authored values outside the DOM: the editor's
+    // temporary overrides must not become content or erase author intent.
+    const authored: EditingBodyAttributes = {
+      contenteditable: body.getAttribute("contenteditable"),
+      spellcheck: body.getAttribute("spellcheck"),
+    };
+    bodyAttributes.current = authored;
+    body.setAttribute("contenteditable", readyRef.current ? "true" : "false");
     body.setAttribute("spellcheck", "true");
     markGeneratedContainers(doc);
+    // A shared-document join can adopt the body after this effect ran. Keep
+    // local hints in step with those children; attribute-only decoration never
+    // triggers this observer or enters the CRDT's wire representation.
+    const MO = doc.defaultView?.MutationObserver ?? MutationObserver;
+    const placeholders = new MO(() => markGeneratedContainers(doc));
+    placeholders.observe(body, { subtree: true, childList: true, characterData: true });
 
     const onInput = () => {
       // execCommand still emits <font size> in every engine. Normalizing on
@@ -145,31 +212,83 @@ export function useInlineEditor(options: {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flushRef.current(), AUTOSAVE_MS);
     };
+    // Descendants may carry their own authored contenteditable=true. A body
+    // override alone cannot prevent their input while the shared host joins.
+    const beforeInput = (event: Event) => { if (!readyRef.current) event.preventDefault(); };
+    doc.addEventListener("beforeinput", beforeInput, true);
     doc.addEventListener("input", onInput);
+    changedRef.current = onInput;
 
     return () => {
+      session.current += 1;
       doc.removeEventListener("input", onInput);
+      changedRef.current = null;
+      doc.removeEventListener("beforeinput", beforeInput, true);
       if (timer.current) clearTimeout(timer.current);
+      placeholders.disconnect();
       clearGeneratedContainers(doc);
-      body.removeAttribute("contenteditable");
-      body.removeAttribute("spellcheck");
+      restoreEditingBodyAttributes(body, authored);
+      bodyAttributes.current = undefined;
     };
     // NOT `flush`. Depending on it would reintroduce exactly the tear-down
     // described above the ref declaration, one indirection further away.
-  }, [editing, doc, epoch]);
+  }, [editing, doc, epoch, baseVersion]);
+
+  useEffect(() => {
+    if (editing && doc?.body) doc.body.setAttribute("contenteditable", ready ? "true" : "false");
+  }, [editing, doc, epoch, ready]);
 
   return {
     saveState,
     saveError,
+    reloadRequired,
+    markChanged: useCallback(() => changedRef.current?.(), []),
     /**
      * Save now, changed or not: before a commit, which publishes the draft's
      * bytes. Resolves false when the save failed, which a commit must heed:
      * it would otherwise publish the PREVIOUS draft and call it done.
      */
     flushNow: flush,
-    /** Save only an edit not yet saved: leaving the editor, which publishes nothing. */
+    /** Save first, then deliver queued shared updates before the connection is torn down. */
     flushUnsaved: useCallback(async () => {
-      if (unsaved.current) await flush();
+      let expired = false;
+      const currentSession = session.current;
+      const attempt = async () => {
+        do {
+          if (unsaved.current || inFlight.current?.session === currentSession) {
+            if (!(await flush())) return false;
+          }
+          if (expired || session.current !== currentSession) return false;
+          try {
+            await flushSharedRef.current?.();
+            if (expired || session.current !== currentSession) return false;
+            setSaveError(null);
+            setSaveState("saved");
+          } catch (error) {
+            if (expired || session.current !== currentSession) return false;
+            setSaveError((error as Error).message);
+            setSaveState("error");
+            return false;
+          }
+          // Remote updates can arrive while the local queue drains. Save that
+          // merged snapshot too before cleanup cancels its autosave timer.
+        } while (unsaved.current);
+        return true;
+      };
+      let timeout: ReturnType<typeof setTimeout>;
+      // A perpetually changing peer can keep the durable save drain busy too.
+      // Stop waiting without aborting an already-started save or losing DOM.
+      const bounded = new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => {
+          expired = true;
+          if (session.current === currentSession) {
+            setSaveError("Your changes are still being saved or shared. Keep this editor open and try Done again.");
+            setSaveState("error");
+          }
+          resolve(false);
+        }, DONE_TIMEOUT_MS);
+      });
+      return Promise.race([attempt(), bounded]).finally(() => clearTimeout(timeout));
     }, [flush]),
     /** True when the last save failed: a commit must not proceed. */
     saveFailed: () => lastSaveFailed.current,

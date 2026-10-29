@@ -1,12 +1,10 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -319,8 +319,7 @@ export function DocViewer() {
-   // a key — so they edit alone and publish through /draft (SPEC §16).
+@@ -323,6 +323,5 @@
    // A public folder's reader is told "public" and still shares nothing live:
    // the realtime `*` key is the document's own level's alone.
 -  const shareLive =
 -    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
 +  const shareLive = signedIn;
+   const remoteChanged = useRef<(() => void) | null>(null);
    const shared = useSharedDocument({
-     mode,
-     doc: frame.doc,

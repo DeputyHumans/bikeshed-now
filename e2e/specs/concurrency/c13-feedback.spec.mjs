@@ -14,12 +14,11 @@
  *             pending by this author". Variants: SYNC-T (N worker threads fire
  *             within 15 ms and every call is on the wire before any answer
  *             begins) and GATED (amplify-c13-feedback holds each create at
- *             `suggest-after-count`, past its count and before its
+ *             `suggest-after-count`, past its observational count and before its
  *             transaction, until all N are held; then all go). WORK: every
  *             answer is a suggestion made on v1 or the twenty-pending refusal,
  *             at least one is made, each made one is stored pending. JUDGE
- *             (S7, the count is read outside the transaction,
- *             functions/src/lib/suggestions.ts:196-208): at most twenty
+ *             (S7 regression, admission is counted inside the transaction): at most twenty
  *             pending. C13-serial: the same calls one after another, the
  *             first made and every other refused, twenty pending.
  *   C14       a publish and feedback on v1. The oracle every variant shares
@@ -28,8 +27,10 @@
  *             suggestion on the current one is pending, through ANY account
  *             channel"; §19 a thread "holds back a new version saved in the
  *             app"; §22 a suggestion "is never left behind on a version nobody
- *             reads"): once a version is current, nothing open is left on an
- *             older one, and every thread a caller was told it opened is where
+ *             reads"): current-only MCP comments and suggestions cannot race
+ *             past publication onto a retired head. Browser comments target
+ *             the explicitly displayed version, including a historical one;
+ *             they retain that version, passage and body. Every thread is where
  *             it was told. The publish is the in-app mint (commitDraft, as the
  *             owner's agent's commit_draft) or the update mint (reviseDocument:
  *             update_document, POST /publish?update=), whose own guard and
@@ -56,14 +57,14 @@
  *             their place; released, its transaction must refuse. SUGGESTION
  *             HELD: N creates held at `suggest-after-count` while the commit
  *             publishes v2; released, each must be refused for the newer
- *             version. COMMENT HELD (S12, functions/src/mcp/tools.ts:1626-1658:
- *             add_comment reads currentVersion, finds the passage, then
- *             writes the thread in a plain batch with no check that the
- *             version is still current): N add_comment calls held at
+ *             version. COMMENT HELD (S12 regression: add_comment rechecks the current
+ *             head and read authority in its thread-creation transaction): N add_comment calls held at
  *             `comment-before-write` while the commit publishes v2. STALE
  *             TAB (X-c13-feedback-1): v2 is published, then N tabs that still
  *             show v1 open a thread each on v1, in order; it is the losing
  *             side of a web thread racing the commit, made deterministic.
+ *             Historical browser feedback is intentional; its fidelity oracle
+ *             replaces the contradictory no-old-open-thread expectation.
  *               Against reviseDocument (comments are exempt there, SPEC §19:
  *             "holds back a new version saved in the app, but not
  *             update_document"): UPDATE SYNC-T: N suggestions and the owner's
@@ -153,7 +154,10 @@ import { publish, readFixture, updateUpload } from "../../lib/seed.mjs";
 import { shareMany } from "../../lib/grant.mjs";
 import { grantEditors } from "../../lib/live.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
-import { settleStill } from "../../lib/assert.mjs";
+import { eventually, settleStill } from "../../lib/assert.mjs";
+import { assertBrowserFeedback } from "../../lib/feedback-oracles.mjs";
+import { publicationSnapshot, assertPublicationBaseline, assertPublicationPreserved, isPublicationReviewRefusal } from "../../lib/publication-oracles.mjs";
+import { naturalRaceAttempts } from "../../lib/review-race.mjs";
 import { requireConclusive, syncHttp } from "../../lib/sync.mjs";
 import { gates, holdCalls } from "../../lib/gates.mjs";
 import { ACCEPT, DEFAULT_PROTOCOL, parseMcpBody, toolOutcome } from "../../lib/mcp.mjs";
@@ -163,8 +167,8 @@ import { clientFirestore, firestoreOrigin, toFields } from "../../lib/firestore-
 import { anchorIn, autoId, commentData, commentPath, webAnnotationWrite, webReply, webResolve, webThread } from "../../lib/web.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { measure } from "../../lib/evidence.mjs";
-import { staticWarmUrl } from "../../lib/workers.mjs";
-import { FIRESTORE_TRIGGERS, caseFunctionRuns } from "../../lib/logs.mjs";
+import { admitWorkers, staticWarmUrl } from "../../lib/workers.mjs";
+import { FIRESTORE_TRIGGERS, caseFunctionRuns, logMark } from "../../lib/logs.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -377,6 +381,7 @@ async function fireAtOnce(ctx, calls, label) {
   const answers = calls.map((c, i) => ({ who: c.who, what: c.what, ...c.parse(run.results.find((r) => r.i === i), i + 1) }));
   const timing = run.results.map((r) => ({ i: r.i, status: r.status ?? null, error: r.error ?? null, firedAt: r.firedAt, sentAt: r.sentAt, firstByteAt: r.firstByteAt, endAt: r.endAt }));
   ctx.ev.json(`fire-${label}`, { spreadMs: run.spreadMs, conclusive: run.conclusive, overlap: run.overlap, timing, answers: answers.map(brief) });
+  record(ctx, { ref: "request burst", label, timing: timing.map(row => ({ ...row, who: calls[row.i].who, what: calls[row.i].what })), overlap: run.overlap });
   ctx.step(`${label}: fired ${calls.length} request(s) at once: spread ${Number(run.spreadMs).toFixed(2)} ms; overlap ${run.overlap.ok ? `proven (every request sent ${run.overlap.marginMs.toFixed(1)} ms before the first answer began)` : run.overlap.reason}`);
   const cut = answers.filter((a) => a.status === 504);
   if (cut.length) ctx.inconclusive(`the stack did not answer, so nothing was measured: Hosting answered 504 to ${cut.map((a) => `${a.who} ${a.what}`).join(", ")}`);
@@ -408,7 +413,7 @@ const answerOf = (c, out) => ({ who: c.who, what: c.name, status: 200, isError: 
  */
 function webThreadCall(who, web, acct, { docId, versionId, k }) {
   const w = webAnnotationWrite(web.fs, acct, { docId, versionId, anchor: anchorOf(k) });
-  const made = { threadId: w.annId, version: versionId };
+  const made = { threadId: w.annId, version: versionId, expectedAnchor: { elementId: anchorOf(k).elementId, exact: anchorOf(k).exact } };
   return {
     who,
     what: "web thread",
@@ -427,8 +432,10 @@ async function webThreads(ctx, s, versionId, label) {
     s.feedback.map(async (a, i) => {
       const who = `${a.name}-tab`;
       try {
-        const r = await webThread(s.web.fs, s.owner.account, { docId: s.docId, versionId, anchor: anchorOf(WEB_FROM + i + 1), body: `C14 ${s.tag}: ${label}, ${who} on paragraph ${WEB_FROM + i + 1}` });
-        return { who, what: "web thread", status: 200, isError: false, text: "committed", json: { threadId: r.annId, version: versionId } };
+        const anchor = anchorOf(WEB_FROM + i + 1);
+        const body = `C14 ${s.tag}: ${label}, ${who} on paragraph ${WEB_FROM + i + 1}`;
+        const r = await webThread(s.web.fs, s.owner.account, { docId: s.docId, versionId, anchor, body });
+        return { who, what: "web thread", status: 200, isError: false, text: "committed", json: { threadId: r.annId, version: versionId, expectedAnchor: { elementId: anchor.elementId, exact: anchor.exact }, expectedBody: body } };
       } catch (err) {
         if (err?.code !== "E2E_WEB_WRITE") throw err;
         return { who, what: "web thread", status: err.result?.status ?? null, isError: true, text: err.message, json: null };
@@ -551,11 +558,10 @@ scenario("C13 SYNC-T: N agents of one author at nineteen pending suggestions cal
 scenario("C13 judge (SYNC-T): the author holds at most twenty pending suggestions on the version", {
   tiers: BOTH,
   n: N,
-  defect: "S7",
   timeoutMs: JUDGE_MS,
 }, async (ctx) => c13Judge(ctx, "C13"));
 
-scenario("C13 gated: N suggest_edit calls of one author at nineteen pending, each held after its pending count and released together; every answer is a suggestion made on v1 or the twenty-pending refusal, at least one is made, and each made is stored", {
+scenario("C13 gated: N suggest_edit calls of one author at nineteen pending, each held after a pre-admission count and released together; every answer is a suggestion made on v1 or the twenty-pending refusal, at least one is made, and each made is stored", {
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
@@ -567,9 +573,21 @@ scenario("C13 judge (gated): the author holds at most twenty pending suggestions
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
-  defect: "S7",
   timeoutMs: JUDGE_MS,
 }, async (ctx) => c13Judge(ctx, "C13 gated"));
+
+// A control runs one selected case. Keep its staging and oracle together so
+// filtering out the work case cannot turn this regression into INCONCLUSIVE.
+scenario("C13 regression: gated concurrent requests cannot exceed the pending limit", {
+  tiers: LOCAL,
+  needs: AMPLIFY,
+  n: [2],
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
+}, async (ctx) => {
+  await c13Work(ctx, "C13 isolated regression", "gated");
+  c13Judge(ctx, "C13 isolated regression");
+});
 
 scenario("C13-serial: the same N suggest_edit calls one after another; the first makes the twentieth suggestion, every later one is refused with the twenty-pending message, and the author holds exactly twenty", {
   tiers: BOTH,
@@ -631,7 +649,8 @@ async function feedbackState(docId) {
       const kind = a.data.suggestion ? "suggestion" : "comment";
       const state = a.data.suggestion?.state ?? null;
       const resolved = a.data.resolved === true;
-      threads.push({ version: v, annId: a.id, kind, channel: a.data.actor?.channel ?? null, resolved, state, open: kind === "suggestion" ? state === "pending" : !resolved });
+      const bodies = a.data.actor?.channel === "web" ? (await readCollection(target, `docs/${docId}/versions/${v}/annotations/${a.id}/comments`)).map((comment) => comment.data.body) : [];
+      threads.push({ version: v, annId: a.id, kind, channel: a.data.actor?.channel ?? null, resolved, state, open: kind === "suggestion" ? state === "pending" : !resolved, anchor: { elementId: a.data.anchor?.elementId, exact: a.data.anchor?.exact }, bodies });
     }
   }
   threads.sort((x, y) => (x.version + x.annId < y.version + y.annId ? -1 : 1));
@@ -639,7 +658,6 @@ async function feedbackState(docId) {
 }
 
 const AGENT_COMMENT = (t) => t.kind === "comment" && t.channel === "mcp";
-const WEB_THREAD = (t) => t.kind === "comment" && t.channel === "web";
 const SUGGESTION = (t) => t.kind === "suggestion";
 const threadLabel = (t) => `${t.kind} ${t.annId} on ${t.version} (${t.channel ?? "no channel"})`;
 const stateLine = (state) => `current ${state.current}; threads: ${state.threads.map((t) => `${t.kind[0]}${t.channel === "web" ? "w" : ""}:${t.version}${t.open ? "" : "(closed)"}`).join(" ") || "none"}`;
@@ -680,15 +698,42 @@ function feedbackAnswerOk(a, published) {
 }
 
 const commitOk = (a) => !a.isError && typeof a.json?.versionId === "string" && a.json?.deduped !== true;
-const commitHeldBack = (a) => a.isError && (OPEN_RE.test(a.text) || PENDING_RE.test(a.text));
+const commitHeldBack = isPublicationReviewRefusal;
 /** POST /publish?update= → fireAtOnce's shape: made {versionId, deduped}, or refused with its error. */
 const uploadAnswer = (r) => ({ who: "owner", what: "POST /publish?update=", status: r.status, isError: r.status !== 200, text: r.status === 200 ? "published" : String(r.json?.error ?? r.status), json: r.json ?? null });
 const landedBy = (state) => Object.fromEntries(state.versions.map((v) => [v, state.threads.filter((t) => t.version === v).map((t) => `${t.kind[0]}${t.channel === "web" ? "w" : ""}${t.open ? "" : "x"}`).join("")]));
 
-/** C14 SYNC-T against commitDraft: the work (its judges read it). */
+/** Keep each attempt's artifacts separate; measurements also survive a passing case's evidence cleanup. */
+function attemptContext(ctx, attempt) {
+  return { ...ctx, c14Attempt: attempt, step: text => ctx.step(`attempt ${attempt}: ${text}`), ev: { ...ctx.ev,
+    json: (name, value) => ctx.ev.json(`attempt-${attempt}-${name}`, value),
+    text: (name, value) => ctx.ev.text(`attempt-${attempt}-${name}`, value) } };
+}
+
+/** C14 SYNC-T against commitDraft: bounded fresh documents, never a held request or altered transport. */
 async function c14SyncWork(ctx) {
+  const result = await naturalRaceAttempts({
+    run: async attempt => {
+      const scoped = attemptContext(ctx, attempt);
+      await c14SyncAttempt(scoped);
+      const obs = observed.get(keyOf("C14 SYNC-T", ctx));
+      return { achieved: obs.state.published, diagnostic: obs.state };
+    },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref: "C14 SYNC-T", naturalAttempts: attempts }); },
+  });
+  ctx.step(`natural publish window: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
+}
+
+async function c14SyncAttempt(ctx) {
   await working(ctx, "C14 SYNC-T", async (obs) => {
     const s = await c14Stage(ctx, "C14 race", { web: true });
+    const before = await publicationSnapshot(target, s.docId);
+    assertPublicationBaseline(before);
+    if (ctx.target.kind === "local") {
+      await admitWorkers(ctx, { requests: ctx.n + 1, what: "C14 feedback and publisher workers" });
+      await Promise.all([...s.feedback, s.publisher].map(agent => agent.mcp.initialize()));
+      ctx.step("feedback and publisher workers answered initialization before the unchanged simultaneous request burst");
+    }
     obs.stage = "staged";
     const calls = numbered([
       ...s.feedback.map((a, i) => (i % 2 === 0 ? tool(a, "add_comment", commentArgs(s, i + 1, a.name)) : tool(a, "suggest_edit", suggestArgs(s, i + 1, a.name)))),
@@ -722,11 +767,20 @@ async function c14SyncWork(ctx) {
       assert.ok(state.threads.some((t) => t.version === "v1" && t.open), "C14: a commit refused for open feedback had open feedback on v1 to see");
     }
     assertNoneLeftBehind(state, { pick: SUGGESTION, what: "suggestions, SPEC §22: never left behind on a version nobody reads" });
+    // Judge every attempt before another may replace its observation.
+    if (published) assertNoneLeftBehind(state, { pick: AGENT_COMMENT, what: "add_comment threads (S12)" });
+    assertBrowserFeedback(state, feedback, { allowRefused: published });
+    if (published) assertNoneLeftBehind(state, { pick: thread => thread.kind === "comment" && thread.channel === "web", what: "browser threads on a retired version" });
+    const after = await publicationSnapshot(target, s.docId);
+    ctx.ev.json("publication-state", { before, after });
+    if (!published) assertPublicationPreserved(before, after);
+    record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "natural", docId: s.docId, attempt: ctx.c14Attempt ?? 1, outcome: published ? "published" : "refused", judged: true, race: fired.race, commit, state, answers: feedback, before, after });
   });
 }
 
 /** A C14 SYNC-T judge: INCONCLUSIVE unless the commit made v2 current (nothing could be left behind otherwise). */
-function c14SyncJudge(ctx, pick, what) {
+async function c14SyncJudge(ctx, pick, what) {
+  if (!observed.has(keyOf("C14 SYNC-T", ctx))) await c14SyncWork(ctx);
   const { state, published, commit } = observation(ctx, "C14 SYNC-T", "state");
   ctx.step(`commit: ${brief(commit)}; ${stateLine(state)}`);
   if (!published) ctx.inconclusive(`the commit was refused (${String(commit.text).slice(0, 120)}): feedback reached v1 first, so no version replaced v1 in this race and nothing could be left behind on it`);
@@ -743,21 +797,27 @@ scenario("C14 SYNC-T: N agents' comments and suggestions (in turn), N threads op
 scenario("C14 judge (SYNC-T, agent comments): when the commit published, no thread an add_comment opened in the race is left unresolved on the version it replaced", {
   tiers: BOTH,
   n: N,
-  defect: "S12",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => c14SyncJudge(ctx, AGENT_COMMENT, "add_comment threads (S12)"));
 
-scenario("C14 judge (SYNC-T, web threads): when the commit published, no thread opened in the browser in the race is left unresolved on the version it replaced", {
+scenario("C14 judge (SYNC-T, web threads): browser feedback stays on its selected version and passage when publication races it", {
   tiers: BOTH,
   n: N,
-  defect: "X-c13-feedback-1",
-  timeoutMs: JUDGE_MS,
-}, async (ctx) => c14SyncJudge(ctx, WEB_THREAD, "web threads (X-c13-feedback-1)"));
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
+}, async (ctx) => {
+  if (!observed.has(keyOf("C14 SYNC-T", ctx))) await c14SyncWork(ctx);
+  const { state, answers, published } = observation(ctx, "C14 SYNC-T", "state");
+  assertBrowserFeedback(state, answers, { allowRefused: published });
+});
 
 /** C14 comment held: the work (S12's judge reads it). */
 async function c14CommentHeldWork(ctx) {
   await working(ctx, "C14 comment held", async (obs) => {
     const s = await c14Stage(ctx, "C14 comment held");
+    const before = await publicationSnapshot(target, s.docId);
+    assertPublicationBaseline(before);
     obs.stage = "staged";
     const calls = s.feedback.map((a, i) => tool(a, "add_comment", commentArgs(s, i + 1, a.name)));
     let commit = null;
@@ -769,6 +829,8 @@ async function c14CommentHeldWork(ctx) {
         ctx.step(`while every add_comment is held past its read of v1, the publisher's commit_draft runs`);
         const out = await s.publisher.mcp.call("commit_draft", { id: s.docId });
         commit = { who: "publisher", what: "commit_draft", status: 200, isError: out.isError, text: out.text, json: out.json ?? null };
+        commit.currentWhileHeld = (await readDoc(target, `docs/${s.docId}`))?.currentVersion;
+        assert.equal(commit.currentWhileHeld, "v2", "C14 comment held: publication commits v2 before releasing the old-head comments");
         ctx.step(`commit: ${brief(commit)}`);
         return commit;
       },
@@ -785,6 +847,11 @@ async function c14CommentHeldWork(ctx) {
     const odd = fired.answers.filter((a) => !(madeOn(a, "v1") || madeOn(a, "v2") || (a.isError && COMMENT_NEWER_RE.test(a.text))));
     assert.deepEqual(odd.map(brief), [], "C14 comment held: every add_comment answered a thread, or a refusal for the newer version");
     assertWhereTold(state, fired.answers);
+    assert.equal(state.current, "v2", "C14 comment held: v2 remains current after the stale comments resume");
+    assertNoneLeftBehind(state, { pick: AGENT_COMMENT });
+    const after = await publicationSnapshot(target, s.docId);
+    ctx.ev.json("publication-state", { before, after });
+    record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "comment-held", docId: s.docId, outcome: "published", judged: true, race: fired.race, commit, state, answers: fired.answers, before, after });
   });
 }
 
@@ -800,9 +867,10 @@ scenario("C14 judge (comment held): no thread an add_comment opened is left unre
   tiers: LOCAL,
   needs: AMPLIFY,
   n: N,
-  defect: "S12",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C14 comment held", ctx))) await c14CommentHeldWork(ctx);
   const { state, answers } = observation(ctx, "C14 comment held", "state");
   ctx.step(`current ${state.current}; add_comment told: ${answers.map((a) => (a.isError ? "refused" : a.json?.version)).join(", ")}`);
   assertNoneLeftBehind(state);
@@ -816,6 +884,8 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
   const s = await c14Stage(ctx, "C14 suggestion held");
+  const before = await publicationSnapshot(target, s.docId);
+  assertPublicationBaseline(before);
   const calls = s.feedback.map((a, i) => tool(a, "suggest_edit", suggestArgs(s, i + 1, a.name)));
   let commit = null;
   const fired = await holdAndRun(ctx, {
@@ -825,6 +895,8 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
     whileHeld: async () => {
       const out = await s.publisher.mcp.call("commit_draft", { id: s.docId });
       commit = { who: "publisher", what: "commit_draft", status: 200, isError: out.isError, text: out.text, json: out.json ?? null };
+      commit.currentWhileHeld = (await readDoc(target, `docs/${s.docId}`))?.currentVersion;
+      assert.equal(commit.currentWhileHeld, "v2", "C14 suggestion held: publication commits v2 before releasing the old-head suggestions");
       ctx.step(`while every suggest_edit is held, commit: ${brief(commit)}`);
       return commit;
     },
@@ -837,11 +909,17 @@ scenario("C14 suggestion held: N suggest_edit calls held after their pending cou
   assert.ok(commitOk(commit), `C14 suggestion held: with nothing pending on v1, the commit publishes (${brief(commit)})`);
   const notRefused = fired.answers.filter((a) => !(a.isError && NEWER_RE.test(a.text)));
   assert.deepEqual(notRefused.map(brief), [], "C14 suggestion held: every suggestion counted on v1 and written after v2 was current is refused for the newer version (SPEC §22)");
+  assert.equal(state.current, "v2", "C14 suggestion held: v2 remains current after the stale suggestions resume");
+  const after = await publicationSnapshot(target, s.docId);
+  ctx.ev.json("publication-state", { before, after });
+  record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: "suggestion-held", docId: s.docId, outcome: "published", judged: true, race: fired.race, commit, state, answers: fired.answers, before, after });
 });
 
 /** C14's commit held at commit-before-tx while `land()` opens threads on v1; released, the transaction must refuse it. */
 async function c14CommitHeld(ctx, { label, web, land }) {
   const s = await c14Stage(ctx, label, { web });
+  const before = await publicationSnapshot(target, s.docId);
+  assertPublicationBaseline(before);
   let landed = null;
   const fired = await holdAndRun(ctx, {
     gate: COMMIT_GATE,
@@ -863,8 +941,12 @@ async function c14CommitHeld(ctx, { label, web, land }) {
   assert.deepEqual(notMade.map(brief), [], `${label}: every thread opened while the commit was held is a thread on v1`);
   assert.ok(commit.isError && OPEN_RE.test(commit.text), `${label}: the commit's transaction sees the threads opened during its upload and refuses: "Resolve all comments before publishing a new version." (${brief(commit)})`);
   assert.equal(state.current, "v1", `${label}: v1 is still current`);
-  assert.ok(state.hasDraft, `${label}: the refused commit leaves the draft`);
   assertWhereTold(state, landed);
+  if (web) assertBrowserFeedback(state, landed);
+  const after = await publicationSnapshot(target, s.docId);
+  ctx.ev.json("publication-state", { before, after });
+  assertPublicationPreserved(before, after);
+  record(ctx, { ref: "C14 composite", schemaVersion: 1, kind: web ? "commit-held-web" : "commit-held-agent", docId: s.docId, outcome: "refused", judged: true, race: fired.race, commit, state, answers: landed, before, after });
 }
 
 scenario("C14 commit held: the owner's agent's commit_draft held after its open-thread check and upload while N agents' comments land on v1, then released; its transaction refuses it for the open comments and nothing is left behind", {
@@ -908,12 +990,17 @@ async function c14StaleTabWork(ctx) {
     const commit = answerOf({ who: "publisher", name: "commit_draft" }, await s.publisher.mcp.call("commit_draft", { id: s.docId }));
     ctx.step(`commit: ${brief(commit)}`);
     precondition(commitOk(commit) && commit.json.versionId === "v2", `with nothing open on v1, the owner's agent's commit_draft publishes v2 (${brief(commit)})`);
+    const headBefore = await s.owner.http.get(`/content/${s.docId}/v2/index.html`);
+    precondition(headBefore.status === 200, "the published v2 content is readable before historical feedback");
     ctx.step(`v2 is current; ${ctx.n} tab(s) of the owner that still show v1 each open a thread on it, as the app's createAnnotation and addComment write them (through the rules)`);
     const threads = await webThreads(ctx, s, "v1", "a tab still showing v1");
     obs.stage = "fired";
     ctx.step(`web threads: ${threads.map(brief).join("; ")}`);
     const state = await settleStill(() => feedbackState(s.docId), { what: "C14 threads and versions", step: stepOf(ctx) });
     ctx.ev.json("state", state);
+    const headAfter = await s.owner.http.get(`/content/${s.docId}/v2/index.html`);
+    assert.equal(headAfter.status, 200, "historical feedback keeps the current version readable");
+    assert.deepEqual(headAfter.buffer, headBefore.buffer, "historical feedback does not change current bytes");
     obs.state = { state, answers: threads };
     obs.stage = "measured";
     record(ctx, { ref: "C14 stale tab", current: state.current, landed: landedBy(state), refused: threads.filter((a) => a.isError).length });
@@ -931,15 +1018,17 @@ scenario("C14 stale tab: v2 is published, then N browser tabs that still show v1
   inconclusiveOnStackTimeout: true,
 }, c14StaleTabWork);
 
-scenario("C14 judge (stale tab): no thread a tab opened is left unresolved on the version the commit replaced", {
+scenario("C14 judge (stale tab): historical feedback keeps its selected version, passage and body without changing current content", {
   tiers: BOTH,
   n: N,
-  defect: "X-c13-feedback-1",
-  timeoutMs: JUDGE_MS,
+  timeoutMs: CASE_MS,
+  inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C14 stale tab", ctx))) await c14StaleTabWork(ctx);
   const { state, answers } = observation(ctx, "C14 stale tab", "state");
   ctx.step(`${stateLine(state)}; the tabs were told: ${answers.map((a) => (a.isError ? "refused" : a.json?.version)).join(", ")}`);
-  assertNoneLeftBehind(state, { pick: WEB_THREAD, what: "web threads opened on a replaced version (X-c13-feedback-1)" });
+  assert.deepEqual(answers.filter(a => !a.isError || !DENIED_RE.test(a.text)), [], "historical browser feedback is refused on the selected archive");
+  assert.deepEqual(state.threads.filter(t => t.version === "v1"), [], "a stale tab creates no archived thread");
 });
 
 // --- C14 against the update mint path (reviseDocument) ------------------------------------------
@@ -1251,7 +1340,38 @@ async function settleStorm(ctx, docId, cursor0, t0, want) {
  * every account with notifications off and each grant through the operator
  * script (scripts/set-access.mjs: no email, the production path), no I11.
  */
+async function warmCommentTriggers(ctx) {
+  if (ctx.target.kind !== "local") return;
+  // Each thread creates an annotation and its first comment: three distinct trigger pools.
+  await admitWorkers(ctx, { requests: 3 * ctx.n, what: "C15 comment, thread-event and comment-event trigger warm-up" });
+  const d = await ownerDoc(ctx, "C15 trigger warm-up"), web = await webOf(ctx, d.owner, "warmup-firestore");
+  const since = logMark({ target: ctx.target });
+  await Promise.all(Array.from({ length: ctx.n }, (_, i) => webThread(web.fs, d.owner.account,
+    { docId: d.docId, versionId: "v1", anchor: anchorOf(i + 1), body: `warm-up ${i + 1}` })));
+  const runs = await eventually(() => {
+    const value = caseFunctionRuns(ctx, { since });
+    return value && (value.runs.onCommentCreated ?? 0) >= ctx.n && !(value.open.onCommentCreated > 0) ? value : false;
+  }, { timeout: LOG_MS, interval: 200, message: "isolated comment warm-up triggers finished before the storm" });
+  ctx.ev.json("trigger-warmup", runs);
+  record(ctx, { ref: "C15 trigger warm-up", triggerRuns: runs });
+}
+
 async function c15Storm(ctx, { ref, email }) {
+  if (!email) return c15StormAttempt(ctx, { ref, email });
+  await warmCommentTriggers(ctx);
+  const result = await naturalRaceAttempts({
+    run: async attempt => {
+      await c15StormAttempt({ ...attemptContext(ctx, attempt), logSince: logMark({ target: ctx.target }) }, { ref, email });
+      const obs = observed.get(keyOf(ref, ctx));
+      return { achieved: (obs.i11.triggerRuns?.peak.onCommentCreated ?? 0) >= 2,
+        diagnostic: { triggerRuns: obs.i11.triggerRuns, messages: obs.i11.messages, eligible: obs.i11.eligible } };
+    },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); record(ctx, { ref, naturalAttempts: attempts }); },
+  });
+  ctx.step(`natural trigger overlap: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
+}
+
+async function c15StormAttempt(ctx, { ref, email }) {
   await working(ctx, ref, async (obs) => {
     const n = ctx.n;
     const tag = rand4();
@@ -1304,6 +1424,10 @@ async function c15Storm(ctx, { ref, email }) {
       },
       { what: "C15 setup events", key: (v) => (v.ready ? JSON.stringify(v.counts) : `not ready at read ${v.read}: ${JSON.stringify(v.counts)}`), quietMs: SETUP_QUIET_MS, deadlineMs: LOG_MS, step: stepOf(ctx) },
     );
+    if (email) await eventually(() => {
+      const runs = caseFunctionRuns(ctx);
+      return runs && (runs.runs.onCommentCreated ?? 0) >= 1 && !(runs.open.onCommentCreated > 0);
+    }, { timeout: LOG_MS, interval: 200, message: "T0's setup comment trigger finished before the measured storm" });
     let cursor0 = null;
     for (let since = "all"; ; ) {
       const head = await poller.ok("get_changes", { id: docId, since });
@@ -1322,6 +1446,7 @@ async function c15Storm(ctx, { ref, email }) {
         storm.push(webReplyCall(a.name, partWeb[i].fs, parts[i].account, partWeb[i].tok, { docId, annId: t0, body: `C15 ${tag}: ${a.name} replies in T0` }));
         storm.push(tool(a, "suggest_edit", { id: docId, exact: exactOf(20 + i + 1), replacement: `Paragraph ${20 + i + 1} (${tag} ${a.name}).` }));
       }
+      const stormSince = ctx.target.kind === "local" ? logMark({ target: ctx.target }) : null;
       const stormFired = await fireAtOnce(ctx, numbered(storm), "storm");
       obs.stage = "stormed";
       const stormOdd = stormFired.answers.filter((a) => (a.what === "web reply" ? a.isError : !madeOn(a, "v1")));
@@ -1346,7 +1471,7 @@ async function c15Storm(ctx, { ref, email }) {
       const suggestions = anns.filter((a) => a.data.suggestion?.state === "pending");
       const t = await flipNotesOf(docId, t0);
       const flipRows = settled.rows.filter(isFlipOn(t0));
-      const triggerRuns = caseFunctionRuns(ctx);
+      const triggerRuns = caseFunctionRuns(ctx, { since: stormSince });
       ctx.ev.json("function-runs", triggerRuns);
       ctx.step(runsLine(triggerRuns));
       record(ctx, { ref, race: stormFired.race, threads: threads.length, suggestions: suggestions.length, t0Human: t.human, notes: t.notes, flips: flipRows.length, rounds: rounds.map((r) => ({ round: r.round, flips: r.flips, types: r.types, notes: r.notes })), polls: feed.polls.length, feed: feed.events.length, log: settled.counts, waitedOut: settled.waitedOut, triggerRuns });
@@ -1388,7 +1513,7 @@ async function c15Storm(ctx, { ref, email }) {
       ctx.ev.json("mail", mail);
       ctx.step(`notices: ${messages.length} message(s) about “${title}”${mail.settled ? `; every eligible one came and the mailboxes held still (${Math.round(mail.waitedMs / 1000)} s)` : `; a second notice reached ${mail.twice.map((x) => `${x.to} (${x.kind} ×${x.n})`).join(", ")}: I11 judges it`}`);
       // The runs that decided the notices: read after they were all sent.
-      const decided = caseFunctionRuns(ctx);
+      const decided = caseFunctionRuns(ctx, { since: stormSince });
       ctx.ev.json("function-runs-at-mail", decided);
       obs.i11 = { messages, eligible, triggerRuns: decided };
       obs.stage = "measured I11";
@@ -1418,6 +1543,7 @@ scenario("C15 I11 race judge: the storm's notices were decided by onCommentCreat
   n: N,
   timeoutMs: JUDGE_MS,
 }, async (ctx) => {
+  if (!observed.has(keyOf("C15", ctx))) await c15Storm(ctx, { ref: "C15", email: true });
   const m = observation(ctx, "C15", "i11");
   const runs = m.triggerRuns;
   if (!runs) ctx.inconclusive("the case's window of emulators.log was not readable, so whether any two onCommentCreated runs overlapped is unknown");

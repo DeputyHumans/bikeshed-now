@@ -1,10 +1,10 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -6,2 +6,3 @@
- import { randomBytes } from "crypto";
-+import { e2eFolderAccessGate } from "./e2eFolderAccessGate";
+@@ -7,2 +7,3 @@
  import type { Principal } from "./auth";
-@@ -87,2 +88,3 @@
++import { e2eFolderAccessGate } from "./e2eFolderAccessGate";
+ import type { Actor } from "./actor";
+@@ -95,2 +96,3 @@
    } else {
 +    await e2eFolderAccessGate("folder-access-before-write", id);
-     await ref.set({ ...next, updatedAt: stamp() }, { merge: true });
+     const result = await persistFolderMembership(ctx.db, ref, apply);

@@ -41,7 +41,7 @@
  *         base is superseded by a commit of the draft made while the editor
  *         edits, since an update is refused under somebody's editor (0.16.0)
  *   A9.11 docs/development/verification.md §7 on the scripted sample
- *   A9.11 (S3) BODYATTR on that commit
+ *   A9.11 BODYATTR on that commit
  *   A9.12 the scripted sample's script runs when trusted and reading, and not
  *         in the edit frame
  *   A9.13 a <style> put into <head> after load (an extension's) is not in
@@ -116,10 +116,12 @@
  *     case's own requests, or from its own requests answered 30 s or more
  *     late. An answer, however slow, is still judged, and an assertion
  *     still FAILS.
- * The two cases that judge what another case measured (S8, S3) end
+ * The two cases that judge what another case measured (S8, BODYATTR) end
  * INCONCLUSIVE when that case never got to measure it: nothing was measured.
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
+import { delayHostingResponse } from "../../lib/response-delay.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { answered, currentTarget, precondition, scenario, untilLanded } from "../../lib/test.mjs";
@@ -127,7 +129,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
-import { closeAdmin, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { frameText, inFrameDoc } from "../../lib/frame.mjs";
@@ -171,7 +173,7 @@ const COMMIT_MS = 150_000;
 const ENV_BUDGET_MS = 300_000;
 /** A case's bound: a dozen sequential writes at the latencies above take minutes. */
 const CASE_MS = 600_000;
-/** The S8 and S3 cases only read what another case measured. */
+/** The S8 and BODYATTR cases only read what another case measured. */
 const JUDGE_MS = 30_000;
 /** The file's budget (lib/budget.mjs, which takes a product only): its 17 cases at CASE_MS one after another, and the two judges' 30 s each, rounded up to one more. */
 export const E2E_FILE_TIMEOUT_MS = 18 * CASE_MS;
@@ -365,8 +367,7 @@ const postRows = (rows, t0 = 0) =>
 
 /** The stored draft entry (Storage, docs/<doc>/draft/<entry>) as text, or null. */
 async function draftObject(docId, entry = "index.html") {
-  const draft = (await readDoc(target, `docs/${docId}`))?.draft;
-  const b = draft ? await readObject(target, `${draft.storagePrefix ?? `docs/${docId}/draft`}/${entry}`) : null;
+  const b = await readDraftObject(target, docId, entry);
   return b ? b.toString("utf8") : null;
 }
 
@@ -388,17 +389,6 @@ async function storedVersion(http, docId, versionId) {
 function plusToken(token) {
   const norm = (x) => String(x).replace(/\s+/g, " ").trim();
   return (v1Text, vNText) => vNText.split(token).length === 2 && norm(vNText.replace(token, "")) === norm(v1Text);
-}
-
-/** <html> and <body> attributes with one name taken out of both sides. */
-function withoutAttr(fp, name) {
-  const drop = (a) => (a ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== name)) : a);
-  return { ...fp, bodyAttrs: drop(fp.bodyAttrs), htmlAttrs: drop(fp.htmlAttrs) };
-}
-
-/** BODYATTR beyond the known S3 attribute (spellcheck on <body>), which has its own case. */
-function bodyAttrBeyondS3(v1, vN) {
-  return bodyAttrDiff(withoutAttr(v1, "spellcheck"), withoutAttr(vN, "spellcheck"));
 }
 
 /** The comment tools, as the owner's agent: an mcp-channel token minted with the owner's session. */
@@ -442,6 +432,7 @@ scenario("A9.1 entering edit mode on a trusted document mounts a new iframe with
   });
 
   ctx.step("the owner presses Edit");
+  const sessionAt = o.responseMark();
   await openEditor(o);
   const edit = await o.page.evaluate(() => {
     const el = document.querySelector("iframe.doc-frame");
@@ -458,7 +449,15 @@ scenario("A9.1 entering edit mode on a trusted document mounts a new iframe with
   ctx.ev.json("edit-frame", edit);
   assert.deepEqual({ sameElement: edit.sameElement, frames: edit.frames }, { sameElement: false, frames: 1 }, "edit mode mounted a NEW iframe element, and only one");
   assert.equal(edit.sandbox, "allow-same-origin", "the edit frame is sandboxed without scripts, whatever trust says");
-  assert.match(edit.src, new RegExp(`^/draft/${docId}/index\\.html\\?r=\\d+$`), "the edit frame loads the draft path, cache-busted");
+  const preparedRows = o.findResponses((r) => r.method === "GET" && r.path === `/draft/${docId}` && r.query.get("session") === "1", { since: sessionAt });
+  assert.equal(preparedRows.length, 1, "entering Edit prepares exactly one checked draft snapshot");
+  assert.equal(preparedRows[0].status, 200, "the prepared draft snapshot was authorized");
+  const prepared = await preparedRows[0].response.json();
+  const editUrl = new URL(edit.src, target.origin);
+  assert.equal(editUrl.pathname, `/draft/${docId}/${prepared.entry}`, "the editor loads the checked snapshot's entry");
+  assert.match(editUrl.searchParams.get("r") ?? "", /^\d+$/, "the edit frame remains cache-busted");
+  assert.match(prepared.draftRevision, /^[a-f0-9]{64}$/, "the prepared snapshot has an opaque revision");
+  assert.deepEqual(Object.fromEntries([...editUrl.searchParams].filter(([k]) => k !== "r")), { baseVersion: prepared.baseVersion, liveEpoch: prepared.liveEpoch, draftRevision: prepared.draftRevision }, "the editor frame requests exactly the prepared version, epoch and revision");
   assert.deepEqual({ contenteditable: edit.contenteditable, isContentEditable: edit.isContentEditable }, { contenteditable: "true", isContentEditable: true });
   const bar = o.page.getByRole("toolbar", { name: "Formatting", exact: true });
   assert.equal(await bar.count(), 1, "exactly one toolbar named Formatting");
@@ -608,6 +607,65 @@ scenario("A9.3 the formatting controls change the text they are used on, and nei
   noPageErrors([o]);
 });
 
+// Each formerly unexercised control is independent, so a broken code or link
+// button cannot hide the other native formatting commands.
+const EXTRA_FORMATS = [
+  { name: "A9.3b Inline code changes the selected content and survives autosave", title: "Inline code", selector: "code", selection: true },
+  { name: "A9.3b Bulleted list changes the selected content and survives autosave", title: "Bulleted list", selector: "ul > li", selection: false },
+  { name: "A9.3b Numbered list changes the selected content and survives autosave", title: "Numbered list", selector: "ol > li", selection: false },
+  { name: "A9.3b Blockquote changes the selected content and survives autosave", title: "Blockquote", selector: "blockquote", selection: false },
+  { name: "A9.3b Horizontal rule changes the selected content and survives autosave", title: "Horizontal rule", selector: "hr", selection: false },
+  { name: "A9.3b Link changes the selected content and survives autosave", title: "Link", selector: "a[href]", selection: true },
+  { name: "A9.3b Align left changes the selected content and survives autosave", title: "Align left", align: "left", selection: false },
+  { name: "A9.3b Align centre changes the selected content and survives autosave", title: "Align centre", align: "center", selection: false },
+];
+function extraFormatIn(doc, action) {
+  const paragraph = doc.getElementById("e2e-3");
+  const matches = action.selector ? Array.from(doc.querySelectorAll(action.selector)) : [];
+  return {
+    text: doc.body.textContent,
+    font: doc.querySelectorAll("font").length,
+    matches: matches.map((node) => ({ text: node.textContent, href: node.getAttribute("href") })),
+    align: paragraph?.style.textAlign ?? null,
+  };
+}
+for (const action of EXTRA_FORMATS) scenario(action.name, { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  const body = FIXTURE_HTML.replace('<p id="e2e-3">', '<p id="e2e-3" style="text-align:right">');
+  const { accounts, docId } = await stage(ctx, { name: "a93-extra", title: `A9.3 ${action.title}`, body });
+  const o = await signedIn(ctx, "owner", accounts[0], docId);
+  await openEditor(o);
+  const before = await inFrameDoc(o, extraFormatIn, action);
+  const selected = "Paragraph 3";
+  if (action.selection) await o.selectText("#e2e-3", selected, { fab: false });
+  else await o.typeInFrame("#e2e-3", "", { at: "end" });
+  const dialogs = [];
+  const onDialog = async (dialog) => { dialogs.push({ type: dialog.type(), message: dialog.message() }); await dialog.accept("https://example.invalid/review"); };
+  o.page.on("dialog", onDialog);
+  try {
+    await o.page.getByRole("toolbar", { name: "Formatting", exact: true }).getByRole("button", { name: action.title, exact: true }).click();
+  } finally { o.page.off("dialog", onDialog); }
+  const judge = (state, where) => {
+    assert.equal(state.text, before.text, `${action.title}: ${where} retains every authored text node`);
+    assert.equal(state.font, 0, `${action.title}: ${where} contains no font element`);
+    if (action.align) assert.equal(state.align, action.align, `${action.title}: ${where} applies the requested paragraph alignment`);
+    else if (action.title === "Horizontal rule") assert.equal(state.matches.length, before.matches.length + 1, `${action.title}: ${where} inserts one rule`);
+    else {
+      const expectedText = action.selection ? selected : paragraph("e2e-3");
+      assert.ok(state.matches.some((node) => node.text === expectedText), `${action.title}: ${where} has the requested semantic element around the selected content`);
+      if (action.title === "Link") assert.ok(state.matches.some((node) => node.text === selected && node.href === "https://example.invalid/review"), `${where}: link retains the supplied destination`);
+    }
+  };
+  judge(await inFrameDoc(o, extraFormatIn, action), "live frame");
+  if (action.title === "Link") assert.deepEqual(dialogs, [{ type: "prompt", message: "Link to" }], "Link asks for its destination once");
+  const saved = await eventually(async () => {
+    const html = await draftObject(docId);
+    return html ? { html, state: await parseAndRun(ctx.users, html, extraFormatIn, action) } : false;
+  }, { timeout: SAVE_MS, interval: 250, message: `${action.title} autosaved` });
+  ctx.ev.json("formatting", { before, stored: saved.state });
+  judge(saved.state, "stored draft");
+  noPageErrors([o]);
+});
+
 // --- A9.4 ---------------------------------------------------------------------
 
 scenario("A9.4 the empty-container marking is in the live edit frame and never reaches the draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
@@ -648,7 +706,7 @@ scenario("A9.4 the empty-container marking is in the live edit frame and never r
 
 // --- A9.5 ---------------------------------------------------------------------
 
-const DRAFT_BANNER = /^You're reading unpublished edits, last saved by (.+?)( just now| \d+[mhd] ago)?\. Everyone else still sees v1 until they're saved as a new version\.$/;
+const DRAFT_BANNER = /^You're reading unpublished edits, last saved by (.+?)( just now| \d+m ago)\. Everyone else still sees v1 until they're saved as a new version\.$/;
 
 async function readerView(u) {
   return u.page.evaluate(() => ({
@@ -697,6 +755,7 @@ scenario("A9.5 with a draft saved, an editor reads it under the unpublished-edit
     assert.ok(banner, `${who}: the draft banner (banners: ${JSON.stringify(r.banners)})`);
     assert.match(banner, DRAFT_BANNER, `${who}: the banner's text`);
     assert.equal(DRAFT_BANNER.exec(banner)[1], by, `${who}: the banner names who saved it`);
+    assert.ok(DRAFT_BANNER.exec(banner)[2], `${who}: the banner says when the draft was saved`);
     assert.match(r.src, new RegExp(`^/draft/${docId}/index\\.html\\?r=\\d+$`), `${who}: the frame reads the draft`);
     assert.ok(r.text.includes(t), `${who}: the frame shows the draft's text`);
   }
@@ -793,10 +852,10 @@ async function typeThenDone(u, selector, text, ctx) {
  * DocViewer.tsx's own comment on stopEditing says the flush on the way out
  * stands in for the timer the cleanup clears. The slow save is forced here
  * by holding Done's POST /draft 1.5 s in the page (User.delayRequests), as a
- * slow network or a loaded stack does; e2e/patches/a09-defect-fixes
- * (10-flush-cancels-the-pending-autosave) makes this pass.
+ * slow network or a loaded stack does. controls-a09-save-coalescing restores
+ * the uncancelled concurrent save as its negative control.
  */
-scenario("A9.6 a Done save that outlasts the debounce is not followed by a second POST /draft of the same edit", { tiers: ["local", "prod"], defect: "X-a09-editing-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A9.6 a Done save that outlasts the debounce is not followed by a second POST /draft of the same edit", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { accounts, docId } = await stage(ctx, { name: "a96-twice", title: "A9.6 Done once" });
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   await openEditor(o);
@@ -871,7 +930,7 @@ scenario("A9.7 an open comment disables Save as new version with its reason and 
 /** What the A9.8 commit leaves for its live-log case (S8). */
 const liveLog = { measured: false, rules: null, before: 0, left: null, leftAfterMs: null, docId: null };
 
-scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVia editor and parentVersion v1, and removes meta.draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+async function commitAndMeasureLog(ctx) {
   // Recorded for the live-log case, which is blind where the app's realtime
   // namespace runs without the tree's rules; nothing here depends on them.
   const rules = await realtimeRules(ctx);
@@ -885,13 +944,14 @@ scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVi
   // The page appends its edit to the live log as it types; under load the append may land late, and S8 is blind without entries to clear.
   let yBefore = null;
   await eventually(async () => {
-    yBefore = await rtdbGet(target, `status/${docId}/y`);
+    yBefore = await readLiveLogs(target, docId);
     return yBefore !== null && Object.keys(yBefore).length > 0;
   }, { timeout: LATENCY_MS, interval: 250, message: "the live log holds the edit" }).catch(() => undefined);
   const before = yBefore ? Object.keys(yBefore).length : 0;
   ctx.step(`status/${docId}/y holds ${before} entries before the commit`);
 
   ctx.step("the owner presses Save as new version");
+  const toastStart = o.toastMark();
   const commit = await commitInApp(o);
   const at = Date.now();
   assert.deepEqual({ outcome: commit.outcome, text: commit.text, kind: commit.toast.kind }, { outcome: "published", text: "Published v2.", kind: "info" });
@@ -900,12 +960,14 @@ scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVi
   // measured here, where the commit happened, and judged there.
   let left = yBefore;
   await eventually(async () => {
-    left = await rtdbGet(target, `status/${docId}/y`);
-    return left === null;
+    left = await readLiveLogs(target, docId);
+    return Object.keys(left ?? {}).length === 0;
   }, { timeout: 2_000, interval: 100, message: "the live log is cleared" }).catch(() => undefined);
-  Object.assign(liveLog, { measured: true, rules, before, left: left ? Object.keys(left).length : null, leftAfterMs: Date.now() - at, docId });
+  Object.assign(liveLog, { measured: true, rules, before, left: Object.keys(left ?? {}).length, leftAfterMs: Date.now() - at, docId });
   ctx.ev.json("live-log", liveLog);
 
+  await sleep(Math.max(0, QUIET_MS - (Date.now() - at)));
+  assert.deepEqual(o.log.toasts.slice(toastStart).filter((x) => x.kind !== "busy").map((x) => `${x.kind}: ${x.text}`), ["info: Published v2."], "an ordinary commit has no later error after the quiet window");
   await leftEditor(o);
   assert.equal(new URL(o.page.url()).pathname, `/d/${docId}`, "the viewer returns to the document's head");
   const meta = await readDoc(target, `docs/${docId}`);
@@ -916,68 +978,31 @@ scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVi
   assert.equal(v2.rehash, v2.record.contentHash, "REHASH v2");
   assert.ok(v2.html.includes(t), "v2 holds the typed token");
   noPageErrors([o]);
-});
+}
 
-/**
- * S8, a SPEC QUESTION (class Q). It stays a known-defect case so the
- * observation stays pinned. It is not a SPEC violation.
- *
- * What happens. DocViewer's commit calls clearLog (DocViewer.tsx:580), a
- * remove() of the whole node status/{doc}/y (crdt/rtdb.ts:72). The realtime
- * rules grant writes only at status/{doc}/y/$entry (database.rules.json:
- * 98-103). So with the rules enforced (as in production; on a stack, only
- * where rtdbRulesStatus says so) the remove is denied, clearLog swallows the
- * error (rtdb.ts:73-75), and the log outlives every in-app commit.
- *
- * What asks for it to go. The app's own code means to clear it
- * (DocViewer.tsx:576-579: "Leaving it behind means the next person to open
- * the editor syncs the old draft from the log and it reappears on top of the
- * version that replaced it"). No SPEC sentence asks this of the in-app
- * commit. The nearest is SPEC §16, spec.md:1556-1560: "The log belongs to
- * the draft. When an editor opens a document, a log that holds anything wins
- * over the bytes it loaded, because it may hold edits they do not. So a write
- * made outside the editor is refused while anybody is in it, and drops a log
- * nobody is using: an agent's accept and `commit_draft` (§22), and every
- * update …". The in-app commit is made inside the editor and is not on that
- * list. §22's "a log nobody is using is dropped with the write"
- * (spec.md:2556-2559) is about an agent's accept. §6b (spec.md:790-806) and
- * ADR 0010 say nothing about the log.
- *
- * The harm. The one this file cited before needed S6/S14 as well: a v3
- * published from bytes after the commit, opened in the editor, showed v2's
- * text, because an update never cleared the log either. Since 0.16.0 every
- * update drops a log nobody is using once its version is current
- * (functions/src/lib/publish.ts:537-539, dropReplacedDraft :597-608). That
- * harm is now gone with S8 still present. What S8 alone leaves, traced in
- * source and not reproduced here: the log holds the draft that became v2,
- * plus anything typed into the session after the pre-commit save (a
- * co-editor's keys). The next person to open the editor on v2 adopts that
- * log over v2's bytes, and their first save makes it a draft of v2, so text
- * nobody published comes back unannounced. Dropping the log would instead
- * lose those keys. Which of the two the in-app commit should do is the
- * question for the SPEC.
- */
-scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], defect: "S8", timeoutMs: JUDGE_MS }, async (ctx) => {
-  if (!liveLog.measured) ctx.inconclusive("the A9.8 commit case did not reach its commit (see its outcome), so nothing was measured");
+scenario("A9.8 a commit from the app says \"Published v2.\", records publishedVia editor and parentVersion v1, and removes meta.draft", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, commitAndMeasureLog);
+
+/** S8 regression: the commit atomically retires the unchanged log it applied before saving. */
+scenario("A9.8 a commit from the app leaves the live log status/{doc}/y empty within 2 s", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  if (!liveLog.measured) await commitAndMeasureLog(ctx);
   precondition(liveLog.rules.ok, `the realtime rules are enforced where the commit cleared the log, or the remove is allowed and nothing is proved: ${liveLog.rules.reason}`);
   precondition(liveLog.before > 0, `the live log held entries before the commit (${liveLog.before})`);
   ctx.step(`status/${liveLog.docId}/y: ${liveLog.before} entries before the commit, ${liveLog.left ?? 0} ${liveLog.leftAfterMs} ms after "Published v2."`);
   assert.ok(
-    liveLog.left === null,
-    `S8, a SPEC QUESTION, not a SPEC violation: status/${liveLog.docId}/y still holds ${liveLog.left} entries ${liveLog.leftAfterMs} ms after "Published v2.". The app's clearLog (DocViewer.tsx:580) was denied by the realtime rules, which allow writes only per entry, so the published draft's log outlives the commit. The app means to clear it (DocViewer.tsx:576-579). The nearest SPEC sentence is §16 spec.md:1556 "The log belongs to the draft.", and no SPEC sentence requires the in-app commit to drop the log`,
+    liveLog.left === 0,
+    `S8: the published draft's live log still holds ${liveLog.left} entries ${liveLog.leftAfterMs} ms after "Published v2."`,
   );
 });
 
-scenario("A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded", { tiers: ["local", "prod"], defect: "X-a09-editing-1", timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const { accounts, docId } = await stage(ctx, { name: "a98-quick", title: "A9.8 quick commit" });
+scenario("A9.8 Save as new version pressed inside the debounce is followed by no stale-version error from the autosave it superseded", { tiers: ["local", "prod"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+  const { owner, accounts, docId } = await stage(ctx, { name: "a98-quick", title: "A9.8 quick commit" });
   const o = await signedIn(ctx, "owner", accounts[0], docId);
   await openEditor(o);
   const rec = await o.recordSaveStates();
   const drafts = o.capture({ paths: "/draft" });
   const commits = o.capture({ paths: "/commit" });
-  ctx.step("this page's first POST /draft (the pre-commit save) is delayed 1.5 s, longer than the debounce; a second one, if any, is delivered only after the commit has answered");
-  const commitAnswered = () => commits.waitFor((r) => r.status !== null, { timeout: COMMIT_MS, settled: false });
-  const slow = await o.delayRequests("/draft", { rules: [1_500, commitAnswered] });
+  ctx.step("send every request immediately; hold only the real /commit response for 1.5 s after the backend has completed the commit");
+  const slow = await delayHostingResponse(o, "/commit", { delayMs: 1_500 });
   const t = tok("q");
   let commit;
   let since;
@@ -1008,10 +1033,25 @@ scenario("A9.8 Save as new version pressed inside the debounce is followed by no
     toasts,
     drafts: postRows(drafts, lastInput),
     commits: postRows(commits, lastInput),
-    delayed: slow.rows.map((x) => ({ seq: x.seq, rule: x.rule, ms: x.ms, released: x.released, heldMs: x.releasedAt === null ? null : Math.round(x.releasedAt - x.heldAt), ruleError: x.ruleError })),
+    delayedResponses: slow.rows,
     meta: { currentVersion: meta.currentVersion, draft: meta.draft ? { baseVersion: meta.draft.baseVersion } : null },
   });
   if (savingAt === null || savingAt - lastInput >= AUTOSAVE_MS) ctx.inconclusive(`the pre-commit save began ${savingAt === null ? "never" : `${Math.round(savingAt - lastInput)} ms`} after the last key, not inside the debounce`);
+  precondition(slow.rows.length === 1 && slow.rows[0].status === 200 && slow.rows[0].error === null, "exactly one real successful commit response was held");
+  // Cold emulator latency is not part of the autosave contract. The button
+  // started saving inside the debounce (above), and the real commit response
+  // stays pending beyond it whether the backend finished early or late.
+  precondition(slow.rows[0].releasedAt - slow.rows[0].backendAnsweredAt >= 1_500 && slow.rows[0].releasedAt > lastInput + AUTOSAVE_MS, "the real commit response stayed held for 1.5 s and beyond the autosave debounce");
+  assert.equal("draft" in meta, false, "quick commit leaves no stale meta.draft after the quiet window");
+  assert.equal(await draftObject(docId), null, "quick commit leaves no selected draft after the quiet window");
+  const savedDraft = drafts.find(row => row.status === 200)?.json?.draft;
+  precondition(typeof savedDraft?.storagePrefix === "string", "the pre-commit save identifies its immutable draft snapshot");
+  const retiredObject = `${draftStoragePrefix(docId, savedDraft)}/${savedDraft.entry ?? "index.html"}`;
+  assert.equal(await readObject(target, retiredObject), null, "quick commit leaves no stale draft object after the quiet window");
+  assert.equal(postRows(drafts, lastInput).length, 1, "quick commit posts the one edit to /draft exactly once");
+  assert.equal(meta.currentVersion, "v2", "quick commit leaves v2 current");
+  const v2 = await storedVersion(owner.http, docId, "v2");
+  assert.ok(v2.html.includes(t), "quick commit preserves the edit in v2");
   // Send times are this process's wall clock and the last key the page's: on one machine, within a few ms.
   assert.deepEqual(toasts, ["info: Published v2."], `after publishing, the publisher sees only "Published v2." (the one edit was posted ${drafts.length} times: ${drafts.map((x) => `${x.status} sent +${Math.round(x.t - lastInput)} ms after the last key`).join(", ")})`);
 });
@@ -1200,12 +1240,11 @@ scenario("A9.11 verification §7: resolve the thread, edit a heading, commit; v1
   assert.deepEqual(diff.lost, [], "DECOR: lost author markers");
   assert.deepEqual(diff.structure, [], "DECOR: structure changed");
   assert.equal(diff.text.allowed, true, "the text change is exactly the heading edit");
-  const beyond = bodyAttrBeyondS3(fp1, fp2);
-  assert.equal(beyond.equal, true, `BODYATTR differs beyond the known S3 spellcheck: ${JSON.stringify(beyond)}`);
+  assert.equal(walkthrough.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify(walkthrough.bodyAttr)}`);
   noPageErrors([o]);
 });
 
-scenario("A9.11 BODYATTR: the committed v2's <html> and <body> attributes equal v1's", { tiers: ["local", "prod"], defect: "S3", timeoutMs: JUDGE_MS }, async (ctx) => {
+scenario("A9.11 BODYATTR: the committed v2's <html> and <body> attributes equal v1's", { tiers: ["local", "prod"], timeoutMs: JUDGE_MS }, async (ctx) => {
   if (!walkthrough.bodyAttr) ctx.inconclusive("the A9.11 walkthrough case did not get to compare a committed v2 (see its outcome), so nothing was measured");
   ctx.step(`BODYATTR v1→v2: ${JSON.stringify(walkthrough.bodyAttr)}`);
   assert.equal(walkthrough.bodyAttr.equal, true, `BODYATTR: ${JSON.stringify({ body: walkthrough.bodyAttr.body, html: walkthrough.bodyAttr.html })}`);
@@ -1399,7 +1438,7 @@ scenario("A9.15 a deck that sizes its slides by script is fitted in edit mode by
   const fpD = await fingerprint(parser, draft);
   const diff = diffFingerprint(fp1, fpD, { contains: [t] }, { ignoreBodyAttr: true });
   assert.deepEqual({ decoration: diff.decoration, structure: diff.structure, textAllowed: diff.text.allowed }, { decoration: [], structure: [], textAllowed: true }, "the draft is v1 plus the token");
-  assert.equal(bodyAttrBeyondS3(fp1, fpD).equal, true, `<html>/<body> attributes beyond S3: ${JSON.stringify(bodyAttrBeyondS3(fp1, fpD))}`);
+  assert.equal(bodyAttrDiff(fp1, fpD).equal, true, `<html>/<body> authored attributes: ${JSON.stringify(bodyAttrDiff(fp1, fpD))}`);
   const styles = await parseAndRun(ctx.users, draft, (doc) => Array.from(doc.querySelectorAll("[style]")).map((el) => el.localName));
   assert.deepEqual(styles, [], "no element in the draft carries a style attribute");
   noPageErrors([o]);

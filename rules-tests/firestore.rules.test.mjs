@@ -674,6 +674,70 @@ describe("firestore rules", () => {
     createdAt: serverTimestamp(),
   });
 
+  // Every mutation is independently judged: a missing gate must fail its own
+  // test instead of being hidden behind the first rejected create (SPEC §17).
+  async function feedbackFixture(p, suffix, expiresAt) {
+    const id = `feedback-expiry-${p.uid}-${suffix}`;
+    const base = `docs/${id}/versions/v1/annotations`;
+    await seed(env, async (db) => {
+      await setDoc(doc(db, `docs/${id}`), {
+        ownerUid: OWNER.uid, ownerEmail: OWNER.email, visibility: "private", currentVersion: "v1",
+        members: [OWNER.email, VIEWER.email],
+        ...(expiresAt === undefined ? {} : { expiresAt }),
+      });
+      for (const key of ["change", "remove"]) {
+        await setDoc(doc(db, `${base}/${key}`), { ...plainAnnotation(p, key), createdAt: new Date(0) });
+      }
+      for (const key of ["change", "remove"]) {
+        await setDoc(doc(db, `${base}/change/comments/${key}`), {
+          commentId: key, body: "original", authorUid: p.uid, authorEmail: p.email,
+          actor: actorFor(p), createdAt: new Date(0),
+        });
+      }
+    });
+    const db = verified(env, p).firestore();
+    return { id, db, base, writes: {
+      "annotation create": () => setDoc(doc(db, `${base}/new`), plainAnnotation(p, "new")),
+      "annotation update": () => updateDoc(doc(db, `${base}/change`), { resolved: true, resolvedBy: actorFor(p) }),
+      "annotation delete": () => deleteDoc(doc(db, `${base}/remove`)),
+      "comment create": () => setDoc(doc(db, `${base}/change/comments/new`), {
+        commentId: "new", body: "new reply", authorUid: p.uid, authorEmail: p.email,
+        actor: actorFor(p), createdAt: serverTimestamp(),
+      }),
+      "comment update": () => updateDoc(doc(db, `${base}/change/comments/change`), { body: "edited" }),
+      "comment delete": () => deleteDoc(doc(db, `${base}/change/comments/remove`)),
+    } };
+  }
+
+  for (const p of [OWNER, VIEWER]) {
+    for (const operation of ["annotation create", "annotation update", "annotation delete", "comment create", "comment update", "comment delete"]) {
+      it(`expiry freezes ${operation} by ${p === OWNER ? "the owner" : "a viewer"}, and clearing expiry restores it`, async () => {
+        const f = await feedbackFixture(p, operation.replaceAll(" ", "-"), new Date(0));
+        await assertFails(f.writes[operation]());
+        // Existing comments and the workspace row remain readable: expiry is
+        // a content freeze, not an incompatible query filter or deletion.
+        await assertSucceeds(getDoc(doc(f.db, `docs/${f.id}`)));
+        assert.equal((await assertSucceeds(getDoc(doc(f.db, `${f.base}/change/comments/change`)))).data().body, "original");
+        await seed(env, (db) => updateDoc(doc(db, `docs/${f.id}`), { expiresAt: null }));
+        await assertSucceeds(f.writes[operation]());
+      });
+    }
+    for (const [kind, expiry] of [["absent", undefined], ["null", null], ["future", new Date(Date.now() + 3_600_000)]]) {
+      it(`${kind} expiry permits every otherwise-authorized feedback mutation by ${p === OWNER ? "the owner" : "a viewer"}`, async () => {
+        const f = await feedbackFixture(p, kind, expiry);
+        for (const write of Object.values(f.writes)) await assertSucceeds(write());
+      });
+    }
+  }
+
+  it("clearing expiry does not give the owner another author's edit or delete rights", async () => {
+    const f = await feedbackFixture(VIEWER, "ownership", null);
+    const db = verified(env, OWNER).firestore();
+    await assertFails(updateDoc(doc(db, `${f.base}/change/comments/change`), { body: "owner rewrite" }));
+    await assertFails(deleteDoc(doc(db, `${f.base}/change/comments/change`)));
+    await assertFails(deleteDoc(doc(db, `${f.base}/change`)));
+  });
+
   it("no client creates a suggestion, though the same annotation without one is fine", async () => {
     const db = verified(env, VIEWER).firestore();
     const at = (id) => doc(db, `docs/private-doc/versions/v1/annotations/${id}`);

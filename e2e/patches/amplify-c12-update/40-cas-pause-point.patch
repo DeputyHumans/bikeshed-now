@@ -1,0 +1,22 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -22,2 +22,3 @@
+ import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
++import { e2eC12Gate } from "./e2eC12Gate";
+
+@@ -306,6 +307,7 @@
+       if (!update) break;
+       if (!snap.updateTime) throw new Error("Draft snapshot has no update time.");
+       try {
++        await e2eC12Gate("draft-cas-before-write", docRef.id, storagePrefix);
+         await docRef.update(update, { lastUpdateTime: snap.updateTime });
+         break;
+       } catch (error) {
+@@ -313,6 +315,7 @@
+         // internal transport retries mean it does NOT prove the first commit
+         // was absent. Reconcile our unique prefix and retain unresolved bytes.
+         const code = (error as { code?: unknown }).code;
++        console.log("[e2e-c12-cas]", JSON.stringify({ docId: docRef.id, storagePrefix, code }));
+         if (code !== 5 && code !== 9) throw error;
+         candidateMayHaveCommitted = true;
+         const remaining = deadline - Date.now();

@@ -14,14 +14,16 @@
  * bypasses rules, and are therefore the only sanctioned write path.
  */
 
-import { StaleVersionError } from "./lib/versions";
+import "./lib/mcp-transport";
 import { healthHandler } from "./lib/health";
 import healthConfig from "./health.json";
 import { setGlobalOptions } from "firebase-functions/v2/options";
-import { draftStoragePrefix, versionStoragePrefix } from "./lib/storage";
+import { versionStoragePrefix } from "./lib/storage";
+
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import { parseCausalStamp, readStoredCausalStamp } from "./lib/causal";
 /**
  * FieldValue and Timestamp come from the MODULAR entry point, never through
  * `admin.firestore.*`.
@@ -39,6 +41,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import * as cookie from "cookie";
 import * as mime from "mime-types";
 import { randomBytes, createHash } from "crypto";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./lib/transaction-receipts";
 
 import {
   MAX_BEAT_MS,
@@ -82,7 +85,6 @@ import {
 } from "./lib/acl";
 import { folderOfDoc, listReach, loadReadAccess } from "./lib/reach";
 import {
-  grantsOf,
   normalizeEmail,
   parseExpiry,
 } from "./lib/access";
@@ -113,6 +115,7 @@ import {
   thumbPrefix,
   thumbSlots,
   type ThumbKind,
+  type StaleThumbs,
 } from "./lib/thumbs";
 import {
   extractBundle,
@@ -148,7 +151,8 @@ import {
   saveCursor,
   versionEvents,
 } from "./lib/events";
-import { commitDraft, loadVersionMeta, writeDraft } from "./lib/draft";
+import { commitDraft, DraftConflict, draftRevision, loadVersionMeta, writeDraft } from "./lib/draft";
+import { WriteAuthorityError } from "./lib/writeAuthority";
 import {
   bearerFrom,
   isTokenShaped,
@@ -401,6 +405,7 @@ function streamObject(
   objectKey: string,
   relPath: string,
   isHead: boolean,
+  jsonErrors = false,
 ): void {
   const file = bucket().file(objectKey);
   res.setHeader("Content-Type", mime.lookup(relPath) || "application/octet-stream");
@@ -415,6 +420,7 @@ function streamObject(
       res.destroy(err);
       return;
     }
+    if (jsonErrors) res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.status(err.code === 404 ? 404 : 500).end();
   });
   stream.pipe(res);
@@ -654,7 +660,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
   if (!isDocEditor(data, caller.uid, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
     return;
   }
   // Expired as a reader meets it: an editor cannot read an expired document,
@@ -684,23 +690,38 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     ),
   );
 
+  const receipt = freshReceiptId();
   const outcome = await db().runTransaction(async (tx) => {
     const fresh = await tx.get(docRef);
+    // A later publication may replace this upload's current key before the
+    // native SDK retries. Keep its bounded result, including original cleanup.
+    const committed = readReceipt<{ stored: true; moved: false; stale: StaleThumbs[] }>(fresh, receipt);
+    if (committed.found) return committed.result;
     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+    // Uploading bytes does not reserve authority: a sharing change may have
+    // removed this editor while Storage was accepting the candidate images.
+    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
+      return { stored: false, moved: false, stale: [], denied: d };
+    }
     if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
       return { stored: false, moved: true, stale: [] };
     }
     const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
     if (!decision.write) return { stored: false, moved: false, stale: [] };
+    const result = { stored: true as const, moved: false as const, stale: decision.stale };
+    recordReceipt(tx, docRef, fresh, receipt, result);
     tx.update(docRef, { thumb: decision.thumb });
-    return { stored: true, moved: false, stale: decision.stale };
+    return result;
   });
+  if (outcome.stored) await clearReceipt(docRef, receipt);
 
   if (!outcome.stored) {
     await bucket()
       .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
       .catch(() => undefined);
-    if (outcome.moved) {
+    if (outcome.denied) {
+      res.status(refusal(outcome.denied, caller, await linkProofFor(docRef, outcome.denied, caller, null))).end();
+    } else if (outcome.moved) {
       res.status(409).json({ error: "not the current version" });
     } else {
       res.status(200).json({ stored: false });
@@ -800,7 +821,7 @@ function asArray(v: unknown): string[] {
 
 /** Errors shared by HTTP and MCP, with no resource existence disclosure. */
 function managementFailure(error: unknown, res: import("express").Response): void {
-  if (error instanceof ManagementError && error.status === 404) { res.status(404).end(); return; }
+  if (error instanceof ManagementError && (error.status === 404 || error.status === 403)) { res.status(error.status).end(); return; }
   if (error instanceof ManagementError) { res.status(error.status).json({ error: error.message }); return; }
   throw error;
 }
@@ -847,7 +868,8 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   const id = typeof body?.docId === "string" ? body.docId : "";
   try {
     const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
-      visibility: body?.visibility, publicEdit: body?.publicEdit === true, expiresAt: expiry.value,
+      visibility: body?.visibility, publicEdit: body?.publicEdit === true,
+      ...(Object.prototype.hasOwnProperty.call(body, "expiresAt") ? { expiresAt: expiry.value } : {}),
     });
     const { visibility, publicEdit, linkToken, expiresAt } = result;
     res.status(200).json({ visibility, publicEdit, linkToken, expiresAt });
@@ -886,7 +908,7 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData;
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
@@ -930,11 +952,12 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
   }
   const data = snap.data() as DocAclData;
   if (!canManageSharing(data, caller.emailLower)) {
-    res.status(refusal(data, caller)).end();
+    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
 
   await ref.set({ marking, updatedAt: now() }, { merge: true });
+  await syncPublicProjection(db(), docId);
   res.status(200).json({ marking });
 });
 
@@ -961,6 +984,9 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     docId?: unknown;
     baseVersion?: unknown;
     html?: unknown;
+    liveEpoch?: unknown;
+    draftRevision?: unknown;
+    causal?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
   if (!docId || !safeSegment(docId)) {
@@ -971,6 +997,18 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   if (!baseVersion || !safeSegment(baseVersion)) {
     badRequest(res, "invalid or missing baseVersion");
     return;
+  }
+  const liveEpoch = body?.liveEpoch;
+  if (liveEpoch !== undefined && (typeof liveEpoch !== "string" || !safeSegment(liveEpoch))) {
+    badRequest(res, "invalid liveEpoch"); return;
+  }
+  const expectedRevision = body?.draftRevision;
+  if (expectedRevision !== undefined && (typeof expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(expectedRevision))) {
+    badRequest(res, "invalid draftRevision"); return;
+  }
+  const causal = body?.causal === undefined ? undefined : parseCausalStamp(body.causal);
+  if (causal === null || (causal !== undefined && liveEpoch === undefined)) {
+    badRequest(res, "invalid causal history or missing liveEpoch"); return;
   }
   const html = typeof body?.html === "string" ? body.html : "";
   if (html.trim().length === 0) {
@@ -1021,24 +1059,31 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
   // For Markdown the posted HTML is converted back to Markdown HERE, and its
   // rendering stored beside it (SPEC §11).
   const markdown = version.format === "markdown" ? htmlToMarkdown(html) : null;
+  let draft;
   try {
-    const draft = await writeDraft({
+    draft = await writeDraft({
       db: db(),
       docRef: ref,
       baseVersion,
+      liveEpoch,
+      causal,
+      // Unclocked writers replace a whole snapshot, so they must not overwrite
+      // any newer save. Legacy API callers still get request-time CAS.
+      ...(!causal ? (expectedRevision === undefined ? { expectedDraft: data.draft } : { expectedRevision }) : {}),
+      retireLive: !causal,
       version,
       content:
         markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },
-      existingSessions: data.draft?.editSessions,
       emailLower: caller.emailLower,
       actor: actorFrom(caller, req),
     });
-
-    res.status(200).json({ draft: { ...draft, editSessions: undefined } });
-  } catch (e) {
-    if (!(e instanceof StaleVersionError)) throw e;
-    res.status(409).json({ error: e.message, currentVersion: e.currentVersion });
+  } catch (error) {
+    if (error instanceof WriteAuthorityError) { res.status(error.status).json(error.detail); return; }
+    if (error instanceof DraftConflict) { res.status(409).json(error.detail); return; }
+    throw error;
   }
+
+  res.status(200).json({ draft: { ...draft, editSessions: undefined } });
 });
 
 /**
@@ -1050,6 +1095,8 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
 export const getDraft = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
   noStore(res); // before any branch can return — see noStore()
+  // Even empty refusals must not look like editable HTML to the parent frame.
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
@@ -1070,7 +1117,8 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
   const docData = docSnap.data() as DocAclData & {
     currentVersion?: string;
-    draft?: { baseVersion?: string; entry?: string; storagePrefix?: string } | null;
+    liveEpoch?: string;
+    draft?: { baseVersion?: string; entry?: string; sourceEntry?: string; storagePrefix?: string; causal?: unknown } | null;
   };
   const proof = await linkProofFor(docSnap.ref, docData, caller, null);
   if (!canEdit(docData, caller, proof)) {
@@ -1082,17 +1130,36 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  const hasDraft = docData.draft?.baseVersion === docData.currentVersion;
   const baseVersion = docData.currentVersion;
-  const draft = docData.draft?.baseVersion === baseVersion ? docData.draft : null;
   if (typeof baseVersion !== "string" || !safeSegment(baseVersion)) {
     res.status(404).end();
+    return;
+  }
+
+  const revision = draftRevision(docData);
+  const liveEpoch = docData.liveEpoch ?? "initial";
+  const requestedBase = strParam(req, "baseVersion");
+  const requestedEpoch = strParam(req, "liveEpoch");
+  const requestedRevision = strParam(req, "draftRevision");
+  if ((requestedBase && requestedBase !== baseVersion) ||
+      (requestedEpoch && requestedEpoch !== liveEpoch) ||
+      (requestedRevision && requestedRevision !== revision)) {
+    res.status(409).json({ error: "The draft changed. Reload before editing.", draftChanged: true });
+    return;
+  }
+  if (strParam(req, "session") === "1") {
+    const version = await loadVersionMeta(docSnap.ref, baseVersion);
+    if (!version) { res.status(404).end(); return; }
+    const causal = hasDraft ? readStoredCausalStamp(docData.draft?.causal) : null;
+    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(causal ? { causal } : {}) });
     return;
   }
 
   let relPath = segments.slice(1).join("/");
   if (relPath.length === 0) {
     const version = await loadVersionMeta(docSnap.ref, baseVersion);
-    const entry = draft?.entry ?? version?.entry;
+    const entry = (hasDraft ? docData.draft?.entry : undefined) ?? version?.entry;
     if (typeof entry !== "string" || safeRelPath(entry) == null) {
       res.status(404).end();
       return;
@@ -1100,12 +1167,16 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     relPath = entry;
   }
 
-  const draftKey = draft ? `${draftStoragePrefix(docId, draft)}/${relPath}` : null;
+  const draftKey = `${versionStoragePrefix(docId, "draft", docData.draft ?? {})}/${relPath}`;
   const version = await loadVersionMeta(docSnap.ref, baseVersion);
   if (!version) { res.status(404).end(); return; }
   const baseKey = `${version.storagePrefix}/${relPath}`;
-  let objectKey = draftKey ?? baseKey;
-  const [draftExists] = draftKey ? await bucket().file(draftKey).exists() : [false];
+  let objectKey = draftKey;
+  const [draftExists] = hasDraft ? await bucket().file(draftKey).exists() : [false];
+  if (hasDraft && !draftExists && (relPath === docData.draft?.entry || relPath === docData.draft?.sourceEntry)) {
+    res.status(409).json({ error: "The draft changed. Reload to read its current snapshot.", draftChanged: true });
+    return;
+  }
   if (!draftExists) {
     objectKey = baseKey;
     const [baseExists] = await bucket().file(baseKey).exists();
@@ -1116,7 +1187,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   }
 
   res.setHeader("Cache-Control", "private, no-store");
-  streamObject(res, objectKey, relPath, req.method === "HEAD");
+  streamObject(res, objectKey, relPath, req.method === "HEAD", true);
 });
 
 /**
@@ -1441,7 +1512,7 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     title: strParam(req, "title") || compiled.title,
     folderId: target.id,
     parentMembership: target.membership,
-    marking: jsonParam(req, "marking"),
+    marking: strParam(req, "marking") ? jsonParam(req, "marking") : undefined,
     via: "upload",
     ...(wantedId ? { docId: wantedId } : {}),
   }).catch((e: Error) => e);
@@ -1539,6 +1610,7 @@ async function updateFromUpload(
     extracted,
     actor,
     authorEmail: caller.emailLower,
+    editorsOnly: true,
     via: isAutomated(actor) ? (actor.channel as "cli" | "mcp" | "api") : "upload",
   }).catch((e: Error) => e);
 
@@ -1661,6 +1733,11 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
 
+    if (isExpired(data, Date.now())) {
+      res.status(409).json({ error: EXPIRED_WRITE });
+      return;
+    }
+
     if (op === "delete") {
       badRequest(res, "deleting documents is not supported");
       return;
@@ -1694,12 +1771,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     await persistDocMembership(
       db(),
       ref,
-      {
-        ownerEmail: String(data.ownerEmail || ""),
-        grants: grantsOf(data),
-        folderId: target.id,
-      },
-      { folderId: target.id },
+      () => ({ folderId: target.id }),
       () =>
         fromFolder === target.id
           ? []
@@ -1876,6 +1948,9 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
 
   const sessionRef = docRef.collection("views").doc(sessionId);
   const viewerRef = caller ? docRef.collection("viewers").doc(caller.uid) : null;
+  // A native retry may follow a successful commit whose acknowledgement was
+  // lost. One HTTP beat must not consume another cap on each callback attempt.
+  let beatCeiling: number | undefined;
 
   const result = await db().runTransaction(async (tx) => {
     const sessionSnap = await tx.get(sessionRef);
@@ -1890,7 +1965,8 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     const isNewSession = !sessionSnap.exists;
     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
     const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
-    const delta = Math.min(Math.max(0, claimedMs - storedMs), MAX_BEAT_MS);
+    beatCeiling ??= storedMs + MAX_BEAT_MS;
+    const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
     const sessionMs = storedMs + delta;
 
     tx.set(
@@ -1928,15 +2004,19 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     tx.set(
       docRef,
       {
-        stats: automated
+        stats: {
+          // Members receive this map. Reading identities belong only in the
+          // editor-gated views/viewers records, including on legacy documents.
+          lastViewedByEmail: FieldValue.delete(),
+          ...(automated
           ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
           : {
               views: FieldValue.increment(isNewSession ? 1 : 0),
               viewers: FieldValue.increment(isNewViewer ? 1 : 0),
               totalMs: FieldValue.increment(delta),
               lastViewedAt: now(),
-              ...(caller ? { lastViewedByEmail: caller.emailLower } : {}),
-            },
+            }),
+        },
         // `updatedAt` is deliberately NOT touched: it means "bumped on every
         // publish", and a read must not masquerade as a publish.
       },
@@ -2092,29 +2172,37 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
       return;
     }
 
-    const existing = (await ref.get()).data()?.verification as
-      | { sentAt?: number }
-      | undefined;
-    if (existing?.sentAt && Date.now() - existing.sentAt < VERIFY_RESEND_GAP_MS) {
+    const code = sixDigitCode();
+    const reservationId = randomBytes(16).toString("hex");
+    const reserved = await db().runTransaction(async (tx) => {
+      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+      if (existing?.reservationId === reservationId) return true;
+      const at = Date.now();
+      if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return false;
+      // Reserve once before sending: retrying this transaction never mails an
+      // obsolete candidate code or resets a newer challenge's attempt budget.
+      tx.set(
+        ref,
+        {
+          verification: {
+            // Only a hash is stored: a leaked record is not a working code.
+            hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
+            email,
+            expiresAt: at + VERIFY_TTL_MS,
+            attempts: 0,
+            sentAt: at,
+            reservationId,
+          },
+        },
+        { merge: true },
+      );
+      return true;
+    });
+    if (!reserved) {
       res.status(429).json({ error: "a code was just sent; wait a minute" });
       return;
     }
 
-    const code = sixDigitCode();
-    await ref.set(
-      {
-        verification: {
-          // Only a hash is stored: a leaked user record must not contain a
-          // working credential, even one that lives fifteen minutes.
-          hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
-          email,
-          expiresAt: Date.now() + VERIFY_TTL_MS,
-          attempts: 0,
-          sentAt: Date.now(),
-        },
-      },
-      { merge: true },
-    );
     const { sendVerificationCode } = await import("./email/notify");
     await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
     res.status(200).json({ sent: true, email });
@@ -2123,48 +2211,64 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 
   const body = jsonBody(req) as { code?: unknown } | null;
   const code = typeof body?.code === "string" ? body.code.trim() : "";
-  const snap = await ref.get();
-  const verification = snap.data()?.verification as
-    | { hash?: string; email?: string; expiresAt?: number; attempts?: number }
-    | undefined;
-  if (!verification?.hash || !verification.email) {
-    res.status(409).json({ error: "no verification in progress" });
-    return;
-  }
-  if (Number(verification.expiresAt ?? 0) < Date.now()) {
-    await ref.set({ verification: FieldValue.delete() }, { merge: true });
-    res.status(409).json({ error: "that code has expired" });
-    return;
-  }
-  if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
-    await ref.set({ verification: FieldValue.delete() }, { merge: true });
-    res.status(429).json({ error: "too many attempts; request a new code" });
-    return;
-  }
-
+  type VerificationCheck =
+    | { status: 400 | 409 | 429; error: string }
+    | { status: 200; email: string; identity: string };
   const expected = createHash("sha256").update(`${uid}:${code}`).digest("hex");
-  if (expected !== verification.hash) {
-    await ref.set(
-      { verification: { attempts: Number(verification.attempts ?? 0) + 1 } },
-      { merge: true },
-    );
-    res.status(400).json({ error: "that code is not right" });
+  const identity = (value: { hash?: string; email?: string; sentAt?: number; expiresAt?: number }) =>
+    JSON.stringify([value.hash, value.email, value.sentAt, value.expiresAt]);
+  const attemptId = randomBytes(16).toString("hex");
+  let checkedIdentity: string | undefined;
+  const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
+    const verification = (await tx.get(ref)).data()?.verification as
+      | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number; attemptIds?: string[] }
+      | undefined;
+    if (!verification?.hash || !verification.email) {
+      return { status: 409, error: "no verification in progress" };
+    }
+    const currentIdentity = identity(verification);
+    if (checkedIdentity !== undefined && checkedIdentity !== currentIdentity) {
+      return { status: 409, error: "that code was replaced; use the latest code" };
+    }
+    checkedIdentity = currentIdentity;
+    // The challenge allows at most five wrong attempts, so this receipt list
+    // is bounded by the existing limit and survives other concurrent guesses.
+    const attemptIds = Array.isArray(verification.attemptIds) ? verification.attemptIds : [];
+    if (attemptIds.includes(attemptId)) return { status: 400, error: "that code is not right" };
+    if (Number(verification.expiresAt ?? 0) < Date.now()) {
+      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      return { status: 409, error: "that code has expired" };
+    }
+    if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
+      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      return { status: 429, error: "too many attempts; request a new code" };
+    }
+    if (expected !== verification.hash) {
+      tx.set(
+        ref,
+        { verification: { attempts: Number(verification.attempts ?? 0) + 1, attemptIds: [...attemptIds, attemptId] } },
+        { merge: true },
+      );
+      return { status: 400, error: "that code is not right" };
+    }
+    return { status: 200, email: verification.email, identity: identity(verification) };
+    // At most five wrong-attempt commits and one retirement can race a caller.
+    // Leave room to observe the resulting refusal after those conflicts.
+  }, { maxAttempts: VERIFY_MAX_ATTEMPTS + 3 });
+  if (checked.status !== 200) {
+    res.status(checked.status).json({ error: checked.error });
     return;
   }
 
-  await admin.auth().updateUser(uid, {
-    email: verification.email,
-    emailVerified: true,
+  await admin.auth().updateUser(uid, { email: checked.email, emailVerified: true });
+  await db().runTransaction(async (tx) => {
+    const current = (await tx.get(ref)).data()?.verification;
+    // Auth is outside Firestore: a resend can reserve another challenge while
+    // this call is in flight. Completion retires only the challenge it checked.
+    if (!current || identity(current) !== checked.identity) return;
+    tx.set(ref, { uid, email: checked.email, verification: FieldValue.delete() }, { merge: true });
   });
-  await ref.set(
-    {
-      uid,
-      email: verification.email,
-      verification: FieldValue.delete(),
-    },
-    { merge: true },
-  );
-  res.status(200).json({ verified: true, email: verification.email });
+  res.status(200).json({ verified: true, email: checked.email });
 });
 
 // ---------------------------------------------------------------------------
@@ -2359,39 +2463,49 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
   }
 
   const ref = db().collection("teams").doc(teamId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    res.status(404).end();
-    return;
-  }
-  const team = snap.data() as TeamAclData & { name?: string; members?: unknown };
-  if (!canManageTeam(team, caller.emailLower)) {
-    res.status(403).end();
-    return;
-  }
-
-  const before = asArray(team.members);
-  const set = new Set(before);
-  for (const e of remove.map(normalizeEmail)) {
-    // The owner is never removed: a team with no owner has no one who can fix it.
-    if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
-  }
-  for (const e of add.map(normalizeEmail)) if (e) set.add(e);
-  const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);
-
-  let admins = asArray(team.admins);
-  if (body?.admin && typeof body.admin === "object") {
-    const a = body.admin as { email?: unknown; isAdmin?: unknown };
-    const email = normalizeEmail(typeof a.email === "string" ? a.email : "");
-    if (email && members.includes(email)) {
-      const adminSet = new Set(admins);
-      if (a.isAdmin === true) adminSet.add(email);
-      else if (email !== String(team.ownerEmail || "").toLowerCase()) adminSet.delete(email);
-      admins = [...adminSet].sort();
+  const receipt = freshReceiptId();
+  type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
+  const result = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const completed = readReceipt<TeamChange>(snap, receipt);
+    if (completed.found) return completed.result;
+    if (!snap.exists) {
+      return { status: 404 as const };
     }
-  }
+    const team = snap.data() as TeamAclData & { name?: string; members?: unknown };
+    if (!canManageTeam(team, caller.emailLower)) {
+      return { status: 403 as const };
+    }
 
-  await ref.set({ members, admins, updatedAt: now() }, { merge: true });
+    const before = asArray(team.members);
+    const set = new Set(before);
+    for (const e of remove.map(normalizeEmail)) {
+      // The owner is never removed: a team with no owner has no one who can fix it.
+      if (e && e !== String(team.ownerEmail || "").toLowerCase()) set.delete(e);
+    }
+    for (const e of add.map(normalizeEmail)) if (e) set.add(e);
+    const members = computeTeamMembers(String(team.ownerEmail || ""), [...set]);
+
+    let admins = asArray(team.admins).filter((email) => members.includes(email));
+    if (body?.admin && typeof body.admin === "object") {
+      const a = body.admin as { email?: unknown; isAdmin?: unknown };
+      const email = normalizeEmail(typeof a.email === "string" ? a.email : "");
+      if (email && members.includes(email)) {
+        const adminSet = new Set(admins);
+        if (a.isAdmin === true) adminSet.add(email);
+        else if (email !== String(team.ownerEmail || "").toLowerCase()) adminSet.delete(email);
+        admins = [...adminSet].sort();
+      }
+    }
+
+    tx.set(ref, { members, admins, updatedAt: now() }, { merge: true });
+    const completedChange: TeamChange = { status: 200, team: { name: typeof team.name === "string" ? team.name : "a team" }, before, members, admins };
+    recordReceipt(tx, ref, snap, receipt, completedChange);
+    return completedChange;
+  });
+  if (result.status !== 200) { res.status(result.status).end(); return; }
+  await clearReceipt(ref, receipt);
+  const { team, before, members, admins } = result;
 
   // Removing someone from a team must revoke their access everywhere the team
   // was granted, and adding someone must grant it. Both are the same recompute.

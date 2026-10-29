@@ -95,8 +95,8 @@ function world() {
 }
 
 /** Storage in memory for the length of `fn`, for the tools that publish. */
-async function withStorage(fn) {
-  const objects = new Map();
+async function withStorage(fn, seed = {}) {
+  const objects = new Map(Object.entries(seed));
   const saved = Object.getOwnPropertyDescriptor(admin, "storage");
   const before = process.env.BIKESHED_BUCKET;
   process.env.BIKESHED_BUCKET = "test-bucket";
@@ -105,10 +105,11 @@ async function withStorage(fn) {
     download: async () => [objects.get(name) ?? Buffer.from("")],
     save: async (data) => void objects.set(name, Buffer.from(data)),
     exists: async () => [objects.has(name)],
+    copy: async (destination) => { objects.set(destination, objects.get(name)); },
   });
   Object.defineProperty(admin, "storage", {
     configurable: true,
-    value: () => ({ bucket: () => ({ file: object, getFiles: async () => [[]], deleteFiles: async () => {} }) }),
+    value: () => ({ bucket: () => ({ file: object, getFiles: async ({ prefix }) => [[...objects.keys()].filter((name) => name.startsWith(prefix)).map(object)], deleteFiles: async () => {} }) }),
   });
   try {
     return await fn();
@@ -382,4 +383,125 @@ test("every way to change a document records an event, or says why it need not",
       assert.ok(name in EXEMPT || name in RECORDS, `${name} changes documents? Record an event, or list it as exempt with a reason`);
     }
   });
+});
+
+for (const [label, fields] of [
+  ['empty event id', { s: 1, n: 0, e: '' }],
+  ['missing seconds', { n: 0, e: 'event' }],
+  ['missing nanoseconds', { s: 1, e: 'event' }],
+  ['missing event id', { s: 1, n: 0 }],
+  ['negative nanoseconds', { s: 1, n: -1, e: 'event' }],
+  ['nanoseconds overflow', { s: 1, n: 1e9, e: 'event' }],
+  ['seconds overflow', { s: 253402300800, n: 0, e: 'event' }],
+  ['event path', { s: 1, n: 0, e: 'nested/event' }],
+]) test(`a malformed cursor with ${label} is rejected without throwing or replaying`, () => {
+  const raw = Buffer.from(JSON.stringify({ v: 1, d: 'd1', ...fields })).toString('base64url');
+  assert.deepEqual(decodeCursor(raw, 'd1'), { error: 'that is not a cursor this server gave out' });
+});
+
+test('MCP reads have a stable startedAt for the Activity query while counts and lastBeatAt advance', async () => {
+  const w = world();
+  await w.call('get_document', OWNER, {});
+  const path = 'docs/d1/views/api-t1-v1';
+  const first = w.store.get(path);
+  assert.ok(first.startedAt instanceof Timestamp, 'MCP activity has the timestamp required by the ordered query');
+  await w.call('get_document', OWNER, {});
+  const second = w.store.get(path);
+  assert.ok(second.startedAt.isEqual(first.startedAt), 'repeated reads retain the session start');
+  assert.ok(second.lastBeatAt.toMillis() >= first.lastBeatAt.toMillis());
+  assert.deepEqual({ reads: second.reads, ms: second.ms, automated: second.automated, apiReads: w.store.get('docs/d1').stats.apiReads }, { reads: 2, ms: 0, automated: true, apiReads: 2 });
+});
+
+test('MCP reads erase a legacy last reader from member-visible stats while retaining editor-only provenance', async () => {
+  const w = world();
+  w.store.get('docs/d1').stats = { lastViewedByEmail: 'former-reader@example.com', commits: 7 };
+  await w.call('get_document', OWNER, {});
+  assert.equal(Object.hasOwn(w.store.get('docs/d1').stats, 'lastViewedByEmail'), false, 'MCP also removes a legacy reading identity');
+  assert.equal(w.store.get('docs/d1').stats.commits, 7);
+  assert.equal(w.store.get('docs/d1/views/api-t1-v1').email, OWNER.emailLower);
+});
+
+
+test("a tied timestamp on both sides of the page boundary retains the event-id cursor", async () => {
+  const w = world();
+  const at = Timestamp.fromMillis(1000);
+  for (let i = 0; i < 101; i++) w.store.set(`docs/d1/events/e${String(i).padStart(3, "0")}`, { at, type: "doc.renamed", audience: "readers", data: { to: `Title ${i}` } });
+  const first = await w.call("get_changes", OWNER, { since: "all", includeMine: true });
+  const second = await w.call("get_changes", OWNER, { since: first.cursor, includeMine: true });
+  assert.deepEqual([first.events.length, first.more, second.events.length, second.more], [100, true, 1, false]);
+  assert.deepEqual([...first.events, ...second.events].map((e) => e.to), Array.from({ length: 101 }, (_, i) => `Title ${i}`));
+});
+
+test("publish and fork save their returned cursors, while update and reply leave the existing cursor untouched", async () => {
+  const w = world();
+  const published = await w.call("publish_document", OWNER, { title: "New plan", content: "# New plan", id: "new-plan" });
+  assert.equal(w.store.get("users/u-owner/cursors/t1~new-plan")?.cursor, published.cursor, "publish saves its cursor");
+  const forked = await withStorage(() => withFakeAdmin({ db: w.db }, () => tool("fork_document").run(w.ctx(OWNER), { id: "d1", title: "Copied" })), { "docs/d1/v1/index.html": Buffer.from("<p>Memo</p>") });
+  assert.equal(w.store.get(`users/u-owner/cursors/t1~${forked.docId}`)?.cursor, forked.cursor, "fork saves its cursor");
+  const first = await w.call("get_changes", OWNER, { since: "all" });
+  await w.comment("waiting", ANA, "Unseen before the agent's writes.");
+  const saved = { ...w.store.get("users/u-owner/cursors/t1~d1") };
+  const reply = await w.call("reply_to_comment", OWNER, { threadId: "waiting", body: "A reply." });
+  assert.equal("cursor" in reply, false);
+  assert.deepEqual(w.store.get("users/u-owner/cursors/t1~d1"), saved, "reply never moves the saved cursor");
+  const updated = await w.call("update_document", OWNER, { baseVersion: "v1", content: "<html><body><p>Revised memo</p></body></html>" });
+  assert.equal("cursor" in updated, false, "update returns no cursor");
+  assert.deepEqual(w.store.get("users/u-owner/cursors/t1~d1"), saved, "update never moves the saved cursor");
+  assert.equal(saved.cursor, first.cursor);
+});
+
+test("generated resolve/reopen notes do not answer a person, and an empty page names no waiting threads", async () => {
+  const w = world();
+  await w.comment("waiting", ANA, "Please answer.");
+  await w.comment("waiting", OWNER, "Resolved.", { channel: "mcp", generated: true });
+  await w.comment("waiting", OWNER, "Reopened.", { channel: "mcp", generated: true });
+  const all = await w.call("get_changes", OWNER, { since: "all" });
+  assert.deepEqual(all.needsReply, ["waiting"], "server notes leave the human comment waiting");
+  const quiet = await w.call("get_changes", OWNER, { since: all.cursor });
+  assert.deepEqual(quiet.events, []);
+  assert.deepEqual(quiet.needsReply, [], "a waiting thread outside this page is not returned");
+});
+
+test("resolved and historical threads are separately excluded from needsReply", async () => {
+  const w = world();
+  await w.comment("closed", ANA, "Done.");
+  const path = "docs/d1/versions/v1/annotations/closed";
+  w.store.set(path, { ...w.store.get(path), resolved: true });
+  assert.deepEqual((await w.call("get_changes", OWNER, { since: "all" })).needsReply, [], "resolved threads are excluded");
+  w.store.set(path, { ...w.store.get(path), resolved: false });
+  w.store.set("docs/d1", { ...w.store.get("docs/d1"), currentVersion: "v2" });
+  w.store.set("docs/d1/versions/v2/annotations/closed", { ...w.store.get(path), resolved: false });
+  w.store.set("docs/d1/versions/v2/annotations/closed/comments/current", { body: "Current waiting", authorEmail: ANA.emailLower, createdAt: Timestamp.now() });
+  assert.deepEqual((await w.call("get_changes", OWNER, { since: "all" })).needsReply, [], "historical events cannot nominate even a same-id current thread");
+});
+
+test("hidden own events still advance the returned cursor", async () => {
+  const w = world();
+  const at = Timestamp.fromMillis(2000);
+  w.store.set("docs/d1/events/e-own", { at, type: "doc.renamed", audience: "readers", actor: { uid: OWNER.uid, channel: "mcp", tokenId: "t1" } });
+  const own = await w.call("get_changes", OWNER, { since: "all" });
+  assert.deepEqual(own.events, []);
+  assert.equal(decodeCursor(own.cursor, "d1").id, "e-own");
+});
+
+test("hidden other-audience events still advance the returned cursor", async () => {
+  const w = world();
+  w.store.set("docs/d1/events/e-private", { at: Timestamp.fromMillis(3000), type: "fork.created", audience: "owner" });
+  const reader = await w.call("get_changes", VIEWER, { since: "all" });
+  assert.deepEqual(reader.events, []);
+  assert.equal(decodeCursor(reader.cursor, "d1").id, "e-private");
+});
+
+test("comment logs exclude body and email, and a resolved event names the resolver rather than the thread author", async () => {
+  const w = world();
+  await w.comment("t1", ANA, "Private body.");
+  assert.ok(!JSON.stringify(w.events()).includes("Private body."));
+  assert.ok(!JSON.stringify(w.events()).includes(ANA.emailLower));
+  const path = "docs/d1/versions/v1/annotations/t1";
+  const before = w.store.get(path);
+  const after = { ...before, resolved: true, resolvedBy: web(BO) };
+  w.store.set(path, after);
+  await w.deliver(triggers.recordThreadEvent, { docId: "d1", versionId: "v1", annId: "t1" }, before, after);
+  const feed = await w.call("get_changes", OWNER, { since: "all" });
+  assert.equal(feed.events.find((e) => e.type === "thread.resolved").by, BO.emailLower);
 });

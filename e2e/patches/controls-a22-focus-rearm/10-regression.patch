@@ -1,0 +1,7 @@
+--- a/app/src/pages/Connect.tsx
++++ b/app/src/pages/Connect.tsx
+@@ -89,3 +89,3 @@
+     document.addEventListener("visibilitychange", restart);
+-    window.addEventListener("focus", restart);
++    window.addEventListener("focus", () => { settled = true; update(); });
+     window.addEventListener("blur", restart);

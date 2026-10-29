@@ -1,0 +1,16 @@
+{
+  "oracle": "A12.10c an operator access grant ACK retry preserves a later real revocation and its mirrors",
+  "what": "controls-operator-access-ack",
+  "target": {
+    "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+    "case": "A12.10c an operator access grant ACK retry preserves a later real revocation and its mirrors",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "^ACK operator access: original retry preserves"
+  }
+}

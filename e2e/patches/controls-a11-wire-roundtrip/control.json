@@ -6,6 +6,6 @@
     "case": "A11.12 joining a live session with no edits rebuilds the body byte-identical (outerHTML) for H, B, M, D and Q"
   },
   "expect": {
-    "message": "every sample's body is byte-identical on the seeder and the joiner"
+    "message": "every sample's body is byte-identical on the seeder and the joiner|SVG roots retain the SVG namespace through the wire round trip"
   }
 }

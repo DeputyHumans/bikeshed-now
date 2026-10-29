@@ -1,0 +1,13 @@
+{
+  "oracle": "stale-after-claim sends only claim then release",
+  "what": "Regress claim release",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.7c a quote changed while claiming releases the successful claim without a draft save or acceptance",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "stale-after-claim sends only claim then release"
+  }
+}

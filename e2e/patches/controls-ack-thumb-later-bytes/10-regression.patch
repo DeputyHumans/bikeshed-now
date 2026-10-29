@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -683,3 +683,3 @@
+   for (const gone of outcome.stale) {
+-    const prefix = `${thumbPrefix(docId, gone.versionId)}${gone.key ? `${gone.key}/` : ""}`;
++    const prefix = `docs/${docId}/thumbs/`; void gone;
+     await bucket().deleteFiles({ prefix, force: true }).catch(() => undefined);

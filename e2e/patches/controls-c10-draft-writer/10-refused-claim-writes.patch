@@ -1,12 +1,9 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -88,7 +88,8 @@
-     });
- 
-   const claimed = await change("claim");
--  if ("status" in claimed) return claimed;
-+  // e2e control (controls-c10-draft-writer): a refused claim no longer stops the change (only a missing suggestion does), so an approver the claim refused writes the draft too.
-+  if ("status" in claimed && claimed.status === 404) return claimed;
-   try {
-     if (made.state === "applied") {
-       if (editors.log) await clearEditLog(docRef.id);
+@@ -125,5 +125,6 @@
+   }
+   const recorded = await change("accept");
+   if ("status" in recorded) return recorded;
++  await docRef.update({ "draft.updatedByEmail": "wrong-writer@example.com" });
+   return { state: "accepted", changed: made.state === "applied" };
+ }

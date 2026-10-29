@@ -1,0 +1,19 @@
+{
+  "oracle": "A19.3 the deployment default marking (VITE_EXPORT_MARK_*) seeds a new account's default, which the account screen shows and the next upload carries (SPEC \u00a720, docs/operations/config.md)",
+  "what": "a19 deployment seed",
+  "target": {
+    "spec": "e2e/specs/functional/a19-account.spec.mjs",
+    "case": "A19.3 the deployment default marking (VITE_EXPORT_MARK_*) seeds a new account's default, which the account screen shows and the next upload carries (SPEC \u00a720, docs/operations/config.md)"
+  },
+  "expect": {
+    "message": "the new account stores the configured deployment marking"
+  },
+  "stack": [
+    "--app-env",
+    "VITE_EXPORT_MARK_ENABLED",
+    "--app-env",
+    "VITE_EXPORT_MARK_LABEL=E2E marking",
+    "--app-env",
+    "VITE_EXPORT_MARK_FOOTER=E2E footer"
+  ]
+}

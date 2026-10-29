@@ -1,0 +1,9 @@
+--- a/functions/src/lib/thumbs.ts
++++ b/functions/src/lib/thumbs.ts
+@@ -170,5 +170,5 @@
+   if (!/^\d{1,7}(,\d{1,7}){0,99}$/.test(sizes)) return { error: "invalid sizes" };
+   const lengths = sizes.split(",").map(Number);
+-  if (kind === "cover" && lengths.length !== 1) return { error: "a cover is one image" };
++  if (kind === "cover" && lengths.length < 1) return { error: "a cover is one image" };
+   if (lengths.length > THUMB_MAX_SLIDES) return { error: "too many slides" };
+   if (!body) return { error: "no body" };

@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.3 a missing or empty required argument is a tool error naming exactly the missing ones, for every tool that requires any; an unknown tool and an unknown method are -32601, a message without a method -32600, a non-JSON body -32700; a notification is 202 and a batch answers its requests in order",
+  "what": "empty argument",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.3 a missing or empty required argument is a tool error naming exactly the missing ones, for every tool that requires any; an unknown tool and an unknown method are -32601, a message without a method -32600, a non-JSON body -32700; a notification is 202 and a batch answers its requests in order",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "missing arguments are named exactly"
+  }
+}

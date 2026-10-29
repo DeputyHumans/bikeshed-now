@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -488,3 +488,3 @@
+         const own = readReceipt<string>(snapshot, retirement);
+-        if (own.found) { retiredEpoch = own.result; return; }
++        if (own.found) { retiredEpoch = own.result; /* control: skip the successful acknowledgement. */ }
+         const current = snapshot.data();

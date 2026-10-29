@@ -1,0 +1,11 @@
+--- a/functions/src/lib/rename.ts
++++ b/functions/src/lib/rename.ts
+@@ -3,2 +3,3 @@
+ 
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import * as admin from "firebase-admin";
+@@ -34,3 +35,3 @@
+   const receipt = freshReceiptId();
+-  await db.runTransaction(async (tx) => {
++  await e2eAckTransaction(db, ref.id, "doc-rename", async (tx) => {
+     const snap = await tx.get(ref);

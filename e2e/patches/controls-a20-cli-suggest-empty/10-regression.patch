@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -668,5 +668,5 @@
+   // An empty --with is what an unset shell variable sends; deleting a passage
+   // has to be asked for by name.
+-  if (replacing && flags.with === "") fail("an empty --with would delete the passage; say --delete if you mean that");
++  if (false && replacing && flags.with === "") fail("an empty --with would delete the passage; say --delete if you mean that");
+   return replacing ? flags.with : "";
+ }

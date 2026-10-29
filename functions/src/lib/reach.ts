@@ -28,10 +28,11 @@ type Db = admin.firestore.Firestore;
 type Caller = { uid: string; emailLower: string } | null;
 
 /** The record of the folder a document is filed in, or null. */
-export async function folderOfDoc(db: Db, doc: DocAclData): Promise<FolderAclData | null> {
+export async function folderOfDoc(db: Db, doc: DocAclData, tx?: admin.firestore.Transaction): Promise<FolderAclData | null> {
   const id = typeof doc.folderId === "string" ? doc.folderId : "";
   if (!id || !safeSegment(id)) return null;
-  const snap = await db.collection("folders").doc(id).get();
+  const ref = db.collection("folders").doc(id);
+  const snap = tx ? await tx.get(ref) : await ref.get();
   return snap.exists ? (snap.data() as FolderAclData) : null;
 }
 

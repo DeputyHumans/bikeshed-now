@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.4d Fork this version, on an old version in the viewer, forks that version: the pointer names it, and the fork's bytes are its bytes and pass REHASH",
+  "what": "Copy an extra source version record into the fork.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.4d Fork this version, on an old version in the viewer, forks that version: the pointer names it, and the fork's bytes are its bytes and pass REHASH",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^forking an old version copies no other version records"
+  }
+}

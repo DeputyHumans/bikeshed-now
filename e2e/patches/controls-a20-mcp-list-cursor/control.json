@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.2.list_documents lists the caller's documents newest first as metadata only, pages by nextCursor to a null cursor, and never lists a document of somebody else's",
+  "what": "list cursor",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.2.list_documents lists the caller's documents newest first as metadata only, pages by nextCursor to a null cursor, and never lists a document of somebody else's",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "page 1"
+  }
+}

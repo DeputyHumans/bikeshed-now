@@ -89,7 +89,7 @@ test("run.mjs takes each tier's lock as tierLockMode chose it from the run's own
   const src = readFileSync(RUN_MJS, "utf8");
   const code = blankSource(src); // comments and string contents blanked: only code matches
   assert.doesNotMatch(code, /\bTIER_MODE\b/, "no tier's lock is read from TIER_MODE directly");
-  assert.equal([...code.matchAll(/\bacquireTierLock\s*\(/g)].length, 1, "one place takes a tier lock");
+  assert.equal([...code.matchAll(/\bacquireTierLock\s*\(/g)].length, 2, "the suite runner and the self-test runner each take a tier lock");
   assert.match(code, /\bacquireTierLock\s*\(\s*tierLock\.mode\s*,/, "the lock taken is the one tierLockMode chose");
   assert.match(code, /\.tierLock\s*=\s*tierLockMode\s*\(\s*p\.tier\s*,\s*selection\s*\)/, "chosen per tier of the plan, from the run's selection");
   assert.match(code, /const selection\s*=\s*\{\s*n:\s*values\.n\s*\?\s*values\.n\.split\(/, "--n as numbers");
@@ -97,7 +97,7 @@ test("run.mjs takes each tier's lock as tierLockMode chose it from the run's own
   assert.match(code, /env\.E2E_N\s*=\s*values\.n\b/, "the spec process selects by the same --n");
   assert.match(code, /env\.E2E_TRIALS\s*=\s*values\.trials\b/, "and runs the same --trials");
   assert.match(code, /locks\[tier\]\s*=\s*\{\s*\.\.\.tierLock\s*,\s*acquiredAt:/, "the lock taken is recorded");
-  assert.match(code, /updateInvocationMeta\(\s*inv\.dir\s*,\s*\{\s*locks\s*\}\s*\)/, "into invocation.json");
+  assert.match(code, /updateInvocationMeta\(\s*inv\.dir\s*,\s*\{\s*locks\s*(?:,|\})/, "into invocation.json");
   assert.doesNotMatch(code, /\.authoring\b|mode\s*===|===\s*mode\b/, "nothing else depends on the mode: the gates apply whatever it is");
   assert.match(src, /if \(tier === "concurrency"\) \{\s*const max = Number\(values\["max-load"\] \?\? DEFAULT_MAX_LOAD\);\s*const gate = await waitForLoad\(/, "the load gate applies to every concurrency run, shared or exclusive");
 });

@@ -1,0 +1,11 @@
+--- a/app/src/analytics.ts
++++ b/app/src/analytics.ts
+@@ -78,7 +78,7 @@
+   if (!analyticsConfigured() || optedOut) return Promise.resolve(null);
+   // Denial means the measurement script is never fetched, rather than fetched
+   // and then disabled — a request nobody sends cannot be logged by anybody.
+-  if (readConsent() !== "granted") return Promise.resolve(null);
++  if (readConsent() !== "granted") return ready = Promise.resolve(null);
+   if (ready) return ready;
+   ready = (async () => {
+     try {

@@ -112,6 +112,11 @@ document's key or link grant (§17), and nothing less: without them an unlisted
 document answers exactly as a private one. The viewer's not-found page offers
 to sign in, or to switch account, from the reader's own sign-in state alone;
 it is never given the document, so it says no more than the `404` does.
+Owner-only refusals and thumbnail-write refusals resolve the caller's current stored
+link grant before choosing that status, including GET `/access`; this changes no
+authority. A rotated, missing, or private-document grant proves nothing. Expiry
+freezes content access and writes as §17 specifies; it does not erase an already
+known id from the refusal's ACL check.
 
 ---
 
@@ -284,7 +289,11 @@ every member sees them without anybody rendering them again.
   JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
   image, slides at most 100. The objects go in under a key minted per upload,
   and a transaction makes that key the record's only if this kind is not yet
-  stored for `v` by this revision; a loser deletes what it wrote. A newer
+  stored for `v` by this revision and the uploader is still an editor in its
+  fresh document snapshot. A downgrade or removal during upload is refused
+  with the same reader-aware `403`/`404` as an initial refusal; it changes no
+  thumbnail metadata and deletes only this upload's candidate key. A loser
+  deletes what it wrote. A newer
   revision replaces an older one's images for the same version and deletes
   their keys, so a capture that got an image wrong is not stuck with it until
   the next version. Moving the record to a new version deletes the old
@@ -367,7 +376,10 @@ Owner-only. Applies deltas with set semantics (one role per principal; the owner
 is never removed and never stored in a role), expands team grants, folds in the
 parent folder chain, and writes the four grant lists `{ viewers, suggesters,
 editors, approvers }`, the four effective sets `{ members, suggesterMembers,
-editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. Records an
+editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. The delta,
+current document, parent membership and referenced teams are read in the same
+Firestore transaction as the grant and effective-set write, so concurrent
+successful deltas compose. Records an
 entry in `docs/{docId}/acl` with the acting `Actor` (§17). Syncs the presence
 mirror (§16) and the public projection (§17).
 
@@ -388,22 +400,40 @@ Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
 caller's link grant), Admin-SDK only, versions immutable — a commit always
 mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
-- **`POST /draft`** — `{ docId, baseVersion, entry?, html }`. `409 { currentVersion }`
-  when `baseVersion !== currentVersion`, checked again in the adopting transaction.
-  Writes create-only objects to a unique `docs/{docId}/drafts/{attempt}/` prefix
-  and records that prefix in `docs/{docId}.draft.storagePrefix`. For a Markdown-sourced document the edited HTML is
+- **`POST /draft`** — `{ docId, baseVersion, entry?, html, liveEpoch?, causal? }`. `409 { currentVersion }`
+  when `baseVersion !== currentVersion`. Uploads an isolated immutable snapshot
+  and transactionally selects it in `docs/{docId}.draft.storagePrefix`, checking
+  the current base, edit authority and expiry again after the upload. A browser
+  captures `liveEpoch` at edit entry; a retired epoch returns `409 { liveReset }`.
+  Shared saves carry a bounded `causal` history: the elected seed's SHA-256,
+  Yjs insertion vector and deletion intervals. An older or equal history is an
+  idempotent `200` retaining the current draft; concurrent histories return
+  `409 { draftChanged }` until merged, and different seed generations refuse
+  with `liveReset`. The server stores deletion intervals as JSON to avoid
+  Firestore's nested-array restriction. For a
+  Markdown-sourced document the edited HTML is
   converted to Markdown server-side and `index.md` is what is stored (§11).
 - **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
-  the base version's committed storage prefix for anything the draft does not carry,
-  so first-edit and non-entry assets render. `private, no-store`.
+  the current version's stored bundle for non-entry assets the draft does not
+  carry. An absent selected draft entry refuses with `409 { draftChanged }`,
+  rather than silently serving older published content. Legacy drafts without
+  a storage pointer retain their historical prefix. `private, no-store`.
 - **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no
   draft, or if any annotation on the current version is unresolved
   (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds
   it, since only an approver can clear a pending suggestion, §6a). Assembles base assets + edited entry, re-renders
-  Markdown if applicable, hashes with the §9 framing, **dedups on `contentHash`**
-  (identical bytes → no-op, clear the draft, `deduped: true`), else uploads and,
+  Markdown if applicable, hashes with the §9 framing, **dedups against the current version's `contentHash`**
+  (identical current bytes → no-op, clear the draft, `deduped: true`). Matching
+  an older version is a restoration, not a no-op. Changed current content uploads and,
   in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
-  clears `draft`.
+  clears `draft`. Both the mint and dedup transactions require the exact
+  snapshot originally read; a newer save returns `409 { draftChanged }` and
+  stays intact. Cleanup deletes only the replaced snapshot's own files.
+  Every retirement, including an identical-byte draft commit, advances the
+  document's opaque `liveEpoch` atomically. Access mirrors and public reader
+  metadata refresh before cleanup removes only that retired epoch's live log.
+  Unknown transaction errors retain uploaded candidates: a lost response may
+  hide a successful commit, whose referenced bytes must survive.
 
 ### `POST /suggestion`
 Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and
@@ -433,7 +463,9 @@ own pending proposal, and neither destroys anything.
   `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`.
   `title` is optional: for HTML the document's own `<title>` (read by the §17
   head scanner, else `og:title`) is the default, then the file name without its
-  extension; for Markdown, the first level-one heading. `id` is optional too:
+  extension; for Markdown, the first level-one heading. The browser upload
+  dialog and file-drop paths leave `title` absent unless the uploader enters
+  one, so both use these defaults. `id` is optional too:
   the docId to publish at, refused with a `400` before anything is stored if it
   breaks the rules in §4. A taken `id` is not refused; see §4.
 
@@ -477,7 +509,7 @@ own pending proposal, and neither destroys anything.
 - **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }`
   (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and
   expiry, recomputes its subtree, and answers `{ visibility, linkToken,
-  expiresAt }`; a folder has no open editing.
+  expiresAt }`; a folder has no open editing. Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
 - **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
   body for an unlisted document; without a read basis it is the `404` an absent
   id gets, and nothing is counted.
@@ -563,7 +595,7 @@ accountMoves/{jobId}                           AccountMove      (server-written;
 "withdrawn", claim?, decidedBy?, decidedAt?, revisions? }`, where `decidedBy`
 and `decidedAt` say who closed it — an approver deciding, or its author
 withdrawing — and when, and `revisions` holds, oldest first, what each change
-its author made replaced: `{ replacement, note?, at, actor }`, the note only
+its author made replaced: `{ replacement, note?, at, actor, operationId? }`, the note only
 when a new one replaced the author's own. Its `resolved` is `false` while pending and `true` once closed, so
 it counts as an open thread everywhere one is counted.
 Only `POST /suggestion` writes the field. A **`Comment`** may carry
@@ -642,6 +674,11 @@ Missing ⇒ treated as trusted.
 counts with no extra reads and any member can see the AGGREGATE. Written only by
 the Admin SDK, always as a nested map under `set(..., { merge: true })` so the
 view writer and the edit writer never clobber each other.
+Reading identities never appear in this member-readable map. They live only in
+the editor-gated `views` and `viewers` collections; `lastViewedAt` is an
+anonymous aggregate timestamp. Read writers delete the legacy
+`stats.lastViewedByEmail` field. An existing installation must also run
+`scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again.
 `recordView` deliberately does NOT touch `updatedAt` — that field means "bumped
 on every publish", and a read must not masquerade as a publish.
 
@@ -667,6 +704,21 @@ documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
 `delete-version.mjs`, so old and new sessions are never conflated under one id.
 Withdrawing a version also deletes its thumbnails and clears a `thumb` naming
 it, since a re-minted id would otherwise inherit them.
+
+Every publish attempt uploads into its own immutable bundle prefix. The
+version record's `storagePrefix` selects those bytes only after the transaction
+commits; a competing or refused upload cannot replace them. All content,
+source, download, fork and subsequent-edit reads follow that pointer. Older
+records without a pointer retain their original version-based path.
+If a transaction commits but loses its acknowledgement, an SDK retry recognizes
+that attempt's unique version prefix before applying new-write guards. It
+acknowledges the already-published version without repointing a later head.
+A refusal on a retry cannot prove an earlier attempt did not commit, so bytes
+from an attempted transaction are retained when its outcome remains uncertain.
+After a known terminal refusal, a fresh transactional read of the document's
+draft and every retained version may prove its unique candidate unreferenced;
+only that proof permits cleanup. A failed lookup or an unknown transport error
+retains the bytes, and a later head never hides a historical version's pointer.
 
 `createdAt` is set once. `updatedAt` is bumped on every publish.
 
@@ -717,6 +769,12 @@ The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`.
 Because it is same-origin, the parent app drives annotation directly on
 `iframe.contentDocument`. **The proxy injects nothing.**
 
+A browser comment belongs to the current version the frame displays. Existing
+feedback stays on its original version after publication; historical versions
+are read-only archives (§24). A pinned reader can open the latest version to
+comment. MCP `add_comment` selects the current head and rechecks it atomically
+(§19).
+
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
 - Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
   `dom-anchor-text-position` as the fallback, both scoped to the **nearest
@@ -755,9 +813,11 @@ Because it is same-origin, the parent app drives annotation directly on
   open when a thread is unresolved, collapsed otherwise — resolved threads are
   hidden until asked for, so they do not count. Until that snapshot lands it
   is closed. Whichever comes first, the snapshot or the reader's toggle, wins,
-  and nothing after it changes the answer: a comment landing later does not
-  reopen a panel the reader closed, and a new version of the same document
-  does not collapse one they had open. Starting a comment opens it regardless.
+  and later annotation snapshots do not change the answer: a comment landing
+  later does not reopen a panel the reader closed, and a new version of the
+  same document does not collapse one they had open. Starting a comment or
+  explicitly selecting a highlight opens its thread regardless; on a phone
+  that selection also switches to the Comments pane.
 - **A click that carries a comment intent never reaches the document's own
   scripts.** A drag that selects text ends in a `click`, and a click on a
   highlight is the thread's. Both are stopped in the capture phase before any
@@ -817,10 +877,16 @@ The one path that writes content, and it is explicit and server-mediated.
   saved bytes.
 - Before serializing, `serializeCleanHtml` strips every app injection from a
   CLONE: highlight marks, the injected stylesheets, the peer-presence overlay,
-  placeholder marking, and `contenteditable` attributes. App injections carry
+  placeholder marking, and the editor's temporary body `contenteditable` and
+  `spellcheck` overrides. The body's original attribute values (including
+  absence) and authored descendant attributes survive. App injections carry
   `data-bshd` with a value from `OWN_MARKERS` and are stripped as a class — the
   value check is what makes the namespace safe against a bundle that happens to
   use the same attribute.
+- The round trip preserves the authored DOM plus the edit, not the original
+  source spelling. The browser parser and HTML serializer may normalize
+  whitespace outside the document body or equivalent HTML syntax. They must
+  not add editing decoration, remove authored elements or change their meaning.
 - Serialization also drops any `script/style/link/meta/base` absent from the
   load-time asset inventory (`captureAssetTags`, taken in `onLoad` before any
   injection). That removes nodes a BROWSER EXTENSION added to the same-origin
@@ -830,11 +896,38 @@ The one path that writes content, and it is explicit and server-mediated.
 - Leaving edit mode saves only an edit the autosave has not yet taken. Any
   save creates a draft, so a save on the way out of an unchanged session
   would leave a draft that differs from nothing.
+- Concurrent suggestion accepts compare the draft snapshot at the write. A
+  conflicting accept rereads and reapplies its change before retrying, so
+  every accepted decision is present in the resulting draft. A changed quote
+  or version refuses instead of recording an unapplied acceptance.
 - While a draft exists, an editor reading the **published head** reads the
   draft, under a banner that says so — who saved it last, and when — and a
   version label that reads `vN · draft`. The banner is the only signal: the
   frame cannot carry one. An editor who opens an older version reads that
   version; the draft is built on the head (`readsDraft`).
+- An open editor retains the version and live epoch it entered, even when
+  another publisher changes the document record. Local and remotely merged
+  edits both schedule autosave. Queued DOM mutations are flushed before the
+  history stamp and matching HTML are captured in one synchronous turn.
+- Entering Edit first prepares an authenticated draft session with only its
+  version, entry, live epoch and opaque snapshot revision. The iframe GET
+  validates those identities against the same snapshot used to resolve its
+  immutable bytes. A changed or refused read stays non-editable and offers
+  Reload draft; it is never treated as an empty document to save.
+- A whole-document save without a causal history compares that revision in
+  the write transaction. A newer snapshot refuses the replacement, preserving
+  both stored bytes and the editor's unsaved DOM until an explicit reload.
+  A successful replacement retires the prior live epoch; its response advances
+  the solo writer's next save revision and epoch without remounting the frame.
+  Legacy API callers without a revision still compare the snapshot read by
+  their request, while browser editors always supply their loaded revision.
+- A remembered-link draft save and a no-change draft publication keep a bounded
+  operation receipt (§17) when the SDK retries after losing the commit
+  acknowledgement. Their original successful result and captured retirement
+  survive a later save, publication, or access change. A retry acknowledges the
+  earlier write and cleans only its replaced snapshot; it never restores an
+  earlier head, draft, or editing session. An unconfirmed earlier attempt keeps
+  its bytes until their absence from every durable pointer is established.
 - Autosave is debounced to `POST /draft`. "Save as new version" calls
   `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
   `lib/draft.ts`), allowed only when every comment on the current version is
@@ -883,9 +976,26 @@ normalized into an editor's model. The **normative** property is that a document
 survives a round trip through the wire format byte-identical; the sample bundles
 are the fixtures that hold it.
 
-Deletion beats concurrent typing: if one person removes a passage while another
-edits it, the passage goes. That is the CRDT's semantics, not a policy choice,
-and it is tested rather than assumed.
+Text edits preserve the browser's `beforeinput` target range (or its selection
+when target ranges are unavailable), provided the unchanged text around that
+range matches the observed mutation. This keeps a newly typed or replaced
+letter distinct from an equal adjacent letter in the CRDT. A concurrent
+deletion of the old letter cannot remove or reorder the newly typed one.
+Mutations without a matching input range use the minimal text diff.
+
+A live co-editor autosave is confirmation of merged work and does not offer a
+competing-copy notice. Saves from outside the live editor still offer that
+choice. A newer-version announcement names the current head only and is shown
+only while the reader remains on an older version.
+
+Deleting an element removes its descendants, including concurrent edits within
+that element. Deleting a text range removes the character identities the writer
+observed. Unseen concurrent insertions in a surviving parent remain once at the
+cut; they are not silently discarded as if the deleting writer had selected
+them. If those insertions reached the writer before deletion, they are observed
+text and are deleted too. Across paragraphs, removed parents take their
+concurrent descendants with them; the surviving parent keeps its unseen text.
+All peers converge to the same result, with untouched text kept in place.
 
 ### 6c. Trust and the untrusted-content sandbox
 
@@ -927,6 +1037,11 @@ load therefore waits for that answer, within three limits:
 A frame that has loaded is never taken away to wait. A reader who signs in to
 comment keeps the document and their selection.
 
+A peer draft save preserves the reader's scroll checkpoint across overlapping
+reloads. When the selected passage still exists unchanged, the replacement
+frame restores that passage and its Comment/Suggest edit toolbar. A removed
+passage must not turn into a selection of different words.
+
 **Trust carries into a new version only when the owner wrote it in the app**
 (`keepsTrust`). Any other new version withdraws both scopes, the global flag and
 every personal grant, in the same transaction that makes it current: an edit by
@@ -964,7 +1079,9 @@ normative:
 - **Detection never runs the document.** It reads markup, which is what makes
   it work in the sandboxed case that needs it most.
 - **A document that is not a deck is unaffected.** Candidates must be siblings
-  of one parent, and the navigator appears only above two slides.
+  of one parent. A recognized deck with at least two slides gets a navigator
+  when its slides measure as pages; a single slide does not. The lower-confidence
+  rules for uniform or id-bearing prose sections still require three candidates.
 
 Navigation **scrolls** the document and never styles it, so §7's rule stands
 unchanged — with one measured exception. A deck that runs its own JavaScript
@@ -974,7 +1091,10 @@ When every slide's rect shares a top, navigation instead presses the arrow keys
 the deck already answers to, dispatched into the frame, and reads position from
 which slide is *shown* (`display`, `visibility`, `opacity`, a translating
 `transform` — the same four the preview undoes) with the deck's own attribute
-changes as the signal, since nothing scrolls. That is the deck's own contract;
+changes and transition/animation completion or cancellation as signals, since
+nothing scrolls. Completion re-reads computed visibility after the outgoing
+slide stops painting, so each settled keypress advances the navigator with the
+deck. That is the deck's own contract;
 the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the
 wild), and toggling the deck's class would style a document this app does not
 own. The one input a deck's script is denied is the click that carries a
@@ -1093,9 +1213,18 @@ app/src/
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```
 
-**Accessibility is a hard requirement:** visible `:focus-visible`, targets ≥44px,
-colour is never the sole signal, `prefers-reduced-motion` honoured, WCAG AA
-contrast. Brand chrome only — **never restyle embedded document content.**
+**Accessibility is a hard requirement:** visible focus indicators, targets
+≥44×44 CSS pixels on coarse pointers, colour is never the sole signal,
+`prefers-reduced-motion` honoured, WCAG AA contrast. A checkbox or radio may use
+its associated label as its hit area; inline links within prose retain their
+inline-target exception. Keyboard focus uses `:focus-visible`; when the browser
+focuses an iframe document without matching a focus pseudo-class on its host,
+the app reflects that focus with the same ring on the app-owned iframe. This
+indicator never decorates the authored document. Dialogs contain Tab focus even
+when a focused control is disabled or removed, and restore their opener when
+closed. Reduced motion applies to every app-driven scroll, including review
+navigation and the slide rail. Presence mode shapes remain visibly painted in
+forced colours. Brand chrome only — **never restyle embedded document content.**
 
 ---
 
@@ -1108,8 +1237,9 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell}.ts
-  lib/{storage,versions,publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,transaction-receipts,mcp-transport}.ts
+  lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+
   lib/accountmove.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
@@ -1128,6 +1258,9 @@ functions/src/
   place a folder's key is, against the hash its `reach` stores. `readAccess`
   adds a folder's reach to `readBasis`, for read paths only (§17).
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
+- `lib/writeAuthority.ts` — transaction-local expiry and edit permission, including
+  a current link grant read, before uploaded content becomes the selected draft or version (§17).
+
 - `lib/accountmove.ts` — believing Google's word for an account's new address,
   and the job that moves the account and everything naming its old address
   (§14 "An address Google renames"). `lib/rename.ts` is the other kind of
@@ -1159,15 +1292,69 @@ functions/src/
 `scripts/` is Node ESM using `node:util parseArgs` and `firebase-admin`.
 Admin is initialized **lazily**, so every `--dry-run` path runs without
 credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
+Publishing, access, withdrawal and teardown await their owned Admin app's
+cleanup on success or failure; the realtime connection must not keep a completed
+command alive. A dry run initializes no client and its cleanup is a no-op.
 
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
 and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
-`firebase`, `hash`, `membership`, `endpoints`.
+`firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`,
+`transaction-receipts`, `endpoints`.
 
 These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
 They authenticate with the Admin SDK and require `--account` explicitly on every
 real run; the CLI authenticates with a personal access token over HTTPS.
+
+Operator access deltas use the same transaction boundary as endpoints: the
+current document, parent and team inputs are read together before grants and
+membership are written. `set-access` awaits the presence and editing mirror
+refresh attempt before completing, for both grants and removals; the delivery
+limitation in §16 still applies. Local verification on a healthy configured
+transport exercises the actual operator command and the grantee's content,
+presence and live-log access after each transition. A mutation keeps a bounded
+operation receipt (§17) on the document until its native transaction resolves,
+so an acknowledgement retry cannot replay an old grant over a later revocation.
+Read-only listing creates no receipt or other write. The operator and Functions
+receipt helpers share golden behavior for deadlines, pruning and independent cleanup.
+
+Operator publishing uploads to a unique immutable
+bundle with create-only Storage writes, then selects and creates a version in
+a Firestore transaction. A content hash matching the current version returns that version;
+restoring an older version's bytes creates a new version, preserving history;
+a different publish from a base that advanced during upload refuses and must
+be rerun. Current sharing is preserved during version selection. Unselected
+attempt bundles can remain unreferenced; they never overwrite selected bytes.
+A transaction retry after a lost acknowledgement recognizes the operator's
+own immutable version prefix and retains the successful replacement receipt;
+it does not turn that replacement into a duplicate that skips cleanup. A
+withdrawal records its captured retirement result in a bounded operation receipt
+on the document, so a later publication changing the head and epoch cannot erase
+that proof. Acknowledging either completed operation does not repeat its writes,
+repoint a later head or erase a later draft.
+
+An operator replacement also advances `liveEpoch` and clears the current draft
+in that transaction. Its return value captures the retired epoch and exact
+draft prefix from the successful transaction attempt. Public replacements
+atomically refresh the existing projection's version, epoch and source/bundle
+metadata while preserving its bounded marking policy; a missing public
+projection refuses before any write. After the access mirror is refreshed,
+cleanup removes only the captured epoch and draft prefix. A legacy `initial`
+retirement additionally removes captured flat string entries, preserving
+every nested epoch map. A newer save or session cannot be swept up by this
+cleanup. A duplicate publish leaves its draft and epoch untouched, and an
+uncertain transaction result retains all candidate bytes.
+
+Version withdrawal resolves exact version and draft prefixes from captured metadata
+(with legacy-path fallbacks) before deleting bytes. The repoint transaction checks
+that the current version, doomed version bytes and draft have not changed, and
+that the retained version still exists. It refuses to delete a prefix referenced
+by a retained version. The same transaction updates the existing public
+projection's version, live epoch, entry, format, source/bundle metadata and publish time, or removes a stale projection
+for a private/unlisted document. A public document with a missing projection must
+be repaired before destructive withdrawal. This keeps anonymous readers on the
+retained version and prevents deletion of a newer draft created after the preview.
+
 
 `publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin
 credentials bypass every endpoint and rule, so a refusal there would be advice,
@@ -1216,8 +1403,9 @@ and mirrored in `app/src/brand/tokens.ts`:
 **No brand-named tokens.** A token called `--teal` cannot be re-themed without a
 rename, and every consumer then encodes a colour rather than a role.
 
-`--color-focus` appears **nowhere** but `:focus-visible`, so the ring is the only
-colour of its kind on the page. Shadows are tinted with the ink RGB, never
+`--color-focus` appears **nowhere** but a focus indicator: `:focus-visible` or
+the app-owned iframe indicator described in §7. The ring is the only colour of
+its kind on the page. Shadows are tinted with the ink RGB, never
 neutral black.
 
 Typography is **one self-hosted variable font**. No font CDN: this product holds
@@ -1238,6 +1426,10 @@ node only when its VALUE is one we write.
 ---
 
 ## 11. Markdown documents
+
+The editor offers only format-independent controls while the selected version's
+format is loading. Presentation controls enable only for confirmed HTML; old
+version responses cannot change the selected version's entry or format.
 
 `.md` is a first-class source format: uploadable, WYSIWYG-editable, versioned,
 annotated, exported and counted exactly like an HTML bundle.
@@ -1382,8 +1574,12 @@ is replayed as an edit in their own session; the reverse would make a role
 that could accept text it could not type.
 
 Because each node only needs its DIRECT parent's already-computed arrays, the
-cascade is a single BFS (`recomputeSubtree`), parent before child. Any
-folder-share change or move re-fans the affected subtree server-side. The
+cascade is a single BFS (`recomputeSubtree`), parent before child. Traversal
+queries discover ids; each node is recomputed in a transaction that rereads
+its current grants, parent membership and referenced teams. An older cascade
+cannot overwrite a newer membership from stale snapshots. Folder grant deltas
+and that folder's effective sets are committed together. Any folder-share
+change or move re-fans the affected subtree server-side. The
 doc-list query, its composite index and the `canRead`/`list` rules are
 UNCHANGED.
 
@@ -1452,6 +1648,20 @@ sharing an address would be an ACL bug.
 
 ### Sign-up
 
+An empty workspace cache while the backend is unavailable remains loading; only
+a server answer establishes that there are no visible documents. This applies
+both to an owner's existing documents and documents shared before sign-in.
+Cached documents can still be shown, and a server-confirmed empty list clears
+them after revocation.
+
+Password signup asks Firebase for the current password policy. While its answer
+is pending the form waits; a known-invalid password stays disabled with its
+requirements. If the policy request fails, the form explains that Auth will
+validate on submit and permits the attempt. It does not invent local policy or
+skip Auth's account-creation validation. A valid SDK verdict is sufficient even
+when no requirement rows are displayed. Responses for an older password cannot
+change the current password's verdict.
+
 1. Choose a provider.
 2. If no email came back, collect one.
 3. If the email is unverified, send a code and **block until verified**.
@@ -1464,6 +1674,21 @@ Step 3 is security-load-bearing: without it, signing in with an unverified
 address that matches a pending share would hand an attacker someone else's
 documents. This is the most tempting shortcut in the whole feature and is
 recorded as such in `docs/architecture/threat-model.md`.
+
+Verification challenges expire after fifteen minutes. Each challenge permits
+at most five wrong code comparisons; the next attempt, including the right
+code, is refused with 429 and retires the challenge. Concurrent attempts share
+that budget. A resend reserves at most one new challenge per account in sixty
+seconds, so concurrent requests produce one accepted request and one code
+mail; the others receive 429. The reservation and attempt count are checked
+and updated transactionally. Email delivery and Firebase Auth updates happen
+outside transaction retries. A successful completion retires only the
+challenge it checked, preserving a newer challenge reserved while Auth was
+updating. An Auth failure leaves the checked challenge available for retry.
+A lost transaction acknowledgement does not reserve and mail another code or
+charge the same request for another wrong guess. Wrong-guess receipts belong
+to the challenge that was checked; a retry cannot spend a replacement
+challenge's budget.
 
 ### An address Google renames
 
@@ -1555,6 +1780,14 @@ address, which is §1's ordinary rule; there are no aliases.
 
 ### Email
 
+Sharing invitations use only the effective access added by that operation's
+transaction, comparing current grants against the same parent and team inputs.
+A document grant does not invite an already inherited reader; a folder grant
+does not invite people added by a later concurrent request. Native transaction
+retries retain that operation's committed before/after delta, even if another
+operation changes membership before the acknowledgement arrives; they neither
+repeat the mutation nor replace the original invitation delta.
+
 Exactly three messages: **invitation** (a new grant, never a re-grant),
 **verification**, **new comment**. Deliberately not built: digests, weekly
 summaries, a notification centre, unread badges, mention parsing, reminders,
@@ -1564,11 +1797,19 @@ anyway, and read only by whoever asks.
 
 The comment email is bounded **by construction rather than by infrastructure**:
 one `onDocumentCreated` trigger; recipients = owner + prior thread participants −
-the author; a per-(recipient, doc) cooldown on the user record. No queue, no
+the author, restricted to people who still have read access when the notice is
+claimed. The transaction that claims the cooldown re-reads the document and
+the recipient's current link grant, including expiry and key rotation. A removed
+reader is not entitled to later passages or comments by having participated
+before. A per-(recipient, doc) cooldown lives on the user record. No queue, no
 scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`.
+A unique claim receipt distinguishes the winning notification from another
+call in the same millisecond. Its native retry still checks current opt-out,
+read authority and expiry before sending; a receipt cannot bypass revocation.
 
 A suggested edit is a branch of the comment email, not a fourth message. Its
 opening comment is addressed to the owner and every approver − the author,
+subject to the same current-read-access check,
 because only they can decide it; the notice shows the quote and the proposed
 replacement, and the author's note if there was one. A decision is a short
 comment in the thread ("Accepted." / "Rejected: …"), which reaches the
@@ -1588,7 +1829,10 @@ in via a **dynamic `import()` inside the send helper** so React never loads in
 secret via `defineSecret`, never an env file. If unset, every send is a logged
 no-op and the app behaves exactly as it does with it — the quickstart must not
 require a Resend account. Sends are try/catch and never fail the request that
-triggered them.
+triggered them. Each provider send has one ten-second deadline covering both
+response headers and the complete response body. On expiry the request is
+cancelled and the delivery failure is logged; persisted access remains granted,
+and later recipients can still receive their invitations.
 
 Comment bodies are rendered as **plain text with a link back**, never as HTML.
 
@@ -1699,11 +1943,27 @@ Three reasons this is not merely tidier:
 Realtime Database, under `status/{docId}`:
 
 ```
-status/{docId}/peers/{uid}    { email, name, mode, focus?, viewport?, composing?, lastChanged }
-status/{docId}/lock           { uid, email, since }
-status/{docId}/requests/{uid} { email, at }
+status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, composing?, lastChanged }
+status/{docId}/y/{entry}        base64 shared-document update
 presenceAccess/{docId}/{emailKey}   server-maintained mirror, client-unreadable
 ```
+
+Each tab owns a random session key and an authenticated, immutable `uid` in
+its record. A second tab cannot replace or remove the first tab's record.
+Readers aggregate sessions by uid: any editing tab keeps the person in edit
+mode; focus and viewport come from the newest editing session, or the newest
+reading session when none edits. Legacy uid-keyed records remain readable and
+may be removed by their own uid during the transition. The withdrawn `lock`
+and `requests` nodes remain rejected.
+
+Leaving cancels queued presence updates and suppresses late connection callbacks.
+An authenticated session owner may delete only their own existing record even
+after revocation or expiry; writes still require current membership and identity
+checks. Announcing `mode: edit` additionally requires current editor access.
+The server's editing veto counts distinct currently authorized editor uids,
+so stale records from a completed downgrade or revocation cannot block a write.
+A failed mirror read refuses the write. This assumes successful mirror delivery;
+the existing delivery limitation below still applies.
 
 | Field | Updated on | Throttle |
 |---|---|---|
@@ -1720,16 +1980,85 @@ revisions — exactly what quote-plus-position anchoring was built for.
 
 ### The presence mirror
 
-`presenceAccess/{docId}/{emailKey}` is written by
-`functions/src/lib/presence.ts syncPresenceAccess(docId, members)` as a
-whole-node `set()` — an atomic replace, so revocations propagate. It is called
-from exactly the places that already recompute `members`: `createDoc`,
-`forkDocument`, `setAccess`, `organize`, `folders.ts recomputeSubtree`,
-`manageTeamMembers`, and the admin scripts. It no-ops when RTDB is unconfigured,
-is wrapped in try/catch, and never fails the request.
+`functions/src/lib/presence.ts syncPresenceAccess` and its operator-script twin
+reread the latest document snapshot before writing the two server-only maps.
+Each map reserves `__revision`, a string containing Firestore `updateTime` as
+12 decimal second digits, a colon, and 9 nanosecond digits, plus `__expiresAt`
+(the expiry in epoch milliseconds, or zero for no expiry) and `__owner`
+(the normalized owner email) and `__liveEpoch` (the current live-session namespace,
+`initial` for a legacy document). A whole-node RTDB
+transaction replaces the grants only if its revision is at least the current
+validated revision. An older writer cannot restore access after a newer writer
+has completed. `editAccess` is updated before `presenceAccess`, withdrawing
+write access before read access during revocation.
+
+A legacy node without metadata is accepted and gains the fence and expiry on
+its next sync. Until that sync, a legacy node has no realtime expiry deadline.
+Clients read individual email keys or `*` as boolean grants; the reserved
+metadata is server-only and the rules use its deadline and owner. The ordering
+guarantee requires all writers to use the fence: an older deployed writer can
+erase it, so mixed-version writers must drain before relying on the guarantee.
+
+The helper runs after document creation, forks, sharing and visibility changes,
+filing, subtree recomputation and team changes. It no-ops when RTDB is
+unconfigured, is wrapped in try/catch, and never fails the request. A backend
+failure can leave a stale mirror; the revision fence orders successful writes
+and is not a delivery queue.
 
 It is keyed by **email, not uid**, because the server does not learn a grantee's
 uid until their first sign-in, and a share must work the moment it is granted.
+
+The peer list is readable at `status/{docId}/peers` by members. Shared draft
+reads at `status/{docId}/y` and its epoch children require the editor mirror: viewers
+and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
+not client-readable. A public open editor with `editAccess/*` may read and write
+`y`, but gains no access to members' peer presence. These rules apply independently
+of any UI affordance or the HTTP draft endpoint.
+
+Each epoch's parent accepts an editor's delete-only transaction while the
+document is unexpired. Non-delete entry writes require the current epoch. Its
+immutable `_seed` identifies
+the shared history; compaction preserves it. Publication and external draft
+replacement advance `liveEpoch` inside their Firestore transaction, refresh the
+access mirror, then remove only the captured old epoch. They never delete the
+`y` root or a newly joined session. Old sessions cannot write the new epoch.
+A legacy flat log blocks new editing until its existing editor saves and
+publishes; cleanup removes captured legacy strings while preserving epoch maps.
+A missing or different seed in a populated/stamped session also blocks editing
+with recovery instructions, instead of adopting stale HTML as a new history.
+
+Failed append bytes stay queued, merge with subsequent local deltas, and retry
+with bounded backoff. The toolbar says Off after a delivery failure and Shared
+once that queue drains. Done first saves durable HTML, then waits for its live
+updates to be acknowledged before leaving; a refused append or a 10-second
+acknowledgment deadline keeps the editor open with an explicit retry message.
+Remote edits received during that wait are saved before leaving too. The entire
+Done attempt has a 30-second deadline, including continuously arriving remote
+edits; expiry keeps the editor open and lets any in-flight save finish safely. Its
+deadline and completion apply only to the editing session that started it; changing
+documents cannot transfer an old save error or close the replacement editor. Normal
+navigation gives pending updates the same bounded drain before disposing the
+connection. Closing a page with pending live updates requests the browser's
+unsaved-work warning even when the HTTP draft save has succeeded; forced closure
+cannot promise delivery.
+
+An editing session returns the saved draft's validated causal frontier alongside
+its opaque revision. Before replacing that frame with live history, the client
+requires the log to include every saved item clock and deletion, with the same
+seed. A missing or incomparable frontier blocks editing and preserves the saved
+HTML. Leave editing releases this unbound session's presence without saving or
+retiring any live work. If the original tab cannot deliver the missing updates,
+the owner/approver can recover the durable draft with `bikeshed commit` or MCP
+`commit_draft` after all editors leave; normal publication gates still apply.
+That explicit publication retires the old epoch, so a new join seeds from the
+recovered version. No join automatically retires another editor's history.
+A configured transport that refuses initialization never enables the editor or
+falls back to a solo autosave. The encoded seed and each update are bounded at
+2,097,152 base64 characters (2 MiB), below the installed database SDK's 10 MiB
+leaf limit. An oversized seed blocks editing with the supported limit and an
+upload/reduction recovery path. This is a wire-update bound, not a promise that
+every document of a particular HTML byte size fits. An oversized compaction is
+skipped; its original seed and deltas remain available to later joiners.
 
 ### Concurrent editing
 
@@ -1743,13 +2072,16 @@ with `requests/{uid}`, the idle release and the "Ask to edit" hand-off. The
 reasoning that chose it, and the reasoning that reversed it, are both in
 [ADR 0010](adr/0010-crdt-for-shared-document-state.md).
 
-The stale-base `409` **stays**, and now means only what it always meant:
-somebody PUBLISHED a new version while you were editing. It never described
-concurrent drafts, and no longer has to.
+A stale-base `409` means somebody published a new version while the editor
+was open. A separate draft-revision refusal protects whole-document saves
+from replacing a newer draft. A retired live epoch requires an explicit reload
+before saving again; a causal save waiting for concurrent live edits to merge
+keeps its current editor open and may retry after those edits arrive.
 
 **The log belongs to the draft.** When an editor opens a document, a log that
-holds anything wins over the bytes it loaded, because it may hold edits they do
-not. So a write made outside the editor is refused while anybody is in it, and
+contains the saved frame's causal frontier wins over the bytes it loaded,
+because it may hold edits they do not. Incomplete live history never replaces a
+fuller saved draft. So a write made outside the editor is refused while anybody is in it, and
 drops a log nobody is using: an agent's accept and `commit_draft` (§22), and
 every update, through `/publish?update=`, the CLI or `update_document` (§6a).
 An update deletes the draft's files with it; left in place, `/draft` would
@@ -1763,6 +2095,11 @@ any verified account. An **unlisted** one never does. The realtime rules cannot
 see a link's key, so `*` there would let any account write into a document it
 cannot name; its link holders edit through `/draft` instead, which can check
 their grant, and are not merged live with the members (§17).
+Their checked snapshot saves must not silently replace newer member work, and
+an accepted link-holder save fences members' older autosaves. A member who
+chooses Reload draft or Load theirs opens those accepted bytes in the new live
+epoch before resuming shared editing. Keeping an old editor open retains its
+local unsaved text; it does not override the server's snapshot or epoch refusal.
 
 ### The caret is still faster than the text
 
@@ -1830,19 +2167,30 @@ only one: the owner's browser may still store the document's thumbnails (§2
 and the owner is the one reader an expired document has left — so the owner's
 workspace keeps recognisable cards, and nobody else is ever shown them.
 
-**Expiry is not in the security rules, and cannot be.** The workspace `list`
-rule has to be statically provable from the query's constraints (§5), and a
-query cannot filter on a field most documents do not have without dropping every
-document that does not have it. So the record stays readable and the CONTENT
-stops being served — which is sufficient precisely because every byte in this
-system already flows through one function. The consequence, stated rather than
-discovered: a member still sees the row, its title and its comments; what they
-cannot get is the document.
+**Expiry is not a Firestore read or list filter.** The workspace `list` rule has
+to be statically provable from the query's constraints (§5), and a query cannot filter
+on a field most documents do not have without dropping every document that does
+not have it. A member still sees the row, its title and its comments; what they
+cannot get is the document. Direct Firestore annotation and comment creates,
+updates (including resolve/reopen), and deletes compare the current document's
+expiry against `request.time` and are refused after it, including the owner's
+writes. An absent or null deadline permits the existing role and author checks;
+clearing expiry restores those permissions without giving an owner the right to
+rewrite or delete someone else's feedback. This is the same freeze as the HTTP
+and MCP write paths, not an exception for browser feedback. Realtime rules
+separately compare the mirrored expiry to the database server's `now`: after that moment only the owner reads
+peer presence and the shared draft, and no account can write the shared draft.
+Clearing or changing expiry refreshes these maps; no timer or cron is needed.
 
-Enforced in ten places from one predicate (`isExpired` in `lib/acl.ts`):
+HTTP and MCP enforce expiry using `isExpired` in `lib/acl.ts`:
 `contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
 `saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
-and `docShell`, plus the MCP tools. A fork
+and `docShell`, document rename/move in `organize`, plus the MCP tools. Content
+write transactions recheck the current deadline and edit authority after upload,
+so expiry or revocation during the upload refuses the metadata commit. A supplied
+MCP link key is compared with the current token inside that transaction; using
+it records no lasting grant. Bundle replacement keeps its stricter real-editor
+requirement through the final check, even when public editing is enabled. A fork
 is a read of every byte, so an expired source cannot be forked out from behind
 its date, and an expired document stops a lineage walk (§21).
 
@@ -1970,17 +2318,25 @@ that subfolder. The five-minute window under "Caching" applies on top.
 Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
-only `docId`, `title`, `slug`, `currentVersion`, `entry`, `format`,
-`visibility`, `publicEdit`, `trusted`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` — written by the same paths that
-recompute `members`, and **deleted the instant it stops being public**. A
-document under a public folder is public too, and mirrored with
-`viaFolder: true` (above). The rule allows `get` of a public row only, and no
-`list`: an absent id and any other row are the same refusal.
+only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
+`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` — written by the same paths that
+recompute `members`, and **deleted the instant it stops being public**. The rule
+allows `get` of a public row only, and no `list`: an absent id and any other row
+are the same refusal. The source document, current version and projection
+set/delete share a Firestore transaction, so an older public snapshot cannot
+restore the projection after a newer visibility change has completed.
+A document under a public folder is public too, and mirrored with `viaFolder: true`. Its folder is read in that same transaction.
 
 An **unlisted** document is not mirrored. Anything in `public/` is readable by
 whoever knows an id, and once was listable by anyone at all; an unlisted
 document's title belongs to the holders of its link. They get the same fields
-from `POST /unlock`, which checks the key.
+from `POST /unlock`, which checks the key. The bounded document marking is
+part of both reader shapes: exports use the owner's policy without exposing
+account defaults, member lists or version records. The current version's
+`sourceEntry` and `fileCount` offer the same permitted source and bundle
+downloads to these readers. `liveEpoch` names the non-secret editing generation
+for authorized editors. Changing a public document's marking or editing
+generation refreshes its projection.
 
 Everything else under `docs/**` still requires an account, even on a public
 document. Those records carry member lists and reviewer identities; publishing a
@@ -2132,7 +2488,22 @@ owner's other clients.
 
 Automated reads record a view session with `ms: 0` and count into
 `stats.apiReads` — never `stats.views` or `stats.totalMs`. The stats panel shows
-both and filters to human-only or automation-only. Comments and highlights
+both and filters to human-only or automation-only. Each automated session has a
+server `startedAt` retained across repeated reads and a refreshed `lastBeatAt`,
+so the Activity query includes it; session and aggregate counters update together.
+One automated fetch increments its read count once across native transaction
+retries. A human reading beat likewise applies its time cap once, even when the
+SDK retries after losing the first commit acknowledgement.
+
+Where a mutable operation needs a receipt rather than an existing immutable
+result, it keeps `transactionReceipts` on its existing record. Each entry holds
+an opaque operation ID, a server time and the bounded non-secret result, never
+a document snapshot or credential. A new write attempt stops after five
+minutes; a later real write may prune entries older than ten minutes. A
+matching receipt still acknowledges the original committed result after that
+new-write deadline. Once the SDK resolves, best-effort cleanup removes only
+that operation's marker. This adds no collection or event stream.
+Comments and highlights
 created through an automation channel carry a visible "via MCP" marker.
 
 ### Version, edit and view provenance
@@ -2205,14 +2576,21 @@ how `docs` and `folders` already behave.
 
 `POST /team` (create / rename / delete), `POST /team-members` (add / remove,
 admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no
-signature change.
+signature change. Member and administrator deltas read, authorize and write the
+team in one transaction. Removing a member also removes their administrator
+grant; the owner remains a member and can always manage the team. A native retry
+acknowledges its already committed result, including an administrator removing
+their own membership, before applying authority checks for a new mutation.
+Its bounded receipt (§17) preserves the original invitation delta without
+repeating writes over a later membership change. The access cascade still
+recomputes from current grants, parents and teams.
 
 ### Fan-out is bounded and reuses the existing cascade
 
 Removing someone from a team must revoke access everywhere the team was granted:
-an `array-contains` query over `team:{teamId}` grants feeding the **same batched
-BFS recompute** that folder-access changes already use. A 50-person team granted
-on 200 documents is 200 writes — a batch, not a job queue. For a small-team tool
+an `array-contains` query over `team:{teamId}` grants feeding the **same BFS
+recompute with per-node transactions** that folder-access changes already use.
+A 50-person team granted on 200 documents requires 200 document writes. For a small-team tool
 that is the right trade, and it is stated in `docs/architecture/overview.md` so nobody is
 surprised at 10,000 documents.
 
@@ -2242,6 +2620,13 @@ A token carries the **same identity, and therefore the same ACL, as the person
 who minted it.** No service accounts, no impersonation, no second permission
 model.
 
+Each use re-checks that the Auth user still exists, is enabled, has a verified
+email matching the token's identity, and still passes the identity gate. An
+Auth lookup failure refuses the credential. Disabling or deleting the user,
+changing their email or withdrawing verification therefore also cuts off
+personal tokens; a browser session is not the only credential revoked by
+those account changes.
+
 *Why not OAuth 2.1, which the MCP spec prefers:* it needs an authorization
 server, a consent screen and token/refresh endpoints — a real subsystem, for a
 self-hosted tool whose users are largely the people who own the deployment. A
@@ -2250,7 +2635,7 @@ by someone who has never heard of OAuth. Noted as the upgrade path if one-click
 client onboarding is ever wanted.
 
 *That upgrade has been taken* (ADR 0014): apps now connect by signing in, as
-§23 specifies. Personal tokens are unchanged and remain the credential for CI,
+§23 specifies. Personal tokens remain the credential for CI,
 scripts and anything that cannot open a browser.
 
 ### Historical versions and immutability
@@ -2352,6 +2737,13 @@ and every other tool refuses that key in words rather than as an absent id. The
 CLI accepts the link itself wherever it takes an id, because the link is the
 only place a person holds the key.
 
+`fork_document` and `get_lineage` use the same optional key as their read proof
+(§21). `revise_suggestion` and `withdraw_suggestion` also take `k` to read the
+document; the suggestion must still be the caller's own, pending, and on the
+current version (§22). A key never substitutes for membership on
+`accept_suggestion`, `reject_suggestion`, `commit_draft`, `rename_document` or
+`move_document`.
+
 ### Watching a document: `get_changes`
 
 An agent that publishes a document watches it for what people say. `get_changes`
@@ -2367,6 +2759,9 @@ starting point. It is one of:
 
 A cursor is bound to its document. One from another document, a malformed one,
 or one of an unknown version is refused, never read as "start over" or "now".
+A positioned cursor requires all of seconds, nanoseconds and a nonempty event
+id that is one safe path segment, within Firestore timestamp bounds. A start
+cursor omits all three position fields.
 It grants nothing, so it is not signed.
 
 **Where a cursor comes from, and only a poll moves one:**
@@ -2514,8 +2909,11 @@ and `update_document` from a caller who may only suggest names `suggest_edit`.
 
 **An agent raises points as well as answering them.** `add_comment` finds its
 passage exactly as `suggest_edit` does, with the same refusals, and writes the
-annotation and its first comment in one batch, stamped with the caller's
-actor. Anyone who can read a document may comment on it, as in the browser.
+annotation and its first comment in one transaction, stamped with the caller's
+actor. The transaction rechecks the current version, read authority and expiry
+after locating the passage. If publication wins, the call refuses the newer
+version rather than opening a thread on a replaced head. Anyone who can read
+a document may comment on it, as in the browser.
 The anchor is stored with `strict: true`, because its offsets mean nothing in
 the page (§6). Nothing caps how many threads an agent opens, as nothing caps a
 person. Like every thread it stays on its version, and it holds back a new
@@ -2529,8 +2927,10 @@ may, and never on a suggestion, which is decided rather than resolved. They act
 on the current version only; an earlier version's threads are the record of
 its review. A token cannot write Firestore, so they go through `lib/threads.ts`
 in a transaction, and unlike the app each change leaves a generated note in the
-thread — "Resolved." or "Reopened." — stamped with the caller's actor. Resolving
-hides a point from the person who raised it; the note, and the comment notice
+thread — "Resolved." or "Reopened." — stamped with the caller's actor. The
+generated note is also the operation's durable retry receipt: a lost transaction
+acknowledgement cannot repeat the decision or overwrite a later opposite
+decision. Resolving hides a point from the person who raised it; the note, and the comment notice
 it sends them (§14), are how they hear an agent closed it, and the panel lets
 them reopen it. A retry that changes nothing writes nothing.
 
@@ -2561,7 +2961,11 @@ Commands: `login`, `logout`, `publish <file>`, `update <slug> <file> [--base <v>
 [--reason <text>]`, `commit <slug>`, `open <slug>`,
 `folders`, `folder <id>`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
 `skills [install <dir>]`, plus `publish --watch`.
-Every command takes `--json`. `--version` on its own prints the CLI's version,
+Every command takes `--json`. Successful commands print one JSON result per
+operation; watch mode prints one per publication. Prompts and human notices go
+to stderr. `open --json` returns `{url}` including a supplied link key, while
+both login flows return `{origin, saved, via}` without the token (`via` is
+`browser` or `paste`). `--version` on its own prints the CLI's version,
 read from its own `package.json`, which is also the version its
 `X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and
 state under its quote. `suggest` demands exactly one of `--with` and `--delete`:
@@ -2684,15 +3088,21 @@ type Marking = { enabled: boolean; label: string; footer: string };
 
 Stamp styles are set **inline with `!important`**. An important inline
 declaration outranks any selector-based author `!important` rule, so hostile
-bundle CSS cannot suppress the marking. All 25 hiding vectors are locked — box
-(`display`, `visibility`, `opacity`, `transform`, `filter`, `clip`, `clip-path`,
+bundle CSS cannot suppress the locked properties. Hiding vectors are locked — box
+(`display`, `visibility`, `opacity`, `transform`, `scale`, `rotate`, `translate`,
+`offset-path`, `mask-image`, `mix-blend-mode`, `filter`, `clip`, `clip-path`,
 `content-visibility`, `max-height/width`, `overflow`, `zoom`) and text
 (`-webkit-text-fill-color`, `-webkit-text-stroke`, `text-indent`, `text-shadow`,
 `letter-spacing`, `word-spacing`, `white-space`, `text-transform`).
 
 Rendering happens in a print iframe sandboxed `allow-same-origin allow-modals`
-with deliberately **no** `allow-scripts`. `position: fixed` repeats the stamp on
-every page. `{year}` is computed at export time.
+with deliberately **no** `allow-scripts`. Generated stamp nodes are manual
+popovers in the top layer: authored `html` or `body` transforms, filters and
+containment cannot move or clip them while leaving the document visible.
+Their `position: fixed` boxes repeat on every page without modifying authored
+ancestor styles. A browser without this placement API refuses a marked export
+with a visible error rather than printing a suppressible stamp. `{year}` is
+computed at export time.
 
 **The export imposes no page geometry.** The document's own `@page` — or,
 absent one, the print dialog — decides size and margins; `@page` cascades by
@@ -2700,6 +3110,14 @@ order, so a rule of ours would beat the document's and a fixed-size deck would
 spill every slide across two pages. The stamp nodes go **first** in `<body>`:
 anything after a document's final forced page break opens a page of its own,
 and a fixed box is positioned the same wherever it sits.
+
+**Image exports contain authored content, not the reader's decoration.** SVG
+serialization strips highlight wrappers, suggestion marks and peer overlays
+from a clone. PNG rendering uses an inert copy of the document at the reader's
+viewport, strips the same decoration before computing styles, and leaves the
+reading frame untouched. Ancestors and authored styles remain so the selected
+section or diagram keeps its layout. The owner's marking is then applied to
+the exported SVG or PNG, including for public and unlisted readers.
 
 **The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page
 is routed to it — heard on the frame's window as well as the app's, because
@@ -2938,7 +3356,12 @@ Escape cancels; a pasted line break becomes a space; empty suggests deleting
 the text. The thread opens on success. Its author may Edit it, in the panel,
 until it is decided — twenty times at most, after which it must be withdrawn
 and suggested afresh. An edit never overwrites: what it replaced is kept in
-`revisions` (§4), so a change of mind is on the record.
+`revisions` (§4), so a change of mind is on the record. A revision's optional
+server-generated `operationId` identifies that single committed change across
+native transaction retries. Lost commit acknowledgements return the original
+creation or revision result without creating another thread, consuming another
+revision slot, overwriting a later revision, or reopening a later decision.
+Legacy history entries without a receipt remain valid.
 
 ### The review pass
 
@@ -2963,7 +3386,11 @@ one contains the other ("X" becomes "Y, X"), the longer is what stands there.
 The edit is checked by what the text must read afterwards, and one that came
 out otherwise is undone. A failure at any step says which and records nothing,
 and accepting again after an interruption finds the change already made and
-only records it. The bar, and the comments panel in the editor, call stale
+only records it. If the author revised the suggestion before recording,
+the previous edit stays in the draft but is not accepted. The UI identifies
+that saved edit and tells the approver to review or undo it before deciding
+the revised suggestion; it must not promise that retrying a stale suggestion
+will record the old replacement. The bar, and the comments panel in the editor, call stale
 exactly what Accept would refuse, judged again as the draft changes. In the
 editor, the same bar tells anyone who cannot decide that suggestions are
 waiting and who can clear them, which is also why "Save as new version" is
@@ -3041,6 +3468,19 @@ A refused `/mcp` request answers `401` with
 response sets `Access-Control-Expose-Headers: WWW-Authenticate` and
 `private, no-store`.
 
+The Node HTTP request-start hook pins these two headers before the runtime's
+listener parses the body, including on the function's direct endpoint. The
+Hosting `/mcp` route retains matching headers as a fallback; Hosting alone does
+not attach them to real-cloud parser failures. The runtime parses `application/json`
+before invoking the function: malformed JSON can therefore produce an HTTP
+`400` with a runtime diagnostic rather than a JSON-RPC envelope, without
+executing a tool. Clients must accept this as a transport error. When a body
+reaches the MCP handler and its parser rejects it, the response is HTTP `400`
+with JSON-RPC error `-32700`, `invalid JSON`. This is a runtime boundary, not a
+second parser or a custom Functions runtime (ADR 0009). Local tests verify the
+emulator and the Hosting configuration; they do not establish production
+header behavior.
+
 ### Who is asking
 
 | `client_id` | Registration | What the consent page may say |
@@ -3093,9 +3533,12 @@ check on the raw string:
   - it does not render inside a frame
   - Approve stays disabled until the page has had focus for a second and a
     pointer or key event
-- **`/connect` and `/signup` both send** `frame-ancestors 'none'` and
-  `X-Frame-Options: DENY`. `/signup` is included because `?next=` reaches the
-  consent page without loading it from Hosting.
+- **Every app-shell entry path sends** `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing
+  slashes and unknown paths that the client redirects. An app-shell page can
+  navigate to signup and consent without another Hosting request, so protecting
+  only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**`
+  and `/thumb/**` byte routes remain embeddable in the app's iframe (§2).
 - **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every
   authorization response carries `iss` (RFC 9207).
 
@@ -3120,6 +3563,11 @@ ignored.
   - Every check runs before the code is spent: client, `redirect_uri` when
     sent, `resource` when sent, and PKCE. A wrong verifier costs nothing.
   - The code is spent in the transaction that mints the grant.
+  - A native transaction retry of that same request is not an independent
+    code replay. It acknowledges its own unchanged grant even after the
+    independent replay grace window. If a later request has refreshed or
+    revoked that grant, it refuses the obsolete credentials without revoking
+    the newer grant. Independent code replay retains the revocation rule.
 - **Rotation:** the new secrets are `HMAC(spent secret, nonce‖label)`. A retry
   of the same spend within 60 s receives the identical pair, so a timeout cannot
   fork the chain. Outside that window, replaying the previous refresh token or

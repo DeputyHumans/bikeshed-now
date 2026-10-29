@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -148,5 +148,5 @@
+           name: t.name,
+           description: t.description,
+-          inputSchema: t.inputSchema,
++          inputSchema: t.name === "get_document" ? { ...t.inputSchema, required: [] } : t.inputSchema,
+         })),
+       });

@@ -51,7 +51,7 @@ function world(extra = {}) {
 }
 
 /** The current version's bytes, served from a stubbed bucket. */
-async function withBucket(fn) {
+async function withBucket(fn, beforeReturn = async () => {}) {
   const saved = Object.getOwnPropertyDescriptor(admin, "storage");
   const before = process.env.BIKESHED_BUCKET;
   process.env.BIKESHED_BUCKET = "test-bucket";
@@ -62,6 +62,7 @@ async function withBucket(fn) {
         file: (key) => ({
           download: async () => {
             assert.equal(key, "docs/d1/v1/index.html", "it reads the rendered entry of the current version");
+            await beforeReturn();
             return [Buffer.from(HTML)];
           },
         }),
@@ -117,11 +118,8 @@ test("the thread and its first comment land together or not at all", async () =>
   const w = world();
   const failing = {
     ...w.db,
-    async runTransaction(fn) {
-      return w.db.runTransaction(async (tx) => {
-        await fn(tx);
-        throw new Error("unavailable");
-      });
+    async runTransaction() {
+      throw new Error("unavailable");
     },
   };
   await assert.rejects(
@@ -217,4 +215,58 @@ test("an unlisted document's key lets a stranger's agent comment, and nothing el
   );
   assert.equal(w.anns().length, 1);
   assert.equal(w.anns()[0].authorEmail, STRANGER.emailLower);
+});
+
+
+test("a comment anchored before publication refuses the newer head without leaving feedback behind", async () => {
+  const w = world();
+  await assert.rejects(withBucket(
+    () => tool("add_comment").run(w.ctx(VIEWER), { id: "d1", exact: "Payments moves last.", body: "Why?" }),
+    () => w.db.doc("docs/d1").update({ currentVersion: "v2" }),
+  ), /newer version/i);
+  assert.equal(w.anns().length, 0);
+  assert.equal(w.comments().length, 0);
+});
+
+test("comment admission rechecks access and expiry after reading the passage", async () => {
+  for (const [who, change, refusal] of [
+    [VIEWER, { members: [OWNER.emailLower] }, /no document with id/],
+    [VIEWER, { expiresAt: admin.firestore.Timestamp.fromMillis(1) }, /no document with id/],
+    [OWNER, { expiresAt: admin.firestore.Timestamp.fromMillis(1) }, /has expired/],
+  ]) {
+    const w = world();
+    await assert.rejects(withBucket(
+      () => tool("add_comment").run(w.ctx(who), { id: "d1", exact: "Payments moves last.", body: "Why?" }),
+      () => w.db.doc("docs/d1").update(change),
+    ), refusal);
+    assert.equal(w.anns().length, 0);
+    assert.equal(w.comments().length, 0);
+  }
+});
+
+test("a key rotated or remembered grant withdrawn during passage lookup no longer admits a comment", async () => {
+  const k = "tok_0123456789abcdefghijk";
+  for (const remembered of [false, true]) {
+    const w = world({ visibility: "unlisted", linkToken: k });
+    if (remembered) await w.db.doc("docs/d1/linkGrants/u-stranger").set({ token: k });
+    await assert.rejects(withBucket(
+      () => tool("add_comment").run(w.ctx(STRANGER), { id: "d1", ...(remembered ? {} : { k }), exact: "Payments moves last.", body: "Why?" }),
+      () => remembered ? w.db.doc("docs/d1/linkGrants/u-stranger").delete() : w.db.doc("docs/d1").update({ linkToken: "tok_rotated0123456789abcdefghijk" }),
+    ), /no document with id/);
+    assert.equal(w.anns().length, 0);
+    assert.equal(w.comments().length, 0);
+  }
+});
+
+test("publication between transaction read and commit retries comment admission against the new head", async () => {
+  const w = world();
+  const run = w.db.runTransaction.bind(w.db); let published = false;
+  w.db.runTransaction = (fn) => run(async (tx) => {
+    const result = await fn(tx);
+    if (!published) { published = true; await w.db.doc("docs/d1").update({ currentVersion: "v2" }); }
+    return result;
+  });
+  await assert.rejects(withBucket(() => tool("add_comment").run(w.ctx(VIEWER), { id: "d1", exact: "Payments moves last.", body: "Why?" })), /newer version/i);
+  assert.equal(w.anns().length, 0);
+  assert.equal(w.comments().length, 0);
 });

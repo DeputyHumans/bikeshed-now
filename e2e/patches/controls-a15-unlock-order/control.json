@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.1b the same on an unlisted document opened with its key: the key travels through sign-in with the intent, and the fork goes once, after the account's link grant exists",
+  "what": "Run the sign-in fork intent before resolving the source for the signed-in account.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.1b the same on an unlisted document opened with its key: the key travels through sign-in with the intent, and the fork goes once, after the account's link grant exists",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the first POST /fork create"
+  }
+}

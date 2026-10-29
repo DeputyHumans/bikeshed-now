@@ -1,0 +1,13 @@
+{
+  "oracle": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+  "what": "afterprint close",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.6 File → Print (the browser's own print): the frame opens to its content's full height and the PDF paginates, then it closes with the reader's scroll position back; no stamp and no print frame; the viewer's chrome is hidden on paper",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "at afterprint the frame is closed again"
+  }
+}

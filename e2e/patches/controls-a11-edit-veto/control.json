@@ -1,0 +1,13 @@
+{
+  "oracle": "^a reader cannot claim editing to veto publishing",
+  "what": "a11 edit veto",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.11b a reader can announce view but cannot claim editing or remove another session",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a reader cannot claim editing to veto publishing"
+  }
+}

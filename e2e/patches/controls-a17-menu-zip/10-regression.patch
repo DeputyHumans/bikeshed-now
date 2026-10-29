@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -802,3 +802,3 @@
+     }
+-    if (doc.fileCount > 1) {
++    if ((doc.version?.fileCount ?? 1) > 1) {
+       entries.push({

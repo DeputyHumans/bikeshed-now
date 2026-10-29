@@ -49,7 +49,7 @@
  * draft, its read-back, the commit (v2), the upload (v3), rename, move, the
  * owner-only settings, the thumbnail on whatever is current, and /visibility
  * last, because an owner's POST /visibility without `expiresAt` clears an
- * expiry (S25) and the expired rows must stay expired until the end.
+ * expiry in older versions (S25); the expired rows stay expired until the end.
  *
  * Every client here throws E2E_STACK_CUTOFF for Hosting's cut-off 504
  * (`cutoffError`), and every case declares inconclusiveOnStackTimeout: a
@@ -70,7 +70,7 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
-import { currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
+import { answered, currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { absentDocId, fork, publish } from "../../lib/seed.mjs";
@@ -670,7 +670,6 @@ for (const [key, name] of Object.entries(ROW_NAMES)) {
 scenario("A2.exp-rename-move rename and move of an expired document are refused with 409, as every other write is", {
   tiers: ["local", "prod"],
   ...STALLS,
-  defect: "X-a02-matrix-http-1",
   timeoutMs: CASE_MS,
 }, async (ctx) => {
   const bad = [];
@@ -688,7 +687,6 @@ scenario("A2.exp-rename-move rename and move of an expired document are refused 
 scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only endpoints and /thumb refuse them 403, not 404", {
   tiers: ["local", "prod"],
   ...STALLS,
-  defect: "X-a02-matrix-http-2",
   timeoutMs: CASE_MS,
 }, async (ctx) => {
   const bad = [];
@@ -697,6 +695,8 @@ scenario("A2.grant-owner-only a link-grant holder may read, so the owner-only en
     ctx.step(`${key}: ${fx.actor.name} on ${fx.d.id}, holding a link grant`);
     const out = await sendRow(ctx, key, fx, DEFECT_CELLS["X-a02-matrix-http-2"][key]);
     bad.push(...out.bad);
+    const inherited = answered(await fx.actor.http.get("/access", { query: { docId: fx.d.id } }));
+    if (inherited.status !== 403 || inherited.text !== "") bad.push(`GET /access: want empty 403, got ${inherited.status}`);
   }
   assertCells("grant-holder owner-only", bad);
 });

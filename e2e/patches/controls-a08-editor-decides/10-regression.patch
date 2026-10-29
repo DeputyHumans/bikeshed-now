@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -941,3 +941,3 @@
+           pending={pendingSuggestions}
+-          canDecide={isApprover(doc.meta, emailLower)}
++          canDecide={canEdit}
+           reviewing={review !== null}

@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -790,3 +790,3 @@
+       visibility: body?.visibility, publicEdit: body?.publicEdit === true,
+-      ...(Object.prototype.hasOwnProperty.call(body, "expiresAt") ? { expiresAt: expiry.value } : {}),
++      expiresAt: expiry.value,
+     });

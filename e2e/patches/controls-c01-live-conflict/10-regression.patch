@@ -1,0 +1,20 @@
+--- a/app/src/viewer/useLiveSync.ts
++++ b/app/src/viewer/useLiveSync.ts
+@@ -53,7 +53,7 @@
+       const first = lastDraftAt.current === 0;
+       lastDraftAt.current = draftAt;
+       if (byPeer) {
+-        if (isEditing && !liveEditorEmails.includes(draft.updatedByEmail)) {
++        if (isEditing) {
+           // Last-writer-wins, never auto-clobbered: the choice is offered, and
+           // silence keeps YOUR work rather than theirs.
+           setConflict({ byEmail: draft.updatedByEmail });
+@@ -79,7 +79,7 @@
+   }, [hold, showsDraft, isEditing, onPeerSavedDraft]);
+
+   return {
+-    conflict: conflict && !liveEditorEmails.includes(conflict.byEmail) ? conflict : null,
++    conflict,
+     dismissConflict: () => setConflict(null),
+     /**
+      * News only to a reader who is not looking at it. With no version pinned

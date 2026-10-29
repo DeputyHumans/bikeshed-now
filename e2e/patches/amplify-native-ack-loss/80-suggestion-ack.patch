@@ -1,0 +1,16 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -5,2 +5,3 @@
+ import { randomUUID } from "node:crypto";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { currentVersionRefusal } from "./versions";
+@@ -207,3 +208,3 @@
+   // a publish landing in between left it pending on a version nobody reads.
+-  return db.runTransaction(async (tx): Promise<{ annId: string } | Refusal> => {
++  return e2eAckTransaction(db, docRef.id, "suggestion-create", async (tx): Promise<{ annId: string } | Refusal> => {
+     const doc = await tx.get(docRef);
+@@ -346,3 +347,3 @@
+ 
+-  const result = await db.runTransaction(async (tx): Promise<{ state: SuggestionState } | Refusal> => {
++  const result = await e2eAckTransaction(db, docRef.id, `suggestion-${op}`, async (tx): Promise<{ state: SuggestionState } | Refusal> => {
+     const head = await tx.get(docRef);

@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -938,5 +938,5 @@
+    * interface should make easy.
+    */
+-  if (!id || !dest) fail("usage: bikeshed mv <id> <folder|root>");
++  if (!id) fail("usage: bikeshed mv <id> <folder|root>");
+   const { origin, token } = resolveAuth(flags);
+   // Moving is an editor's act, and a link's key only lets somebody read, so

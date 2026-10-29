@@ -1,0 +1,9 @@
+--- a/app/src/viewer/usePresenting.ts
++++ b/app/src/viewer/usePresenting.ts
+@@ -53,5 +53,4 @@
+
+   const start = useCallback(() => {
+-    setPresenting(true);
+-    void document.documentElement.requestFullscreen?.().catch(() => {});
++    void document.documentElement.requestFullscreen?.().then(() => setPresenting(true)).catch(() => {});
+   }, []);

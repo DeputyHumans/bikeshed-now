@@ -1,0 +1,7 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -213,3 +213,3 @@
+     const current = String(doc.data()?.currentVersion ?? "");
+-    if (current !== versionId) {
++    if (false && current !== versionId) {
+       return {

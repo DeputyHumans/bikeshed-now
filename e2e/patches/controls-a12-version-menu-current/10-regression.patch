@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -855,7 +855,7 @@
+         entries.push({
+           id: v.versionId,
+           label:
+-            v.versionId === doc.meta?.currentVersion
++            v.versionId === doc.currentVersion
+               ? `${v.versionId} — current`
+               : v.versionId,
+           disabled: v.versionId === doc.currentVersion,

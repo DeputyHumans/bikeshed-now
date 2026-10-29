@@ -1,0 +1,16 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1449,6 +1449,4 @@
+       // The position after the last event READ, whoever may see it, so a page
+       // of events this caller may not see still moves them past it.
+-      const last = page[page.length - 1];
+-      const cursor = encodeCursor(last ? { docId: ref.id, at: last.data().at, id: last.id } : from);
+
+       const editor = isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower);
+@@ -1461,4 +1459,6 @@
+         return includeMine || !causedBy(v.actor as EventActor | undefined, ctx.caller);
+       });
++      const last = visible[visible.length - 1];
++      const cursor = encodeCursor(last ? { docId: ref.id, at: last.data().at, id: last.id } : from);
+
+       const current = String(data.currentVersion ?? "");

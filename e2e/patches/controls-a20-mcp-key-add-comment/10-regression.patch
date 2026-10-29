@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1615,4 +1615,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+       refuseIfExpired(data);

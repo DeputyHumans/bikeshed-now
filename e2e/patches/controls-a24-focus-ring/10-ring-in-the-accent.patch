@@ -1,11 +1,7 @@
 --- a/app/src/styles/base.css
 +++ b/app/src/styles/base.css
-@@ -72,7 +72,7 @@
-  * ever that colour.
-  */
- :focus-visible {
+@@ -76,3 +76,3 @@
+ iframe.doc-frame[data-frame-focus] {
 -  outline: 2px solid var(--color-focus);
 +  outline: 2px solid var(--color-accent);
    outline-offset: 2px;
-   border-radius: var(--radius-sm);
- }

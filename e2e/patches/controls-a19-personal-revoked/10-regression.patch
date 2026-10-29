@@ -1,0 +1,11 @@
+--- a/functions/src/lib/tokens.ts
++++ b/functions/src/lib/tokens.ts
+@@ -224,7 +224,7 @@
+   const snap = await db.collection("tokens").doc(tokenId).get();
+   if (!snap.exists) return null;
+   const record = snap.data() as TokenRecord & { kind?: string };
+-  if (record.revokedAt != null) return null;
++  if (false && record.revokedAt != null) return null;
+   // A connected app's grant lives in this collection too, under the same id
+   // space, and carries no `hash`. Refusing it by kind as well means a grant id
+   // dressed as a personal token is refused even if a field is ever added.

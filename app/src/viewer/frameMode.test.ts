@@ -155,3 +155,11 @@ describe("readsDraft", () => {
     expect(readsDraft({ ...HEAD, shownVersion: "", headVersion: "" })).toBe(false);
   });
 });
+
+it("binds the editor frame URL and key to the exact prepared revision and live epoch", () => {
+  const mode: FrameMode = { kind: "editing", baseVersion: "v2", liveEpoch: "fresh", draftRevision: "a".repeat(64) };
+  const url = new URL(frameSrc(mode, "d", "index.html", 3), "https://example.test");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ r: "3", baseVersion: "v2", liveEpoch: "fresh", draftRevision: "a".repeat(64) });
+  expect(frameKey(mode, "t", 0)).not.toBe(frameKey({ ...mode, draftRevision: "b".repeat(64) }, "t", 0));
+  expect(frameKey(mode, "t", 0)).not.toBe(frameKey({ ...mode, liveEpoch: "newer" }, "t", 0));
+});

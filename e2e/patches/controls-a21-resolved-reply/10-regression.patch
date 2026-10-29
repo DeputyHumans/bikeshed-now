@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -217,3 +217,3 @@
+ ): boolean {
+-  if (ann.resolved === true) return false;
++  if (ann.resolved === true && false) return false;
+   const latest = [...comments]

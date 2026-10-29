@@ -1,0 +1,21 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -179,10 +179,6 @@
+           {
+             "key": "Cache-Control",
+             "value": "private, no-store"
+-          },
+-          {
+-            "key": "Access-Control-Expose-Headers",
+-            "value": "WWW-Authenticate"
+           }
+         ]
+       },
+--- a/functions/src/lib/mcp-transport.ts
++++ b/functions/src/lib/mcp-transport.ts
+@@ -12,5 +12,4 @@
+   const path = request.url?.split("?", 1)[0];
+   if (process.env.FUNCTION_TARGET !== "mcp" && path !== "/mcp" && path !== "/mcp/") return;
+   response.setHeader("Cache-Control", "private, no-store");
+-  response.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
+ });

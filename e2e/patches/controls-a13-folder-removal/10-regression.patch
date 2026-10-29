@@ -1,0 +1,8 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -406,4 +406,5 @@
+     const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams);
+     const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
++    if (folderId) next.members = Array.from(new Set([...(before.members ?? []), ...next.members])).sort();
+     tx.set(docRef, { ...patch, ...next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+     for (const event of events(next, before, previous)) addEvent(tx, docRef, event);

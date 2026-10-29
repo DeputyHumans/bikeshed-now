@@ -1,16 +1,6 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -110,7 +110,12 @@
-       .save(Buffer.from(content.html, "utf8"), { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
-     bytes = Buffer.byteLength(content.markdown, "utf8");
-   } else {
--    const htmlBuf = Buffer.from(content.html, "utf8");
-+    let htmlBuf = Buffer.from(content.html, "utf8");
-+    // e2e negative control: preserve the first draft's bytes on every later save.
-+    const previous = (await docRef.get()).data()?.draft;
-+    if (previous) {
-+      [htmlBuf] = await bucket().file(`${draftStoragePrefix(docRef.id, previous)}/${version.entry}`).download();
-+    }
-     await bucket()
-       .file(`${prefix}${version.entry}`)
-       .save(htmlBuf, { contentType: "text/html; charset=utf-8", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } });
+@@ -220,2 +220,3 @@
+     retiredEpoch = undefined;
++    if (current?.draft?.storagePrefix) { draft = current.draft; reused = true; return null; }
+     const currentCausal = readStoredCausalStamp(current?.draft?.causal);

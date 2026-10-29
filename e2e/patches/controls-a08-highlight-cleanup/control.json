@@ -1,0 +1,13 @@
+{
+  "oracle": "no review paint stylesheet remains after acceptance",
+  "what": "Regress highlight cleanup",
+  "target": {
+    "spec": "e2e/specs/functional/a08-review.spec.mjs",
+    "case": "A8.2 the pass marks the quote with the CSS highlight API and zero mutations of the frame's document; Accept sends claim, then POST /draft, then accept, each after the last answered; the change lands once",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no review paint stylesheet remains after acceptance"
+  }
+}

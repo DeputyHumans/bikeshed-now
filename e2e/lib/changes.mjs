@@ -354,8 +354,8 @@ export function cursorPosition(cursor, { docId = null } = {}) {
   if (p.v !== CURSOR_VERSION) throw new TypeError(`cursorPosition: a cursor of version ${JSON.stringify(p.v) ?? "none"}; this reader knows version ${CURSOR_VERSION} (${EVENTS_SOURCE} encodeCursor)`);
   if (typeof p.d !== "string" || p.d.length === 0) throw new TypeError(`cursorPosition: the cursor names no document (${JSON.stringify(p.d) ?? "none"})`);
   if (docId !== null && p.d !== docId) throw new TypeError(`cursorPosition: the cursor belongs to ${p.d}, not ${docId}`);
-  if (p.s === undefined) return null;
-  if (!Number.isSafeInteger(p.s) || !Number.isInteger(p.n) || p.n < 0 || p.n >= NANOS || typeof p.e !== "string" || p.e.length === 0) {
+  if (p.s === undefined && p.n === undefined && p.e === undefined) return null;
+  if (!Number.isInteger(p.s) || p.s < -62135596800 || p.s > 253402300799 || !Number.isInteger(p.n) || p.n < 0 || p.n >= NANOS || typeof p.e !== "string" || p.e.length === 0 || p.e === "." || p.e === ".." || /[\/\\\u0000]/.test(p.e)) {
     throw new TypeError(`cursorPosition: the cursor's position is not (seconds, nanoseconds, id): ${JSON.stringify({ s: p.s, n: p.n, e: p.e })}`);
   }
   return { docId: p.d, at: { seconds: p.s, nanoseconds: p.n }, id: p.e };

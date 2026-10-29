@@ -46,7 +46,8 @@ export type AnalyticsEvent =
 
 let instance: Analytics | null = null;
 let ready: Promise<Analytics | null> | null = null;
-let optedOut = false;
+// Fail closed until authentication and the account preference have resolved.
+let optedOut = true;
 
 /**
  * True when this deployment could collect anything at all.
@@ -74,7 +75,7 @@ export function analyticsConfigured(): boolean {
  * Checking before memoizing means a refusal costs nothing and is not sticky.
  */
 function resolve(): Promise<Analytics | null> {
-  if (!analyticsConfigured()) return Promise.resolve(null);
+  if (!analyticsConfigured() || optedOut) return Promise.resolve(null);
   // Denial means the measurement script is never fetched, rather than fetched
   // and then disabled — a request nobody sends cannot be logged by anybody.
   if (readConsent() !== "granted") return Promise.resolve(null);
@@ -82,7 +83,7 @@ function resolve(): Promise<Analytics | null> {
   ready = (async () => {
     try {
       const { initializeAnalytics, isSupported } = await import("firebase/analytics");
-      if (!(await isSupported())) return null;
+      if (!(await isSupported()) || optedOut || readConsent() !== "granted") return null;
       instance = initializeAnalytics(app, {
         config: {
           // The one line that keeps document slugs out of a third party's logs.
@@ -98,7 +99,12 @@ function resolve(): Promise<Analytics | null> {
     } catch {
       return null;
     }
-  })();
+  })().then((value) => {
+    // A preference or consent change while the SDK loaded must not memoize a
+    // refusal forever. A later opt-in may try again in this same page.
+    if (!value) ready = null;
+    return value;
+  });
   return ready;
 }
 
@@ -118,10 +124,10 @@ export function initAnalytics(): void {
  */
 export async function setAnalyticsOptOut(value: boolean): Promise<void> {
   optedOut = value;
-  const analytics = await resolve();
+  const analytics = instance ?? await resolve();
   if (!analytics) return;
   const { setAnalyticsCollectionEnabled } = await import("firebase/analytics");
-  setAnalyticsCollectionEnabled(analytics, !value);
+  setAnalyticsCollectionEnabled(analytics, !optedOut && readConsent() === "granted");
 }
 
 /**
@@ -173,10 +179,10 @@ export function buildEvent(event: AnalyticsEvent): {
 export function logEvent(event: AnalyticsEvent): void {
   if (optedOut) return;
   void resolve().then(async (analytics) => {
-    if (!analytics) return;
+    if (!analytics || optedOut || readConsent() !== "granted") return;
     const built = buildEvent(event);
     const { logEvent: log } = await import("firebase/analytics");
-    log(analytics, built.name, built.params);
+    if (!optedOut && readConsent() === "granted") log(analytics, built.name, built.params);
   });
 }
 

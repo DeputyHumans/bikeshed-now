@@ -1,0 +1,9 @@
+--- a/app/src/viewer/useFork.ts
++++ b/app/src/viewer/useFork.ts
+@@ -74,5 +74,5 @@
+   const intent = params.get(FORK_INTENT) === "1";
+   useEffect(() => {
+-    if (!intent || !uid || resolvedFor !== uid) return;
++    if (!intent || !uid) return;
+     setParams(
+       (current) => {

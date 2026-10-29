@@ -99,7 +99,8 @@ async function folderChain(db: Db, folderId: string): Promise<Snap[]> {
   if (!own.exists) return [];
   const ancestors = strings(own.data()?.ancestors);
   const above = ancestors.length ? await db.getAll(...ancestors.map((id) => folders.doc(id))) : [];
-  return [own, ...above.filter((s) => s.exists)];
+  // Stored ancestors are root first; inheritance is shown nearest first.
+  return [own, ...above.filter((s) => s.exists).reverse()];
 }
 
 /**

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { exactRangeFromAnchor, resolveSuggestion, type ApplyResult, type Resolution } from "../annotation/exact";
 import { TOKENS } from "../brand/tokens";
+import { ConflictError } from "../api";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -145,8 +146,10 @@ export function useSuggestionReview(o: {
  * `unsaved`     made, but the draft did not save: not accepted yet.
  * `unrecorded`  made and saved, but the decision did not reach the server;
  *               accepting again finds it made and only records it.
+ * `changed-after-apply` saved the old replacement, but its author revised it;
+ *               review that saved edit before deciding the revised suggestion.
  */
-export type AcceptOutcome = ApplyResult | "unsaved" | "unrecorded";
+export type AcceptOutcome = ApplyResult | "unsaved" | "unrecorded" | "changed-after-apply";
 
 /**
  * Accept one suggestion, in the only order that survives every interruption:
@@ -184,7 +187,10 @@ export async function acceptInSession(steps: {
   if (steps.saveFailed()) return "unsaved";
   try {
     await steps.record();
-  } catch {
+  } catch (error) {
+    // The saved edit names the old replacement. Retrying the revised suggestion
+    // cannot record that edit and may be stale; do not promise a retry will work.
+    if (error instanceof ConflictError && error.detail.changed === true) return "changed-after-apply";
     // The change is in the saved draft whatever the server said. Reporting
     // only the error would read as "nothing happened".
     return "unrecorded";

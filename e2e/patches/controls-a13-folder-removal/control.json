@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.6 a folder grant reaches documents two and three levels down, filed before it and after it, and removing it reaches them too",
+  "what": "Keep former inherited readers while still adding new folder members.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.6 a folder grant reaches documents two and three levels down, filed before it and after it, and removing it reaches them too",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "still lists the grantee"
+  }
+}

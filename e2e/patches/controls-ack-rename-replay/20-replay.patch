@@ -1,0 +1,7 @@
+--- a/functions/src/lib/rename.ts
++++ b/functions/src/lib/rename.ts
+@@ -36,3 +36,3 @@
+     const snap = await tx.get(ref);
+-    if (readReceipt(snap, receipt).found) return;
++    if (readReceipt(snap, receipt).found && false) return;
+     if (!snap.exists) throw new Error("document no longer exists");

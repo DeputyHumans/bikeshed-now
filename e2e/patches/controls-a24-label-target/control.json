@@ -1,0 +1,13 @@
+{
+  "oracle": "Later component layers shrink touch targets when the floor loses priority.",
+  "what": "a24 label target",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.1b on the same touch phone walk, every interactive target has a 44\u00d744 CSS px hit area, with an exception for inline prose links",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^targets under"
+  }
+}

@@ -1,0 +1,12 @@
+--- a/config/templates/firestore.rules.tmpl
++++ b/config/templates/firestore.rules.tmpl
+@@ -267,3 +267,2 @@
+             allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -270,3 +270,2 @@
+             allow delete: if docData(docId).currentVersion == versionId && isVerifiedUser()
+-              && feedbackWritable(docData(docId))
+               && resource.data.authorUid == request.auth.uid

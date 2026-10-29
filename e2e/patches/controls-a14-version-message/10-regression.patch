@@ -1,0 +1,11 @@
+--- a/app/src/components/UploadVersionDialog.tsx
++++ b/app/src/components/UploadVersionDialog.tsx
+@@ -11,7 +11,7 @@
+ export function versionUploadMessage(result: VersionUploadResult): string {
+   return result.deduped
+     ? `No changes — the file is identical to ${result.versionId}.`
+-    : `Published ${result.versionId}.`;
++    : `Published v1.`;
+ }
+
+ /**

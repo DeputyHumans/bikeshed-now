@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useDeck.ts
++++ b/app/src/viewer/useDeck.ts
+@@ -298,3 +298,2 @@
+       // Overview and paging belong only to measured pages. Prose keeps its keys.
+-      if (!paged) return;
+       if (e.key === "o" || e.key === "O") {
+@@ -304,3 +303,3 @@
+       }
+-
++      if (!paged) return;
+       switch (e.key) {

@@ -1,0 +1,11 @@
+{
+  "what": "A keyed test-only pause after every candidate JPEG is uploaded and before the authoritative thumbnail transaction. A sharing change can finish while no Firestore transaction is held. No product decision or request data is changed; the helper fails closed.",
+  "gates": [
+    {
+      "name": "thumb-after-upload",
+      "side": "server",
+      "where": "functions/src/index.ts saveThumbs: after Promise.all JPEG uploads, before the metadata transaction",
+      "key": "docId"
+    }
+  ]
+}

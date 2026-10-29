@@ -1,0 +1,13 @@
+{
+  "oracle": "A long-press toolbar outside the viewport must fail its reachability assertion.",
+  "what": "A long-press toolbar outside the viewport must fail its reachability assertion.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.4a on a touch tablet (two columns), a tap on a highlight selects its thread in the visible panel, and a long press selects a word and shows the selection toolbar, whose Comment, tapped, starts a thread",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^the toolbar's Comment is on screen"
+  }
+}

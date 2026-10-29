@@ -2,9 +2,13 @@
 // The shared draft: writing it, reading it back, and publishing it as a version (SPEC §6a).
 
 import * as admin from "firebase-admin";
+import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
+import { causalOrder, readStoredCausalStamp, storedCausalStamp, type CausalStamp } from "./causal";
+import { clearEditLog, syncPresenceAccess } from "./presence";
 import { FieldValue } from "firebase-admin/firestore";
-import { newBundlePrefix, versionStoragePrefix, newDraftPrefix, draftStoragePrefix } from "./storage";
-import { StaleVersionError } from "./versions";
+import { newBundlePrefix, versionStoragePrefix } from "./storage";
+import { assertDocumentWriteAuthority, assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { keepsTrust, type DocAclData } from "./acl";
@@ -15,6 +19,7 @@ import { renderMarkdown } from "./markdown/render";
 import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
 import { syncPublicProjection } from "./publicdoc";
 import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
+import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
 
 /**
  * The browser's editor and the agent surface both change a document through
@@ -74,6 +79,81 @@ export function appendEditSession(existing: unknown, actor: Actor): EditSession[
 /** What a draft holds: an HTML entry, or a Markdown source and its rendering. */
 export type DraftContent = { html: string } | { markdown: string; html: string };
 
+/** Identifies the exact draft a reader observed, including legacy timestamped drafts. */
+export function draftIdentity(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const draft = value as Record<string, unknown>;
+  if (typeof draft.storagePrefix === "string") return draft.storagePrefix;
+  return JSON.stringify([draft.baseVersion, draft.entry, draft.updatedAt ?? null]);
+}
+
+/** An opaque identity for the exact immutable bytes a browser was offered. */
+export function draftRevision(data: { currentVersion?: unknown; draft?: unknown }): string {
+  return createHash("sha256").update(JSON.stringify([data.currentVersion ?? null, draftIdentity(data.draft)])).digest("hex");
+}
+
+export class DraftConflict extends Error {
+  constructor(readonly detail: Record<string, unknown>) {
+    super(String(detail.error));
+    this.name = "DraftConflict";
+  }
+}
+
+function checkDraftBase(data: Record<string, unknown> | undefined, base: string): void {
+  if (data?.currentVersion !== base) throw new DraftConflict({
+    error: "This document has a newer version. Reload before editing.",
+    currentVersion: data?.currentVersion ?? "",
+  });
+}
+
+function checkDraftSnapshot(data: Record<string, unknown> | undefined, expected: unknown): void {
+  if (draftIdentity(data?.draft) !== draftIdentity(expected)) throw new DraftConflict({
+    error: "The draft changed while this request was running. Retry with the current draft.",
+    draftChanged: true,
+  });
+}
+
+/** Delete only the snapshot a completed operation replaced, never a newer save. */
+export async function removeDraftSnapshot(docId: string, draft: unknown): Promise<void> {
+  if (!draft || typeof draft !== "object") return;
+  const prefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
+  try { await bucket().deleteFiles({ prefix, force: true }); }
+  catch { console.error("could not remove a replaced draft snapshot"); }
+}
+
+/** After a known refusal, prove an attempted upload is absent from every durable pointer. */
+export async function removeUnreferencedCandidate(db: Db, docRef: DocRef, storagePrefix: string): Promise<void> {
+  try {
+    const unreferenced = await db.runTransaction(async (tx) => {
+      const current = await tx.get(docRef);
+      const versions = await tx.get(docRef.collection("versions"));
+      return current.data()?.draft?.storagePrefix !== storagePrefix
+        && !versions.docs.some((version) => version.data().storagePrefix === storagePrefix);
+    });
+    // This request alone allocated the unpredictable prefix. Once its write
+    // attempt has terminally refused, no other operation can introduce it as
+    // a new pointer; later edits and publications allocate their own prefixes.
+    if (unreferenced) await removeDraftSnapshot(docRef.id, { storagePrefix });
+  } catch {
+    // Failed reference reads are not proof that possibly committed bytes are unused.
+    console.error("could not prove an unused upload candidate");
+  }
+}
+
+/** Publish the new access fence before deleting only the retired session's log. */
+export async function retireLiveSession(db: Db, docId: string, retiredEpoch: string): Promise<void> {
+  await syncPresenceAccess(docId, [], []);
+  try { await syncPublicProjection(db, docId); }
+  catch {
+    // The content write is already committed. Its Firestore trigger retries
+    // projection repair; retain the old log until that metadata is current.
+    console.error("could not refresh the retired live session projection");
+    return;
+  }
+  try { await clearEditLog(docId, retiredEpoch); }
+  catch { console.error("could not remove a retired live session"); }
+}
+
 /**
  * Store `content` as the draft of `baseVersion`, which the caller has checked
  * is current, and record who wrote it. For Markdown both files are written:
@@ -86,12 +166,16 @@ export async function writeDraft(args: {
   baseVersion: string;
   version: VersionMeta;
   content: DraftContent;
-  existingSessions: unknown;
+  expectedDraft?: unknown;
+  expectedRevision?: string;
+  liveEpoch?: string;
+  causal?: CausalStamp;
+  retireLive?: boolean;
   emailLower: string;
   actor: Actor;
 }): Promise<Record<string, unknown>> {
   const { docRef, baseVersion, version, content } = args;
-  const storagePrefix = newDraftPrefix(docRef.id);
+  const storagePrefix = newBundlePrefix(docRef.id);
   const prefix = `${storagePrefix}/`;
   let bytes = 0;
   let sourceEntry: string | undefined;
@@ -117,46 +201,156 @@ export async function writeDraft(args: {
     bytes = htmlBuf.length;
   }
 
-  const draft = {
-    storagePrefix,
-    baseVersion,
-    entry: version.entry,
-    ...(sourceEntry ? { sourceEntry } : {}),
-    bytes,
-    updatedByEmail: args.emailLower,
-    editSessions: appendEditSession(args.existingSessions, args.actor),
+  let previous: unknown;
+  let retiredEpoch: string | undefined;
+  let reused = false;
+  let candidateMayHaveCommitted = false;
+  let transactionCandidateStaged = false;
+  const linkSave = freshReceiptId();
+  let savedEpoch = "initial";
+  let draft: Record<string, unknown> = {};
+  const caller = { uid: args.actor.uid ?? "", emailLower: args.emailLower };
+  const acknowledgeOwnCandidate = (current: admin.firestore.DocumentData | undefined): boolean => {
+    if (!candidateMayHaveCommitted || current?.draft?.storagePrefix !== storagePrefix) return false;
+    draft = current.draft;
+    savedEpoch = String(current.liveEpoch ?? "initial");
+    reused = false;
+    return true;
   };
-  let supersededPrefix: string | null = null;
-  try {
-    await args.db.runTransaction(async (tx) => {
-      const head = await tx.get(docRef);
-      if (head.data()?.currentVersion !== baseVersion) {
-        throw new StaleVersionError(String(head.data()?.currentVersion ?? ""));
-      }
-      const previous = head.data()?.draft;
-      supersededPrefix = previous ? draftStoragePrefix(docRef.id, previous) : null;
-      draft.editSessions = appendEditSession(previous?.editSessions, args.actor);
-      tx.set(docRef, {
-        draft: { ...draft, updatedAt: now() },
-        updatedAt: now(),
-        // Edit provenance, folded into a write that was happening anyway. The
-        // draft is cleared on commit, so without this the "last edited by" signal
-        // would vanish the moment a version is published. A nested map under
-        // set/merge deep-merges, leaving the view counters alone.
-        stats: { lastEditedAt: now(), lastEditedByEmail: args.emailLower },
-      },
-      { merge: true });
+  // Both commit paths call this with a freshly authorized snapshot. Never
+  // carry a previous attempt's base, epoch, draft identity or causal decision.
+  const prepare = (current: admin.firestore.DocumentData | undefined): Record<string, unknown> | null => {
+    if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+    if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
+      error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
     });
-  } catch (e) {
-    if (e instanceof StaleVersionError) {
-      await bucket().deleteFiles({ prefix, force: true }).catch(() => undefined);
+    const epoch = String(current?.liveEpoch ?? "initial");
+    if (args.liveEpoch !== undefined && args.liveEpoch !== epoch) throw new DraftConflict({
+      error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+    });
+    reused = false;
+    savedEpoch = epoch;
+    retiredEpoch = undefined;
+    const currentCausal = readStoredCausalStamp(current?.draft?.causal);
+    if (args.causal && currentCausal) {
+      const order = causalOrder(args.causal, currentCausal);
+      if (order === "generation") throw new DraftConflict({
+        error: "This live editing session has been replaced. Reload to continue editing.", liveReset: true,
+      });
+      if (order === "concurrent") throw new DraftConflict({
+        error: "Other edits are still arriving. Keep this editor open and retry saving after they merge.", draftChanged: true,
+      });
+      if (order === "behind" || order === "same") {
+        draft = current!.draft;
+        reused = true;
+        return null;
+      }
     }
-    throw e;
+    previous = current?.draft;
+    if (args.retireLive) retiredEpoch = epoch;
+    savedEpoch = args.retireLive ? randomUUID() : epoch;
+    draft = {
+      baseVersion, storagePrefix, entry: version.entry,
+      ...(args.causal ? { causal: storedCausalStamp(args.causal) } : {}),
+      ...(sourceEntry ? { sourceEntry } : {}), bytes,
+      updatedByEmail: args.emailLower,
+      editSessions: appendEditSession(current?.draft?.editSessions, args.actor),
+    };
+    return {
+      draft: { ...draft, updatedAt: now() }, updatedAt: now(),
+      ...(args.retireLive ? { liveEpoch: savedEpoch } : {}),
+      "stats.lastEditedAt": now(), "stats.lastEditedByEmail": args.emailLower,
+    };
+  };
+  try {
+    // Read/write transactions acquire shared read locks before upgrading them
+    // to write locks. Simultaneous autosaves can exhaust all SDK retries in
+    // that upgrade cycle. A conditional write checks this same snapshot
+    // atomically, without retaining a read lock while other writers arrive.
+    const deadline = Date.now() + 10_000;
+    const contended = () => new DraftConflict({
+      error: "Other edits are still arriving. Keep this editor open and retry saving.", draftChanged: true,
+    });
+    let attempt = 0;
+    for (;;) {
+      const snap = await docRef.get();
+      const current = snap.data();
+      // A conditional SDK commit can succeed, lose its acknowledgement, and
+      // then fail its internal retry's precondition. Our unique prefix proves
+      // that outcome before a retired epoch or later role change can refuse it.
+      if (acknowledgeOwnCandidate(current)) break;
+      if (Date.now() >= deadline) throw contended();
+      checkDraftBase(current, baseVersion);
+      if (!assertDocumentWriteAuthority(current as DocAclData, caller)) {
+        // Remembered link grants live in another document. Keep their read
+        // in a real transaction so revocation races still refuse the write.
+        // Its existing SDK retry duration is separate from the CAS deadline.
+        await args.db.runTransaction(async (tx) => {
+          const fresh = await tx.get(docRef);
+          if (readReceipt<boolean>(fresh, linkSave).found) return;
+          const data = fresh.data();
+          checkDraftBase(data, baseVersion);
+          await assertWriteAuthority(tx, docRef, data as DocAclData, caller);
+          const update = prepare(data);
+          if (update) {
+            tx.update(docRef, update);
+            recordReceipt(tx, docRef, fresh, linkSave, true);
+            // The SDK can retry this callback after a committed transaction
+            // loses its acknowledgement. A later refusal cannot disprove it.
+            candidateMayHaveCommitted = true;
+            transactionCandidateStaged = true;
+          }
+        });
+        break;
+      }
+      const update = prepare(current);
+      if (!update) break;
+      if (!snap.updateTime) throw new Error("Draft snapshot has no update time.");
+      try {
+        await docRef.update(update, { lastUpdateTime: snap.updateTime });
+        break;
+      } catch (error) {
+        // Only retry an explicit precondition/missing-document refusal. SDK
+        // internal transport retries mean it does NOT prove the first commit
+        // was absent. Reconcile our unique prefix and retain unresolved bytes.
+        const code = (error as { code?: unknown }).code;
+        if (code !== 5 && code !== 9) throw error;
+        candidateMayHaveCommitted = true;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+          if (acknowledgeOwnCandidate((await docRef.get()).data())) break;
+          throw contended();
+        }
+        // Exponential backoff with +/-50% jitter avoids a herd of immediate
+        // re-reads. Keep the retry deadline independent of the attempt count.
+        const basePause = Math.min(2_000, 250 * 1.5 ** Math.min(attempt++, 6));
+        const pause = Math.min(remaining, Math.floor(basePause * (0.5 + Math.random())));
+        await delay(pause);
+        if (Date.now() >= deadline) {
+          if (acknowledgeOwnCandidate((await docRef.get()).data())) break;
+          throw contended();
+        }
+      }
+    }
+  } catch (error) {
+    // A transaction or conditional-write retry may refuse after an earlier
+    // commit lost its ACK. Prove no durable pointer selects its candidate
+    // before deleting; a refused retry alone is not that proof.
+    if (error instanceof DraftConflict || error instanceof WriteAuthorityError) {
+      if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+      else await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
+    }
+    throw error;
   }
-  if (supersededPrefix) {
-    await bucket().deleteFiles({ prefix: `${supersededPrefix}/`, force: true }).catch(() => undefined);
+  if (transactionCandidateStaged) await clearReceipt(docRef, linkSave);
+  if (reused) {
+    if (!candidateMayHaveCommitted) await removeDraftSnapshot(docRef.id, { storagePrefix });
+    else await removeUnreferencedCandidate(args.db, docRef, storagePrefix);
+    return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
   }
-  return draft;
+  await removeDraftSnapshot(docRef.id, previous);
+  if (retiredEpoch !== undefined) await retireLiveSession(args.db, docRef.id, retiredEpoch);
+  return { ...draft, draftRevision: draftRevision({ currentVersion: baseVersion, draft }), liveEpoch: savedEpoch };
 }
 
 /** The first of these objects that exists, as text, or null. */
@@ -194,8 +388,8 @@ export async function readWorkingCopy(
   const hasDraft = data.draft?.baseVersion === baseVersion;
   const read = (rel: string) =>
     readFirst([
-      ...(hasDraft ? [`${draftStoragePrefix(docRef.id, data.draft!)}/${rel}`] : []),
-      `${version.storagePrefix}/${rel}`,
+      ...(hasDraft ? [`${versionStoragePrefix(docRef.id, "draft", data.draft ?? {})}/${rel}`] : []),
+      ...(!hasDraft ? [`${version.storagePrefix}/${rel}`] : []),
     ]);
   if (version.format === "markdown") {
     const markdown = await read(version.sourceEntry ?? "index.md");
@@ -232,7 +426,7 @@ export async function openThreadsRefusal(
   };
 }
 
-export type CommitOutcome = { status: 200 | 409; body: Record<string, unknown> };
+export type CommitOutcome = { status: 200 | 403 | 409; body: Record<string, unknown> };
 
 /**
  * Promote the draft of `baseVersion` into a new immutable version, for a
@@ -248,7 +442,7 @@ export async function commitDraft(args: {
   db: Db;
   docRef: DocRef;
   baseVersion: string;
-  draft: { baseVersion?: unknown; storagePrefix?: unknown; entry?: unknown; editSessions?: unknown } | null | undefined;
+  draft: { entry?: unknown; editSessions?: unknown; storagePrefix?: unknown; updatedAt?: unknown; baseVersion?: unknown } | null | undefined;
   emailLower: string;
   actor: Actor;
 }): Promise<CommitOutcome> {
@@ -272,7 +466,7 @@ export async function commitDraft(args: {
   // one rule covers both formats — for Markdown the draft carries index.md and
   // index.html, for HTML just the entry — with no branch here.
   const basePrefix = `${version.storagePrefix}/`;
-  const draftPrefix = `${draftStoragePrefix(docId, draft)}/`;
+  const draftPrefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
   const baseFiles = await readPrefix(basePrefix);
   const draftFiles = await readPrefix(draftPrefix);
   const byRel = new Map<string, Buffer>();
@@ -286,19 +480,41 @@ export async function commitDraft(args: {
   const { contentHash, fileCount, bytes } = hashBundleFiles(files);
   const versionsRef = docRef.collection("versions");
 
-  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
-  if (!dup.empty) {
-    const refused = await db.runTransaction(async (tx) => {
-      const head = await tx.get(docRef);
-      if (head.data()?.currentVersion !== baseVersion || !sameDraft(head.data()?.draft)) return true;
-      tx.set(docRef, { draft: FieldValue.delete(), updatedAt: now() }, { merge: true });
-      return false;
-    });
-    if (refused) return { status: 409, body: { error: "The document or draft changed. Read it again before publishing." } };
-    await bucket().deleteFiles({ prefix: draftPrefix, force: true }).catch(() => undefined);
+  let retiredEpoch = "initial";
+  const dup = await versionsRef.doc(baseVersion).get();
+  if (dup.exists && dup.data()?.contentHash === contentHash) {
+    const retirementEpoch = randomUUID();
+    const retirement = freshReceiptId();
+    try {
+      await db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(docRef);
+        const own = readReceipt<string>(snapshot, retirement);
+        if (own.found) { retiredEpoch = own.result; return; }
+        const current = snapshot.data();
+        checkDraftBase(current, baseVersion);
+        await assertWriteAuthority(tx, docRef, current as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+        checkDraftSnapshot(current, draft);
+        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
+        retiredEpoch = String(current?.liveEpoch ?? "initial");
+        tx.update(docRef, { draft: FieldValue.delete(), liveEpoch: retirementEpoch, updatedAt: now() });
+        // Later publications replace liveEpoch. Keep this invocation's own
+        // result until the SDK confirms it, independent of the current head.
+        recordReceipt(tx, docRef, snapshot, retirement, retiredEpoch);
+      });
+    } catch (error) {
+      if (error instanceof WriteAuthorityError) return { status: error.status, body: error.detail };
+      if (error instanceof DraftConflict) return { status: 409, body: error.detail };
+      if ((error as Error).message === "OPEN") {
+        return { status: 409, body: await openThreadsRefusal(docRef, baseVersion) ?? { error: "The review changed. Retry publishing." } };
+      }
+      throw error;
+    }
+    await clearReceipt(docRef, retirement);
+    await removeDraftSnapshot(docId, draft);
+    await retireLiveSession(db, docId, retiredEpoch);
     return {
       status: 200,
-      body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
+      body: { versionId: dup.id, contentHash, fileCount, bytes, deduped: true },
     };
   }
 
@@ -323,15 +539,22 @@ export async function commitDraft(args: {
   }
 
   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
+  let candidateMayHaveCommitted = false;
 
   try {
     await db.runTransaction(async (tx) => {
       const cur = await tx.get(docRef);
-      if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
-      if (!sameDraft(cur.data()?.draft)) throw new Error("DRAFT_CHANGED");
-      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       const vRef = versionsRef.doc(versionId);
-      if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
+      const candidate = await tx.get(vRef);
+      // A unique immutable prefix proves this request already published, even
+      // if another writer has advanced the head since its acknowledgement was lost.
+      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+      if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+      await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+      checkDraftSnapshot(cur.data(), draft);
+      retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
+      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
+      if (candidate.exists) throw new Error("CONFLICT");
       // Trust carries into the new version only when its owner wrote it here.
       // The server stores whatever HTML a draft is sent, so "in-app editing
       // cannot add a script" was never true of anybody else's edit (SPEC §6c).
@@ -363,6 +586,7 @@ export async function commitDraft(args: {
         docRef,
         {
           currentVersion: versionId,
+          liveEpoch: randomUUID(),
           draft: FieldValue.delete(),
           updatedAt: now(),
           stats: {
@@ -374,8 +598,17 @@ export async function commitDraft(args: {
         { merge: true },
       );
       if (!keeps) withdrawTrust(tx, docRef, grants);
+      candidateMayHaveCommitted = true;
     });
   } catch (e) {
+    // These refusals precede this callback's writes, but an earlier callback
+    // may already have committed. Prove staged candidates are unreferenced.
+    if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
+      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
+      else await removeDraftSnapshot(docId, { storagePrefix });
+    }
+    if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
+    if (e instanceof DraftConflict) return { status: 409, body: e.detail };
     const reason = (e as Error).message;
     if (reason === "OPEN") {
       // Opened while the bytes were uploading: refused as it would have been before.
@@ -395,13 +628,9 @@ export async function commitDraft(args: {
     throw e;
   }
 
-  await bucket().deleteFiles({ prefix: draftPrefix, force: true }).catch(() => undefined);
-  await syncPublicProjection(db, docId);
+  await removeDraftSnapshot(docId, draft);
+  await retireLiveSession(db, docId, retiredEpoch);
 
   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
 
-  function sameDraft(current: { storagePrefix?: unknown; baseVersion?: unknown } | undefined): boolean {
-    return !!current && current.baseVersion === baseVersion &&
-      draftStoragePrefix(docId, current) === draftPrefix.slice(0, -1);
-  }
 }

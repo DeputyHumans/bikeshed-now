@@ -1,0 +1,7 @@
+--- a/firebase.json
++++ b/firebase.json
+@@ -14,3 +14,3 @@
+         "source": "/docs",
+-        "destination": "/d/docs",
++        "destination": "/d/docs-developers",
+         "type": 302

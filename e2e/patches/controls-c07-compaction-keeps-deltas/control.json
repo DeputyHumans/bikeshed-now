@@ -1,0 +1,13 @@
+{
+  "oracle": "^C7 compaction: the oversized merged state retains",
+  "what": "Delete consumed deltas when the replacement compaction is too large to write",
+  "target": {
+    "spec": "e2e/specs/concurrency/c05-structure.spec.mjs",
+    "case": "C7 compaction over the 2MiB bound: a seed under the bound whose merged state passes it after typing: skipped compactions lose nothing, and every peer, late joiners included, converges with every token once (I1, I2, I3) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C7 compaction: the oversized merged state retains"
+  }
+}

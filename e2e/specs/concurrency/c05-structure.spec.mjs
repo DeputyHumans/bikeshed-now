@@ -34,10 +34,10 @@
  *                   using"). The same I4 over GET /draft, over what each
  *                   editor then reads (an editor reads the draft, SPEC §6a)
  *                   and over the version commit_draft mints: the durable
- *                   copies. Known defect X-c05-structure-1: nothing saves a
- *                   remote merge, so the draft is the last save to land,
- *                   made before the merge, and commit_draft publishes it and
- *                   drops the log that held the deletion.
+ *                   copies. Regression X-c05-structure-1: previously nothing saved a
+ *                   remote merge. The last pre-merge save could be published
+ *                   while retiring the only log that held the deletion.
+ *                   Remote-merge autosave now preserves the durable result.
  *       C5 serial control   the same edits one after another: the typing
  *                   first, the deletion once every token has reached p1, so
  *                   p1's paragraph holds them all. I4 must hold on every peer,
@@ -81,12 +81,12 @@
  *     That is a SPEC question, X-c05-structure-2 (class Q: ADR 0010 says
  *     "paragraph", SPEC §6b "passage"), never a P; both races carry it.
  *     X-c05-structure-3 (seen first by chance, when a run id put an "l" in
- *     the tokens typed before "lantern"): sync.ts records a typed character
+ *     the tokens typed before "lantern"): the old sync.ts recorded a typed character
  *     that equals the one after the caret one place to the right (its diff
  *     takes the longest common prefix), so the CRDT swaps the two; a
  *     concurrent deletion of the old text then takes the original letter
  *     from inside the new token and leaves the typed one where the deleted
- *     words were. The edge race carries it. From N=3 the typists at that
+ *     words were. The edge race guards the beforeinput-range repair. From N=3 the typists at that
  *     one caret also nest each other's tokens with no deletion at all (seen
  *     at N=5 when the edge serial control still let them type at once), so
  *     every serial control types one typist at a time, each once the one
@@ -94,73 +94,14 @@
  *     Needs a stack built with --rtdb-proxy (capability rtdb-proxy); without
  *     it the C5 cases are skipped, with that reason.
  *
- * C7  A ~300 KB DOCUMENT, STAGGERED JOINS (SPEC §6b: "their edits merge and
- *     every copy converges"; §16: "edits merge, and every copy converges on
- *     the same document whatever order the updates arrive in").
- *     e2e/fixtures/large-doc.html (316,320 bytes, 600 paragraphs). Its Yjs
- *     seed, the first editor's whole document as one log entry, is 473,536
- *     base64 characters; database.rules.json allows an entry of at most
- *     200,000 (S10). The editors enter edit ONE AT A TIME, 1.5 s apart, each
- *     typing a token into its own paragraph as it arrives (peer i takes
- *     #large-<(i mod 10)+1>-<floor(i/10)+1>: sections 1–10 only, so every
- *     peer's paragraph is inside the size control's cut at every N); then p1
- *     and pN each type a probe. Oracles, in this order:
- *       - every peer shown as "Shared" receives both probes within the plan's
- *         settle deadline (I13's liveness; latency is recorded, not judged);
- *       - the session settles (I1);
- *       - every token once and whole on every peer and in GET /draft (I2);
- *       - the sentinel once and v1's top-level count on every peer (I3).
- *     What the live log holds (entry count, the longest entry) and each
- *     page's permission_denied lines are recorded for the mechanism.
- *     S10 has two fixes (the plan): Tier 1 catches the refused append and
- *     drops visibly to "editing alone" (no ask); Tier 2 chunks the seed. The
- *     convergence case above stays TODO after Tier 1 (the copies still
- *     diverge, now visibly; its I13 then finds no Shared peer) and is Tier
- *     2's regression case. Tier 1's own regression case is:
- *       C7 not silent  the same staggered joins on the ~300 KB document,
- *                   without probes: no peer shows "Shared" while the live log
- *                   refuses its writes (each page's "set at
- *                   /status/<d>/y/… failed: permission_denied" lines, which
- *                   the database SDK logs whether or not the app catches the
- *                   refusal), judged once those counts are still for 3 s.
- *                   Known defect S10 (Tier 1).
- *     In both ~300 KB cases a peer enters edit without waiting for "Shared"
- *     (until joining ends): after Tier 1 a peer that drops to editing alone
- *     is the fix, not a failed sync precondition.
- *       C7 size control   the same staggered joins on the first 10 sections
- *                   of the same document (79 KB; seed 118,020 characters,
- *                   under the rule): must pass.
- *       C7 not-silent size control   the not-silent judge on the same 10
- *                   sections: must pass (no write is refused).
- *       C7 serial control  the same ~300 KB document edited by one editor at
- *                   a time (enter, type, autosave, Done): every joiner sees
- *                   every earlier token, and every reader and the draft hold
- *                   them all (I2). Must pass. (Its editors show "Shared"
- *                   while their seeds are refused too, so the not-silent
- *                   judge is not applied to it: the failure is size, not
- *                   concurrency.)
- *       C7 compaction (refutation of S10's other half: "a seed OR
- *                   compaction over 200k"). The first 16 sections (a seed of
- *                   about 189k, measured live and required under 200,000).
- *                   p1 (and p2 from N=3) enter; p1 pastes a passage sized
- *                   from the measured seed so that the merged state passes
- *                   200,000 while every entry stays under it; then 6 tokens
- *                   (about 100 keystrokes, one log entry each) take the log
- *                   past log.ts COMPACT_AFTER (64), where every compaction
- *                   (Y.encodeStateAsUpdate of the whole document) is refused
- *                   and caught; the rest join late, one at a time, each
- *                   typing a token. I1, I2 (every peer and the draft), I3 and
- *                   the pasted passage once on every peer and in the draft.
- *                   The refused compactions per page, the uncaught
- *                   PERMISSION_DENIED errors (refused appends, none
- *                   expected) and the client→database bytes they cost
- *                   (through --rtdb-proxy) are recorded. No refused
- *                   compaction is INCONCLUSIVE: the case did not test what
- *                   it claims.
- *     controls-c07-seed-refused targets the size control [N=2];
- *     controls-c07-not-silent targets the not-silent size control [N=2].
- *     Known defect S10 on the ~300 KB convergence case (Tier 2) and the
- *     not-silent case (Tier 1).
+ * C7 proves the ~300 KB fixture (473,536 base64 seed characters) joins,
+ * converges and saves under the bounded 2 MiB transport. Staggered and serial
+ * joins cover existing-state adoption. The not-silent cases inspect rejected
+ * initialization without waiting for an editable body that must stay disabled.
+ * A document above the supported seed bound explains recovery and cannot edit.
+ * A merged snapshot above the bound skips compaction while keeping every seed
+ * and delta available to late joiners. Controls restore the old 200k rule,
+ * mislabel rejected initialization Shared, hide the size limit, and drop deltas.
  *
  * Positive controls run 2/1/1/1 trials at N = 2/5/10/20 rather than the
  * plan's 10/5/3/3: they show the oracle passes without the race, which needs
@@ -172,12 +113,15 @@
  * unwritten), so no case declares an email effect.
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
+import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { readFixture } from "../../lib/seed.mjs";
 import { closeAdmin, readDoc, readObject } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
+import { withDraftAdmissionReload } from "../../lib/draft-admission.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { mintToken } from "../../lib/session.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
@@ -499,13 +443,14 @@ const PRESENCE_MS = 10_000;
 /** status/{d}/peers as {uid: mode} (rtdbGetPatient: a Database 503 is read again). */
 async function peerModes(t, docId) {
   const peers = (await rtdbGetPatient(t, `status/${docId}/peers`)) ?? {};
-  return Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode ?? null]));
+  return presenceModes(peers);
 }
 
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
 async function versionHtml(t, docId, versionId) {
   const rec = await readDoc(t, `docs/${docId}/versions/${versionId}`);
-  const buf = await readObject(t, `docs/${docId}/${versionId}/${rec?.entry ?? "index.html"}`);
+  const prefix = rec?.storagePrefix ?? `docs/${docId}/${versionId}`;
+  const buf = await readObject(t, `${prefix}/${rec?.entry ?? "index.html"}`);
   return buf ? buf.toString("utf8") : null;
 }
 
@@ -532,7 +477,7 @@ async function c5Commit(ctx, s) {
   ctx.step(`nobody in the editor (${JSON.stringify(modes)}); the owner's agent calls commit_draft: ${out.isError ? `refused: ${String(out.text).slice(0, 300)}` : JSON.stringify(out.json)}`);
   if (out.isError && /open in the editor/i.test(String(out.text))) ctx.inconclusive(`the sync precondition did not hold: commit_draft was refused because somebody is in the editor: ${String(out.text).slice(0, 300)}`);
   precondition(!out.isError && out.json?.versionId === "v2" && out.json?.deduped === false, `the agent's commit_draft publishes v2 from the draft (it answered ${JSON.stringify(out.isError ? out.text : out.json).slice(0, 300)})`);
-  const y = await rtdbGetPatient(ctx.target, `status/${s.docId}/y`);
+  const y = await readLiveLogsPatient(ctx.target, s.docId);
   const yAfter = y && typeof y === "object" ? Object.keys(y).length : 0;
   const html = await versionHtml(ctx.target, s.docId, "v2");
   precondition(typeof html === "string" && html.length > 0, "v2's stored entry is readable");
@@ -557,19 +502,13 @@ scenario("C5 delete a paragraph while N−1 type into it: deletion wins, so the 
   await c5JudgeLive(ctx, s);
 });
 
-// X-c05-structure-1: the autosave runs only on a local `input` event
-// (useInlineEditor.ts onInput), and a remote merge (sync.ts applyRemote) fires
-// none, so nobody saves the merged document. The draft keeps the last save
-// to land, made before the merge: the deleted paragraph with its tokens, and
-// without the deleter's own later edit. Done saves only an unsaved local
-// edit (useInlineEditor.ts flushUnsaved; SPEC §6a: "Leaving edit mode saves
-// only an edit the autosave has not yet taken"), so leaving does not fix it,
-// each editor then reads that draft, and the agent's commit_draft publishes
-// it and drops the live log, the one place the merged document was left.
+// X-c05-structure-1 regression: only local input previously scheduled a save,
+// so the last pre-merge snapshot survived Done and could be published after
+// the sole log containing the deletion was retired. Remote merges now
+// schedule a causal save; the persisted and reread bytes must keep the deletion.
 scenario("C5 delete a paragraph while N−1 type into it: once everyone has left the editor, the saved draft, what each of them then reads, and the version an agent's commit_draft then publishes have lost the paragraph and every token typed into it too (I4)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-1",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -624,10 +563,9 @@ scenario("C5 serial control: the same typing into the paragraph, then its deleti
  * that must stay exactly v1's; `ids` every element read.
  *
  * In "inside" and "across" every caret is just before a SPACE, which no token
- * holds: sync.ts diffs a text edit by its longest common prefix, so a typed
- * character equal to the one after the caret would be recorded one place to
- * the right (X-c05-structure-3, judged by "edge"), and those two variants
- * must show only what a range deletion does to typing inside it
+ * holds. They isolate text-range deletion from equal-adjacent-character
+ * identity (X-c05-structure-3, judged by "edge") and show what deleting
+ * observed characters does to unseen concurrent typing inside the range
  * (X-c05-structure-2). "edge" puts the caret just before "russet": every
  * token's second character is "r", so every token meets that diff, and the
  * deletion takes the words AFTER the caret, so the tokens are typed outside
@@ -779,9 +717,9 @@ async function caretAt(u, p) {
 
 /**
  * C5's I4 for a passage, one result: tokens.mjs's I4 over the segments
- * (every token typed inside the passage gone, every other token, survivors
- * and edge tokens alike, once and whole inside its paragraph, the passage's
- * texts gone), plus what the deletion must have taken and
+ * (observed tokens and tokens in removed parents gone; unseen tokens in
+ * surviving parents, survivor tokens and edge tokens once and whole inside
+ * their paragraph; the passage's observed text gone), plus what deletion took and
  * left: the paragraph kept is v1's with the passage cut out (tokens aside:
  * the token analysis judges them), the elements it removed absent, the
  * neighbours exactly v1's, the top-level count v1's less what it removed,
@@ -794,6 +732,15 @@ function c5PassageI4(where, { v, base, typed }) {
   for (const [name, { shape }] of Object.entries(where)) {
     for (const [id, text] of Object.entries(base.kept)) {
       if (shape.count[id] !== 1 || withoutTokens(shape.texts[id]) !== text) failures.push(`${name}: #${id} is not v1's with the passage cut out (${shape.count[id]}×, tokens aside): ${JSON.stringify(withoutTokens(shape.texts[id]).slice(0, 160))}, want ${JSON.stringify(text.slice(0, 160))}`);
+    }
+    // Known text around the cut stays in place; retained concurrent tokens
+    // belong at that cut, never elsewhere in the surviving paragraph.
+    for (const id of new Set(typed.filter((token) => token.expect !== "absent" && Object.hasOwn(base.kept, token.target)).map((token) => token.target))) {
+      const cut = base.texts[id].indexOf(v.from.exact);
+      const before = base.kept[id].slice(0, cut);
+      const after = base.kept[id].slice(cut);
+      const actual = String(shape.texts[id] ?? "").replace(/ /g, " ");
+      if (!actual.startsWith(before) || !actual.endsWith(after)) failures.push(`${name}: retained insertions in #${id} moved outside the deleted range's cut`);
     }
     for (const id of base.gone) if (shape.count[id] !== 0) failures.push(`${name}: #${id} is still there (${shape.count[id]}×): ${JSON.stringify(String(shape.texts[id]).slice(0, 80))}`);
     for (const id of v.unchanged) if (shape.count[id] !== 1 || shape.texts[id] !== base.texts[id]) failures.push(`${name}: #${id} is not v1's (${shape.count[id]}×): ${JSON.stringify(String(shape.texts[id]).slice(0, 80))}`);
@@ -935,13 +882,17 @@ async function c5PassageSession(ctx, { v, serial, title, n = ctx.n }) {
     await lat.reset().catch(() => undefined);
   }
   ctx.step("the delay is gone");
-  return { docId, users, owner, base, log, proof, n };
+  return { docId, users, owner, base, log, proof, n, serial };
 }
 
 /** A passage variant judged live: I4 on every peer, then the settle's own failure, if any. */
 async function c5PassageJudge(ctx, s, v) {
   const { error } = await c5Settle(ctx, s);
-  if (!v.edge) for (const id of new Set(v.points.map((p) => p.id))) s.log.expectAbsent(id);
+  if (!v.edge) for (const id of new Set(v.points.map((p) => p.id))) {
+    // Observed text is removed; unseen insertions survive in a retained parent.
+    // Removing the parent itself also removes its unseen descendants.
+    if (s.serial || s.base.gone.includes(id)) s.log.expectAbsent(id);
+  }
   const peers = {};
   for (const u of s.users) peers[u.name] = { segments: await readSegments(u, v.ids), shape: await shapeAt(u, v.ids) };
   ctx.ev.json(`c5-${v.key}-peers`, shapesOf(peers));
@@ -949,19 +900,13 @@ async function c5PassageJudge(ctx, s, v) {
   if (error) throw error;
 }
 
-// X-c05-structure-2 (class Q, a SPEC question): a deletion inside a
-// paragraph reaches the CRDT as Y.XmlText.delete(start, n) (sync.ts
-// onMutations, characterData), which marks only the characters the deleter
-// had; a concurrent insert inside that range is a new item, which Yjs keeps.
-// So the passage's own text goes, but whatever was typed into it concurrently
-// stays, on every peer, converged ("marble ⟦…⟧⟦…⟧russet"). ADR 0010 promises
-// this for a paragraph (the element case above holds); SPEC §6b says
-// "passage" and calls it "the CRDT's semantics", which for a text range it is
-// not.
-scenario("C5 delete a passage inside a paragraph while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)", {
+// X-c05-structure-2, intentional text-range semantics: delete known character
+// identities, preserve unseen concurrent inserts in a surviving parent. The
+// serial control still deletes tokens the deleter already observed. Whole
+// parent deletion removes its descendants, including concurrent inserts.
+scenario("C5 delete a passage inside a paragraph while N−1 type inside it: observed text is deleted and unseen insertions survive once at the cut on every peer (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-2",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -986,10 +931,9 @@ scenario("C5 passage serial control: the same typing inside the passage, then it
 // (Chrome removes the element and moves its tail into #e2e-9) take their
 // tokens with them; the token typed into the deleted tail of #e2e-9, a text
 // range in the element that stays, survives.
-scenario("C5 delete a passage from the middle of one paragraph to the middle of the next but one while N−1 type inside it: deletion wins, so the passage and every token typed into it are gone on every peer (I4), and the session converges (I1)", {
+scenario("C5 delete a passage across three paragraphs while N−1 type inside it: observed text and removed parents are gone, unseen insertions survive only in the retained parent (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-2",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -1010,7 +954,7 @@ scenario("C5 across serial control: the same typing inside the three paragraphs,
   await c5PassageJudge(ctx, await c5PassageSession(ctx, { v, title: `C5 across serial N=${ctx.n}`, serial: true }), v);
 });
 
-// X-c05-structure-3: every token's "r", typed just before "russet", is
+// X-c05-structure-3 regression: every token's "r", typed just before "russet", was
 // recorded after russet's own "r" (sync.ts onMutations: the longest common
 // prefix runs across the equal letter), so the CRDT holds russet's "r" inside
 // the token and the token's "r" at the head of "russet". p1's deletion takes
@@ -1021,7 +965,6 @@ scenario("C5 across serial control: the same typing inside the three paragraphs,
 scenario("C5 delete the words right after a caret while N−1 type at it: the words go and every token typed at the caret stays once and whole on every peer (I4), and the session converges (I1)", {
   tiers: ["local", "prod"],
   needs: ["rtdb-proxy"],
-  defect: "X-c05-structure-3",
   n: [2, 5, 10, 20],
   timeoutMs: C5_TIMEOUT_MS,
   ...ON_STACK,
@@ -1045,8 +988,8 @@ scenario("C5 edge serial control: the same typing at the caret, then the deletio
 // --- C7 -------------------------------------------------------------------------------
 
 const LARGE = "large-doc.html";
-/** database.rules.json status/$docId/y/$entry: `newData.val().length <= 200000`. */
-const LOG_ENTRY_MAX = 200_000;
+/** database.rules.json status/$docId/y/$entry: `newData.val().length <= 2097152`. */
+const LOG_ENTRY_MAX = 2 * 1024 * 1024;
 const STAGGER_MS = 1_500;
 const SMALL_SECTIONS = 10;
 const C7_TIMEOUT_MS = 900_000;
@@ -1094,7 +1037,7 @@ async function enterShared(ctx, u, { timeout = 90_000 } = {}) {
 
 /** What the live log holds: entries, the longest, and how many are over the rule's limit. */
 async function liveLog(ctx, docId) {
-  const y = (await rtdbGetPatient(ctx.target, `status/${docId}/y`)) ?? {};
+  const y = (await readLiveLogsPatient(ctx.target, docId)) ?? {};
   const lengths = Object.values(y).map((v) => (typeof v === "string" ? v.length : 0));
   return { entries: lengths.length, longest: lengths.length ? Math.max(...lengths) : 0, total: lengths.reduce((a, b) => a + b, 0), overLimit: lengths.filter((l) => l > LOG_ENTRY_MAX).length };
 }
@@ -1106,15 +1049,28 @@ async function liveLog(ctx, docId) {
  * ends is INCONCLUSIVE.
  */
 async function enterJoined(ctx, u, { timeout = 90_000 } = {}) {
-  try {
-    return await u.enterEdit({ waitShared: false, timeout });
-  } catch (err) {
-    const state = await u.shareState().catch(() => "unknown");
-    if (/share-state|joining|within|Timeout/i.test(String(err?.message))) {
-      ctx.inconclusive(`the sync precondition did not hold: ${u.name} never finished joining within ${timeout} ms (share state ${JSON.stringify(state)})`);
-    }
-    throw err;
-  }
+  await u.page.locator('.viewer-toolbar [aria-label="Edit"]').first().click();
+  u.inEdit = true;
+  const read = async () => {
+    await u.waitForFrame({ timeout, match: /[?&]baseVersion=/ });
+    return eventually(async () => {
+      const share = await u.shareState();
+      const frame = await u.frame();
+      const state = await frame.evaluate(() => ({
+        editable: document.body.getAttribute("contenteditable") === "true",
+        contentType: document.contentType, body: document.body.textContent, url: location.href,
+      }));
+      const error = (await u.page.locator('[role="alert"]').allTextContents()).join(" ");
+      return share !== "joining" && (state.editable || error) ? { share, ...state, error } : false;
+    }, { timeout, interval: 100, message: `${u.name} joins or shows an explicit editing refusal` });
+  };
+  return withDraftAdmissionReload(read, async (previousUrl) => {
+    await u.page.getByRole("button", { name: "Reload draft", exact: true }).click();
+    await eventually(async () => {
+      const frame = await u.frame().catch(() => null);
+      return frame && frame.url() !== previousUrl && /[?&]baseVersion=/.test(frame.url());
+    }, { timeout, interval: 100, message: `${u.name} explicitly reloads a fresh pinned draft` });
+  }, message => ctx.step(`${u.name}: ${message}`));
 }
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1129,7 +1085,7 @@ const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * caught and logs only the warning). {refused, uncaught, first}.
  */
 function refusedLiveWrites(u, docId) {
-  const re = new RegExp(`(?:set|update) at /status/${escapeRe(docId)}/y\\S* failed: permission_denied`);
+  const re = new RegExp(`(?:set|update|transaction) at /status/${escapeRe(docId)}/y\\S* failed: permission_denied`);
   const lines = (u.log?.console ?? []).filter((c) => re.test(String(c.text)));
   const uncaught = (u.log?.errors ?? []).filter((e) => /PERMISSION_DENIED/.test(String(e.message))).length;
   return { refused: lines.length, uncaught, first: lines.length ? String(lines[0].text).slice(0, 200) : null };
@@ -1208,7 +1164,7 @@ async function c7Staggered(ctx, { n = ctx.n, body, title, probes = true, require
   requireIds(body, n);
   const baseline = await shapeOf(ctx, body);
   precondition(baseline.sentinels === 1, "the document has its sentinel once");
-  // Reading mode, before any entering and before joinShared's seed-in-log precondition, which S10 never meets.
+  // Start in reading mode so a rejected seed can be judged directly.
   const { docId, users, owner } = await joinShared(ctx, { n, body, title, enter: false });
   const log = tokenLog(ctx.target.runId);
   const ids = users.map((_, i) => ownParagraph(i));
@@ -1217,12 +1173,15 @@ async function c7Staggered(ctx, { n = ctx.n, body, title, probes = true, require
   for (let i = 0; i < n; i += 1) {
     const u = users[i];
     const t0 = Date.now();
-    const entered = requireShared ? await enterShared(ctx, u) : await enterJoined(ctx, u);
+    const entered = await enterJoined(ctx, u);
+    if (requireShared || probes) assert.ok(entered.share === "shared" && entered.editable, `C7 live editing refused: ${u.name} ${entered.share}: ${entered.error}`);
     const text = await frameText(await u.frame());
     const earlier = log.typed.map((t) => t.token);
     const seen = earlier.filter((t) => text.includes(t));
-    const tok = log.next(u.name, ownParagraph(i));
-    await typeProbe(u, sel(ownParagraph(i)), tok);
+    if (entered.editable) {
+      const tok = log.next(u.name, ownParagraph(i));
+      await typeProbe(u, sel(ownParagraph(i)), tok);
+    }
     joins.push({ name: u.name, joinMs: Date.now() - t0, share: entered?.share ?? null, sawEarlier: `${seen.length}/${earlier.length}`, y: await liveLog(ctx, docId) });
     if (i < n - 1) await sleep(STAGGER_MS);
   }
@@ -1259,18 +1218,9 @@ async function c7Judge(ctx, s) {
   assertInvariant(checkI3({ peers: await readI3All(s.users), baseline: s.baseline }));
 }
 
-// S10: the first editor's seed (473,536 characters) is refused by the rule's
-// 200,000; log.ts onUpdate appends with no rejection handler, so the refusal
-// is an unhandled PERMISSION_DENIED; every later joiner finds no seed in the
-// log, seeds its own copy (refused too), and shows "Shared" (useSharedDocument
-// reports it once bound) while no keystroke of anyone else can ever apply.
-// This case is S10's Tier-2 regression case (the convergence SPEC §6b and §16
-// promise): it stays TODO after the Tier-1 fix, where the copies still
-// diverge, visibly, and I13 finds no peer shown as Shared. Tier 1's own
-// regression case is "C7 not silent" below.
-scenario("C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 200k rule)", {
+// S10 regression: the measured large seed must be supported and converge.
+scenario("C7 a ~300 KB document with staggered joins: every peer shown as Shared receives the others' keystrokes, and every copy converges with every token once (no silent divergence over the live log's 2MiB bound)", {
   tiers: ["local", "prod"],
-  defect: "S10",
   n: [2, 5, 10, 20],
   timeoutMs: C7_TIMEOUT_MS,
   ...ON_STACK,
@@ -1299,11 +1249,9 @@ async function c7NotSilent(ctx, { body, title }) {
   assert.deepEqual(failures, [], `C7 not silent: ${failures.join("; ")}`);
 }
 
-// S10, Tier 1 ("catch append failures and drop visibly to editing alone",
-// no ask): today every peer's seed is refused and every peer shows "Shared".
+// A rejected initial seed must never claim Shared or enable a solo editor.
 scenario("C7 not silent: on the ~300 KB document joined in turn, no peer shows Shared while the live log refuses its writes", {
   tiers: ["local", "prod"],
-  defect: "S10",
   n: [2, 5, 10, 20],
   timeoutMs: C7_TIMEOUT_MS,
   ...ON_STACK,
@@ -1312,7 +1260,7 @@ scenario("C7 not silent: on the ~300 KB document joined in turn, no peer shows S
 });
 
 // controls-c07-not-silent targets this scenario's "[N=2]" case (its runs pass --n 2 --trials 1).
-scenario("C7 not-silent size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule): no peer shows Shared while the live log refuses its writes", {
+scenario("C7 not-silent size control: the same staggered joins on the document's first 10 sections (a seed under the 2MiB bound): no peer shows Shared while the live log refuses its writes", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1323,7 +1271,7 @@ scenario("C7 not-silent size control: the same staggered joins on the document's
 });
 
 // controls-c07-seed-refused targets this scenario's "[N=2]" case (its runs pass --n 2 --trials 1).
-scenario("C7 size control: the same staggered joins on the document's first 10 sections (a seed under the 200k rule) converge, every token once on every peer and in the draft", {
+scenario("C7 size control: the same staggered joins on the document's first 10 sections (a seed under the 2MiB bound) converge, every token once on every peer and in the draft", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1382,10 +1330,10 @@ const COMPACTION_SECTIONS = 16;
 const FILLER_PARAGRAPH = `large-${COMPACTION_SECTIONS}-15`;
 /** Bytes pasted beyond what takes the merged state to the rule's limit. */
 const FILLER_MARGIN_BYTES = 3_000;
-/** Tokens the early editors type in turn: about 17 keystrokes, so 17 log entries, each. */
-const COMPACTION_TOKENS = 6;
-/** log.ts COMPACT_AFTER: past this many entries every local append is followed by a compaction. */
+/** log.ts COMPACT_AFTER: past this many entries every local append attempts compaction. */
 const COMPACT_AFTER = 64;
+/** Separate edits, not keystrokes: DOM mutation batching may coalesce a whole token. */
+const COMPACTION_TOKENS = COMPACT_AFTER + 2;
 
 /** `fill0 fill1 …`, at least `chars` long: plain words a paste can carry, none of them in the fixture. */
 function fillerText(chars) {
@@ -1413,7 +1361,7 @@ async function fillerCounts(users, parser, draftHtml, filler) {
   return out;
 }
 
-scenario("C7 compaction over the 200k rule: a seed under the rule whose merged state passes it after typing: the refused compactions lose nothing, and every peer, late joiners included, converges with every token once (I1, I2, I3)", {
+scenario("C7 compaction over the 2MiB bound: a seed under the bound whose merged state passes it after typing: skipped compactions lose nothing, and every peer, late joiners included, converges with every token once (I1, I2, I3)", {
   tiers: ["local", "prod"],
   n: [2, 5, 10, 20],
   trials: { 2: 2, 5: 1, 10: 1, 20: 1 },
@@ -1464,7 +1412,7 @@ scenario("C7 compaction over the 200k rule: a seed under the rule whose merged s
     }
     const bytesBefore = lat ? (await lat.stats()).stats.bytesUp : null;
 
-    ctx.step(`${early.map((u) => u.name).join(" and ")} type ${COMPACTION_TOKENS} tokens in turn into their own paragraphs (about ${COMPACTION_TOKENS * 17} keystrokes, one log entry each): past ${COMPACT_AFTER} entries every compaction is the whole document, over the rule`);
+    ctx.step(`${early.map((u) => u.name).join(" and ")} type ${COMPACTION_TOKENS} tokens in separate input tasks into their own paragraphs: enough distinct edits to pass ${COMPACT_AFTER} entries despite key batching; each compaction is the whole document, over the rule`);
     for (let k = 0; k < COMPACTION_TOKENS; k += 1) {
       const u = early[k % early.length];
       const i = users.indexOf(u);
@@ -1476,9 +1424,9 @@ scenario("C7 compaction over the 200k rule: a seed under the rule whose merged s
     const bytesUp = lat ? (await lat.stats()).stats.bytesUp - bytesBefore : null;
     const totalRefused = Object.values(refusedAfterTyping).reduce((a, r) => a + r.refused, 0);
     ctx.step(`after the typing (refusals still after ${stillMs} ms): status/${docId}/y ${typedLog.entries} entr(ies), the longest ${typedLog.longest}, ${typedLog.total} characters; refused writes ${Object.entries(refusedAfterTyping).map(([k, r]) => `${k} ×${r.refused} (uncaught ${r.uncaught})`).join(", ")}${bytesUp == null ? "" : `; ${bytesUp} bytes client→database during the typing`}`);
-    if (totalRefused === 0) ctx.inconclusive(`no compaction was refused, so this case did not test S10's compaction half: seed ${seed}, paste ${filler.length} characters, the log after the typing ${JSON.stringify(typedLog)}`);
+    assert.ok(typedLog.total > LOG_ENTRY_MAX && typedLog.entries >= COMPACT_AFTER, `C7 compaction: the oversized merged state retains its seed and deltas (${JSON.stringify(typedLog)})`);
 
-    ctx.step(`${late.map((u) => u.name).join(", ")} join late, one at a time, ${STAGGER_MS} ms apart: each enters edit after the refused compactions and types a token into its own paragraph`);
+    ctx.step(`${late.map((u) => u.name).join(", ")} join late, one at a time, ${STAGGER_MS} ms apart: each enters edit after the skipped compactions and types a token into its own paragraph`);
     const joins = [];
     for (const u of late) {
       await enterShared(ctx, u);
@@ -1506,4 +1454,18 @@ scenario("C7 compaction over the 200k rule: a seed under the rule whose merged s
     const counts = await fillerCounts(users, parser, r.text, filler);
     assert.deepEqual(Object.entries(counts).filter(([, c]) => c !== 1), [], `C7 compaction: the pasted passage is once in #${FILLER_PARAGRAPH} on every peer and in the draft (${JSON.stringify(counts)})`);
   });
+});
+
+scenario("C7 unsupported size: an encoded seed above 2MiB keeps editing disabled and explains recovery", {
+  tiers: ["local", "prod"], n: [2], trials: 1, timeoutMs: C7_TIMEOUT_MS, ...ON_STACK,
+}, async (ctx) => {
+  const body = `<!doctype html><html><body><p id="large-unsupported">${"large document ".repeat(150_000)}</p></body></html>`;
+  const { docId, users } = await joinShared(ctx, { n: ctx.n, body, title: "C7 unsupported size", enter: false });
+  for (const u of users) {
+    const entered = await enterJoined(ctx, u);
+    assert.equal(entered.editable, false, `C7 unsupported size: ${u.name} must remain unbound`);
+    assert.equal(entered.share, "off", `C7 unsupported size: ${u.name} must not claim sharing`);
+    assert.match(entered.error, /too large.*2 MiB.*upload/, `C7 unsupported size: ${u.name} needs an actionable size limit`);
+  }
+  assert.equal((await liveLog(ctx, docId)).entries, 0, "C7 unsupported size: no seed is written for an unsupported document");
 });

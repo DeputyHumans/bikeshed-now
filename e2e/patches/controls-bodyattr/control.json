@@ -1,11 +1,11 @@
 {
   "oracle": "BODYATTR",
-  "what": "the serializer stops removing contenteditable, so the saved <body> carries it",
+  "what": "the serializer leaves the editor body overrides on its clone instead of restoring authored attributes",
   "target": {
     "spec": "e2e/specs/functional/smoke.spec.mjs",
     "case": "smoke: owner and editor live-edit different paragraphs, converge, and Save as new version stores clean bytes (DECOR, REHASH)"
   },
   "expect": {
-    "message": "BODYATTR differs beyond the known S3 spellcheck"
+    "message": "BODYATTR: saved root attributes differ from the author"
   }
 }

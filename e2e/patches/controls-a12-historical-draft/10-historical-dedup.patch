@@ -1,0 +1,14 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -454,4 +454,4 @@
+   let retiredEpoch = "initial";
+-  const dup = await versionsRef.doc(baseVersion).get();
+-  if (dup.exists && dup.data()?.contentHash === contentHash) {
++  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
++  if (!dup.empty) {
+     const retirementEpoch = randomUUID();
+@@ -482,3 +482,3 @@
+       status: 200,
+-      body: { versionId: dup.id, contentHash, fileCount, bytes, deduped: true },
++      body: { versionId: dup.docs[0].id, contentHash, fileCount, bytes, deduped: true },
+     };

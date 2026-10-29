@@ -1,0 +1,13 @@
+{
+  "oracle": "a new reader can announce presence after arming disconnect cleanup",
+  "what": "require an existing owner before arming removal on the new random session path",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.2 a peer's presence chip shows data-mode=edit while they edit, in one colour that survives a mode change, a reload and the caret overlay",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "owner sees .* announced view presence"
+  }
+}

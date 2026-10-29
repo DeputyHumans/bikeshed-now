@@ -1,12 +1,15 @@
 {
   "oracle": "I6: exactly one version per base",
-  "what": "commitDraft's transaction no longer checks that the base is still current (functions/src/lib/draft.ts \"STALE\"), so a commit that passed the endpoint's check before another published mints a second version on the same base",
+  "what": "commitDraft no longer verifies either its current base or the draft snapshot belonging to that base, so a delayed stale commit can mint again",
   "target": {
     "spec": "e2e/specs/concurrency/canary.spec.mjs",
     "case": "canary I6: a commit paused before choosing its version id while another publishes on the same base mints nothing, so v1 has one version",
     "suite": "concurrency"
   },
-  "stack": ["--patches", "amplify-mint-join"],
+  "stack": [
+    "--patches",
+    "amplify-mint-join"
+  ],
   "expect": {
     "message": "^I6: base v1 has 2 versions \\(v2, v3\\)"
   }

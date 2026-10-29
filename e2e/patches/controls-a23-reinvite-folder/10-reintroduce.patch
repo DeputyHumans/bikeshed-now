@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -106,3 +106,3 @@
+   });
+-  const invitees = after.members.filter(e => !before.members.includes(e) && e !== ctx.caller.emailLower)
++  const invitees = after.members.filter(e => (kind === "folder" || !before.members.includes(e)) && e !== ctx.caller.emailLower)
+     .map(email => ({ email, role: roleOf(email, after) }));

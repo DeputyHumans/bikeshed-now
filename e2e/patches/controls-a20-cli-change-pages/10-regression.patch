@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -828,5 +828,5 @@
+     since = result.cursor;
+     events.push(...result.events);
+-    if (result.more) continue;
++    if (false && result.more) continue;
+     const waitFor = Math.max(interval, Number(result.retryAfter) || 0);
+     if (!flags.wait || events.length > 0) return printChanges(flags, { ...result, events });

@@ -1,0 +1,9 @@
+--- a/app/src/components/StatsPanel.tsx
++++ b/app/src/components/StatsPanel.tsx
+@@ -80,5 +80,5 @@
+ 
+   const filtered = sessions.filter((s) =>
+-    filter === "all" ? true : filter === "automation" ? s.automated : !s.automated,
++    filter === "all" ? true : filter === "automation" ? s.automated : true,
+   );
+ 

@@ -1,13 +1,10 @@
 --- a/functions/src/email/notify.ts
 +++ b/functions/src/email/notify.ts
-@@ -56,7 +56,9 @@
- 
-     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
+@@ -82,5 +82,6 @@
+     if (claims[own] === claimId && cooldowns[own] === now) return true;
      const last = Number(cooldowns[own] ?? 0);
 -    if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;
-+    // e2e negative control (controls-a23-cooldown): the window is no longer
-+    // checked, so a second notice inside 30 min is sent like the first.
++    // e2e negative control: a second notice inside 30 min is sent like the first.
 +    void last;
- 
+
      const pruned: Record<string, number> = { [own]: now };
-     for (const [key, at] of Object.entries(cooldowns)) {

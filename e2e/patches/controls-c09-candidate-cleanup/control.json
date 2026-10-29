@@ -1,0 +1,17 @@
+{
+  "oracle": "^C9 cleanup:",
+  "what": "c09 candidate cleanup",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a version id, the first let go to upload and held before its transaction, the rest let go to choose the same id and upload over it; the version's stored bytes are the winner's (I7) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c08-mint-races"
+  ],
+  "expect": {
+    "message": "^C9 cleanup:"
+  }
+}

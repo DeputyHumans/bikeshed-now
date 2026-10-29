@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -132,3 +132,3 @@
+     const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
+-    const publicEdit = visibility !== "private" && (patch.publicEdit ?? data.publicEdit) === true;
++    const publicEdit = (patch.publicEdit ?? data.publicEdit) === true;
+     const update: Record<string, unknown> = { visibility, publicEdit, updatedAt: stamp() };

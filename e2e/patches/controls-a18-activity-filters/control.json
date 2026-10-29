@@ -1,0 +1,13 @@
+{
+  "oracle": "A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view",
+  "what": "controls-a18-activity-filters",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Automation excludes human activity"
+  }
+}

@@ -1,0 +1,7 @@
+--- a/functions/src/lib/suggestions.ts
++++ b/functions/src/lib/suggestions.ts
+@@ -362,3 +362,3 @@
+     // cannot turn our completed change into another write or a false refusal.
+-    if (op === "revise" && revisionAttempted && s?.suggestion?.revisions?.some(revision => revision.operationId === revisionOperationId)) return { state: "pending" as SuggestionState };
++    if (op === "revise" && revisionAttempted && s?.suggestion?.revisions?.some(revision => revision.operationId === revisionOperationId)) void 0;
+     const refusal = currentVersionRefusal(head.data(), versionId);

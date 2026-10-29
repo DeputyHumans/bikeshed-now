@@ -87,7 +87,6 @@ const PRIVATE_FIELDS = [
   "ownerUid",
   "stats",
   "linkToken",
-  "marking",
   "draft",
   "folderId",
 ];
@@ -137,11 +136,15 @@ test("the projection carries render fields and nothing else", () => {
   assert.ok(p, "a public document is projected");
   assert.deepEqual(Object.keys(p).sort(), [
     "currentVersion",
+    "liveEpoch",
     "docId",
     "entry",
     "expiresAt",
     "forked",
     "format",
+    "fileCount",
+    "sourceEntry",
+    "marking",
     "publicEdit",
     "publishedAt",
     "slug",
@@ -162,11 +165,15 @@ test("the reader projection an unlisted document unlocks carries render fields a
   assert.ok(p, "an unlisted document has a reader projection");
   assert.deepEqual(Object.keys(p).sort(), [
     "currentVersion",
+    "liveEpoch",
     "docId",
     "entry",
     "expiresAt",
     "forked",
     "format",
+    "fileCount",
+    "sourceEntry",
+    "marking",
     "publicEdit",
     "slug",
     "title",
@@ -176,6 +183,16 @@ test("the reader projection an unlisted document unlocks carries render fields a
   ].sort());
   for (const field of PRIVATE_FIELDS) {
     assert.ok(!(field in p), `${field} leaked into the reader projection`);
+  }
+});
+
+test("reader projections carry only the bounded document marking, including explicit off", () => {
+  for (const [project, visibility] of [[projectPublicDoc, "public"], [projectReader, "unlisted"]]) {
+    const marking = { enabled: true, label: "OWNER", footer: "For {user}", privateNote: "never project" };
+    assert.deepEqual(project("d1", storedDoc({ visibility, marking })).marking,
+      { enabled: true, label: "OWNER", footer: "For {user}" }, "the reader receives the owner's export policy without extra fields");
+    assert.deepEqual(project("d1", storedDoc({ visibility, marking: { enabled: false, label: "old", footer: "old" } })).marking,
+      MARKING_OFF, "turning marking off is authoritative for every reader");
   }
 });
 
@@ -264,4 +281,11 @@ test("the projection carries the expiry, so a reader is told rather than shown n
     null,
     "a document with no expiry says so explicitly",
   );
+});
+
+test("reader projections carry the current live generation, defaulting older documents to initial", () => {
+  for (const visibility of ["public", "unlisted"]) {
+    assert.equal(projectReader("d1", storedDoc({ visibility, liveEpoch: "epoch-next" })).liveEpoch, "epoch-next");
+    assert.equal(projectReader("d1", storedDoc({ visibility })).liveEpoch, "initial");
+  }
 });

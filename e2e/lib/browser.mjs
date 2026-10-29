@@ -423,6 +423,7 @@ import {
 } from "./frame.mjs";
 import { colourPixels, pngPixels } from "./png.mjs";
 import { firestoreOrigin } from "./firestore-client.mjs";
+import { observeFirestoreContext, preserveFirestoreResponses } from "./firestore-channels.mjs";
 import { dummyMeasurementId, isMeasurementIdShape } from "./options.mjs";
 import { ledgerDoc, ledgerFolder } from "./seed.mjs";
 import { browserArgs } from "./browsers.mjs";
@@ -2119,6 +2120,7 @@ export class User {
       await root.pool.admitContexts(1);
       if (root.closed || root.pool.closed) throw new Error(`${root.name}: newTab: ${root.closed ? "the user was closed" : "the pool was closed"} while the tab waited for memory`);
       tab.page = await root.context.newPage();
+      if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1") await preserveFirestoreResponses(root.pool.target, root.context, tab.page);
     } catch (err) {
       root.tabs.splice(root.tabs.indexOf(tab), 1);
       throw err;
@@ -4812,6 +4814,7 @@ export class BrowserPool {
     await this.instrument(user, context);
     if (this.trace) await context.tracing.start({ screenshots: true, snapshots: true });
     user.page = await context.newPage();
+    if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1") await preserveFirestoreResponses(this.target, context, user.page);
     return user;
   }
 
@@ -4834,6 +4837,7 @@ export class BrowserPool {
 
   async instrument(user, context) {
     const target = this.target;
+    if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1") observeFirestoreContext(target, context);
     const log = user.log;
     await context.exposeBinding("__e2eToast", (source, toast) => {
       // Which page showed it, for a tab's waits (ONE PERSON IN TWO TABS); never serialised.

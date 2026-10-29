@@ -37,16 +37,21 @@ export function markGeneratedContainers(doc: Document): number {
   const scriptText = Array.from(doc.querySelectorAll("script"))
     .map((s) => s.textContent ?? "")
     .join("\n");
-  if (!scriptText.trim()) return 0;
+  // A shared-body adoption or typing can change which containers are empty.
+  // Reconcile stale hints as well as adding the ones newly materialised.
+  for (const el of Array.from(doc.querySelectorAll(`[${EMPTY_ATTR}]`))) {
+    if (!isEmptyContainer(el) || !scriptText.includes(el.id)) el.removeAttribute(EMPTY_ATTR);
+  }
 
   let marked = 0;
   for (const el of Array.from(doc.querySelectorAll("[id]"))) {
     if (!isEmptyContainer(el)) continue;
     if (!scriptText.includes(el.id)) continue;
-    el.setAttribute(EMPTY_ATTR, `#${el.id}`);
+    if (el.getAttribute(EMPTY_ATTR) !== `#${el.id}`) el.setAttribute(EMPTY_ATTR, `#${el.id}`);
     marked += 1;
   }
   if (marked > 0) ensurePlaceholderStyles(doc);
+  else doc.getElementById(EDIT_PLACEHOLDERS_ID)?.remove();
   return marked;
 }
 

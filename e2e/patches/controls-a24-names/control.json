@@ -1,0 +1,13 @@
+{
+  "oracle": "A modal close icon without a computed name must fail the Chrome accessibility-tree oracle.",
+  "what": "A modal close icon without a computed name must fail the Chrome accessibility-tree oracle.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.5c all 11 screens and 2 dialogs have AA text contrast, computed accessible names, and focus colour reserved for focused indicators",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "Chrome computes a nonempty accessible name"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "oracle": "^C8 cleanup:",
+  "what": "c08 candidate cleanup",
+  "target": {
+    "spec": "e2e/specs/concurrency/c08-mint-races.spec.mjs",
+    "case": "C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-mint-join"
+  ],
+  "expect": {
+    "message": "^C8 cleanup:"
+  }
+}

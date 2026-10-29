@@ -1,0 +1,16 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -37,2 +37,3 @@
+
++import { e2eAckTransaction } from "../lib/e2eAckTransaction";
+ import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
+@@ -406,3 +407,3 @@
+   try {
+-    await ctx.db.runTransaction(async (tx) => {
++    await e2eAckTransaction(ctx.db, docRef.id, "mcp-read", async (tx) => {
+       const before = await tx.get(viewRef);
+@@ -1649,3 +1650,3 @@
+       const receipt = freshReceiptId();
+-      await ctx.db.runTransaction(async (tx) => {
++      await e2eAckTransaction(ctx.db, ref.id, "mcp-comment", async (tx) => {
+         const current = await tx.get(ref);

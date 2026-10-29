@@ -1,0 +1,7 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -337,3 +337,3 @@
+     writeConfig({ ...readConfig(), origin: where, token, via: "paste" });
+-    out(flags.json, { origin: where, saved: CONFIG_PATH, via: "paste" }, () =>
++    out(false, { origin: where, saved: CONFIG_PATH, via: "paste" }, () =>
+       console.log(`\nSaved to ${CONFIG_PATH} (readable only by you).`),

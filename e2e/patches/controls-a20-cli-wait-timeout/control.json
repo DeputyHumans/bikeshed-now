@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7j changes --json: --since is required; `all` reads what another credential caused, with quote and body; a quiet cursor comes back unchanged; another document's cursor is refused; --wait --timeout on a quiet cursor exits 3 with the cursor; --wait returns 0 with what arrived after its first check, at least --interval 30 s in",
+  "what": "cli wait timeout",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7j changes --json: --since is required; `all` reads what another credential caused, with quote and body; a quiet cursor comes back unchanged; another document's cursor is refused; --wait --timeout on a quiet cursor exits 3 with the cursor; --wait returns 0 with what arrived after its first check, at least --interval 30 s in",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "--wait that times out exits 3"
+  }
+}

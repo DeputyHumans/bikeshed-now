@@ -1,0 +1,18 @@
+{
+  "oracle": "^I3:",
+  "what": "c04 atomic seed",
+  "target": {
+    "spec": "e2e/specs/concurrency/c04-first-join.spec.mjs",
+    "case": "C4 simultaneous first join, client gate: N editors held at join-before-bind after an empty log.ready() and released together; the v1 body is once on every peer (I3) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-mint-join",
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^I3:"
+  }
+}

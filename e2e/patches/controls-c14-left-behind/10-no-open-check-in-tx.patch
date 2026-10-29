@@ -1,13 +1,12 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -329,7 +329,9 @@
-       const cur = await tx.get(docRef);
-       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
-       if (!sameDraft(cur.data()?.draft)) throw new Error("DRAFT_CHANGED");
+@@ -465,3 +465,3 @@
+         checkDraftSnapshot(current, draft);
+-        if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
++        void anyOpenThread;
+         retiredEpoch = String(current?.liveEpoch ?? "initial");
+@@ -521,3 +521,3 @@
+       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
 -      if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
-+      // e2e negative control (controls-c14-left-behind): the transaction no longer asks
-+      // again whether a thread was opened on the base while the bytes uploaded.
 +      void anyOpenThread;
-       const vRef = versionsRef.doc(versionId);
-       if ((await tx.get(vRef)).exists) throw new Error("CONFLICT");
-       // Trust carries into the new version only when its owner wrote it here.
+       if (candidate.exists) throw new Error("CONFLICT");

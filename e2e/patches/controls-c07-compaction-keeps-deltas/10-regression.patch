@@ -1,0 +1,11 @@
+--- a/app/src/crdt/log.ts
++++ b/app/src/crdt/log.ts
+@@ -171,7 +171,7 @@
+     const consumed = [...seen].filter((key) => key !== SEED_KEY);
+     try {
+       const payload = toBase64(Y.encodeStateAsUpdate(doc));
+-      if (payload.length > LOG_ENTRY_MAX) return;
++      if (payload.length > LOG_ENTRY_MAX) { await log.remove(consumed); return; }
+       const merged = await log.append(payload);
+       if (!merged) return;
+       seen.add(merged); payloads.set(merged, payload);

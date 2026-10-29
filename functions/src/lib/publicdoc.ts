@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { earlierEnd, expiryMs, folderAccess, visibilityOf, type DocAclData, type ReadAccess } from "./acl";
 import { folderOfDoc } from "./reach";
+import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
 
@@ -40,12 +41,19 @@ export interface ReaderDoc {
   title: string;
   slug: string;
   currentVersion: string;
+  /** Generation for authorized live editors; no session identity is exposed. */
+  liveEpoch: string;
   entry: string;
   format: "html" | "markdown";
+  /** Download choices for this version, without exposing its private record. */
+  sourceEntry: string | null;
+  fileCount: number;
   visibility: "unlisted" | "public";
   publicEdit: boolean;
   /** Needed so an anonymous reader's iframe is sandboxed the same way (SPEC §6c). */
   trusted: boolean;
+  /** The owner's export policy is the same for members and other readers (SPEC §20). */
+  marking: Marking;
   /**
    * Epoch milliseconds, or null. Carried so an anonymous reader is TOLD the
    * document expired rather than shown an empty frame.
@@ -86,11 +94,15 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "title",
   "slug",
   "currentVersion",
+  "liveEpoch",
   "entry",
   "format",
+  "sourceEntry",
+  "fileCount",
   "visibility",
   "publicEdit",
   "trusted",
+  "marking",
   "expiresAt",
   "viaFolder",
   "forked",
@@ -147,13 +159,17 @@ export function projectReader(
       slug: typeof data.slug === "string" ? data.slug : docId,
       currentVersion:
         typeof data.currentVersion === "string" ? data.currentVersion : "",
+      liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial",
       entry: typeof data.entry === "string" ? data.entry : "index.html",
       format: data.format === "markdown" ? "markdown" : "html",
+      sourceEntry: typeof data.sourceEntry === "string" ? data.sourceEntry : null,
+      fileCount: typeof data.fileCount === "number" && Number.isSafeInteger(data.fileCount) && data.fileCount > 0 ? data.fileCount : 1,
       visibility,
       // Open editing is the document's own setting for its own readers, and
       // never reaches anyone through a folder.
       publicEdit: !reach && data.publicEdit === true,
       trusted: data.trusted !== false,
+      marking: resolveMarking(data.marking),
       expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,
       viaFolder: reach !== null,
       forked: data.forked === true,
@@ -195,20 +211,26 @@ export function projectPublicDoc(
 async function withVersionFields(
   docRef: admin.firestore.DocumentReference,
   data: Record<string, unknown>,
+  tx?: admin.firestore.Transaction,
 ): Promise<Record<string, unknown>> {
   const versionId =
     typeof data.currentVersion === "string" ? data.currentVersion : "";
   let entry = "index.html";
   let format: "html" | "markdown" = "html";
+  let sourceEntry: string | null = null;
+  let fileCount = 1;
   if (versionId) {
-    const vSnap = await docRef.collection("versions").doc(versionId).get();
+    const versionRef = docRef.collection("versions").doc(versionId);
+    const vSnap = tx ? await tx.get(versionRef) : await versionRef.get();
     if (vSnap.exists) {
       const v = vSnap.data() || {};
       if (typeof v.entry === "string") entry = v.entry;
       if (v.format === "markdown") format = "markdown";
+      if (typeof v.sourceEntry === "string") sourceEntry = v.sourceEntry;
+      if (Number.isSafeInteger(v.fileCount) && v.fileCount > 0) fileCount = v.fileCount;
     }
   }
-  return { ...data, entry, format };
+  return { ...data, entry, format, sourceEntry, fileCount };
 }
 
 /** The reader projection of a stored document, as POST /unlock returns it. */
@@ -228,25 +250,15 @@ export async function readerProjection(
 export async function syncPublicProjection(db: Db, docId: string): Promise<void> {
   const docRef = db.collection("docs").doc(docId);
   const publicRef = db.collection("public").doc(docId);
-  const snap = await docRef.get();
-  if (!snap.exists) {
-    await publicRef.delete();
-    return;
-  }
-  const data = snap.data() || {};
-  // Only a public folder entry that has not ended counts: one that has is not
-  // mirrored at all, and one that ends later is described by its date.
-  const reach =
-    visibilityOf(data as DocAclData) === "public"
-      ? null
-      : reachOfAccess(folderAccess(await folderOfDoc(db, data as DocAclData), null, Date.now()));
-  const projection =
-    visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public"
-      ? projectPublicDoc(docId, await withVersionFields(docRef, data), reach)
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const data = snap.data() || {};
+    const reach = visibilityOf(data as DocAclData) === "public" ? null
+      : reachOfAccess(folderAccess(await folderOfDoc(db, data as DocAclData, tx), null, Date.now()));
+    const projection = snap.exists && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
+      ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx), reach)
       : null;
-  if (!projection) {
-    await publicRef.delete();
-    return;
-  }
-  await publicRef.set(projection);
+    if (projection) tx.set(publicRef, projection);
+    else tx.delete(publicRef);
+  });
 }

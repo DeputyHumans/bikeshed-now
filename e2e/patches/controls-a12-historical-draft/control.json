@@ -1,0 +1,13 @@
+{
+  "oracle": "restoring v1 publishes v3",
+  "what": "Restore cross-history deduplication in functions/src/lib/draft.ts",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.4 restoring historical bytes publishes a new current version through commit, MCP, upload and the editor without changing history",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "restoring v1 publishes v3"
+  }
+}

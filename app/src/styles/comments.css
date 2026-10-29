@@ -168,7 +168,7 @@
   font-size: var(--fs-small);
 }
 
-@media (max-width: 860px) {
+@media screen and (max-width: 860px) {
   .comments-panel {
     border-left: 0;
     border-top: 1px solid var(--color-line);
@@ -199,6 +199,6 @@
   color: var(--color-accent-strong);
   font-weight: 620;
 }
-@media (max-width: 860px) {
+@media screen and (max-width: 860px) {
   .pane-toggle { display: inline-flex; }
 }

@@ -1,0 +1,21 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -368,7 +368,6 @@
+   .viewer-toolbar,
+   .viewer-banners,
+   .comments-panel,
+-  .consent,
+   .slide-rail,
+   .slide-overview,
+   .selection-fab,
+--- a/app/src/styles/consent.css
++++ b/app/src/styles/consent.css
+@@ -181,7 +181,3 @@
+ /* Nobody's printed copy of somebody else's document should carry our cookie
+    notice. */
+-@media print {
+-  .consent {
+-    display: none;
+-  }
+-}
++/* regression: the consent notice remains on paper. */

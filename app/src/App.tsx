@@ -7,6 +7,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 import { useAuth } from "./auth";
 import { AddressNotice, signingInLabel } from "./components/AddressNotice";
 import { initAnalytics, logPageView } from "./analytics";
+import { useAccountPreferences } from "./accountPreferences";
 import { CookieConsent } from "./components/CookieConsent";
 import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
@@ -47,12 +48,12 @@ function useHeaderHeightVar() {
 /** Log route changes as PATTERNS. Never the concrete path (SPEC §15). */
 function useRouteAnalytics() {
   const location = useLocation();
+  const preferencesReady = useAccountPreferences();
   useEffect(() => {
+    if (!preferencesReady) return;
     initAnalytics();
-  }, []);
-  useEffect(() => {
     logPageView(location.pathname);
-  }, [location.pathname]);
+  }, [location.pathname, preferencesReady]);
 }
 
 /**

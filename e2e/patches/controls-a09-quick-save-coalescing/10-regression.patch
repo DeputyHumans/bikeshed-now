@@ -1,0 +1,21 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -97,8 +97,5 @@
+     if (!doc || mode.kind !== "editing" || !readyRef.current) return false;
+-    if (timer.current) {
+-      clearTimeout(timer.current);
+-      timer.current = null;
+-    }
++
+     const currentSession = session.current;
+-    if (inFlight.current?.session === currentSession) return inFlight.current.promise;
++
+     const flight = { session: currentSession, promise: Promise.resolve(false) };
+@@ -109,6 +106,3 @@
+         // This ordered drain owns that edit now; the timer must not save it again.
+-        if (timer.current) {
+-          clearTimeout(timer.current);
+-          timer.current = null;
+-        }
++
+         setSaveState("saving");

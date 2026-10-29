@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -24,5 +24,5 @@
+-
++
+ const AUTOSAVE_MS = 1000;
+-const DONE_TIMEOUT_MS = 30_000;
++const DONE_TIMEOUT_MS = 90_000;
+-
++
+ /**

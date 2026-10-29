@@ -143,20 +143,11 @@
  *        allow. It is judged only where the database enforces the tree's
  *        rules (rtdbRulesStatus, live; S31); elsewhere the case FAILS its
  *        precondition, as A9.8 does.
- *   C12d co-editor (S8's other side, class Q, recorded): as C12d, but p2
- *        stays in the editor and types without pause through p1's commit and
- *        3 s past it. Oracles: "Published v2.", and v2 and the next editor
- *        show the sentinel once (I3). Recorded: where p2's keys begun after
- *        p1's pre-commit save end up (v2; p2's page, whose edit frame the app
- *        remounts on v2 because the editing mode follows doc.currentVersion,
- *        DocViewer.tsx:208-211, and the base its own next save goes on; the
- *        live log; what the next editor sees; the draft its first keystroke
- *        saves): the evidence G1 needs to choose between dropping the log on
- *        commit (those keys lost) and keeping it (unpublished keys kept as
- *        the next draft). No SPEC sentence says which base a co-editor's
- *        open editor saves on once a version is published (§16 keeps the
- *        stale 409 for "somebody PUBLISHED a new version while you were
- *        editing"), so that is recorded, never judged.
+ *   C12d co-editor retains the original typing-through-publication measurement.
+ *        The deterministic recovery case separately holds a late save before
+ *        publication and asserts SPEC §16: the old editor keeps its local text
+ *        and base, the server refuses its save, and only explicit Reload draft
+ *        opens the new base. No automatic remount may carry late keys into v2.
  *
  * The three gated cases need both amplify sets (their callers pass the gate
  * service by when unarmed), and C12a's probe needs amplify-c12-update:
@@ -183,6 +174,10 @@
  * mirror is missing (S16) is INCONCLUSIVE.
  */
 
+import { readLiveLogsPatient } from "../../lib/live-log.mjs";
+import { assertCasWinner, assertCasCandidateOutcome } from "../../lib/cas-candidate-oracles.mjs";
+import { publicationSnapshot } from "../../lib/publication-oracles.mjs";
+import { presenceModes } from "../../lib/presence.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
 import { createHash } from "node:crypto";
@@ -192,7 +187,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readDoc, readObject, watchRtdb } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, watchRtdb } from "../../lib/admin.mjs";
 import { grepLog, logFile, logMark } from "../../lib/logs.mjs";
 import { DATABASE_LOG, drainDatabaseLog } from "../../lib/debuglogs.mjs";
 import { rtdbRulesStatus } from "../../lib/rtdb.mjs";
@@ -569,7 +564,7 @@ async function fireTogether(ctx, requests, label) {
 // --- the server's state -----------------------------------------------------------------------
 
 /** status/{d}/y read as the emulator's admin, read again through the Database's 503 for 5 s (past that, the stack did not answer: INCONCLUSIVE). */
-const readLog = (docId) => rtdbGetPatient(target, `status/${docId}/y`);
+const readLog = (docId) => readLiveLogsPatient(target, docId);
 
 const entriesOf = (y) => (y && typeof y === "object" ? Object.keys(y).length : 0);
 
@@ -583,6 +578,32 @@ async function logEntriesAfter(docId, timeoutMs = LOG_EMPTY_MS) {
   }
 }
 
+// Keep concrete snapshot paths after the metadata selecting them is removed.
+// Reading only the current pointer would turn a failed cleanup into an empty,
+// vacuously passing inventory.
+const retiredDraftPrefixes = new Map();
+function rememberDraft(docId, draft) {
+  if (!draft) return;
+  let prefixes = retiredDraftPrefixes.get(docId);
+  if (!prefixes) retiredDraftPrefixes.set(docId, prefixes = new Set());
+  prefixes.add(draftStoragePrefix(docId, draft));
+}
+async function draftObjects(docId, draft, versions) {
+  rememberDraft(docId, draft);
+  const prefixes = retiredDraftPrefixes.get(docId) ?? new Set();
+  const lists = await Promise.all([...prefixes].map((prefix) => listObjects(target, `${prefix}/`)));
+  const referenced = versions.map((version) => `${version.storagePrefix ?? `docs/${docId}/${version.id}`}/`);
+  const bundles = await listObjects(target, `docs/${docId}/bundles/`);
+  // A rejected save may have allocated its immutable snapshot without ever
+  // returning metadata. Inventory those unreferenced objects as well.
+  const unreferenced = bundles.filter((name) => !referenced.some((prefix) => name.startsWith(prefix)));
+  return [...new Set([...lists.flat(), ...unreferenced])].sort();
+}
+async function versionPrefix(docId, versionId) {
+  const meta = await readDoc(target, `docs/${docId}/versions/${versionId}`);
+  return meta ? (meta.storagePrefix ?? `docs/${docId}/${versionId}`) : null;
+}
+
 /** What an update leaves behind: the pointer, the draft record, the version records, the draft's objects, the log's size. */
 async function serverState(docId) {
   const d = await readDoc(target, `docs/${docId}`);
@@ -591,7 +612,7 @@ async function serverState(docId) {
     currentVersion: d?.currentVersion ?? null,
     draft: d?.draft ? { baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null } : null,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${v.publishedVia}`),
-    draftObjects: await listObjects(target, `docs/${docId}/draft`),
+    draftObjects: await draftObjects(docId, d?.draft, versions),
     yEntries: entriesOf(await readLog(docId)),
   };
 }
@@ -651,11 +672,15 @@ const millis = (ts) => (ts && typeof ts.toMillis === "function" ? ts.toMillis() 
  */
 async function footprint(docId) {
   const from = Date.now();
-  const [d, versions, objects, v2] = await Promise.all([
+  const [d, versions, v2Prefix] = await Promise.all([
     readDoc(target, `docs/${docId}`),
     readVersions(target, docId),
-    listObjects(target, `docs/${docId}/draft`, { meta: true }),
-    listObjects(target, `docs/${docId}/v2/`),
+    versionPrefix(docId, "v2"),
+  ]);
+  rememberDraft(docId, d?.draft);
+  const [objects, v2] = await Promise.all([
+    d?.draft ? listObjects(target, `${draftStoragePrefix(docId, d.draft)}/`, { meta: true }) : [],
+    v2Prefix ? listObjects(target, `${v2Prefix}/`) : [],
   ]);
   return {
     from,
@@ -663,7 +688,7 @@ async function footprint(docId) {
     currentVersion: d?.currentVersion ?? null,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${v.publishedVia}`),
     v2Objects: v2.length,
-    draft: d?.draft ? { baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null, bytes: d.draft.bytes ?? null, updatedAt: millis(d.draft.updatedAt) } : null,
+    draft: d?.draft ? { storagePrefix: draftStoragePrefix(docId, d.draft), baseVersion: d.draft.baseVersion ?? null, entry: d.draft.entry ?? null, bytes: d.draft.bytes ?? null, updatedAt: millis(d.draft.updatedAt) } : null,
     objects,
   };
 }
@@ -772,7 +797,7 @@ async function realtimeRules(ctx) {
 /** status/{d}/peers as {uid: mode}; `retryMs` as rtdbGetPatient's (0: a 503 throws at once). */
 async function peerModes(docId, { retryMs } = {}) {
   const peers = (await rtdbGetPatient(target, `status/${docId}/peers`, retryMs === undefined ? {} : { retryMs })) ?? {};
-  return Object.fromEntries(Object.entries(peers).map(([uid, p]) => [uid, p?.mode ?? null]));
+  return presenceModes(peers);
 }
 
 const editorsIn = (modes) => Object.entries(modes).filter(([, m]) => m === "edit").map(([uid]) => uid);
@@ -958,7 +983,8 @@ async function publishedEntry(docId, versionId, entry) {
 
 /** An editor's GET /draft serves `versionId`'s stored entry. */
 async function judgeDraftServed({ label, http, docId, entry, versionId, forbidden = [] }) {
-  const stored = await publishedEntry(docId, versionId, entry);
+  const prefix = await versionPrefix(docId, versionId);
+  const stored = prefix ? await readObject(target, `${prefix}/${entry}`) : null;
   const got = await draftServed(http, docId, entry);
   const whose = stored && got.sha === sha(stored) ? `${versionId}'s entry` : forbidden.find((m) => got.text.includes(m)) ? `a replaced draft (${forbidden.find((m) => got.text.includes(m))})` : got.text.includes(`>${V1_HEADING}<`) ? "v1's content" : "something else";
   assert.ok(got.status === 200 && stored && got.sha === sha(stored), `${label} GET /draft: an editor's GET /draft serves the agent's version (${versionId}'s stored entry) — it answered ${got.status} with ${whose}`);
@@ -1141,7 +1167,8 @@ scenario("C12a agent update vs editors: while N editors type in the editor, the 
   });
   const mid = await serverState(docId);
   ctx.ev.json("after-refusal", mid);
-  const uploaded = await listObjects(target, `docs/${docId}/v2/`);
+  const v2Prefix = await versionPrefix(docId, "v2");
+  const uploaded = v2Prefix ? await listObjects(target, `${v2Prefix}/`) : [];
   await o.check(() => assert.ok(mid.currentVersion === "v1" && mid.versions.length === 1 && uploaded.length === 0, `C12a nothing minted (after the settle): a refused update mints and uploads nothing — current ${mid.currentVersion}, versions ${JSON.stringify(mid.versions)}, ${uploaded.length} object(s) under docs/{d}/v2/`));
   await o.check(() => assert.ok(mid.draft?.baseVersion === "v1" && mid.draftObjects.length > 0 && mid.yEntries > 0, `C12a left alone (after the settle): the draft and its log are still there (draft ${JSON.stringify(mid.draft)}, ${mid.draftObjects.length} draft object(s), ${mid.yEntries} log entries)`));
   verdict({ others: o });
@@ -1199,6 +1226,7 @@ async function curlSetup(ctx, label) {
 /** A curl editor's POST /draft on `baseVersion` with its own marker → {name, status, json}. */
 async function curlSave(e, docId, baseVersion) {
   const r = await e.http.postJson("/draft", { docId, baseVersion, html: curlDraft(e.mark) }, { timeoutMs: HTTP_MS });
+  if (r.status === 200) rememberDraft(docId, r.json?.draft);
   return { name: e.name, status: r.status, json: r.status === 200 ? { baseVersion: r.json?.draft?.baseVersion ?? null } : r.json ?? null };
 }
 
@@ -1245,13 +1273,17 @@ scenario("C12b curl-only drafts vs the agent's update (SYNC-T): N−1 editors' P
     toolRequest(s.agent.token, "update_document", { id: s.docId, content: agentContent(markA), baseVersion: "v1" }, 1),
   ], "C12b drafts and update");
   const drafts = run.results.slice(0, s.editors.length).map((r, i) => ({ name: s.editors[i].name, ...jsonRow(r) }));
+  for (const draft of drafts) if (draft.status === 200) rememberDraft(s.docId, draft.json?.draft);
   const upd = toolRow(run.results.at(-1), 1);
   ctx.ev.json("answers", { drafts, update: upd });
   ctx.step(`drafts: ${drafts.map((d) => `${d.name} ${d.status}`).join(", ")}; update_document: ${upd.kind}${upd.json?.versionId ? ` ${upd.json.versionId}` : ""}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12b race", drafts: drafts.map((d) => d.status), update: upd.kind });
-  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && (d.json?.error === DRAFT_STALE || d.json?.error === `Historical versions are read-only. Read the latest version (${d.json?.currentVersion}) before making changes.`)));
+  // Non-causal saves also refuse when another editor replaces the snapshot
+  // before this save commits. This is a safe refusal, not a successful save;
+  // the published version, retired files and next-reader checks still run.
+  const odd = drafts.filter((d) => d.status !== 200 && !(d.status === 409 && (d.json?.error === DRAFT_STALE || d.json?.error === `Historical versions are read-only. Read the latest version (${d.json?.currentVersion}) before making changes.` || (d.json?.draftChanged === true && d.json?.error === "The draft changed while this request was running. Retry with the current draft."))));
   if (odd.length) {
-    const err = new Error(`a curl draft was answered neither 200 nor the stale 409: ${JSON.stringify(odd)}`);
+    const err = new Error(`a curl draft was answered neither 200 nor a recognized stale-version or concurrent-snapshot 409: ${JSON.stringify(odd)}`);
     err.code = "E2E_C12_DRAFT";
     throw err;
   }
@@ -1485,7 +1517,7 @@ async function c12cRace(ctx, { gated }) {
   await own.check(() => judgeAgentView(view, { label, mark: markA, who: p1.name }));
   // Recorded, not judged: whether one keystroke of the next editor saves what it was shown as the draft of the new version.
   const probe = await p1.typeAndAutosave(idSelector(paragraph(0)), log.next(p1.name, paragraph(0)), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const saved = (await readObject(target, `${(await readDoc(target, `docs/${docId}`)).draft?.storagePrefix ?? `docs/${docId}/draft`}/${await v1Entry(docId)}`))?.toString("utf8") ?? "";
+  const saved = (await readDraftObject(target, docId, await v1Entry(docId)))?.toString("utf8") ?? "";
   const savedIs = saved.includes(markA) ? "the agent's version" : saved.includes(`>${V1_HEADING}<`) ? "v1's content (the update reverted)" : saved ? "something else" : "absent";
   ctx.step(`OBSERVED: ${p1.name} types one token; its autosave answered ${probe.status} on ${probe.body?.draft?.baseVersion ?? "?"}, and the draft of ${v} now holds ${savedIs}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: `${label} keystroke`, status: probe.status, base: probe.body?.draft?.baseVersion ?? null, draftHolds: savedIs });
@@ -1496,12 +1528,11 @@ scenario("C12c race (SYNC-P, amplify-c08-mint-races): the agent's update passes 
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c08-mint-races"],
   n: [2, 5, 10, 20],
-  defect: "X-c12-agent-vs-editors-1",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
   const own = await c12cRace(ctx, { gated: true });
-  verdict({ defect: "X-c12-agent-vs-editors-1", others: oracleSet(), own });
+  verdict({ others: oracleSet(), own });
 }));
 
 scenario("C12c race serial positive control: the same update first, then the same editors opening the editor, typing, saving and leaving; the next editor to open the editor sees the agent's version", {
@@ -1536,14 +1567,13 @@ function judgeS8(docId, { yBefore, left, refused, label }) {
   assert.equal(
     left.n,
     0,
-    `${label} S8, a SPEC QUESTION (class Q), not a SPEC violation: status/${docId}/y still holds ${left.n} entries ${(left.ms / 1000).toFixed(1)} s after "Published v2." (it held ${yBefore}; the committing page logged ${refused} refused write(s) to it). The app's clearLog (app/src/pages/DocViewer.tsx:580, app/src/crdt/rtdb.ts:69-76) removes the whole node, which the realtime rules refuse (database.rules.json allows writes per entry only), so the published draft's log outlives the commit. The app means to clear it (DocViewer.tsx:576-579); the nearest SPEC sentence is §16 spec.md:1556 "The log belongs to the draft.", and no SPEC sentence requires the in-app commit to drop the log`,
+    `${label} S8: the applied live log is empty within 2 s of publishing after every co-editor left; status/${docId}/y still holds ${left.n} entries after ${left.ms} ms`,
   );
 }
 
 scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, p1 presses Save as new version: \"Published v2.\", the draft's record and objects are gone, v2 holds every token once (I2) and the sentinel once (I3), and the next editor sees v2; then the agent's update publishes v3, the live log is empty within 2 s and the next editor sees the agent's version. Own oracle (S8, class Q, a SPEC question): the live log is empty within 2 s of \"Published v2.\"", {
   tiers: BOTH,
   n: [2, 5, 10, 20],
-  defect: "S8",
   timeoutMs: CASE_MS,
   ...LIVE,
 }, async (ctx) => guarded(ctx, async () => {
@@ -1566,7 +1596,11 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   const yBefore = entriesOf(await readLog(docId));
   const consoleMark = p1.log.console.length;
   ctx.step(`${p1.name} presses Save as new version (the live log holds ${yBefore} entries)`);
+  rememberDraft(docId, (await readDoc(target, `docs/${docId}`))?.draft);
+  const commitDrafts = p1.capture({ paths: "/draft" });
   const saved = await p1.saveAsNewVersion({ timeout: HTTP_MS });
+  commitDrafts.stop();
+  for (const row of commitDrafts) if (row.status === 200) rememberDraft(docId, row.json?.draft);
   // S8's own oracle counts from the toast, read while presence catches up.
   const leftP = settled(logLeftWithin(docId, LOG_EMPTY_MS));
   ctx.step(`${p1.name}: ${saved.outcome} "${saved.text}"`);
@@ -1591,7 +1625,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(state.currentVersion === "v2" && state.versions.includes("v2<v1:editor"), `C12d version: v2 is current, minted on v1 by the editor (${JSON.stringify(state.versions)}, current ${state.currentVersion})`));
   await o.check(() => judgeDraftDropped(state, { label: "C12d", versionId: "v2" }));
   const parser = await ctx.users.parser();
-  const v2html = (await publishedEntry(docId, "v2", entry))?.toString("utf8") ?? "";
+  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
   await o.check(async () => assertInvariant(checkI2({ peers: { v2: await segmentsOfHtml(parser, v2html, ids) }, typed: log.typed })));
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1602,7 +1636,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(view.i3.sentinels === 1 && view.i3.children === baseline.children && view.heading === V1_HEADING, `C12d next editor: ${p2.name} sees v2 (sentinel ${view.i3.sentinels} time(s), ${view.i3.children} top-level element(s) for v2's ${baseline.children}, heading ${JSON.stringify(view.heading)})`));
   await p2.done({ timeout: 60_000 });
   await nobodyEditing(ctx, docId, `${p2.name} pressed Done`);
-  if (o.failed.length) verdict({ defect: "S8", others: o, own });
+  if (o.failed.length) verdict({ others: o, own });
 
   const markA = marker("A");
   const out = await agentUpdate(agent, docId, agentContent(markA), "v2");
@@ -1612,7 +1646,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o2.check(() => judgeLogDropped(docId, { label: "C12d", what: "the agent's update after the in-app commit" }));
   await o2.check(async () => judgeDraftDropped(await serverState(docId), { label: "C12d", versionId: v }));
   await o2.check(async () => judgeAgentView(await editorView(ctx, p1, docId), { label: "C12d", mark: markA, noTokens: true, who: p1.name }));
-  verdict({ defect: "S8", others: merged(o, o2), own });
+  verdict({ others: merged(o, o2), own });
   // As A9.8: without the tree's rules the remove is allowed and S8's oracle proves nothing (S31).
   if (!rules.ok) precondition(false, `the realtime rules are enforced where the commit cleared the log, or the remove is allowed and S8's oracle proves nothing (S31): ${rules.reason}`);
 }));
@@ -1646,8 +1680,8 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   if (!two.ok) ctx.inconclusive(`the sync precondition did not hold: presence never showed p1 and p2 alone in the editor (${JSON.stringify(two.modes)})`);
   const yBefore = entriesOf(await readLog(docId));
   const p1Drafts = p1.capture({ paths: "/draft" });
-  // p2's edit frame loads: the editing mode follows doc.currentVersion (app/src/pages/DocViewer.tsx:208-211), so a new
-  // version remounts it on that version (frameMode.ts frameKey) — recorded, with the base its next save goes on.
+  // Retain the historical measurement; the separate recovery case asserts
+  // that publication cannot remount this open editor onto a different base.
   const p2Loads = p2.capture({ paths: /^\/draft\//, method: "GET" });
   const consoleMark = p1.log.console.length;
 
@@ -1701,19 +1735,23 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const left = leftR.value;
   const refused = refusedRemoves(p1, docId, consoleMark);
   ctx.step(`${p2.name}'s autosave after its last key (recorded: its status and the base it went on); then its own page's text; then it presses Done`);
-  // Recorded, not judged. No SPEC sentence says which base a co-editor's open editor saves on once a version is published:
-  // SPEC §16 keeps the stale 409 for "somebody PUBLISHED a new version while you were editing", and the app instead
-  // remounts the editor on the new version (DocViewer.tsx:208-211), so the next save goes on it.
+  // Natural-race timing remains diagnostic; the controlled recovery case
+  // below asserts refusal and explicit reload without depending on key timing.
   const p2Save = await p2.waitForAutosave({ after: rows.at(-1).end, timeout: 60_000, expectStatus: null }).catch((err) => ({ status: null, body: null, error: String(err?.message ?? err).slice(0, 300) }));
   const p2Text = await (await p2.frame()).evaluate(bodyText).catch(() => null);
   p2Loads.stop();
   // From the press: the page sees the new version (and remounts) before this process sees the toast.
   const remounts = p2Loads.filter((r) => r.t >= pressAt).map((r) => ({ afterPublishedMs: r.t - publishedAt, status: r.status, url: r.url.replace(/^.*\/draft\//, "/draft/") }));
+  if (p2Save.status === 409) {
+    ctx.step(`${p2.name}'s retained old-base snapshot was refused; explicitly reload before leaving the editor`);
+    await p2.page.getByRole("button", { name: "Reload draft", exact: true }).click({ timeout: 15_000 });
+    await p2.awaitEdit({ waitShared: true, timeout: 90_000 });
+  }
   await p2.done({ timeout: 60_000 });
   await nobodyEditing(ctx, docId, `${p1.name} published and ${p2.name} pressed Done`);
   const yLeft = entriesOf(await readLog(docId));
 
-  const v2html = (await publishedEntry(docId, "v2", entry))?.toString("utf8") ?? "";
+  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
   const parser = await ctx.users.parser();
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1723,7 +1761,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const view = await editorView(ctx, next, docId);
   await o.check(() => assert.ok(view.i3.sentinels === 1 && view.i3.children === baseline.children, `C12d co-editor next editor: ${next.name} sees the sentinel once and v2's ${baseline.children} top-level elements (sentinel ${view.i3.sentinels} time(s), ${view.i3.children} element(s))`));
   const probe = await next.typeAndAutosave(idSelector(paragraph(users.indexOf(next))), log.next(next.name, paragraph(users.indexOf(next))), { delay: KEY_DELAY_MS, timeout: 30_000, expectStatus: null });
-  const draftNow = (await readObject(target, `${(await readDoc(target, `docs/${docId}`)).draft?.storagePrefix ?? `docs/${docId}/draft`}/${entry}`))?.toString("utf8") ?? "";
+  const draftNow = (await readDraftObject(target, docId, entry))?.toString("utf8") ?? "";
 
   const count = (text) => (text == null ? null : late.filter((r) => text.includes(r.token)).length);
   const where = {
@@ -1746,11 +1784,145 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   const fate =
     where.inV2 === 0 && where.nextEditorSees === late.length && where.draftOfV2Holds === late.length
       ? `kept as unpublished text: in no version, but in the draft of v2${p2Save.status === 200 && where.p2SaveAfterCommit.base === "v2" ? ` (${p2.name}'s own editor, remounted on v2, saved them there)` : ""} and in what the next editor sees`
-      : where.nextEditorSees === 0 && where.draftOfV2Holds === 0
-        ? "lost: in no version, no draft and nothing the next editor sees"
-        : "split";
+      : where.nextEditorSees === 0 && where.draftOfV2Holds === 0 && where.inP2Page > 0
+        ? "retained in the stale editor until its explicit reload, without crossing into the new draft"
+        : where.nextEditorSees === 0 && where.draftOfV2Holds === 0
+          ? "absent from the version, local editor and next draft"
+          : "split";
   ctx.step(`RECORDED (S8's other side, class Q): of ${late.length} token(s) ${p2.name} began after the pre-commit save, v2 holds ${where.inV2}, ${p2.name}'s page held ${where.inP2Page} (its edit frame loaded ${remounts.length} time(s) after the press), its own next save answered ${p2Save.status} on ${where.p2SaveAfterCommit.base}; the live log held ${left.n} entries ${(left.ms / 1000).toFixed(1)} s after "Published" and ${yLeft} once ${p2.name} left; ${next.name} sees ${where.nextEditorSees} and its first keystroke (${probe.status} on ${where.nextKeystroke.base}) left ${where.draftOfV2Holds} in the draft of v2: ${fate}`);
   ctx.t.diagnostic(`C12d co-editor N=${n}: ${late.length} late token(s): v2 ${where.inV2}, next editor ${where.nextEditorSees}, draft of v2 ${where.draftOfV2Holds} (${fate}); y ${yBefore} → ${left.n} → ${yLeft}`);
   measure(ctx, "c12-agent-vs-editors", { scenario: "C12d co-editor", ...where, p2FrameLoadsAfterCommit: remounts.length, p2SaveAfterCommit: `${p2Save.status}@${where.p2SaveAfterCommit.base}`, fate });
   verdict({ others: o });
 }));
+
+scenario("C12d co-editor recovery: publishing retires the open editor's base without remounting or losing local late text; its save is refused until explicit reload", {
+  tiers: BOTH, n: [2, 5, 10, 20], timeoutMs: CASE_MS, ...LIVE,
+}, async (ctx) => guarded(ctx, async () => {
+  const { docId, users } = await joinShared(ctx, { n: ctx.n, fixture: FIXTURE, title: `C12d explicit recovery N=${ctx.n}` });
+  const log = tokenLog(target.runId);
+  const [publisher, peer] = users;
+  await typeOneEach(users, log);
+  await settleFirst(users, docId);
+  for (const u of users.slice(2)) await u.done({ timeout: 60_000 });
+  const late = log.next(peer.name, paragraph(1));
+  const loads = peer.capture({ paths: /^\/draft\//, method: "GET" });
+  const saves = peer.capture({ paths: "/draft" });
+  // Hold actual outgoing requests, never their answers: the publication uses
+  // the already saved snapshot while the peer owns a newer unsaved local edit.
+  const heldCommit = await publisher.delayRequests("/commit", { rules: [() => new Promise(() => {})], maxMs: 120_000 });
+  const heldDrafts = await Promise.all([publisher, peer].map((u) => u.delayRequests("/draft", {
+    rules: Array.from({ length: 10 }, () => () => new Promise(() => {})),
+    match: ({ postJson }) => String(postJson?.html ?? "").includes(late), maxMs: 120_000,
+  })));
+  const publication = settled(publisher.saveAsNewVersion({ timeout: HTTP_MS }));
+  try {
+    await eventually(() => heldCommit.seen() > 0, { timeout: 60_000, message: "the publisher has saved and is about to commit" });
+    await peer.typeInFrame(idSelector(paragraph(1)), late, { delay: KEY_DELAY_MS, at: "end" });
+    await eventually(() => heldDrafts[1].seen() > 0, { timeout: 60_000, message: "the peer's late snapshot is held before publication" });
+    assert.equal(heldDrafts[1].rows[0].postJson.baseVersion, "v1", "C12 recovery origin: the open editor's late save stays on v1");
+    await heldCommit.restore();
+    const published = await publication;
+    if (!published.ok) throw published.error;
+    assert.deepEqual([published.value.outcome, published.value.versionId], ["published", "v2"], "C12 recovery publication: the saved snapshot publishes v2");
+    await Promise.all(heldDrafts.map((h) => h.restore()));
+    const refused = await saves.waitFor((r) => String(r.postJson?.html ?? "").includes(late), { timeout: 60_000 });
+    assert.equal(refused.status, 409, "C12 recovery fence: a late save on the retired base is refused");
+    assert.equal(refused.json?.currentVersion, "v2", "C12 recovery fence: refusal identifies the newly published base");
+    assert.equal(loads.length, 0, "C12 recovery frame: publication does not automatically reload the peer's editor");
+    assert.ok((await (await peer.frame()).evaluate(bodyText)).includes(late), "C12 recovery local text: a refused late edit remains in the peer's open editor");
+    const entry = await v1Entry(docId);
+    const v2 = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
+    assert.ok(!v2.includes(late), "C12 recovery immutable version: the held late edit is absent from v2");
+    const beforeReload = await readDoc(target, `docs/${docId}`);
+    assert.ok(!beforeReload.draft, "C12 recovery durability: the refused late save cannot silently become a draft of v2");
+    const reload = peer.page.getByRole("button", { name: "Reload draft", exact: true });
+    const offered = await eventually(() => reload.count().then((n) => n > 0), { timeout: 15_000, message: "the stale editor offers recovery" }).catch(() => false);
+    assert.equal(offered && await reload.isVisible(), true, "C12 recovery action: the peer can explicitly reload the new base");
+    await reload.click();
+    await peer.awaitEdit({ waitShared: true, timeout: 90_000 });
+    assert.ok(!(await (await peer.frame()).evaluate(bodyText)).includes(late), "C12 recovery choice: explicit reload replaces the refused local snapshot");
+    const resumed = log.next(peer.name, paragraph(1));
+    const saved = await peer.typeAndAutosave(idSelector(paragraph(1)), resumed, { delay: KEY_DELAY_MS, timeout: 60_000 });
+    assert.equal(saved.body?.draft?.baseVersion, "v2", "C12 recovery resume: an explicitly reloaded editor saves on v2");
+    const draft = (await readDraftObject(target, docId, entry))?.toString("utf8") ?? "";
+    assert.ok(draft.includes(resumed) && !draft.includes(late), "C12 recovery durable resume: only the edit made after reload reaches the new draft");
+    ctx.ev.json("co-editor-explicit-recovery", { late, resumed, refused: { status: refused.status, base: refused.postJson.baseVersion, currentVersion: refused.json?.currentVersion }, loadsBeforeReload: 0, resumedBase: saved.body?.draft?.baseVersion });
+  } finally {
+    await heldCommit.restore();
+    await Promise.all(heldDrafts.map((h) => h.restore()));
+    loads.stop(); saves.stop();
+  }
+}));
+
+async function c12CasCandidate(ctx, { reused }) {
+  const label = reused ? "C12e CAS reused candidate" : "C12e CAS refused candidate";
+  const s = await curlSetup(ctx, label), actor = s.editors[0];
+  const meta = await readDoc(target, `docs/${s.docId}`), liveEpoch = String(meta.liveEpoch ?? "initial");
+  const generation = sha(readFixture(FIXTURE)), stamp = clock => ({ generation, vector: { 101: clock }, deletes: {} });
+  const html = clock => curlDraft(`CAS${clock}${marker("candidate")}`);
+  const save = (clock, content) => actor.http.postJson("/draft", { docId: s.docId, baseVersion: "v1", liveEpoch, causal: stamp(clock), html: content }, { timeoutMs: HTTP_MS });
+  const baseline = await save(1, html(1));
+  precondition(baseline.status === 200 && baseline.json?.draft?.causal, `${label}: the real endpoint saved the initial causal snapshot`);
+  const original = await publicationSnapshot(target, s.docId);
+  precondition(original.versions.length === 1 && original.versions[0].objects.length > 0 && original.draftObjects.length > 0, `${label}: baseline current and historical bytes exist`);
+  const beforeKeys = new Set(await listObjects(target, `docs/${s.docId}/bundles/`));
+  const g = gates(ctx.target), pending = [], since = logMark({ target });
+  let losingPrefix, winner, response, final;
+  try {
+    await g.hold("draft-cas-before-write", { key: s.docId, ttlMs: 40_000 });
+    const older = settled(save(2, html(2))); pending.push(older);
+    const held = await requireHeld(ctx, g, "draft-cas-before-write", 1, { key: s.docId, timeoutMs: HELD_MS });
+    // The amplifier supplies only the already allocated prefix as caller identity.
+    losingPrefix = held.callers[0]?.caller;
+    precondition(typeof losingPrefix === "string" && losingPrefix.startsWith(`docs/${s.docId}/bundles/`), `${label}: the actual CAS pause identifies this request's immutable candidate`);
+    const candidateKeys = await listObjects(target, `${losingPrefix}/`);
+    precondition(candidateKeys.length > 0 && candidateKeys.every(key => !beforeKeys.has(key)), `${label}: candidate bytes were uploaded before the captured snapshot pause`);
+    ctx.ev.json("cas-held-candidate", { prefix: losingPrefix, keys: candidateKeys, held });
+    if (reused) {
+      const newer = settled(save(3, html(3))); pending.push(newer);
+      const both = await requireHeld(ctx, g, "draft-cas-before-write", 2, { key: s.docId, timeoutMs: HELD_MS, distinct: "caller" });
+      const later = both.callers.find(c => c.caller !== losingPrefix);
+      precondition(Boolean(later), `${label}: two distinct uploaded CAS callers are held`);
+      await g.releaseCaller("draft-cas-before-write", { key: s.docId, caller: later.caller });
+      const result = await newer; if (!result.ok) throw result.error;
+      winner = await publicationSnapshot(target, s.docId);
+      assertCasWinner({ reused, response: result.value, winner, original, expectedPrefix: later.caller, expectedVector: stamp(3).vector });
+    } else {
+      const markA = marker("CASpublished");
+      const out = await agentUpdate(s.agent, s.docId, agentContent(markA), "v1");
+      winner = await publicationSnapshot(target, s.docId);
+      assertCasWinner({ reused, published: publishedVersion(out, label), winner, original });
+    }
+    ctx.ev.json("cas-winner-before-release", winner);
+    await g.release("draft-cas-before-write", { key: s.docId });
+    const result = await older; if (!result.ok) throw result.error;
+    response = { status: result.value.status, json: result.value.json };
+    const parseCas = line => { try { return JSON.parse(line.slice(line.indexOf("[e2e-c12-cas]") + "[e2e-c12-cas]".length).trim()); } catch { return null; } };
+    const codeRows = await eventually(() => {
+      const found = grepLog("[e2e-c12-cas]", { target, since }).map(parseCas).filter(r => r?.docId === s.docId && r.storagePrefix === losingPrefix && r.code === 9);
+      return found.length ? found : false;
+    }, { timeout: 45_000, interval: 250, message: `${label}: the real SDK reports the losing snapshot's CAS precondition failure` }).catch(error => {
+      if (error.code === "E2E_EVENTUALLY_TIMEOUT") ctx.inconclusive(`${label}: no observed code-9 CAS window; ${error.message}`);
+      throw error;
+    });
+    ctx.ev.json("cas-conditional-write-refusal", codeRows);
+    final = await publicationSnapshot(target, s.docId);
+    const discarded = await listObjects(target, `${losingPrefix}/`);
+    const selectedKeys = new Set([...final.draftObjects, ...final.versions.flatMap(v => v.objects)].map(o => o.key));
+    const unreachable = (await listObjects(target, `docs/${s.docId}/bundles/`)).filter(key => !selectedKeys.has(key));
+    assertCasCandidateOutcome({ reused, response, winner, final, discarded, unreachable });
+    ctx.ev.json("cas-candidate-outcome", { original, winner, losingPrefix, response, final, discarded });
+    measure(ctx, "c12-agent-vs-editors", { scenario: label, branch: reused ? "reuse" : "terminal-refusal", losingPrefix, response, preserved: true, discarded });
+  } finally {
+    await g.release("draft-cas-before-write", { key: s.docId }).catch(() => undefined);
+    await Promise.all(pending);
+  }
+}
+
+scenario("C12e CAS candidate reuse: a held older causal save loses its exact precondition to a newer save, acknowledges the newer draft, and deletes only its unreferenced upload", {
+  tiers: LOCAL, n: [2], needs: ["gates", "patch:amplify-c12-update"], timeoutMs: CASE_MS, ...LIVE,
+}, async ctx => guarded(ctx, () => c12CasCandidate(ctx, { reused: true })));
+
+scenario("C12e CAS candidate refusal: a held draft loses its exact precondition to publication, refuses the old base, and deletes only its unreferenced upload", {
+  tiers: LOCAL, n: [2], needs: ["gates", "patch:amplify-c12-update"], timeoutMs: CASE_MS, ...LIVE,
+}, async ctx => guarded(ctx, () => c12CasCandidate(ctx, { reused: false })));

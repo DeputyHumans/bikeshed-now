@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -660,7 +660,7 @@
+       .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
+       .catch(() => undefined);
+     if (outcome.denied) {
+-      res.status(refusal(outcome.denied, caller, await linkProofFor(docRef, outcome.denied, caller, null))).end();
++      res.status(refusal(outcome.denied, caller, await linkProofFor(docRef, outcome.denied, caller, null))).json({ denied: true });
+     } else if (outcome.moved) {
+       res.status(409).json({ error: "not the current version" });
+     } else {

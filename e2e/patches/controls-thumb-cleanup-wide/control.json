@@ -1,0 +1,17 @@
+{
+  "oracle": "thumbnail revocation: only candidate JPEGs are deleted",
+  "what": "Delete all version thumbnails on refusal, including the existing sibling.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17c thumbnail authority: an editor downgraded after JPEG upload receives 403, changes no thumbnail, and deletes only its candidate (SPEC §2) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-thumb-authority"
+  ],
+  "expect": {
+    "message": "thumbnail revocation: only candidate JPEGs are deleted"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK cooldown expiry: the expired reader receives no private comment notice",
+  "what": "Check authority expiry against the old claim clock instead of the retry clock.",
+  "target": {
+    "spec": "e2e/specs/functional/a23-cooldown-ack.spec.mjs",
+    "case": "A23.8c a reader whose document expires while its committed cooldown ACK is held receives no comment bytes after retry",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK cooldown expiry: the expired reader receives no private comment notice"
+  }
+}

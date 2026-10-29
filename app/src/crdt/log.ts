@@ -2,6 +2,7 @@
 // Shared document state as an append-only update log (SPEC §6b, §16).
 
 import * as Y from "yjs";
+import type { CausalStamp } from "./causal";
 
 /**
  * Why a log of updates rather than a shared snapshot
@@ -15,9 +16,10 @@ import * as Y from "yjs";
  *
  * The log is NOT the durable artifact. The draft and the published versions
  * are, in Firestore and Storage, exactly as before. This carries live
- * collaboration and nothing else, so it can be trimmed aggressively and lost
- * entirely without losing a document — whoever opens the editor next seeds a
- * fresh one from the saved bytes.
+ * collaboration and nothing else. Compaction preserves the elected seed; a
+ * successful publication retires its epoch so the next session can seed from
+ * the saved bytes. Unexpected loss within a stamped epoch fails closed instead
+ * of inventing a new identity over still-active peers.
  *
  * Transport is injected rather than imported so the merge behaviour can be
  * tested without a network, a Firebase app, or an emulator. The RTDB binding is
@@ -27,17 +29,12 @@ import * as Y from "yjs";
 /** What the provider needs from a transport. Deliberately tiny. */
 export interface UpdateLog {
   /** Calls back for every entry already present and every one appended after. */
-  subscribe(onEntry: (key: string, payload: string) => void): () => void;
+  subscribe(onEntry: (key: string, payload: string) => void, onError?: (error: Error) => void): () => void;
   append(payload: string): Promise<string | null>;
   remove(keys: readonly string[]): Promise<void>;
-  /**
-   * Resolves once every entry that existed at join time has been delivered.
-   *
-   * This is what decides WHO SEEDS. `bindSync` seeds an empty fragment from the
-   * local DOM, so two people opening the editor in the same second would both
-   * seed and the document would appear twice. Waiting for the existing log
-   * first means the second one finds a non-empty fragment and adopts it.
-   */
+  /** Atomically retain one initial update; return the winner to every joiner. */
+  initialize(payload: string): Promise<string>;
+  /** Resolves once all entries that existed at join time have been delivered. */
   ready(): Promise<void>;
 }
 
@@ -72,12 +69,25 @@ export function fromBase64(value: string): Uint8Array {
  * depend on it, because an uncompacted log and a compacted one describe the
  * same document.
  */
+// Base64 characters, matching the server rule and below the SDK leaf ceiling.
+export const LOG_ENTRY_MAX = 2 * 1024 * 1024;
+export class LiveLogSizeError extends Error {
+  constructor() { super("This document is too large for live editing (2 MiB encoded update limit). Reduce its size or update it through an upload, then reopen the editor."); }
+}
 export const COMPACT_AFTER = 64;
+export const SEED_KEY = "_seed";
+export const DELIVERY_TIMEOUT_MS = 10_000;
 
 export interface Connection {
+  initialize(seed?: Uint8Array): Promise<void>;
+  causalStamp(): CausalStamp;
+  /** Wait for queued local updates to be acknowledged before leaving edit mode. */
+  flush(): Promise<void>;
+  hasPending(): boolean;
   destroy(): void;
   /** Entry keys currently believed to be in the log. Exposed for tests. */
   size(): number;
+  snapshot(): Record<string, string>;
 }
 
 /**
@@ -88,30 +98,75 @@ export interface Connection {
  * Without it every remote update is immediately re-appended by every peer that
  * receives it, and the log grows without bound while the document does nothing.
  */
-export function connect(doc: Y.Doc, log: UpdateLog): Connection {
+export function connect(doc: Y.Doc, log: UpdateLog, beforeRemote: () => void = () => {}, onDelivery: (available: boolean) => void = () => {}): Connection {
   const REMOTE = Symbol("remote");
   const seen = new Set<string>();
+  const payloads = new Map<string, string>();
   let destroyed = false;
   let compacting = false;
+  let generation: string | null = null;
+  let pending: Uint8Array | null = null;
+  let sending = false;
+  let readFailed = false;
+  let failures = 0;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+
+  const waiters = new Set<(error?: Error) => void>();
+  const finishWaiters = (error?: Error) => { for (const finish of [...waiters]) finish(error); };
+  const deliveryError = () => new Error("Live sharing has not acknowledged every change. Keep this editor open and try Done again.");
 
   const unsubscribe = log.subscribe((key, payload) => {
     if (destroyed || seen.has(key)) return;
     seen.add(key);
     try {
+      // Preserve DOM edits whose MutationObserver has not delivered yet.
+      beforeRemote();
       Y.applyUpdate(doc, fromBase64(payload), REMOTE);
+      payloads.set(key, payload);
     } catch {
       // A malformed entry is one peer's problem, not everybody's. Applying the
       // rest still converges every client that can read them.
     }
-  });
+  }, () => { readFailed = true; if (!destroyed) onDelivery(false); });
 
   const onUpdate = (update: Uint8Array, origin: unknown) => {
     if (destroyed || origin === REMOTE) return;
-    void log.append(toBase64(update)).then((key) => {
-      if (key) seen.add(key);
-      void compact();
-    });
+    pending = pending ? Y.mergeUpdates([pending, update]) : update;
+    void drain();
   };
+
+  async function drain(): Promise<void> {
+    if (destroyed || sending || retry || !pending) return;
+    sending = true;
+    try {
+      while (pending && !destroyed) {
+        const update = pending;
+        pending = null;
+        const payload = toBase64(update);
+        try {
+          const key = await log.append(payload);
+          if (!key) throw new Error("The shared update was not acknowledged");
+          if (destroyed) return;
+          seen.add(key); payloads.set(key, payload);
+          failures = 0;
+          void compact();
+        } catch {
+          if (destroyed) return;
+          // Keep both the refused bytes and changes made while they were in
+          // flight. Later Yjs deltas may depend on those earlier item ids.
+          pending = pending ? Y.mergeUpdates([update, pending]) : update;
+          onDelivery(false);
+          finishWaiters(deliveryError());
+          retry = setTimeout(() => { retry = null; void drain(); }, Math.min(2_000, 200 * 2 ** Math.min(failures++, 4)));
+          return;
+        }
+      }
+      if (!destroyed && !readFailed) onDelivery(true);
+    } finally {
+      sending = false;
+      if (!pending && !retry && !destroyed) finishWaiters();
+    }
+  }
   doc.on("update", onUpdate);
 
   /**
@@ -125,12 +180,15 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
   async function compact(): Promise<void> {
     if (compacting || destroyed || seen.size < COMPACT_AFTER) return;
     compacting = true;
-    const consumed = [...seen];
+    const consumed = [...seen].filter((key) => key !== SEED_KEY);
     try {
-      const merged = await log.append(toBase64(Y.encodeStateAsUpdate(doc)));
-      if (merged) seen.add(merged);
+      const payload = toBase64(Y.encodeStateAsUpdate(doc));
+      if (payload.length > LOG_ENTRY_MAX) return;
+      const merged = await log.append(payload);
+      if (!merged) return;
+      seen.add(merged); payloads.set(merged, payload);
       await log.remove(consumed);
-      for (const key of consumed) seen.delete(key);
+      for (const key of consumed) { seen.delete(key); payloads.delete(key); }
     } catch {
       /* the log stays longer than it needs to; nothing is lost */
     } finally {
@@ -139,11 +197,55 @@ export function connect(doc: Y.Doc, log: UpdateLog): Connection {
   }
 
   return {
+    async initialize(seed) {
+      let elected = payloads.get(SEED_KEY);
+      if (!elected) {
+        if (payloads.size > 0) throw new Error("The shared document seed is missing");
+        if (!seed) throw new Error("The shared document needs an initial seed");
+        elected = await log.initialize(toBase64(seed));
+      }
+      const bytes = fromBase64(elected);
+      const hash = await crypto.subtle.digest("SHA-256", bytes.buffer as ArrayBuffer);
+      if (!destroyed) {
+        Y.applyUpdate(doc, fromBase64(elected), REMOTE);
+        seen.add(SEED_KEY); payloads.set(SEED_KEY, elected);
+        generation = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      }
+    },
+    causalStamp() {
+      if (!generation) throw new Error("The shared document seed is not ready");
+      const deletes = Y.decodeUpdate(Y.encodeStateAsUpdate(doc)).ds.clients;
+      return {
+        generation,
+        vector: Object.fromEntries(Y.decodeStateVector(Y.encodeStateVector(doc))),
+        deletes: Object.fromEntries([...deletes].map(([client, ranges]) =>
+          [client, ranges.map(({ clock, len }) => [clock, len] as [number, number])])),
+      };
+    },
+    flush() {
+      if (destroyed) return Promise.reject(deliveryError());
+      if (!pending && !sending && !retry) return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        const finish = (error?: Error) => {
+          clearTimeout(timeout);
+          waiters.delete(finish);
+          if (error) reject(error); else resolve();
+        };
+        const timeout = setTimeout(() => finish(deliveryError()), DELIVERY_TIMEOUT_MS);
+        waiters.add(finish);
+        void drain();
+      });
+    },
+    hasPending: () => Boolean(pending || sending || retry),
     destroy() {
       destroyed = true;
+      finishWaiters(deliveryError());
+      if (retry) clearTimeout(retry);
+      pending = null;
       doc.off("update", onUpdate);
       unsubscribe();
     },
     size: () => seen.size,
+    snapshot: () => Object.fromEntries(payloads),
   };
 }

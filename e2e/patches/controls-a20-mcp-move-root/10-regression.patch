@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1208,5 +1208,5 @@
+     inputSchema: {
+       type: "object",
+-      required: ["id"],
++      required: ["id", "folder"],
+       properties: {
+         id: { type: "string", description: "The document id." },

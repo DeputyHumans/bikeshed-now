@@ -1,0 +1,15 @@
+--- a/functions/src/lib/tokens.ts
++++ b/functions/src/lib/tokens.ts
+@@ -257,10 +257,10 @@
+   const now = FieldValue.serverTimestamp();
+   void db
+     .batch()
+-    .set(snap.ref, { lastUsedAt: now }, { merge: true })
++    .set(snap.ref, { controlLastUsedAt: now }, { merge: true })
+     .set(
+       db.collection("users").doc(record.uid).collection("tokens").doc(tokenId),
+-      { lastUsedAt: now },
++      { controlLastUsedAt: now },
+       { merge: true },
+     )
+     .commit()

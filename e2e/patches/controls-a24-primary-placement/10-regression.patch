@@ -1,0 +1,7 @@
+--- a/app/src/styles/dialogs.css
++++ b/app/src/styles/dialogs.css
+@@ -295 +295,4 @@
+ .expiry-row input[type="date"] { flex: 0 1 auto; }
++
++.modal-foot { position: relative; }
++.modal-foot::after { content: ""; position: absolute; inset: 0; z-index: 10; }

@@ -4,9 +4,10 @@
 import * as admin from "firebase-admin";
 import type { Actor } from "./actor";
 import { applyToHtml, applyToMarkdown, type ApplyRefusal } from "./apply";
-import { readWorkingCopy, writeDraft } from "./draft";
+import { DraftConflict, draftRevision, readWorkingCopy, writeDraft } from "./draft";
+import { WriteAuthorityError } from "./writeAuthority";
 import { renderMarkdown } from "./markdown/render";
-import { clearEditLog, editorsRefusal } from "./presence";
+import { editorsRefusal } from "./presence";
 import { changeSuggestion, type Author, type Refusal } from "./suggestions";
 
 /**
@@ -64,10 +65,23 @@ export async function acceptSuggestion(args: {
   const editors = await editorsRefusal(docRef.id, "accepted");
   if ("refusal" in editors) return editors.refusal;
 
-  const working = await readWorkingCopy(docRef, data as Parameters<typeof readWorkingCopy>[1]);
+  let draftData = data;
+  // A completed save may retire the object between our metadata read and
+  // download. Retry only a proven snapshot move; never fall back to v1 bytes.
+  const readCurrent = async () => {
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const copy = await readWorkingCopy(docRef, draftData as Parameters<typeof readWorkingCopy>[1]);
+      if (copy) return copy;
+      const fresh = (await docRef.get()).data() ?? {};
+      if (fresh.currentVersion !== versionId || draftRevision(fresh) === draftRevision(draftData)) return null;
+      draftData = fresh;
+    }
+    return null;
+  };
+  let working = await readCurrent();
   if (!working) return { status: 409, error: "Could not read the document to make the change in it." };
   const title = typeof data.title === "string" ? data.title : undefined;
-  const made =
+  let made =
     working.format === "html"
       ? applyToHtml(working.html, anchor, replacement)
       : applyToMarkdown(working.markdown, anchor, replacement, (md) => renderMarkdown(md, { title }).html);
@@ -90,22 +104,36 @@ export async function acceptSuggestion(args: {
   const claimed = await change("claim");
   if ("status" in claimed) return claimed;
   try {
-    if (made.state === "applied") {
-      if (editors.log) await clearEditLog(docRef.id);
-      await writeDraft({
-        db,
-        docRef,
-        baseVersion: working.baseVersion,
-        version: working.version,
-        content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
-        existingSessions: (data.draft as { editSessions?: unknown } | undefined)?.editSessions,
-        emailLower: caller.emailLower,
-        actor,
-      });
+    // A different suggestion can replace the shared draft after this request
+    // reads it. Keep our claim, reread and reapply on that newer snapshot.
+    // Each attempt owns its uploaded bytes; a conflict never records acceptance.
+    for (let attempt = 0; made.state === "applied"; attempt++) {
+      try {
+        await writeDraft({
+          db, docRef, baseVersion: working.baseVersion, version: working.version,
+          content: made.markdown !== undefined ? { markdown: made.markdown, html: made.html } : { html: made.html },
+          retireLive: true, expectedDraft: draftData.draft, emailLower: caller.emailLower, actor,
+        });
+        break;
+      } catch (error) {
+        if (!(error instanceof DraftConflict) || error.detail.draftChanged !== true || attempt >= 24) throw error;
+        draftData = (await docRef.get()).data() ?? {};
+        working = await readCurrent();
+        if (!working) throw new DraftConflict({ error: "The draft changed. Retry accepting this suggestion.", draftChanged: true });
+        made = working.format === "html"
+          ? applyToHtml(working.html, anchor, replacement)
+          : applyToMarkdown(working.markdown, anchor, replacement, (md) => renderMarkdown(md, { title }).html);
+        if (made.state === "refused") {
+          await change("release");
+          return { status: 409, error: REFUSALS[made.reason], refused: made.reason };
+        }
+      }
     }
-  } catch (e) {
+  } catch (error) {
     await change("release").catch(() => undefined);
-    throw e;
+    if (error instanceof WriteAuthorityError) return { status: error.status, error: error.message, ...error.detail };
+    if (error instanceof DraftConflict) return { status: 409, error: error.message, ...error.detail };
+    throw error;
   }
   const recorded = await change("accept");
   if ("status" in recorded) return recorded;

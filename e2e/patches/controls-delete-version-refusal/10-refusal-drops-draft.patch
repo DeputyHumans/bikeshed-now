@@ -1,5 +1,15 @@
 --- a/scripts/delete-version.mjs
 +++ b/scripts/delete-version.mjs
+@@ -31,6 +31,7 @@
+ import { withdrawalPrefix, repointWithdrawal } from "./lib/withdraw-version.mjs";
+ import { finishOperatorReplacement } from "./lib/operator-writes.mjs";
+ import {
++  FieldValue,
+   getBucket,
+   getBucketName,
+   closeAdmin,
+--- a/scripts/delete-version.mjs
++++ b/scripts/delete-version.mjs
 @@ -190,6 +190,8 @@
    }
  

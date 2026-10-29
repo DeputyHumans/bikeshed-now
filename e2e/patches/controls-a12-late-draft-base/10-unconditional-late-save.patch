@@ -1,0 +1,16 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -220,5 +220,5 @@
+   // carry a previous attempt's base, epoch, draft identity or causal decision.
+   const prepare = (current: admin.firestore.DocumentData | undefined): Record<string, unknown> | null => {
+-    if ("expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
++    if (current?.currentVersion === baseVersion && "expectedDraft" in args) checkDraftSnapshot(current, args.expectedDraft);
+     if (args.expectedRevision !== undefined && draftRevision(current ?? {}) !== args.expectedRevision) throw new DraftConflict({
+       error: "Someone saved a newer draft. Reload to read their changes before editing again.", draftChanged: true, reloadRequired: true,
+@@ -280,5 +280,5 @@
+       if (acknowledgeOwnCandidate(current)) break;
+       if (Date.now() >= deadline) throw contended();
+-      checkDraftBase(current, baseVersion);
++      // Control: let an authorized late save write on its superseded base.
+       if (!assertDocumentWriteAuthority(current as DocAclData, caller)) {
+         // Remembered link grants live in another document. Keep their read

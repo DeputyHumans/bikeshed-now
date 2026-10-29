@@ -1,0 +1,10 @@
+--- a/app/src/hooks/useCoverBackfill.ts
++++ b/app/src/hooks/useCoverBackfill.ts
+@@ -85,6 +85,6 @@
+     const next = (): DocMeta | undefined =>
+       live.current.docs.find(
+         (doc) =>
+-          coverOwed(doc, live.current.emailLower) &&
++          coverOwed({ ...doc, thumb: (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming)?.type === "reload" ? undefined : doc.thumb }, live.current.emailLower) &&
+           !attempted.has(`${doc.docId}/${doc.currentVersion}`),
+       );

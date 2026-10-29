@@ -1,0 +1,10 @@
+--- a/app/src/viewer/useSharedDocument.ts
++++ b/app/src/viewer/useSharedDocument.ts
+@@ -127,6 +127,5 @@
+       bound?.flush();
+       if (!connection?.hasPending()) return;
+-      event.preventDefault();
+-      event.returnValue = "";
++      void event; // negative control: omit both browser warning signals.
+     };
+     window.addEventListener("beforeunload", beforeUnload);

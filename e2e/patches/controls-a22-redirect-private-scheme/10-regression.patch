@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/redirect.ts
++++ b/functions/src/oauth/redirect.ts
+@@ -77,3 +77,3 @@
+   if (FORBIDDEN_SCHEMES.has(protocol)) return null;
+-  return { raw, url, kind: "app" };
++  return null;
+ }

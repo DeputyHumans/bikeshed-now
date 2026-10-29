@@ -1,0 +1,11 @@
+--- a/app/src/wysiwyg/EditToolbar.tsx
++++ b/app/src/wysiwyg/EditToolbar.tsx
+@@ -218,7 +218,7 @@
+       } else if (command.kind === "block") {
+         doc.execCommand("formatBlock", false, command.value);
+       } else {
+-        doc.execCommand(command.command, false, command.value);
++        if (command.command !== "insertOrderedList") doc.execCommand(command.command, false, command.value);
+       }
+     },
+     [doc, sharing],

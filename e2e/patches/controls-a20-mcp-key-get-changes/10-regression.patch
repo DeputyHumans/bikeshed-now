@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1423,4 +1423,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
+       const since = str(args, "since");

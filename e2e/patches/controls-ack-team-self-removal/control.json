@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK team: self-removal acknowledges the completed authorized change",
+  "what": "Reintroduce the team-self-removal acknowledgement regression.",
+  "target": {
+    "spec": "e2e/specs/functional/a12-endpoint-ack.spec.mjs",
+    "case": "A12.11e an administrator acknowledges self-removal after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK team: self-removal acknowledges the completed authorized change"
+  }
+}

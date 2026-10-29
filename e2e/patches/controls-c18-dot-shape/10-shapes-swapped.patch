@@ -1,22 +1,15 @@
 --- a/app/src/styles/viewer.css
 +++ b/app/src/styles/viewer.css
-@@ -233,13 +233,16 @@
- .presence-dot {
-   width: 8px;
+@@ -234,3 +234,4 @@
    height: 8px;
 -  border-radius: 50%;
-+  /* e2e negative control (controls-c18-dot-shape): the two shapes swapped, so a
-+     reader's dot is the square, rotated one and an editor's the round one. */
 +  border-radius: 2px;
 +  transform: rotate(45deg);
    background: currentColor;
-   flex: none;
- }
+@@ -242,4 +243,4 @@
  .presence-dot[data-mode="edit"] {
 -  border-radius: 2px;
 -  transform: rotate(45deg);
 +  border-radius: 50%;
 +  transform: none;
  }
- .presence-name { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; }
- 

@@ -149,6 +149,7 @@ import { admitWorkers, staticWarmUrl } from "../../lib/workers.mjs";
 import { ACCEPT, parseMcpBody, toolOutcome } from "../../lib/mcp.mjs";
 import { assertInvariant, checkI8, checkI9 } from "../../lib/invariants.mjs";
 import { grantEditors, joinShared, rssFile, settleLive, startRssSampler } from "../../lib/live.mjs";
+import { naturalRaceAttempts, installReviewCommandObserver, finishReviewCommandObserver, assertRefusedReview } from "../../lib/review-race.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -598,6 +599,7 @@ async function c10aWork(ctx, ref, how) {
     measure(ctx, MEASURE, { ref, how, race: fired.race, answers: fired.pairs.map((p) => p.answer.isError ? `refused: ${p.answer.text}` : p.answer.json?.state), inDraft });
     assertEveryAgentAccepted(fired);
     assertDecidedOnce(out.anns, Object.fromEntries(pairs.map((p) => [p.annId, p.agent.email])), "mcp");
+    assertInvariant(i8Of({ ...out.draft, accepted }));
   });
 }
 
@@ -972,10 +974,30 @@ async function withSlowLink(ctx, body) {
  * "together" and "slow" record the save race (saveRace) for their judge.
  */
 async function c10bWork(ctx, ref, mode) {
-  await working(ctx, ref, async (obs) => withRss(ctx, async () => {
+  if (mode !== "together") return c10bAttempt(ctx, ref, mode);
+  const result = await naturalRaceAttempts({
+    run: async attempt => {
+      const attemptRef = `${ref} attempt ${attempt}`;
+      const scoped = { ...ctx, users: { many: (n, options) => ctx.users.many(n, { ...options, names: options.names.map(name => `attempt${attempt}-${name}`) }) }, step: text => ctx.step(`attempt ${attempt}: ${text}`), ev: { ...ctx.ev, json: (name, value) => ctx.ev.json(`attempt-${attempt}-${name}`, value), text: (name, value) => ctx.ev.text(`attempt-${attempt}-${name}`, value) } };
+      await c10bAttempt(scoped, attemptRef, mode);
+      const obs = observed.get(keyOf(attemptRef, ctx));
+      // Every completed attempt is judged, even if its timing cannot expose S17.
+      assertInvariant(i8Of(obs.draft));
+      observed.set(keyOf(ref, ctx), obs);
+      return { achieved: obs.saveRace.achieved, diagnostic: obs.saveRace };
+    },
+    record: attempts => { ctx.ev.json("natural-attempts", attempts); measure(ctx, MEASURE, { ref, naturalAttempts: attempts }); },
+  });
+  ctx.step(`natural accept window: ${result.achieved ? "achieved" : "still unachieved"} after ${result.attempts.length} fresh document attempt(s)`);
+}
+
+async function c10bAttempt(ctx, ref, mode) {
+  let attemptUsers = [];
+  try { await working(ctx, ref, async (obs) => withRss(ctx, async () => {
     const n = ctx.n;
     const live = await joinApprovers(ctx, { n, ks: Array.from({ length: n }, (_, i) => i + 1), title: `C10b ${mode} N=${n}` });
     const { docId, users, suggestions } = live;
+    attemptUsers = users;
     obs.stage = "joined";
     ctx.step(`each approver opens the review pass on its own suggestion: ${users.map((u, i) => `${u.name} → "${suggestions[i].exact}"`).join(", ")}`);
     await Promise.all(users.map((u, i) => openPassOn(u, suggestions[i].exact, n)));
@@ -983,11 +1005,6 @@ async function c10bWork(ctx, ref, mode) {
     const posts = users.map((u) => u.capture({ paths: ["/suggestion", "/draft"] }));
     const marks = posts.map((p) => p.mark());
     const toastMarks = users.map((u) => u.toastMark());
-    const together = async () => {
-      const pressed = await pressAcceptTogether(ctx, users);
-      await Promise.all(users.map((u, i) => acceptAnswered(u, posts[i], marks[i], suggestions[i].annId)));
-      return pressed;
-    };
     const oneByOne = async () => {
       for (const [i, u] of users.entries()) {
         await barButton(u, "Accept").click({ timeout: CLIENT_MS });
@@ -999,14 +1016,33 @@ async function c10bWork(ctx, ref, mode) {
       return { kind: "serial" };
     };
     let race = null;
-    if (mode === "together") race = await together();
-    else if (mode === "slow") {
-      race = await withSlowLink(ctx, async () => {
-        const pressed = await together();
-        // Every page's own saves (its accept's, and its autosave a second after its edit) go while the link is still slow.
-        await quietSaves(users, posts, marks);
-        return { ...pressed, link: SLOW_LINK };
-      });
+    if (mode === "together" || mode === "slow") {
+      const initialSaves = async () => {
+        const pressed = await pressAcceptTogether(ctx, users);
+        // First snapshots deliberately lack each other's changes. A causal
+        // conflict must refuse, leave the decision pending, and let the user
+        // retry after the remote merge; waiting for accept here deadlocks the
+        // test's own slow-link window against that safe refusal.
+        await eventually(() => posts.every((rows, i) => rows.find((r) => r.seq >= marks[i] && r.path === "/draft")?.settled),
+          { timeout: 30_000, interval: 100, message: "every initial accept save is answered" });
+        const first = posts.map((rows, i) => rows.find((r) => r.seq >= marks[i] && r.path === "/draft"));
+        assert.ok(first.every((r) => r.status === 200 || (r.status === 409 && r.json?.draftChanged === true)),
+          `initial accept saves are accepted or explicitly retryable: ${JSON.stringify(first.map((r) => ({ status: r.status, json: r.json })))}`);
+        return mode === "slow" ? { ...pressed, link: SLOW_LINK } : pressed;
+      };
+      race = mode === "slow" ? await withSlowLink(ctx, initialSaves) : await initialSaves();
+      await settleLive(users, { docId, n });
+      for (const [i, u] of users.entries()) {
+        const drafts = posts[i].filter((r) => r.seq >= marks[i] && r.path === "/draft");
+        if (drafts.some((r) => r.status === 409 && r.json?.draftChanged === true)
+            && !posts[i].some((r) => r.seq >= marks[i] && isOp(r, "accept", suggestions[i].annId))) {
+          const ann = await readDoc(ctx.target, `docs/${docId}/versions/v1/annotations/${suggestions[i].annId}`);
+          assert.equal(ann?.suggestion?.state, "pending", `${u.name}'s rejected save must not mark its suggestion accepted`);
+          await barButton(u, "Accept").click({ timeout: CLIENT_MS });
+          ctx.step(`${u.name} retries Accept after the merged snapshot saved`);
+        }
+        await acceptAnswered(u, posts[i], marks[i], suggestions[i].annId);
+      }
     } else if (mode === "serial") race = await oneByOne();
     else if (mode === "serial-slow") race = { ...(await withSlowLink(ctx, oneByOne)), link: SLOW_LINK };
     else if (mode === "held") race = await heldSave(ctx, { users, posts, marks, suggestions });
@@ -1032,17 +1068,23 @@ async function c10bWork(ctx, ref, mode) {
     const saveRow = raced && { achieved: raced.achieved, pairs: raced.pairs.length, last: raced.last, remote: raced.remote, saves: raced.saves.map(({ save, status, sentMs, respondedMs, holds }) => ({ save, status, sentMs, respondedMs, holds })) };
     measure(ctx, MEASURE, { ref, mode, race, ...(saveRow ? { saveRace: saveRow } : {}), settledMs: settled.ms, inDraft });
     const steps = users.map((u, i) => posts[i].filter((r) => r.seq >= marks[i] && r.path === "/suggestion").map((r) => `${r.op} ${r.status}`).join(" → "));
-    assert.deepEqual(steps.filter((x) => !/^claim 200 → accept 200$/.test(x)), [], `every page claimed and accepted its own suggestion, 200 each (${JSON.stringify(steps)})`);
-    const saves = users.flatMap((u, i) => posts[i].filter((r) => r.seq >= marks[i] && r.path === "/draft" && r.status !== 200).map((r) => `${u.name}: POST /draft ${r.status ?? r.state}`));
-    assert.deepEqual(saves, [], "every POST /draft answered 200");
-    assertNoErrorToasts(users, toastMarks);
+    assert.deepEqual(steps.filter((x) => !(["slow", "together"].includes(mode) ? /^(?:claim 200 → )+accept 200$/ : /^claim 200 → accept 200$/).test(x)), [], `every page claimed and accepted its own suggestion, 200 each (${JSON.stringify(steps)})`);
+    const retryable = (r) => ["slow", "together"].includes(mode) && r.status === 409 && r.json?.draftChanged === true;
+    const saves = users.flatMap((u, i) => posts[i].filter((r) => r.seq >= marks[i] && r.path === "/draft" && r.status !== 200 && !retryable(r)).map((r) => `${u.name}: POST /draft ${r.status ?? r.state}`));
+    assert.deepEqual(saves, [], "every POST /draft answered 200 or a causal conflict recovered before accepting");
+    if (["slow", "together"].includes(mode)) {
+      const retryMessage = "The change is made, but the draft didn’t save, so it isn’t accepted yet. Accept it again once it saves.";
+      const errors = users.flatMap((u, i) => u.log.toasts.slice(toastMarks[i]).filter((t) => t.kind === "error"
+        && !(t.text === retryMessage && posts[i].some((r) => r.seq >= marks[i] && r.path === "/draft" && retryable(r)))).map((t) => `${u.name}: ${t.text}`));
+      assert.deepEqual(errors, [], "only an explicit retryable save conflict may show the pending-accept retry notice");
+    } else assertNoErrorToasts(users, toastMarks);
     assertDecidedOnce(out.anns, Object.fromEntries(suggestions.map((s, i) => [s.annId, live.accounts[i].email.toLowerCase()])), "web");
     await assertLiveOnce(users, suggestions);
     if (mode === "serial" || mode === "serial-slow") {
       assertInvariant(i8);
       assertInvariant(checkI9({ suggestions: out.anns.map((a, i) => ({ annId: a.annId, insertions: occurrences(out.draft.text, suggestions[i].replacement), notes: a.notes.length })) }));
     }
-  }));
+  })); } finally { await Promise.allSettled(attemptUsers.map(u => u.close())); }
 }
 
 /**
@@ -1109,6 +1151,7 @@ async function c10cInApp(ctx, mode) {
     const s = suggestions[0];
     ctx.step(`all ${n} approvers open the review pass on "${s.exact}"`);
     await Promise.all(users.map((u) => openPassOn(u, s.exact, 1)));
+    await Promise.all(users.map(async u => (await u.frame()).evaluate(installReviewCommandObserver)));
     const posts = users.map((u) => u.capture({ paths: ["/suggestion", "/draft"] }));
     const marks = posts.map((p) => p.mark());
     const toastMarks = users.map((u) => u.toastMark());
@@ -1145,6 +1188,7 @@ async function c10cInApp(ctx, mode) {
         const heldAt = heldAcc.rows[0].heldAt;
         const early = pressers.filter((u, j) => !(claims[first + j].sentAt > heldAt));
         if (early.length) ctx.inconclusive(`the sync precondition did not hold: ${early.map((u) => u.name).join(", ")} sent a claim before ${users[0].name}'s accept was held`);
+        assert.deepEqual(pressers.map((u, j) => ({ status: claims[first + j].status, claimedBy: claims[first + j].json?.claimedBy })), pressers.map(() => ({ status: 409, claimedBy: live.accounts[0].email.toLowerCase() })), "I9: a held claim refuses every other approver and names its holder");
       }
       const took = users.map((u, i) => i).filter((i) => i >= (mode === "held-accept" ? 1 : 0) && claims[i].status === 200);
       await Promise.all(took.map((i) => acceptAnswered(users[i], posts[i], marks[i], s.annId)));
@@ -1166,6 +1210,9 @@ async function c10cInApp(ctx, mode) {
     ctx.step(`claims in flight together: ${overlap.ok ? `yes (margin ${overlap.marginMs.toFixed(1)} ms)` : overlap.reason} (recorded, not required)`);
     const settled = await settleLive(users, { docId, n });
     ctx.step(`the live session settled in ${settled.ms} ms on ${settled.hash.slice(0, 16)}`);
+    await quietSaves(users, posts, marks);
+    const localCommands = await Promise.all(users.map(async u => (await u.frame()).evaluate(finishReviewCommandObserver)));
+    ctx.ev.json("local-editing-commands", users.map((u, i) => ({ user: u.name, commands: localCommands[i] })));
     const out = await readOutcome(live);
     const ann = out.anns[0];
     const winnerIdx = live.accounts.findIndex((a) => a.email.toLowerCase() === ann.decidedBy?.email);
@@ -1179,18 +1226,18 @@ async function c10cInApp(ctx, mode) {
     ctx.ev.text("draft.html", out.draft.html);
     ctx.step(`decided by ${users[winnerIdx]?.name ?? JSON.stringify(ann.decidedBy)}; ${insertions} insertion(s) in the live document, ${occurrences(out.draft.text, s.replacement)} in the draft; ${ann.notes.length} note(s); losers: ${JSON.stringify(kinds)}`);
     measure(ctx, MEASURE, { ref: "C10c in-app", mode, race, claimsOverlap: overlap.ok, insertions, inDraft: occurrences(out.draft.text, s.replacement), notes: ann.notes.length, losers: kinds });
-    // I9 first: one insertion in the live document, one note, and every loser refused naming the claimer.
+    for (const [i, u] of users.entries()) if (claims[i].status !== 200) {
+      assertRefusedReview({ name: u.name, commands: localCommands[i], expectedText: out.draft.text,
+        requests: posts[i].filter(r => r.seq >= marks[i]).map(r => ({ path: r.path, op: r.op, text: textOf(r.postJson?.html), status: r.status, draftChanged: r.json?.draftChanged })) });
+    }
+    // I9: one insertion in the live document, one note, and every loser refused naming the claimer.
     assertInvariant(checkI9({ suggestions: [{ annId: s.annId, insertions, notes: ann.notes.length }], losers: losers.filter((l) => l.loser).map((l) => l.loser) }));
+    assert.equal(localCommands.flat().filter(c => c.command === "inserttext").length, 1, "the command observer saw exactly the decider's local replacement");
     assertInvariant(i8Of({ ...out.draft, accepted: acceptedOf([s]) }));
     assert.ok(winnerIdx >= 0, `the suggestion was decided by one of the approvers (decidedBy ${JSON.stringify(ann.decidedBy)})`);
     if (mode === "held-accept") assert.equal(winnerIdx, 0, `${users[0].name}, who held the claim, decided it`);
     const misnamed = losers.filter((l) => l.kind === "claimed" && !l.named);
     assert.deepEqual(misnamed.map((l) => `${l.user}: claimedBy ${l.claimedBy}`), [], "every claimedBy refusal names the decider");
-    const loserWrites = users
-      .map((u, i) => ({ u, i }))
-      .filter(({ i }) => i !== winnerIdx)
-      .flatMap(({ u, i }) => posts[i].filter((r) => r.seq > claims[i].seq && (r.path === "/draft" || isOp(r, "accept"))).map((r) => `${u.name}: ${r.path}${r.op ? `:${r.op}` : ""}`));
-    assert.deepEqual(loserWrites, [], "a refused page applied nothing: no POST /draft and no accept after its claim");
     assertNoErrorToasts([users[winnerIdx]], [toastMarks[winnerIdx]]);
     assertDecidedOnce(out.anns, { [s.annId]: live.accounts[winnerIdx].email.toLowerCase() }, "web");
     await assertLiveOnce(users, suggestions);
@@ -1211,9 +1258,8 @@ scenario("C10a agents accept N different suggestions at once (SYNC-T): every age
 scenario("C10a judge (SYNC-T): I8, every replacement an agent's accept recorded is in the draft exactly once, in place", {
   tiers: BOTH,
   n: [2, 5, 10, 20],
-  defect: "S5",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10a", { suspect: "S5" }));
+}, async (ctx) => i8Judge(ctx, "C10a"));
 
 scenario("C10a gated: N agent accepts of different suggestions held after reading the working copy and released together: every agent is told accepted, each suggestion accepted once with one note", {
   tiers: LOCAL,
@@ -1227,9 +1273,8 @@ scenario("C10a judge (gated): I8, every replacement an agent's accept recorded i
   tiers: LOCAL,
   needs: ["gates", "patch:amplify-c10-accept"],
   n: [2, 5, 10, 20],
-  defect: "S5",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10a gated", { suspect: "S5" }));
+}, async (ctx) => i8Judge(ctx, "C10a gated"));
 
 scenario("C10a-serial: N agents accept N different suggestions one after another; every replacement is in the draft once (I8), one insertion and one note each (I9)", {
   tiers: BOTH,
@@ -1282,9 +1327,8 @@ scenario("C10b held save: one approver's accept save is held while the others ac
 scenario("C10b judge (held save): I8, the draft holds every replacement accepted in the app exactly once, in place", {
   tiers: BOTH,
   n: [2, 5, 10, 20],
-  defect: "S17",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10b held", { suspect: "S17" }));
+}, async (ctx) => i8Judge(ctx, "C10b held"));
 
 scenario("C10b-serial: N approvers accept N different suggestions in the app one after another; the draft holds each replacement once (I8), one insertion and one note each (I9)", {
   tiers: BOTH,
@@ -1294,7 +1338,7 @@ scenario("C10b-serial: N approvers accept N different suggestions in the app one
   inconclusiveOnPageStall: true,
 }, (ctx) => c10bWork(ctx, "C10b-serial", "serial"));
 
-scenario("C10b slow link: approvers press Accept on N different suggestions at once with the live link slowed past the autosave debounce, until every page's own saves are done; every claim, save and accept answered, the live document converges with each replacement once and one note each", {
+scenario("C10b slow link: approvers press Accept on N different suggestions at once with the live link slowed past the autosave debounce, until every initial save is answered; conflicts are retried after merging, every claim, save and accept answered, the live document converges with each replacement once and one note each", {
   tiers: LOCAL,
   needs: ["rtdb-proxy"],
   n: [2, 5, 10, 20],
@@ -1307,9 +1351,8 @@ scenario("C10b judge (slow link): with two accept saves each made without the ot
   tiers: LOCAL,
   needs: ["rtdb-proxy"],
   n: [2, 5, 10, 20],
-  defect: "S17",
   timeoutMs: JUDGE_MS,
-}, async (ctx) => i8Judge(ctx, "C10b slow", { suspect: "S17", race: true }));
+}, async (ctx) => i8Judge(ctx, "C10b slow", { race: true }));
 
 scenario("C10b-serial (slow link): N approvers accept N different suggestions in the app one after another with the live link slowed; the draft holds each replacement once, in place (I8), one insertion and one note each (I9)", {
   tiers: LOCAL,

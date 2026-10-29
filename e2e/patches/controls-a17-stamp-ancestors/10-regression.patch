@@ -1,0 +1,11 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -262,7 +262,7 @@
+   // produces a page of unstyled text, which looks like a bug in the document.
+   await new Promise((r) => setTimeout(r, 250));
+   try {
+-    activatePrintMarks(fdoc);
++    // regression: marks remain descendants of authored containing blocks.
+     frame.contentWindow?.focus();
+     frame.contentWindow?.print();
+   } finally {

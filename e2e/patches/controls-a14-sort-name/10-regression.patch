@@ -1,0 +1,11 @@
+--- a/app/src/workspace/tree.ts
++++ b/app/src/workspace/tree.ts
+@@ -138,7 +138,7 @@
+   switch (key) {
+     case "name":
+       return list.sort((a, b) =>
+-        a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
++        b.title.localeCompare(a.title, undefined, { sensitivity: "base" }),
+       );
+     case "views":
+       return list.sort((a, b) => (b.stats?.views ?? 0) - (a.stats?.views ?? 0));

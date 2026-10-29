@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2965,7 +2965,7 @@
+     if (owner) recipients.add(owner);
+     // A new suggestion is for the people who can decide it: only they can
+     // clear it, and until they do it holds back the next version (SPEC §22).
+-    const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
++    const suggestion = annSnap.data()?.suggestion;
+     const deciders = suggestion ? membershipOf(doc).approverMembers : [];
+     for (const e of deciders) recipients.add(normalizeEmail(e));
+     for (const c of siblingSnap.docs) {

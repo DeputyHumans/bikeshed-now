@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1226,3 +1226,3 @@
+       ...(!causal ? (expectedRevision === undefined ? { expectedDraft: data.draft } : { expectedRevision }) : {}),
+-      retireLive: !causal,
++      retireLive: false,
+       version,

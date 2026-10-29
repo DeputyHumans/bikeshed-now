@@ -1,0 +1,11 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -508,7 +508,7 @@
+     throw e;
+   }
+
+-  await removeDraftSnapshot(docId, draft);
++  // control: leave the committed draft snapshot object behind
+   await retireLiveSession(db, docId, retiredEpoch);
+
+   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };

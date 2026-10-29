@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -312,3 +312,3 @@
+   const isPrevious = !isCurrent && sameHash(g.prevRefreshHash, secret);
+-  if (!isCurrent && !isPrevious) return invalidGrant("refresh token not recognised");
++  if (!isCurrent && !isPrevious) { await revokeToken(db, g.uid, tokenId); return invalidGrant("refresh token not recognised"); }
+   if (g.revokedAt != null) return invalidGrant("this connection was disconnected");

@@ -1,0 +1,13 @@
+{
+  "oracle": "^Done's edit was posted",
+  "what": "a09 save coalescing",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.6 a Done save that outlasts the debounce is not followed by a second POST /draft of the same edit",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^Done's edit was posted"
+  }
+}

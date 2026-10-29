@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useLiveSync.ts
++++ b/app/src/viewer/useLiveSync.ts
+@@ -91,3 +91,3 @@
+      */
+-    newVersion: newVersion !== null && newVersion !== shownVersion && newVersion === meta?.currentVersion ? newVersion : null,
++    newVersion: newVersion !== null && newVersion !== shownVersion && newVersion === meta?.currentVersion ? null : null,
+     dismissNewVersion: () => setNewVersion(null),

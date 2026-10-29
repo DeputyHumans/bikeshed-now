@@ -21,12 +21,12 @@
 + * WHO CALLS. Each call is its own request, so each names a caller of its
 + * own (run 1): a spec waiting for distinct callers counts requests.
 + */
-+export async function e2eC12Gate(name: string, key: string): Promise<void> {
++export async function e2eC12Gate(name: string, key: string, caller: string = randomUUID()): Promise<void> {
 +  const base = process.env.E2E_GATE_URL;
 +  if (!base) {
 +    throw new Error(`e2e gate ${name}: E2E_GATE_URL is not set on this patched stack, so the pause point cannot be honoured; refusing to go on`);
 +  }
-+  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=server&caller=${encodeURIComponent(randomUUID())}&run=1`;
++  const url = `${base.replace(/\/$/, "")}/gate/${encodeURIComponent(name)}/pass?key=${encodeURIComponent(key)}&side=server&caller=${encodeURIComponent(caller)}&run=1`;
 +  const res = await fetch(url, { method: "POST" });
 +  const text = await res.text();
 +  if (res.status !== 200) throw new Error(`e2e gate ${name}: the gate service answered ${res.status} ${text.slice(0, 200)}`);

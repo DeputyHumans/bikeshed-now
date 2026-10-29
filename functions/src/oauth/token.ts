@@ -125,6 +125,11 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
   const redirectUri = fields.get("redirect_uri");
   const ref = db.collection("oauthCodes").doc(createHash("sha256").update(code, "utf8").digest("hex"));
 
+  // Plaintext remains local to this request. An independent HTTP replay must
+  // still revoke a built-in CLI token, while the SDK may acknowledge its own
+  // already-committed token after losing the first commit response.
+  let cliReceipt: ReturnType<typeof prepareToken> | null = null;
+  let grantReceipt: ReturnType<typeof createGrant> | null = null;
   return db.runTransaction(async (tx): Promise<Exchange> => {
     const snap = await tx.get(ref);
     if (!snap.exists) {
@@ -140,6 +145,24 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
     if (!pkceMatches(verifier, stored.codeChallenge)) return mismatch("code_verifier does not match");
 
     if (stored.usedAt) {
+      // A native retry is still this request, even if another client already
+      // recovered and refreshed the grant. Never treat that as code theft and
+      // revoke its newer credentials. Plaintext remains request-local.
+      const issued = grantReceipt;
+      if (issued && stored.tokenId === issued.tokenId) {
+        const current = (await tx.get(db.collection("tokens").doc(issued.tokenId))).data();
+        if (current && current.revokedAt == null && (current.generation ?? 0) === 0) {
+          return { kind: "pair", body: { ...issued.pair } };
+        }
+        return mismatch("the grant issued by this request was revoked or refreshed; use its current credentials");
+      }
+      const receipt = cliReceipt;
+      if (receipt && stored.tokenId === receipt.tokenId && stored.registration === "builtin" && stored.clientId === CLI_CLIENT_ID) {
+        const committed = (await tx.get(db.collection("tokens").doc(receipt.tokenId))).data();
+        if (committed && committed.revokedAt == null && committed.uid === stored.uid && committed.hash === receipt.record.hash) {
+          return { kind: "pair", body: { access_token: receipt.plaintext, token_type: "Bearer" } };
+        }
+      }
       // Possession is proven twice over by now — the code hashed to this
       // document and the verifier matched — so acting on a replay is safe.
       const since = Date.now() - stored.usedAt.toMillis();
@@ -167,12 +190,15 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
       tx.set(db.collection("tokens").doc(prepared.tokenId), prepared.record);
       tx.set(db.collection("users").doc(stored.uid).collection("tokens").doc(prepared.tokenId), prepared.mirror);
       tx.set(ref, { usedAt: now, tokenId: prepared.tokenId }, { merge: true });
+      cliReceipt = prepared;
       return { kind: "pair", body: { access_token: prepared.plaintext, token_type: "Bearer" } };
     }
 
     const nonce = randomBytes(16).toString("base64url");
-    const { tokenId, pair } = createGrant(db, tx, code, stored, nonce);
+    const issued = createGrant(db, tx, code, stored, nonce);
+    const { tokenId, pair } = issued;
     tx.set(ref, { usedAt: now, tokenId, nonce }, { merge: true });
+    grantReceipt = issued;
     return { kind: "pair", body: { ...pair } };
   });
 }

@@ -1,0 +1,16 @@
+{
+  "oracle": "A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication",
+  "what": "controls-operator-withdraw-later-ack",
+  "target": {
+    "spec": "e2e/specs/functional/a12-operator-ack.spec.mjs",
+    "case": "A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "^ACK operator withdrawal later head: exact captured retirement"
+  }
+}

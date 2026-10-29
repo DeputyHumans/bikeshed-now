@@ -1,36 +1,20 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -131,6 +131,7 @@ import {
-   slugify,
- } from "./lib/folders";
- import { computeTeamMembers } from "./lib/teams";
-+import { e2eAccessGate } from "./lib/e2eAccessGate";
- import { forkDocument, lineageFor } from "./lib/fork";
- import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
- import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
-@@ -2393,6 +2394,7 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
-     }
-   }
- 
-+  await e2eAccessGate("team-members-after-read", teamId);
-   await ref.set({ members, admins, updatedAt: now() }, { merge: true });
- 
-   // Removing someone from a team must revoke their access everywhere the team
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -14,6 +14,7 @@ import { addEvent, eventActor } from "./events";
- import { syncPresenceAccess } from "./presence";
- import { syncPublicProjection } from "./publicdoc";
- import { safeSegment } from "./http";
-+import { e2eAccessGate } from "./e2eAccessGate";
+@@ -18,2 +18,3 @@
  import { publicOrigin } from "../config";
++import { e2eAccessGate } from "./e2eAccessGate";
  
- export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
-@@ -147,6 +148,7 @@ export async function setVisibility(ctx: ManagementContext, id: string, patch: R
-   await syncPublicProjection(ctx.db, id);
-   const data = (await ref.get()).data()!;
+@@ -152,2 +153,3 @@
    const m = membershipOf(data);
 +  await e2eAccessGate("visibility-before-mirror", id);
    await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
-   return { id, ...settings("document", id, data), linkToken: data.linkToken ?? null };
- }
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -22,2 +22,3 @@
++import { e2eAccessGate } from "./lib/e2eAccessGate";
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+ import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+@@ -2383,2 +2384,3 @@
+   const ref = db().collection("teams").doc(teamId);
++  await e2eAccessGate("team-members-after-read", teamId);
+   const receipt = freshReceiptId();

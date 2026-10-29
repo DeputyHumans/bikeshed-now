@@ -1,0 +1,7 @@
+--- a/scripts/publish.mjs
++++ b/scripts/publish.mjs
+@@ -295,3 +295,2 @@
+ }
+-
+-main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));
++main().finally(() => { void closeAdmin; }).catch((err) => fail(err.message || String(err)));

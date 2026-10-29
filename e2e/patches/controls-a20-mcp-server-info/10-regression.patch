@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -132,5 +132,5 @@
+         protocolVersion: PROTOCOL_VERSION,
+         capabilities: { tools: { listChanged: false } },
+-        serverInfo: SERVER_INFO,
++        serverInfo: { ...SERVER_INFO, name: "wrong-server" },
+         instructions: INSTRUCTIONS,
+       });

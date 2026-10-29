@@ -1,0 +1,8 @@
+--- a/app/src/styles/base.css
++++ b/app/src/styles/base.css
+@@ -134,4 +134,3 @@
+   select, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+-  textarea, summary, label:has(input:is([type="checkbox"], [type="radio"])),
+-  .checkbox-row > label {
++  textarea, summary, label:has(input:is([type="checkbox"], [type="radio"])) {
+     min-height: var(--tap) !important;

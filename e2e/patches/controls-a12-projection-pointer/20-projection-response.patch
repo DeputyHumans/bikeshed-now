@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1244,7 +1244,7 @@
+     throw error;
+   }
+
+-  res.status(200).json({ draft: { ...draft, editSessions: undefined } });
++  res.status(200).json({ draft: { ...draft, storagePrefix: "wrong-draft-pointer", editSessions: undefined } });
+ });
+
+ /**

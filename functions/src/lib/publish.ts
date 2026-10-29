@@ -19,8 +19,12 @@
  */
 
 import * as admin from "firebase-admin";
+import { syncPublicProjection } from "./publicdoc";
+import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { draftStoragePrefix, newBundlePrefix, versionStoragePrefix } from "./storage";
+import { newBundlePrefix, versionStoragePrefix } from "./storage";
+import { removeDraftSnapshot, removeUnreferencedCandidate, retireLiveSession } from "./draft";
+import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
@@ -35,7 +39,7 @@ import {
   uniqueDocId,
   type Membership,
 } from "./folders";
-import { clearEditLog, editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
+import { editorsRefusal, syncPresenceAccess, type EditingRefusal } from "./presence";
 import {
   anyAcceptedInDraft,
   anyOpenThread,
@@ -45,13 +49,15 @@ import {
   type PendingRefusal,
 } from "./review";
 
+/** Access or expiry changed while bytes were uploading. */
+export type AuthorityRefusal = { status: 403 | 409; error: string; expired?: boolean };
+
 /** Another version became current while this one was uploading. */
 export interface StaleRefusal {
   error: string;
   status: 409;
   currentVersion: string;
 }
-import { syncPublicProjection } from "./publicdoc";
 import { resolveMarking, type Marking } from "./marking";
 
 type Db = admin.firestore.Firestore;
@@ -205,8 +211,10 @@ export async function reviseDocument(args: {
   extracted: ExtractedBundle;
   actor: Actor;
   authorEmail: string;
+  k?: string | null;
+  editorsOnly?: boolean;
   via: "cli" | "mcp" | "api" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | { error: string }> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | { error: string }> {
   const { docRef, baseVersion, extracted } = args;
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
@@ -230,6 +238,8 @@ export async function reviseDocument(args: {
     compiled,
     actor: args.actor,
     authorEmail: args.authorEmail,
+    k: args.k,
+    editorsOnly: args.editorsOnly,
     baseVersion,
     via: args.via,
   });
@@ -380,7 +390,9 @@ export async function publishNewDocument(
     emptyGrants(),
     input.parentMembership,
   );
-  const marking: Marking = resolveMarking(input.marking);
+  const account = input.marking === undefined && input.ownerUid
+    ? await db.collection("users").doc(input.ownerUid).get() : null;
+  const marking: Marking = resolveMarking(input.marking === undefined ? account?.get("defaultMarking") : input.marking);
   const docRef = db.collection("docs").doc(docId);
 
   const batch = db.batch();
@@ -466,17 +478,20 @@ export async function commitNewVersion(args: {
   compiled: CompiledBundle;
   actor: Actor;
   authorEmail: string;
+  k?: string | null;
+  editorsOnly?: boolean;
   baseVersion: string | null;
   via: "cli" | "mcp" | "api" | "editor" | "upload";
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal> {
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal> {
   const { db, docRef, compiled } = args;
   const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
   const versionsRef = docRef.collection("versions");
 
-  const dup = await versionsRef.where("contentHash", "==", contentHash).limit(1).get();
-  if (!dup.empty) {
+  const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
+  const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
+  if (dup?.exists && dup.data()?.contentHash === contentHash) {
     return {
-      versionId: dup.docs[0].id,
+      versionId: dup.id,
       contentHash,
       fileCount,
       bytes,
@@ -507,19 +522,33 @@ export async function commitNewVersion(args: {
   await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
 
   const base = args.baseVersion ?? "";
-  let replacedDraftPrefix: string | null = null;
+  let replacedDraft: unknown;
+  let retiredEpoch = "initial";
+  let candidateMayHaveCommitted = false;
   try {
     await db.runTransaction(async (tx) => {
       // Both asked again here, where the version becomes current: the checks
       // above ran before the upload, and either may have changed during it.
       const cur = await tx.get(docRef);
+      const candidate = await tx.get(versionsRef.doc(versionId));
+      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
+      await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
-      replacedDraftPrefix = cur.data()?.draft ? draftStoragePrefix(docRef.id, cur.data()!.draft) : null;
+      replacedDraft = cur.data()?.draft;
+      retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       await mintVersion(tx);
+      candidateMayHaveCommitted = true;
     });
   } catch (e) {
+    // A retry-only refusal cannot disprove an earlier acknowledged-lost commit.
+    // Staged candidates need a fresh proof that no durable pointer selects them.
+    if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
+      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
+      else await removeDraftSnapshot(docRef.id, { storagePrefix });
+    }
+    if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };
     const reason = (e as Error).message;
     if (reason === "PENDING") {
       const pending = await refuseIfPending(docRef, base);
@@ -542,8 +571,8 @@ export async function commitNewVersion(args: {
 
   // Only once the version is current, so a refused or stale update leaves the
   // draft and its log to the people editing them.
-  await dropReplacedDraft(docRef.id, editing.log, replacedDraftPrefix);
-  await syncPublicProjection(db, docRef.id);
+  await removeDraftSnapshot(docRef.id, replacedDraft);
+  await retireLiveSession(db, docRef.id, retiredEpoch);
 
   return { versionId, contentHash, fileCount, bytes, deduped: false };
 
@@ -575,6 +604,7 @@ export async function commitNewVersion(args: {
       docRef,
       {
         currentVersion: versionId,
+        liveEpoch: randomUUID(),
         draft: FieldValue.delete(),
         updatedAt: now(),
         stats: {
@@ -586,29 +616,5 @@ export async function commitNewVersion(args: {
       { merge: true },
     );
     withdrawTrust(tx, docRef, grants);
-  }
-}
-
-/**
- * What a draft leaves behind once a version has replaced it (SPEC §6b).
- *
- * The transaction deleted the `draft` field; its files and its live log are
- * outside Firestore. Both would bring it back: the next editor to open the
- * document joins the log, which wins over the bytes it loaded, and autosaves
- * the old draft over the new version; the files are what `/draft` serves.
- *
- * Best effort, because the version is already current: failing the request now
- * would report as unpublished a version everybody can already see.
- */
-async function dropReplacedDraft(docId: string, log: boolean, prefix: string | null): Promise<void> {
-  try {
-    if (log) await clearEditLog(docId);
-  } catch (e) {
-    console.error(`could not clear the edit log of ${docId}:`, (e as Error)?.message ?? e);
-  }
-  try {
-    if (prefix) await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `${prefix}/`, force: true });
-  } catch (e) {
-    console.error(`could not delete the draft files of ${docId}:`, (e as Error)?.message ?? e);
   }
 }

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/threads.ts
++++ b/functions/src/lib/threads.ts
+@@ -5,2 +5,3 @@
+ import { currentVersionRefusal } from "./versions";
++import { e2eAckTransaction } from "./e2eAckTransaction";
+ import { FieldValue } from "firebase-admin/firestore";
+@@ -35,3 +36,3 @@
+   let attempted = false;
+-  return db.runTransaction(async (tx) => {
++  return e2eAckTransaction(db, docRef.id, resolved ? "thread-resolve" : "thread-reopen", async (tx) => {
+     const head = await tx.get(docRef);

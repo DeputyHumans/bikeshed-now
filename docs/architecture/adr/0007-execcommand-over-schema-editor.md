@@ -19,17 +19,19 @@ document schema comes back as paragraphs.
 
 Edit the **actual authored DOM**. Set `contentEditable` on the document body
 inside the same-origin iframe and drive formatting with `document.execCommand`.
-Nothing is parsed, normalized or reconstructed; the bytes that come back are the
-bytes that went in, plus the edit.
+No editor schema reconstructs the document. The browser's parsed DOM survives
+plus the edit; normal HTML parsing and serialization can change equivalent
+source spelling and whitespace outside the body.
 
 `serializeCleanHtml` is what makes that a guarantee rather than a hope: it
 strips own-marked nodes, unwraps highlight `<mark>`s preserving children, drops
-`[contenteditable]`, and drops any asset tag absent from the `authoredAssets`
+the editor's body attribute overrides back to their authored values, and drops
+any asset tag absent from the `authoredAssets`
 baseline captured at load.
 
 ## Consequences
 
-- **A round trip is an identity function on a clean document.** That is the
+- **A round trip preserves a clean document's DOM.** That is the
   single most valuable test in the app.
 - `execCommand` is deprecated, inconsistent across engines, and emits `<font>`
   tags. Deprecated here means "no longer specified", not "removed" — every

@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -56,3 +56,3 @@
+   const target = range.startContainer.parentElement;
+-  target?.scrollIntoView?.({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
++  target?.scrollIntoView?.({ block: "center", behavior: reduceMotion ? "smooth" : "smooth" });
+   if (win?.Highlight && win.CSS?.highlights && "adoptedStyleSheets" in doc) {

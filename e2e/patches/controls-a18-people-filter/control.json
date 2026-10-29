@@ -1,0 +1,13 @@
+{
+  "oracle": "People excludes automated activity and includes the human session",
+  "what": "Keep Automation correct while leaking automated rows through People",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "People excludes automated activity and includes the human session"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK MCP read: successful calls remove only their completed receipts",
+  "what": "Reintroduce the MCP native acknowledgement-loss failure in this directional assertion.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+    "case": "A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK MCP read: successful calls remove only their completed receipts"
+  }
+}

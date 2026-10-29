@@ -16,9 +16,9 @@
 
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { E2E_DIR, OUT_DIR, REPO_ROOT } from "../lib/paths.mjs";
 import { CASE_TIMEOUT_ENV } from "../lib/budget.mjs";
@@ -28,6 +28,8 @@ import {
   admitWorkers, functionWorkerBytes, functionWorkers, retireIdleWorkers, staticWarmUrl, workerNeedBytes,
 } from "../lib/workers.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
+import { firebaseTools } from "../lib/prerequisites.mjs";
+import { firebaseBehavior } from "./helpers/firebase-probes.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dir = tempDir("e2e-workers-");
@@ -265,17 +267,12 @@ test("retireIdleWorkers is refused outside the concurrency tier and for a hub th
   for (const bad of [{ timeoutMs: -1 }, { settleMs: 1.5 }, { scan: 3 }, { fetchImpl: null }]) await assert.rejects(retireIdleWorkers(baseTarget, { env: CONC, ...bad }), TypeError, JSON.stringify(bad));
 });
 
-test("the installed firebase-tools: the hub's PUT route reloads the triggers, a reload refreshes the worker pools (idle killed, busy finishing), and the source watcher ignores every path under ~/.cache", (t) => {
+test("the installed firebase-tools: the hub's PUT route reloads the triggers, a reload refreshes the worker pools (idle killed, busy finishing), and the source watcher ignores every path under ~/.cache", async (t) => {
   assert.equal(RELOAD_PATH, "/functions/enableBackgroundTriggers");
-  let bin;
-  try {
-    bin = realpathSync(execFileSync("/usr/bin/which", ["firebase"], { encoding: "utf8" }).trim());
-  } catch {
-    t.skip("firebase-tools is not installed here");
-    return;
-  }
-  let root = dirname(bin);
-  while (root !== dirname(root) && !existsSync(join(root, "package.json"))) root = dirname(root);
+  const firebase = firebaseTools({ optional: true });
+  if (!firebase) return t.skip("firebase-tools is not installed here");
+  const { root } = firebase;
+  t.diagnostic(`firebase-tools ${firebase.version}: ${firebase.bin}`);
   const emu = join(root, "lib", "emulator");
   const hub = readFileSync(join(emu, "hub.js"), "utf8");
   const fe = readFileSync(join(emu, "functionsEmulator.js"), "utf8");
@@ -287,11 +284,19 @@ test("the installed firebase-tools: the hub's PUT route reloads the triggers, a 
   assert.match(pool, /refresh\(\) \{[\s\S]{0,300}?if \(w\.state === RuntimeWorkerState\.IDLE\) \{[\s\S]{0,200}?w\.runtime\.process\.kill\(\);[\s\S]{0,200}?else if \(w\.state === RuntimeWorkerState\.BUSY\) \{[\s\S]{0,200}?w\.state = RuntimeWorkerState\.FINISHING;/, "refresh kills IDLE workers and lets BUSY ones finish");
   assert.match(fe, /path\.join\(__dirname, "functionsEmulatorRuntime"\)/, "a worker runs functionsEmulatorRuntime");
   assert.match(fe, /envs\.FUNCTION_TARGET = /, "with FUNCTION_TARGET in its env");
-  const ignored = /ignored: \[\s*(\/\(\^\|\[\\\/\\\\\]\)\\\.\.\/),/.exec(fe);
-  assert.ok(ignored, "the watcher's dotfile pattern");
-  const dotfiles = new RegExp(ignored[1].slice(1, -1));
-  assert.ok(dotfiles.test(join(realpathSync(process.env.HOME ?? "/"), ".cache", "bikeshed-e2e", "stacks", "r", "tree", "functions", "lib", "index.js")), "a stack tree's functions/ under ~/.cache is ignored whole: no change there reloads anything");
-  t.diagnostic(`firebase-tools ${JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version}`);
+  const judge = ({ watched }) => {
+    assert.equal(watched.length, 1, "one source watcher was requested");
+    const ignored = watched[0].options.ignored;
+    const matches = (path) => ignored.some((rule) => rule instanceof RegExp && rule.test(path));
+    assert.ok(matches("/users/probe/.cache/bikeshed-e2e/stacks/r/tree/functions/lib/index.js"), "a cached stack path is ignored");
+    assert.equal(matches("/users/probe/work/functions/lib/index.js"), false, "ordinary source is not mistaken for a dotfile");
+  };
+  judge(await firebaseBehavior(root));
+  // Remove the dotfile rule independent of its position in the ignored array.
+  const dotfileLine = fe.split("\n").find((line) => line.includes("/(^|[\\/\\\\])\\../"));
+  assert.ok(dotfileLine, "the watcher control found the installed dotfile rule");
+  const withoutDotfiles = await firebaseBehavior(root, { source: fe.replace(dotfileLine, "") });
+  assert.throws(() => judge(withoutDotfiles), /a cached stack path is ignored/, "NEGATIVE: dropping the dotfile rule is detected");
 });
 
 // --- the static warm-up ---------------------------------------------------------------

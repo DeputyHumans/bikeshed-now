@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1307,5 +1307,5 @@
+     if (!version) { res.status(404).end(); return; }
+     const causal = hasDraft ? readStoredCausalStamp(docData.draft?.causal) : null;
+-    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(causal ? { causal } : {}) });
++    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(false && causal ? { causal } : {}) });
+     return;
+   }

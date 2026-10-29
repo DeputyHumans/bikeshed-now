@@ -1,0 +1,10 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -48,7 +48,6 @@
+   transform: "none",
+   scale: "1",
+   rotate: "none",
+-  translate: "none",
+   "offset-path": "none",
+   "mask-image": "none",
+   "mix-blend-mode": "normal",

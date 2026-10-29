@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.7x changes reads both default-sized pages: all 103 recorded events exactly once in stored order",
+  "what": "controls-a20-cli-change-pages",
+  "target": {
+    "spec": "e2e/specs/functional/a20-cli.spec.mjs",
+    "case": "A20.7x changes reads both default-sized pages: all 103 recorded events exactly once in stored order",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "changes returns all 103 events"
+  }
+}

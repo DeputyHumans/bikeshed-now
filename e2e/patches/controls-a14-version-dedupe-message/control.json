@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.7 Upload a new version from the workspace preserves the address, explains refusals, retries, reports identical files and blocks an outdated open dialog",
+  "what": "version dedupe message",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.7 Upload a new version from the workspace preserves the address, explains refusals, retries, reports identical files and blocks an outdated open dialog"
+  },
+  "expect": {
+    "message": "the identical-file message names the retained version"
+  }
+}

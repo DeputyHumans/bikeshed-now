@@ -1,0 +1,9 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -234,5 +234,5 @@
+     ...(Array.isArray(v.files) ? { files: v.files } : {}),
+     parentVersion: null,
+-    publishedVia: "fork",
++    publishedVia: "mcp",
+     publishedByEmail: caller.emailLower,
+     publishedBy: input.actor,

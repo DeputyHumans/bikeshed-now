@@ -1,0 +1,13 @@
+{
+  "oracle": "A cross-origin frame cannot reach signup through alternate app routes",
+  "what": "A cross-origin frame cannot reach signup through alternate app routes",
+  "target": {
+    "spec": "e2e/specs/functional/a01-identity.spec.mjs",
+    "case": "A1.9c a page on another origin cannot frame the sign-in page at /SIGNUP, /Signup, /CONNECT or /Connect, as it cannot frame /signup itself",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "variant paths another origin framed"
+  }
+}

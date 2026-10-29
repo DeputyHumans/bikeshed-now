@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -749,3 +749,3 @@
+           ...(await whereAndWho(ctx, out.docId)),
+-          cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(out.docId), "always"),
++          cursor: encodeCursor(await headCursor(ctx.db.collection("docs").doc(out.docId))),
+         },

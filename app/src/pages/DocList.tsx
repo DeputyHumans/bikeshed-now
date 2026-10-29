@@ -43,7 +43,7 @@ import { coverUrl } from "../thumbs";
 import { useCoverBackfill } from "../hooks/useCoverBackfill";
 import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
-import { MARKING_OFF } from "../export/labels";
+import { DEPLOYMENT_MARKING } from "../config";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -296,15 +296,15 @@ export function DocList() {
     return watchUser(user.uid, setAccount);
   }, [user]);
 
-  const defaultMarkingRef = useRef(MARKING_OFF as Marking);
-  defaultMarkingRef.current = account?.defaultMarking ?? MARKING_OFF;
+  const defaultMarkingRef = useRef(DEPLOYMENT_MARKING as Marking);
+  defaultMarkingRef.current = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
   /**
    * Upload dropped files where they landed.
    *
    * No dialog: everything the dialog collects is already determined by the
-   * drop. The title comes from the filename exactly as the dialog derives it,
-   * the marking from the account default exactly as the dialog seeds it, and
+   * drop. The server derives the title from the document exactly as it does
+   * for an untitled dialog upload, the marking comes from the account default, and
    * the folder from what was dropped on. Asking again would be asking somebody
    * to confirm what they just did.
    *
@@ -328,7 +328,6 @@ export function DocList() {
       for (const file of usable) {
         try {
           const result = await uploadDoc(file, {
-            title: file.name.replace(/\.[^.]+$/, "") || undefined,
             folderId: target,
             marking: defaultMarkingRef.current,
             onProgress: (fraction) =>
@@ -379,7 +378,7 @@ export function DocList() {
     return filterFolders(scoped, search).sort((a, b) => a.name.localeCompare(b.name));
   }, [folders, folderId, search]);
 
-  const defaultMarking: Marking = account?.defaultMarking ?? MARKING_OFF;
+  const defaultMarking: Marking = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
   const shareDoc = (doc: DocMeta) =>
     setSharing({

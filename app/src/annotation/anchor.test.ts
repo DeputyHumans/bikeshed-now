@@ -2,7 +2,7 @@
 // Anchors have to survive edits, and this is the property they exist for (SPEC §6).
 
 import { describe, expect, it } from "vitest";
-import { describeAnchorFromRange, rangeFromAnchor, sameAnchor } from "./anchor";
+import { describeAnchorFromRange, describeAnchorFromSelection, describeFocusFromSelection, rangeFromAnchor, sameAnchor } from "./anchor";
 
 function makeDoc(body: string): Document {
   return new DOMParser().parseFromString(
@@ -169,4 +169,22 @@ describe("anchors, defensively", () => {
       }),
     ).toBeNull();
   });
+});
+
+it("broadcasts a collapsed peer caret at its actual offset without making it a comment anchor", () => {
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  const doc = frame.contentDocument!;
+  doc.body.innerHTML = '<p id="caret">one two three</p>';
+  try {
+    const text = doc.querySelector("p")!.firstChild!;
+    doc.getSelection()!.setBaseAndExtent(text, 7, text, 7);
+    expect(describeAnchorFromSelection(doc)).toBeNull();
+    const anchor = describeFocusFromSelection(doc);
+    expect(anchor).toMatchObject({ elementId: "caret", exact: "", start: 7, end: 7 });
+    const range = rangeFromAnchor(doc, anchor!);
+    expect(range?.collapsed).toBe(true);
+    expect(range?.startContainer).toBe(text);
+    expect(range?.startOffset).toBe(7);
+  } finally { frame.remove(); }
 });

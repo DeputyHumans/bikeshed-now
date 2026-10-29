@@ -31,12 +31,18 @@ export async function setThreadResolved(args: {
 }): Promise<{ resolved: boolean; changed: boolean } | ThreadRefusal> {
   const { db, docRef, versionId, annId, resolved, caller, actor } = args;
   const annRef = docRef.collection("versions").doc(versionId).collection("annotations").doc(annId);
+  const noteRef = annRef.collection("comments").doc();
+  let attempted = false;
   return db.runTransaction(async (tx) => {
     const head = await tx.get(docRef);
-    const refusal = currentVersionRefusal(head.data(), versionId);
-    if (refusal) return refusal;
     const snap = await tx.get(annRef);
     const ann = snap.data();
+    // The note's preallocated id proves this operation committed already.
+    // A retry after acknowledgement loss must not undo a later reopen/resolve.
+    const note = attempted ? await tx.get(noteRef) : null;
+    if (note?.exists && note.data()?.commentId === noteRef.id && note.data()?.authorUid === caller.uid) return { resolved, changed: true };
+    const refusal = currentVersionRefusal(head.data(), versionId);
+    if (refusal) return refusal;
     if (!snap.exists || !ann) return { status: 404, error: "no such thread" };
     if (ann.suggestion) {
       return {
@@ -49,7 +55,6 @@ export async function setThreadResolved(args: {
 
     // `resolvedBy` is who the change log says resolved or reopened it.
     tx.update(annRef, { resolved, resolvedBy: actor });
-    const noteRef = annRef.collection("comments").doc();
     tx.create(noteRef, {
       commentId: noteRef.id,
       body: resolved ? "Resolved." : "Reopened.",
@@ -59,6 +64,7 @@ export async function setThreadResolved(args: {
       createdAt: FieldValue.serverTimestamp(),
       generated: true,
     });
+    attempted = true;
     return { resolved, changed: true };
   });
 }

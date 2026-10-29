@@ -1,0 +1,8 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -346,5 +346,4 @@
+ .is-presenting .viewer-toolbar,
+ .is-presenting .viewer-banners,
+-.is-presenting .comments-panel,
+ .is-presenting .consent {
+   display: none;

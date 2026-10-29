@@ -1,0 +1,12 @@
+--- a/app/src/components/SlideOverview.tsx
++++ b/app/src/components/SlideOverview.tsx
+@@ -59,3 +59,3 @@
+     target?.focus();
+-    const release = dialog.current ? containModalFocus(dialog.current) : () => {};
++    const release = () => { void containModalFocus; };
+     return () => {
+@@ -71,3 +71,3 @@
+       tabIndex={-1}
+-      onKeyDown={(e) => trapModalTab(e, e.currentTarget)}
++      onKeyDown={() => { void trapModalTab; }}
+       role="dialog"

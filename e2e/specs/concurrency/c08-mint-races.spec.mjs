@@ -199,6 +199,7 @@
  * gated cases are LOCAL: an amplify set is applied to a local stack copy.
  */
 
+import { readLiveLogs } from "../../lib/live-log.mjs";
 import assert from "node:assert/strict";
 import { AssertionError } from "node:assert";
 import { createHash } from "node:crypto";
@@ -207,7 +208,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { closeAdmin, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
 import { eventually, settleStill } from "../../lib/assert.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
 import { idSelector } from "../../lib/frame.mjs";
@@ -259,7 +260,7 @@ const MEASURE = "c08-mint-races";
  * race reaches S4's window only by chance. C9 S4 decides whether S4 is
  * fixed; once it is, set this to null and such a trial PASSES.
  */
-const C9_RACE_DEFECT = "S4";
+const C9_RACE_DEFECT = null;
 /** editorsRefusal (functions/src/lib/presence.ts). */
 const EDITORS_RE = /open in the editor, where this would be lost/;
 
@@ -323,9 +324,13 @@ async function serverSnapshot(docId) {
   const draft = d?.draft
     ? { baseVersion: d.draft.baseVersion ?? null, bytes: d.draft.bytes ?? null, updatedByEmail: d.draft.updatedByEmail ?? null, updatedAt: d.draft.updatedAt?.toMillis?.() ?? null }
     : null;
+  const selected = versions.map((v) => `${v.storagePrefix ?? `docs/${docId}/${v.id}`}/`);
+  if (d?.draft) selected.push(`${draftStoragePrefix(docId, d.draft)}/`);
+  const orphanedObjects = objects.filter((name) => name.startsWith(`docs/${docId}/bundles/`) && !selected.some((prefix) => name.startsWith(prefix)));
   return {
     currentVersion: d?.currentVersion ?? null,
     draft,
+    orphanedObjects,
     versions: versions.map((v) => `${v.id}<${v.parentVersion ?? "-"}:${short(v.contentHash)}:${v.publishedVia}`),
     objects,
   };
@@ -520,6 +525,7 @@ function toastSplit(rows, { published: want = 1 } = {}) {
   for (const r of rows) {
     if (r.outcome === "published") continue;
     if (r.outcome === CONFLICT_OUTCOME && r.answer?.status === 409) continue;
+    if (r.outcome === "error" && r.answer?.status === 409 && r.answer.json?.draftChanged === true) continue;
     if (r.outcome === "nochange" && r.answer?.status === 200 && r.answer.json?.deduped === true) s4b.push(why(r));
     else other.push(why(r));
   }
@@ -564,7 +570,7 @@ async function saveFreshDraft(ctx, s, baseVersion, bytes, marker) {
  */
 async function freshDraftSplit(s, baseVersion, marker) {
   const d = await readDoc(target, `docs/${s.docId}`);
-  const obj = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+  const obj = await readDraftObject(target, s.docId, s.entry);
   const gone = [];
   const other = [];
   if (!d?.draft) gone.push(`docs/${s.docId}.draft is gone`);
@@ -751,7 +757,7 @@ async function editedAndLeft(ctx, label, tag) {
   await typeAndSettle(ctx, s, log);
   await p1.done({ timeout: 60_000 });
   await nobodyEditing(ctx, s.docId);
-  precondition(await readObject(target, `docs/${s.docId}/draft/${s.entry}`), "the editor's draft is saved");
+  precondition(await readDraftObject(target, s.docId, s.entry), "the editor's draft is saved");
   const agents = await agentsOf(ctx, s.owner, ctx.n - 1, tag);
   return { s, p1, key: s.docId, agents };
 }
@@ -795,12 +801,21 @@ async function firstUpdateAlone(ctx, g, agent, call, defect = null) {
 }
 
 /** The document's draft as the server holds it now: docs/{d}.draft and the objects under docs/{d}/draft/. */
+async function captureRetiringDraft(s) {
+  const d = await readDoc(target, `docs/${s.docId}`);
+  precondition(d?.draft, "the draft selected for retirement exists before the write");
+  s.retiringDraftPrefix = draftStoragePrefix(s.docId, d.draft);
+  const objects = await listObjects(target, `${s.retiringDraftPrefix}/`);
+  precondition(objects.length > 0, "the draft selected for retirement has concrete objects");
+}
 async function draftState(s) {
   const d = await readDoc(target, `docs/${s.docId}`);
+  precondition(s.retiringDraftPrefix, "the retiring snapshot path was captured before its metadata was removed");
   return {
     currentVersion: d?.currentVersion ?? null,
     field: d?.draft ? { baseVersion: d.draft.baseVersion ?? null } : null,
-    files: await listObjects(target, `docs/${s.docId}/draft/`),
+    files: await listObjects(target, `${s.retiringDraftPrefix}/`),
+    currentFiles: d?.draft ? await listObjects(target, `${draftStoragePrefix(s.docId, d.draft)}/`) : [],
   };
 }
 
@@ -862,7 +877,7 @@ scenario("C8 N × Save as new version (SYNC-H): N editors' commits, held in thei
       if (err?.code === "E2E_SYNC_TIMEOUT") ctx.inconclusive(`the sync precondition did not hold: ${err.held}/${ctx.n} POST /commit held within 90 s`);
       throw err;
     }
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, `the draft every commit is about to publish is in Storage (docs/${s.docId}/draft/${s.entry})`);
     released = await hold.release();
   } finally {
@@ -894,7 +909,6 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
   tiers: LOCAL,
   needs: RACES,
   n: N,
-  defect: "S4b",
   timeoutMs: APP_CASE_MS,
   ...LIVE,
 }, async (ctx) => {
@@ -909,16 +923,33 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
   let draft = null;
   let won = null;
   let pending = [];
+  const holds = s.users.map((u) => holdRequests(u.page, (url) => url.pathname === "/commit", 1, { method: "POST", timeoutMs: 90_000 }));
+  const releases = new Map();
+  const dispatch = (i) => {
+    if (!releases.has(i)) {
+      const response = holds[i].release();
+      response.catch(() => undefined);
+      releases.set(i, response);
+    }
+    return releases.get(i);
+  };
   try {
+    await Promise.all(holds.map((hold) => hold.installed));
     await g.hold("commit-before-read", { key });
-    ctx.step(`${w.name} presses Save: its commit is held at commit-before-read, past the endpoint's base check`);
+    ctx.step("every editor saves its draft, but each commit waits in its own browser until all saves finished");
     const wp = pressSave(w);
-    await requireHeld(ctx, g, "commit-before-read", 1, { key, timeoutMs: HELD_MS });
-    ctx.step(`${losers.map((u) => u.name).join(", ")} press Save: each saves its draft on v1 and its commit is held there too`);
     const lp = losers.map(pressSave);
     pending = [wp, ...lp];
+    await Promise.all(holds.map((hold) => hold.held));
+    // Immutable snapshot CAS is about identity, even for identical HTML. Let
+    // every commit read the same last saved snapshot before separating them.
+    // release() also waits for the HTTP response, which this server gate holds.
+    // Dispatch now, prove arrival, and await responses only after opening gates.
+    dispatch(0);
+    await requireHeld(ctx, g, "commit-before-read", 1, { key, timeoutMs: HELD_MS });
+    for (let i = 1; i < holds.length; i++) dispatch(i);
     await requireHeld(ctx, g, "commit-before-read", ctx.n, { key, timeoutMs: HELD_MS });
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while every commit is held");
     ctx.step(`let ${w.name}'s commit go alone (the first to arrive)`);
     await g.release("commit-before-read", { count: 1 });
@@ -938,6 +969,7 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
     await g.release("commit-after-read");
   } finally {
     await releaseAll(g, ["commit-before-read", "commit-after-read"]);
+    await Promise.all(holds.map((_, i) => dispatch(i)));
   }
   const rows = await outcomesOf(ctx, s.users, pending, caps);
   await settleServer(ctx, s.docId, "after the late losers");
@@ -954,14 +986,13 @@ scenario("C8 S4b a late losing Save as new version (SYNC-P): commits held before
   // Any other toast, and the fresh draft overwritten, are others' (FAIL).
   await judgeToastsSplit(rows, "C8 S4b toasts", { others, own });
   await judgeFreshDraftSplit(s, won.versionId, marker, { others, own });
-  verdict({ defect: "S4b", others, own });
+  verdict({ others, own });
 });
 
-scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading its draft, each loser typing once more and saving a later draft, all choosing the same version id and uploading before the first commits; the version's stored bytes are the winner's (I7)", {
+scenario("C8 divergent draft snapshots (SYNC-P): the first commit reads D1, later editors save newer snapshots, and every commit uploads before transactions run; D1 is refused with draftChanged and exactly one current snapshot is published with its own bytes (I7)", {
   tiers: LOCAL,
   needs: MINT_JOIN,
   n: N,
-  defect: "S4",
   timeoutMs: APP_CASE_MS,
   ...LIVE,
 }, async (ctx) => {
@@ -973,6 +1004,7 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
   const [w, ...losers] = s.users;
   const caps = captureSaves(s.users);
   let d1 = null;
+  let latest = null;
   let pending = [];
   const later = {};
   try {
@@ -981,7 +1013,7 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
     ctx.step(`${w.name} presses Save: its commit reads draft D1 and is held at mint-before-id`);
     const wp = pressSave(w);
     await requireHeld(ctx, g, "mint-before-id", 1, { key, timeoutMs: HELD_MS });
-    d1 = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    d1 = await readDraftObject(target, s.docId, s.entry);
     precondition(d1, "the draft the first commit read is in Storage");
     ctx.step(`${losers.map((u) => u.name).join(", ")} each type one more token and press Save: a later draft, held at mint-before-id too`);
     const lp = losers.map((u) => settled((async () => {
@@ -995,6 +1027,8 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
     pending = [wp, ...lp];
     await requireHeld(ctx, g, "mint-before-id", ctx.n, { key, timeoutMs: HELD_MS });
     for (const u of losers) later[u.name] = lastSavedHtml(caps.get(u.name));
+    latest = await readDraftObject(target, s.docId, s.entry);
+    precondition(latest && !latest.equals(d1), "the later draft snapshot differs from D1");
     ctx.step(`let ${w.name}'s commit choose its id and upload; it is held at mint-after-upload`);
     await g.release("mint-before-id", { count: 1 });
     await requireHeld(ctx, g, "mint-after-upload", 1, { key, timeoutMs: HELD_MS });
@@ -1004,17 +1038,18 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
     ctx.step(`let ${w.name}'s transaction go first, then the losers'`);
     await g.release("mint-after-upload", { count: 1 });
     const wr = await wp;
-    if (!wr.ok || wr.value.outcome !== "published") {
-      const err = new Error(`not S4's oracle: the first commit did not publish (${wr.ok ? `${wr.value.outcome} "${wr.value.text}"` : wr.error?.message})`);
-      err.code = "E2E_C08_OTHER_ORACLE";
-      throw err;
-    }
+    if (!wr.ok) throw wr.error;
+    const first = await answersOf(caps.get(w.name));
+    assert.ok(first.commit?.status === 409 && first.commit.json?.draftChanged === true,
+      "C8 snapshot CAS: the first commit read D1 and must refuse after a newer draft replaced it");
+    assert.notEqual(wr.value.outcome, "published", "the superseded draft is never announced as published");
     await g.release("mint-after-upload");
   } finally {
     await releaseAll(g, ["mint-before-id", "mint-after-upload"]);
   }
   const rows = await outcomesOf(ctx, s.users, pending, caps);
-  await settleServer(ctx, s.docId, "after the divergent commits");
+  const state = await settleServer(ctx, s.docId, "after the divergent commits");
+  assert.deepEqual(state.orphanedObjects, [], "C8 cleanup: refused commit candidates leave no unreachable immutable bundles");
 
   const others = oracleSet();
   const own = oracleSet();
@@ -1024,8 +1059,8 @@ scenario("C8 S4 divergent drafts (SYNC-P): the first commit held after reading i
     minted = await judgeOneVersion(ctx, s.docId, { via: "editor" });
   });
   const known = { [w.name]: d1, ...Object.fromEntries(Object.entries(later).map(([k, v]) => [k, v == null ? null : Buffer.from(v, "utf8")])) };
-  if (minted) await judgeI7Split(ctx, s.owner.http, s.docId, minted.id, d1, { winner: w.name, known, others, own });
-  verdict({ defect: "S4", others, own });
+  if (minted) await judgeI7Split(ctx, s.owner.http, s.docId, minted.id, latest, { winner: "the latest draft", known, others, own });
+  verdict({ others, own });
 });
 
 scenario("C8 serial positive control: the same saves one after another — every other editor types, saves its draft on v1 and presses Save, the first then publishes, a fresh draft is saved on its version, and only then does each losing commit on v1 reach the server, in turn — mint one version (I6) with the first's bytes (I7), one \"Published\" toast and N−1 conflict toasts, and the fresh draft survives", {
@@ -1164,7 +1199,6 @@ scenario("C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a vers
   tiers: LOCAL,
   needs: RACES,
   n: N,
-  defect: "S4",
   timeoutMs: MCP_CASE_MS,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -1206,7 +1240,8 @@ scenario("C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a vers
     await releaseAll(g, ["update-before-id", "update-after-upload"]);
   }
   const rows = await updateRows(ctx, pending, "C9 S4");
-  await settleServer(ctx, d.docId, "after the held updates");
+  const state = await settleServer(ctx, d.docId, "after the held updates");
+  assert.deepEqual(state.orphanedObjects, [], "C9 cleanup: refused update candidates leave no unreachable immutable bundles");
 
   const others = oracleSet();
   const own = oracleSet();
@@ -1220,7 +1255,7 @@ scenario("C9 S4 (SYNC-P): N agents' updates on v1 held before they choose a vers
   });
   const known = Object.fromEntries(agents.map((a) => [a.name, Buffer.from(a.content, "utf8")]));
   if (minted) await judgeI7Split(ctx, d.owner.http, d.docId, minted.id, Buffer.from(w.content, "utf8"), { winner: w.name, known, others, own });
-  verdict({ defect: "S4", others, own });
+  verdict({ others, own });
 });
 
 scenario("C9 serial positive control: the same N updates on v1 one after another; exactly one succeeds and N−1 are refused as stale, one version is minted (I6), and its stored bytes are the first's (I7)", {
@@ -1285,16 +1320,16 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
     ctx.step(`${s.users.map((u) => u.name).join(", ")} press Save: every commit is held at mint-before-id, in flight past its base check`);
     pending = s.users.map(pressSave);
     await requireHeld(ctx, g, "mint-before-id", m, { key, timeoutMs: HELD_MS });
-    draft = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while the commits are held");
-    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await rtdbGet(target, `status/${s.docId}/y`)) ?? {}).sort() };
+    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort() };
     ctx.step(`while they are held, ${k} agent(s) update on v1 at once`);
     ({ rows } = await fireUpdates(ctx, agents, s.docId, "C9b updates"));
-    const obj = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+    const obj = await readDraftObject(target, s.docId, s.entry);
     during = {
       snap: await serverSnapshot(s.docId),
       draftSha: obj ? sha(obj) : "absent",
-      y: Object.keys((await rtdbGet(target, `status/${s.docId}/y`)) ?? {}).sort(),
+      y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort(),
       next: await listObjects(target, `docs/${s.docId}/v2/`),
       held: (await g.counts({ key }))["mint-before-id"]?.held ?? null,
     };
@@ -1331,7 +1366,6 @@ scenario("C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the edito
   tiers: LOCAL,
   needs: [...MINT_JOIN, "patch:amplify-c08-mint-races"],
   n: N,
-  defect: "S4",
   timeoutMs: APP_CASE_MS,
   ...LIVE,
 }, async (ctx) => {
@@ -1345,7 +1379,7 @@ scenario("C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the edito
   await typeAndSettle(ctx, s, log);
   await p1.done({ timeout: 60_000 });
   await nobodyEditing(ctx, s.docId);
-  const draftBytes = await readObject(target, `docs/${s.docId}/draft/${s.entry}`);
+  const draftBytes = await readDraftObject(target, s.docId, s.entry);
   precondition(draftBytes, "the editor's draft is saved");
   const agents = await agentsOf(ctx, s.owner, ctx.n - 1, "c09bs4");
   const caps = captureSaves(s.users);
@@ -1394,14 +1428,13 @@ scenario("C9b S4 across the two mint paths (SYNC-P): N−1 agents pass the edito
   });
   const known = { [p1.name]: winner, ...Object.fromEntries(agents.map((a) => [a.name, Buffer.from(a.content, "utf8")])) };
   if (minted) await judgeI7Split(ctx, s.owner.http, s.docId, minted.id, winner, { winner: p1.name, known, others, own });
-  verdict({ defect: "S4", others, own });
+  verdict({ others, own });
 });
 
 scenario("C9b S4b across the two mint paths (SYNC-P): N−1 agents pass the editors question while nobody edits and are held before choosing an id; an editor then opens the editor and saves, and its commit passes the base check and is held before it reads the draft; the first agent mints a version and drops the draft; the editor's commit, let go, is told of the newer version (POST /commit 409, a conflict toast), never \"No changes to publish\"", {
   tiers: LOCAL,
   needs: RACES,
   n: N,
-  defect: "S4b",
   timeoutMs: APP_CASE_MS,
   ...LIVE,
 }, async (ctx) => {
@@ -1421,6 +1454,7 @@ scenario("C9b S4b across the two mint paths (SYNC-P): N−1 agents pass the edit
     await p1.enterEdit({ waitShared: true, timeout: 30_000 });
     save = pressSave(p1);
     await requireHeld(ctx, g, "commit-before-read", 1, { key, timeoutMs: HELD_MS });
+    await captureRetiringDraft(s);
     await firstUpdateAlone(ctx, g, a1, pending[0], "S4b");
     dropped = await draftState(s);
     ctx.step(`after the update: current ${dropped.currentVersion}; docs/${s.docId}.draft ${dropped.field ? `on ${dropped.field.baseVersion}` : "gone"}; ${dropped.files.length} object(s) under docs/${s.docId}/draft/`);
@@ -1429,11 +1463,7 @@ scenario("C9b S4b across the two mint paths (SYNC-P): N−1 agents pass the edit
     await g.release("commit-before-read");
     await requireHeld(ctx, g, "commit-after-read", 1, { key, timeoutMs: HELD_MS });
     read = await draftState(s);
-    // S4b's window: the commit read a draft prefix the update had emptied. A
-    // draft saved there in between (p1's page, on the new version) is not
-    // that window; one the update never dropped is judged below (a FAIL).
-    if (!dropped.files.length && read.files.length) ctx.inconclusive(`the sync precondition did not hold: S4b's window was not reached — docs/${s.docId}/draft/ held ${read.files.join(", ")} (docs/${s.docId}.draft ${read.field ? `on ${read.field.baseVersion}` : "gone"}) when ${p1.name}'s commit had read it, saved after the update dropped the draft`);
-    ctx.step(`${p1.name}'s commit read ${read.files.length ? read.files.join(", ") : "an empty draft prefix"}; let it go`);
+    ctx.step(`${p1.name}'s commit read its captured immutable snapshot after the update; a newer draft uses a separate prefix and cannot alter that read`);
     await g.release("commit-after-read");
     await save;
     if (rest.length) {
@@ -1451,7 +1481,7 @@ scenario("C9b S4b across the two mint paths (SYNC-P): N−1 agents pass the edit
   const others = oracleSet();
   const own = oracleSet();
   await judgeUpdateBeatsEditor(ctx, { s, saves, rows, agents, dropped, label: "C9b S4b", others, own });
-  verdict({ defect: "S4b", others, own });
+  verdict({ others, own });
 });
 
 scenario("C9b S4b serial positive control: the same update and Save one after another — N−1 agents pass the editors question while nobody edits and are held; the editor opens the editor and presses Save, and its POST /commit waits in its own browser; the first agent mints alone, and only then does the editor's commit on v1 reach the server: 409 and a conflict toast, one update succeeds and the rest are stale, one version (I6) with the agent's bytes (I7)", {
@@ -1484,6 +1514,7 @@ scenario("C9b S4b serial positive control: the same update and Save one after an
       if (err?.code === "E2E_SYNC_TIMEOUT") ctx.inconclusive(`the sync precondition did not hold: ${p1.name}'s POST /commit never reached its hold within 90 s`);
       throw err;
     }
+    await captureRetiringDraft(s);
     await firstUpdateAlone(ctx, g, a1, pending[0]);
     dropped = await draftState(s);
     ctx.step(`after the update: current ${dropped.currentVersion}; docs/${s.docId}.draft ${dropped.field ? `on ${dropped.field.baseVersion}` : "gone"}; ${dropped.files.length} object(s) under docs/${s.docId}/draft/`);

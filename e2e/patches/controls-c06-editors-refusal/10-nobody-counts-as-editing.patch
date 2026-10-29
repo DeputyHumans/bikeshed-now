@@ -1,13 +1,7 @@
 --- a/functions/src/lib/presence.ts
 +++ b/functions/src/lib/presence.ts
-@@ -150,7 +150,9 @@
-     return null;
-   }
-   const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
--  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
-+  // e2e negative control (controls-c06-editors-refusal): presence is read,
-+  // and nobody in it ever counts as editing.
-+  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "e2e-never").length;
-   const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
-   return { editors, log };
- }
+@@ -173,3 +173,3 @@
+   // Count people, not tabs; any editing session keeps the refusal active.
+-  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "edit" && (p.liveEpoch ?? "initial") === liveEpoch && mayEdit(p.email))
++  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "e2e-never" && (p.liveEpoch ?? "initial") === liveEpoch && mayEdit(p.email))
+     .map(([session, p]) => typeof p.uid === "string" ? p.uid : session)).size;

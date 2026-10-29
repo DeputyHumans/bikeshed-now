@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.2 a folder made with the Folder button, and one made inside it, deep-link: the URL survives a reload and a fresh navigation with its breadcrumb, rail and contents",
+  "what": "breadcrumb link",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.2 a folder made with the Folder button, and one made inside it, deep-link: the URL survives a reload and a fresh navigation with its breadcrumb, rail and contents"
+  },
+  "expect": {
+    "message": "the breadcrumb after the reload"
+  }
+}

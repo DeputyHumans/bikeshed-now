@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/grants.ts
++++ b/functions/src/oauth/grants.ts
+@@ -252,3 +252,3 @@
+   } catch (err) {
+-    if ((err as { code?: string })?.code === "auth/user-not-found") return "closed";
++    if ((err as { code?: string })?.code === "auth/user-not-found") return "ok";
+     console.error("gate re-check failed:", (err as Error)?.message ?? err);

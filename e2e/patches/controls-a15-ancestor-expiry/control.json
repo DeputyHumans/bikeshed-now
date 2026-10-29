@@ -1,0 +1,13 @@
+{
+  "oracle": "A15.4c an expired source is the absent id's bare 404 to its viewer for fork and lineage, and writes nothing; its owner still forks it",
+  "what": "Let the ancestor walk bypass expiry while direct expired-document requests stay refused.",
+  "target": {
+    "spec": "e2e/specs/functional/a15-forks.spec.mjs",
+    "case": "A15.4c an expired source is the absent id's bare 404 to its viewer for fork and lineage, and writes nothing; its owner still forks it",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^an expired source stops a live fork's ancestor walk"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/app/src/workspace/tree.ts
++++ b/app/src/workspace/tree.ts
+@@ -141,7 +141,7 @@
+         a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+       );
+     case "views":
+-      return list.sort((a, b) => (b.stats?.views ?? 0) - (a.stats?.views ?? 0));
++      return list.sort((a, b) => (a.stats?.views ?? 0) - (b.stats?.views ?? 0));
+     case "lastViewed":
+       return list.sort(
+         (a, b) => millis(b.stats?.lastViewedAt) - millis(a.stats?.lastViewedAt),

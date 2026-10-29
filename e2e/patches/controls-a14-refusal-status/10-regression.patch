@@ -1,0 +1,9 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1742,5 +1742,5 @@
+     // Pending suggestions, or another version made current during the upload.
+     const { status, ...refusal } = result;
+-    res.status(status).json(refusal);
++    res.status(200).json({ ...refusal, refusedStatus: status });
+     return;
+   }

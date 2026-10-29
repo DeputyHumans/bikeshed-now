@@ -1,12 +1,9 @@
 --- a/functions/src/lib/accept.ts
 +++ b/functions/src/lib/accept.ts
-@@ -90,7 +90,8 @@
-   const claimed = await change("claim");
-   if ("status" in claimed) return claimed;
-   try {
--    if (made.state === "applied") {
-+    // e2e control (controls-c10-i8-unwritten): the decision is recorded, the change is never written to the draft.
-+    if (made.state === "applied" && made.html === "") {
-       if (editors.log) await clearEditLog(docRef.id);
-       await writeDraft({
-         db,
+@@ -96,5 +96,5 @@
+     // reads it. Keep our claim, reread and reapply on that newer snapshot.
+     // Each attempt owns its uploaded bytes; a conflict never records acceptance.
+-    for (let attempt = 0; made.state === "applied"; attempt++) {
++    for (let attempt = 0; made.state === "applied" && made.html === ""; attempt++) {
+       try {
+         await writeDraft({

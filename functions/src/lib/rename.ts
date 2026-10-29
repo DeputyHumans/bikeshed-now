@@ -7,6 +7,7 @@ import type { Actor } from "./actor";
 import { addEvent, eventActor } from "./events";
 import { slugify } from "./folders";
 import { syncPublicProjection } from "./publicdoc";
+import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "./transaction-receipts";
 
 /** The longest title a document may be given. */
 export const TITLE_LIMIT = 200;
@@ -30,13 +31,19 @@ export async function renameDocument(
   if (!title || title.length > TITLE_LIMIT) {
     return { error: `title is required (up to ${TITLE_LIMIT} characters)` };
   }
+  const receipt = freshReceiptId();
   await db.runTransaction(async (tx) => {
-    const was = String((await tx.get(ref)).data()?.title ?? "");
+    const snap = await tx.get(ref);
+    if (readReceipt(snap, receipt).found) return;
+    if (!snap.exists) throw new Error("document no longer exists");
+    const was = String(snap.data()?.title ?? "");
     tx.set(ref, { title, slug: slugify(title), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     if (was !== title) {
       addEvent(tx, ref, { type: "doc.renamed", audience: "readers", actor: eventActor(actor), data: { from: was, to: title } });
     }
+    recordReceipt(tx, ref, snap, receipt, { title });
   });
+  await clearReceipt(ref, receipt);
   // A public document's title is also in its world-readable projection.
   await syncPublicProjection(db, ref.id);
   return { title };

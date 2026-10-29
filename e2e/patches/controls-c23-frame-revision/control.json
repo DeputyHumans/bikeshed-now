@@ -1,0 +1,12 @@
+{
+  "oracle": "C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes [N=2]",
+  "what": "frame revision",
+  "target": {
+    "spec": "e2e/specs/concurrency/c18-scale-ui.spec.mjs",
+    "case": "C23 frame snapshot: a draft changed after preparing Edit refuses the frame load, stays non-editable, and explicit reload opens the new bytes [N=2]",
+    "suite": "concurrency"
+  },
+  "expect": {
+    "message": "X-c18 frame: the editor GET carries"
+  }
+}

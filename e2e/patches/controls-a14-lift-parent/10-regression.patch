@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -170,3 +170,3 @@
+   } else {
+-    const parent = data.parentId ?? null;
++    const parent = null;
+     const folders = await ctx.db.collection("folders").where("parentId", "==", id).get();

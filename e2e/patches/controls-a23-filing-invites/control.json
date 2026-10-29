@@ -1,0 +1,11 @@
+{
+  "oracle": "A23.1 one invitation per new member for a document, a folder and a team, each with the subject \"<inviter> shared \u201c<title>\u201d with you\", its kind in the text and its own link; a team granted on a document invites its members to that document; filing, a re-grant and a role change send nothing",
+  "what": "send a document invitation when publishing into an already shared folder",
+  "target": {
+    "spec": "e2e/specs/functional/a23-email.spec.mjs",
+    "case": "A23.1 one invitation per new member for a document, a folder and a team, each with the subject \"<inviter> shared \u201c<title>\u201d with you\", its kind in the text and its own link; a team granted on a document invites its members to that document; filing, a re-grant and a role change send nothing"
+  },
+  "expect": {
+    "message": "filing into an already shared folder sends no document invitation"
+  }
+}

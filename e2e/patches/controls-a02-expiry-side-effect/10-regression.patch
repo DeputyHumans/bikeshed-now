@@ -1,0 +1,10 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -1914,6 +1914,7 @@
+     }
+
+     if (isExpired(data, Date.now())) {
++      await ref.update({ title: "changed despite expiry" });
+       res.status(409).json({ error: EXPIRED_WRITE });
+       return;
+     }

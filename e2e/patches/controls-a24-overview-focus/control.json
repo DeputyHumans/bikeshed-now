@@ -1,0 +1,13 @@
+{
+  "oracle": "Removing the overview Tab trap and focus containment leaks focus behind its aria-modal boundary.",
+  "what": "Removing the overview Tab trap and focus containment leaks focus behind its aria-modal boundary.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.2j the slide overview, a dialog with aria-modal=\"true\", keeps Tab and Shift+Tab inside it",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^focus left an aria-modal dialog"
+  }
+}

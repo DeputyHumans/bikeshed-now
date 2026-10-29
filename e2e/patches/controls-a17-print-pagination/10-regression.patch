@@ -1,0 +1,9 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -379,5 +379,5 @@
+     display: none !important;
+   }
+-  .viewer { height: auto; }
++  .viewer { height: 700px; position: fixed; overflow: hidden; }
+   .viewer-body { grid-template-columns: minmax(0, 1fr); }
+ }

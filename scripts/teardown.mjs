@@ -25,6 +25,7 @@ import {
   REPO_ROOT,
   getBucket,
   getBucketName,
+  closeAdmin,
   getDb,
   getProjectId,
   getRtdb,
@@ -138,4 +139,4 @@ project id it prints before you drop --dry-run.`;
   console.log("teardown complete.");
 }
 
-main().catch((err) => fail(err.message || String(err)));
+main().finally(closeAdmin).catch((err) => fail(err.message || String(err)));

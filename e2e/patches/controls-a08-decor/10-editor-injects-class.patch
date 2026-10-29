@@ -1,0 +1,6 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -143,2 +143,3 @@
+     body.setAttribute("spellcheck", "true");
++    body.querySelector("p")?.classList.add("bshd-control");
+     markGeneratedContainers(doc);

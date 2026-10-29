@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK CLI OAuth: the first exchange acknowledges its committed token",
+  "what": "Reject the matching token receipt so the installed SDK retry is treated as a separate code replay.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-oauth-ack.spec.mjs",
+    "case": "A20.oauth-ack the CLI first code exchange survives native ACK loss with one usable token while an independent replay still revokes it",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK CLI OAuth: the first exchange acknowledges its committed token"
+  }
+}

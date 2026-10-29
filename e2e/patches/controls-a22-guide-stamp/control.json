@@ -1,0 +1,13 @@
+{
+  "oracle": "A22.7 /llms.txt is the tree's agent guide stamped with this origin; /skills/index.json lists SPEC \u00a719's three skills, each served stamped; /.well-known/mcp.json is served as written, every URL in it relative and answering here; /docs and /docs/ 302 to /d/docs and /docs/developers to /d/docs-developers; /terms and /privacy render for an anonymous visitor",
+  "what": "Stamp one agent-guide origin with an incorrect path while retaining a valid stack origin elsewhere",
+  "target": {
+    "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
+    "case": "A22.7 /llms.txt is the tree's agent guide stamped with this origin; /skills/index.json lists SPEC \u00a719's four skills, each served stamped; /.well-known/mcp.json is served as written, every URL in it relative and answering here; /docs and /docs/ 302 to /d/docs and /docs/developers to /d/docs-developers; /terms and /privacy render for an anonymous visitor",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^GET /llms.txt is the stamped guide"
+  }
+}

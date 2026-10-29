@@ -1,0 +1,9 @@
+--- a/functions/src/mcp/server.ts
++++ b/functions/src/mcp/server.ts
+@@ -268,5 +268,5 @@
+   for (const message of messages) {
+     if (!message || typeof message !== "object" || typeof message.method !== "string") {
+-      responses.push(rpcError(null, INVALID_REQUEST, "not a JSON-RPC request"));
++      responses.push(rpcError(null, METHOD_NOT_FOUND, "not a JSON-RPC request"));
+       continue;
+     }

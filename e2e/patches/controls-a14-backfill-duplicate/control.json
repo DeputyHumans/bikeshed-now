@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor",
+  "what": "backfill duplicate",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.6 cover backfill: one cover POST per card that lacks one, none for a trusted scripted deck, a document not on screen or a reload; an expired document gets its cover from its owner's workspace only and stays a placeholder for its editor"
+  },
+  "expect": {
+    "message": "one cover POST for the control"
+  }
+}

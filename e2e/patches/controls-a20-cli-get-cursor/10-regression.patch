@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -539,5 +539,5 @@
+   out(
+     flags.json,
+-    whole ? { ...result, truncated: false, source: whole.toString("utf8") } : result,
++    whole ? { ...result, cursor: undefined, truncated: false, source: whole.toString("utf8") } : result,
+     () => process.stdout.write(whole ?? result.source),
+   );

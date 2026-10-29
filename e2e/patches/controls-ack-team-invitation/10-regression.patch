@@ -1,0 +1,7 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2786,3 +2786,3 @@
+     const completed = readReceipt<TeamChange>(snap, receipt);
+-    if (completed.found) return completed.result;
++    if (completed.found) return { ...completed.result, before: completed.result.members };
+     if (!snap.exists) {

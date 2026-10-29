@@ -18,8 +18,8 @@
  *   A13.4  inherited grants in the dialog: after the document's own rows,
  *          nearest folder first and highest role first, each with its folder's
  *          path and no controls; a person granted directly and through a
- *          folder has both rows. Then three folder levels (suspected:
- *          X-a13-sharing-1, the chain is own folder, root, …, parent), and a
+ *          folder has both rows. Then three folder levels (X-a13-sharing-1
+ *          formerly listed own folder, root, …, parent), and a
  *          folder above that the owner cannot open
  *   A13.5  a team grant expands to the team's members (each holds the
  *          presence mirror); removing one from the team revokes them from the
@@ -34,6 +34,8 @@
  *          server stores publicEdit false for a private document
  *          (index.ts setVisibility), so the oracle is: absent while private,
  *          and making a document private withdraws open editing
+ *   A13.9  the local operator grants and removes an editor; Firestore, both
+ *          live mirrors and the grantee's actual content/RTDB gates agree
  *
  * Tiers. Sharing goes through lib/grant.mjs (share/unshare), which on
  * production is the operator's script and sends nothing. A13.1 adds a person
@@ -81,9 +83,12 @@ import { createFolder, createTeam, publish } from "../../lib/seed.mjs";
 import { ROLES, principalOf, share, shareFolder, teamMembers, trackWindow, unshare, unshareFolder } from "../../lib/grant.mjs";
 import { closeAdmin, emailKey, readDoc, rtdbGet } from "../../lib/admin.mjs";
 import { rtdbAs, rtdbRulesStatus } from "../../lib/rtdb.mjs";
-import { eventually } from "../../lib/assert.mjs";
+import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
+import { unrecoveredListenerLoss } from "../../lib/listener-loss.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
+import { runOperator } from "../../lib/operator.mjs";
+import { liveLogPath } from "../../lib/live-log.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -159,10 +164,12 @@ async function grantOnFolder(owner, folder, grants) {
   for (const [account, role] of grants) await shareFolder(target, { owner, folder, account, role, timeoutMs: REQ_MS });
 }
 
-/** GET /content of v1 as this session (or an anonymous client) → status. */
-async function contentStatus(http, docId, { k = null } = {}) {
-  const r = answered(await http.get(`/content/${encodeURIComponent(docId)}/v1/`, k ? { query: { k } } : {}), `GET /content/${docId}/v1/`);
-  return r.status;
+/** GET /content of v1, retaining denial bytes and headers for parity checks. */
+async function contentReply(http, docId, { k = null } = {}) {
+  return answered(await http.get(`/content/${encodeURIComponent(docId)}/v1/`, k ? { query: { k } } : {}), `GET /content/${docId}/v1/`);
+}
+async function contentStatus(http, docId, options = {}) {
+  return (await contentReply(http, docId, options)).status;
 }
 
 /** Every principal a record names in any of its four grant lists. */
@@ -361,7 +368,7 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
 
   ctx.step("before: the viewer reads the content and the live state, and may write their own peer node");
   precondition((await contentStatus(V.http, docId)) === 200, "the viewer reads the content before the removal");
-  assert.equal(verdictOf(await vdb.get(`status/${docId}`), "V's read before"), "ALLOW", "control: the viewer's read of status/{doc} is allowed while a member");
+  assert.equal(verdictOf(await vdb.get(`status/${docId}/peers`), "V's read before"), "ALLOW", "control: the viewer's read of status/{doc}/peers is allowed while a member");
   assert.equal(verdictOf(await vdb.put(`status/${docId}/peers/${V.uid}`, peerNode(V)), "V's peer write before"), "ALLOW", "control: the viewer's peer write is allowed while a member");
   precondition(verdictOf(await vdb.delete(`status/${docId}/peers/${V.uid}`), "V's peer delete") === "ALLOW", "the viewer removed the peer node it wrote");
 
@@ -377,8 +384,9 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
   const reads = [];
   for (;;) {
     const sentAfter = Date.now() - removedAt;
-    const status = await contentStatus(V.http, docId);
-    reads.push({ sentAfter, status, answeredAfter: Date.now() - removedAt });
+    const response = await contentReply(V.http, docId);
+    const status = response.status;
+    reads.push({ sentAfter, status, answeredAfter: Date.now() - removedAt, response });
     if (status === 404 || sentAfter > 2_000) break;
     await new Promise((r) => setTimeout(r, 100)); // the poll's own interval
   }
@@ -387,11 +395,13 @@ scenario("A13.2 removing a member gives them the absent id's 404 within 2 s, tak
   ctx.step(`404 for a read sent ${notFound.sentAfter} ms after the removal (answered at ${notFound.answeredAfter} ms; ${reads.length} read(s))`);
   const absent = answered(await anon.get(`/content/${encodeURIComponent(`${docId}-absent`)}/v1/`), "GET /content of an absent id");
   assert.equal(absent.status, 404, "an absent id is 404 too");
+  assert.equal(sameBytes(notFound.response.buffer, absent.buffer).equal, true, "a removed member receives the absent id's exact body bytes");
+  assert.equal(sameHeadersExceptDate(notFound.response, absent).equal, true, `a removed member receives the absent id's headers: ${JSON.stringify(sameHeadersExceptDate(notFound.response, absent).diff)}`);
 
-  ctx.step("the RTDB rules refuse the removed viewer's read of status/{doc} and write of their peer node; the other viewer is still allowed");
-  assert.equal(verdictOf(await vdb.get(`status/${docId}`), "V's read after"), "DENY", "the removed viewer's RTDB read is refused");
+  ctx.step("the RTDB rules refuse the removed viewer's read of status/{doc}/peers and write of their peer node; the other viewer is still allowed");
+  assert.equal(verdictOf(await vdb.get(`status/${docId}/peers`), "V's read after"), "DENY", "the removed viewer's RTDB read is refused");
   assert.equal(verdictOf(await vdb.put(`status/${docId}/peers/${V.uid}`, peerNode(V)), "V's peer write after"), "DENY", "the removed viewer's peer write is refused");
-  assert.equal(verdictOf(await wdb.get(`status/${docId}`), "W's read"), "ALLOW", "the other viewer still reads the live state");
+  assert.equal(verdictOf(await wdb.get(`status/${docId}/peers`), "W's read"), "ALLOW", "the other viewer still reads the live state");
   assert.equal(await contentStatus(W.http, docId), 200, "the other viewer still reads the content");
 
   ctx.step("the record and the presence mirror no longer hold the viewer; the other viewer keeps both");
@@ -431,6 +441,7 @@ scenario("A13.3 changing a member's role sends no email, and Edit appears in the
     window.__a13 = v;
   }, marker);
 
+  let roleWriteAt;
   if (target.kind === "local") {
     ctx.step("the owner changes the member to Can edit with the row's select in Share");
     const o = await signedInAt(ctx, "owner", O, docId);
@@ -438,29 +449,22 @@ scenario("A13.3 changing a member's role sends no email, and Edit appears in the
     const select = dialog.getByLabel(`Access for ${M.account.email}`);
     await select.waitFor({ state: "visible", timeout: 20_000 });
     assert.equal(await select.inputValue(), "viewer");
+    roleWriteAt = Date.now();
     const changed = await posting(o, "/access", () => select.selectOption("editor"));
     assert.equal(changed.status, 200, `POST /access from the row's select: ${JSON.stringify(changed.json)}`);
     assert.deepEqual({ viewers: changed.json?.viewers, editors: changed.json?.editors }, { viewers: [], editors: [M.account.email] }, "one role per principal: moved, not added");
   } else {
     ctx.step("the operator changes the member to editor (production: set-access.mjs, which sends nothing)");
+    roleWriteAt = Date.now();
     const up = await share(target, { owner: O, doc: docId, account: M.account, role: "editor", timeoutMs: REQ_MS });
     assert.equal(up.status, 200);
   }
 
   ctx.step("Edit appears in the member's open viewer, and the page was not reloaded");
-  const waitFrom = Date.now();
   const appeared = await edit.first().waitFor({ state: "visible", timeout: 30_000 }).then(() => true, () => false);
   if (!appeared) {
-    // The viewer learns the role from its Firestore listener on the record.
-    // A page whose listener lost the emulator in this window (its own
-    // "Could not reach Cloud Firestore backend", or the SDK's network test,
-    // which it sends only after its Listen channel errors) was never told:
-    // nothing was measured. A page whose listener stayed up FAILS.
-    const lost = [
-      ...m.log.console.filter((c) => c.t >= waitFrom - 30_000 && /Could not reach Cloud Firestore backend/.test(c.text ?? "")),
-      ...(m.log.sdkProbes ?? []).filter((p) => p.t >= waitFrom - 30_000),
-    ];
-    if (lost.length > 0) ctx.inconclusive(`Edit did not appear within 30 s, while the member's page's Firestore client had lost the emulator (${lost.length} sign(s) in the window): the role change never reached the page`);
+    const loss = unrecoveredListenerLoss(m, roleWriteAt);
+    if (loss) ctx.inconclusive(`Edit did not appear after the role write while this member's listener remained disconnected (${loss.signs} new sign(s), no later successful Listen response)`);
   }
   assert.ok(appeared, "Edit did not appear in the member's open viewer within 30 s of the role change");
   assert.equal(await m.page.evaluate(() => window.__a13), marker, "the member's page is the same page: no reload");
@@ -543,7 +547,6 @@ scenario("A13.4 inherited grants: listed after the document's own, nearest folde
 scenario("A13.4 three folder levels: the inherited grants still come nearest folder first, the parent before the root", {
   tiers: ["local", "prod"],
   effects: ["email:POST /folder-access"],
-  defect: "X-a13-sharing-1",
   timeoutMs: 300_000,
   inconclusiveOnStackTimeout: true,
 }, async (ctx) => {
@@ -565,7 +568,7 @@ scenario("A13.4 three folder levels: the inherited grants still come nearest fol
   // `inherited.map`; the first A13.4 case asserts the dialog's order equals
   // the answer's), so the order the server gives is the order a person reads.
 
-  ctx.step("SPEC §2: nearest folder first — the leaf, then the middle, then the root");
+  ctx.step("SPEC §13: nearest folder first — the leaf, then the middle, then the root");
   const want = [
     { path: names.join("/"), principal: who.c },
     { path: `${names[0]}/${names[1]}`, principal: who.b },
@@ -867,7 +870,7 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
 
   ctx.step("Private again: open editing is withdrawn with it, and the box and the link are gone");
   await pick("private");
-  assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null });
+  assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "making private withdraws open editing");
   await eventually(async () => (await openEdit.count()) === 0 && (await link.count()) === 0, { timeout: 10_000, message: "no #public-edit and no link while private" });
 
   ctx.step("expiry: a date a month out is stored as the end of that day; Clear removes it");
@@ -893,4 +896,45 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
   const emptied = await posting(o, "/visibility", () => date.fill(""));
   assert.equal(emptied.status, 200);
   assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "an emptied field clears the expiry and nothing else");
+});
+
+// --- A13.9 --------------------------------------------------------------------
+
+scenario("A13.9 local operator set-access grants and revokes an editor in Firestore and both RTDB mirrors, changing their actual reads and writes", {
+  tiers: ["local"], needs: ["operator-scripts", "rtdb-rules"], timeoutMs: 240_000,
+}, async (ctx) => {
+  const { owner, editor } = await people(["owner", "editor"]);
+  const { docId } = await publishDoc(owner, "operator-access");
+  await rulesEnforced(ctx);
+  const key = emailKey(editor.account.email), db = rtdbAs(target, { idToken: editor.idToken, http: ctx.http({ actor: "operator-grantee-rtdb" }) });
+  const logPath = await liveLogPath(target, docId), epoch = logPath.split("/").at(-1);
+  const peerPath = `status/${docId}/peers/operator-${rand4()}`;
+  const peer = { uid: editor.uid, email: editor.account.email.toLowerCase(), mode: "edit", liveEpoch: epoch, lastChanged: { ".sv": "timestamp" } };
+  const mirrors = async () => ({ presence: await rtdbGet(target, `presenceAccess/${docId}/${key}`), edit: await rtdbGet(target, `editAccess/${docId}/${key}`) });
+  const operate = async (action) => {
+    const result = await runOperator(target, "set-access.mjs", ["--doc", docId, action, editor.account.email, "--role", "editor", "--account", owner.account.email, "--project", target.projectId]);
+    assert.equal(result.code, 0, `operator ${action} completes before access is observed`);
+    ctx.ev.json(`operator-${action.slice(2)}`, { code: result.code, signal: result.signal, ms: result.ms });
+  };
+  assert.equal(await contentStatus(editor.http, docId), 404, "the future editor cannot read before the operator grant");
+  assert.equal(verdictOf(await db.put(`${logPath}/before`, "AAA="), "log before grant"), "DENY", "the future editor cannot write before the operator grant");
+  await operate("--add");
+  const granted = await readDoc(target, `docs/${docId}`);
+  assert.ok(granted.members.includes(editor.account.email) && granted.editorMembers.includes(editor.account.email) && granted.editors.includes(editor.account.email), "operator grant stores the editor and effective membership");
+  assert.deepEqual(await mirrors(), { presence: true, edit: true }, "operator grant installs both member mirrors");
+  assert.equal(await contentStatus(editor.http, docId), 200, "operator grant permits the editor's content read");
+  assert.equal(verdictOf(await db.put(peerPath, peer), "peer after grant"), "ALLOW", "operator grant permits the editor's own presence write");
+  assert.equal(verdictOf(await db.put(`${logPath}/granted`, "AAA="), "log after grant"), "ALLOW", "operator grant permits the editor's live append");
+  assert.equal(verdictOf(await db.get(logPath), "log read after grant"), "ALLOW", "operator grant permits shared draft reads");
+  await operate("--remove");
+  const revoked = await readDoc(target, `docs/${docId}`);
+  assert.ok(!revoked.members.includes(editor.account.email) && !revoked.editorMembers.includes(editor.account.email) && !revoked.editors.includes(editor.account.email), "operator revoke removes direct and effective membership");
+  assert.deepEqual(await mirrors(), { presence: null, edit: null }, "operator revoke removes both member mirrors");
+  assert.equal(await contentStatus(editor.http, docId), 404, "operator revoke refuses the former editor's content read");
+  assert.equal(verdictOf(await db.get(logPath), "log read after revoke"), "DENY", "operator revoke refuses shared draft reads");
+  assert.equal(verdictOf(await db.put(`${logPath}/revoked`, "AAA="), "log after revoke"), "DENY", "operator revoke refuses the former editor's live append");
+  assert.equal(verdictOf(await db.put(peerPath, peer), "peer after revoke"), "DENY", "operator revoke refuses new presence updates");
+  assert.equal(verdictOf(await db.delete(peerPath), "departed peer cleanup"), "ALLOW", "the revoked editor can remove only their departed session");
+  const ownerKey = emailKey(owner.account.email);
+  assert.deepEqual({ presence: await rtdbGet(target, `presenceAccess/${docId}/${ownerKey}`), edit: await rtdbGet(target, `editAccess/${docId}/${ownerKey}`) }, { presence: true, edit: true }, "operator grant and revoke retain the owner's mirrors");
 });

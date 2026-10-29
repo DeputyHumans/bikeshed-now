@@ -1,0 +1,13 @@
+{
+  "oracle": "the menu while v9 is pinned",
+  "what": "version-menu-current",
+  "target": {
+    "spec": "e2e/specs/functional/a12-versions.spec.mjs",
+    "case": "A12.2 the More menu lists the last eight versions newest first, the current one labelled and the shown one disabled; a pinned version loads that version and shows only that version's threads",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the menu while v9 is pinned"
+  }
+}

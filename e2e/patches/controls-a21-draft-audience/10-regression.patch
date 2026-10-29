@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1563,3 +1563,3 @@
+         // As the app shows it: an unsaved draft is an editor's business.
+-        ...(editor
++        ...(true
+           ? {

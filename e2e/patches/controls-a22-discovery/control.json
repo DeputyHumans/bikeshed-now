@@ -1,0 +1,13 @@
+{
+  "oracle": "A22.1 discovery: both protected-resource documents name the issuer byte for byte as their only authorization server and this host's /mcp, private, no-store; the authorization-server metadata is public, max-age=300 and advertises S256, auth none, CIMD and iss with no scopes; openid-configuration is a JSON 404; /mcp's 401 points at the protected-resource document",
+  "what": "Advertise the unsupported plain PKCE method in authorization discovery.",
+  "target": {
+    "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
+    "case": "A22.1 discovery: both protected-resource documents name the issuer byte for byte as their only authorization server and this host's /mcp, private, no-store; the authorization-server metadata is public, max-age=300 and advertises S256, auth none, CIMD and iss with no scopes; openid-configuration is a JSON 404; /mcp's 401 points at the protected-resource document",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^authorization-server metadata"
+  }
+}

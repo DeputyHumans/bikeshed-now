@@ -1,0 +1,7 @@
+--- a/app/src/viewer/useSharedDocument.ts
++++ b/app/src/viewer/useSharedDocument.ts
+@@ -74,3 +74,3 @@
+               seedFragment(proposal.getXmlFragment("body"), doc.body);
+-              await connection.initialize(Y.encodeStateAsUpdate(proposal));
++              Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(proposal));
+             } finally { proposal.destroy(); }

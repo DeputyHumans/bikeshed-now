@@ -1,0 +1,13 @@
+{
+  "oracle": "^C11b: while a tab of",
+  "what": "c11b session",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C11b same person in two tabs: while one tab of an editor is in the editor, a second tab of the same account opens the document and closes; the agent's accept_suggestion and commit_draft are still refused [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^C11b: while a tab of"
+  }
+}

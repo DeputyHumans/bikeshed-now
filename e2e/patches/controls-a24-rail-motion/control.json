@@ -1,0 +1,13 @@
+{
+  "oracle": "rail follow must honour reduced motion independently of the other scroll paths.",
+  "what": "rail follow must honour reduced motion independently of the other scroll paths.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.3c reduced motion is honoured by review Next, deck arrow navigation and the slide rail following the current slide",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^rail follow uses auto with reduced motion"
+  }
+}

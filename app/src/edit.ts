@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client for the draft and commit endpoints (SPEC §2, §6a).
 
-import { ConflictError, post } from "./api";
+import type { CausalStamp } from "./crdt/causal";
+import { ConflictError, get, post } from "./api";
 
 /**
  * Content writes are server-side only, so inline editing calls these endpoints.
@@ -43,6 +44,7 @@ export class PendingSuggestionsError extends Error {
 
 function rethrow(e: unknown): never {
   if (e instanceof ConflictError) {
+    if (e.detail.draftChanged === true || e.detail.expired === true) throw e;
     // First: a pending suggestion is also an unresolved thread, so it is in
     // `unresolvedCount` too, and "resolve every comment" would send someone to
     // a Resolve button that is not there.
@@ -53,14 +55,31 @@ function rethrow(e: unknown): never {
     if (typeof e.detail.unresolvedCount === "number") {
       throw new UnresolvedCommentsError(e.detail.unresolvedCount);
     }
-    if (typeof e.detail.currentVersion === "string" || e.detail.currentVersion === undefined) {
+    if (typeof e.detail.currentVersion === "string") {
       throw new StaleVersionError(e.detail.currentVersion as string | undefined);
     }
   }
   throw e;
 }
 
+/** An editor's exact version, epoch and immutable draft snapshot. */
+export interface DraftSession {
+  causal?: CausalStamp;
+  baseVersion: string;
+  liveEpoch: string;
+  draftRevision: string;
+  entry: string;
+}
+
+export function openDraftSession(docId: string, baseVersion: string): Promise<DraftSession> {
+  return get(`/draft/${encodeURIComponent(docId)}`, { session: "1", baseVersion }, {
+    forbidden: "You do not have edit access to this document.",
+  });
+}
+
 export interface DraftResult {
+  draftRevision?: string;
+  liveEpoch?: string;
   baseVersion: string;
   entry: string;
   sourceEntry?: string;
@@ -73,11 +92,12 @@ export async function saveDraft(
   docId: string,
   baseVersion: string,
   html: string,
+  session?: { liveEpoch: string; draftRevision?: string; causal?: CausalStamp },
 ): Promise<DraftResult> {
   try {
     const result = await post<{ draft: DraftResult }>(
       "/draft",
-      { docId, baseVersion, html },
+      { docId, baseVersion, html, ...session },
       { forbidden: "You do not have edit access to this document." },
     );
     return result.draft;

@@ -1,0 +1,7 @@
+--- a/functions/src/lib/draft.ts
++++ b/functions/src/lib/draft.ts
+@@ -416,3 +416,3 @@
+       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
+-      checkDraftSnapshot(cur.data(), draft);
++      void [cur, draft, checkDraftSnapshot];
+       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");

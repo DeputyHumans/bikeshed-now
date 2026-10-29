@@ -1,0 +1,7 @@
+--- a/functions/src/lib/management.ts
++++ b/functions/src/lib/management.ts
+@@ -157,3 +157,3 @@
+ export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move" | "delete", args: Record<string, unknown> = {}) {
+-  const { ref, data } = await load(ctx, "folder", id, op === "delete");
++  const { ref, data } = await load(ctx, "folder", id, false);
+   if (op !== "delete" && !canEditFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) throw new ManagementError(403, "you cannot edit that folder");

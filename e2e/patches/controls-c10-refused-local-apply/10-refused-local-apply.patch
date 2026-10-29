@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useSuggestionReview.ts
++++ b/app/src/viewer/useSuggestionReview.ts
+@@ -176,7 +176,7 @@
+   record: () => Promise<unknown>;
+ }): Promise<AcceptOutcome> {
+   if (steps.check() === "stale") return "stale";
+-  await steps.claim();
++  try { await steps.claim(); } catch (error) { steps.apply(); throw error; }
+   const applied = steps.apply();
+   if (applied === "stale" || applied === "failed" || applied === "unverified") {
+     // Best effort: a claim that is not let go of lapses on its own.

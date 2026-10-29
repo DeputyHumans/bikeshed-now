@@ -14,6 +14,579 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## 0.24.1 — 2026-10-29
+
+- Integrate the E2E repairs with folder sharing and account-address migration, preserving transaction-local membership and projection checks. Ship behind bounded release checks; extended campaign work remains explicitly deferred in `docs/development/e2e-release-waves.md`.
+
+- Rebase the verification-mail regression control onto deferred email loading, preserving its suppression of the verification message after a committed reservation.
+
+- Make harness self-tests share the machine-wide test lock, so their browsers cannot enter an exclusive concurrency measurement or prevent its diagnostic cleanup. Retain the lock until the test child closes and forward interruption to its process group.
+
+- Dispatch held publication requests before awaiting their gated responses in E2E races. Preserve natural suggestion-race inconclusives while applying the reviewed same-file safety qualification to the exact C10 pause-point configuration.
+
+- Preserve bounded browser response diagnostics across navigation so local Firestore cleanup can recover completed handshakes without delaying application requests.
+
+- Keep synthetic campaign tests independent of recorded release proofs and source bindings, while preserving all original claims, required cases and historical audit records. Retain the separately verified Hosting 404 boundary in the canonical discovery inventory.
+
+- Correct the delayed Done test to retry explicit safe delivery refusals at any injected latency, retaining all data-integrity checks. Cap this release concurrency qualification at ten participants as requested; retain twenty-participant obligations as deferred coverage.
+
+- Exercise explicit draft reload after a documented stale-snapshot refusal during E2E join admission. Bound recovery before typing, retain version and live epoch, and preserve every convergence and token oracle.
+
+- Let targetless concurrency discovery finish naturally so forced process exit cannot silently truncate the executable case inventory. Pin full declaration drainage with a regression control.
+
+- Confirm idle Firestore cleanup with an ordered read-only subscription barrier, so already-revoked targets cannot stall the next E2E case waiting for a duplicate removal reply.
+
+- Retire observed orphaned Firestore browser subscriptions at the exclusive idle E2E maintenance boundary. Unsubscribe, drain and acknowledge their queues before transport termination, preserving active-case timing, database data, rules and heap limits.
+
+- Archive and recycle Firestore rule-value diagnostics between quiescent exclusive E2E cases. Reapply identical pinned rules and verify their bytes and enforcement, preserving database data and the existing heap ceiling after a ten-editor run exhausted the emulator's heap.
+
+- Preserve actual source fingerprints when a reviewed diagnostics-only harness repair continues an E2E campaign. Qualify narrowly defined browser timing gaps with complete controlled witnesses and regression controls while retaining natural inconclusives and requiring explicit release policy.
+
+- Set MCP transport headers before the managed runtime parses JSON. Real Hosting parser failures bypassed both the handler and configured Hosting headers; malformed requests now retain the non-cacheable response and exposed authentication challenge.
+
+- Support explicitly approved controlled-race release evidence, pinned to reviewed deployed source archives and an actual guard-removal/restoration test, while retaining natural inconclusive outcomes and requiring all local campaign obligations. Preserve verified local-limit and composite qualifications in complete-file partitions.
+
+- Judge cloud notification safety before timing eligibility, so serial delivery cannot hide duplicate notices or cooldown grants behind an inconclusive race classification.
+
+- Check real-cloud notification evidence against automatic trigger identities, deployed function hashes, overlapping cooldown calls on the same instance, committed receipts and captured recipient/kind counts.
+
+- Verify concurrency partitions against executable case, participant and trial inventories, retaining each original completed invocation rather than manufacturing a full-suite result. Reject incomplete partitions and stale source or capability evidence.
+
+- Bound harness self-test file concurrency and use independent user contexts for simultaneous browser actors; retain the measured timing limits and negative controls. Refresh access-race patch context after health integration.
+
+- Collect concurrency partitions on resumable fresh stacks, retaining inconclusive measurements without admitting them as passing matrix evidence.
+
+- Integrate the E2E campaign repairs with production health monitoring and refreshed landing media.
+
+- Recognize the exact concurrent-snapshot draft refusal in the C12 publication race test, retaining all final-state and next-reader checks instead of rejecting safe concurrent saves before those checks run.
+
+- Retry suggestion acceptance when a concurrent save retires the draft object between metadata lookup and download. Read the replacement snapshot without discarding concurrent edits; continue to refuse missing objects whose draft identity has not changed. Refresh the existing misplaced-replacement control for the read helper, and reproduce retirement both before the first save and after a save conflict.
+- Repair three integration-stale E2E negative controls: exercise public editing through folder sharing, expect the current 32-tool MCP catalog, and remove reply credentials from the reply handler itself. Each restored control fails its intended assertion and passes against the clean source.
+
+- Preserve an open revision upload and its selected file after edit access is revoked, so the server refusal explains the change without discarding the work. Align CLI pinned-link and MCP required-argument checks with the released history and management contracts.
+
+- Align the browser consent regression with the current owner-management disclosure while retaining exact allowed and excluded capability assertions.
+
+- Keep all 724 negative-control targets selectable after the tool catalog and skill inventory expanded; preserve amplifier composition across the merged sharing and retry paths.
+
+- Preserve current archive read-only behavior in E2E feedback checks, update management fault injection to the shared implementation, and retain all existing control identities through integration.
+
+- Integrate the E2E repairs with the current agent-management and immutable-history features; preserve remembered-link refusals, transaction retry receipts and read-only archives. Replace reaped stack records atomically to prevent concurrent cleanup from corrupting retained evidence.
+
+- Keep the audience self-test adapters synchronized with the explicit hidden trust event used to prove cursor advancement.
+
+- Repair 33 E2E negative controls against current policy generation, live-session guards and assertion messages; independently check SVG namespaces, hidden-event cursors and held claims, drain fork-route cleanup, and flush complete control summaries before worker exit.
+
+- Isolate the phone toolbar negative control from presence-chip clipping so it proves the primary-action reachability assertion directly.
+
+- Keep mobile viewer controls and presence chips reachable by constraining the viewer grid column to the viewport.
+
+- Keep the stale-base commit canary on one saved draft so draft-snapshot protection does not mask the version-minting race it measures.
+
+- Avoid a circular wait in forced first-join E2E scenarios: observe the loaded draft while the join gate holds, then require editable shared state after release.
+
+- Pin the pending-request self-test clock so real timer rounding cannot turn a correctly classified stack timeout into a test failure.
+
+- Release expired E2E stack slots when an unrelated process has reused a recorded group ID; preserve conservative cleanup when process identity is unknown.
+
+- Keep successful skill installation out of every deliberately invalid-name variant, and require only the projection-failure fixture's actual capabilities when importing its evidence.
+
+- Refresh watched-file metadata when a debounced publish starts, preventing a later fallback poll from publishing the same save twice; exercise the delayed-poll ordering in real CLI process tests.
+
+- Extend discovery-retention checks to the watch regression while keeping all original identities, claims and case obligations pinned.
+
+- Track the reproduced watch-delivery regression as an open campaign finding until final frozen acceptance, preserving its native failure and recovery evidence.
+
+- Keep CLI watch mode publishing after missed native file notifications or atomic file replacement. A single-file metadata fallback shares the existing debounce and preserves JSON-only output.
+
+- Check CLI change events in their recorded order rather than assuming thread and comment triggers run in causal order; require wait and resume to deliver both events exactly once.
+
+- Pin the synthetic send interval in the cut-look budget selftest while retaining a real unanswered-read deadline, preventing timer rounding from invalidating its exact retry diagnostic.
+
+- Wait for the saved account preference and checkbox state in the analytics E2E flow, so asynchronous record delivery cannot turn a successful toggle into a false failure.
+
+- Bind the exhausted-budget selftest to an exact observed send interval, so timer rounding cannot invalidate its retry estimate while the no-send and no-look checks remain strict.
+
+- Judge delayed requests against their own route and server clocks, and prove shared delay windows through enrolled requests and an explicit release. Keep synthetic HTTP and MCP cutoff intervals exact so scheduling load cannot change their diagnostics; retain routing, numeric-delay and stall-classification controls.
+
+- Require exact retained RTDB archives, runtime identity, JVM settings, rules and reporter timing for every campaign proof, including composite dependencies and control pairs. Provision the pinned public test archive without a Firebase account or CLI, and keep verification bounded by sharing immutable artifact inspection within each operation.
+
+- Verify the derived Database archive one bounded ZIP member at a time so the full campaign checker fits its unchanged memory limit. Preserve every member digest, CRC, canonical archive bytes and reviewed runtime profile; reject malformed local metadata, oversized output and trailing compressed data.
+
+- Keep the CAS pause patch composable with the existing feedback and minting pauses without changing its resulting code. Load the runtime dependency in isolated capability-parser controls so both admission faults reach their intended assertions.
+
+- Exercise both conditional-draft candidate disposal paths with captured CAS pauses, exact byte preservation and separate product controls. Bind every discovered product defect to its current affected cases while preserving original claims, native ACK obligations and unresolved evidence; extend the existing cleanup finding with the observed CAS draft failures.
+
+- Run local E2E stacks with an explicitly labeled, exact-byte derived Database emulator that synchronizes only diagnostic appends. Keep the installed emulator untouched, preserve ordinary JVM limits and workflow concurrency, and bind each invocation to retained archive attestations plus before/after JVM and rules receipts. Refuse unreviewed toolchains and derived bytes; the standalone rules command remains stock.
+
+- Share immutable campaign evidence reads within each check/import, preserving every proof’s identity checks and detecting changed artifacts without retaining a full report per case.
+
+- Add separate E2E fault controls for duplicated committed suggestion text, missing co-editor delivery and omitted embedded Markdown styling. Keep the existing cases and exact assertions, and include every new control in the complete catalog obligation.
+
+- Remove discarded autosave uploads after conditional-write contention only when a fresh transaction proves neither the draft nor any published version references them. Cover terminal refusals, newer causal drafts, lost acknowledgements and failed reference reads; keep uncertain transport results intact.
+
+- Restore per-callback generated-note allocation in the thread acknowledgement fault control so it reproduces the intended stale-decision overwrite. The former plant hit an immutable-create refusal before changing state; retain that invalid attempt and keep the original later-reopen assertion unchanged.
+
+- Bind native acknowledgement-loss evidence to each held caller’s actual committed callback ordinal. Allow normal precommit contention without mistaking the following native retry for a failed fault injection; retain exact caller, loss order and contiguous retry checks, record the sequence, and preserve every product assertion.
+
+- Keep the late-save publication race conclusive only when the publisher wins an overlapping attempt. Accept an exact snapshot conflict only after proving the winning late draft and published head remain intact; preserve the stale-draft invariant and add a product fault control for the retired-base guard.
+
+- Make the large-document transport regression deterministic by fixing its Yjs client ID width. Preserve the existing payload floor and transport limit; retain observed failures for a short-ID fixture, the old limit and a disabled oversized-compaction guard.
+
+- Retain all original E2E acceptance obligations and add nine complete native-retry area runs, bringing the local matrix to 64 cells. Bind the retry discovery to 34 exact cases and 55 directional controls; keep every finding open until fresh integrated evidence satisfies it.
+
+- Refresh six retained fault patches after transaction receipts changed source context. Keep their projection, minting, deduplication, rename and thumbnail mutations unchanged; verify the complete patch catalog reverses exactly and the affected directional unit checks still detect their faults.
+
+- Distinguish a native OAuth code-exchange retry from independent code replay after another request refreshes the grant. Keep the newer credentials valid, refuse obsolete original credentials without revocation, and retain independent replay protection; cover the real recovery→refresh→retry ordering with a keyed endpoint control.
+
+- Keep the feedback publication pause points applicable after bounded retry receipts changed their imports. Preserve the original gates and directional controls, with exact patch reversal and composed compiler checks.
+
+- Keep a committed MCP comment acknowledged when its author deletes the thread, opening comment or both before a native retry. Store a bounded receipt independently of deletable feedback, preventing false refusals and resurrection, with real author-delete E2E coverage and three directional controls.
+
+- Acknowledge remembered-link saves and no-change publications after a later edit replaces their current pointer or epoch. Bounded operation receipts preserve the original result and captured cleanup without overwriting later drafts; add native retry regressions and combined endpoint schedules for draft and thumbnail supersession.
+
+- Bind the native-retry email privacy check to completion of the actual cooldown decision before counting absent mail. A keyed fault-capability marker distinguishes a finished denial from a callback still waiting in Firestore.
+
+- Preserve later suggestion lease operations when a completed claim or release loses its transaction acknowledgement. Bounded request receipts prevent an older claim from resurrecting a released lease or an older release from clearing a newer claim; cover both same-account races with native retry regressions and keyed endpoint controls.
+
+- Preserve a completed rename across native transaction retries without replaying it over a later name or duplicating its change event. Reject a missing document instead of recreating a partial record; retain regression tests and a keyed endpoint control.
+
+- Preserve an accepted thumbnail upload after a later publication and thumbnail replace its current key. A bounded receipt retains the original success and obsolete-image cleanup without repointing the newer head, epoch or JPEGs; retain native retry regressions and four directional E2E controls.
+
+- Keep operator sharing and withdrawal results across native commit retries even after a later revocation or publication. Share bounded receipt semantics with Functions through an ESM helper and golden tests; add two real operator fault schedules with directional controls.
+
+- Require every declared affected E2E case and concurrency axis when resolving product, discovery or coverage repairs. Command-only harness repairs remain valid when they declare no affected E2E cases.
+
+- Keep membership race gates, PKCE spending, email cooldown and retired-head comment controls applicable after native acknowledgement recovery; preserve each fault and validate the capability combinations.
+
+- Keep the retired-head suggestion and unwritten thread-flip controls effective after native acknowledgement recovery, preserving their original faults and E2E targets.
+
+- Retain the existing verification race gates and reading-statistics regression controls after native retry recovery, preserving their original faults and assertions in either capability order.
+
+- Exercise native acknowledgement loss through the CLI OAuth exchange and comment/suggestion cooldown triggers, including a document expiring while its reader’s claim is held. Four directional controls bind actual commits and native retries to token validity, exact notice counts and expiry privacy; mailbox transport errors remain separate from measured count failures. Align deterministic cooldown fixtures with the fresh authority clock.
+
+- Exercise native acknowledgement loss during folder and document sharing while a later request revokes the grant. Bind the original successful response to its invitation delta, exact event records and the later membership state, with four directional controls.
+
+- Preserve one endpoint operation when Firestore commits but loses its acknowledgement: verification sends its reserved code, wrong codes spend one guess, replaced challenges retain their budget, reading beats consume one cap, and team changes acknowledge prior authority while keeping their invitation delta. Add six real fault-gated endpoint cases and ten directional controls.
+
+- Drain MCP acknowledgement probes after releasing their gate even when setup inspection fails, so a completed case leaves no request running in the next case.
+
+- Forward explicit native Firestore transaction options through the acknowledgement-loss capability, preserving endpoint retry budgets and testing a dropped-options inverse.
+
+- Preserve each completed document or folder membership mutation across native commit retries. Bounded receipts keep the original invitation delta and event emission, prevent an old grant or move from overwriting a later one, and leave pure membership recomputation receipt-free.
+
+- Preserve a notification’s winning cooldown claim across a native commit retry, with a unique claim id alongside compatible numeric timestamps. Recheck current opt-out, read authority and expiry before delivering; prune expired claim ids with their cooldown entries.
+
+- Preserve the built-in CLI’s first OAuth exchange when the native SDK retries a committed token after acknowledgement loss. Keep its plaintext only in that request, verify the committed token identity and revocation state, and retain independent replay revocation.
+
+- Exercise native commit acknowledgement loss through MCP comment creation and overlapping document fetches. Bind each fault to its real commit and retry, with four directional controls for the comment receipt, both read counters and independent receipt cleanup.
+
+- Acknowledge an MCP comment already committed before a lost Firestore acknowledgement, and count each automated fetch once even when another fetch commits before its retry. Keep bounded per-operation receipts on existing records, with independent cleanup and age guards that prevent expired operations from replaying.
+
+- Recognize completed suggestion creations, revisions and thread decisions when the native Firestore SDK retries after losing a commit acknowledgement. Unique annotation/history/note receipts prevent false refusals, duplicate revision history and an old resolution overwriting a later reopen; retain focused native-retry regressions and gated E2E controls.
+
+- Register the native acknowledgement-loss pause at its actual helper source and named gate call, allowing the existing amplifier-composition checks to verify that controls preserve it.
+
+- Keep operator historical-deduplication, withdrawal epoch and public-projection controls applicable after acknowledgement recovery, preserving each original mutation.
+
+- Require complete projection-failure, endpoint acknowledgement-loss and operator acknowledgement-loss runs in the E2E acceptance matrix, preserving every original axis and recording the new transaction-retry defect family without premature closure.
+
+- Exercise actual Firestore commit acknowledgement loss through a document-keyed local fault capability. Seven endpoint and operator cases check successful receipts, retained exact bytes and completed retirement after native SDK retries; fifteen directional controls cover false refusals, lost objects and skipped cleanup. Confine the separate projection fault to its marked fixture so whole-area capability runs remain valid.
+
+- Keep the draft and external-update cleanup controls effective after acknowledgement recovery: their mutations suppress both direct cleanup and cleanup proven safe by stored references, while preserving the original loser-upload assertions.
+
+- Preserve operator publication and withdrawal completion after a lost transaction acknowledgement. A retry recognizes its own immutable version or retirement epoch, keeps the successful cleanup receipt, and finishes mirror, old-log and captured-draft cleanup without repointing newer work.
+
+- Keep normal losing-transaction cleanup while protecting acknowledged-lost uploads: a known refusal may remove a staged candidate only after a fresh read finds its unique prefix in neither the current draft nor any historical version. Failed reference reads and unknown transport outcomes retain bytes.
+
+- Retain the thumbnail upload gate and existing timestamp, authority and nontransactional-write controls after acknowledgement reconciliation, with their original assertions unchanged.
+
+- Refresh publication race and cleanup control patches after acknowledgement recovery changes, preserving their mutations and amplifier composition.
+
+- Give the projection-failure E2E case the same bounded setup budget as the rest of its area, so its session setup reaches the product before the response and storage assertions run.
+
+- Preserve saved and published bytes when Firestore retries a transaction after losing its commit acknowledgement. Recognize each request's committed immutable prefix or retirement epoch before retry-only refusals, keep later heads intact, and retain potentially committed bytes when the result remains uncertain.
+
+- Preserve thumbnails when the database commits an upload but loses its acknowledgement. A transaction retry recognizes that request's recorded key, reports the completed upload, and finishes retiring obsolete images instead of deleting the new JPEGs.
+
+- Verify the original A08 and A11 stability requirements against three distinct completed whole-file runs with every current case passing on the same frozen source; reject filtered, partial, stale or repeated substitutes.
+
+- Exercise an unavailable postcommit projection dependency through the draft API, binding successful responses to durable storage pointers and exact read-back bytes; add explicit local fault capability and directional controls without changing product behavior.
+
+- Add a default-trial thumbnail authority matrix cell while retaining every original campaign axis, and record the targeted N20 repair evidence without closing final acceptance.
+
+- Judge C14 wire overlap from unrounded request timestamps while accepting a positive sub-tenth-millisecond margin displayed as zero; a true zero overlap still refuses the evidence.
+
+- Keep stale-draft, delayed-autosave and checked-snapshot negative controls applicable to both draft commit paths after the snapshot-precondition repair.
+
+- Bind the separate C14 local safety assessment to every original natural and forced trial, exact saved bytes, request timing, completed records, and actual directional controls. Retain raw inconclusive observations and the original open obligation, so local acceptance never claims full completion.
+
+- Recheck thumbnail editor authority after JPEG upload, so a concurrent downgrade or removal cannot publish a shared image. Refuse with the existing reader-aware status and remove only the rejected candidate's objects; preserve owner uploads and existing thumbnails.
+
+- Save document-authorized drafts with an exact snapshot precondition instead of retaining a read transaction through the write. Recheck base, expiry, current role, live epoch, and causal order on every conflict; keep remembered-link authorization transactional and retain candidate bytes when a lost acknowledgement leaves the commit uncertain.
+
+- Keep the tier-lock recording regression valid when invocation metadata also records guarded RTDB maintenance.
+
+- Require the complete documented review refusal and a successful MCP transport before a natural publication race can count as safe refusal; share that predicate with composite evidence validation.
+
+- Preserve exact draft and version bytes when publication loses a feedback race, retain every natural attempt, and add forced-order controls for the separately reported C14 composite safety proof.
+
+- Preserve the RTDB coverage-retention and incomplete-report discoveries in the campaign ledger, and record completed C6 authoring controls without closing final acceptance.
+
+- Archive and recycle the pinned local RTDB emulator’s unbounded rule-value coverage at verified quiescent boundaries, preserving exact rules, data and diagnostics without raising resource caps.
+
+- Require successful invocation completion and the final reporter case records before a passing E2E report can close a full campaign matrix cell; interrupted or early merged subsets remain incomplete.
+
+- Register additional E2E campaign mechanisms without closing original findings; keep harness defects, product fixes and unresolved runtime failures distinct.
+
+- Keep long-paragraph input points visible in scaled frames and exercise concurrent typing as an uninterrupted keystroke sequence, so the driver does not move fast writers into a peer’s unfinished word.
+
+- Cancel pending Done UI effects when its viewer unmounts, and separately exercise a real iframe replacement while a save is held; distinguish each lifecycle guard with its own negative control.
+
+- Exercise an untouched empty shared document through the real save and publish path, and prove its causal-history acceptance with an exact rejecting control.
+
+- Keep a pending Done deadline and completion tied to the editing session that started it, so navigating to another document cannot change its save state, display an old error, or close its editor.
+
+- Bind the local trigger-overlap limitation to completed run metadata, exact case identities and pinned runtime evidence; retain inconclusive outcomes and distinguish local acceptance from full completion.
+
+- Retarget refused-append and oversized-live-document controls around the new delivery/recovery guards, retaining each original mutation and failure assertion.
+
+- Explicitly retry Done in large-peer latency and held-save scenarios after an intentional delivery deadline, preserving their save-order, token and convergence assertions.
+
+- Challenge expiry clearing through its actual HTTP field-deletion path; the control now retains the old deadline and proves the restored feedback-permission assertion detects it.
+
+- Pin and behaviorally reproduce the local Firestore emulator’s serial trigger delivery, document its narrow overlap limitation, and retain each feedback burst’s wire timings and conservative warm-up memory reservation.
+
+- Preserve sufficient patch context for the Done-deadline negative control while keeping its mutation limited to the timeout.
+
+- Verify both external update paths retire a live log created after their initial editor check and fence subsequent writes from that old epoch; independently remove epoch advancement to prove the regression.
+
+- Tie every reported product finding to current executable witnesses, retaining original case identities and peer counts beside explicit rename rationales; no finding is closed by the mapping.
+
+- Wait for live update acknowledgment before Done tears down editing, retain failed or timed-out work for retry, and bound the whole Done attempt. Warn on closing with pending live typing; refuse incomplete live history over a fuller saved draft and offer an explicit leave-and-publish recovery path.
+
+- Challenge the personal-token current-identity gate independently for disabled and deleted accounts, keeping both existing session-versus-token witnesses selectable and requiring exact patched-stack refusals.
+
+- Follow explicit stale-base reload in the natural co-editor observation, and recognize per-tab peer records in the leave-presence canary precondition.
+
+- Reject control definitions whose suite cannot select their spec before allocating a stack; explicitly select concurrency for twelve affected controls.
+
+- Cover an owner signing into an existing workspace while the first backend listen is delayed past the SDK offline transition; require the eventual document and no false empty state, with a direct cache-guard control.
+
+- Exercise real local operator access grants and removals through Firestore, both live-access mirrors and authenticated content/presence/log gates, with separate missing-grant and missing-revoke controls.
+
+- Observe the deck overview opening independently of its image renderer, so a stored-thumbnail regression reaches the exact image assertion rather than a setup timeout.
+
+- Keep the delayed live-editing race and its convergence/token checks, then continue acknowledged typing until a real log compaction occurs; batched transport updates no longer leave those cases permanently inconclusive.
+
+- Retain bounded fresh-document attempts for natural review, publish and feedback-trigger races; assert every attempt, and distinguish refused local review commands from legitimate remote-merge autosaves.
+
+- Validate the live epoch as reserved access-mirror metadata in sharing concurrency snapshots, while continuing to reject malformed grants and retain unknown keys for membership comparison.
+
+- Match affected concurrency scenarios to their actual expanded result identities without losing the recorded peer count or trial; reject contradictory suffix metadata and unrelated scenarios.
+
+- Compare authored reader bodies after Done without per-person presence paint, while retaining the original convergence deadline, save/log stability checks, and independent persisted-byte decoration checks.
+
+- Retarget historical-comment, annotation-access and generated-note controls around the new expiry gates, preserving the specific regressions each control reintroduces.
+
+- Run a frozen complete control inventory through at most three ordinary harness workers, preserving admission gates and importing exact pair artifacts into one command report; reject partial, duplicated, stale or changed-source evidence.
+
+- Bind local E2E acceptance to a frozen source fingerprint, exact assertion failures and complete control ledgers; prepare commands and import actual run evidence into reviewable proposals.
+
+- Offer explicit draft reload when another editor publishes, retaining the stale editor's unsaved local text until that choice. Add a controlled co-editor publication case at every concurrency size and inverse controls for recovery and automatic remounting.
+
+- Freeze direct annotation and comment creates, changes and deletes when a document expires, including owner writes, while preserving existing feedback reads and restoring the same permissions when expiry is cleared.
+
+- Keep one quote context intact in repeated-replacement review tests, and assert failed-save error text after observing any error toast; real patched-stack controls now reach both intended assertions.
+
+- Wait for analytics route events with the harness's explicit pending sentinel, and make the repeated-script control insert a fresh executable script so it proves the later fetch-count assertion.
+
+- Keep change-feed audience checks reusable on both tiers, expecting access events only from local sharing while retaining fork and draft privacy checks everywhere.
+
+- Audit the original smoke, live-editing, workspace and account attempts; preserve unresolved save and page-close causes, and distinguish the account shared-stack one-of-three result from dedicated runs.
+
+- Expand MCP coverage for exact schemas, browser preflight and error headers, historical fork provenance, and every permitted or member-only link-key boundary. Add directional protocol, paging, identity and lineage controls, and reuse the shared visibility helper for cleanup.
+
+- Exercise specific-thread and panel review entry points, deletion and repeated-quote retries, failed draft saves, claim release and protection, adopted highlight paint, stale panel state and full committed attributes; add independent controls without treating scratch negatives as product control proof.
+
+- Wait for separately written smoke comments, allow slow completed saves without weakening convergence checks, and let the saved-attribute smoke case prepare its own version. Keep the autosave race open by holding a real response without imposing a cold-server speed requirement, and assert both peers retain generated-container hints.
+
+- Reconcile original comments, review, change-feed and OAuth failures from their saved artifacts, preserving uncertain attempts and historical outcomes instead of treating current passing runs as retroactive proof.
+
+- Explain when a suggestion changed after its previous replacement reached the draft, so an approver can review or undo that edit instead of being told to retry a now-stale acceptance.
+
+- Add directional account controls for populated-team deletion, consent and script loading, token revocation, hashing, read privacy and names; judge delayed token-use records with an explicit final assertion.
+
+- Exercise fork privacy and expiry across ancestors, descendants and public projections; prove that copied versions exclude feedback and unrelated files, refused destinations leave no bytes, and sign-in intents wait for the authenticated unlock answer.
+
+- Require separate positive campaign runs for the three added CLI capability variants, retaining all 48 original acceptance cells and refusing a ledger that drops any new cell.
+
+- Make presentation hiding checks start with visible comments and banners, require real deck keyboard dispatch, pin thumbnail cache duration independently, and exercise two-image cover refusals and thumbnail side effects with directional controls.
+
+- Verify Markdown readiness without a timed gate, inspect real section hierarchy and external-resource channels, and preserve exact authored raw blocks and duplicate comments across a second save, with directional regression controls.
+
+- Add CLI cases that cross the unchanged document and event page limits, isolate the polling interval floor from the server retry delay, and challenge parent-directory, uppercase and underscore skill names. Trace only local call timing and tool names; slow measurements remain inconclusive.
+
+- Verify live peer colours against independent comment accents and distinct email-derived expectations, inspect decoded shared-log bytes for editor decoration, enforce the exact two-second sharing bound, and add directional suggester-write controls. Explain historical live-editing failures without carrying old stability claims into current acceptance.
+
+- Preserve inline-code markup at the start of a paragraph without changing the authored block or native undo. Exercise the commit/autosave race by holding only a completed response, with exact draft cleanup and request-count checks; the response-delay helper preserves redirects and never resends a completed request during cleanup.
+
+- Distinguish revoked-reader responses from absent-document responses byte for byte, require fresh unrecovered listener failures before excusing a sharing observation, and add directional controls for team and folder removals, invitation contents, inherited rows and private editing.
+
+- Exercise CLI saved-sign-in revocation beside a shell token, already-dead credentials and immediate CI refusal; retain large-source change cursors and add directional controls for logout, replacement arguments, move destinations and wait timeouts.
+
+- Make reading-statistics E2E checks wait for the exact page-exit beacon in both stored records, and add independent controls for automated metrics, both activity filters, malformed beats and editor detail gates.
+
+- Exercise OAuth focus rearming, resource and client binding, live identity closure, hostile redirects, duplicate parameters and capability disclosure; exchange short-lived credentials before unrelated waits and add directional source controls for the protocol and public entry points.
+
+- Keep the document visible and the reader’s place intact when File → Print runs with Comments selected: phone pane switching now applies only on screen, and print hiding overrides later chrome styles. Exercise the complete stylesheet and real printing hook, including consent’s independent print guard.
+
+- Make Inline code wrap the selected rich text with native undo, preserving authored whitespace and styles, and request link destinations from the app window so the sandboxed editor can insert links. Exercise every formatting control through autosave and require the draft banner to show when it was saved.
+
+- Promote seven repaired concurrency regressions after local browser proof, make causal-save retries preserve pending suggestions and authored document checks, and cover the 2 MiB live-log boundary and compaction fallback with explicit negative controls.
+
+- Keep print markings visible above authored ancestor transforms, filters and containment, and lock independent rotation. Expand export coverage for page geometry, both print shortcuts, decoration, browser print cleanup, pagination and every chrome surface, with directional regression controls.
+
+- Cover withdrawal and remint change-feed events, current-content deduplication and trust, and pinned version menus with directional E2E controls; limit report claims to the DOM and final-state evidence actually observed.
+
+- Strengthen change-feed coverage with a real tied page boundary, saved publish and fork cursors, unseen events before writes, generated-note and page-local reply checks, and existing-draft privacy. Classify evidenced emulator timeouts without suppressing extra events, and add directional regression controls.
+
+- Test debug-log limits at watchdog checks, including delayed-poll overshoot and bounded recovery, instead of assuming the scheduler guarantees a hard continuous size cap. Refresh the update-race amplifier for snapshot-bound draft loading.
+
+- Publish restored historical content as a new current version across draft, upload, MCP and operator paths; only content matching the current version is a no-op, so reverting an edit cannot silently discard the draft.
+
+- Keep an active editor and its unsaved changes when entering a review pass; only explicit Reload or Take theirs prepares a new draft snapshot. Verify editor frame parameters against that prepared snapshot.
+
+- Let accessibility judges perform their shared setup when selected alone, while preserving inconclusive results after an earlier failed measurement and inheriting the setup budget and side effects.
+
+- Clarify and test text-range deletion: remove observed characters, retain unseen concurrent insertions at the cut in surviving parents, and remove descendants of deleted elements. Preserve the serial deletion controls.
+
+- Keep the campaign ledger deletion control pinned to its required discovery when new findings are appended.
+
+- Preserve intentional historical browser comments and test their selected version, passage, body and newer-version notice, replacing the contradictory concurrency expectation that no old version may receive feedback.
+
+- Let the operator smoke case create its own owner when selected alone, so its negative controls reach the command under test.
+
+- Refresh regression mutations after presence, activity and write-authority repairs; keep verification race controls applicable alone and after their timing gates.
+
+- Close the operator-owned Admin app after awaited publishing, access, withdrawal or teardown work, so a live realtime mirror connection cannot keep a completed command running.
+
+- Recheck the current version and reader permission atomically when MCP opens a comment, so publication or access revocation during passage lookup cannot leave new feedback behind.
+
+- Judge retired live logs by entry count and observe OAuth return state without waiting for Firebase listeners to become network-idle; fix the default-marking matrix command.
+
+- Carry the supplied MCP link key through the final content transaction, recheck it after token rotation, and preserve the stricter upload editor gate after access revocation.
+
+- Let new presence sessions register disconnect cleanup before announcing themselves, while rechecking ownership so queued cleanup cannot remove another person.
+
+- Align visibility coverage with the explicit reader metadata and response-type contracts while retaining strict field allowlists and header controls.
+
+- Keep reading identities in editor-only history, remove the legacy last-reader email from shared stats, and provide a bounded redaction command for existing records.
+
+- Cover upload-revision refusals from workspace actions and document-frame drops, including permission and expiry changes after opening, pending and accepted suggestions, and active peers; pin readable errors, retry state and unchanged stored content with negative controls.
+
+- Bound email provider requests to ten seconds, including incomplete response bodies, so saved access and later recipients survive a stalled provider; cover both phases with recipient-scoped local holds and regression controls.
+
+- Keep owner export markings and permitted source/bundle downloads available to link readers, refresh legacy public projections, lock five additional print-hiding CSS properties, and strip reader decoration from SVG/PNG exports while preserving authored canvas pixels.
+
+### Fixed
+
+- Refuse stale whole-document draft saves, bind editor frames to their prepared
+  snapshot, and retire old live sessions after link-holder saves so accepted work
+  survives delayed member autosaves and explicit reload resumes from those bytes.
+
+- Preserve reader scroll and unchanged selections across overlapping draft reloads,
+  and keep mobile toolbar actions visible while every presence chip remains reachable.
+
+- Enforce the email verification guess budget and resend interval across concurrent requests; preserve newer challenges when an older completion returns late.
+
+- Make CLI `open --json` and `login --paste --json` return structured results,
+  keeping paste instructions and prompts on stderr.
+
+- Refresh a stacked deck’s position when motion completes or is cancelled,
+  and leave overview keys to documents that do not measure as pages.
+
+- Enforce saved root-attribute preservation after an in-app acceptance, with
+  independent setup when the regression case is selected on its own.
+
+- Initialize operator Realtime Database handles with an explicit emulator URL
+  and demo namespace, so publish and access changes install their mirrors.
+
+- Refresh regression controls for current permission mirrors and cursor rules;
+  assert both live-log directions before a denied join stops the editor.
+
+- Support the measured large-document live seed with a bounded 2 MiB encoded-update
+  limit, explain oversized seed refusals, and retain every delta when a merged
+  compaction is too large.
+
+- Accept an untouched empty shared document's causal history, and replay the
+  delayed-save regression through its authenticated owner session.
+
+- Clarify that a recognized two-slide deck keeps its navigator; cover both
+  destinations and the single-slide boundary in the end-to-end suite.
+
+- Keep delayed autosaves from overwriting merged work using insertion and deletion
+  histories. Capture each editor's version and live epoch, autosave remote merges,
+  and retire only the session consumed by a publish or accepted suggestion.
+  Preserve candidate bytes when a transaction response is uncertain.
+
+- Operator publishing and withdrawal atomically advance the live editing epoch,
+  refresh public version metadata, and retire only the captured log and draft
+  bytes after updating the access mirror.
+
+- Live editing preserves the identity of repeated letters through concurrent
+  typing and deletion by honoring the browser's input range. Applied remote
+  edits notify autosave after the DOM binding has settled.
+
+- Give each browser tab its own presence record, cancel departed callbacks, and
+  retain editing status while any tab of a person edits. Revoked sessions can
+  clean up their own records; readers cannot claim editing to block publishing.
+  Agent guards ignore records whose editor access has been withdrawn.
+- Resolve operator Realtime Database URLs explicitly from environment or ignored
+  deployment configuration; reject malformed targets and isolate demo emulators.
+
+- Hosting pins MCP transport headers even when the Functions runtime rejects
+  malformed JSON before the handler runs. The documented boundary is HTTP 400
+  with a diagnostic; handler parse errors retain JSON-RPC `-32700`.
+
+- Empty offline caches no longer claim the workspace is empty. Formatting waits
+  for the selected version's format, and late responses from older versions
+  cannot replace the current entry or palette.
+
+- MCP reads appear in Activity with a stable session start. Malformed change-feed
+  cursors with partial positions, empty event ids or invalid timestamp ranges
+  are refused without replaying the log or advancing the saved cursor.
+
+- CLI publish/update watch status goes to stderr, keeping `--json` stdout a
+  stream of parseable results while the watcher remains active.
+
+- Browser file drops use the document title and address defaults. Upload dialogs
+  adopt late account marking defaults until the uploader chooses, and explicit
+  stamp-off remains off when sent to the server.
+
+- Withdrawing a version repoints its public view atomically and deletes the exact
+  immutable version and draft bundles named by metadata, preserving other bundles.
+  A changed draft or version aborts before destructive work.
+
+- Live co-editor autosaves no longer offer competing-copy notices. Unpinned
+  readers never flash an obsolete version announcement when following another
+  publish, and a single orphaned comment uses singular grammar.
+
+- Refused draft commits and uploaded updates remove only their unreferenced
+  candidate bundle. Live-log retirement retries an empty browser cache against
+  the server instead of silently leaving the consumed log.
+
+- Owner-only and thumbnail refusals recognize a current stored link grant while
+  preserving the refusal and all write gates. Inherited sharing rows show each
+  ancestor nearest first even in trees deeper than two folders.
+
+- Password signup remains usable when the policy request is unavailable, while
+  Auth still validates submitted passwords. Every app-shell entry path denies
+  framing, covering case variants and client-side navigation to consent.
+
+- Simultaneous live editors elect one initial document, retain its CRDT seed
+  through compaction, and preserve carets and pending local edits when remote
+  updates arrive. Editing waits for initial adoption. Autosave, Done and
+  publish share one ordered save drain; a failed Done keeps the editor open.
+  Publishing retires only an unchanged snapshot of the applied live log.
+- Phone slide rails stay below wrapped toolbars, and external checkbox labels
+  meet the 44-pixel touch target requirement.
+
+- Draft saves and publishes select immutable snapshots, recheck the current
+  version, permissions and expiry at commit time, and preserve later saves
+  during deduplication and cleanup. Concurrent suggestion accepts retry on
+  the latest draft, preserving every accepted change. Draft and expiry
+  conflicts retain their own message instead of claiming a newer version.
+
+- Account preferences restore analytics consent before collection, keep route
+  names free of document identifiers, and apply the saved default marking to
+  browser, MCP and CLI publications. Explicit off remains an override.
+
+- Expiry freezes document rename, move and realtime draft writes; only the
+  owner retains realtime reads after expiry. Visibility changes preserve an
+  omitted expiry. Shared draft reads require editor access, while public open
+  editors can join the existing log without seeing members' peer presence.
+
+- Suggestion replacements reject Unicode line and paragraph separators and C1
+  controls on both creation and revision, matching the single-line contract.
+- Dialogs keep focus when controls become disabled, the slide overview traps
+  Tab, and closing a dialog returns focus to its opener. The hidden file picker
+  is no longer a Tab stop. Document frames show their own focus ring.
+- Touch controls retain their 44-pixel hit areas across component styles.
+  Explicitly selecting a highlight opens its thread on phones and tablets.
+  Thread scrolling honours reduced motion, and presence dots remain visible
+  in forced colours.
+
+- Operator sharing and publishing now use transactional records and isolated,
+  create-only uploads. The E2E mirror repair uses revision fences and conditional
+  node writes, preserving concurrent revocations.
+
+- Concurrent document, folder and team sharing changes preserve every successful
+  delta. Membership cascades retry changed dependencies, removed team admins
+  lose management rights, and invitations belong to the operation that added access.
+  Realtime access mirrors reject older writes, and public projections cannot
+  reappear from a stale snapshot after a document becomes private.
+
+- Competing version publishes upload into isolated immutable bundles. The
+  committed version record selects the bytes served, downloaded, forked and
+  edited, so a losing request cannot overwrite the winner's content.
+- Concurrent suggestion requests share the twenty-pending limit atomically;
+  only one request can take the final slot, with no orphan opening comment.
+- Editing restores the document's original body attributes before saving and
+  on exit. Editor-only `spellcheck` no longer leaks into published bytes, while
+  authored editing attributes survive. Empty generated-container hints are
+  restored after a shared document adopts remote content.
+- Personal tokens stop working when their owner is disabled, deleted, loses
+  email verification or changes identity. Every use re-checks Auth and the
+  identity gate; an unavailable identity service fails closed.
+- Comment and suggestion notices require current read access when their
+  cooldown is claimed. Prior participation no longer mails new content to a
+  removed reader; expiry and rotated link grants are checked too.
+
+### Tests
+
+- Revision upload checks follow the version record's immutable entry and wait
+  for the document iframe before testing a file drop.
+
+- Spawned publish and update watchers verify that both JSON results stay on
+  stdout while the readiness notice goes to stderr after registration.
+
+- Framing controls apply to the stack's expanded Firebase configuration, and
+  the grant-refusal case imports its HTTP-answer classifier.
+
+- Workspace coverage checks independent sort orders, inherited folder movement,
+  invitation silence, thumbnail backfill and both revision-upload entry paths,
+  with refusal, retry and deduplication controls.
+
+- Version and withdrawal checks read immutable snapshot paths, keep retired
+  byte evidence, and detect uploads without a committed version record.
+
+- Concurrency cleanup checks follow immutable storage pointers, retain retired
+  paths after metadata deletion, and detect unreachable refused candidates.
+  Snapshot-race and concurrent-accept controls execute their own measurement.
+
+- Email E2E coverage now checks cooldown expiry, rendered notice content,
+  removed readers, repeated grants, filing silence and provider failures.
+  A request cutoff stays inconclusive instead of counting as delivery-handling
+  success; each added control is independently buildable.
+
+- Regression controls can share the explicit analytics and CLI capability
+  setup with their clean run. Routing fixtures isolate account restoration,
+  and thumbnail checks preserve authored editing attributes.
+
+- Accessibility E2E checks now measure Chrome's computed control names, text
+  contrast and focus paint on 11 screens and two dialogs without an extra
+  dependency. Nested overflow, all interactive hit areas, all five app scroll
+  paths and phone long-press comments have explicit checks and regression
+  controls.
+
+- Endpoint test transactions retry conflicting document and query reads, and
+  failed batches and transactions roll back every write.
+- E2E self-tests and stacks select Node 24 and the same explicit Firebase
+  executable, reporting both versions. Installed-tool probes check environment
+  precedence and watcher behavior without depending on source formatting.
+  Mail settling and log-rotation tests wait for the conditions they measure.
+
 ## 0.24.0 — 2026-10-28
 
 ### Fixed
@@ -184,6 +757,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Changed
 
 - Refresh the landing-page explainer video, poster and captions.
+
 
 ## 0.19.1 — 2026-10-16
 

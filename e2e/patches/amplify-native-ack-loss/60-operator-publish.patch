@@ -1,0 +1,11 @@
+--- a/scripts/lib/operator-writes.mjs
++++ b/scripts/lib/operator-writes.mjs
+@@ -4,2 +4,3 @@
+ import { randomUUID } from 'node:crypto';
++import { e2eAckTransaction } from './e2e-ack-transaction.mjs';
+ import mime from 'mime';
+@@ -47,3 +48,3 @@
+   let attempted;
+-  return db.runTransaction(async (tx) => {
++  return e2eAckTransaction(db, docRef.id, "operator-publish", async (tx) => {
+     const snap = await tx.get(docRef);

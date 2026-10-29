@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -616,3 +616,3 @@
+       baseHref: contentBase(docId, doc.currentVersion, linkKey || undefined),
+-      marking: doc.marking,
++      marking: doc.meta?.marking ?? MARKING_OFF,
+       title: doc.title,

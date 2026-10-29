@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Browser upload, with real progress and a marking default (SPEC §2, §11, §20).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { FileDropzone } from "./FileDropzone";
 import { useToast } from "./Toast";
@@ -27,6 +27,10 @@ export function UploadDialog({
   const [title, setTitle] = useState("");
   const [id, setId] = useState("");
   const [marking, setMarking] = useState<Marking>(accountDefaultMarking ?? MARKING_OFF);
+  const markingChosen = useRef(false);
+  useEffect(() => {
+    if (!markingChosen.current) setMarking(accountDefaultMarking ?? MARKING_OFF);
+  }, [accountDefaultMarking]);
   const [progress, setProgress] = useState<number | null>(null);
 
   const upload = async () => {
@@ -120,7 +124,7 @@ export function UploadDialog({
           id="upload-marking"
           type="checkbox"
           checked={marking.enabled}
-          onChange={(e) => setMarking({ ...marking, enabled: e.target.checked })}
+          onChange={(e) => { markingChosen.current = true; setMarking({ ...marking, enabled: e.target.checked }); }}
         />
         <label htmlFor="upload-marking">
           Stamp exports of this document

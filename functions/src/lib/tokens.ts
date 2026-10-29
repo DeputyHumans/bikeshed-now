@@ -4,6 +4,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { isAllowedEmail } from "../generated/policy";
 
 type Db = admin.firestore.Firestore;
 
@@ -204,7 +205,8 @@ export interface VerifiedToken {
  * Verify a presented token.
  *
  * Comparison is timing-safe. Returns null for anything wrong — malformed,
- * unknown, revoked, or a hash mismatch — because distinguishing those for the
+ * unknown, revoked, a hash mismatch, or an owner whose identity no longer
+ * passes the gate — because distinguishing those for the
  * caller would turn this into an oracle for which token ids exist.
  *
  * `lastUsedAt` is updated best-effort and never blocks the request: it exists so
@@ -233,6 +235,24 @@ export async function verifyToken(
   const actual = Buffer.from(sha256(secret), "hex");
   if (expected.length !== actual.length) return null;
   if (!timingSafeEqual(expected, actual)) return null;
+
+  // A personal token has no expiry or refresh step. Re-read Auth on every use
+  // so disabling/deleting an account cannot leave an indefinite bearer route
+  // around the browser's identity gate. A changed address must mint new tokens:
+  // the old token must never retain the old address's grants.
+  let user: admin.auth.UserRecord;
+  try {
+    user = await admin.auth().getUser(record.uid);
+  } catch (err) {
+    if ((err as { code?: string })?.code !== "auth/user-not-found") {
+      console.error("personal token identity check failed:", (err as Error)?.message ?? err);
+    }
+    return null;
+  }
+  const email = typeof user.email === "string" ? user.email.toLowerCase() : "";
+  if (user.disabled || user.emailVerified !== true || !email || email !== record.email || !isAllowedEmail(email)) {
+    return null;
+  }
 
   const now = FieldValue.serverTimestamp();
   void db

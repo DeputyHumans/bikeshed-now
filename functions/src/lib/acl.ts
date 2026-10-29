@@ -68,9 +68,9 @@ export function expiryMs(doc: DocAclData | null | undefined): number | null {
  * constraints (SPEC §5), and a query cannot filter on a field most documents do
  * not have without dropping every document that does not have it.
  *
- * So the record stays readable and the CONTENT stops being served. Every byte
- * in this system already flows through one function, which is exactly the
- * property that makes enforcing it there sufficient (SPEC §17).
+ * So the record stays readable and the CONTENT stops being served by the
+ * functions. RTDB separately enforces the mirrored expiry on shared draft
+ * bytes with its own server clock (SPEC §16, §17).
  */
 export function isExpired(
   doc: DocAclData | null | undefined,
@@ -84,7 +84,7 @@ export function isExpired(
  * An expired document is READ-ONLY, and visible only to its owner.
  *
  * One sentence, enforced at every read and write path (SPEC §17 "Expiry"),
- * because expiry is not in the security rules and cannot be (see `isExpired`).
+ * because expiry is not in the Firestore rules (see `isExpired`).
  * The owner keeps reading it because they are the one who set the date and the
  * one who can move it; locking them out of their own document would make the
  * setting unrecoverable rather than reversible. Everybody else gets the same

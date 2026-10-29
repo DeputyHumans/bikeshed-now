@@ -86,13 +86,12 @@ function world({ format = "html", doc = {}, anns = {}, files = {}, rtdb = false 
   });
   const call = (name, who, args) =>
     withFakes(objects, rtdb, () => tool(name).run(ctx(who), { id: "d1", ...args }));
-  const text = (key) => {
-    const prefix = store.get("docs/d1").draft?.storagePrefix;
-    return objects.get(prefix ? key.replace("docs/d1/draft/", `${prefix}/`) : key)?.toString("utf8");
-  };
+  const together = (calls) => withFakes(objects, rtdb, () => Promise.all(calls.map(({ name, who, args }) => tool(name).run(ctx(who), { id: "d1", ...args }))));
+  const text = (key) => objects.get(key)?.toString("utf8");
+  const draftText = (rel = "index.html") => text(`${store.get("docs/d1").draft?.storagePrefix ?? "docs/d1/draft"}/${rel}`);
   const notes = (annId) =>
     [...store.entries()].filter(([p]) => p.startsWith(`${V1}/${annId}/comments/`)).map(([, d]) => d);
-  return { db, store, objects, call, text, notes, ann: (id) => store.get(`${V1}/${id}`), doc: () => store.get("docs/d1") };
+  return { db, store, objects, call, together, text, draftText, notes, ann: (id) => store.get(`${V1}/${id}`), doc: () => store.get("docs/d1") };
 }
 
 /** Storage and the Realtime Database, in memory, for the length of `fn`. */
@@ -125,7 +124,7 @@ async function withFakes(objects, rtdb, fn) {
     configurable: true,
     value: () => {
       if (rtdb === false) throw new Error("no Realtime Database configured");
-      const at = (path) => path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
+      const at = (path) => !path ? rtdb : path.split("/").reduce((node, k) => (node == null ? undefined : node[k]), rtdb);
       const ref = (path) => ({
         once: async () => ({ val: () => at(path) ?? null, exists: () => at(path) != null }),
         limitToFirst: () => ref(path),
@@ -133,6 +132,11 @@ async function withFakes(objects, rtdb, fn) {
           const parts = path.split("/");
           const parent = at(parts.slice(0, -1).join("/"));
           if (parent) delete parent[parts[parts.length - 1]];
+          // RTDB removes empty ancestors as well as the requested subtree.
+          for (let i = parts.length - 1; i > 0; i--) {
+            const node = at(parts.slice(0, i).join("/"));
+            if (node && Object.keys(node).length === 0) delete at(parts.slice(0, i - 1).join("/"))[parts[i - 1]];
+          }
         },
       });
       return { ref };
@@ -152,6 +156,54 @@ const S2 = suggestion("s2", "OpenAI", "Compare vs. ", " Codex", "");
 const S3 = suggestion("s3", "a single fortnight", "cut over in ", ", and", "a month");
 const C1 = { annId: "c1", anchor: { exact: "Ship it" }, authorEmail: OWNER.emailLower, resolved: false };
 
+for (const { moved, conflict = false } of [{ moved: false }, { moved: true }, { moved: true, conflict: true }]) test(`accept rereads a retired draft only when its metadata moved: ${moved}, after conflict: ${conflict}`, async () => {
+  const oldPrefix = "docs/d1/drafts/old";
+  const nextPrefix = "docs/d1/drafts/next";
+  const conflictedPrefix = "docs/d1/drafts/conflicted";
+  const w = world({ anns: { s1: S1 }, doc: { draft: { baseVersion: "v1", storagePrefix: oldPrefix } },
+    files: { [`${oldPrefix}/index.html`]: HTML, [`${conflictedPrefix}/index.html`]: HTML, [`${nextPrefix}/index.html`]: HTML.replace("Ship it with", "Keep the other edit and ship it with") } });
+  if (conflict) {
+    const set = w.objects.set.bind(w.objects);
+    let first = true;
+    w.objects.set = (key, value) => {
+      if (first) {
+        first = false;
+        w.doc().draft = { baseVersion: "v1", storagePrefix: conflictedPrefix };
+      }
+      return set(key, value);
+    };
+  }
+  const has = w.objects.has.bind(w.objects);
+  w.objects.has = (key) => {
+    if (key === `${conflict ? conflictedPrefix : oldPrefix}/index.html`) {
+      w.objects.delete(key);
+      if (moved) w.doc().draft = { baseVersion: "v1", storagePrefix: nextPrefix };
+    }
+    return has(key);
+  };
+  if (moved) {
+    let result;
+    await assert.doesNotReject(async () => { result = await w.call("accept_suggestion", APPROVER, { threadId: "s1" }); }, "a retired draft read retries against current metadata");
+    assert.equal(result.state, "accepted", "a retired draft read retries against current metadata");
+    assert.match(w.draftText(), /two weekends/, "the requested replacement is saved");
+    assert.match(w.draftText(), /Keep the other edit/, "the concurrent replacement survives");
+  } else {
+    await assert.rejects(w.call("accept_suggestion", APPROVER, { threadId: "s1" }), /Could not read the document/);
+    assert.equal(w.ann("s1").suggestion.state, "pending", "missing bytes never record acceptance");
+  }
+});
+
+test("concurrent accepts keep both changes in the shared draft with one decision each", async () => {
+  const w = world({ anns: { s1: S1, s2: S2 } });
+  const results = await w.together(["s1", "s2"].map((threadId) => ({ name: "accept_suggestion", who: APPROVER, args: { threadId } })));
+  assert.deepEqual(results.map((r) => r.state), ["accepted", "accepted"]);
+  assert.equal(w.draftText(), HTML.replace("in a single weekend, and", "in two weekends, and").replace("vs. OpenAI Codex", "vs. Codex"));
+  for (const id of ["s1", "s2"]) {
+    assert.equal(w.ann(id).suggestion.state, "accepted");
+    assert.equal(w.notes(id).length, 1);
+  }
+});
+
 test("an approver's agent accepts two, rejects one, closes the thread, and publishes them as one version", async () => {
   // The sequence a review takes, as one run: every decision lands in the
   // draft, nothing is minted until the draft is published, and the version
@@ -165,10 +217,10 @@ test("an approver's agent accepts two, rejects one, closes the thread, and publi
   );
   assert.equal(w.doc().currentVersion, "v1", "accepting mints no version");
   assert.equal(w.doc().draft.baseVersion, "v1");
-  assert.match(w.text("docs/d1/draft/index.html"), /We can cut over in two weekends, and yes,\n {5}a single weekend is enough\./);
+  assert.match(w.draftText(), /We can cut over in two weekends, and yes,\n {5}a single weekend is enough\./);
 
   await w.call("accept_suggestion", APPROVER, { threadId: "s2" });
-  const draft = w.text("docs/d1/draft/index.html");
+  const draft = w.draftText();
   assert.match(draft, /two weekends/, "the second lands on top of the first, not over it");
   assert.match(draft, /<p>Compare vs\. Codex &amp; friends\.<\/p>/, "a deletion takes the space it would leave doubled");
   assert.equal(
@@ -193,7 +245,7 @@ test("an approver's agent accepts two, rejects one, closes the thread, and publi
   const v2 = w.text(`${w.store.get("docs/d1/versions/v2").storagePrefix}/index.html`);
   assert.match(v2, /cut over in two weekends/);
   assert.match(v2, /Compare vs\. Codex/);
-  assert.equal(w.text("docs/d1/draft/index.html"), undefined);
+  assert.equal(w.draftText(), undefined);
   const version = w.store.get("docs/d1/versions/v2");
   assert.equal(version.publishedVia, "mcp", "published through an agent, and says so");
   assert.ok(version.editSessions.some((s) => s.actor.channel === "mcp"), "who wrote the draft is kept");
@@ -221,11 +273,11 @@ test("a Markdown document is changed in its source, which stays as written aroun
   await w.call("accept_suggestion", OWNER, { threadId: "s1" });
   await w.call("accept_suggestion", OWNER, { threadId: "s2" });
   assert.equal(
-    w.text("docs/d1/draft/index.md"),
+    w.draftText("index.md"),
     "# Migration\n\nWe can cut over in two \\*busy\\* weekends, and yes, that is enough.\n\nCompare vs. Codex today.\n",
     "the line it was wrapped across is joined, emphasis it did not ask for is escaped, and nothing else moves",
   );
-  assert.match(w.text("docs/d1/draft/index.html"), /two \*busy\* weekends/, "and the draft's rendering follows");
+  assert.match(w.draftText(), /two \*busy\* weekends/, "and the draft's rendering follows");
 });
 
 test("an accept lands on top of what a person already has in the draft", async () => {
@@ -236,28 +288,28 @@ test("an accept lands on top of what a person already has in the draft", async (
     files: { "docs/d1/draft/index.html": theirs },
   });
   await w.call("accept_suggestion", APPROVER, { threadId: "s1" });
-  const draft = w.text("docs/d1/draft/index.html");
+  const draft = w.draftText();
   assert.match(draft, /Ship it, carefully, with/, "their edit is kept");
   assert.match(draft, /cut over in two weekends/, "and the change is made beside it");
 });
 
 test("nothing is written while somebody has the editor open, and a log nobody is using is dropped", async () => {
   const live = {
-    status: { d1: { peers: { "u-ed": { mode: "edit" }, "u-x": { mode: "view" } }, y: { e1: "AAEC" } } },
+    editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-ed": { mode: "edit", email: "ed@example.com", liveEpoch: "initial" }, "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } },
   };
   const busy = world({ anns: { s1: S1 }, rtdb: live });
   await assert.rejects(busy.call("accept_suggestion", APPROVER, { threadId: "s1" }), /Somebody has this document open in the editor/);
   await assert.rejects(busy.call("commit_draft", APPROVER, {}), /open in the editor/);
-  assert.equal(busy.text("docs/d1/draft/index.html"), undefined);
+  assert.equal(busy.draftText(), undefined);
   assert.equal(busy.ann("s1").suggestion.state, "pending");
   assert.equal(busy.ann("s1").suggestion.claim, undefined, "and nobody is kept off it");
 
-  const idle = { status: { d1: { peers: { "u-x": { mode: "view" } }, y: { e1: "AAEC" } } } };
+  const idle = { editAccess: { d1: { "ed@example,com": true, __liveEpoch: "initial" } }, status: { d1: { peers: { "u-x": { mode: "view" } }, y: { initial: { e1: "AAEC" } } } } };
   const quiet = world({ anns: { s1: S1 }, rtdb: idle });
   await quiet.call("accept_suggestion", APPROVER, { threadId: "s1" });
   assert.equal(idle.status.d1.y, undefined, "the log would have won over the draft, so it goes");
   assert.ok(idle.status.d1.peers["u-x"], "and the readers stay");
-  assert.match(quiet.text("docs/d1/draft/index.html"), /two weekends/);
+  assert.match(quiet.draftText(), /two weekends/);
 });
 
 test("what cannot be made for certain without the page is refused, and nothing is written or held", async () => {
@@ -270,7 +322,7 @@ test("what cannot be made for certain without the page is refused, and nothing i
   for (const [ann, message] of cases) {
     const w = world({ anns: { [ann.annId]: ann } });
     await assert.rejects(w.call("accept_suggestion", APPROVER, { threadId: ann.annId }), message);
-    assert.equal(w.text("docs/d1/draft/index.html"), undefined, String(message));
+    assert.equal(w.draftText(), undefined, String(message));
     assert.equal(w.ann(ann.annId).suggestion.state, "pending");
     assert.equal(w.ann(ann.annId).suggestion.claim, undefined);
   }
@@ -304,5 +356,5 @@ test("an update is refused while the draft holds an accepted change, and says to
     w.call("update_document", APPROVER, { content: "<p>Something else entirely.</p>" }),
     /holds 1 accepted suggestion, .* Publish the draft first, with commit_draft/,
   );
-  assert.match(w.text("docs/d1/draft/index.html"), /two weekends/, "and the draft is kept");
+  assert.match(w.draftText(), /two weekends/, "and the draft is kept");
 });

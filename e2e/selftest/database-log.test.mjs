@@ -26,6 +26,7 @@ import { HOUR_MS, initialLease, ownerIdentity, writeLease } from "../lib/lifetim
 import { saveRecord, stopStack } from "../lib/stack.mjs";
 import { spawnWatchdog } from "../lib/watchdog.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
+import { firebaseTools } from "../lib/prerequisites.mjs";
 
 const WRITER = fileURLToPath(new URL("./helpers/fb-log-writer.mjs", import.meta.url));
 const STACK_SRC = fileURLToPath(new URL("../lib/stack.mjs", import.meta.url));
@@ -36,16 +37,7 @@ const children = [];
 const fakes = [];
 let seq = 0;
 
-/** firebase-tools' bin and package root, as the writer finds them (null when not installed). */
-function firebaseTools() {
-  const onPath = (process.env.PATH ?? "").split(":").map((d) => join(d, "firebase")).find((p) => existsSync(p));
-  const bin = process.env.E2E_FIREBASE_BIN || onPath;
-  if (!bin) return null;
-  let dir = dirname(realpathSync(bin));
-  while (dir !== dirname(dir) && !existsSync(join(dir, "lib", "emulator", "emulatorLogger.js"))) dir = dirname(dir);
-  return existsSync(join(dir, "lib", "emulator", "emulatorLogger.js")) ? { bin, root: dir } : null;
-}
-const FT = firebaseTools();
+const FT = firebaseTools({ optional: true });
 const WRITER_ENV = FT ? { E2E_FIREBASE_BIN: FT.bin } : { E2E_FB_WRITER: "format" };
 
 after(async () => {
@@ -465,12 +457,17 @@ test("an older record (no logs.database) is drained beside its emulators.log, an
   assert.ok(got.length >= 5 && got.every((n, i) => n === i));
 });
 
-test("the watchdog drains before every cut: what the cap throws away from the tree is in logs/database-debug.log", async (t) => {
+test("the watchdog drains before every cut: what the cap throws away from the tree is in logs/database-debug.log", { timeout: 60_000 }, async (t) => {
   // ~110 KB/s of firestore lines against a 200 KB cap: a cut about every second.
   const rec = await fakeStack({ watchdog: true, maxBytes: 200_000, tickMs: 20, filler: 2000 });
-  await sleep(4500);
-  const wd = readFileSync(rec.logs.watchdog, "utf8");
-  const cuts = (wd.match(/cut .*firebase-debug\.log at/g) ?? []).length;
+  const deadline = Date.now() + 30_000;
+  let wd = "";
+  let cuts = 0;
+  do {
+    await sleep(100);
+    wd = readFileSync(rec.logs.watchdog, "utf8");
+    cuts = (wd.match(/cut .*firebase-debug\.log at/g) ?? []).length;
+  } while (cuts < 2 && Date.now() < deadline);
   assert.ok(cuts >= 2, `the watchdog cut firebase-debug.log ${cuts} times:\n${wd}`);
   // What the tree still holds, as a stop without the drain would have it: the middle is gone.
   const inTree = new Set();

@@ -79,7 +79,7 @@ function mediaBlock(query: string): string {
 const selectorsWith = (css: string, property: string, value: string) =>
   // Comments first, or the prose before a rule is read as part of its selector.
   Array.from(css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^}]*)\}/g))
-    .filter((m) => new RegExp(`${property}\\s*:\\s*${value}\\s*;`).test(m[2]))
+    .filter((m) => new RegExp(`${property}\\s*:\\s*${value}(?:\\s*!important)?\\s*;`).test(m[2]))
     .flatMap((m) => m[1].split(",").map((s) => s.trim()))
     .filter((s) => s && !s.startsWith("@"));
 

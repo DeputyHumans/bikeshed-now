@@ -1,0 +1,13 @@
+{
+  "oracle": "^X-a11-live-1:",
+  "what": "a11 collapsed caret",
+  "target": {
+    "spec": "e2e/specs/functional/a11-live.spec.mjs",
+    "case": "A11.2b a collapsed caret an editor clicks into a paragraph reaches the server as their focus, and a reader's frame draws it there, labelled",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^X-a11-live-1:"
+  }
+}

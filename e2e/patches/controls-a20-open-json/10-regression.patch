@@ -1,0 +1,7 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -1020,3 +1020,3 @@
+   openBrowser(url);
+-  out(flags.json, { url }, () => console.log(url));
++  console.log(url);
+ }

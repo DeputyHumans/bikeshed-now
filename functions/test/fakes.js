@@ -3,7 +3,7 @@
 
 const { createHash, randomBytes } = require("node:crypto");
 const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
+const { FieldValue: DefaultFieldValue } = require("firebase-admin/firestore");
 
 /**
  * Enough of Firestore to run an endpoint end to end: document refs, dotted
@@ -16,9 +16,10 @@ const { FieldValue } = require("firebase-admin/firestore");
  * reads after it has written throws, as the real one does. A fake looser than
  * the real thing is how a test passes while the bug is live.
  */
-function fakeFirestore(initial = {}) {
+function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
   const store = new Map();
   for (const [path, data] of Object.entries(initial)) store.set(path, clone(data));
+  const revisions = new Map();
   let autoId = 0;
 
   const isSentinel = (v, kind) => v instanceof FieldValue && v.isEqual(kind);
@@ -86,24 +87,43 @@ function fakeFirestore(initial = {}) {
 
   function apply(w) {
     const exists = store.has(w.path);
+    if (w.precondition?.lastUpdateTime && (!exists || !w.precondition.lastUpdateTime.isEqual(new admin.firestore.Timestamp(0, revisions.get(w.path) ?? 0)))) {
+      throw Object.assign(new Error(`fake: stale update time at ${w.path}`), { code: 9 });
+    }
     switch (w.op) {
       case "create":
         if (exists) throw new Error(`fake: ${w.path} already exists`);
         store.set(w.path, resolve(w.data));
-        return;
+        break;
       case "set":
         store.set(w.path, w.opts?.merge ? merge(store.get(w.path), w.data) : resolve(w.data));
-        return;
+        break;
       case "update": {
         if (!exists) throw new Error(`fake: no document to update at ${w.path}`);
         const next = clone(store.get(w.path));
         for (const [k, v] of Object.entries(w.data)) put(next, k, v);
         store.set(w.path, next);
-        return;
+        break;
       }
       case "delete":
         store.delete(w.path);
-        return;
+        break;
+    }
+    revisions.set(w.path, (revisions.get(w.path) ?? 0) + 1);
+  }
+
+  /** Validate/apply the whole write set synchronously, restoring it on any refusal. */
+  function commit(writes) {
+    const before = new Map([...store].map(([p, d]) => [p, clone(d)]));
+    const versions = new Map(revisions);
+    try {
+      for (const w of writes) apply(w);
+    } catch (error) {
+      store.clear();
+      for (const [p, d] of before) store.set(p, d);
+      revisions.clear();
+      for (const [p, n] of versions) revisions.set(p, n);
+      throw error;
     }
   }
 
@@ -112,6 +132,7 @@ function fakeFirestore(initial = {}) {
     return {
       id: path.split("/").pop(),
       exists: data !== undefined,
+      updateTime: data === undefined ? undefined : new admin.firestore.Timestamp(0, revisions.get(path) ?? 0),
       ref: ref(path),
       data: () => (data === undefined ? undefined : clone(data)),
       get: (field) => (data === undefined ? undefined : field.split(".").reduce((n, k) => n?.[k], data)),
@@ -124,7 +145,7 @@ function fakeFirestore(initial = {}) {
       path,
       get: async () => snap(path),
       set: async (data, opts) => apply({ op: "set", path, data, opts }),
-      update: async (data) => apply({ op: "update", path, data }),
+      update: async (data, precondition) => apply({ op: "update", path, data, precondition }),
       create: async (data) => apply({ op: "create", path, data }),
       delete: async () => apply({ op: "delete", path }),
       collection: (name) => collection(`${path}/${name}`),
@@ -200,6 +221,11 @@ function fakeFirestore(initial = {}) {
     return {
       ...query(path),
       doc: (id) => ref(`${path}/${id ?? `auto${++autoId}`}`),
+      async add(data) {
+        const document = ref(`${path}/auto${++autoId}`);
+        await document.create(data);
+        return document;
+      },
     };
   }
 
@@ -222,28 +248,37 @@ function fakeFirestore(initial = {}) {
     batch() {
       const batch = {};
       const writes = writer(batch);
-      batch.commit = async () => {
-        for (const x of writes) {
-          if (x.op === "create" && store.has(x.path)) throw new Error(`fake: ${x.path} already exists`);
-        }
-        for (const x of writes) apply(x);
-      };
+      batch.commit = async () => commit(writes);
       return batch;
     },
-    async runTransaction(fn) {
-      const tx = {};
-      const writes = writer(tx);
-      Object.assign(tx, {
-        async get(target) {
-          if (writes.length > 0) throw new Error("fake: a transaction must read before it writes");
-          return target._matches
-            ? { docs: target._matches(), empty: target._matches().length === 0 }
-            : snap(target.path);
-        },
-      });
-      const result = await fn(tx);
-      for (const x of writes) apply(x);
-      return result;
+    async runTransaction(fn, { maxAttempts = 5 } = {}) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const tx = {};
+        const writes = writer(tx);
+        const reads = new Map();
+        const queries = [];
+        const version = (p) => revisions.get(p) ?? 0;
+        // Include membership and revisions: an inserted/deleted matching row
+        // conflicts too, including a query that was empty when read.
+        const queryVersion = (q) => JSON.stringify(q._matches().map((s) => [s.ref.path, version(s.ref.path)]));
+        Object.assign(tx, {
+          async get(target) {
+            if (writes.length > 0) throw new Error("fake: a transaction must read before it writes");
+            if (target._matches) {
+              const docs = target._matches();
+              queries.push([target, queryVersion(target)]);
+              return { docs, empty: docs.length === 0 };
+            }
+            if (!reads.has(target.path)) reads.set(target.path, version(target.path));
+            return snap(target.path);
+          },
+        });
+        const result = await fn(tx);
+        if ([...reads].some(([p, v]) => version(p) !== v) || queries.some(([q, v]) => queryVersion(q) !== v)) continue;
+        commit(writes);
+        return result;
+      }
+      throw Object.assign(new Error("fake: transaction contention exhausted retries"), { code: 10 });
     },
   };
   return { db, store };

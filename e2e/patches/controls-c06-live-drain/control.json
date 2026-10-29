@@ -1,0 +1,15 @@
+{
+  "oracle": "C6 delivery: unacknowledged live updates",
+  "what": "Done skips its shared acknowledgment drain after the durable HTTP save.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c06-leave-commit.spec.mjs",
+    "case": "C6 delivery timeout keeps saved local typing open until the live queue recovers [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--rtdb-proxy"
+  ],
+  "expect": {
+    "message": "^C6 delivery: unacknowledged live updates"
+  }
+}

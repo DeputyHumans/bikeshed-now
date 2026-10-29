@@ -1,0 +1,17 @@
+{
+  "oracle": "a current-only MCP comment cannot be left on a replaced version",
+  "what": "controls-c14-comment-head",
+  "target": {
+    "spec": "e2e/specs/concurrency/c13-feedback.spec.mjs",
+    "case": "C14 judge (comment held): no thread an add_comment opened is left unresolved on the version the commit replaced [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-c13-feedback"
+  ],
+  "expect": {
+    "message": "C14 left behind:"
+  }
+}

@@ -1,0 +1,7 @@
+--- a/app/src/components/SlidePanel.tsx
++++ b/app/src/components/SlidePanel.tsx
+@@ -62,3 +62,3 @@
+       ?.querySelector<HTMLElement>('[aria-current="true"]')
+-      ?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
++      ?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "smooth" : "smooth" });
+   }, [current, reduceMotion]);

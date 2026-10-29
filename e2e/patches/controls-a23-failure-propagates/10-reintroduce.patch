@@ -1,0 +1,15 @@
+--- a/functions/src/email/send.ts
++++ b/functions/src/email/send.ts
+@@ -112,10 +112,10 @@
+     if (error) {
+       console.warn(`[email] send failed: ${error.message}`);
+-      return { sent: false, reason: "failed" };
++      throw new Error("provider refused delivery");
+     }
+     return { sent: true };
+   } catch (e) {
+     console.warn(`[email] send threw: ${(e as Error).message}`);
+-    return { sent: false, reason: "failed" };
++    throw new Error("provider refused delivery");
+   }
+ }

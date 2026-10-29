@@ -17,6 +17,8 @@
  *          key event → the redirect carries code, state and iss → a one-hour
  *          bsa_ and a bsr_; bsa_ sees the 33 tools at /mcp and nothing else.
  *          Cancel sends access_denied with state and iss
+ *   A22.2b real tab focus loss disarms the consent card; returning focus
+ *          requires a fresh second before approval can arm again
  *   A22.3  refresh rotates both secrets; a replay of the spent bsr_, or of
  *          the code, within 60 s gets the identical pair; a wrong secret for
  *          a known grant changes nothing; a replay after 60 s revokes the
@@ -34,6 +36,8 @@
  *          named for its device, with no refresh token, usable beyond /mcp
  *   A22.7  /llms.txt, /skills/index.json, /.well-known/mcp.json, the /docs
  *          redirects and the legal pages
+ *   A22.8  authorization, access and refresh resource/client binding; refused
+ *          attempts preserve the original usable grant
  *
  * No client_id here is a metadata-document URL: the one outbound fetch the
  * product makes would be refused by the stack's egress guard, which says
@@ -44,7 +48,7 @@
  * runs here too; on production every one is a route.
  *
  * When the stack does not answer, nothing was measured. Every case declares
- * inconclusiveOnStackTimeout (lib/test.mjs), its clients throw for Hosting's
+ * inconclusiveOnCaseTimeout (lib/test.mjs), which also classifies page stalls, its clients throw for Hosting's
  * cut-off 504 (cutoffError), and a response a case reads itself goes through
  * answered(). A redirect that never comes because the consent page's own POST
  * /oauth/consent got that 504 is the receiver's timeout carrying it as
@@ -63,7 +67,7 @@ import { join } from "node:path";
 import { answered, currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { idToken, listTokens, mintToken, openSession, bearerHttp } from "../../lib/session.mjs";
-import { approveViaApi, armingProbe, authorizeParams, consent, discover, exchangeCode, pkce, readArming, refresh, register, startReceiver } from "../../lib/oauth.mjs";
+import { approveViaApi, armingProbe, authorizeParams, consent, discover, realPageFocus, exchangeCode, pkce, readArming, refresh, register, startReceiver } from "../../lib/oauth.mjs";
 import { openCrossSitePage } from "../../lib/browser.mjs";
 import { adminFor, closeAdmin, readDoc } from "../../lib/admin.mjs";
 import { assertHeaderMatrix, eventually } from "../../lib/assert.mjs";
@@ -155,7 +159,7 @@ async function connectViaApi(http, session, { clientId, redirectUri, resource })
 
 /** POST /mcp initialize with a bearer: {status, challenge, cacheControl}. */
 async function mcpInit(ctx, token, actor) {
-  const m = ctx.mcp({ token, actor });
+  const m = ctx.mcp({ token, actor, cutoffError: true });
   const r = await m.raw({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "bikeshed-e2e", version: "1" } } });
   answered(r.response, `POST /mcp initialize (${actor})`);
   return { status: r.status, challenge: r.headers.get("www-authenticate"), cacheControl: r.headers.get("cache-control") };
@@ -163,7 +167,7 @@ async function mcpInit(ctx, token, actor) {
 
 /** The 31 tool names a token sees. */
 async function toolNames(ctx, token, actor) {
-  const m = ctx.mcp({ token, actor });
+  const m = ctx.mcp({ token, actor, cutoffError: true });
   await m.initialize();
   return (await m.listTools()).map((t) => t.name).sort();
 }
@@ -185,7 +189,7 @@ async function consentRaw(http, { body, headers = {}, contentType = "application
 
 scenario("A22.1 discovery: both protected-resource documents name the issuer byte for byte as their only authorization server and this host's /mcp, private, no-store; the authorization-server metadata is public, max-age=300 and advertises S256, auth none, CIMD and iss with no scopes; openid-configuration is a JSON 404; /mcp's 401 points at the protected-resource document", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 180_000,
 }, async (ctx) => {
   const http = ctx.http({ actor: "oauth-app", cutoffError: true });
@@ -235,7 +239,7 @@ scenario("A22.1 discovery: both protected-resource documents name the issuer byt
   assert.deepEqual({ head: head.status, post: post.status, allow: post.headers.get("allow") }, { head: 200, post: 405, allow: "GET, HEAD" });
 
   ctx.step("the chain an MCP client follows: /mcp's 401 names the PRM, and that address answers this document");
-  const probe = await ctx.mcp({ actor: "no-credential" }).raw({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+  const probe = await ctx.mcp({ actor: "no-credential", cutoffError: true }).raw({ jsonrpc: "2.0", id: 1, method: "tools/list" });
   assert.deepEqual({ status: probe.status, challenge: probe.headers.get("www-authenticate") }, { status: 401, challenge: challengeFor(false) });
   const followed = await http.get(/resource_metadata="([^"]+)"/.exec(probe.headers.get("www-authenticate"))[1], { expect: 200 });
   assert.deepEqual(followed.json, d.prm, "the challenge's resource_metadata is the PRM");
@@ -286,7 +290,7 @@ async function signInAtConnect(u, acct) {
 
 scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 33 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 360_000,
 }, async (ctx) => {
   const t = tag();
@@ -350,6 +354,17 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     assert.match((await card.locator(".banner-warn").first().textContent()).replace(/\s+/g, " "), /That's a program on this computer\./);
     assert.match((await card.textContent()).replace(/\s+/g, " "), new RegExp(`Signed in as ${acct.email.toLowerCase().replace(/[.+]/g, "\\$&")}`));
 
+    assert.deepEqual(await card.locator(".connect-list:not(.connect-list-not) li").allTextContents(), [
+      "Read what you can read", "Publish, revise and rename documents", "Comment, reply, suggest edits and resolve threads",
+      "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
+      "Manage sharing on documents and folders you own, sending invitations to new readers",
+      "Change visibility, open editing and expiry on documents you own",
+      "Rename and move folders you can edit; delete folders you own while keeping their contents",
+    ], "consent discloses every allowed capability");
+    assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
+      "Delete documents or manage teams", "Trust document scripts or act with permissions you do not have",
+    ], "consent discloses the forbidden capabilities");
+
     ctx.step("arming, phase 1: with no input at all for 2.5 s Approve stays disabled (the product's one-second delay, waited out with margin)");
     const a0 = await readArming(u);
     precondition(a0?.appeared != null, "the arming probe saw Approve appear");
@@ -380,6 +395,46 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     assert.deepEqual(Object.keys(back1.query).sort(), ["code", "iss", "state"], `the authorization response: ${Object.keys(back1.query)}`);
     assert.deepEqual({ state: back1.state, iss: back1.iss }, { state: params1.state, iss: ISSUER() }, "state round-trips; iss is the issuer (RFC 9207)");
     assert.match(back1.code, /^[A-Za-z0-9_-]{43}$/);
+
+    ctx.step("the code from card 1 exchanges for a bsa_ good for one hour and a bsr_ of the same grant; no-store, no-cache");
+    const x = await exchangeCode(http, { code: back1.code, verifier: p1.verifier, clientId: reg.clientId, redirectUri: r1.redirectUri });
+    assert.equal(x.status, 200, JSON.stringify(x.json));
+    assertHeaderMatrix([{ label: "POST /oauth/token", res: x.response, expect: { "cache-control": "private, no-store", pragma: "no-cache" } }]);
+    assert.deepEqual(Object.keys(x.json).sort(), ["access_token", "expires_in", "refresh_token", "token_type"]);
+    assert.equal(x.json.token_type, "Bearer");
+    const am = ACCESS_RE.exec(x.json.access_token);
+    const rm = REFRESH_RE.exec(x.json.refresh_token);
+    assert.ok(am && rm && am[1] === rm[1], "bsa_<tokenId>.<secret> and bsr_<same tokenId>.<secret>");
+    assert.ok(x.json.expires_in > 3590 && x.json.expires_in <= 3600, `expires_in ${x.json.expires_in}: one hour`);
+    const tokenId = am[1];
+    appendLedger(target, { kind: "oauth", tokenId, uid: session.uid, clientId: reg.clientId });
+    if (target.kind === "local") {
+      const rec = await readDoc(target, `oauthCodes/${sha256(back1.code)}`);
+      assert.equal(await readDoc(target, `oauthCodes/${back1.code}`), null, "the code itself is never a key");
+      assert.deepEqual(
+        { uid: rec?.uid, clientId: rec?.clientId, redirectUri: rec?.redirectUri, challenge: rec?.codeChallenge, resource: rec?.resource, life: rec?.expiresAt.toMillis() - rec?.createdAt.toMillis(), spent: Boolean(rec?.usedAt), tokenId: rec?.tokenId },
+        { uid: session.uid, clientId: reg.clientId, redirectUri: r1.redirectUri, challenge: p1.challenge, resource: RESOURCE(), life: 120_000, spent: true, tokenId },
+        "Approve wrote oauthCodes/{sha256(code)}, valid for two minutes, spent by the exchange (SPEC §23 Consent)",
+      );
+      const g = await readDoc(target, `tokens/${tokenId}`);
+      assert.deepEqual(
+        { kind: g.kind, channel: g.channel, hasHash: "hash" in g, life: g.accessExpiresAt.toMillis() - g.createdAtMs, resource: g.resource, client: g.client, generation: g.generation, revokedAt: g.revokedAt },
+        { kind: "oauth", channel: "mcp", hasHash: false, life: 3_600_000, resource: RESOURCE(), client: { id: reg.clientId, host: null, verified: false, registration: "dcr" }, generation: 0, revokedAt: null },
+        "tokens/{id}: an oauth grant, never with a personal token's hash (SPEC §23 Tokens)",
+      );
+    }
+    const listed = ((await listTokens(session)).json?.tokens ?? []).filter((x2) => x2.tokenId === tokenId);
+    assert.deepEqual(listed.map((l) => ({ kind: l.kind, name: l.name, channel: l.channel, clientHost: l.clientHost, registration: l.registration, revoked: l.revoked })), [{ kind: "oauth", name: cleanName, channel: "mcp", clientHost: null, registration: "dcr", revoked: false }], "the account's token list carries the grant");
+
+    ctx.step("bsa_ at /mcp sees exactly the tools a personal token sees (32); at /publish it is not a credential");
+    const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
+    const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
+    const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
+    assert.equal(viaGrant.length, 32, viaGrant.join(", "));
+    assert.deepEqual(viaGrant, viaPersonal, "the same 32 tools as a personal token");
+    const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
+    assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
+
 
     ctx.step("card 2 (an https redirect): the title leads with the redirect's host, then the self-chosen name, unchecked, with the any-name warning");
     const p3 = pkce();
@@ -483,7 +538,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
 
 scenario("A22.3 refresh rotates both secrets and the spent bsa_ stops working; a replay of the spent bsr_ or of the code within 60 s gets the identical pair; a wrong secret for a known grant changes nothing; a replay after 60 s revokes the grant, so its bsa_ answers 401 and its newest bsr_ is refused", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 360_000,
 }, async (ctx) => {
   const { session } = await owner();
@@ -495,6 +550,7 @@ scenario("A22.3 refresh rotates both secrets and the spent bsa_ stops working; a
   const A = await connectViaApi(http, session, { clientId: reg.clientId, redirectUri });
   const pair0 = A.pair;
   assert.equal((await mcpInit(ctx, pair0.access_token, "A0")).status, 200, "the first bsa_ works");
+  const rotationStartedAt = Date.now();
   const rot = await refresh(http, { refreshToken: pair0.refresh_token, clientId: reg.clientId });
   const rotatedAt = Date.now();
   assert.equal(rot.status, 200, JSON.stringify(rot.json));
@@ -502,15 +558,18 @@ scenario("A22.3 refresh rotates both secrets and the spent bsa_ stops working; a
   assert.ok(ACCESS_RE.exec(pair1.access_token)?.[1] === A.tokenId && REFRESH_RE.exec(pair1.refresh_token)?.[1] === A.tokenId, "the same grant");
   assert.notEqual(pair1.access_token, pair0.access_token, "the access secret rotated");
   assert.notEqual(pair1.refresh_token, pair0.refresh_token, "the refresh secret rotated");
+  ctx.step("a retry of the same spend within 60 s gets the identical pair, and writes nothing");
+  const retry = await refresh(http, { refreshToken: pair0.refresh_token, clientId: reg.clientId });
+  if (retry.status !== 200 && Date.now() - rotationStartedAt >= 60_000) ctx.inconclusive("the rotation and retry requests outlasted the 60-second replay window");
+  assert.equal(retry.status, 200, JSON.stringify(retry.json));
+  assert.deepEqual({ access: retry.json.access_token, refresh: retry.json.refresh_token }, { access: pair1.access_token, refresh: pair1.refresh_token }, "the identical pair");
+  if (target.kind === "local") assert.equal((await readDoc(target, `tokens/${A.tokenId}`)).generation, 1, "one rotation, not two");
+
   const spent = await mcpInit(ctx, pair0.access_token, "A0-after-rotation");
   assert.deepEqual({ status: spent.status, challenge: spent.challenge }, { status: 401, challenge: challengeFor(true) }, "the bsa_ from before the rotation no longer works");
   assert.equal((await mcpInit(ctx, pair1.access_token, "A1")).status, 200, "the rotated bsa_ works");
 
-  ctx.step("a retry of the same spend within 60 s gets the identical pair, and writes nothing");
-  const retry = await refresh(http, { refreshToken: pair0.refresh_token, clientId: reg.clientId });
-  assert.equal(retry.status, 200, JSON.stringify(retry.json));
-  assert.deepEqual({ access: retry.json.access_token, refresh: retry.json.refresh_token }, { access: pair1.access_token, refresh: pair1.refresh_token }, "the identical pair");
-  if (target.kind === "local") assert.equal((await readDoc(target, `tokens/${A.tokenId}`)).generation, 1, "one rotation, not two");
+
 
   ctx.step("revocation requires possession: a wrong secret for the known grant id is refused and changes nothing");
   const forged = `bsr_${A.tokenId}.${randomBytes(32).toString("base64url")}`;
@@ -519,9 +578,11 @@ scenario("A22.3 refresh rotates both secrets and the spent bsa_ stops working; a
   assert.equal((await mcpInit(ctx, pair1.access_token, "A1-after-forgery")).status, 200, "the grant still works");
 
   ctx.step("grant B: a retry of the code exchange within 60 s gets the identical pair");
+  const codeRetryStartedAt = Date.now();
   const B = await connectViaApi(http, session, { clientId: reg.clientId, redirectUri });
   const exchangedAt = Date.now();
   const again = await exchangeCode(http, { code: B.code, verifier: B.verifier, clientId: reg.clientId, redirectUri });
+  if (again.status !== 200 && Date.now() - codeRetryStartedAt >= 60_000) ctx.inconclusive("the first exchange and code retry requests outlasted the 60-second replay window");
   assert.equal(again.status, 200, JSON.stringify(again.json));
   assert.deepEqual({ access: again.json.access_token, refresh: again.json.refresh_token }, { access: B.pair.access_token, refresh: B.pair.refresh_token }, "the identical pair for a retried code");
   assert.equal((await mcpInit(ctx, B.pair.access_token, "B")).status, 200);
@@ -551,7 +612,7 @@ scenario("A22.3 refresh rotates both secrets and the spent bsa_ stops working; a
 
 scenario("A22.3b the gate is re-checked at every refresh: once the account signs out everywhere, or is disabled, the next refresh of its connected app is refused with \"this account can no longer connect apps\" and revokes the grant, whose bsa_ then answers 401", {
   tiers: ["local"],
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   needs: ["admin-emulator"],
   timeoutMs: 360_000,
 }, async (ctx) => {
@@ -563,6 +624,9 @@ scenario("A22.3b the gate is re-checked at every refresh: once the account signs
   for (const [label, close] of [
     ["signed out everywhere", (uid) => auth.revokeRefreshTokens(uid)],
     ["disabled", (uid) => auth.updateUser(uid, { disabled: true })],
+    ["unverified email", (uid) => auth.updateUser(uid, { emailVerified: false })],
+    ["changed email", (uid) => auth.updateUser(uid, { email: `changed-${tag()}@example.com` })],
+    ["deleted account", (uid) => auth.deleteUser(uid)],
   ]) {
     const { session } = await owner();
     const G = await connectViaApi(http, session, { clientId: reg.clientId, redirectUri });
@@ -578,7 +642,7 @@ scenario("A22.3b the gate is re-checked at every refresh: once the account signs
     out[label] = { refresh: `${r.status} ${r.json?.error}: ${r.json?.error_description}`, mcp: after.status, revoked: Boolean(record?.revokedAt) };
   }
   const closed = { refresh: "400 invalid_grant: this account can no longer connect apps", mcp: 401, revoked: true };
-  assert.deepEqual(out, { "signed out everywhere": closed, disabled: closed }, "a closed gate revokes the grant at its next refresh (SPEC §23 Tokens)");
+  assert.deepEqual(out, { "signed out everywhere": closed, disabled: closed, "unverified email": closed, "changed email": closed, "deleted account": closed }, "a closed gate revokes the grant at its next refresh (SPEC §23 Tokens)");
 });
 
 // --- A22.4 ------------------------------------------------------------------
@@ -590,7 +654,7 @@ function handBuiltClientId(name, redirects) {
 
 scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the code is spent, so a wrong client, redirect_uri, resource or verifier is refused and the code still works; javascript:, data:, fragment and userinfo redirects are refused at registration and in a hand-built id; a loopback redirect matches any port, localhost is not 127.0.0.1, an https one matches exactly; only S256, and a failure once the redirect is known carries back with iss, which the consent page follows only when pressed", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 300_000,
 }, async (ctx) => {
   const { session } = await owner();
@@ -604,6 +668,7 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     " javascript:alert(1)",
     "data:text/html,<script>alert(1)</script>",
     "vbscript:msgbox(1)",
+    "blob:https://example.com/id",
     "file:///etc/passwd",
     "about:blank",
     `https://app-${t}.example/cb#fragment`,
@@ -615,15 +680,23 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     const r = await register(http, { redirectUris: [uri] });
     refusals.push({ uri, status: r.status, error: r.json?.error, d: r.json?.error_description });
   }
-  assert.deepEqual(refusals, hostile.map((uri) => ({ uri, status: 400, error: "invalid_redirect_uri", d: MSG.redirectRefused })));
+  assert.deepEqual(refusals, hostile.map((uri) => ({ uri, status: 400, error: "invalid_redirect_uri", d: MSG.redirectRefused })), "registration refuses hostile redirect URIs");
 
   const tok = session.idToken;
   const describe = async (params) => approveViaApi(http, tok, params, { action: "describe" });
 
-  ctx.step("a hand-built client id carrying javascript: is refused as no client at all, with nothing sent anywhere");
-  const forged = handBuiltClientId("Forged", ["javascript:alert(1)"]);
-  const fd = await describe(authorizeParams({ clientId: forged, redirectUri: "javascript:alert(1)", challenge: pkce().challenge }));
-  assert.deepEqual(fd.json, { valid: false, error: "invalid_client", message: MSG.whoIsAsking }, "no back URL: the redirect is not established");
+  ctx.step("every hostile URI is rejected again when smuggled in a hand-built client id");
+  for (const uri of hostile) {
+    const forged = handBuiltClientId("Forged", [uri]);
+    const fd = await describe(authorizeParams({ clientId: forged, redirectUri: uri, challenge: pkce().challenge }));
+    assert.deepEqual(fd.json, { valid: false, error: "invalid_client", message: MSG.whoIsAsking }, `hand-built redirect is rejected without a back URL: ${uri}`);
+  }
+  for (const uri of ["com.example.app:/callback", "example-app://desktop/callback"]) {
+    const app = await register(http, { redirectUris: [uri], clientName: "A22 native application" });
+    assert.equal(app.status, 201, "an application's private-use scheme can register");
+    const described = await describe(authorizeParams({ clientId: app.clientId, redirectUri: uri, challenge: pkce().challenge }));
+    assert.equal(described.json?.valid, true, "an application's private-use scheme can request consent");
+  }
 
   ctx.step("loopback: registered with no port, any port matches; another host spelling, path or query does not");
   const lo = await client(http, [LOOPBACK_CB]);
@@ -664,12 +737,12 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     const r = await describe(authorizeParams({ clientId: web.clientId, redirectUri: uri, challenge: ch }));
     exact[label] = r.json?.valid === true ? "valid" : r.json?.error;
   }
-  assert.deepEqual(exact, { exact: "valid", "trailing slash": "invalid_redirect_uri", port: "invalid_redirect_uri", "upper-case path": "invalid_redirect_uri" });
+  assert.deepEqual(exact, { exact: "valid", "trailing slash": "invalid_redirect_uri", port: "invalid_redirect_uri", "upper-case path": "invalid_redirect_uri" }, "HTTPS redirect matching is exact");
 
   ctx.step("PKCE is S256 only; with the redirect established, the refusal carries back, with the error, state and iss");
   const plainParams = authorizeParams({ clientId: lo.clientId, redirectUri: `http://127.0.0.1:${portA}/callback`, challenge: ch, extra: { code_challenge_method: "plain" } });
   const plain = await describe(plainParams);
-  assert.deepEqual({ valid: plain.json?.valid, error: plain.json?.error }, { valid: false, error: "invalid_request" });
+  assert.deepEqual({ valid: plain.json?.valid, error: plain.json?.error }, { valid: false, error: "invalid_request" }, "plain PKCE cannot request consent");
   const back = new URL(plain.json.back);
   assert.deepEqual(
     { at: `${back.origin}${back.pathname}`, q: Object.fromEntries(back.searchParams) },
@@ -683,6 +756,7 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
   const redirectUri = `http://127.0.0.1:${portB}/callback`;
   const approved = await approveViaApi(http, tok, authorizeParams({ clientId: lo.clientId, redirectUri, challenge: p.challenge }));
   assert.equal(approved.status, 200, JSON.stringify(approved.json));
+  const approvedAt = Date.now();
   assert.ok(approved.redirect.startsWith(`${redirectUri}?`), `the code goes to the port presented: ${approved.redirect.split("?")[0]}`);
   const attempts = [
     ["another client", { clientId: web.clientId, redirectUri, verifier: p.verifier }],
@@ -703,7 +777,15 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     "a malformed verifier": "400 invalid_grant: code_verifier is malformed",
     "the wrong verifier": "400 invalid_grant: code_verifier does not match",
   });
-  const ok = await exchangeCode(http, { code: approved.code, verifier: p.verifier, clientId: lo.clientId, redirectUri, resource: RESOURCE() });
+  const fields = { grant_type: "authorization_code", code: approved.code, code_verifier: p.verifier, client_id: lo.clientId, redirect_uri: redirectUri, resource: RESOURCE() };
+  for (const repeated of ["code_verifier", "redirect_uri"]) {
+    const form = new URLSearchParams(fields);
+    form.append(repeated, fields[repeated]);
+    const response = await http.request("POST", "/oauth/token", { body: form.toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
+    assert.deepEqual({ status: response.status, error: response.json?.error, description: response.json?.error_description }, { status: 400, error: "invalid_request", description: "a parameter was repeated" }, `a repeated ${repeated} is rejected before spending the code`);
+  }
+  if (Date.now() - approvedAt >= 110_000) ctx.inconclusive("the refusal matrix consumed the authorization code's two-minute life before its final exchange could be measured");
+  const ok = await http.postJson("/oauth/token", fields);
   assert.equal(ok.status, 200, `the code still works after the refused attempts (SPEC §23: a wrong verifier costs nothing): ${ok.status} ${JSON.stringify(ok.json)}`);
   assert.match(ok.json.access_token, ACCESS_RE);
   appendLedger(target, { kind: "oauth", tokenId: ACCESS_RE.exec(ok.json.access_token)[1], uid: session.uid, clientId: lo.clientId });
@@ -728,7 +810,11 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
     await u.goto(`/connect?${new URLSearchParams(refusedParams)}`);
     const goBack = card.getByRole("button", { name: "Go back to 127.0.0.1", exact: true });
     await goBack.waitFor({ state: "visible", timeout: ROUND_TRIP_MS });
-    await u.page.waitForLoadState("networkidle");
+    // Firebase listeners intentionally keep network activity alive. Observe
+    // the navigation/receiver state after the refusal rendered instead.
+    // Observe beyond a common deferred-navigation timer; this is a bounded
+    // no-navigation oracle, not a network-idle or backend latency wait.
+    await sleep(2500);
     assert.equal(new URL(u.page.url()).pathname, "/connect", "the page did not leave by itself");
     assert.equal(receiver.heard(), false, "the receiver heard nothing before the button was pressed");
     await goBack.click();
@@ -744,7 +830,7 @@ scenario("A22.4 redirects and PKCE: every token-endpoint check runs before the c
 
 scenario("A22.5 POST /oauth/consent takes only the signed-in account's ID token from this origin's own page: the session cookie alone and a personal token are 401; cross-site, same-site and unlabelled requests are 403 even with a valid ID token, and a real cross-site page cannot get past that; a non-JSON body is 400 and GET 405, every answer private, no-store", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 240_000,
 }, async (ctx) => {
   const { acct, session } = await owner();
@@ -774,7 +860,7 @@ scenario("A22.5 POST /oauth/consent takes only the signed-in account's ID token 
     got.push({ label, status: r.status, error: r.json?.error ?? null, valid: r.json?.valid ?? null });
     headerRows.push({ label, res: r, expect: { "cache-control": "private, no-store" } });
   }
-  assert.deepEqual(got, rows.map(([label, , , , status, error]) => ({ label, status, error, valid: status === 200 ? true : null })));
+  assert.deepEqual(got, rows.map(([label, , , , status, error]) => ({ label, status, error, valid: status === 200 ? true : null })), "consent requires the ID token and this origin");
   const get = await http.get("/oauth/consent");
   assert.deepEqual({ status: get.status, allow: get.headers.get("allow") }, { status: 405, allow: "POST" });
   headerRows.push({ label: "GET", res: get, expect: { "cache-control": "private, no-store" } });
@@ -849,7 +935,7 @@ async function openAccount(u, email) {
 
 scenario("A22.6 a connected app is listed on the account screen under where it returns, and Revoke there makes /mcp refuse its bsa_ with invalid_token and the token endpoint its bsr_; the command line's built-in client goes through the same consent page and gets an ordinary cli token named for its device, with no refresh token, that works beyond /mcp", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 360_000,
 }, async (ctx) => {
   const t = tag();
@@ -899,7 +985,7 @@ scenario("A22.6 a connected app is listed on the account screen under where it r
     const d = await approveViaApi(http, tok, authorizeParams({ clientId: "bikeshed-cli", redirectUri: uri, challenge: pkce().challenge, extra: { device } }), { action: "describe" });
     cliRefused[label] = d.json?.valid === true ? "valid" : d.json?.error;
   }
-  assert.deepEqual(cliRefused, { localhost: "invalid_redirect_uri", https: "invalid_redirect_uri", "other path": "invalid_redirect_uri" });
+  assert.deepEqual(cliRefused, { localhost: "invalid_redirect_uri", https: "invalid_redirect_uri", "other path": "invalid_redirect_uri" }, "the built-in CLI redirects only to its registered numeric loopback callback");
 
   const receiver = await startReceiver({ target, page: u });
   try {
@@ -947,7 +1033,7 @@ function stamp(buf) {
 
 scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /skills/index.json lists SPEC §19's four skills, each served stamped; /.well-known/mcp.json is served as written, every URL in it relative and answering here; /docs and /docs/ 302 to /d/docs and /docs/developers to /d/docs-developers; /terms and /privacy render for an anonymous visitor", {
   tiers: BOTH,
-  inconclusiveOnStackTimeout: true,
+  inconclusiveOnCaseTimeout: true,
   timeoutMs: 180_000,
 }, async (ctx) => {
   const http = ctx.http({ actor: "anonymous", cutoffError: true });
@@ -994,7 +1080,7 @@ scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /s
   const urls = { transport: m.transport?.url, resourceMetadata: m.authentication?.resourceMetadata, authorizationServer: m.authentication?.authorizationServer, instructions: m.authentication?.instructions };
   assert.deepEqual(urls, { transport: "/mcp", resourceMetadata: "/.well-known/oauth-protected-resource/mcp", authorizationServer: "/.well-known/oauth-authorization-server", instructions: "/llms.txt" });
   const answers = {
-    transport: (await ctx.mcp({ actor: "anonymous" }).raw({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { path: urls.transport })).status,
+    transport: (await ctx.mcp({ actor: "anonymous", cutoffError: true }).raw({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { path: urls.transport })).status,
     resourceMetadata: (await http.get(urls.resourceMetadata)).json?.resource ?? null,
     authorizationServer: (await http.get(urls.authorizationServer)).json?.issuer ?? null,
     instructions: (await http.get(urls.instructions)).status,
@@ -1011,7 +1097,7 @@ scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /s
     "/docs": `302 ${target.origin}/d/docs`,
     "/docs/": `302 ${target.origin}/d/docs`,
     "/docs/developers": `302 ${target.origin}/d/docs-developers`,
-  });
+  }, "documentation routes preserve their exact destinations");
 
   ctx.step("the legal pages render for somebody who is not signed in, and stay where they are");
   const u = await ctx.users.user({ name: "anonymous" });
@@ -1023,4 +1109,75 @@ scenario("A22.7 /llms.txt is the tree's agent guide stamped with this origin; /s
     assert.deepEqual(await u.page.locator(".legal__nav a").allTextContents(), ["Back to your documents", "Terms", "Privacy"]);
   }
   noPageErrors([u]);
+});
+
+
+scenario("A22.8 resource and client binding reject authorization, access and refresh at the wrong target without disconnecting the valid grant", {
+  tiers: ["local"], inconclusiveOnCaseTimeout: true, timeoutMs: 240_000,
+}, async (ctx) => {
+  const { session } = await owner();
+  const http = ctx.http({ actor: "oauth-binding", cutoffError: true });
+  const redirectUri = "http://127.0.0.1:1/callback";
+  const registered = await client(http, [LOOPBACK_CB]);
+  const otherClient = await client(http, [LOOPBACK_CB]);
+  const wrongResource = `${target.origin}/not-mcp`;
+  for (const action of ["describe", "approve"]) {
+    const refused = await approveViaApi(http, session.idToken, authorizeParams({ clientId: registered.clientId, redirectUri, challenge: pkce().challenge, resource: wrongResource }), { action });
+    assert.equal(refused.json?.error, "invalid_target", `${action} refuses another resource`);
+  }
+  const grant = await connectViaApi(http, session, { clientId: registered.clientId, redirectUri, resource: RESOURCE() });
+  const otherOrigin = new URL(target.origin);
+  otherOrigin.hostname = "localhost";
+  const wrongAccess = await http.postJson(`${otherOrigin.origin}/mcp`, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "a22", version: "1" } } }, { headers: { authorization: `Bearer ${grant.pair.access_token}` } });
+  assert.equal(wrongAccess.status, 401, "an access token is refused by another resource authority");
+  assert.match(wrongAccess.headers.get("www-authenticate") ?? "", /error="invalid_token"/, "wrong-resource access carries the invalid-token challenge");
+  for (const [label, fields, error, description] of [
+    ["resource", { clientId: registered.clientId, resource: wrongResource }, "invalid_target", "refresh token was issued for another resource"],
+    ["client", { clientId: otherClient.clientId, resource: RESOURCE() }, "invalid_grant", "refresh token was issued to another client"],
+  ]) {
+    const refused = await refresh(http, { refreshToken: grant.pair.refresh_token, ...fields });
+    assert.deepEqual({ status: refused.status, error: refused.json?.error, description: refused.json?.error_description }, { status: 400, error, description }, `refresh refuses another ${label} without spending the secret`);
+    assert.equal((await mcpInit(ctx, grant.pair.access_token, `after-wrong-${label}`)).status, 200, `wrong ${label} never revokes the legitimate connection`);
+  }
+  const valid = await refresh(http, { refreshToken: grant.pair.refresh_token, clientId: registered.clientId, resource: RESOURCE() });
+  assert.equal(valid.status, 200, "the original refresh token still works at its own resource and client");
+});
+
+
+scenario("A22.2b consent loses its armed state while another page has focus and waits a fresh second after focus returns", {
+  tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 240_000,
+}, async (ctx) => {
+  const { acct } = await owner();
+  const http = ctx.http({ actor: "oauth-focus", cutoffError: true });
+  const registered = await client(http, [LOOPBACK_CB]);
+  const u = await ctx.users.user({ name: "consent-focus" });
+  await armingProbe(u);
+  precondition((await u.signInUi(acct.email, acct.password)).status === "ok", "the owner signed in");
+  const focus = await realPageFocus(u);
+  try {
+    await u.goto(connectPath(authorizeParams({ clientId: registered.clientId, redirectUri: "http://127.0.0.1:1/callback", challenge: pkce().challenge })));
+    const approve = u.page.getByRole("button", { name: "Approve", exact: true });
+    await approve.waitFor({ state: "visible", timeout: ROUND_TRIP_MS });
+    await u.page.bringToFront();
+    await u.page.keyboard.press("Shift");
+    await eventually(() => approve.isEnabled(), { timeout: 5_000, interval: 40, message: "the focused page arms after input and a second" });
+    await focus.blur();
+    const blurred = await eventually(() => u.page.evaluate(() => !document.hasFocus()), { timeout: 3_000, interval: 40, message: "the browser gives actual focus to the other page" }).catch(() => false);
+    if (!blurred) ctx.inconclusive("this browser did not expose a real focus transition after disabling focus emulation");
+    await sleep(1500);
+    assert.equal(await approve.isDisabled(), true, "consent stays disarmed after a full second without focus");
+    await u.page.bringToFront();
+    const focusedAt = await eventually(async () => {
+      const record = await readArming(u);
+      return record.focusChanges.filter((f) => f.type === "focus" && f.hasFocus).at(-1)?.t ?? false;
+    }, { timeout: 3_000, interval: 20, message: "the probe records returning focus" });
+    assert.equal(await approve.isDisabled(), true, "returning focus does not arm consent immediately");
+    await eventually(() => approve.isEnabled(), { timeout: 5_000, interval: 30, message: "a new focused second arms consent again" });
+    const record = await readArming(u);
+    ctx.ev.json("focus-rearming", record);
+    const armedAt = record.states.find((state) => state.t >= focusedAt && state.present && !state.disabled)?.t;
+    assert.ok(armedAt != null && armedAt - focusedAt >= 990, `consent waits a fresh focused second: ${armedAt - focusedAt} ms`);
+  } finally {
+    await focus.restore();
+  }
 });

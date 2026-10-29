@@ -1,0 +1,9 @@
+--- a/cli/src/index.mjs
++++ b/cli/src/index.mjs
+@@ -393,5 +393,5 @@
+   writeConfig(kept);
+
+-  const revoked = outcome === "revoked" || outcome === "invalid";
++  const revoked = outcome === "revoked";
+   out(flags.json, { origin, revoked, forgot: true }, () =>
+     console.log(

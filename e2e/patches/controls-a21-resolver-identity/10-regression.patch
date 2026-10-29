@@ -1,0 +1,7 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -1503,3 +1503,3 @@
+           case "thread.reopened":
+-            out.by = (thread?.resolvedBy as { email?: unknown } | undefined)?.email ?? null;
++            out.by = thread?.authorEmail ?? null;
+             break;

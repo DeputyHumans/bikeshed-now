@@ -152,6 +152,10 @@ import { logFile, logMark, readLog } from "./logs.mjs";
 import { REPO_ROOT, SPECS_DIR } from "./paths.mjs";
 import { formatNotReproduced } from "./reporter.mjs";
 import { loadTarget } from "./target.mjs";
+import { CoverageBoundary, recycleRtdbCoverage } from "./rtdb-coverage.mjs";
+import { recycleFirestoreCoverage } from "./firestore-coverage.mjs";
+
+const coverageBoundary = new CoverageBoundary();
 
 async function optional(rel) {
   try {
@@ -1625,11 +1629,18 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
     if (r.waitedMs > 0) ev.step(`environment: waited ${Math.round(r.waitedMs / 1000)} s for ${(r.needBytes / GIB).toFixed(1)} GB available (N=${c.n}: its browsers and the stack's growth)`);
   };
   const body = async () => {
+    if (process.env.E2E_RTDB_COVERAGE_RECYCLE === "1" && coverageBoundary.needed) {
+      const firestore = await recycleFirestoreCoverage(target, { boundary: coverageBoundary, caseName: c.name });
+      t.diagnostic(`maintenance: archived ${firestore.coverage.sourceBytes} bytes of Firestore rule coverage and reapplied identical rules ${firestore.rulesSha256}; ${firestore.coverage.artifact}`);
+      const recycled = await recycleRtdbCoverage(target, { boundary: coverageBoundary, caseName: c.name });
+      t.diagnostic(`maintenance: archived ${recycled.coverage.sourceBytes} bytes of RTDB rule coverage and restored exact rules ${recycled.rulesSha256} after a whitespace-only round trip; ${recycled.coverage.artifact}`);
+    }
     await reserveLive();
     return fn(ctx);
   };
   const scoped = () => (grantMod?.withWindowScope ? grantMod.withWindowScope(windows, body) : body());
   const run = () => (httpMod?.withEvidenceSink ? httpMod.withEvidenceSink(sink, scoped) : scoped());
+  coverageBoundary.enter();
   try {
     await run();
     settled = true;
@@ -1689,8 +1700,12 @@ async function runCase(t, { target, c, fn, file, usersPerBrowser, defect, timeou
     // A body its budget abandoned has had its outcome decided inside the
     // margin: closing its browsers (seconds a Chrome, more under load) is not
     // waited for, or node:test's timeout would report over that outcome.
-    if (!aborted && abandoned) void pool?.close().catch(() => undefined);
-    else if (!aborted) await pool?.close();
+    try {
+      if (!aborted && abandoned) void pool?.close().catch(() => undefined);
+      else if (!aborted) await pool?.close();
+    } finally {
+      coverageBoundary.leave({ settled: settled && !aborted && !abandoned, closed: !pool || (pool.closed && !aborted && !abandoned), usedBrowsers: !!pool, pending: httpMod?.pendingRequests?.(sink)?.length ?? 0 });
+    }
   }
 }
 

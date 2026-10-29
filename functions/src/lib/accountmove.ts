@@ -395,15 +395,7 @@ async function pass(db: Db, from: string, to: string, phase: Phase, audit: MoveA
     const ref = db.collection("docs").doc(id);
     const snap = await ref.get();
     if (!snap.exists) continue;
-    const d = snap.data() ?? {};
-    await persistDocMembership(
-      db,
-      ref,
-      { ownerEmail: String(d.ownerEmail ?? ""), grants: grantsOf(d), folderId: (d.folderId as string | null) ?? null },
-      {},
-      () => [],
-      QUIET,
-    );
+    await persistDocMembership(db, ref, undefined, undefined, QUIET);
   }
   return { found, named };
 }

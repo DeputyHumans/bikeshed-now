@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -58,2 +58,3 @@
+ import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
++import { e2eAckTransaction } from "./lib/e2eAckTransaction";
+ import {
+@@ -628,3 +629,3 @@
+   const receipt = freshReceiptId();
+-  const outcome = await db().runTransaction(async (tx) => {
++  const outcome = await e2eAckTransaction(db(), docId, `thumb-${kind}`, async (tx) => {
+     const fresh = await tx.get(docRef);

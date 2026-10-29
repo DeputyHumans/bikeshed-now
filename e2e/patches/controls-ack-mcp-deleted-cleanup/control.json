@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK MCP author deletion: the completed request removes its bounded receipt",
+  "what": "Leave a completed comment receipt on the document after native acknowledgement reconciliation.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp-ack.spec.mjs",
+    "case": "A20.7c MCP add_comment acknowledges its commit without resurrecting feedback an author deletes before the native retry",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK MCP author deletion: the completed request removes its bounded receipt"
+  }
+}

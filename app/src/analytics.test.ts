@@ -159,6 +159,7 @@ describe("the tag's own events", () => {
       setAnalyticsCollectionEnabled: vi.fn(),
     }));
     const analytics = await import("./analytics");
+    await analytics.setAnalyticsOptOut(false);
     analytics.initAnalytics();
     await new Promise((r) => setTimeout(r, 0));
 
@@ -166,5 +167,62 @@ describe("the tag's own events", () => {
     const [, options] = initializeAnalytics.mock.calls[0] as unknown as [unknown, { config: Record<string, unknown> }];
     expect(options.config.send_page_view).toBe(false);
     expect(options.config.page_title).toBe("Bikeshed");
+  });
+});
+
+describe("restoring the account opt-out", () => {
+  beforeEach(() => { vi.resetModules(); window.localStorage.clear(); });
+
+  it("fetches nothing before preference resolution or for a saved opt-out, then respects changes in one page", async () => {
+    const { writeConsent } = await import("./consent");
+    writeConsent("granted");
+    const initializeAnalytics = vi.fn(() => ({}) as never);
+    const log = vi.fn();
+    const enabled = vi.fn();
+    vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
+    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/analytics", () => ({ initializeAnalytics, isSupported: async () => true, logEvent: log, setAnalyticsCollectionEnabled: enabled }));
+    const analytics = await import("./analytics");
+    analytics.initAnalytics();
+    analytics.logPageView("/d/private/v1");
+    await analytics.setAnalyticsOptOut(true);
+    expect(initializeAnalytics).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    await analytics.setAnalyticsOptOut(false);
+    analytics.logPageView("/d/private/v1");
+    await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1));
+    expect(log.mock.calls[0][2]).toEqual({ page_path: "/d/:docId/:versionId", page_location: "/d/:docId/:versionId", page_title: "/d/:docId/:versionId" });
+    await analytics.setAnalyticsOptOut(true);
+    expect(enabled).toHaveBeenLastCalledWith(expect.anything(), false);
+    analytics.logPageView("/account");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(log).toHaveBeenCalledTimes(1);
+    await analytics.setAnalyticsOptOut(false);
+    expect(initializeAnalytics).toHaveBeenCalledTimes(1);
+    expect(enabled).toHaveBeenLastCalledWith(expect.anything(), true);
+  });
+
+  it("does not send an event queued before opting out while the SDK support check was pending", async () => {
+    const { writeConsent } = await import("./consent");
+    writeConsent("granted");
+    let support!: (value: boolean) => void;
+    const supported = new Promise<boolean>((resolve) => { support = resolve; });
+    const log = vi.fn();
+    const initializeAnalytics = vi.fn(() => ({}) as never);
+    vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
+    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/analytics", () => ({ initializeAnalytics, isSupported: () => supported, logEvent: log, setAnalyticsCollectionEnabled: vi.fn() }));
+    const analytics = await import("./analytics");
+    const enable = analytics.setAnalyticsOptOut(false);
+    analytics.logPageView("/account");
+    await analytics.setAnalyticsOptOut(true);
+    support(true);
+    await enable;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(initializeAnalytics).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    await analytics.setAnalyticsOptOut(false);
+    analytics.logPageView("/account");
+    await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1));
   });
 });

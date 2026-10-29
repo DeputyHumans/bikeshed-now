@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.1c public readers receive the owner's changed marking and explicit off without private metadata",
+  "what": "Changing marking leaves the existing public projection stale",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.1c public readers receive the owner's changed marking and explicit off without private metadata"
+  },
+  "expect": {
+    "message": "public mirror follows the owner.s latest marking"
+  }
+}

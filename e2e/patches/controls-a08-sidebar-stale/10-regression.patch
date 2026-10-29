@@ -1,0 +1,7 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -1145,3 +1145,3 @@
+             orphaned={annotationLayer.orphaned}
+-            stale={mode.kind === "editing" ? reviewStale : annotationLayer.stale}
++            stale={mode.kind === "editing" ? (void reviewStale, []) : annotationLayer.stale}
+             isApprover={isApprover(doc.meta, emailLower)}

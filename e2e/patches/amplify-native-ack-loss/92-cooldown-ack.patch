@@ -1,0 +1,17 @@
+--- a/functions/src/email/notify.ts
++++ b/functions/src/email/notify.ts
+@@ -4,2 +4,3 @@
+ import * as admin from "firebase-admin";
++import { e2eAckTransaction } from "../lib/e2eAckTransaction";
+ import { randomUUID } from "node:crypto";
+@@ -54,3 +55,3 @@
+   const claimId = randomUUID();
+-  return db.runTransaction(async (tx) => {
++  return e2eAckTransaction(db, `${uid}:${docId}:${kind}`, "email-cooldown", async (tx) => {
+     const snap = await tx.get(ref);
+@@ -98,2 +99,5 @@
+     return true;
++  }).then(result => {
++    console.log(`E2E_COOLDOWN_RESULT ${uid}:${docId}:${kind} ${result}`);
++    return result;
+   });

@@ -1,0 +1,7 @@
+--- a/functions/src/oauth/metadata.ts
++++ b/functions/src/oauth/metadata.ts
+@@ -148,3 +148,3 @@
+     grant_types_supported: ["authorization_code", "refresh_token"],
+-    code_challenge_methods_supported: ["S256"],
++    code_challenge_methods_supported: ["plain"],
+     token_endpoint_auth_methods_supported: ["none"],

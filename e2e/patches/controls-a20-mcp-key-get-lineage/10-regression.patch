@@ -1,0 +1,8 @@
+--- a/functions/src/mcp/tools.ts
++++ b/functions/src/mcp/tools.ts
+@@ -773,4 +773,5 @@
+     },
+     async run(ctx, args) {
++      args = { ...args, k: undefined };
+       const id = str(args, "id");
+       const out = await lineageFor({ db: ctx.db, caller: ctx.caller, docId: id, k: str(args, "k") || null });

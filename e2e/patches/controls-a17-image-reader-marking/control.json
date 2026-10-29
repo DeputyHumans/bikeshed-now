@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.1b an anonymous holder of an unlisted document's link who prints it gets the owner's marking stamped, as a member does",
+  "what": "Image export ignores the anonymous reader projection",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.1b an anonymous holder of an unlisted document's link who prints it gets the owner's marking stamped, as a member does"
+  },
+  "expect": {
+    "message": "anonymous reader.s PNG carries the owner.s label pixels"
+  }
+}

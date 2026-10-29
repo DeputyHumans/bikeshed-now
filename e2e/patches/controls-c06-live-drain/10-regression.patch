@@ -1,0 +1,9 @@
+--- a/app/src/viewer/useInlineEditor.ts
++++ b/app/src/viewer/useInlineEditor.ts
+@@ -261,5 +261,5 @@
+           if (expired || session.current !== currentSession) return false;
+           try {
+-            await flushSharedRef.current?.();
++            // negative control: skip live delivery.
+             if (expired || session.current !== currentSession) return false;
+             setSaveError(null);

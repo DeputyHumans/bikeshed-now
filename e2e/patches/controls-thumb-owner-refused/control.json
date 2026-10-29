@@ -1,0 +1,17 @@
+{
+  "oracle": "thumbnail owner: fresh authority answers 200",
+  "what": "Incorrectly reject the owner at the fresh authority check.",
+  "target": {
+    "spec": "e2e/specs/concurrency/c17-identity.spec.mjs",
+    "case": "C17c thumbnail authority: the owner still stores and serves its exact JPEGs after removing another editor during upload (SPEC §2) [N=2]",
+    "suite": "concurrency"
+  },
+  "stack": [
+    "--gates",
+    "--patches",
+    "amplify-thumb-authority"
+  ],
+  "expect": {
+    "message": "thumbnail owner: fresh authority answers 200"
+  }
+}

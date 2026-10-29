@@ -91,11 +91,33 @@ export function getBucketName(projectOverride, bucketOverride) {
   return `${getProjectId(projectOverride)}-content`;
 }
 
+/** Explicit RTDB target for operators; unlike bucket names, it is never derived. */
+function getDatabaseUrl(projectOverride) {
+  if (process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
+    if (!getProjectId(projectOverride).startsWith("demo-")) {
+      throw new Error("Realtime Database emulator use requires a demo- project");
+    }
+    // Admin's database service requires a URL even when an emulator host is
+    // set. Pin this invocation's demo namespace; never inherit a deployment.
+    return `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}/?ns=${encodeURIComponent(getProjectId(projectOverride))}`;
+  }
+  const value = process.env.BIKESHED_DATABASE_URL ?? deployConfig().databaseURL;
+  if (value === undefined || value === "") return undefined;
+  let parsed;
+  try { parsed = typeof value === "string" ? new URL(value) : null; } catch { /* rejected below */ }
+  if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password ||
+    parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("databaseURL must be an HTTPS database URL without credentials, path, query or fragment");
+  }
+  return parsed.origin;
+}
+
 function getApp(projectOverride, bucketOverride) {
   if (_app) return _app;
   _app = admin.initializeApp({
     projectId: getProjectId(projectOverride),
     storageBucket: getBucketName(projectOverride, bucketOverride),
+    databaseURL: getDatabaseUrl(projectOverride),
   });
   return _app;
 }
@@ -114,11 +136,20 @@ export function getBucket(projectOverride, bucketOverride) {
 
 /** Realtime Database handle, or null when the deployment has none. */
 export function getRtdb(projectOverride) {
+  const app = getApp(projectOverride);
   try {
-    return admin.database(getApp(projectOverride));
+    return admin.database(app);
   } catch {
     return null;
   }
+}
+
+/** Release only this module's app after an operator finishes its awaited work. */
+export async function closeAdmin() {
+  if (!_app) return;
+  const app = _app;
+  _app = null;
+  await app.delete();
 }
 
 export const FieldValue = admin.firestore.FieldValue;

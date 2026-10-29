@@ -1,0 +1,13 @@
+{
+  "oracle": "A20.6 a link key opens an unlisted open-editing document to a non-member on each of the nine tools SPEC §19 names; without it, or with a wrong one, each answers exactly as for an id that does not exist",
+  "what": "key get document",
+  "target": {
+    "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
+    "case": "A20.6 a link key opens an unlisted open-editing document to a non-member on each of the nine tools SPEC §19 names; without it, or with a wrong one, each answers exactly as for an id that does not exist",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "get_document with k"
+  }
+}

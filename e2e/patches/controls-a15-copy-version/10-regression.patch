@@ -1,0 +1,8 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -239,4 +239,5 @@
+     publishedAt: now(),
+   });
++  batch.create(forkRef.collection("versions").doc("v2"), v);
+   batch.create(db.collection(FORKS).doc(docId), {
+     parentId: input.sourceId,

@@ -1,0 +1,13 @@
+{
+  "oracle": "two-slide navigation boundary",
+  "what": "Hide the navigator for a recognized two-slide deck",
+  "target": {
+    "spec": "e2e/specs/functional/a16-decks.spec.mjs",
+    "case": "A16.1b a recognized two-slide deck has a navigator that reaches both slides; a single slide has none (SPEC §6d)",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a recognized two-slide deck has its navigator"
+  }
+}

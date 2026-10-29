@@ -1,13 +1,14 @@
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -66,7 +66,9 @@
-       const log = rtdbLog(docId);
-       if (log) {
-         connection = connect(ydoc, log);
--        await log.ready();
-+        // e2e negative control (controls-i3-ready-skipped): bind without
-+        // waiting for the existing log, so a late joiner seeds a second copy.
-+        void log.ready();
-       }
-       if (cancelled || !doc.body) return;
-       bound = bindSync(ydoc.getXmlFragment("body"), doc.body);
+@@ -91,6 +91,11 @@
+             // Existing logs need the same elected seed hash before save stamps
+             // become synchronously available to the editor.
+             await connection.initialize();
++            const duplicate = new Y.Doc();
++            try {
++              seedFragment(duplicate.getXmlFragment("body"), doc.body);
++              Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(duplicate));
++            } finally { duplicate.destroy(); }
+           }
+           if (expectedCausal) {
+             const order = causalOrder(connection.causalStamp(), expectedCausal);

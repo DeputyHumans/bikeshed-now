@@ -1,0 +1,11 @@
+{
+  "oracle": "A14.4 drag and drop behaves as the dialog: the same types, one upload per accepted file, the folder it was dropped on or in, the account's default marking; the dialog's own drop zone refuses the same files",
+  "what": "drop count",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.4 drag and drop behaves as the dialog: the same types, one upload per accepted file, the folder it was dropped on or in, the account's default marking; the dialog's own drop zone refuses the same files"
+  },
+  "expect": {
+    "message": "upload|Uploaded|documents|publish"
+  }
+}

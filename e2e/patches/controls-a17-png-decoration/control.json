@@ -1,0 +1,11 @@
+{
+  "oracle": "A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized)",
+  "what": "The image snapshot keeps reader highlights before computing styles",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.3c the section's PNG, exported while the reader's comment is highlighted in it, is drawn from markup without the highlight (DECOR 0 on what html-to-image rasterized)"
+  },
+  "expect": {
+    "message": "PNG is drawn from clean markup"
+  }
+}

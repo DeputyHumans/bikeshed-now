@@ -1,0 +1,9 @@
+--- a/app/src/components/SharePanel.tsx
++++ b/app/src/components/SharePanel.tsx
+@@ -403,5 +403,5 @@
+               />
+             ))}
+-            {inherited.map((grant) => (
++            {inherited.filter((grant) => !principals.some(({ principal }) => principal === grant.principal)).map((grant) => (
+               <InheritedRow
+                 key={`${grant.folderId}:${grant.principal}`}

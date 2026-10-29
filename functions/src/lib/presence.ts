@@ -2,6 +2,7 @@
 // The server-maintained presence access mirror in RTDB (SPEC §1.4a, §16).
 
 import * as admin from "firebase-admin";
+import { expiryMs, opensEditingToAnyAccount } from "./acl";
 
 /**
  * Why this exists
@@ -26,7 +27,7 @@ import * as admin from "firebase-admin";
  * Keyed by EMAIL, not uid, because the server does not learn a grantee's uid
  * until their first sign-in and a share has to work the moment it is granted.
  *
- * Written as a whole-node `set()` — an atomic replace — so a revocation
+ * Written as version-fenced whole-node transactions, so a revocation
  * propagates rather than leaving a stale key behind. It fails CLOSED: a missing
  * entry means presence goes dark for that document, never that a stranger can
  * read it.
@@ -90,24 +91,37 @@ export async function syncPresenceAccess(
 ): Promise<void> {
   const db = database();
   if (!db) return;
-  const keyed = (list: readonly string[]): Record<string, true> => {
-    const out: Record<string, true> = {};
-    for (const m of list) {
-      const key = emailKey(m);
-      if (key.length > 0) out[key] = true;
-    }
-    return out;
-  };
-  const edit = keyed(editorMembers) as Record<string, true>;
-  if (publicEdit) edit[OPEN_EDIT_KEY] = true;
+  // The parameters retain the call-site contract; only the latest committed
+  // Firestore snapshot is authoritative. A visibility request may have read
+  // its member arrays before a concurrent revocation completed.
+  void members; void editorMembers; void publicEdit;
   try {
-    // ONE multi-path update, so the two mirrors can never disagree about a
-    // person: a window where `editAccess` still names somebody `presenceAccess`
-    // has dropped is a window where a revoked reader can still write.
-    await db.ref().update({
-      [`presenceAccess/${docId}`]: keyed(members),
-      [`editAccess/${docId}`]: edit,
-    });
+    const snap = await admin.firestore().collection("docs").doc(docId).get();
+    if (!snap.exists || !snap.updateTime) return;
+    const data = snap.data() || {};
+    const revision = `${String(snap.updateTime.seconds).padStart(12, "0")}:${String(snap.updateTime.nanoseconds).padStart(9, "0")}`;
+    const keyed = (list: unknown): Record<string, true | string | number> => {
+      const out: Record<string, true | string | number> = { __revision: revision, __expiresAt: expiryMs(data) ?? 0, __owner: String(data.ownerEmail ?? "").toLowerCase(), __liveEpoch: typeof data.liveEpoch === "string" ? data.liveEpoch : "initial" };
+      for (const member of Array.isArray(list) ? list : []) {
+        if (typeof member === "string" && member.length > 0) out[emailKey(member)] = true;
+      }
+      return out;
+    };
+    const edit = keyed(data.editorMembers);
+    if (opensEditingToAnyAccount(data)) edit[OPEN_EDIT_KEY] = true;
+    const replace = async (path: string, next: Record<string, true | string | number>) => {
+      await db.ref(path).transaction((current) => {
+        const prior = current?.__revision;
+        // Legacy nodes have no fence. Reject only a validated newer revision;
+        // the server alone writes these maps, and arbitrary keys stay visible.
+        if (typeof prior === "string" && /^\d{12}:\d{9}$/.test(prior) && prior > revision) return;
+        return next;
+      });
+    };
+    // Revoke writes before reads. Each node has its own ordering fence, so a
+    // slow older request cannot reopen access after a newer one has returned.
+    await replace(`editAccess/${docId}`, edit);
+    await replace(`presenceAccess/${docId}`, keyed(data.members));
   } catch {
     /* presence is best-effort and must never fail the request it rode in on */
   }
@@ -142,28 +156,44 @@ export async function clearPresence(docId: string): Promise<void> {
  * why a draft written under a log nobody is using must clear the log too. It
  * carries live collaboration and nothing durable, so it may be dropped.
  */
-export async function liveEditing(docId: string): Promise<{ editors: number; log: boolean } | null> {
+export async function liveEditing(docId: string): Promise<{ editors: number; log: boolean; liveEpoch: string } | null> {
   let db: admin.database.Database;
   try {
     db = admin.database();
   } catch {
     return null;
   }
-  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { mode?: unknown }> | null;
-  const editors = Object.values(peers ?? {}).filter((p) => p?.mode === "edit").length;
-  const log = (await db.ref(`status/${docId}/y`).limitToFirst(1).once("value")).exists();
-  return { editors, log };
+  const peers = (await db.ref(`status/${docId}/peers`).once("value")).val() as Record<string, { uid?: unknown; email?: unknown; mode?: unknown; liveEpoch?: unknown }> | null;
+  const access = (await db.ref(`editAccess/${docId}`).once("value")).val() as Record<string, unknown> | null;
+  const liveEpoch = typeof access?.__liveEpoch === "string" ? access.__liveEpoch : "initial";
+  // A completed downgrade/revocation must withdraw the veto of older records.
+  // Failure to read this mirror throws, as does failure to read the peers.
+  const mayEdit = (email: unknown) => typeof email === "string" &&
+    (access?.[emailKey(email)] === true || access?.[OPEN_EDIT_KEY] === true);
+  // Count people, not tabs; any editing session keeps the refusal active.
+  const editors = new Set(Object.entries(peers ?? {}).filter(([, p]) => p?.mode === "edit" && (p.liveEpoch ?? "initial") === liveEpoch && mayEdit(p.email))
+    .map(([session, p]) => typeof p.uid === "string" ? p.uid : session)).size;
+  const log = (await db.ref(`status/${docId}/y/${liveEpoch}`).limitToFirst(1).once("value")).exists();
+  return { editors, log, liveEpoch };
 }
 
 /** Drop a document's live editing log, as the app does when a draft is published. */
-export async function clearEditLog(docId: string): Promise<void> {
+export async function clearEditLog(docId: string, retiredEpoch: string): Promise<void> {
   let db: admin.database.Database;
   try {
     db = admin.database();
   } catch {
     return;
   }
-  await db.ref(`status/${docId}/y`).remove();
+  await db.ref(`status/${docId}/y/${retiredEpoch}`).remove();
+  if (retiredEpoch === "initial") {
+    const root = db.ref(`status/${docId}/y`);
+    const legacy = (await root.once("value")).val() as Record<string, unknown> | null;
+    const remove = Object.fromEntries(Object.entries(legacy ?? {}).filter(([, value]) => typeof value === "string").map(([key]) => [key, null]));
+    // Flat writes are no longer authorized. Capture only legacy strings;
+    // never delete a nested epoch that was opened after the transaction.
+    if (Object.keys(remove).length) await root.update(remove);
+  }
 }
 
 /** A write refused because somebody is in the editor, or might be. */
@@ -180,7 +210,7 @@ export type EditingRefusal = { status: 409; error: string; editors?: number };
 export async function editorsRefusal(
   docId: string,
   doing: string,
-): Promise<{ refusal: EditingRefusal } | { log: boolean }> {
+): Promise<{ refusal: EditingRefusal } | { log: boolean; liveEpoch: string }> {
   let live: Awaited<ReturnType<typeof liveEditing>>;
   try {
     live = await liveEditing(docId);
@@ -199,5 +229,5 @@ export async function editorsRefusal(
       },
     };
   }
-  return { log: Boolean(live?.log) };
+  return { log: Boolean(live?.log), liveEpoch: live?.liveEpoch ?? "initial" };
 }

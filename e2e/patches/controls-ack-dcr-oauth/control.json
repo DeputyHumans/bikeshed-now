@@ -1,0 +1,16 @@
+{
+  "oracle": "ACK DCR OAuth: own retry preserves the newer unrevoked generation",
+  "what": "Misclassify this request’s own code retry as a replay so it revokes a grant already refreshed by a later real request.",
+  "target": {
+    "spec": "e2e/specs/functional/a20-oauth-ack.spec.mjs",
+    "case": "A20.oauth-ack-dcr a native code retry cannot revoke a later refreshed grant while independent code replay still can",
+    "suite": "functional"
+  },
+  "stack": [
+    "--patches",
+    "amplify-native-ack-loss"
+  ],
+  "expect": {
+    "message": "ACK DCR OAuth: own retry preserves the newer unrevoked generation"
+  }
+}

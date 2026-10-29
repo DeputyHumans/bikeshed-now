@@ -1,0 +1,7 @@
+--- a/functions/src/lib/publicdoc.ts
++++ b/functions/src/lib/publicdoc.ts
+@@ -191,3 +191,3 @@
+       if (typeof v.sourceEntry === "string") sourceEntry = v.sourceEntry;
+-      if (Number.isSafeInteger(v.fileCount) && v.fileCount > 0) fileCount = v.fileCount;
++      fileCount = 1;
+     }

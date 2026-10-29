@@ -1,0 +1,13 @@
+{
+  "oracle": "A22.3b the gate is re-checked at every refresh: once the account signs out everywhere, or is disabled, the next refresh of its connected app is refused with \"this account can no longer connect apps\" and revokes the grant, whose bsa_ then answers 401",
+  "what": "Treat a deleted Auth user as a still-open connected identity.",
+  "target": {
+    "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
+    "case": "A22.3b the gate is re-checked at every refresh: once the account signs out everywhere, or is disabled, the next refresh of its connected app is refused with \"this account can no longer connect apps\" and revokes the grant, whose bsa_ then answers 401",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^a closed gate revokes the grant"
+  }
+}

@@ -98,10 +98,30 @@ function plainPath(p, label) {
 }
 
 /** The wrapper script's text (see the header). */
-export function javaWrapper({ realJava, jvmDir, heap, runId = "" }) {
+export function javaWrapper({ realJava, jvmDir, heap, runId = "", rtdbEngine = null }) {
   plainPath(realJava, "real java");
   plainPath(jvmDir, "jvm dir");
   for (const r of JVM_ROLES) if (!Number.isInteger(heap?.[r]) || heap[r] < 1) throw new Error(`javaWrapper: heap.${r} is a whole number of MiB`);
+  if (rtdbEngine) { plainPath(rtdbEngine.sourcePath, "stock Database JAR"); plainPath(rtdbEngine.actualPath, "derived Database JAR"); }
+  const replacement = rtdbEngine ? [
+    `stock='${rtdbEngine.sourcePath}' derived='${rtdbEngine.actualPath}'`,
+    'jar_next=0 replaced=0 jars=0',
+    // The for list is captured before the loop; shift+append preserves every original argument boundary.
+    'for arg do',
+    '  shift',
+    '  if [ "$jar_next" = 1 ]; then',
+    '    jars=$((jars + 1))',
+    '    if [ "$arg" = "$stock" ]; then arg=$derived; replaced=$((replaced + 1));',
+    '    else case "$arg" in *firebase-database-emulator*) echo "RTDB derived runtime refused: unexpected Database JAR" >&2; exit 70 ;; esac; fi',
+    '    jar_next=0',
+    '  elif [ "$arg" = -jar ]; then jar_next=1; fi',
+    '  set -- "$@" "$arg"',
+    'done',
+    '[ "$jar_next" = 0 ] || { echo "RTDB derived runtime refused: missing -jar value" >&2; exit 70; }',
+    'if [ "$role" = database ]; then',
+    '  [ "$replaced" = 1 ] && [ "$jars" = 1 ] || { echo "RTDB derived runtime refused: Database launch was not uniquely replaced" >&2; exit 70; }',
+    'fi',
+  ] : [];
   return [
     "#!/bin/sh",
     `# The java of e2e stack ${runId}: the real JVM with this stack's heap cap per emulator (e2e/lib/jvm.mjs).`,
@@ -115,18 +135,21 @@ export function javaWrapper({ realJava, jvmDir, heap, runId = "" }) {
     "    -version|--version) probe=1 ;;",
     "  esac",
     "done",
+    ...replacement,
     '[ -n "$probe" ] || echo "$role $$ $heap" >> "$dir/started"',
+    // NUL framing retains spaces/quotes exactly. A reused PID cannot overwrite a prior launch receipt.
+    `[ -n "$probe" ] || (set -C; printf '%s\\000' "$real" "-Xmx$heap" -XX:+ExitOnOutOfMemoryError "-XX:OnOutOfMemoryError=echo $role %p >> '${jvmDir}/oom'" "-XX:ErrorFile=${jvmDir}/hs_err_pid%p.log" "$@" > "$dir/argv-$$") || exit 70`,
     `exec "$real" "-Xmx$heap" -XX:+ExitOnOutOfMemoryError "-XX:OnOutOfMemoryError=echo $role %p >> '$dir/oom'" "-XX:ErrorFile=$dir/hs_err_pid%p.log" "$@"`,
     "",
   ].join("\n");
 }
 
 /** Write the stack's wrapper; returns the directory to put first on the emulator's PATH. */
-export function installJavaWrapper({ stackDir, realJava, heap, runId }) {
+export function installJavaWrapper({ stackDir, realJava, heap, runId, rtdbEngine = null }) {
   const p = jvmPaths(stackDir);
   mkdirSync(p.binDir, { recursive: true });
   mkdirSync(p.jvmDir, { recursive: true });
-  writeFileSync(p.java, javaWrapper({ realJava, jvmDir: p.jvmDir, heap, runId }));
+  writeFileSync(p.java, javaWrapper({ realJava, jvmDir: p.jvmDir, heap, runId, rtdbEngine }));
   chmodSync(p.java, 0o755);
   return p;
 }
