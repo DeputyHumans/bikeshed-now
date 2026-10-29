@@ -56,6 +56,7 @@ import {
   signInHint,
 } from "./config";
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
+import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
 import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
@@ -126,11 +127,11 @@ import {
   isValidDocId,
   membershipOf,
   persistDocMembership,
-  recomputeSubtree,
+  refanTeam,
   resolveFolderTarget,
   slugify,
 } from "./lib/folders";
-import { computeTeamMembers, findGrantsForTeam } from "./lib/teams";
+import { computeTeamMembers } from "./lib/teams";
 import { forkDocument, lineageFor } from "./lib/fork";
 import { linkGrantRef, linkProofFor, grantTokenOf, recordLinkGrant } from "./lib/linkgrant";
 import { readerProjection, syncPublicProjection } from "./lib/publicdoc";
@@ -296,6 +297,30 @@ export const session = onRequest(WARM, async (req, res) => {
     }
     res.status(401).json({ status: "session_failed" });
     return;
+  }
+
+  /**
+   * Google renamed this account (SPEC §14, ADR 0020). The browser sends
+   * Google's own token only when the two addresses differ; `googleAddress`
+   * believes nothing but Google's signature, bound to this account by `sub`.
+   * The move itself is a job a trigger finishes: Hosting cuts a request at
+   * sixty seconds, and a move can touch every document the person can see.
+   * No cookie: this token names the address the account is leaving. Anything
+   * that fails here signs the person in as they were, which is no worse than
+   * before.
+   */
+  const googleIdToken = (jsonBody(req) as { googleIdToken?: unknown } | null)?.googleIdToken;
+  if (googleIdToken !== undefined) {
+    try {
+      const to = await googleAddress(googleIdToken, gate.googleSubs);
+      if (to && to !== gate.principal.emailLower) {
+        const jobId = await requestMove(db(), gate.principal.uid, gate.principal.emailLower, to);
+        res.status(200).json({ status: "moving", jobId, to });
+        return;
+      }
+    } catch (err) {
+      console.error("could not start an account move:", (err as Error)?.message ?? err);
+    }
   }
 
   let sessionCookie: string;
@@ -2224,33 +2249,6 @@ export const manageTokens = onRequest(PLAIN, async (req, res) => {
 // Teams
 // ---------------------------------------------------------------------------
 
-/**
- * Re-expand every grant that names this team.
- *
- * The affected set is an `array-contains` QUERY over `team:{id}` grants, not a
- * traversal, which is what lets this reuse the folder cascade rather than needing
- * a job queue. The cost is honest: a team granted on 200 documents is 200 writes.
- * That is a batch, and the trade is written down in docs/architecture/overview.md rather
- * than discovered at ten thousand documents.
- */
-async function refanTeam(teamId: string): Promise<number> {
-  const { docIds, folderIds } = await findGrantsForTeam(db(), teamId);
-  for (const id of docIds) {
-    const ref = db().collection("docs").doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) continue;
-    const d = snap.data() || {};
-    await persistDocMembership(db(), ref, {
-      ownerEmail: String(d.ownerEmail || ""),
-      grants: grantsOf(d),
-      folderId: (d.folderId as string | null) ?? null,
-    });
-  }
-  for (const id of folderIds) {
-    await recomputeSubtree(db(), id);
-  }
-  return docIds.length + folderIds.length;
-}
 
 /** POST /team — `{ op: "create" | "rename" | "delete", teamId?, name? }`. */
 export const manageTeam = onRequest(PLAIN, async (req, res) => {
@@ -2321,7 +2319,7 @@ export const manageTeam = onRequest(PLAIN, async (req, res) => {
     // Grants naming the team survive as dangling references and expand to
     // nothing, which DENIES. Re-fanning here is what turns that from a latent
     // inconsistency into an immediate, correct revocation.
-    const affected = await refanTeam(teamId);
+    const affected = await refanTeam(db(), teamId);
     res.status(200).json({ ok: true, affected });
     return;
   }
@@ -2397,7 +2395,7 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
 
   // Removing someone from a team must revoke their access everywhere the team
   // was granted, and adding someone must grant it. Both are the same recompute.
-  const affected = await refanTeam(teamId);
+  const affected = await refanTeam(db(), teamId);
 
   const beforeSet = new Set(before);
   const invitees: InviteTarget[] = members
@@ -2706,11 +2704,38 @@ export const onCommentCreated = onDocumentCreated(
     const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;
     const deciders = suggestion ? membershipOf(doc).approverMembers : [];
     for (const e of deciders) recipients.add(normalizeEmail(e));
+    // People are found by account where a comment names one, and by address
+    // only where it does not: an address somebody has since moved from (SPEC
+    // §14) finds nobody, so they would stop hearing about the thread, and the
+    // author's own stale address would not exclude them from their own notice.
+    const uidOf = (c: Record<string, unknown>): string | null => {
+      const uid = c.authorUid ?? (c.actor as { uid?: unknown } | undefined)?.uid;
+      return typeof uid === "string" && uid ? uid : null;
+    };
+    const authorUid = uidOf(comment);
+    const uids = new Set<string>(authorUid ? [authorUid] : []);
     for (const c of siblingSnap.docs) {
-      const e = normalizeEmail(String(c.data()?.authorEmail || ""));
+      const d = c.data() ?? {};
+      const uid = uidOf(d);
+      if (uid) {
+        uids.add(uid);
+        continue;
+      }
+      const e = normalizeEmail(String(d.authorEmail || ""));
       if (e) recipients.add(e);
     }
+    const accounts = uids.size
+      ? await db().getAll(...[...uids].map((uid) => db().collection("users").doc(uid)))
+      : [];
+    let authorNow = "";
+    for (const account of accounts) {
+      const e = normalizeEmail(String(account.data()?.email || ""));
+      if (!e) continue;
+      if (account.id === authorUid) authorNow = e;
+      else recipients.add(e);
+    }
     recipients.delete(authorEmail);
+    if (authorNow) recipients.delete(authorNow);
     if (recipients.size === 0) return;
 
     const quote = String(annSnap.data()?.anchor?.exact ?? "").slice(0, 300);
@@ -2745,6 +2770,29 @@ export const onCommentCreated = onDocumentCreated(
           : {}),
       });
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Moving an account (SPEC §14, ADR 0020)
+// ---------------------------------------------------------------------------
+
+/**
+ * Finish moving an account to the address Google renamed it to.
+ *
+ * Fires when a job becomes `pending`, and on nothing else: its own `done` or
+ * `blocked` is a write to the same record. `retry: true` because a move left
+ * half done is the one outcome worse than not starting, and `runMove` resumes
+ * from wherever a failed attempt stopped. The long timeout is the point of
+ * being a trigger: the work is a recompute of everything the person can see.
+ */
+export const moveAccount = onDocumentWritten(
+  { document: "accountMoves/{jobId}", region: REGION, retry: true, timeoutSeconds: 540, memory: "512MiB" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data() as MoveJob | undefined;
+    if (!after || after.state !== "pending" || before?.state === "pending") return;
+    await runMove(db(), event.params.jobId, after);
   },
 );
 

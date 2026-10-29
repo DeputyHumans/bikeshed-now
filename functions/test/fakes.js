@@ -290,6 +290,26 @@ async function withFakeAdmin({ db, sessions = {}, idTokens = {}, users = {} }, f
         if (!user) throw Object.assign(new Error("no user"), { code: "auth/user-not-found" });
         return user;
       },
+      // The account-changing calls an address move makes (SPEC §14). They
+      // edit the `users` map in place, so a test reads the result from it.
+      getUserByEmail: async (email) => {
+        const found = Object.values(users).find(
+          (u) => u && !(u instanceof Error) && String(u.email ?? "").toLowerCase() === String(email).toLowerCase(),
+        );
+        if (!found) throw Object.assign(new Error("no user"), { code: "auth/user-not-found" });
+        return found;
+      },
+      updateUser: async (uid, patch) => {
+        if (!users[uid]) throw Object.assign(new Error("no user"), { code: "auth/user-not-found" });
+        users[uid] = { ...users[uid], ...patch };
+        return users[uid];
+      },
+      deleteUser: async (uid) => {
+        delete users[uid];
+      },
+      revokeRefreshTokens: async (uid) => {
+        users[uid] = { ...users[uid], tokensValidAfterTime: new Date().toUTCString() };
+      },
     }),
   });
   try {

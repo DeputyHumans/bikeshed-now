@@ -42,8 +42,24 @@ export function gateDecodedToken(
 export type GateFailure = "invalid" | "unverified" | "not_allowed";
 
 export type GateResult =
-  | { ok: true; principal: Principal }
+  | {
+      ok: true;
+      principal: Principal;
+      /**
+       * The Google accounts this Firebase account signed in with, by Google's
+       * own id. From the VERIFIED token, so a Google token naming any other id
+       * is somebody else's (SPEC §14, ADR 0020).
+       */
+      googleSubs: string[];
+    }
   | { ok: false; reason: GateFailure };
+
+/** `firebase.identities["google.com"]`, as strings and nothing else. */
+function googleSubsOf(decoded: admin.auth.DecodedIdToken): string[] {
+  const ids = (decoded.firebase as { identities?: Record<string, unknown> } | undefined)
+    ?.identities?.["google.com"];
+  return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+}
 
 /**
  * Verify an ID token and report WHY it failed, not just that it did.
@@ -82,7 +98,7 @@ export async function verifyIdToken(idToken: string): Promise<GateResult> {
   }
   const principal = gateDecodedToken(decoded);
   return principal
-    ? { ok: true, principal }
+    ? { ok: true, principal, googleSubs: googleSubsOf(decoded) }
     : { ok: false, reason: "invalid" };
 }
 

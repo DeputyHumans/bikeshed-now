@@ -82,7 +82,8 @@ export function eventActor(actor: Partial<Actor> | null | undefined): EventActor
   };
 }
 
-function record(input: EventInput): Record<string, unknown> {
+/** The stored shape of an event, for a writer that has to choose its id itself. */
+export function eventRecord(input: EventInput): Record<string, unknown> {
   return {
     at: FieldValue.serverTimestamp(),
     type: input.type,
@@ -101,7 +102,7 @@ function record(input: EventInput): Record<string, unknown> {
  * document record, which cannot carry a trigger: every view heartbeat writes it.
  */
 export function addEvent(writer: Writer, docRef: DocRef, input: EventInput): void {
-  writer.create(docRef.collection("events").doc(), record(input));
+  writer.create(docRef.collection("events").doc(), eventRecord(input));
 }
 
 /**
@@ -120,7 +121,7 @@ export async function recordTriggered(
   const log = db.collection("docs").doc(docId).collection("events");
   for (const [i, e] of events.entries()) {
     try {
-      await log.doc(events.length === 1 ? eventId : `${eventId}-${i}`).create(record(e));
+      await log.doc(events.length === 1 ? eventId : `${eventId}-${i}`).create(eventRecord(e));
     } catch (err) {
       const code = (err as { code?: unknown }).code;
       if (code === 6 || /already exists/i.test(String((err as Error).message))) continue;

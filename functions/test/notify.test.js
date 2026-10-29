@@ -129,3 +129,35 @@ test("the trigger tells the owner about a new suggestion a minute after telling 
   const reply = { authorEmail: "sug@example.com", actor: opener.actor, body: "Also this." };
   assert.deepEqual(await notifyFor(db, reply), []);
 });
+
+test("a participant who moved address hears about the thread at the new one", async () => {
+  // Victoria wrote in the thread as victoria@old before Google renamed her
+  // (SPEC §14). Her account record now says victoria@new; the comment she
+  // wrote still says the old address, which finds nobody.
+  const { db } = fakeFirestore({
+    "users/u-own": { uid: "u-own", email: "owner@example.com" },
+    "users/u-vic": { uid: "u-vic", email: "victoria@new.example.com" },
+    "docs/moved": { title: "Plan", ownerEmail: "owner@example.com", members: ["owner@example.com", "victoria@new.example.com"] },
+    "docs/moved/versions/v1/annotations/a1": { anchor: { exact: "words" }, resolved: false },
+    "docs/moved/versions/v1/annotations/a1/comments/c0": {
+      authorUid: "u-vic",
+      authorEmail: "victoria@old.example.com",
+      body: "Earlier.",
+    },
+  });
+  const reply = { authorUid: "u-own", authorEmail: "owner@example.com", actor: { uid: "u-own", channel: "web" }, body: "Reply." };
+  const sent = await notifyFor(db, reply, { docId: "moved", annId: "a1" });
+  assert.deepEqual(sent.map((s) => s.to), ["victoria@new.example.com"], JSON.stringify(sent));
+});
+
+test("an author is not told about their own comment written under an address they left", async () => {
+  // A tab still on the old token writes her old address into the comment;
+  // she owns the document under the new one.
+  const { db } = fakeFirestore({
+    "users/u-vic": { uid: "u-vic", email: "victoria@new.example.com" },
+    "docs/hers": { title: "Hers", ownerEmail: "victoria@new.example.com", members: ["victoria@new.example.com"] },
+    "docs/hers/versions/v1/annotations/a1": { anchor: { exact: "words" }, resolved: false },
+  });
+  const own = { authorUid: "u-vic", authorEmail: "victoria@old.example.com", actor: { uid: "u-vic", channel: "web" }, body: "Note to self." };
+  assert.deepEqual(await notifyFor(db, own, { docId: "hers", annId: "a1" }), []);
+});

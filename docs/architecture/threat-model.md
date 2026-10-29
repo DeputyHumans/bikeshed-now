@@ -75,6 +75,35 @@ claim. One gate, one source of truth, zero rules changes.
 "just for GitHub" would hand an attacker every document anyone ever shared with
 that address.
 
+### A forged rename takes someone's shares
+
+An account follows the address Google renames it to (ADR 0020). That move
+rewrites grants on documents other people own. A forged move would be the
+unverified-address attack above, with a redirect added: everything shared with
+one address handed to another.
+
+**Mitigation.** The new address is believed only from Google's own ID token:
+- its RS256 signature is checked locally against Google's keys;
+- `iss` must be Google, the token unexpired, and `email_verified` the string
+  `"true"`, since `"false"` is truthy;
+- its `sub` must be one of the Google ids in the caller's *verified* Firebase
+  token.
+
+So a token for any other Google account is refused, and the most any token can
+do is set the caller's own account to what Google vouches for now. Nothing the
+browser says about an address counts.
+
+The job that does the move is created only by the server, and the rules let no
+client write one. Before it runs, one account per address is enforced again: a
+verified holder of the new address blocks the move.
+
+Once the address changes, every session, cookie and personal token carrying the
+old address is revoked. An old address that is later reassigned therefore
+inherits nothing from a credential still acting as it. Under the Auth emulator
+the unsigned token is accepted only while `FIREBASE_AUTH_EMULATOR_HOST` is set.
+That is firebase-admin's own switch, and a test pins that without it the same
+token is refused.
+
 ### Enumerating the slug space
 
 With no domain gate, any signed-in account could otherwise probe for documents.

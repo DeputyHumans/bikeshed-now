@@ -38,7 +38,7 @@ import {
 } from "./access";
 import { canEditFolder, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
-import { EMPTY_TEAM_INDEX, loadTeamIndex, type TeamIndex } from "./teams";
+import { EMPTY_TEAM_INDEX, findGrantsForTeam, loadTeamIndex, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
 import { syncPublicProjection } from "./publicdoc";
 
@@ -342,7 +342,25 @@ export async function createFolderRecord(
  * documents is 200 document writes. That is a batch, not a job queue, and the
  * trade is stated in docs/architecture/overview.md so it is not discovered at scale.
  */
-export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
+/**
+ * `touchUpdatedAt: false` is for a recompute that is not a change anybody made
+ * to the record: an account moving to a new address (SPEC §14). `updatedAt`
+ * is what every collaborator's card reads as "updated", so stamping it there
+ * would announce an edit on every document the person could see.
+ */
+export interface RecomputeOptions {
+  touchUpdatedAt?: boolean;
+}
+
+function stampOf(opts: RecomputeOptions): { updatedAt?: FieldValue } {
+  return opts.touchUpdatedAt === false ? {} : { updatedAt: FieldValue.serverTimestamp() };
+}
+
+export async function recomputeSubtree(
+  db: Db,
+  rootId: string,
+  opts: RecomputeOptions = {},
+): Promise<void> {
   const queue: string[] = [rootId];
   const visited = new Set<string>();
 
@@ -384,7 +402,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         ancestors,
         depth: ancestors.length,
         reach: computeReach(folderId, data as FolderAclData, parentReach),
-        updatedAt: FieldValue.serverTimestamp(),
+        ...stampOf(opts),
       },
       { merge: true },
     );
@@ -417,7 +435,7 @@ export async function recomputeSubtree(db: Db, rootId: string): Promise<void> {
         );
         batch.set(
           docSnap.ref,
-          { ...docMembership, updatedAt: FieldValue.serverTimestamp() },
+          { ...docMembership, ...stampOf(opts) },
           { merge: true },
         );
         touched.push({ id: docSnap.id, membership: docMembership, publicEdit: opensEditingToAnyAccount(dd as DocAclData) });
@@ -464,6 +482,7 @@ export async function persistDocMembership(
    * written in the same batch, so the record and its event cannot disagree.
    */
   events: (membership: Membership) => EventInput[] = () => [],
+  opts: RecomputeOptions = {},
 ): Promise<Membership> {
   const parent = await loadFolderMembership(db, fields.folderId);
   const teams = await loadTeamIndex(db, ...grantLists(fields.grants));
@@ -474,7 +493,7 @@ export async function persistDocMembership(
     {
       ...fields.grants,
       ...membership,
-      updatedAt: FieldValue.serverTimestamp(),
+      ...stampOf(opts),
       ...extra,
     },
     { merge: true },
@@ -485,4 +504,43 @@ export async function persistDocMembership(
   await syncPresenceAccess(docRef.id, membership.members, membership.editorMembers, opensEditingToAnyAccount(fresh));
   await syncPublicProjection(db, docRef.id);
   return membership;
+}
+
+/**
+ * Re-expand every grant that names this team.
+ *
+ * The affected set is an `array-contains` QUERY over `team:{id}` grants, not a
+ * traversal, which is what lets this reuse the folder cascade rather than needing
+ * a job queue. The cost is honest: a team granted on 200 documents is 200 writes.
+ * That is a batch, and the trade is written down in docs/architecture/overview.md rather
+ * than discovered at ten thousand documents.
+ */
+export async function refanTeam(
+  db: Db,
+  teamId: string,
+  opts: RecomputeOptions = {},
+): Promise<number> {
+  const { docIds, folderIds } = await findGrantsForTeam(db, teamId);
+  for (const id of docIds) {
+    const ref = db.collection("docs").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    const d = snap.data() || {};
+    await persistDocMembership(
+      db,
+      ref,
+      {
+        ownerEmail: String(d.ownerEmail || ""),
+        grants: grantsOf(d),
+        folderId: (d.folderId as string | null) ?? null,
+      },
+      {},
+      () => [],
+      opts,
+    );
+  }
+  for (const id of folderIds) {
+    await recomputeSubtree(db, id, opts);
+  }
+  return docIds.length + folderIds.length;
 }

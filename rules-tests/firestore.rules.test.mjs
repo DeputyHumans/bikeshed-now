@@ -352,6 +352,13 @@ describe("firestore rules", () => {
       });
       await setDoc(doc(db, "users/u-owner/tokens/grant1"), { tokenId: "grant1", kind: "oauth", name: "Claude" });
       await setDoc(doc(db, "oauthCodes/c1"), { uid: OWNER.uid, codeChallenge: "x" });
+      // An account moving to the address Google renamed it to (SPEC §14).
+      await setDoc(doc(db, "accountMoves/u-owner~1"), {
+        uid: OWNER.uid,
+        from: OWNER.email,
+        to: "owner@renamed.example.com",
+        state: "pending",
+      });
     });
   });
 
@@ -1085,6 +1092,25 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "tokens/tok1")));
     await assertFails(
       setDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok2"), { name: "x" }),
+    );
+  });
+
+  it("an account move is watched by its own account alone, and written by nobody", async () => {
+    // The browser waits on it to know when to sign in again; a job names two
+    // addresses, so nobody else may read or list it, and only the server's
+    // trigger may write it — a client-written job would move an account.
+    const owner = verified(env, OWNER).firestore();
+    await assertSucceeds(getDoc(doc(owner, "accountMoves/u-owner~1")));
+    await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "accountMoves/u-owner~1")));
+    await assertFails(getDocs(collection(owner, "accountMoves")));
+    await assertFails(updateDoc(doc(owner, "accountMoves/u-owner~1"), { state: "done" }));
+    await assertFails(
+      setDoc(doc(owner, "accountMoves/u-owner~2"), {
+        uid: OWNER.uid,
+        from: OWNER.email,
+        to: "attacker@example.com",
+        state: "pending",
+      }),
     );
   });
 

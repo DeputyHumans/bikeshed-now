@@ -14,6 +14,27 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- Follow an account to the address Google renamed it to. Firebase finds a
+  returning Google user by Google's account id and never updates the stored
+  address. Someone whose Workspace admin moved them to a new domain therefore
+  signed in as their old address, and saw nothing shared with the new one.
+  Now a Google sign-in whose verified address differs moves the account:
+  everything it owns, every grant and team membership naming the old address,
+  and the account record all move to the new one. The new address is believed
+  only from Google's own signed token, bound to the account by Google's id.
+  The move runs as a retried job (`accountMoves/`, the `moveAccount` trigger)
+  that leaves nobody with less access if it stops partway. It signs the
+  account out everywhere and revokes personal tokens minted under the old
+  address. History keeps the address it was written under. Each owner's ACL
+  log records the move (ADR 0020, SPEC §14).
+- Find a thread's earlier participants by account rather than by the address
+  on their comment. Someone who moved address keeps getting notices, and an
+  author is never sent their own comment under an address they have left.
+
 ## 0.23.0 — 2026-10-28
 
 ### Added

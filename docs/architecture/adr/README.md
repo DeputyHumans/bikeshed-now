@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Nineteen decisions that a newcomer would otherwise re-argue in a pull request, each
+Twenty decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
@@ -14,7 +14,7 @@ actually available at the time.
 | [0001](0001-same-origin-iframe.md) | Render documents in a same-origin iframe | Accepted |
 | [0002](0002-two-scope-trust.md) | Two trust scopes: global and personal | Accepted |
 | [0003](0003-server-side-markdown.md) | Compile Markdown on the server, once per version | Accepted |
-| [0004](0004-email-keyed-acl.md) | Key the ACL by verified email, not uid | Accepted |
+| [0004](0004-email-keyed-acl.md) | Key the ACL by verified email, not uid | Amended by 0020 |
 | [0005](0005-generated-rules.md) | Generate the security rules from one policy file | Accepted |
 | [0006](0006-denormalized-members.md) | Denormalize membership into a flat array | Accepted |
 | [0007](0007-execcommand-over-schema-editor.md) | Edit with `execCommand`, not a schema editor | Accepted |
@@ -30,6 +30,7 @@ actually available at the time.
 | [0017](0017-agent-management-with-owner-permissions.md) | Agents manage access with their person's permissions | Accepted |
 | [0018](0018-keep-the-document-open-path-warm.md) | Keep the document-open path warm | Accepted |
 | [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Accepted |
+| [0020](0020-an-account-follows-its-google-address.md) | An account follows the address Google renames it to | Accepted |
 
 ## Format
 

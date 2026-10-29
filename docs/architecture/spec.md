@@ -75,8 +75,8 @@ render allowlist mode in memory and feed the string straight to
 Vite inlines everything it imports into the public bundle, so `app/src/generated/
 policy.ts` carries the email SHAPE rules and one boolean (`POLICY_IS_OPEN`) and
 never the domain list. The client learns policy outcomes from `POST /session`,
-which returns exactly four typed outcomes: `ok`, `unverified`, `not_allowed`,
-`session_failed`.
+which returns exactly five typed outcomes: `ok`, `unverified`, `not_allowed`,
+`session_failed`, and `moving` when Google has renamed the account (§14).
 
 ### 1.3 Email validity
 
@@ -165,6 +165,7 @@ which also holds this table to them.
 | — (Firestore trigger) | `recordVersionEvent` |
 | — (Firestore trigger) | `recordThreadEvent` |
 | — (Firestore trigger) | `recordCommentEvent` |
+| — (Firestore trigger) | `moveAccount` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
 catch-all. `/folder` is an exact rewrite to `createFolder`, which the
@@ -208,6 +209,14 @@ Response `200 { status: "ok" }`, or `200 { status: "unverified" }`,
 `403 { status: "not_allowed", message }`, `401 { status: "session_failed" }`.
 The status is a typed outcome, not an error string, so the UI can explain
 rejection as a *state* rather than a failure.
+
+The body may also carry `googleIdToken`, Google's own ID token from the
+sign-in that just happened. The browser sends it only when Google's address
+for the account differs from the account's. When Google's signature, `sub`
+and `email_verified` all hold (§14 "An address Google renames"), the response
+is `200 { status: "moving", jobId, to }`. No cookie is minted, because the
+presented token names the address the account is leaving. In all other cases
+it is the ordinary outcome as if the field were absent.
 
 ### `DELETE /session`
 Clears `__session` (Max-Age=0). `204`.
@@ -536,6 +545,7 @@ users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
+accountMoves/{jobId}                           AccountMove      (server-written; its own account may read, §14)
 ```
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
@@ -582,6 +592,14 @@ How events are written:
 A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId,
 tokenId, updatedAt }`: the last cursor `get_changes` gave that credential for
 that document. It is server-only.
+
+**`accountMoves/{jobId}`** is `{ uid, from, to, state, reason?, requestedAt,
+finishedAt? }`. It is one account's move to the address Google renamed it to
+(§14). `state` is `pending`, `done` or `blocked`, and `reason` is
+`address-taken` or `stale`. The id is `{uid}~{sha256(to) prefix}`, so a second
+tab finds the first one's job. `POST /session` creates it, and the
+`moveAccount` trigger finishes it. Its own account may `get` it, to know when
+to sign in again. No client lists or writes one.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
@@ -1082,6 +1100,7 @@ functions/src/
   lib/{auth,acl,access,management,audience,events,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell}.ts
   lib/{storage,versions,publish,draft,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/accountmove.ts
   lib/markdown/{render,serialize,slug,theme}.ts
   email/{send,notify}.ts
   email/templates/*.tsx
@@ -1099,6 +1118,10 @@ functions/src/
   place a folder's key is, against the hash its `reach` stores. `readAccess`
   adds a folder's reach to `readBasis`, for read paths only (§17).
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
+- `lib/accountmove.ts` — believing Google's word for an account's new address,
+  and the job that moves the account and everything naming its old address
+  (§14 "An address Google renames"). `lib/rename.ts` is the other kind of
+  rename: a document's title.
 - `lib/reach.ts` — the Firestore half of a folder's reach: the folder a read
   path loads only after the document's own basis said no, and the one level of
   a folder a stranger holding its link is shown (§13, §17).
@@ -1431,6 +1454,94 @@ Step 3 is security-load-bearing: without it, signing in with an unverified
 address that matches a pending share would hand an attacker someone else's
 documents. This is the most tempting shortcut in the whole feature and is
 recorded as such in `docs/architecture/threat-model.md`.
+
+### An address Google renames
+
+Firebase finds a returning Google user by Google's permanent account id
+(`sub`), and never rewrites the account's own `email`. When a Workspace admin
+renames somebody, for example from `ana@old.example` to `ana@new.example`,
+Google's tokens carry the new address while ours keep the old one. Anything
+shared with the new address is then invisible. So the account follows Google
+(ADR 0020).
+
+**Detecting it.** After a Google popup sign-in, the browser compares the
+address in Google's profile with the account's. Only when they differ does it
+send Google's ID token as `googleIdToken` on `POST /session` (§2). An ordinary
+sign-in costs nothing extra.
+
+**Believing it.** The server, never the browser, decides. It accepts Google's
+token only if all of these hold:
+- its RS256 signature checks against Google's published keys, verified locally
+  and not through the throttled tokeninfo endpoint;
+- `iss` is Google, in either of its two spellings, and the token has not
+  expired;
+- `email_verified` is `"true"` as a string. Google writes it both ways, and
+  `"false"` is truthy;
+- `sub` is one of the Google ids in the caller's *verified* Firebase token
+  (`firebase.identities["google.com"]`);
+- the address passes §1.3 and the deployment's policy.
+
+`aud` is not checked: binding by `sub` means the most any token can do is align
+the caller's own account with what Google vouches for now. Under the Auth
+emulator, and only while `FIREBASE_AUTH_EMULATOR_HOST` is set, the emulator's
+unsigned token is read instead, under the same switch firebase-admin uses.
+
+**Moving.** `POST /session` creates `accountMoves/{jobId}` (§4) and answers
+`moving`. The `moveAccount` trigger does the work, with `retry: true` and a
+540-second budget, because Hosting cuts a request at sixty seconds. Every step
+finds its work by querying `members`, `admins` and token `email` for the old
+address, so a redelivery resumes wherever an attempt died. The steps, in order:
+
+1. **Collision.** One account per address (§1). An account already holding the
+   new address that is unverified and password-only can never pass the gate,
+   so it owns nothing; it is deleted, as Firebase itself drops such an account
+   when a trusted provider vouches for the address. Any other holder ends the
+   job `blocked` with `address-taken`, and nothing changes. A pending
+   `verification` is cleared, so an old code cannot undo the move.
+2. **Add.** The new address is added beside the old one everywhere the old is
+   named: team members and admins, and each grant list, taking the higher role
+   when both are present. On records the person owns, it is added as an
+   approver for now. Every record found is recomputed through
+   `refanTeam`, `recomputeSubtree` and `persistDocMembership`, without stamping
+   `updatedAt`, because a move is not a publish.
+3. **Commit.** `updateUser({ email, emailVerified: true })`, then
+   `revokeRefreshTokens`. The account is signed out everywhere. Personal tokens
+   minted under the old address are revoked, since one would act as that
+   address for good. Connected apps close at their next refresh (§23).
+4. **Remove.** `ownerEmail` moves to the new address, the old address is
+   dropped, and everything found is recomputed again. An owner is never also a
+   grant. Then `users/{uid}.email` moves, and presence is re-synced for every
+   document touched. The job is `done` once no `members` or `admins` on a
+   document, folder or team names the old address; otherwise it throws and is
+   retried.
+
+If the job dies before the commit, both addresses hold access. If it dies after,
+the new address does. Nobody loses anything either way.
+
+**The record of it.** Each document and folder that named the old address
+*directly* gets an `acl` entry with `reason: "address-moved"`, `added: [new]`
+and `removed: [old]`. Each such document also gets an `access.changed` event,
+written in the same transaction as the rewrite under a fixed id, so a
+redelivery writes neither twice. A record that only inherited the address did
+not change and gets neither. **History is not rewritten**: comments,
+annotations, versions, views, trust records and the change log keep the
+address they were written under, each with a uid beside it. A comment notice
+therefore finds a thread's earlier participants by `authorUid` and their
+current `users/{uid}.email`, and excludes the author the same way.
+
+**The browser.** On `moving`, the app waits on its job record. On `done`, it
+signs in again with the same Google token (`signInWithCredential`), which is a
+fresh `auth_time` past the revocation. On `blocked`, it says another account
+already uses the address and carries on as before. An account that is signed
+in when the rename happens learns of it from `providerData`, and is offered the
+move.
+
+**Not covered.** GitHub and password accounts do not follow automatically,
+because GitHub does not vouch for addresses. An allowlist that rejects the
+*old* address stops the gate before the move is considered, so a deployment
+renaming its domain keeps both domains listed until everyone has moved. A
+share sent to the old address after the move goes to whoever proves that
+address, which is §1's ordinary rule; there are no aliases.
 
 ### Email
 
