@@ -113,8 +113,8 @@ const TOUR = "bikeshed-tour";
 const SCRIPT_FREE = "design-review-shortener";
 /** The dialog's accessible name: TrustDialog.tsx's Modal title. */
 const TRUST_DIALOG = "This document wants to run its own code";
-/** The only sandbox an untrusted reading frame gets (frameMode.ts frameSandbox, SPEC §6c). */
-const SANDBOXED = "allow-same-origin";
+/** The only sandbox an untrusted reading frame gets (frameMode.ts READING_SANDBOX, SPEC §6c): never scripts; popups, for a link out where the engine delivers no clicks (SPEC §6). */
+const SANDBOXED = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
 /** useDocTrust.ts PERSONAL_TRUST_WAIT_MS: how long a first load waits for a reader's own answer (SPEC §6c "Bounded"). */
 const PERSONAL_TRUST_WAIT_MS = 1500;
 /** How long "nothing changes" has to hold: 12 samples 250 ms apart (a state that changes resets the count). */
