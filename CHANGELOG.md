@@ -18,6 +18,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- Preserve the acknowledgement-cleanup negative control beside the new comment retry option.
 - Give concurrent MCP comments up to ten native Firestore transaction attempts, retaining backoff, atomic writes and acknowledgement receipts.
 - Run one complete local C15 email storm per trial instead of repeating an impossible automatic-trigger overlap three times. Keep every participant/trial, ordinary safety assertion, explicit inconclusive result and separate cloud qualification requirement; retain historical three-attempt evidence.
 
