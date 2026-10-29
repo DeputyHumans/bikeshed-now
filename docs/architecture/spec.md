@@ -252,10 +252,7 @@ the text and none of its images or stylesheets. A path segment is inherited by
 every relative reference. A document id never starts with `~`, so the segment
 is unambiguous (`contentPath` in `lib/http.ts`).
 
-After the key may come `!run`, the **run variant**: the only address at which
-a document's own script may run (§6c, [ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)).
-It is a path segment for the same reason the key is, and `!` never begins a
-document id. Asking is not being granted.
+After the key may come `!run`, the **run variant**: the only address at which a document's own script may run (§6c, [ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). It is a path segment for the same reason the key is, and `!` never begins a document id. Asking is not being granted.
 
 1. Resolve the caller: `__session` cookie, else anonymous.
 2. Load `docs/{docId}`. If absent → `404`.
@@ -271,21 +268,9 @@ Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
 with `k` — because a grant's URL carries no key and a shared cache keys on the
 URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
 
-**The script lock** (`lib/scriptlock.ts`). A response of a type a browser
-renders as a scripted document — `text/html`, `application/xhtml+xml`,
-`image/svg+xml`, `application/xml`, `text/xml` — carries
-`Content-Security-Policy: sandbox allow-same-origin`, whatever the document's
-trust, so its bytes opened any way but the app's frame (a pasted address, a
-popup, an `<object>`) render inert. Inside the frame it is the frame's own
-sandbox, and changes nothing. The run variant lifts it only when the document
-is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a
-scriptable answer there is always `private, no-store`, because it depends on
-who asked, and the run variant always carries `frame-ancestors 'self'`. A
-request carrying `Service-Worker: script` is a `404`: a worker would outlive
-the page and serve without the lock.
+**The script lock** (`lib/scriptlock.ts`). A response of a type a browser renders as a scripted document — `text/html`, `application/xhtml+xml`, `image/svg+xml`, `application/xml`, `text/xml` — carries `Content-Security-Policy: sandbox allow-same-origin`, whatever the document's trust, so its bytes opened any way but the app's frame (a pasted address, a popup, an `<object>`) render inert. Inside the frame it is the frame's own sandbox, and changes nothing. The run variant lifts it only when the document is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a scriptable answer there is always `private, no-store`, because it depends on who asked, and the run variant always carries `frame-ancestors 'self'`. A request carrying `Service-Worker: script` is a `404`: a worker would outlive the page and serve without the lock.
 
-Never send `X-Frame-Options`, nor `frame-ancestors` other than the run
-variant's `'self'` — the content must embed same-origin in the app's iframe.
+Never send `X-Frame-Options`, nor `frame-ancestors` other than the run variant's `'self'` — the content must embed same-origin in the app's iframe.
 
 Streamed with `file.createReadStream()`; large files are never buffered whole.
 
@@ -1026,15 +1011,9 @@ effectively trusted. Same-origin is retained so the parent can still drive
 annotation and editing; scripts are disabled so an untrusted bundle cannot
 exfiltrate the token.
 
-**Two trust scopes, split by who bears the risk.** Effective trust for a reader
-is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
+**Two trust scopes, split by who bears the risk.** Effective trust for a reader is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
 
-- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader,
-  which lets the document's author act as each of them. So it is a
-  **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment
-  configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)).
-  Any owner may restore the sandbox. `GET /trust?docId=` tells an owner whether
-  they may lift it; the dialog offers it only then.
+- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader, which lets the document's author act as each of them. So it is a **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). Any owner may restore the sandbox. `GET /trust?docId=` tells an owner whether they may lift it; the dialog offers it only then.
 - **PERSONAL** (`docs/{docId}/trust/{uid}`) — un-sandboxes only in the granting
   user's own browser. The sole session exposed to that bundle's JS is their own,
   so **any reader may grant it to themselves**. Client-written under an own-uid
@@ -1080,13 +1059,7 @@ line: `/draft` stores whatever HTML a `canEdit` caller sends, so on a trusted
 document with open editing any signed-in account could commit a `<script>` that
 then ran, same-origin with the app, in every reader's session.
 
-**The frame's sandbox is not the only lock.** Every scriptable content
-response carries the same sandbox as a header (§2 "The script lock"), so the
-bytes opened outside the frame run nothing either. An unsandboxed frame loads
-the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only
-for global trust or this reader's own grant, which is why a grant counts in
-the viewer only once the server has it. **A draft never runs its script**, for
-anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
+**The frame's sandbox is not the only lock.** Every scriptable content response carries the same sandbox as a header (§2 "The script lock"), so the bytes opened outside the frame run nothing either. An unsandboxed frame loads the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only for global trust or this reader's own grant, which is why a grant counts in the viewer only once the server has it. **A draft never runs its script**, for anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
 
 A sandboxed document may therefore be one whose scripts were the only thing
 that would have BUILT it. The viewer distinguishes "this document has no
@@ -1306,10 +1279,7 @@ functions/src/
 - `lib/html.ts` — escaping for markup the functions emit into the app shell;
   separate from the Markdown renderer's escaper, whose bytes are part of the
   content hash.
-- `lib/scriptlock.ts` — whether a document's own script may run in a
-  response: the lock every scriptable content and draft response carries,
-  the run variant that alone can lift it, and who may trust a document for
-  everyone (§2, §6c; ADR 0021).
+- `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
 - `lib/shell.ts` — the `docShell` decision, the page composed from it, the
   splice into the shell template, and the runtime fetch of the shell from
   Hosting; the handler in `index.ts` is glue.

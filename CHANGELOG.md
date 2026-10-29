@@ -38,25 +38,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Security
 
-- **A document's scripts no longer run when its file is opened directly.**
-  The sandbox that kept an untrusted page's scripts off belonged to the
-  viewer's frame, not to the page. The same `/content/…` address pasted into a
-  tab, opened as a popup or embedded with `<object>` ran the page's scripts on
-  this origin, as whoever opened it, able to act for them. Every content and
-  draft response a browser renders as a scripted document now carries the
-  sandbox itself (`Content-Security-Policy: sandbox allow-same-origin`). A
-  page's script runs only at its run address, `/content/[~k/]!run/…`, which the
-  server unlocks only for a reader who chose to run it or a document trusted
-  for everyone. That answer is never cached and only this site may frame it. No
-  page may register a service worker, and a draft never runs its scripts
-  (SPEC §2, §6c; ADR 0021).
-- **Only a superadmin may trust a document for everyone.** Doing so lets the
-  page's author act as every reader, and any owner could do it to their own
-  page. Now it takes an owner listed in the deployment's `BIKESHED_SUPERADMINS`,
-  which is never committed. Every reader can still run a page's scripts for
-  themselves. A document with no trust flag is now untrusted, where it used to
-  count as trusted. `scripts/reconcile-trust.mjs` withdraws trust granted
-  under the old rule (docs/operations/overview.md).
+- **A document's scripts no longer run when its file is opened directly.** The sandbox that kept an untrusted page's scripts off belonged to the viewer's frame, not to the page. The same `/content/…` address pasted into a tab, opened as a popup or embedded with `<object>` ran the page's scripts on this origin, as whoever opened it, able to act for them. Every content and draft response a browser renders as a scripted document now carries the sandbox itself (`Content-Security-Policy: sandbox allow-same-origin`). A page's script runs only at its run address, `/content/[~k/]!run/…`, which the server unlocks only for a reader who chose to run it or a document trusted for everyone. That answer is never cached and only this site may frame it. No page may register a service worker, and a draft never runs its scripts (SPEC §2, §6c; ADR 0021).
+- **Only a superadmin may trust a document for everyone.** Doing so lets the page's author act as every reader, and any owner could do it to their own page. Now it takes an owner listed in the deployment's `BIKESHED_SUPERADMINS`, which is never committed. Every reader can still run a page's scripts for themselves. A document with no trust flag is now untrusted, where it used to count as trusted. `scripts/reconcile-trust.mjs` withdraws trust granted under the old rule (docs/operations/overview.md).
 
 ## 0.25.0 — 2026-10-29
 

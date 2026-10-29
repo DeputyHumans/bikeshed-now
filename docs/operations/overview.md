@@ -330,21 +330,14 @@ names from the channel host, which serves a different build and does not have
 them: a blank page. Preview the workspace on a channel; preview the document
 page on the live site.
 
-**Global trust becoming a superadmin's is a migration**
-([ADR 0021](../architecture/adr/0021-a-documents-script-runs-only-with-consent.md)).
-Set `BIKESHED_SUPERADMINS` in the functions' environment first: the deployer's
-`functions/.env` and the CI secret it is written from. Unset, nobody may trust a
-document for everyone, which is the safe default but stops every trusted page's
-scripts. Then deploy, and bring the stored flags into line with the same list:
+**Global trust becoming a superadmin's is a migration** ([ADR 0021](../architecture/adr/0021-a-documents-script-runs-only-with-consent.md)). Set `BIKESHED_SUPERADMINS` in the functions' environment first: the deployer's `functions/.env` and the CI secret it is written from. Unset, nobody may trust a document for everyone, which is the safe default but stops every trusted page's scripts. Then deploy, and bring the stored flags into line with the same list:
 
 ```bash
 node scripts/reconcile-trust.mjs --dry-run --project <id> --superadmins a@example.com,b@example.com
 node scripts/reconcile-trust.mjs --yes --account you@example.com --project <id> --superadmins a@example.com,b@example.com
 ```
 
-The dry run lists every document whose flag would change. A superadmin's
-document that was trusted, or had no flag, is written `trusted: true`; every
-other trusted document is withdrawn. Readers' own grants are never touched.
+The dry run lists every document whose flag would change. A superadmin's document that was trusted, or had no flag, is written `trusted: true`; every other trusted document is withdrawn. Readers' own grants are never touched.
 
 **Unlisted documents needing their link is a migration**
 ([ADR 0012](../architecture/adr/0012-unlisted-needs-its-link.md)). Deploy in

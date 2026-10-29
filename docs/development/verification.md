@@ -182,12 +182,7 @@ The prompt appears only when the document is sandboxed **and** actually contains
 a `<script>`. That AND is why the two HTML samples differ the way they do, and
 it is what keeps the prompt meaningful when it appears.
 
-The sandbox is also in the bytes (SPEC §2 "The script lock"). Open the scripted
-fork's own address, `/content/<id>/v1/index.html`, in a tab: the page renders
-and `#dot-nav` stays empty, and `curl -sI` shows
-`content-security-policy: sandbox allow-same-origin`. Its run address,
-`/content/!run/<id>/v1/index.html`, is unlocked (`frame-ancestors 'self'` alone)
-only once you have chosen *Run it for me*.
+The sandbox is also in the bytes (SPEC §2 "The script lock"). Open the scripted fork's own address, `/content/<id>/v1/index.html`, in a tab: the page renders and `#dot-nav` stays empty, and `curl -sI` shows `content-security-policy: sandbox allow-same-origin`. Its run address, `/content/!run/<id>/v1/index.html`, is unlocked (`frame-ancestors 'self'` alone) only once you have chosen *Run it for me*.
 
 ### 6 · A highlight opens every collapsed ancestor it needs — and only those
 
