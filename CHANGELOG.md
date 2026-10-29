@@ -14,7 +14,9 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.24.1 — 2026-10-29
+
+- Integrate the E2E repairs with folder sharing and account-address migration, preserving transaction-local membership and projection checks. Ship behind bounded release checks; extended campaign work remains explicitly deferred in `docs/development/e2e-release-waves.md`.
 
 - Rebase the verification-mail regression control onto deferred email loading, preserving its suppression of the verification message after a committed reservation.
 
