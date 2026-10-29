@@ -492,7 +492,8 @@ const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 scre
     await uploadDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await uploadDialog.waitFor({ state: "detached", timeout: 10_000 });
     await phone.goto(`/folder/${encodeURIComponent(folderId)}`);
-    await visit(phone, "folder", { ready: btn(phone, "Upload"), primary: [btn(phone, "Upload")] });
+    // The open folder's own Share and menu stand beside its name, so they are this screen's too.
+    await visit(phone, "folder", { ready: btn(phone, "Upload"), primary: [btn(phone, "Share"), btn(phone, "Folder actions"), btn(phone, "Upload")] });
     await phone.goto("/account");
     await visit(phone, "account", { ready: { label: "the heading", loc: phone.page.getByRole("heading", { name: "Account", level: 1 }) }, primary: [btn(phone, "Sign out")] });
 

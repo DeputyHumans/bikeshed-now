@@ -547,6 +547,12 @@ export function DocList() {
           ) {
             return;
           }
+          // Deleted from inside itself, the page would be left on a folder that
+          // no longer exists, which reads as a link to somebody else's folder.
+          // Go up first, to where its contents are about to land.
+          if (folder.folderId === folderId) {
+            navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
+          }
           // The server moves the contents up before it removes the folder, so
           // for a moment both are on screen; saying so keeps that from looking
           // like a glitch.
@@ -562,6 +568,11 @@ export function DocList() {
   // read-only, exactly as it would for somebody signed out (SPEC §17).
   if (folderId && !foldersLoading && !folderById.has(folderId)) return <SharedFolder />;
 
+  // The folder this page is showing, with its own actions beside its name:
+  // sharing a folder used to mean going up a level to find its card's menu.
+  const current = folderId ? folderById.get(folderId) : undefined;
+  const ownsCurrent = current?.ownerEmail === emailLower;
+
   return (
     <div className="workspace">
       <FolderTree folders={folders} currentFolderId={folderId} drawerOpen={drawer} />
@@ -573,7 +584,32 @@ export function DocList() {
         data-drop-over={workspaceDrop.over || undefined}
         {...workspaceDrop.handlers}
       >
-        <Breadcrumb folderId={folderId} folders={folders} />
+        <div className="workspace-head">
+          <Breadcrumb folderId={folderId} folders={folders} />
+          {current ? (
+            <div className="workspace-head-actions">
+              {ownsCurrent ? (
+                <button type="button" className="btn btn-sm" onClick={() => shareFolder(current)}>
+                  <Icon name="share" size={15} /> Share
+                </button>
+              ) : null}
+              <Menu
+                label={`Actions for ${current.name}`}
+                // The card's menu, less "Open" (this is it) and, for its owner,
+                // less the Share the button beside it already is. Anyone else
+                // keeps Share there, disabled, with the reason.
+                entries={folderMenu(current).filter(
+                  (e) => e.id !== "open" && !(ownsCurrent && e.id === "share"),
+                )}
+                trigger={(props) => (
+                  <button {...props} type="button" className="icon-btn" aria-label="Folder actions">
+                    <Icon name="more" size={16} />
+                  </button>
+                )}
+              />
+            </div>
+          ) : null}
+        </div>
 
         <div className="workspace-toolbar">
           {singleColumn ? (
