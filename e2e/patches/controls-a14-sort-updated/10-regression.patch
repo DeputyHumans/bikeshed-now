@@ -1,10 +1,11 @@
 --- a/app/src/workspace/tree.ts
 +++ b/app/src/workspace/tree.ts
-@@ -147,6 +147,6 @@
-         (a, b) => millis(b.stats?.lastViewedAt) - millis(a.stats?.lastViewedAt),
+@@ -148,7 +148,7 @@
        );
      default:
--      return list.sort((a, b) => millis(b.updatedAt) - millis(a.updatedAt));
-+      return list.sort((a, b) => millis(a.updatedAt) - millis(b.updatedAt));
+       // By the current version's publish: a rename or a share is not an update.
+-      return list.sort((a, b) => millis(b.latest?.at ?? b.updatedAt) - millis(a.latest?.at ?? a.updatedAt));
++      return list.sort((a, b) => millis(a.latest?.at ?? a.updatedAt) - millis(b.latest?.at ?? b.updatedAt));
    }
  }
+ 

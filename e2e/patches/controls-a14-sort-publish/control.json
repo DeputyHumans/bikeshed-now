@@ -1,0 +1,11 @@
+{
+  "oracle": "a rename is not an update (A14.1, SPEC §4): Recently updated orders documents by their current version's publish, never by the record's updatedAt, which a rename, a share or a folder move also bumps",
+  "what": "workspace/tree.ts sorts Recently updated by updatedAt again, as it did before `latest`, so renaming a document moves it to the top",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.1 the workspace lists Recently updated first (by the current version's publish, which a rename does not move), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+  },
+  "expect": {
+    "message": "a rename is not an update"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/app/src/workspace/tree.ts
++++ b/app/src/workspace/tree.ts
+@@ -148,7 +148,7 @@
+       );
+     default:
+       // By the current version's publish: a rename or a share is not an update.
+-      return list.sort((a, b) => millis(b.latest?.at ?? b.updatedAt) - millis(a.latest?.at ?? a.updatedAt));
++      return list.sort((a, b) => millis(b.updatedAt) - millis(a.updatedAt));
+   }
+ }
+ 

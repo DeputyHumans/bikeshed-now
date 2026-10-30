@@ -383,7 +383,7 @@ function noPageErrors(users) {
 
 // --- A14.1 ----------------------------------------------------------------------
 
-scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders", { tiers: BOTH, effects: ["email:POST /access"], timeoutMs: 420_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+scenario("A14.1 the workspace lists Recently updated first (by the current version's publish, which a rename does not move), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders", { tiers: BOTH, effects: ["email:POST /access"], timeoutMs: 420_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
   const { owner: O, viewer: V } = await sessions(["owner", "viewer"]);
   const tag = tagFor();
   const titles = { A: `Alpha ${tag}`, B: `Bravo ${tag}`, C: `Charlie ${tag}` };
@@ -405,6 +405,16 @@ scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a s
   precondition(updated.C > updated.B && updated.B > updated.A, `updatedAt: C's second version is the newest: ${JSON.stringify(updated)}`);
   ctx.ev.json("records", { ids, created, updated });
 
+  ctx.step("the version trigger counts each current version and summarizes it on its document: the version, its publish and its words (SPEC §4)");
+  const latest = {};
+  for (const k of ["A", "B", "C"]) {
+    latest[k] = await eventually(async () => {
+      const l = (await readDoc(target, `docs/${ids[k]}`))?.latest;
+      return l && typeof l.words === "number" && l.version === (k === "C" ? "v2" : "v1") ? l : false;
+    }, { timeout: PAGE_LOAD_MS, message: `${k}'s summary of its current version` });
+  }
+  assert.ok(Object.values(latest).every((l) => l.words > 0 && l.channel && l.origin === "upload"), `every summary counts words and says how it arrived: ${JSON.stringify(latest)}`);
+
   ctx.step("the owner signs in; the sort control reads Recently updated, and the cards are Charlie, Bravo, Alpha (updatedAt desc), distinct from title and creation order");
   const u = await ctx.users.user({ name: "owner" });
   await u.signInUi(O.account.email, O.account.password);
@@ -415,7 +425,17 @@ scenario("A14.1 the workspace lists Recently updated first (updatedAt desc), a s
     { value: "recent", label: "Recently updated" },
     "the default sort",
   );
-  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "Recently updated: updatedAt desc");
+  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "Recently updated: newest publish first");
+  const meta = await u.page.$$eval(".doc-card .doc-card-meta", (els) => els.map((e) => e.textContent ?? ""));
+  assert.ok(meta.length === 3 && meta.every((t) => /\d+ min read/.test(t) && /Updated /.test(t)), `each card says how long it is and when it was updated: ${JSON.stringify(meta)}`);
+
+  ctx.step("renaming Alpha moves its record's updatedAt past everything, and Recently updated does not move: a rename is not an update");
+  const renamed = await O.http.postJson("/organize", { kind: "doc", id: ids.A, op: "rename", name: `${titles.A} renamed` });
+  assert.equal(renamed.status, 200, `the rename: ${renamed.status}`);
+  const afterRename = await readDoc(target, `docs/${ids.A}`);
+  precondition(millis(afterRename.updatedAt) > updated.C, "the rename bumped Alpha's updatedAt past Charlie's publish");
+  await u.page.locator(".doc-card", { hasText: `${titles.A} renamed` }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "a rename is not an update: Recently updated still reads Charlie, Bravo, Alpha");
 
   ctx.step("Name sorts by title; Most read and Recently read, with no reads to sort on, keep the query's createdAt desc (SPEC §5)");
   await sort.selectOption("name");

@@ -1,9 +1,9 @@
 {
-  "oracle": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders",
+  "oracle": "A14.1 the workspace lists Recently updated first (by the current version's publish, which a rename does not move), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders",
   "what": "sort views",
   "target": {
     "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
-    "case": "A14.1 the workspace lists Recently updated first (updatedAt desc), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
+    "case": "A14.1 the workspace lists Recently updated first (by the current version's publish, which a rename does not move), a sort with nothing to sort on keeps the query's createdAt desc, Name sorts by title, and searching narrows the cards with no network request and reaches into folders"
   },
   "expect": {
     "message": "Most read uses nonzero view totals"
