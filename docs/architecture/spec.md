@@ -576,7 +576,7 @@ meaning.
 
 ```
 docs/{docId}                                   DocMeta
-docs/{docId}/versions/{versionId}              DocVersion       (immutable)
+docs/{docId}/versions/{versionId}              DocVersion       (immutable but for `words`, added once by the trigger)
 .../annotations/{annId}                        Annotation
 .../annotations/{annId}/comments/{commentId}   Comment
 docs/{docId}/trust/{uid}                       PersonalTrust
@@ -702,7 +702,7 @@ shows that cover meanwhile.
 `stats.totalMs`: reading *time* is a human concept and an agent fetching a
 document forty times would otherwise turn both into noise (§17).
 
-**Versions** are immutable and mint as `v{max(N)+1}` over EXISTING version
+**Versions** are immutable, but for the word count the version trigger adds once (`words`, below), and mint as `v{max(N)+1}` over EXISTING version
 documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
 .versionId` may therefore carry a `"{versionId}-deleted"` tombstone, written by
 `delete-version.mjs`, so old and new sessions are never conflated under one id.

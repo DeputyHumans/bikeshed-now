@@ -399,7 +399,7 @@ export interface DraftMeta {
   editSessions?: EditSession[];
 }
 
-/** Firestore: docs/{docId}/versions/{versionId} — immutable. */
+/** Firestore: docs/{docId}/versions/{versionId} — immutable, but for `words`, which the version trigger adds once. */
 export interface DocVersion {
   versionId: string;
   label: string;

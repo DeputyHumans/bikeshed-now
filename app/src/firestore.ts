@@ -156,7 +156,12 @@ export function watchDoc(
   );
 }
 
-/** Versions are immutable, so a one-shot read is correct. Oldest first. */
+/**
+ * A one-shot read, oldest first. A version's content never changes; the only
+ * field written after it is `words`, which the version trigger adds a moment
+ * later, and the current version's count reaches the viewer sooner through
+ * `latest` on the live record (readingTime.ts `wordsOf`).
+ */
 export async function listVersions(docId: string): Promise<DocVersion[]> {
   const q = query(
     collection(db, "docs", docId, "versions"),
