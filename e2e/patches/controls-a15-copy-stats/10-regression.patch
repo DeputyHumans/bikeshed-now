@@ -1,0 +1,11 @@
+--- a/functions/src/lib/fork.ts
++++ b/functions/src/lib/fork.ts
+@@ -224,7 +224,7 @@
+     createdAt: now(),
+     updatedAt: now(),
+     // Its first version is one of the versions published (SPEC §17).
+-    stats: { commits: 1 },
++    stats: { ...(src.stats as Record<string, unknown> | undefined), commits: 1 },
+   });
+   batch.create(forkRef.collection("versions").doc("v1"), {
+     versionId: "v1",

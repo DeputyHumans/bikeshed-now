@@ -441,7 +441,7 @@ scenario("A15.2 a fork of a trusted public document is private, trusted:false, f
     );
     assert.ok(!JSON.stringify(rec).includes(S.docId), `docs/{fork} carries only forked:true, never the parent's id: ${JSON.stringify(Object.keys(rec).sort())}`);
     assert.deepEqual(rec.marking, readerDefault, "the fork's marking is the reader's account default, not the source owner's policy");
-    assert.equal(rec.stats, undefined, "views are not copied: the fork has no stats");
+    assert.deepEqual(rec.stats, { commits: 1 }, "views are not copied: the fork's stats are its own, its first version published and nothing read");
     assert.deepEqual(await readCollection(target, `docs/${forkId}/versions/v1/annotations`), [], "the fork copies no source annotations or comments");
     assert.equal(await readDoc(target, `public/${forkId}`), null, "a private fork has no public projection");
 
