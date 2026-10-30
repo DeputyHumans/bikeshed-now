@@ -55,8 +55,3 @@ export function purgeSentence(s: PurgeSummary): string {
   }
   return `Everything in your Trash, ${count(s.documents, "document", "documents")} and ${count(s.folders, "folder", "folders")}, will be deleted for good.`;
 }
-
-/** The day the Trash deletes something itself, from when it went there. */
-export function deletesOn(trashedAtMs: number | null, retentionDays: number): Date | null {
-  return trashedAtMs === null ? null : new Date(trashedAtMs + retentionDays * 86_400_000);
-}

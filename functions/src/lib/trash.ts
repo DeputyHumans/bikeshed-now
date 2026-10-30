@@ -4,11 +4,12 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { randomBytes } from "crypto";
-import { canManageSharing, canManageFolder, isTrashed, type DocAclData, type FolderAclData } from "./acl";
+import { TRASH_RETENTION_MS } from "../config";
+import { batchOf, canManageSharing, canManageFolder, isTrashed, trashedAtMs, type DocAclData, type FolderAclData } from "./acl";
 import { eventActor, type EventInput } from "./events";
 import { persistDocMembership, persistFolderMembership, type Change } from "./folders";
 import { load, ManagementError, type ManagementContext } from "./management";
-import { deletesAtMs, trashedAtMs } from "./purge";
+import { ownTrash } from "./purge";
 
 type Db = admin.firestore.Firestore;
 type Data = admin.firestore.DocumentData;
@@ -49,11 +50,6 @@ interface TrashMark {
 
 function newBatch(): string {
   return randomBytes(9).toString("base64url");
-}
-
-function batchOf(data: Data | undefined): string | null {
-  const t = data?.trashed as { batch?: unknown } | null | undefined;
-  return t && typeof t.batch === "string" ? t.batch : null;
 }
 
 /** The folder an item went to the Trash with, by id, or null. */
@@ -249,20 +245,18 @@ export interface TrashedItem {
  * no index beyond the one every equality query has.
  */
 export async function listTrash(ctx: ManagementContext): Promise<{ documents: TrashedItem[]; folders: TrashedItem[] }> {
-  const [docs, folders] = await Promise.all([
-    ctx.db.collection("docs").where("ownerUid", "==", ctx.caller.uid).get(),
-    ctx.db.collection("folders").where("ownerUid", "==", ctx.caller.uid).get(),
-  ]);
+  const { docs, folders } = await ownTrash(ctx.db, ctx.caller.uid);
   const item = (kind: TrashedItem["kind"], id: string, d: Data): TrashedItem => {
     const t = d.trashed as { with?: { folderId?: unknown; name?: unknown } };
     const along = t.with && typeof t.with.folderId === "string" ? { folderId: t.with.folderId, name: String(t.with.name ?? "") } : null;
     const was = kind === "document" ? d.folderId : d.parentId;
+    const at = trashedAtMs(d);
     return {
       kind,
       id,
       title: String((kind === "document" ? d.title : d.name) ?? id),
-      trashedAt: trashedAtMs(d),
-      deletesAt: deletesAtMs(d),
+      trashedAt: at,
+      deletesAt: at === null ? null : at + TRASH_RETENTION_MS,
       batch: batchOf(d),
       with: along,
       was: typeof was === "string" && was ? was : null,
@@ -270,7 +264,7 @@ export async function listTrash(ctx: ManagementContext): Promise<{ documents: Tr
   };
   const newest = (a: TrashedItem, b: TrashedItem) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0);
   return {
-    documents: docs.docs.filter((s) => isTrashed(s.data())).map((s) => item("document", s.id, s.data())).sort(newest),
-    folders: folders.docs.filter((s) => isTrashed(s.data())).map((s) => item("folder", s.id, s.data())).sort(newest),
+    documents: docs.map((s) => item("document", s.id, s.data())).sort(newest),
+    folders: folders.map((s) => item("folder", s.id, s.data())).sort(newest),
   };
 }

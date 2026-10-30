@@ -4,10 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
-import { formatDay } from "../expiry";
+import { expiryMs, formatDay } from "../expiry";
 import { formatRelative, formatTimestamp, listMyDocs, listMyFolders } from "../firestore";
 import { type OrganizeKind } from "../folders";
-import { UNKNOWN_AVAILABILITY, deletesOn, purgeAvailability, targetFor, type PurgeAvailability, type PurgeTarget } from "../purge";
+import { UNKNOWN_AVAILABILITY, purgeAvailability, targetFor, type PurgeAvailability, type PurgeTarget } from "../purge";
 import { isTrashed, trashedFrom } from "../trash";
 import { restoreFromTrash } from "../trashActions";
 import { FolderTree } from "../components/FolderTree";
@@ -94,8 +94,8 @@ export function Trash() {
   const deleteRow = (row: Row) =>
     setDeleting({ target: targetFor(row.kind, row.id), what: row.kind === "folder" ? `The folder “${row.title}” and what of yours went with it` : `“${row.title}”` });
   const deletesWhen = (row: Row) => {
-    const day = deletesOn(row.at?.toMillis?.() ?? null, purge.retentionDays);
-    return day ? ` · deleted forever on ${formatDay(day.getTime())}` : "";
+    const at = expiryMs(row.at);
+    return at === null ? "" : ` · deleted forever on ${formatDay(at + purge.retentionDays * 86_400_000)}`;
   };
 
   return (

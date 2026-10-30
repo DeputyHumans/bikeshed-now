@@ -98,6 +98,18 @@ export function isTrashed(doc: { trashed?: unknown } | null | undefined): boolea
   return t != null && typeof t === "object" && !Array.isArray(t);
 }
 
+/** The batch a trashed item shares with what went to the Trash with it, or null (SPEC §4). */
+export function batchOf(doc: { trashed?: unknown } | null | undefined): string | null {
+  const t = doc?.trashed as { batch?: unknown } | null | undefined;
+  return t && typeof t.batch === "string" ? t.batch : null;
+}
+
+/** When a trashed item went to the Trash, epoch ms, or null. */
+export function trashedAtMs(doc: { trashed?: unknown } | null | undefined): number | null {
+  const at = (doc?.trashed as { at?: { toMillis?: () => number } } | null | undefined)?.at;
+  return typeof at?.toMillis === "function" ? at.toMillis() : null;
+}
+
 /**
  * Deleted forever: the record is a tombstone, `{ purgedAt }` and nothing else
  * (lib/purge.ts, ADR 0025). It names no owner and no member, so every gate

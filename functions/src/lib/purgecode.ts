@@ -24,8 +24,8 @@ type Db = admin.firestore.Firestore;
  * `verifications/{uid}` does and for the same reason: a six-digit code's hash
  * is the code to whoever can read it.
  */
-export const PURGE_MAX_ATTEMPTS = 5;
-export const PURGE_RESEND_GAP_MS = 60 * 1000;
+const PURGE_MAX_ATTEMPTS = 5;
+const PURGE_RESEND_GAP_MS = 60 * 1000;
 
 /** The one thing a code is for, as a string the hash binds. */
 export function targetKey(target: PurgeTarget): string {

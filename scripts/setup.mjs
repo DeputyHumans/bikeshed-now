@@ -19,7 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { parse, fail } from "./lib/args.mjs";
 import { REPO_ROOT, getBucketName, getProjectId } from "./lib/firebase.mjs";
-import { SCHEDULED, TRIGGERS, functionNames } from "./lib/endpoints.mjs";
+import { ENDPOINTS } from "./lib/endpoints.mjs";
 import { ensureMediaBucket, resolveMediaBucket, resolveMediaOrigin } from "./lib/media.mjs";
 
 const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempotently
@@ -388,7 +388,9 @@ function main() {
    * Restricted Sharing on. docs/operations/overview.md says what to do about it.
    */
   console.log("\n[8/10] Allow unauthenticated invocation of the HTTP endpoints");
-  const httpFunctions = functionNames().filter((n) => !TRIGGERS.includes(n) && !SCHEDULED.includes(n));
+  // Every function with a Hosting rewrite, and nothing else: a trigger or a
+  // scheduled job has none, whatever kind is added next.
+  const httpFunctions = [...new Set(ENDPOINTS.map((e) => e.fn))];
   console.log(`  ${httpFunctions.length} HTTP endpoints; the triggers and the scheduled job stay private`);
   for (const name of httpFunctions) {
     grant(`allUsers invoker on ${name}`, [

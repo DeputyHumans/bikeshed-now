@@ -67,7 +67,7 @@ import { verifyIdToken, verifySessionCookie } from "./lib/auth";
 import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
 import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "./lib/trash";
-import { describePurge, purgeExpired, purgeOwn, type PurgeSummary } from "./lib/purge";
+import { describePurge, inOwnTrash, purgeExpired, purgeOwn, type PurgeSummary } from "./lib/purge";
 import { checkPurgeCode, maskAddress, parseTarget, reservePurgeCode, retirePurgeCode, targetKey } from "./lib/purgecode";
 import { emailEnabled } from "./email/send";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
@@ -2502,14 +2502,15 @@ export const purgeTrash = onRequest(MAILING, async (req, res) => {
     res.status(409).json({ error: "Email is off here, so nothing can be deleted early: the Trash deletes each item 30 days after it arrived.", emailOff: true });
     return;
   }
-  const summary = await describePurge(db(), caller.uid, target);
-  if (!summary) {
-    res.status(404).json({ error: "that is not in your Trash" });
-    return;
-  }
   const key = targetKey(target);
+  const notInTrash = () => res.status(404).json({ error: "that is not in your Trash" });
 
   if (op === "code") {
+    const summary = await describePurge(db(), caller.uid, target);
+    if (!summary) {
+      notInTrash();
+      return;
+    }
     const code = sixDigitCode();
     if ((await reservePurgeCode(db(), caller.uid, key, code)) === "cooldown") {
       res.status(429).json({ error: "a code was just sent; wait a minute before asking for another" });
@@ -2526,6 +2527,10 @@ export const purgeTrash = onRequest(MAILING, async (req, res) => {
     return;
   }
 
+  if (!(await inOwnTrash(db(), caller.uid, target))) {
+    notInTrash();
+    return;
+  }
   const code = typeof body?.code === "string" ? body.code.trim() : "";
   const checked = await checkPurgeCode(db(), caller.uid, key, code);
   if (checked.status !== 200) {
@@ -3194,7 +3199,7 @@ export const purgeExpiredTrash = onSchedule(
   { schedule: "every day 03:17", timeZone: "Etc/UTC", region: REGION, timeoutSeconds: 540, retryCount: 0 },
   async () => {
     const started = Date.now();
-    const report = await purgeExpired(db(), started, started + 8 * 60_000);
+    const report = await purgeExpired(db(), started);
     logger.info("trash_purge", { event: "trash_purge", ...report, ms: Date.now() - started });
   },
 );

@@ -33,11 +33,14 @@ export function PurgeDialog({
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
+  const wait = sent ? Math.max(0, Math.ceil((sent.at + RESEND_GAP_MS - now) / 1000)) : 0;
+
+  // Ticks only while there is a wait to count down.
   useEffect(() => {
-    if (!sent) return;
-    const tick = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(tick);
-  }, [sent]);
+    if (wait === 0) return;
+    const tick = window.setTimeout(() => setNow(Date.now()), 1000);
+    return () => window.clearTimeout(tick);
+  }, [wait]);
 
   const ask = async () => {
     setBusy("code");
@@ -65,18 +68,16 @@ export function PurgeDialog({
     }
   };
 
-  const wait = sent ? Math.max(0, Math.ceil((sent.at + RESEND_GAP_MS - now) / 1000)) : 0;
-
   return (
     <Modal
       title="Delete forever?"
       onClose={onClose}
       footer={
-        sent ? (
-          <>
-            <button type="button" className="btn btn-quiet" onClick={onClose}>
-              Keep it
-            </button>
+        <>
+          <button type="button" className="btn btn-quiet" onClick={onClose}>
+            Keep it
+          </button>
+          {sent ? (
             <button
               type="button"
               className="btn btn-danger"
@@ -86,17 +87,12 @@ export function PurgeDialog({
             >
               Delete forever
             </button>
-          </>
-        ) : (
-          <>
-            <button type="button" className="btn btn-quiet" onClick={onClose}>
-              Keep it
-            </button>
+          ) : (
             <button type="button" className="btn btn-primary" disabled={busy !== null} aria-busy={busy === "code"} onClick={() => void ask()}>
               Email me a code
             </button>
-          </>
-        )
+          )}
+        </>
       }
     >
       {sent ? (

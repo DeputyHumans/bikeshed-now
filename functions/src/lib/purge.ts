@@ -4,7 +4,7 @@
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { TRASH_RETENTION_MS, bucketName } from "../config";
-import { isPurged, isTrashed } from "./acl";
+import { batchOf, isPurged, isTrashed, trashedAtMs } from "./acl";
 import { FORKS } from "./fork";
 import { persistDocMembership, persistFolderMembership, recomputeSubtree } from "./folders";
 import { clearPresence } from "./presence";
@@ -58,23 +58,6 @@ export interface PurgeScope {
   batch?: string;
 }
 
-function batchOf(data: Data | undefined): string | null {
-  const t = data?.trashed as { batch?: unknown } | null | undefined;
-  return t && typeof t.batch === "string" ? t.batch : null;
-}
-
-/** When it went to the Trash, epoch ms, or null. */
-export function trashedAtMs(data: Data | undefined): number | null {
-  const at = (data?.trashed as { at?: { toMillis?: () => number } } | null | undefined)?.at;
-  return typeof at?.toMillis === "function" ? at.toMillis() : null;
-}
-
-/** When the daily job deletes it, epoch ms, or null when it is not in the Trash. */
-export function deletesAtMs(data: Data | undefined): number | null {
-  const at = isTrashed(data) ? trashedAtMs(data) : null;
-  return at === null ? null : at + TRASH_RETENTION_MS;
-}
-
 function inScope(data: Data, scope: PurgeScope): boolean {
   if (!isTrashed(data)) return false;
   if (scope.ownerUid !== undefined && data.ownerUid !== scope.ownerUid) return false;
@@ -96,9 +79,8 @@ export type DocumentOutcome = "purged" | "finished" | "skipped";
 export async function purgeDocument(db: Db, id: string, scope: PurgeScope = {}): Promise<DocumentOutcome> {
   const ref = db.collection("docs").doc(id);
   const step = await db.runTransaction(async (tx): Promise<"tombstoned" | "pending" | "skipped"> => {
-    const snap = await tx.get(ref);
-    const data = snap.data();
-    if (!snap.exists || !data) return "skipped";
+    const data = (await tx.get(ref)).data();
+    if (!data) return "skipped";
     if (isPurged(data)) return data.purgePending === true ? "pending" : "skipped";
     if (!inScope(data, scope)) return "skipped";
     const fork = await tx.get(db.collection(FORKS).doc(id));
@@ -108,7 +90,7 @@ export async function purgeDocument(db: Db, id: string, scope: PurgeScope = {}):
     tx.set(ref, { purgedAt: FieldValue.serverTimestamp(), purgePending: true });
     if (fork.exists) tx.delete(fork.ref);
     const forks = Number((parent?.data()?.stats as { forks?: unknown } | undefined)?.forks ?? 0);
-    if (parent?.exists && !isPurged(parent.data()) && forks > 0) {
+    if (parent?.exists && forks > 0) {
       tx.update(parent.ref, { "stats.forks": FieldValue.increment(-1) });
     }
     return "tombstoned";
@@ -118,12 +100,19 @@ export async function purgeDocument(db: Db, id: string, scope: PurgeScope = {}):
   return step === "tombstoned" ? "purged" : "finished";
 }
 
-/** Everything but the tombstone, idempotently. */
+/**
+ * Everything but the tombstone, idempotently, and all at once: none of it
+ * depends on the rest, and how fast this goes is how much the daily job
+ * reaches before its deadline. `purgePending` goes only once all of it has.
+ */
 async function finishDocument(db: Db, ref: Ref): Promise<void> {
-  for (const collection of await ref.listCollections()) await db.recursiveDelete(collection);
-  await db.collection("public").doc(ref.id).delete();
-  await admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${ref.id}/` });
-  await clearPresence(ref.id);
+  const collections = await ref.listCollections();
+  await Promise.all([
+    ...collections.map((collection) => db.recursiveDelete(collection)),
+    db.collection("public").doc(ref.id).delete(),
+    admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${ref.id}/` }),
+    clearPresence(ref.id),
+  ]);
   await ref.update({ purgePending: FieldValue.delete() });
 }
 
@@ -177,12 +166,11 @@ async function subtreeOf(db: Db, root: Ref, contents: PurgeScope): Promise<Subtr
 /** The folder in scope, and the scope of what went with it; null when it is not in scope. */
 async function folderInScope(db: Db, id: string, scope: PurgeScope): Promise<{ root: Ref; data: Data; contents: PurgeScope } | null> {
   const root = db.collection("folders").doc(id);
-  const snap = await root.get();
-  const data = snap.data();
-  if (!snap.exists || !data || !inScope(data, scope)) return null;
+  const data = (await root.get()).data();
+  if (!data || !inScope(data, scope)) return null;
   // Everything in the batch went at the same moment, give or take the
   // seconds the walk took, so only the folder itself is held to the date.
-  const contents: PurgeScope = { batch: batchOf(data) as string, ...(scope.ownerUid !== undefined ? { ownerUid: scope.ownerUid } : {}) };
+  const contents: PurgeScope = { batch: batchOf(data) as string, ownerUid: scope.ownerUid };
   return { root, data, contents };
 }
 
@@ -236,19 +224,14 @@ export type PurgeSummary =
 export async function describePurge(db: Db, ownerUid: string, target: PurgeTarget): Promise<PurgeSummary | null> {
   const scope = { ownerUid };
   if ("all" in target) {
-    const [docs, folders] = await Promise.all([
-      db.collection("docs").where("ownerUid", "==", ownerUid).get(),
-      db.collection("folders").where("ownerUid", "==", ownerUid).get(),
-    ]);
-    const documents = docs.docs.filter((d) => isTrashed(d.data())).length;
-    const trashedFolders = folders.docs.filter((f) => isTrashed(f.data())).length;
-    return documents + trashedFolders === 0 ? null : { kind: "all", documents, folders: trashedFolders };
+    const { docs, folders } = await ownTrash(db, ownerUid);
+    return docs.length + folders.length === 0 ? null : { kind: "all", documents: docs.length, folders: folders.length };
   }
   if (target.kind === "document") {
-    const snap = await db.collection("docs").doc(target.id).get();
-    const data = snap.data();
-    if (!snap.exists || !data || !inScope(data, scope)) return null;
-    const versions = (await snap.ref.collection("versions").count().get()).data().count;
+    const ref = db.collection("docs").doc(target.id);
+    const data = (await ref.get()).data();
+    if (!data || !inScope(data, scope)) return null;
+    const versions = (await ref.collection("versions").count().get()).data().count;
     return { kind: "document", title: String(data.title ?? target.id), versions };
   }
   const found = await folderInScope(db, target.id, scope);
@@ -266,12 +249,47 @@ export async function describePurge(db: Db, ownerUid: string, target: PurgeTarge
 /** One item, or everything: what a code is asked for and confirms. */
 export type PurgeTarget = { all: true } | { kind: "document" | "folder"; id: string };
 
+type Snap = admin.firestore.QueryDocumentSnapshot;
+
+/** What one account owns that is in the Trash, by owner uid, so it is right across a change of address. */
+export async function ownTrash(db: Db, ownerUid: string): Promise<{ docs: Snap[]; folders: Snap[] }> {
+  const [docs, folders] = await Promise.all([
+    db.collection("docs").where("ownerUid", "==", ownerUid).get(),
+    db.collection("folders").where("ownerUid", "==", ownerUid).get(),
+  ]);
+  const trashed = (s: Snap) => isTrashed(s.data());
+  return { docs: docs.docs.filter(trashed), folders: folders.docs.filter(trashed) };
+}
+
+/**
+ * Is `target` in this account's Trash? What `describePurge` decides, without
+ * counting: a confirm needs only the answer, and the purge walks again anyway.
+ */
+export async function inOwnTrash(db: Db, ownerUid: string, target: PurgeTarget): Promise<boolean> {
+  if ("all" in target) {
+    const { docs, folders } = await ownTrash(db, ownerUid);
+    return docs.length + folders.length > 0;
+  }
+  if (target.kind === "folder") return (await folderInScope(db, target.id, { ownerUid })) !== null;
+  const data = (await db.collection("docs").doc(target.id).get()).data();
+  return !!data && inScope(data, { ownerUid });
+}
+
+/** Add what one purge took to a running count. */
+function add(into: FolderOutcome, out: FolderOutcome | null): boolean {
+  if (!out) return false;
+  into.folders += out.folders;
+  into.documents += out.documents;
+  return true;
+}
+
+/** A document's purge as a count: one document, or nothing. */
+const one = (outcome: DocumentOutcome): FolderOutcome | null => (outcome === "purged" ? { folders: 0, documents: 1 } : null);
+
 /** An early purge of `target`, which must be in this account's Trash. */
 export async function purgeOwn(db: Db, ownerUid: string, target: PurgeTarget): Promise<FolderOutcome> {
   if ("all" in target) return purgeAllOwn(db, ownerUid);
-  if (target.kind === "document") {
-    return { folders: 0, documents: (await purgeDocument(db, target.id, { ownerUid })) === "purged" ? 1 : 0 };
-  }
+  if (target.kind === "document") return one(await purgeDocument(db, target.id, { ownerUid })) ?? { folders: 0, documents: 0 };
   return (await purgeFolder(db, target.id, { ownerUid })) ?? { folders: 0, documents: 0 };
 }
 
@@ -279,19 +297,9 @@ export async function purgeOwn(db: Db, ownerUid: string, target: PurgeTarget): P
 async function purgeAllOwn(db: Db, ownerUid: string): Promise<FolderOutcome> {
   const counts: FolderOutcome = { folders: 0, documents: 0 };
   const scope = { ownerUid };
-  const folders = await db.collection("folders").where("ownerUid", "==", ownerUid).get();
-  for (const f of folders.docs) {
-    if (!isTrashed(f.data())) continue;
-    const out = await purgeFolder(db, f.id, scope);
-    if (out) {
-      counts.folders += out.folders;
-      counts.documents += out.documents;
-    }
-  }
-  const docs = await db.collection("docs").where("ownerUid", "==", ownerUid).get();
-  for (const d of docs.docs) {
-    if (isTrashed(d.data()) && (await purgeDocument(db, d.id, scope)) === "purged") counts.documents += 1;
-  }
+  for (const f of (await ownTrash(db, ownerUid)).folders) add(counts, await purgeFolder(db, f.id, scope));
+  // Read again: the folders took what of theirs went with them.
+  for (const d of (await ownTrash(db, ownerUid)).docs) add(counts, one(await purgeDocument(db, d.id, scope)));
   return counts;
 }
 
@@ -315,7 +323,10 @@ const PAGE = 100;
  * it does not reach today it reaches tomorrow; an item a day late is the
  * cost, and the report says so.
  */
-export async function purgeExpired(db: Db, now = Date.now(), deadline = now + 8 * 60_000): Promise<DailyReport> {
+/** How long a daily run works before it stops and leaves the rest: well inside its 540 s timeout. */
+const DAILY_BUDGET_MS = 8 * 60_000;
+
+export async function purgeExpired(db: Db, now = Date.now(), deadline = now + DAILY_BUDGET_MS): Promise<DailyReport> {
   const report: DailyReport = { documents: 0, folders: 0, finished: 0, more: false };
   const late = () => Date.now() > deadline;
   const pending = await db.collection("docs").where("purgePending", "==", true).limit(PAGE).get();
@@ -325,25 +336,17 @@ export async function purgeExpired(db: Db, now = Date.now(), deadline = now + 8 
   }
   const scope = { trashedBefore: now - TRASH_RETENTION_MS };
   const cutoff = Timestamp.fromMillis(scope.trashedBefore);
-  for (const kind of ["docs", "folders"] as const) {
+  const purgers = [
+    ["docs", async (id: string) => one(await purgeDocument(db, id, scope))],
+    ["folders", (id: string) => purgeFolder(db, id, scope)],
+  ] as const;
+  for (const [kind, purge] of purgers) {
     for (;;) {
       const page = await db.collection(kind).where("trashed.at", "<=", cutoff).limit(PAGE).get();
       let progressed = false;
       for (const item of page.docs) {
         if (late()) return { ...report, more: true };
-        if (kind === "docs") {
-          if ((await purgeDocument(db, item.id, scope)) === "purged") {
-            report.documents += 1;
-            progressed = true;
-          }
-        } else {
-          const out = await purgeFolder(db, item.id, scope);
-          if (out) {
-            report.folders += out.folders;
-            report.documents += out.documents;
-            progressed = true;
-          }
-        }
+        if (add(report, await purge(item.id))) progressed = true;
       }
       // A page that took nothing would be read again forever.
       if (page.docs.length < PAGE || !progressed) break;
