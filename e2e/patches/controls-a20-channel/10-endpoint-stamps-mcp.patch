@@ -1,11 +1,11 @@
 --- a/functions/src/mcp/server.ts
 +++ b/functions/src/mcp/server.ts
-@@ -203,7 +203,7 @@
-   return {
-     uid: verified.uid,
-     emailLower: verified.emailLower,
--    channel: verified.channel,
-+    channel: "mcp",
-     tokenId: verified.tokenId,
-     credentialName: verified.name,
-   };
+@@ -253,7 +253,7 @@
+   }
+ 
+   // Its own channel and name, never the endpoint's (ADR 0023).
+-  const principal = principalOf(verified);
++  const principal = { ...principalOf(verified), channel: "mcp" as const };
+   const ctx: ToolContext = {
+     db: admin.firestore(),
+     caller: principal,

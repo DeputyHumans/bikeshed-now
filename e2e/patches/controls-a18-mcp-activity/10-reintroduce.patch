@@ -4,12 +4,12 @@
  import * as admin from "firebase-admin";
 -import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 +import { FieldPath, FieldValue } from "firebase-admin/firestore";
- import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
-@@ -411,3 +411,2 @@
+ import { currentVersionRefusal, mutationVersion, originOf, selectedVersion } from "../lib/versions";
+@@ -438,3 +438,2 @@
        recordReceipt(tx, viewRef, before, receipt, true);
 -      const startedAt = before.data()?.startedAt;
        tx.set(viewRef, {
-@@ -416,3 +415,2 @@
+@@ -443,3 +442,2 @@
          reads: FieldValue.increment(1),
 -        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
          lastBeatAt: FieldValue.serverTimestamp(),

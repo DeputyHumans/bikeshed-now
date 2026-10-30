@@ -1,12 +1,12 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -1839,7 +1839,8 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
+@@ -2055,7 +2055,8 @@
    const basis = access.basis;
  
    const actor = caller ? actorFrom(caller, req) : null;
--  const automated = actor ? isAutomated(actor) : false;
+-  const automated = isAutomated(actor);
 +  // e2e control: an automated caller is counted as a person, into views and totalMs.
-+  const automated = actor ? isAutomated(actor) && false : false;
++  const automated = isAutomated(actor) && false;
    // A public folder's reader read a public page; a folder key's, an unlisted one.
    const via: "app" | "unlisted" | "public" =
      basis === "member" ? "app" : basis === "public" || basis === "folder-public" ? "public" : "unlisted";

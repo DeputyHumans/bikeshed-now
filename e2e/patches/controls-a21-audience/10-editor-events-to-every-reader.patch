@@ -1,10 +1,10 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1463,7 +1463,6 @@
-       const includeMine = args.includeMine === true;
-       const visible = page.filter((e) => {
-         const v = e.data();
--        if (v.audience === "editors" && !editor) return false;
-         if (v.audience === "owner" && !owner) return false;
-         return includeMine || !causedBy(v.actor as EventActor | undefined, ctx.caller);
-       });
+--- a/functions/src/lib/events.ts
++++ b/functions/src/lib/events.ts
+@@ -95,7 +95,6 @@
+  * for get_changes and the Activity feed alike (SPEC §17, §21).
+  */
+ export function eventVisibleTo(event: { audience?: unknown }, reader: { editor: boolean; owner: boolean }): boolean {
+-  if (event.audience === "editors") return reader.editor;
+   if (event.audience === "owner") return reader.owner;
+   return true;
+ }

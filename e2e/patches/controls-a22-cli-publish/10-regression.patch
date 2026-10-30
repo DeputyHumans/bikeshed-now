@@ -1,6 +1,6 @@
 --- a/functions/src/lib/actor.ts
 +++ b/functions/src/lib/actor.ts
-@@ -122,2 +122,3 @@
+@@ -190,2 +190,3 @@
      const verified = await verifyToken(admin.firestore(), bearer as string);
 +    if (verified?.channel === "cli" && req.path === "/publish") return null;
-     if (verified) {
+     if (verified) return principalOf(verified);
