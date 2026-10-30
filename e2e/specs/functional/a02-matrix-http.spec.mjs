@@ -77,7 +77,7 @@ import { absentDocId, fork, publish } from "../../lib/seed.mjs";
 import { setVisibility as postVisibility, share } from "../../lib/grant.mjs";
 import { postThumb } from "../../lib/thumbs.mjs";
 import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
-import { sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
+import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { createHttp } from "../../lib/http.mjs";
 
 const target = currentTarget();
@@ -520,6 +520,22 @@ async function stateOf(id) {
   };
 }
 
+/**
+ * Wait until the version trigger has summarized document `id`'s head: it
+ * writes docs/<id>.latest a moment after every new version (SPEC §4), and a
+ * write that lands between two stateOf reads would be blamed on the cell
+ * between them.
+ */
+async function summarized(id) {
+  await eventually(
+    async () => {
+      const record = await readDoc(target, `docs/${id}`);
+      return record !== null && record.latest?.version === record.currentVersion;
+    },
+    { timeout: 30_000, interval: 200, message: `docs/${id}.latest names its current version` },
+  ).catch((err) => precondition(false, err.message));
+}
+
 /** True when a state holds nothing at all (an id nobody ever wrote). */
 const isEmptyState = (s) => s.record === null && !s.versions.length && !Object.keys(s.linkGrants).length && !s.objects.length;
 
@@ -572,6 +588,7 @@ async function sendRow(ctx, key, { actor, d }, cols) {
   const absent = { ...d, id: absentDocId(target, "a2-absent"), v: "v1" };
   const bad = [];
   const cells = [];
+  await summarized(d.id);
   let state = await stateOf(d.id);
   precondition(state.record !== null, `docs/${d.id} is readable through Admin`);
   for (const id of EXEC) {
@@ -592,6 +609,8 @@ async function sendRow(ctx, key, { actor, d }, cols) {
     } else if (r.status === 409 && r.json?.error !== EXPIRED_WRITE) {
       bad.push(`${cell}: 409 but not the expired-write message: ${JSON.stringify(r.json?.error)}`);
     }
+    // A 200 may have made a version; its summary must land before the next cell's baseline.
+    if (r.status === 200) await summarized(d.id);
     const next = await stateOf(d.id);
     if (r.status !== 200) {
       const stored = changes(state, next);
