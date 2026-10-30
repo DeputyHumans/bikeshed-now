@@ -1,9 +1,9 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -324,5 +324,5 @@
+@@ -327,5 +327,5 @@
    // the realtime `*` key is the document's own level's alone.
    const shareLive =
 -    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
 +    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public") && !(doc.publicEdit && !isOwner);
    const remoteChanged = useRef<(() => void) | null>(null);
-   const shared = useSharedDocument({
+   // Where the frame delivers no `input` (viewer/frameWatch.ts), the shared

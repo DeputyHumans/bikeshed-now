@@ -719,3 +719,18 @@ test("release cloud qualification uses the same reviewed ten-participant scope a
   assert.equal(result.releaseComplete, true);
   assert.equal(result.releaseQualification.trials, 18);
 });
+
+test("one declared local trigger attempt preserves the incomplete cloud obligation and cannot be truncated", t => {
+  const f = limitFixture(t);
+  for (const metric of f.metrics) {
+    metric.naturalAttemptLimit = 1;
+    metric.naturalAttempts = metric.naturalAttempts.slice(0, 1);
+  }
+  f.flush();
+  const result = checkCampaign(f.c, { root: f.root });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.localComplete, true);
+  assert.equal(result.complete, false);
+  f.metrics[0].naturalAttempts.pop(); f.flush();
+  assert.equal(checkCampaign(f.c, { root: f.root }).localComplete, false);
+});

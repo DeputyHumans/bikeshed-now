@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## 0.26.4 — 2026-10-29
+
+### Fixed
+
+- Refresh three live-editing regression patch anchors after the Safari integration and cover all 24 accessibility scenarios in the file budget.
+
+- Preserve the acknowledgement-cleanup negative control beside the new comment retry option.
+- Give concurrent comments and suggestions up to ten native Firestore transaction attempts, retaining backoff, atomic writes and acknowledgement receipts.
+- Run one complete local C15 email storm per trial instead of repeating an impossible automatic-trigger overlap three times. Keep every participant/trial, ordinary safety assertion, explicit inconclusive result and separate cloud qualification requirement; retain historical three-attempt evidence.
+
 ## 0.26.3 — 2026-10-29
 
 ### Fixed

@@ -1795,7 +1795,10 @@ export const TOOLS: ToolDefinition[] = [
           resolved: false,
         });
         tx.create(commentRef, { commentId: commentRef.id, body, ...author });
-      });
+      // Concurrent comments write independent feedback but share this document's
+      // receipt record. Keep native backoff and atomic retries, with room beyond
+      // the default five attempts for a burst of reviewers (SPEC §17).
+      }, { maxAttempts: 10 });
       await clearReceipt(ref, receipt);
       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
     },

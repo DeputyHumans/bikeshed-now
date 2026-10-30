@@ -1,7 +1,7 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
 @@ -1676,3 +1676,3 @@
-       });
+       }, { maxAttempts: 10 });
 -      await clearReceipt(ref, receipt);
 +      void receipt;
        return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);

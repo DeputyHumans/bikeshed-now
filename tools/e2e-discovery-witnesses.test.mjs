@@ -1150,12 +1150,62 @@ expected.push({
 });
 commandIds.push("resume-accessibility-touch-fixture");
 
+expected.push({
+  "id": "resume-comment-storm-contention",
+  "claim": "A full N5 C15 trial refused four concurrent MCP comments with ABORTED Transaction lock timeout while suggestions and replies succeeded. Preserve the failure, test bounded native retries without replaying committed feedback, and distinguish emulator contention from deployed behavior.",
+  "requiredCases": [
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 2
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 5
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 10
+    }
+  ]
+});
+
+expected.push({
+  "id": "resume-suggestion-storm-contention",
+  "claim": "N10 mixed feedback storms exhausted the suggestion transaction retry budget while concurrent comments succeeded. Retain those refusals and validate bounded native suggestion retries without weakening head, pending-limit or acknowledgement checks.",
+  "requiredCases": [
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 2
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 5
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 feedback storm under a get_changes poller: N participants each open a thread, reply in a shared one and suggest an edit at one instant, then resolve and reopen the shared one together; N threads and N+1 replies, the poller sees every event once (I15), one note per real flip (I10), and at most one notice per person and kind (I11)",
+      "n": 10
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 zero-email storm under a get_changes poller: as C15, with every grant through the operator script and every account's notifications off; N threads and N+1 replies, the poller sees every event once (I15), and one note per real flip (I10)",
+      "n": 2
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 zero-email storm under a get_changes poller: as C15, with every grant through the operator script and every account's notifications off; N threads and N+1 replies, the poller sees every event once (I15), and one note per real flip (I10)",
+      "n": 5
+    },
+    {
+      "caseId": "e2e/specs/concurrency/c13-feedback.spec.mjs::C15 zero-email storm under a get_changes poller: as C15, with every grant through the operator script and every account's notifications off; N threads and N+1 replies, the poller sees every event once (I15), and one note per real flip (I10)",
+      "n": 10
+    }
+  ]
+});
+
 const row = id => campaign.discoveries.find(r => r.id === id);
-test("all 39 discoveries retain their identities and original claims", () => {
+test("all 41 discoveries retain their identities and original claims", () => {
   assert.deepEqual(campaign.discoveries.map(r => r.id), expected.map(r => r.id), "discovery identity and order retention");
   for (const original of expected) assert.equal(row(original.id).claim, original.claim, `${original.id}: original discovery claim retention`);
 });
-test("26 non-native discoveries retain every exact affected case and N-axis cell", () => {
+test("28 non-native discoveries retain every exact affected case and N-axis cell", () => {
   const cases = expected.filter(r => r.id !== nativeId && !commandIds.includes(r.id));
   for (const original of cases) assert.deepEqual(row(original.id).requiredCases, original.requiredCases, `${original.id}: exact affected case and N-axis retention`);
 });

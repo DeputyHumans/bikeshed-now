@@ -251,7 +251,10 @@ export async function createSuggestion(args: {
     });
     attempted = true;
     return { annId: annRef.id };
-  });
+  // Comments write receipts on this same document. Keep enough native retries
+  // for suggestions to outlast a concurrent comment burst without losing the
+  // transaction's head, pending-limit or acknowledgement checks (SPEC §22).
+  }, { maxAttempts: 10 });
 }
 
 interface StoredSuggestion {
