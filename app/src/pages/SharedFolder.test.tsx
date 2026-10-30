@@ -15,7 +15,7 @@ vi.mock("../visibility", async (importOriginal) => ({
   unlockFolder,
 }));
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
-vi.mock("../firestore", () => ({ formatRelative: () => "2d ago" }));
+vi.mock("../firestore", () => ({ formatRelative: () => "2d ago", formatTimestamp: () => "27 Oct 2026, 12:00" }));
 vi.mock("../auth", () => ({
   useAuth: () => ({ gate: "signed_out", user: null, emailLower: "", signOut: vi.fn() }),
 }));

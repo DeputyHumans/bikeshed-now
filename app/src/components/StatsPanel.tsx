@@ -10,6 +10,7 @@ import { formatDuration, formatRelative, formatTimestamp, listDocViewers } from 
 import { describeActivity, fetchActivity, subjectOf, type ActivityItem } from "../activity";
 import { formatDay } from "../expiry";
 import { viaOf } from "../provenance";
+import { ViaBadge } from "./ViaBadge";
 import type { DocMeta, ViewerStat } from "../types";
 
 /**
@@ -69,13 +70,7 @@ function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
       <Icon name={ICON[item.type] ?? "comment"} size={14} />
       <span>{subjectOf(item)}</span>
       <span>{describeActivity(item)}</span>
-      {via ? (
-        // Server-derived, so stated as fact: the credential, in the words it
-        // was given when it acted (provenance.ts).
-        <span className="badge-automated" title={`Done through ${via}, not by a person in the browser`}>
-          via {via}
-        </span>
-      ) : null}
+      <ViaBadge via={via} title={`Done through ${via}, not by a person in the browser`} />
       {item.version ? (
         <span className="caption">
           <Link to={`/d/${docId}/${item.version}`}>{item.version}</Link>

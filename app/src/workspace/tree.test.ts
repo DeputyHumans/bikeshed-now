@@ -193,11 +193,20 @@ describe("documents", () => {
   it("sorts recency by the current version's publish, not by a rename or a share", () => {
     // b was renamed last (updatedAt 900), but a's content changed last.
     const docs = [
-      document_("a", null, { updatedAt: millis(100), latest: { version: "v2", at: millis(500) } as never }),
-      document_("b", null, { updatedAt: millis(900), latest: { version: "v1", at: millis(200) } as never }),
+      document_("a", null, { currentVersion: "v2", updatedAt: millis(100), latest: { version: "v2", at: millis(500) } as never }),
+      document_("b", null, { currentVersion: "v1", updatedAt: millis(900), latest: { version: "v1", at: millis(200) } as never }),
       document_("c", null, { updatedAt: millis(300) }),
     ];
     expect(sortDocs(docs, "recent").map((d) => d.docId)).toEqual(["a", "c", "b"]);
+  });
+
+  it("reads a summary of an older version as no summary: just published, the record's time is the newer", () => {
+    // d's v3 is published but not yet summarized; its summary still names v2.
+    const docs = [
+      document_("d", null, { currentVersion: "v3", updatedAt: millis(800), latest: { version: "v2", at: millis(100) } as never }),
+      document_("e", null, { currentVersion: "v1", updatedAt: millis(900), latest: { version: "v1", at: millis(400) } as never }),
+    ];
+    expect(sortDocs(docs, "recent").map((d) => d.docId)).toEqual(["d", "e"]);
   });
 
   it("does not mutate the input", () => {

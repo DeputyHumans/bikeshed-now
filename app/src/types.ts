@@ -322,7 +322,7 @@ export interface TokenSummary {
 /**
  * Firestore: public/{docId} — the world-readable projection of a PUBLIC
  * document. POST /unlock returns the same shape, without `publishedAt`, to a
- * reader holding an unlisted document's key (SPEC §17).
+ * reader holding an unlisted document's key (SPEC §2, §17).
  */
 export interface PublicDoc {
   docId: string;
@@ -351,7 +351,13 @@ export interface PublicDoc {
    * then when THEIR access ends. Absent on older mirrors.
    */
   viaFolder?: boolean;
-  /** When the current version was published (not the last rename or re-share). */
+  /**
+   * When the current version was published (not the last rename or re-share),
+   * in epoch milliseconds, as the folder listing's `updatedAt`. Absent on
+   * older projections.
+   */
+  updatedAt?: number | null;
+  /** The same instant as a timestamp, on the mirror only, which the sitemap orders by. */
   publishedAt?: Timestamp;
   /** The current version's word count, for its reading time; null until counted. */
   words?: number | null;

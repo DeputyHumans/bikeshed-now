@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Folder-tree construction, filtering and sorting (SPEC §13).
 
-import type { DocMeta, FolderMeta } from "../types";
+import type { Timestamp } from "firebase/firestore";
+import type { DocLatest, DocMeta, FolderMeta } from "../types";
 
 /**
  * Extracted, rather than living inline in the three components that need it.
@@ -129,8 +130,24 @@ export function docsInFolder(
   return docs.filter((d) => (d.folderId ?? null) === folderId);
 }
 
-function millis(value: { toMillis?: () => number } | undefined): number {
+function millis(value: { toMillis?: () => number } | null | undefined): number {
   return value?.toMillis ? value.toMillis() : 0;
+}
+
+/**
+ * What a card says of a document's current version: its summary while that
+ * names the head, else the record's own time, which a rename also moves, for
+ * a document not summarized yet or in the moment between a publish and its
+ * summary. The server's summaryOf (functions/src/lib/latest.ts) answers a
+ * reader the same way, and the card and the sort read this one answer.
+ */
+export function currentSummary(doc: Pick<DocMeta, "latest" | "currentVersion" | "updatedAt">): {
+  at: Timestamp | null;
+  words: number | null;
+  latest: DocLatest | null;
+} {
+  const latest = doc.latest && doc.latest.version === doc.currentVersion ? doc.latest : null;
+  return { at: latest?.at ?? doc.updatedAt ?? null, words: typeof latest?.words === "number" ? latest.words : null, latest };
 }
 
 export function sortDocs(docs: readonly DocMeta[], key: SortKey): DocMeta[] {
@@ -148,7 +165,7 @@ export function sortDocs(docs: readonly DocMeta[], key: SortKey): DocMeta[] {
       );
     default:
       // By the current version's publish: a rename or a share is not an update.
-      return list.sort((a, b) => millis(b.latest?.at ?? b.updatedAt) - millis(a.latest?.at ?? a.updatedAt));
+      return list.sort((a, b) => millis(currentSummary(b).at) - millis(currentSummary(a).at));
   }
 }
 

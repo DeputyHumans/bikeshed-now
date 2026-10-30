@@ -63,7 +63,7 @@ import { TrustDialog } from "../components/TrustDialog";
 import { MarkingDialog } from "../components/MarkingDialog";
 import { StatsPanel } from "../components/StatsPanel";
 import { DetailsPanel } from "../components/DetailsPanel";
-import { readingMinutes } from "../readingTime";
+import { readingMinutes, wordsOf } from "../readingTime";
 import { ForksPanel } from "../components/ForksPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
@@ -287,14 +287,8 @@ export function DocViewer() {
           };
         })()
       : null;
-  // How long the version on screen is, for the chip: counted on the version
-  // itself, else in the document's summary of its current version, else in the
-  // mirror a reader without the record reads. Undefined until counted.
-  const shownWords =
-    doc.version?.words ??
-    (doc.currentVersion === doc.meta?.latest?.version ? doc.meta?.latest?.words : undefined) ??
-    doc.publicDoc?.words ??
-    undefined;
+  // How long the version on screen is, for the chip and Details alike.
+  const shownWords = wordsOf(doc.currentVersion, { version: doc.version, latest: doc.meta?.latest, mirror: doc.publicDoc });
 
   // A form for a frame that has since reloaded, or gone into edit mode,
   // quotes a document that is no longer the one on screen.
@@ -1291,6 +1285,7 @@ export function DocViewer() {
           publicDoc={doc.publicDoc}
           versions={doc.versions}
           viewing={doc.currentVersion}
+          words={shownWords}
           slides={deck.slides.length}
           showDraft={isDocEditor}
           onClose={() => setDialog(null)}

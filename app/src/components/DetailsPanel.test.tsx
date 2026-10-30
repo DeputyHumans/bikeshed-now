@@ -3,7 +3,10 @@
 
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { originOfVersion } from "../provenance";
 import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
@@ -29,7 +32,7 @@ const VERSIONS = [
 function open(props: Partial<Parameters<typeof DetailsPanel>[0]>) {
   render(
     <MemoryRouter>
-      <DetailsPanel title="Plan" docId="plan" meta={null} publicDoc={null} versions={[]} viewing="v2" slides={0} showDraft={false} onClose={() => {}} {...props} />
+      <DetailsPanel title="Plan" docId="plan" meta={null} publicDoc={null} versions={[]} viewing="v2" words={undefined} slides={0} showDraft={false} onClose={() => {}} {...props} />
     </MemoryRouter>,
   );
   return screen.getByRole("dialog");
@@ -37,7 +40,7 @@ function open(props: Partial<Parameters<typeof DetailsPanel>[0]>) {
 
 describe("a document's details", () => {
   it("tell a member how long it is, when it was made and updated, by whom and through what, and every version", () => {
-    const dialog = open({ meta: META, versions: VERSIONS, showDraft: true });
+    const dialog = open({ meta: META, versions: VERSIONS, words: 2380, showDraft: true });
     expect(dialog.textContent).toContain("10 min read · 2,380 words");
     expect(dialog.textContent).toContain("by ana@example.com");
     expect(within(dialog).getAllByText("via “Claude” (connected app)").length).toBeGreaterThan(0);
@@ -48,9 +51,16 @@ describe("a document's details", () => {
     expect(rows[1]).not.toContain("via");
   });
 
-  it("measure the version on screen, not the current one", () => {
-    const dialog = open({ meta: META, versions: VERSIONS, viewing: "v1" });
-    expect(dialog.textContent).toContain("2 min read · 300 words");
+  it("say when the current version was published, falling back as the card does for a document not summarized yet", () => {
+    const unsummarized = { ...META, latest: undefined } as unknown as DocMeta;
+    const dialog = open({ meta: unsummarized, versions: VERSIONS });
+    expect(within(dialog).getByText("Updated").nextElementSibling?.textContent).not.toBe("…");
+  });
+
+  it("say nothing of who published from a summary that is of an older version", () => {
+    const behind = { ...META, latest: { ...META.latest, version: "v1" } } as unknown as DocMeta;
+    const dialog = open({ meta: behind, versions: VERSIONS });
+    expect(within(dialog).getByText("Updated").nextElementSibling?.textContent).not.toMatch(/\(v1\)/);
   });
 
   it("keep an unpublished draft to the document's editors", () => {
@@ -58,9 +68,11 @@ describe("a document's details", () => {
   });
 
   it("tell a reader without the record its length and date and nobody's name", () => {
-    const publicDoc = { words: 476, publishedAt: ts("2026-10-28T12:00:00Z") } as unknown as PublicDoc;
-    const dialog = open({ publicDoc });
+    // POST /unlock's answer, as JSON carries it: the time in epoch milliseconds.
+    const publicDoc = { currentVersion: "v2", words: 476, updatedAt: Date.parse("2026-10-28T12:00:00Z") } as unknown as PublicDoc;
+    const dialog = open({ publicDoc, words: 476 });
     expect(dialog.textContent).toContain("2 min read · 476 words");
+    expect(within(dialog).getByText("Updated").nextElementSibling?.textContent, "the date the answer carries").toMatch(/2026/);
     expect(dialog.textContent).not.toMatch(/@|via|Created|Versions/);
   });
 
@@ -72,6 +84,13 @@ describe("a document's details", () => {
     const rows = [...open({ meta: META, versions: older }).querySelectorAll(".details-versions li")].map((li) => li.textContent);
     expect(rows[0]).toContain("published from the editor");
     expect(rows[1]).toContain("made as a fork");
+  });
+
+  it("read how a version arrived exactly as the server does (origin-vectors.json)", () => {
+    const file = join(__dirname, "..", "..", "..", "functions", "test", "fixtures", "origin-vectors.json");
+    const { cases } = JSON.parse(readFileSync(file, "utf8")) as { cases: Array<{ name: string; version: Record<string, unknown>; origin: string | null }> };
+    expect(cases.length).toBeGreaterThan(5);
+    for (const c of cases) expect(originOfVersion(c.version), c.name).toBe(c.origin);
   });
 
   it("say a deck's slides, and an uncounted document as such", () => {

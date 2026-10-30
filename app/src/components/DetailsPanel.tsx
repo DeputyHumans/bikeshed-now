@@ -4,8 +4,10 @@
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
 import { formatTimestamp } from "../firestore";
-import { viaOf } from "../provenance";
+import { originOfVersion, viaOf } from "../provenance";
 import { readingTime } from "../readingTime";
+import { currentSummary } from "../workspace/tree";
+import { ViaBadge } from "./ViaBadge";
 import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 /**
@@ -21,30 +23,13 @@ import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 const ORIGIN: Record<string, string> = { upload: "uploaded", edit: "published from the editor", fork: "made as a fork" };
 
-/**
- * How a version arrived, for one written before `origin` was stored too, read
- * as the server's originOf reads it (functions/src/lib/versions.ts).
- */
-function originOf(v: DocVersion): string | null {
-  if (v.origin) return ORIGIN[v.origin];
-  if (v.publishedVia === "fork" || v.publishedVia === "duplicate") return ORIGIN.fork;
-  if (v.publishedVia === "editor") return ORIGIN.edit;
-  return v.publishedVia ? ORIGIN.upload : null;
-}
-
 function Who({ email, via }: { email: string | null | undefined; via: string | null }) {
   if (!email && !via) return null;
   return (
     <>
       {email ? ` by ${email}` : ""}
-      {via ? (
-        <>
-          {" "}
-          <span className="badge-automated" title={`Through ${via}, not a person in the browser`}>
-            via {via}
-          </span>
-        </>
-      ) : null}
+      {via ? " " : ""}
+      <ViaBadge via={via} title={`Published through ${via}, not by a person in the browser`} />
     </>
   );
 }
@@ -57,6 +42,7 @@ export function DetailsPanel({
   publicDoc,
   versions,
   viewing,
+  words,
   slides,
   showDraft,
   onClose,
@@ -71,18 +57,19 @@ export function DetailsPanel({
   versions: DocVersion[];
   /** The version on screen. */
   viewing: string;
+  /** That version's word count, as the viewer's chip reads it; undefined until counted. */
+  words: number | undefined;
   /** Slides the viewer found, when the document is a deck. */
   slides: number;
   /** An editor's: the unpublished draft is theirs to know about. */
   showDraft: boolean;
   onClose: () => void;
 }) {
-  const shown = versions.find((v) => v.versionId === viewing);
-  const words =
-    shown?.words ?? (viewing === meta?.latest?.version ? meta.latest.words : undefined) ?? publicDoc?.words ?? undefined;
   const reading = readingTime(words);
-  const latest = meta?.latest;
-  const updatedAt = latest?.at ?? publicDoc?.publishedAt ?? null;
+  // The card's answer: the current version's publish, which a rename does not move.
+  const summary = meta ? currentSummary(meta) : null;
+  const latest = summary?.latest ?? null;
+  const updatedAt = summary ? summary.at : publicDoc?.updatedAt ?? null;
   const draft = showDraft ? meta?.draft : null;
   const keyed = linkKey ? `?k=${encodeURIComponent(linkKey)}` : "";
 
@@ -107,7 +94,7 @@ export function DetailsPanel({
 
         <dt>Updated</dt>
         <dd>
-          {updatedAt ? formatTimestamp(updatedAt) : "…"}
+          {formatTimestamp(updatedAt)}
           {latest ? (
             <>
               {` (${latest.version})`}
@@ -131,7 +118,8 @@ export function DetailsPanel({
           <h3 style={{ marginTop: "var(--s-4)" }}>Versions</h3>
           <ul className="activity-feed details-versions">
             {[...versions].reverse().map((v) => {
-              const how = originOf(v);
+              const origin = originOfVersion(v);
+              const how = origin ? ORIGIN[origin] : null;
               const length = readingTime(v.words);
               const current = v.versionId === meta?.currentVersion;
               return (

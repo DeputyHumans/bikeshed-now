@@ -433,9 +433,9 @@ describe("each card's length and last update", () => {
     mount();
     act(() =>
       listeners.docs?.([
-        docMeta({ docId: "by-cli", title: "By the CLI", latest: { version: "v3", at: null, byEmail: "ana@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 2380 } } as Partial<DocMeta>),
-        docMeta({ docId: "by-hand", title: "By hand", latest: { version: "v1", at: null, byEmail: "ana@example.com", channel: "web", origin: "edit", words: 40 } } as Partial<DocMeta>),
-        docMeta({ docId: "older", title: "Not summarized yet" }),
+        docMeta({ docId: "by-cli", title: "By the CLI", currentVersion: "v3", latest: { version: "v3", at: null, byEmail: "ana@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 2380 } } as Partial<DocMeta>),
+        docMeta({ docId: "by-hand", title: "By hand", currentVersion: "v1", latest: { version: "v1", at: null, byEmail: "ana@example.com", channel: "web", origin: "edit", words: 40 } } as Partial<DocMeta>),
+        docMeta({ docId: "older", title: "Not summarized yet", updatedAt: { toMillis: () => 1, toDate: () => new Date(1) } as never }),
       ]),
     );
     act(() => listeners.folders?.([]));

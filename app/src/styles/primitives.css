@@ -168,7 +168,7 @@
    and `.chip` already resets everything a button would bring except the cursor. */
 button.expiry-chip { cursor: pointer; }
 /* The version chip opens the document's details. */
-button.version-chip { cursor: pointer; font-family: inherit; }
+button.version-chip { cursor: pointer; }
 button.version-chip:hover { color: var(--color-ink); border-color: var(--color-ink-muted); }
 
 /* That this document is a fork, or has been forked (SPEC §21). A button for

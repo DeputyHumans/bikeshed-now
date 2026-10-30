@@ -4,13 +4,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../components/Icon";
+import { UpdatedLine } from "../components/UpdatedLine";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { NotHere } from "../components/NotHere";
 import { CardSkeletons } from "../components/Spinner";
 import { unlockFolder, type FolderUnlock } from "../visibility";
 import { thumbUrl } from "../thumbs";
-import { formatRelative } from "../firestore";
-import { readingTime } from "../readingTime";
 
 /**
  * Read-only, and it looks it: no menus, no upload, no drop zone, no tree.
@@ -159,8 +158,7 @@ export function SharedFolder() {
                 </div>
                 {doc.updatedAt !== null || typeof doc.words === "number" ? (
                   <div className="doc-card-meta">
-                    {readingTime(doc.words) ? <span className="doc-card-stat">{readingTime(doc.words)}</span> : null}
-                    {doc.updatedAt !== null ? <span className="doc-card-stat">Updated {formatRelative(doc.updatedAt)}</span> : null}
+                    <UpdatedLine words={doc.words} at={doc.updatedAt} />
                   </div>
                 ) : null}
               </div>
