@@ -6,7 +6,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomBytes } from "crypto";
 import type { Principal } from "./auth";
 import type { Actor } from "./actor";
-import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, visibilityOf, expiryMs, opensEditingToAnyAccount, type DocAclData, type FolderAclData } from "./acl";
+import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, visibilityOf, expiryMs, isTrashed, opensEditingToAnyAccount, TRASHED_WRITE, type DocAclData, type FolderAclData } from "./acl";
 import { applyAccessDelta, grantsOf, invalidPrincipals, parseAccessDelta, parseExpiry, type Role } from "./access";
 import { filedIn, inheritedGrants, inheritedReach, folderAudience } from "./audience";
 import { membershipOf, persistFolderMembership, persistDocMembership, recomputeSubtree, resolveFolderTarget, slugify, wouldCycle, type Membership } from "./folders";
@@ -23,9 +23,16 @@ export class ManagementError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
 }
 const bad = (message: string): never => { throw new ManagementError(400, message); };
+/** A trashed folder is frozen as a trashed document is (SPEC §4): Restore first. */
+export const TRASHED_FOLDER = "this folder is in the Trash — restore it first";
+/** Refuse a change to anything in the Trash, read inside the writing transaction. */
+function refuseTrashed(kind: ResourceKind, data: DocumentData): void {
+  if (isTrashed(data)) throw new ManagementError(409, kind === "document" ? TRASHED_WRITE : TRASHED_FOLDER);
+}
 const stamp = () => FieldValue.serverTimestamp();
 
-async function load(ctx: ManagementContext, kind: ResourceKind, id: string, ownerOnly = true) {
+/** A document or folder the caller may manage (owner) or at least read; 404 alike for anything else. */
+export async function load(ctx: ManagementContext, kind: ResourceKind, id: string, ownerOnly = true) {
   if (!id || !safeSegment(id)) bad("invalid or missing id");
   const ref = ctx.db.collection(kind === "document" ? "docs" : "folders").doc(id);
   const snap = await ref.get();
@@ -84,6 +91,7 @@ export async function setAccess(ctx: ManagementContext, kind: ResourceKind, id: 
   let next = grantsOf(data);
   let changed = false;
   const apply = (current: DocumentData) => {
+    refuseTrashed(kind, current);
     const oldGrants = grantsOf(current);
     next = applyAccessDelta(oldGrants, String(current.ownerEmail), delta);
     changed = JSON.stringify(oldGrants) !== JSON.stringify(next);
@@ -135,6 +143,8 @@ export async function setVisibility(ctx: ManagementContext, id: string, patch: R
   await ctx.db.runTransaction(async tx => {
     const data = (await tx.get(ref)).data()!;
     if (!canManageSharing(data as DocAclData, ctx.caller.emailLower)) throw new ManagementError(403, "only the owner can manage this document");
+    // Not a thaw, as lifting an expiry is: only Restore brings it back.
+    refuseTrashed("document", data);
     const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
     const publicEdit = visibility !== "private" && (patch.publicEdit ?? data.publicEdit) === true;
     const update: Record<string, unknown> = { visibility, publicEdit, updatedAt: stamp() };
@@ -180,6 +190,7 @@ export async function setFolderVisibility(ctx: ManagementContext, id: string, pa
   const before = await ctx.db.runTransaction(async tx => {
     const data = (await tx.get(ref)).data()!;
     if (!canManageFolder(data as FolderAclData, ctx.caller.emailLower)) throw new ManagementError(403, "only the owner can manage this folder");
+    refuseTrashed("folder", data);
     const visibility = (patch.visibility ?? visibilityOf(data as DocAclData)) as "private" | "unlisted" | "public";
     const update: Record<string, unknown> = { visibility, updatedAt: stamp() };
     if (expiry && "value" in expiry) update.expiresAt = expiry.value === null ? FieldValue.delete() : Timestamp.fromMillis(expiry.value);
@@ -205,9 +216,10 @@ export async function setFolderVisibility(ctx: ManagementContext, id: string, pa
   return { id, ...after, linkToken: data.linkToken ?? null };
 }
 
-export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move" | "delete", args: Record<string, unknown> = {}) {
-  const { ref, data } = await load(ctx, "folder", id, op === "delete");
-  if (op !== "delete" && !canEditFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) throw new ManagementError(403, "you cannot edit that folder");
+export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move", args: Record<string, unknown> = {}) {
+  const { ref, data } = await load(ctx, "folder", id, false);
+  if (!canEditFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) throw new ManagementError(403, "you cannot edit that folder");
+  refuseTrashed("folder", data);
   if (op === "rename") {
     const name = typeof args.name === "string" ? args.name.trim() : "";
     if (!name || name.length > 120) bad("folder name is required (up to 120 characters)");
@@ -218,23 +230,6 @@ export async function organizeFolder(ctx: ManagementContext, id: string, op: "re
     if (target.id && await wouldCycle(ctx.db, id, target.id)) bad("cannot move a folder into itself or a descendant");
     await ref.set({ parentId: target.id, updatedAt: stamp() }, { merge: true });
     await recomputeSubtree(ctx.db, id);
-  } else {
-    const parent = data.parentId ?? null;
-    const folders = await ctx.db.collection("folders").where("parentId", "==", id).get();
-    const docs = await ctx.db.collection("docs").where("folderId", "==", id).get();
-    // Chunk the writes so a folder containing more than one Firestore batch still works.
-    const children = [...folders.docs.map(s => ({ ref: s.ref, field: "parentId" })), ...docs.docs.map(s => ({ ref: s.ref, field: "folderId" }))];
-    for (let i = 0; i < children.length; i += 400) {
-      const batch = ctx.db.batch();
-      for (const child of children.slice(i, i + 400)) batch.set(child.ref, { [child.field]: parent, updatedAt: stamp() }, { merge: true });
-      await batch.commit();
-    }
-    for (const child of folders.docs) await recomputeSubtree(ctx.db, child.id);
-    for (const child of docs.docs) {
-      await persistDocMembership(ctx.db, child.ref);
-    }
-    await ref.delete();
-    return { id, deleted: true, parent, reparented: { folders: folders.size, documents: docs.size } };
   }
   const fresh = await ref.get();
   const paths = await filedIn(ctx.db, ctx.caller, [id]);

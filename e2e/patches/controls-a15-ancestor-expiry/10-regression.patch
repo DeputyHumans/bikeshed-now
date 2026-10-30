@@ -9,8 +9,8 @@
 @@ -112,5 +113,5 @@
    // Forking reads every byte, so it is a read path: without this, copying an
    // expired document would get its content back out from behind the date.
--  if (expiredForReader(data, caller)) return null;
-+  if (!ignoreExpiry && expiredForReader(data, caller)) return null;
+-  if (frozenForReader(data, caller)) return null;
++  if (!ignoreExpiry && frozenForReader(data, caller)) return null;
    return { ref, data };
  }
 @@ -317,5 +318,5 @@

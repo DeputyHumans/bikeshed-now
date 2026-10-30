@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Management authorization, inherited access, sparse settings and folder reparenting (SPEC §13, §17, §19).
+// Management authorization, inherited access and sparse settings (SPEC §13, §17, §19).
 
 const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
@@ -118,14 +118,6 @@ test("folder editors rename and move, cycles and read-only destinations are refu
   }
   const moved = await w.run("move_folder", { id: "child" }, editor);
   assert.deepEqual({ name: renamed.name, codes, parent: moved.parent, descendants: w.store.get("folders/grandchild").ancestors, mail: invitations.length }, { name: "Reviews", codes: [400, 403, 403], parent: null, descendants: ["child"], mail: 0 });
-});
-
-test("folder deletion reparents documents and folders without removing their content", async () => {
-  const w = world();
-  const result = await w.run("delete_folder", { id: "child" });
-  assert.deepEqual({ result, exists: w.store.has("folders/child"), docParent: w.store.get("docs/doc").folderId, folderParent: w.store.get("folders/grandchild").parentId, version: w.store.has("docs/doc/versions/v1"), nested: w.store.has("docs/nested"), mail: invitations.length }, {
-    result: { id: "child", deleted: true, parent: "parent", reparented: { folders: 1, documents: 1 } }, exists: false, docParent: "parent", folderParent: "parent", version: true, nested: true, mail: 0,
-  });
 });
 
 test("HTTP preserves full-form settings and access response contracts through shared handlers", async () => {

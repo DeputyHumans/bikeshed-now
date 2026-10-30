@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import * as React from "react";
 import { COMMENT_EMAIL_COOLDOWN_MS, publicOrigin } from "../config";
 import type { Role } from "../lib/access";
-import { canRead, canManageSharing, isExpired, isMember, visibilityOf } from "../lib/acl";
+import { canRead, canManageSharing, isFrozen, isMember, visibilityOf } from "../lib/acl";
 import { grantTokenOf, linkGrantRef } from "../lib/linkgrant";
 import { documentUrl, sendEmail } from "./send";
 import { Invite, inviteText, type InviteProps } from "./templates/Invite";
@@ -72,7 +72,7 @@ export async function claimCommentCooldown(
       ? await tx.get(linkGrantRef(docRef, uid))
       : null;
     if (!canRead(doc, caller, { grantToken: grantTokenOf(grant) })) return false;
-    if (isExpired(doc, Date.now()) && !canManageSharing(doc, emailLower)) return false;
+    if (isFrozen(doc, Date.now()) && !canManageSharing(doc, emailLower)) return false;
 
     const cooldowns = (data.emailCooldowns as Record<string, number>) || {};
     const claims = (data.emailCooldownClaims as Record<string, string>) || {};

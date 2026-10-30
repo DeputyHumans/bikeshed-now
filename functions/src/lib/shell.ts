@@ -19,7 +19,7 @@
  */
 
 import { PUBLIC_CACHE_SECONDS } from "../config";
-import { type DocAclData, type FolderAclData, earlierEnd, expiryMs, folderAccess, isExpired, readAccess, visibilityOf } from "./acl";
+import { type DocAclData, type FolderAclData, earlierEnd, expiryMs, folderAccess, isFrozen, readAccess, visibilityOf } from "./acl";
 import type { DocHead } from "./head";
 import { escapeAttr, escapeText } from "./html";
 
@@ -72,7 +72,7 @@ export function decideShell(input: {
   const access = readAccess(doc, null, { k }, input.folder ?? null, now);
   // With no caller, the only bases are the URL's own: never member or grant.
   if (access === null || access.basis === "member" || access.basis === "grant") return GENERIC;
-  if (isExpired(doc, now)) return GENERIC;
+  if (isFrozen(doc, now)) return GENERIC;
   const visibility = visibilityOf(doc);
   const versionId = input.versionId ?? doc.currentVersion;
   if (typeof versionId !== "string" || versionId.length === 0) return GENERIC;

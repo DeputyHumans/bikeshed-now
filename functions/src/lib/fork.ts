@@ -25,7 +25,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
   canManageSharing,
-  expiredForReader,
+  frozenForReader,
   isMember,
   visibilityOf,
   type DocAclData,
@@ -115,7 +115,7 @@ async function openReadable(
   if ((await loadReadAccess(db, data, caller, proof)) === null) return null;
   // Forking reads every byte, so it is a read path: without this, copying an
   // expired document would get its content back out from behind the date.
-  if (expiredForReader(data, caller)) return null;
+  if (frozenForReader(data, caller)) return null;
   return { ref, data };
 }
 
@@ -401,7 +401,7 @@ async function forksOf(
       if (!snap.exists) continue;
       const data = snap.data() as Stored;
       const proof = await linkProofFor(snap.ref, data, caller, null);
-      if (expiredForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
+      if (frozenForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
       const listing: ForkListing = {
         docId: snap.id,
         title: str(data.title, "Untitled"),

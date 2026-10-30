@@ -22,7 +22,7 @@
 -    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
 -      return { stored: false, moved: false, stale: [], denied: d };
 -    }
--    if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
+-    if (!d || d.currentVersion !== versionId || frozenForReader(d, caller)) {
 -      return { stored: false, moved: true, stale: [] };
 -    }
 -    const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);

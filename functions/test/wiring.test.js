@@ -451,9 +451,9 @@ test("storing thumbnails is for editors, refused once expired, and is not an edi
   // transaction that decides: refused to every editor, but not to the owner,
   // who alone still reads an expired document and so may store its cover.
   const transaction = body.slice(body.indexOf("runTransaction("));
-  const before = body.indexOf("expiredForReader(data, caller)");
+  const before = body.indexOf("frozenForReader(data, caller)");
   assert.ok(before > 0 && before < body.indexOf("runTransaction("));
-  assert.match(transaction, /expiredForReader\(d, caller\)/);
+  assert.match(transaction, /frozenForReader\(d, caller\)/);
   assert.doesNotMatch(body, /\bisExpired\(/);
   assert.match(transaction, /d\.currentVersion !== versionId/);
   // A captured image is not an edit: the workspace sorts and labels by this.

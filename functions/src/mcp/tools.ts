@@ -53,7 +53,8 @@ import {
   expiryMs,
   isDocApprover,
   isDocEditor,
-  isExpired,
+  frozenWrite,
+  isFrozen,
   isFolderBasis,
   isMember,
   visibilityOf,
@@ -278,15 +279,15 @@ async function loadDoc(ctx: ToolContext, slug: string, k: string | null = null) 
   if (!canRead(data, ctx.caller, proof)) {
     // A folder's key reads, and this is a tool that does more. Saying so tells
     // nobody anything new: the key already lets them read the document.
-    if (k && !isExpired(data, Date.now()) && (await loadReadAccess(ctx.db, data, ctx.caller, proof)) !== null) {
+    if (k && !isFrozen(data, Date.now()) && (await loadReadAccess(ctx.db, data, ctx.caller, proof)) !== null) {
       throw new Error("this document is shared with you through a folder's link, which lets you read it and nothing else");
     }
     throw new Error(`no document with id "${slug}"`);
   }
-  // An expired document reads as absent to everyone but its owner — the same
-  // answer a document they may not read gives, so expiry cannot be used to
-  // confirm that a slug exists (SPEC §17).
-  if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
+  // An expired or trashed document reads as absent to everyone but its owner —
+  // the same answer a document they may not read gives, so neither can be used
+  // to confirm that a slug exists (SPEC §4, §17).
+  if (isFrozen(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
     throw new Error(`no document with id "${slug}"`);
   }
   return { ref, snap, data, proof };
@@ -305,7 +306,7 @@ async function loadDocForRead(ctx: ToolContext, slug: string, k: string | null =
   const proof = await linkProofFor(ref, data, ctx.caller, k);
   const access = await loadReadAccess(ctx.db, data, ctx.caller, proof);
   if (access === null) throw new Error(`no document with id "${slug}"`);
-  if (isExpired(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
+  if (isFrozen(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
     throw new Error(`no document with id "${slug}"`);
   }
   return { ref, snap, data, proof, viaFolder: isFolderBasis(access.basis) };
@@ -365,7 +366,7 @@ async function changeOwnSuggestion(
   change: { replacement?: string; note?: string },
 ) {
   const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-  refuseIfExpired(data);
+  refuseIfFrozen(data);
   const threadId = str(args, "threadId");
   if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
   const versionId = mutationVersion(args.version, data);
@@ -391,7 +392,7 @@ async function changeOwnSuggestion(
  */
 async function changeThread(ctx: ToolContext, args: Record<string, unknown>, resolved: boolean) {
   const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-  refuseIfExpired(data);
+  refuseIfFrozen(data);
   const threadId = str(args, "threadId");
   if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the thread, from get_comments");
   const versionId = mutationVersion(args.version, data);
@@ -408,11 +409,10 @@ async function changeThread(ctx: ToolContext, args: Record<string, unknown>, res
   return withReaderAddress({ threadId, version: versionId, resolved: changed.resolved }, ref.id);
 }
 
-/** Writes are refused on an expired document, the owner's included. */
-function refuseIfExpired(data: DocAclData): void {
-  if (isExpired(data, Date.now())) {
-    throw new Error("this document has expired — change or clear its expiry to edit it");
-  }
+/** Writes are refused on an expired or trashed document, the owner's included. */
+function refuseIfFrozen(data: DocAclData): void {
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) throw new Error(frozen.error);
 }
 
 /**
@@ -679,7 +679,7 @@ export const TOOLS: ToolDefinition[] = [
       const versionId = selectedVersion(args.version, data.currentVersion);
       const isCurrent = versionId === data.currentVersion;
       // Read through a folder's key: the reader may do nothing but read.
-      const writable = isCurrent && !viaFolder && !isExpired(data, Date.now());
+      const writable = isCurrent && !viaFolder && !isFrozen(data, Date.now());
       const vSnap = await ref.collection("versions").doc(versionId).get();
       if (!vSnap.exists) throw new Error(`no version "${versionId}"`);
       const v = vSnap.data() || {};
@@ -907,7 +907,7 @@ export const TOOLS: ToolDefinition[] = [
             : "you cannot edit that document",
         );
       }
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       const content = String(args.content ?? "");
       if (!content.trim()) throw new Error("content is empty");
 
@@ -974,7 +974,7 @@ export const TOOLS: ToolDefinition[] = [
       // Whoever may edit, as for the app's own commit, which takes no link key either.
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
       if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot publish that document's draft");
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       const baseVersion = mutationVersion(args.baseVersion, data);
       const editors = await editorsRefusal(ref.id, "published");
       if ("refusal" in editors) throw new Error(editors.refusal.error);
@@ -1023,7 +1023,7 @@ export const TOOLS: ToolDefinition[] = [
     async run(ctx, args) {
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
       if (!canSuggest(data, ctx.caller, proof)) throw new Error("you cannot suggest edits to that document");
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       mutationVersion(args.version, data);
       if (typeof args.replacement !== "string") {
         throw new Error("replacement is required: the new text, or an empty string to propose deleting the passage");
@@ -1129,7 +1129,7 @@ export const TOOLS: ToolDefinition[] = [
       if (!isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower)) {
         throw new Error("only the owner or an approver can accept or reject a suggestion");
       }
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
@@ -1172,7 +1172,7 @@ export const TOOLS: ToolDefinition[] = [
       if (!isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower)) {
         throw new Error("only the owner or an approver can accept or reject a suggestion");
       }
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       if (!threadId || !safeSegment(threadId)) throw new Error("threadId is required: the suggestion's thread");
@@ -1349,7 +1349,7 @@ export const TOOLS: ToolDefinition[] = [
       if (!isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower)) {
         throw new Error("you cannot move that document");
       }
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
 
       const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
       if (!target.ok) throw new Error(target.error);
@@ -1396,7 +1396,7 @@ export const TOOLS: ToolDefinition[] = [
       // link key either (POST /organize).
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
       if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot rename that document");
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       const renamed = await renameDocument(ctx.db, ref, args.title, ctx.actor);
       if ("error" in renamed) throw new Error(renamed.error);
       return withReaderAddress({ id: ref.id, title: renamed.title }, ref.id);
@@ -1516,7 +1516,7 @@ export const TOOLS: ToolDefinition[] = [
           }),
         });
       }
-      return withReaderAddress({ id: ref.id, version: versionId, currentVersion: data.currentVersion, isCurrent: answerable, canComment: answerable && !isExpired(data, Date.now()), truncated, threads }, ref.id, args.version === undefined ? undefined : versionId, str(args, "k") || undefined);
+      return withReaderAddress({ id: ref.id, version: versionId, currentVersion: data.currentVersion, isCurrent: answerable, canComment: answerable && !isFrozen(data, Date.now()), truncated, threads }, ref.id, args.version === undefined ? undefined : versionId, str(args, "k") || undefined);
     },
   },
 
@@ -1623,9 +1623,9 @@ export const TOOLS: ToolDefinition[] = [
                 : { exists: false },
             }
           : {}),
-        canEdit: canEdit(data, ctx.caller, proof) && !isExpired(data, Date.now()),
-        canSuggest: canSuggest(data, ctx.caller, proof) && !isExpired(data, Date.now()),
-        canDecide: isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower),
+        canEdit: canEdit(data, ctx.caller, proof) && !isFrozen(data, Date.now()),
+        canSuggest: canSuggest(data, ctx.caller, proof) && !isFrozen(data, Date.now()),
+        canDecide: isDocApprover(data, ctx.caller.uid, ctx.caller.emailLower) && !isFrozen(data, Date.now()),
       };
 
       if (ctx.caller.tokenId) await saveCursor(ctx.db, ctx.caller.uid, ctx.caller.tokenId, ref.id, cursor);
@@ -1671,7 +1671,7 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       mutationVersion(args.version, data);
       const body = String(args.body ?? "").trim().slice(0, 5000);
       if (!body) throw new Error("body is empty");
@@ -1711,10 +1711,10 @@ export const TOOLS: ToolDefinition[] = [
           proof = { ...proof, grantToken: grantTokenOf(await tx.get(linkGrantRef(ref, ctx.caller.uid))) };
         }
         if (!current.exists || !canRead(currentData, ctx.caller, proof)
-          || (isExpired(currentData, Date.now()) && !canManageSharing(currentData, ctx.caller.emailLower))) {
+          || (isFrozen(currentData, Date.now()) && !canManageSharing(currentData, ctx.caller.emailLower))) {
           throw new Error(`no document with id "${ref.id}"`);
         }
-        refuseIfExpired(currentData);
+        refuseIfFrozen(currentData);
         if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
         recordReceipt(tx, ref, current, receipt, true);
         tx.create(annRef, {
@@ -1753,7 +1753,7 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-      refuseIfExpired(data);
+      refuseIfFrozen(data);
       mutationVersion(args.version, data);
       const threadId = str(args, "threadId");
       const body = String(args.body ?? "").slice(0, 5000);
@@ -1769,7 +1769,7 @@ export const TOOLS: ToolDefinition[] = [
       await ctx.db.runTransaction(async (tx) => {
         const fresh = (await tx.get(ref)).data();
         if (!fresh || !canRead(fresh, ctx.caller, proof)) throw new Error("no such document");
-        refuseIfExpired(fresh);
+        refuseIfFrozen(fresh);
         const refusal = currentVersionRefusal(fresh, versionId);
         if (refusal) throw new Error(refusal.error);
         if (!(await tx.get(annRef)).exists) throw new Error("no such thread");

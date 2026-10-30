@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Current expiry and edit authority are checked in conditional snapshots and transactions (SPEC §8, §17).
+// Current expiry, the Trash and edit authority are checked in conditional snapshots and transactions (SPEC §4, §8, §17).
 
 import type * as admin from "firebase-admin";
-import { canEdit, isDocEditor, isExpired, visibilityOf, type DocAclData, type LinkProof } from "./acl";
+import { canEdit, frozenWrite, isDocEditor, visibilityOf, type DocAclData, type LinkProof } from "./acl";
 import { grantTokenOf, linkGrantRef } from "./linkgrant";
 
 export class WriteAuthorityError extends Error {
@@ -18,10 +18,8 @@ export function assertDocumentWriteAuthority(
   caller: { uid: string; emailLower: string },
   options: { k?: string | null; editorsOnly?: boolean } = {},
 ): boolean {
-  if (isExpired(data, Date.now())) throw new WriteAuthorityError(409, {
-    expired: true,
-    error: "this document has expired — change or clear its expiry to edit it",
-  });
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) throw new WriteAuthorityError(409, frozen);
   if (options.editorsOnly) {
     if (isDocEditor(data, caller.uid, caller.emailLower)) return true;
     throw new WriteAuthorityError(403, { error: "You no longer have permission to edit this document." });

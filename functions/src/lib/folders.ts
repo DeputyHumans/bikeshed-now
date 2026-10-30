@@ -36,7 +36,7 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
+import { canEditFolder, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -85,14 +85,27 @@ function expand(principals: readonly string[], teams: TeamIndex): string[] {
   return out;
 }
 
-/** Every effective set from a node's own grants unioned with its parent's. */
+/**
+ * Every effective set from a node's own grants unioned with its parent's.
+ *
+ * A node in the Trash is its owner's alone (SPEC §4): its grants and its
+ * parent's are kept on the record, so Restore can give them back, and count
+ * for nothing until then. Every membership writer computes through here, so
+ * no recompute — a folder cascade, a team change, an account move — can hand
+ * a trashed document back to anyone.
+ */
 export function computeMembership(
   ownerEmail: string,
   grants: RoleGrants,
   parent: Membership | null,
   teams: TeamIndex = EMPTY_TEAM_INDEX,
+  trashed = false,
 ): Membership {
   const owner = normalizeEmail(ownerEmail);
+  if (trashed) {
+    const alone = owner ? [owner] : [];
+    return { members: alone, suggesterMembers: [...alone], editorMembers: [...alone], approverMembers: [...alone] };
+  }
   // One rung of the ladder: everyone on the rung above, this rung's own grants,
   // and what the parent holds at this rung.
   const rung = (above: Iterable<string>, own: readonly string[], inherited: readonly string[]) =>
@@ -117,13 +130,15 @@ export const computeDocMembership = computeMembership;
  * A folder's reach: its parent's, then its own entry when it is not private
  * (SPEC §13, §17). The parent's already folds in every ancestor, so this is the
  * same one-level step `computeMembership` takes, and the cascade below computes
- * both in the same pass.
+ * both in the same pass. A folder in the Trash reaches nobody, not even
+ * through an ancestor's link (SPEC §4), and so neither does anything in it.
  */
 export function computeReach(
   folderId: string,
   own: FolderAclData,
   parentReach: readonly ReachEntry[],
 ): ReachEntry[] {
+  if (isTrashed(own)) return [];
   // Defensive against a corrupt chain naming this folder above itself.
   const out = parentReach.filter((e) => e.folderId !== folderId);
   const entry = ownReachEntry(folderId, own);
@@ -185,7 +200,8 @@ function randomSuffix(): string {
  * The suffix is random rather than a count. A count told the publisher how
  * many documents already held the name, and made the next one guessable. What
  * the suffix still reveals, that `wanted` is taken, is accepted: finding it out
- * costs the asker a document that can never be deleted (SPEC §4).
+ * costs the asker a document in their own name, which keeps the id even in
+ * their Trash (SPEC §4).
  *
  * `skipWanted` is for a caller that already knows `wanted` is unusable even
  * though no document record holds it yet — see `placeNewDocument`.
@@ -244,7 +260,7 @@ export type FolderTarget =
       /** The target's reach, which a child folder inherits. Empty at the root. */
       reach: ReachEntry[];
     }
-  | { ok: false; status: 400 | 403 | 404; error: string };
+  | { ok: false; status: 400 | 403 | 404 | 409; error: string };
 
 /**
  * Resolve "put this inside that folder" once, for every caller that asks it.
@@ -283,6 +299,11 @@ export async function resolveFolderTarget(
   const data = snap.data() as FolderAclData & Record<string, unknown>;
   if (!canEditFolder(data, caller.uid, caller.emailLower)) {
     return { ok: false, status: 403, error: "you cannot put anything in that folder" };
+  }
+  // Its owner is the only one left who can edit it: nothing goes into a
+  // folder in the Trash, so nothing is left behind in it untrashed.
+  if (isTrashed(data)) {
+    return { ok: false, status: 409, error: "that folder is in the Trash — restore it first" };
   }
 
   return {
@@ -328,6 +349,16 @@ export async function createFolderRecord(
   return { folderId: ref.id, name };
 }
 
+/**
+ * A delta to a node's current record, decided inside the transaction that
+ * writes its membership. It may read through `tx` (reads come before the
+ * writes), and may throw to refuse the change after all.
+ */
+export type Change = (
+  data: admin.firestore.DocumentData,
+  tx: admin.firestore.Transaction,
+) => Record<string, unknown> | Promise<Record<string, unknown>>;
+
 /** Read every dependency through the same transaction as its membership write. */
 async function transactionTeams(db: Db, tx: admin.firestore.Transaction, grants: RoleGrants): Promise<TeamIndex> {
   const index = new Map<string, string[]>();
@@ -342,7 +373,7 @@ async function transactionTeams(db: Db, tx: admin.firestore.Transaction, grants:
 export async function persistFolderMembership(
   db: Db,
   ref: admin.firestore.DocumentReference,
-  change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
+  change?: Change,
   opts: RecomputeOptions = {},
 ): Promise<{ data: admin.firestore.DocumentData; before: Membership; membership: Membership; grants: RoleGrants } | null> {
   const receipt = change ? freshReceiptId() : null;
@@ -359,18 +390,20 @@ export async function persistFolderMembership(
     }
     if (!snap.exists) return null;
     const data = snap.data() || {};
-    const patch = change?.(data) ?? {};
-    const parentId = typeof data.parentId === "string" ? data.parentId : null;
+    const patch = (await change?.(data, tx)) ?? {};
+    const next = { ...data, ...patch };
+    // From the patched record: a restore may move it to the owner's root.
+    const parentId = typeof next.parentId === "string" ? next.parentId : null;
     const parentSnap = parentId ? await tx.get(db.collection("folders").doc(parentId)) : null;
     const parent = parentSnap?.exists ? membershipOf(parentSnap.data()) : null;
     const parentAncestors = parentSnap?.exists ? asArray(parentSnap.data()?.ancestors) : [];
-    const grants = grantsOf({ ...data, ...patch });
+    const grants = grantsOf(next);
     const teams = await transactionTeams(db, tx, grants);
     const beforeTeams = await transactionTeams(db, tx, grantsOf(data));
-    const before = computeMembership(String(data.ownerEmail || ""), grantsOf(data), parent, beforeTeams);
-    const membership = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
+    const before = computeMembership(String(data.ownerEmail || ""), grantsOf(data), parent, beforeTeams, isTrashed(data));
+    const membership = computeMembership(String(data.ownerEmail || ""), grants, parent, teams, isTrashed(next));
     const ancestors = parentId ? [...parentAncestors, parentId] : [];
-    tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, reach: computeReach(ref.id, { ...data, ...patch } as FolderAclData, parentSnap?.exists ? reachOf(parentSnap.data()) : []), ...stampOf(opts) }, { merge: true });
+    tx.set(ref, { ...patch, ...membership, ancestors, depth: ancestors.length, reach: computeReach(ref.id, next as FolderAclData, parentSnap?.exists ? reachOf(parentSnap.data()) : []), ...stampOf(opts) }, { merge: true });
     if (receipt) {
       originalData = data; // request-local only: never persist a document snapshot in its receipt
       recordReceipt(tx, ref, snap, receipt, { before, membership, grants });
@@ -444,7 +477,7 @@ export async function persistDocMembership(
   db: Db,
   docRef: admin.firestore.DocumentReference,
   /** Apply a delta to the transaction's current record, never a caller's snapshot. */
-  change?: (data: admin.firestore.DocumentData) => Record<string, unknown>,
+  change?: Change,
   events: (membership: Membership, before: admin.firestore.DocumentData, previous: Membership) => EventInput[] = () => [],
   opts: RecomputeOptions = {},
 ): Promise<Membership> {
@@ -459,7 +492,7 @@ export async function persistDocMembership(
     }
     if (!snap.exists) throw new Error("document no longer exists");
     const before = snap.data() || {};
-    const patch = change?.(before) ?? {};
+    const patch = (await change?.(before, tx)) ?? {};
     const data = { ...before, ...patch };
     const folderId = typeof data.folderId === "string" ? data.folderId : null;
     const parentSnap = folderId ? await tx.get(db.collection("folders").doc(folderId)) : null;
@@ -471,8 +504,8 @@ export async function persistDocMembership(
       ? await tx.get(db.collection("folders").doc(beforeFolderId)) : null;
     const beforeParent = beforeFolderId === folderId ? parent : beforeParentSnap?.exists ? membershipOf(beforeParentSnap.data()) : null;
     const beforeTeams = await transactionTeams(db, tx, grantsOf(before));
-    const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams);
-    const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
+    const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams, isTrashed(before));
+    const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams, isTrashed(data));
     tx.set(docRef, { ...patch, ...next, ...stampOf(opts) }, { merge: true });
     for (const event of events(next, before, previous)) addEvent(tx, docRef, event);
     if (receipt) recordReceipt(tx, docRef, snap, receipt, next);

@@ -105,6 +105,17 @@ const CASES = [
     parent: { members: ["p@example.com"], editorMembers: ["pe@example.com"] },
     teams: { design: ["bo@example.com"], leads: ["di@example.com"] },
   },
+  {
+    name: "everything at once, in the Trash",
+    owner: "Owner@example.com",
+    viewers: ["team:design", "v@example.com"],
+    suggesters: ["s@example.com"],
+    editors: ["team:leads", "e@example.com"],
+    approvers: ["a@example.com"],
+    parent: { members: ["p@example.com"], editorMembers: ["pe@example.com"] },
+    teams: { design: ["bo@example.com"], leads: ["di@example.com"] },
+    trashed: true,
+  },
 ];
 
 /** A case's grants with every role's list present, as both twins require. */
@@ -119,10 +130,30 @@ test("both implementations agree across the fixture table", async () => {
   const esm = await import("../../scripts/lib/membership.mjs");
   for (const c of CASES) {
     const teams = new Map(Object.entries(c.teams));
-    const fromCjs = cjs.computeMembership(c.owner, grantsFor(c), c.parent, teams);
-    const fromEsm = esm.computeMembership(c.owner, grantsFor(c), c.parent, teams);
+    const fromCjs = cjs.computeMembership(c.owner, grantsFor(c), c.parent, teams, c.trashed === true);
+    const fromEsm = esm.computeMembership(c.owner, grantsFor(c), c.parent, teams, c.trashed === true);
     assert.deepEqual(fromEsm, fromCjs, c.name);
   }
+});
+
+// Pinned, not only compared: two twins that drifted together would still agree.
+test("in the Trash, both give the owner alone in every set, whatever the grants and the parent", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const c = CASES.find((x) => x.trashed);
+  const alone = ["owner@example.com"];
+  const want = { members: alone, suggesterMembers: alone, editorMembers: alone, approverMembers: alone };
+  const teams = new Map(Object.entries(c.teams));
+  assert.deepEqual(cjs.computeMembership(c.owner, grantsFor(c), c.parent, teams, true), want);
+  assert.deepEqual(esm.computeMembership(c.owner, grantsFor(c), c.parent, teams, true), want);
+});
+
+test("both decide what is in the Trash identically: a map, and nothing else", async () => {
+  const esm = await import("../../scripts/lib/membership.mjs");
+  const acl = require("../lib/lib/acl.js");
+  const records = [{}, { trashed: null }, { trashed: { batch: "b" } }, { trashed: {} }, { trashed: "yes" }, { trashed: true }, { trashed: [] }, null, undefined];
+  const want = [false, false, true, true, false, false, false, false, false];
+  assert.deepEqual(records.map((r) => acl.isTrashed(r)), want);
+  assert.deepEqual(records.map((r) => esm.isTrashed(r)), want);
 });
 
 test("both implementations name the same roles and grant lists", async () => {

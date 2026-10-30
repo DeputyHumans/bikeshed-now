@@ -51,6 +51,12 @@ export function grantLists(grants) {
   return ROLES.map((role) => grants[GRANT_LIST[role]]);
 }
 
+/** In the Trash (SPEC §4); must agree with isTrashed in functions/src/lib/acl.ts. */
+export function isTrashed(data) {
+  const t = data?.trashed;
+  return t != null && typeof t === "object" && !Array.isArray(t);
+}
+
 /** The effective membership stored on a document or folder. A missing set is empty. */
 export function membershipOf(data) {
   return {
@@ -95,13 +101,18 @@ function expand(principals, teams) {
  * a role would otherwise write that role's people out of every derived set —
  * a silent revocation, which is the defect ADR 0006 records.
  */
-export function computeMembership(ownerEmail, grants, parent = null, teams = new Map()) {
+export function computeMembership(ownerEmail, grants, parent = null, teams = new Map(), trashed = false) {
   for (const role of ROLES) {
     if (!Array.isArray(grants?.[GRANT_LIST[role]])) {
       throw new Error(`computeMembership: grants.${GRANT_LIST[role]} is missing`);
     }
   }
   const owner = normalizeEmail(ownerEmail);
+  // In the Trash: its owner's alone, its grants kept for Restore (SPEC §4).
+  if (trashed) {
+    const alone = owner ? [owner] : [];
+    return { members: alone, suggesterMembers: [...alone], editorMembers: [...alone], approverMembers: [...alone] };
+  }
   const rung = (above, own, inherited) =>
     new Set([...above, ...expand(own, teams), ...(inherited ?? [])]);
 

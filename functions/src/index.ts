@@ -62,6 +62,7 @@ import {
 import { verifyIdToken, verifySessionCookie } from "./lib/auth";
 import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
 import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
+import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "./lib/trash";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
   canEdit,
@@ -70,11 +71,13 @@ import {
   canRead,
   canSuggest,
   earlierEnd,
-  expiredForReader,
   expiryMs,
+  frozenForReader,
+  frozenWrite,
   isDocApprover,
   isDocEditor,
   isExpired,
+  isTrashed,
   readBasis,
   tokenMatches,
   visibilityOf,
@@ -232,8 +235,6 @@ function refusal(
   return canRead(doc, caller, proof) ? 403 : 404;
 }
 
-/** The message a write path gives, which has to say how to undo it. */
-const EXPIRED_WRITE = "this document has expired — change or clear its expiry to edit it";
 
 /** Functions that may send email declare the secret; the rest never load it. */
 const MAILING = { region: REGION, secrets: [RESEND_API_KEY] };
@@ -498,7 +499,7 @@ async function readGate(
   const docSnap = await db().collection("docs").doc(docId).get();
   if (!docSnap.exists) return null;
   const docData = docSnap.data() as DocAclData;
-  if (expiredForReader(docData, caller)) return null;
+  if (frozenForReader(docData, caller)) return null;
   const proof = await linkProofFor(docSnap.ref, docData, caller, linkKey);
   // A READ path, so a folder's reach counts (ADR 0019).
   const access = await loadReadAccess(db(), docData, caller, proof);
@@ -725,11 +726,12 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
     return;
   }
-  // Expired as a reader meets it: an editor cannot read an expired document,
+  // Frozen as a reader meets it: an editor cannot read an expired document,
   // so may not store its picture; its owner still reads it, and is the only
   // one who will ever be shown the cover.
-  if (expiredForReader(data, caller)) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  const frozen = frozenForReader(data, caller) ? frozenWrite(data, Date.now()) : null;
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
   if (data.currentVersion !== versionId) {
@@ -765,7 +767,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
       return { stored: false, moved: false, stale: [], denied: d };
     }
-    if (!d || d.currentVersion !== versionId || expiredForReader(d, caller)) {
+    if (!d || d.currentVersion !== versionId || frozenForReader(d, caller)) {
       return { stored: false, moved: true, stale: [] };
     }
     const decision = nextThumb(readThumb(d.thumb), versionId, kind, key, count, THUMB_REVISION);
@@ -822,7 +824,7 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const docData = docSnap.data() as DocAclData & { slug?: string };
-  if (expiredForReader(docData, caller)) {
+  if (frozenForReader(docData, caller)) {
     res.status(404).end();
     return;
   }
@@ -984,6 +986,12 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  // Expiry does not stop this (lifting the sandbox is not an edit); the Trash
+  // does, because nothing but Restore changes a trashed document.
+  if (isTrashed(data)) {
+    res.status(409).json(frozenWrite(data, Date.now()));
+    return;
+  }
   const trusted = body?.trusted !== false;
   if (trusted && !mayLift) {
     res.status(403).json({ error: TRUST_FOR_EVERYONE_REFUSED });
@@ -1038,6 +1046,10 @@ export const setMarking = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  if (isTrashed(data)) {
+    res.status(409).json(frozenWrite(data, Date.now()));
+    return;
+  }
   await ref.set({ marking, updatedAt: now() }, { merge: true });
   await syncPublicProjection(db(), docId);
   res.status(200).json({ marking });
@@ -1118,10 +1130,12 @@ export const saveDraft = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, proof)).end();
     return;
   }
-  // Refused for the OWNER too: an expired document is frozen, and lifting the
-  // date is what unfreezes it. One action, rather than a special case here.
-  if (isExpired(data, Date.now())) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  // Refused for the OWNER too: an expired or trashed document is frozen, and
+  // lifting the date or restoring it is what thaws it. One action, rather than
+  // a special case here.
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
   if (data.currentVersion !== baseVersion) {
@@ -1211,8 +1225,9 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(docData, caller, proof)).end();
     return;
   }
-  if (isExpired(docData, Date.now())) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  const frozen = frozenWrite(docData, Date.now());
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
 
@@ -1322,10 +1337,12 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, proof)).end();
     return;
   }
-  // Refused for the OWNER too: an expired document is frozen, and lifting the
-  // date is what unfreezes it. One action, rather than a special case here.
-  if (isExpired(data, Date.now())) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  // Refused for the OWNER too: an expired or trashed document is frozen, and
+  // lifting the date or restoring it is what thaws it. One action, rather than
+  // a special case here.
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
   if (data.currentVersion !== baseVersion) {
@@ -1420,8 +1437,9 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
     return;
   }
   // Frozen for everyone, the owner included, as every other write is.
-  if (isExpired(data, Date.now())) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
   const actor = actorFrom(caller, req);
@@ -1673,8 +1691,9 @@ async function updateFromUpload(
     res.status(refusal(data, caller, proof)).end();
     return;
   }
-  if (isExpired(data, Date.now())) {
-    res.status(409).json({ error: EXPIRED_WRITE });
+  const frozen = frozenWrite(data, Date.now());
+  if (frozen) {
+    res.status(409).json(frozen);
     return;
   }
   // The version the caller revised from, when it says, as update_document
@@ -1769,11 +1788,13 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
 });
 
 /**
- * POST /organize — move, rename or delete a document or folder.
+ * POST /organize — move, rename, trash or restore a document or folder.
  *
- * Deleting a DOCUMENT is deliberately unsupported and says so, rather than
- * being a missing case. Deleting a folder is owner-only and reparents its
- * children to the folder's parent, so nothing is ever orphaned.
+ * `trash` and `restore` are the owner's alone (SPEC §4): a folder goes with
+ * everything in it, other people's documents too, and each owner restores
+ * their own. Nothing is deleted. `delete` on a folder is `trash`, the word
+ * the CLI before 0.20 sends; on a document it is refused and says to trash
+ * it, until permanent deletion exists.
  */
 export const organize = onRequest(PLAIN, async (req, res) => {
   noStore(res);
@@ -1794,9 +1815,22 @@ export const organize = onRequest(PLAIN, async (req, res) => {
   const kind = body?.kind === "doc" || body?.kind === "folder" ? body.kind : "";
   const id = typeof body?.id === "string" ? body.id : "";
   const op =
-    body?.op === "move" || body?.op === "rename" || body?.op === "delete" ? body.op : "";
+    body?.op === "move" || body?.op === "rename" || body?.op === "delete" || body?.op === "trash" || body?.op === "restore" ? body.op : "";
   if (!kind || !id || !safeSegment(id) || !op) {
     badRequest(res, "invalid kind/id/op");
+    return;
+  }
+
+  // Before the edit checks below: a trashed document is frozen, and the
+  // owner restoring it is the one write that thaws it.
+  if (op === "trash" || op === "restore" || (op === "delete" && kind === "folder")) {
+    const ctx = { db: db(), caller, actor: actorFrom(caller, req) };
+    try {
+      const result = kind === "doc"
+        ? op === "restore" ? await restoreDocument(ctx, id) : await trashDocument(ctx, id)
+        : op === "restore" ? await restoreFolder(ctx, id) : await trashFolder(ctx, id);
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) { managementFailure(error, res); }
     return;
   }
 
@@ -1820,13 +1854,14 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
 
-    if (isExpired(data, Date.now())) {
-      res.status(409).json({ error: EXPIRED_WRITE });
+    const frozen = frozenWrite(data, Date.now());
+    if (frozen) {
+      res.status(409).json(frozen);
       return;
     }
 
     if (op === "delete") {
-      badRequest(res, "deleting documents is not supported");
+      badRequest(res, "a document is not deleted: move it to the Trash with op \"trash\"");
       return;
     }
     if (op === "rename") {
@@ -1868,6 +1903,11 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
+  // A folder's delete went to the Trash above.
+  if (op !== "rename" && op !== "move") {
+    badRequest(res, "invalid kind/id/op");
+    return;
+  }
   try {
     await organizeFolder({ db: db(), caller, actor: actorFrom(caller, req) }, id, op, {
       name: body?.name, parent: body?.targetFolderId,
@@ -1973,7 +2013,7 @@ async function serveActivity(req: Request, res: import("express").Response): Pro
 
   const docRef = db().collection("docs").doc(docId);
   const data = (await docRef.get()).data();
-  if (!data || !canRead(data, caller) || expiredForReader(data, caller)) { res.status(404).end(); return; }
+  if (!data || !canRead(data, caller) || frozenForReader(data, caller)) { res.status(404).end(); return; }
   if (!isDocEditor(data, caller.uid, caller.emailLower)) { res.status(403).end(); return; }
   res.status(200).json(await activityPage(db(), docRef, data, caller, cursor));
 }
@@ -2048,7 +2088,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
   // key is a view of nothing, and answering otherwise would confirm the id.
   const k = typeof body?.k === "string" ? body.k.trim() : null;
   const proof = await linkProofFor(docRef, docData, caller, k);
-  const access = expiredForReader(docData, caller) ? null : await loadReadAccess(db(), docData, caller, proof);
+  const access = frozenForReader(docData, caller) ? null : await loadReadAccess(db(), docData, caller, proof);
   if (access === null) {
     res.status(404).end();
     return;
@@ -2211,6 +2251,12 @@ export const unlockDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const data = docSnap.data() as DocAclData & Record<string, unknown>;
+  // In the Trash: the absent id's 404 for every key and grant, and no new
+  // grant. Its owner reads it as a member, never through here (SPEC §4).
+  if (isTrashed(data)) {
+    res.status(404).end();
+    return;
+  }
   const access = await loadReadAccess(db(), data, caller, { k, grantToken: grantTokenOf(grantSnap) });
   const projection = access === null ? null : await readerProjection(docRef, data, access);
   if (!projection) {
@@ -2674,7 +2720,8 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
   const entries = snap.docs
     // An expired document is not served, so listing it would be advertising a
     // 404 to a crawler. The projection carries the date precisely so this can
-    // be decided without a second read per row.
+    // be decided without a second read per row. A trashed one has no
+    // projection at all (publicdoc.ts), so it is never in this list.
     .filter((d) => !isExpired(d.data() as DocAclData, Date.now()))
     .map((d) => {
       const at = d.data()?.publishedAt as admin.firestore.Timestamp | undefined;

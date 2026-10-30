@@ -730,6 +730,80 @@ describe("firestore rules", () => {
     }
   }
 
+  // The Trash (SPEC §4). The server collapses a trashed document's derived
+  // sets to its owner, so membership already shuts everyone else out; these
+  // are the ways in that are not membership, and the owner's own writes.
+  // Each case is run again with `trashed: null`, Restore's write, as its own
+  // negative control.
+  async function trashedFixture(suffix, extra = {}) {
+    const id = `trash-${suffix}`;
+    await seed(env, async (db) => {
+      await setDoc(doc(db, `docs/${id}`), {
+        ownerUid: OWNER.uid, ownerEmail: OWNER.email, currentVersion: "v1",
+        visibility: "private", members: [OWNER.email], editorMembers: [OWNER.email],
+        editors: [EDITOR.email], trashed: { batch: "b1", by: OWNER.uid },
+        ...extra,
+      });
+      await setDoc(doc(db, `docs/${id}/versions/v1/annotations/a1`), { ...plainAnnotation(OWNER, "a1"), createdAt: new Date(0) });
+      await setDoc(doc(db, `docs/${id}/views/s1`), { sessionId: "s1", uid: VIEWER.uid });
+    });
+    const restore = () => seed(env, (db) => updateDoc(doc(db, `docs/${id}`), { trashed: null }));
+    return { id, restore };
+  }
+
+  for (const operation of ["annotation create", "annotation update", "annotation delete", "comment create", "comment update", "comment delete"]) {
+    it(`the Trash freezes ${operation} by the owner, and Restore thaws it`, async () => {
+      const f = await feedbackFixture(OWNER, `trash-${operation.replaceAll(" ", "-")}`, undefined);
+      await seed(env, (db) => updateDoc(doc(db, `docs/${f.id}`), { trashed: { batch: "b1", by: OWNER.uid } }));
+      await assertFails(f.writes[operation]());
+      // The owner still reads it: that is how Trash shows it to them.
+      await assertSucceeds(getDoc(doc(f.db, `docs/${f.id}`)));
+      await assertSucceeds(getDoc(doc(f.db, `${f.base}/change/comments/change`)));
+      await seed(env, (db) => updateDoc(doc(db, `docs/${f.id}`), { trashed: null }));
+      await assertSucceeds(f.writes[operation]());
+    });
+  }
+
+  it("a public document in the Trash shows its feedback to no stranger, until it is restored", async () => {
+    const f = await trashedFixture("public", { visibility: "public" });
+    const stranger = verified(env, STRANGER).firestore();
+    await assertFails(getDoc(doc(stranger, `docs/${f.id}/versions/v1/annotations/a1`)));
+    await f.restore();
+    await assertSucceeds(getDoc(doc(stranger, `docs/${f.id}/versions/v1/annotations/a1`)));
+  });
+
+  it("an unlisted document in the Trash shows its feedback to no link-grant holder, until it is restored", async () => {
+    const f = await trashedFixture("unlisted", { visibility: "unlisted", linkToken: "tok-trash" });
+    await seed(env, (db) => setDoc(doc(db, `docs/${f.id}/linkGrants/${GRANTED.uid}`), { uid: GRANTED.uid, token: "tok-trash", grantedAt: new Date(0) }));
+    const granted = verified(env, GRANTED).firestore();
+    await assertFails(getDoc(doc(granted, `docs/${f.id}/versions/v1/annotations/a1`)));
+    await f.restore();
+    await assertSucceeds(getDoc(doc(granted, `docs/${f.id}/versions/v1/annotations/a1`)));
+  });
+
+  it("a direct editor of a trashed document is no editor: the reading sessions are not theirs, until it is restored", async () => {
+    const f = await trashedFixture("editor");
+    const editor = verified(env, EDITOR).firestore();
+    await assertFails(getDoc(doc(editor, `docs/${f.id}/views/s1`)));
+    await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), `docs/${f.id}/views/s1`)));
+    await f.restore();
+    await assertSucceeds(getDoc(doc(editor, `docs/${f.id}/views/s1`)));
+  });
+
+  it("the owner chooses no personal trust for a document in the Trash, until it is restored", async () => {
+    const f = await trashedFixture("trust");
+    const db = verified(env, OWNER).firestore();
+    const trust = () => setDoc(doc(db, `docs/${f.id}/trust/${OWNER.uid}`), { uid: OWNER.uid, email: OWNER.email });
+    await assertFails(trust());
+    await f.restore();
+    await assertSucceeds(trust());
+  });
+
+  it("only a map is the Trash, as the server decides it: a stray string freezes nothing", async () => {
+    const f = await trashedFixture("string", { visibility: "public", trashed: "yes" });
+    await assertSucceeds(getDoc(doc(verified(env, STRANGER).firestore(), `docs/${f.id}/versions/v1/annotations/a1`)));
+  });
+
   it("clearing expiry does not give the owner another author's edit or delete rights", async () => {
     const f = await feedbackFixture(VIEWER, "ownership", null);
     const db = verified(env, OWNER).firestore();

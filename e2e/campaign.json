@@ -12157,7 +12157,7 @@
         "id": "X-a02-matrix-http-Q1",
         "ref": "A2.E-exp",
         "claim": "A SPEC question, not tagged as a defect: an editor of an expired document gets 403 from the owner-only endpoints (c15), although they may no longer read it, so a literal reading of \u00a71.4b says 404.",
-        "mechanism": "functions/src/index.ts:216-222: refusal() decides by canRead, and canRead ignores expiry by design (acl.ts expiredForReader is applied only on read paths).",
+        "mechanism": "functions/src/index.ts:216-222: refusal() decides by canRead, and canRead ignores expiry by design (acl.ts frozenForReader is applied only on read paths).",
         "violates": "Unclear. \u00a71.4b read literally says 404, but \u00a717 keeps the row, its title and its comments visible to members, so the 403 leaks nothing they do not see already. The cell is pinned at the source's 403 until someone decides.",
         "evidence": "A2.E-exp passes with c15a/v/t/m = 403 in every run (this pass: 2610120023-zk88 invocations 20261012T072452Z-p74214-oyma, 20261012T072733Z-p81416-7kyc, 20261012T072843Z-p84490-9e5i); the cell log is kept by the first pass's E2E_EVIDENCE=always run, 2610102145-0a2t/invocations/20261011T050221Z-p91670-po5r/evidence/a2-e-the-editor-of-an-expired-document-reads-404-as-for-an-absent-id-edits-409-o/",
         "repro_runs": 11,

@@ -51,6 +51,8 @@ export type EventType =
   | "doc.moved"
   | "doc.visibility"
   | "doc.trust"
+  | "doc.trashed"
+  | "doc.restored"
   | "access.changed"
   | "fork.created";
 

@@ -89,14 +89,26 @@ service cloud.firestore {
     function canRead(docId, d) {
       return isMember(d)
         || (isVerifiedUser()
+            && !isTrashed(d)
             && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d)));
     }
 
-    // Expiry freezes every feedback mutation, including the owner's. Keep
-    // this separate from canRead: workspace queries and existing feedback
-    // remain readable under their normal membership policy (SPEC §17).
+    // In the Trash (SPEC §4). Its derived sets hold its owner alone, so
+    // membership already shuts everyone else out; this closes the ways in
+    // that are not membership (public, a link grant) and the direct grant
+    // lists, which are kept on the record for Restore. Restore writes null.
+    // Mirrors functions/src/lib/acl.ts isTrashed().
+    function isTrashed(d) {
+      return d.get('trashed', null) is map;
+    }
+
+    // Expiry and the Trash freeze every feedback mutation, including the
+    // owner's. Keep this separate from canRead: workspace queries and existing
+    // feedback remain readable under their normal membership policy (SPEC §4,
+    // §17).
     function feedbackWritable(d) {
-      return d.get('expiresAt', null) == null || d.expiresAt > request.time;
+      return !isTrashed(d)
+        && (d.get('expiresAt', null) == null || d.expiresAt > request.time);
     }
 
     // The real editor set: owner, direct editors, or effective/inherited
@@ -108,9 +120,10 @@ service cloud.firestore {
       return isVerifiedUser()
         && (request.auth.uid == d.ownerUid
             || myEmail() == d.ownerEmail
-            || (d.editors is list && myEmail() in d.editors)
-            || (d.approvers is list && myEmail() in d.approvers)
-            || (d.editorMembers is list && myEmail() in d.editorMembers));
+            || (!isTrashed(d)
+                && ((d.editors is list && myEmail() in d.editors)
+                    || (d.approvers is list && myEmail() in d.approvers)
+                    || (d.editorMembers is list && myEmail() in d.editorMembers))));
     }
 
     // `publicEdit` widens WHO MAY EDIT to "any verified account" among those
@@ -182,6 +195,7 @@ service cloud.firestore {
       match /trust/{uid} {
         allow read: if isVerifiedUser() && request.auth.uid == uid;
         allow create, update: if canRead(docId, docData(docId))
+          && !isTrashed(docData(docId))
           && request.auth.uid == uid
           && request.resource.data.uid == uid
           && request.resource.data.email == myEmail();

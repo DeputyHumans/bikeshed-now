@@ -11,7 +11,8 @@
 import * as admin from "firebase-admin";
 import {
   folderAccess,
-  isExpired,
+  isFrozen,
+  isTrashed,
   latestEnd,
   openedReach,
   readAccess,
@@ -102,8 +103,9 @@ function millis(v: unknown): number | null {
  * Null — one identical refusal — for an absent folder, a private one, a wrong
  * key and a rotated one. A key that matched, or a public level, whose date has
  * passed is told so, as a reader of an expired document is (SPEC §17).
- * Documents whose own expiry has passed are left out: they are their owner's
- * alone, and a stranger is not shown that they exist.
+ * Documents whose own expiry has passed, and anything in the Trash, are left
+ * out: they are their owner's alone, and a stranger is not shown that they
+ * exist.
  */
 export async function listReach(
   db: Db,
@@ -116,6 +118,9 @@ export async function listReach(
   const snap = await ref.get();
   if (!snap.exists) return null;
   const folder = snap.data() as FolderAclData & Record<string, unknown>;
+  // A trashed folder has no reach once the cascade has rewritten it
+  // (computeReach); this refuses it in the moment before that lands.
+  if (isTrashed(folder)) return null;
   const name = str(folder.name, "Untitled folder");
 
   const access = folderAccess(folder, k, nowMs);
@@ -144,14 +149,14 @@ export async function listReach(
     db.collection("folders").where("parentId", "==", folderId).limit(REACH_LIST_CAP + 1).get(),
     db.collection("docs").where("folderId", "==", folderId).limit(REACH_LIST_CAP + 1).get(),
   ]);
-  const folders = childSnaps.docs.slice(0, REACH_LIST_CAP).map((s) => ({
+  const folders = childSnaps.docs.slice(0, REACH_LIST_CAP).filter((s) => !isTrashed(s.data())).map((s) => ({
     folderId: s.id,
     name: str(s.data()?.name, "Untitled folder"),
   }));
   const documents: ReachedDocument[] = [];
   for (const s of docSnaps.docs.slice(0, REACH_LIST_CAP)) {
     const d = s.data() || {};
-    if (isExpired(d as DocAclData, nowMs)) continue;
+    if (isFrozen(d as DocAclData, nowMs)) continue;
     const thumb = readThumb(d.thumb);
     const summary = summaryOf(d);
     documents.push({

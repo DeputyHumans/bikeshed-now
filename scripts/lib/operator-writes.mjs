@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import mime from 'mime';
-import { GRANT_LIST, computeMembership, grantLists, grantsOf, loadFolderMembership, loadTeamIndex } from './membership.mjs';
+import { GRANT_LIST, computeMembership, grantLists, grantsOf, isTrashed, loadFolderMembership, loadTeamIndex } from './membership.mjs';
 import { FieldValue, getRtdb } from './firebase.mjs';
 import { syncPresenceAccess } from './presence.mjs';
 import { withdrawalPrefix } from './withdraw-version.mjs';
@@ -18,7 +18,9 @@ async function effective(db, tx, current, grants, ownerEmail) {
   const reads = reader(db, tx);
   const parent = await loadFolderMembership(reads, current.folderId ?? null);
   const teams = await loadTeamIndex(reads, ...grantLists(grants));
-  return computeMembership(ownerEmail, grants, parent, teams);
+  // A trashed document stays its owner's alone whatever an operator grants:
+  // the grants are stored for Restore and count for nothing until then.
+  return computeMembership(ownerEmail, grants, parent, teams, isTrashed(current));
 }
 
 /** Apply one CLI delta to the current record; a read-only --list writes nothing. */

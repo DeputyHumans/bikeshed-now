@@ -134,8 +134,7 @@ considerably more than a name.
 document at a suffixed one, so the publisher learns the id exists, even when it
 belongs to a private document they cannot read. This is accepted, not missed.
 Refusing instead would make the check free and silent. As it is, every check
-creates a document in the checker's own workspace, attributed to them, which
-cannot be deleted. The suffix is random, so it does not say how many documents
+creates a document in the checker's own workspace, attributed to them; it can go to their Trash, and a trashed document keeps its id, so a check cannot be made and quietly taken back. The suffix is random, so it does not say how many documents
 share the name (SPEC §4). `publish_document`'s `idTaken` says the same thing in
 so many words; it tells the caller nothing that comparing ids did not.
 
@@ -151,7 +150,7 @@ public" would hand the world `members`, `viewers`, `ownerEmail` and `stats`.
 
 **Mitigation.** A separate world-readable `public/{docId}` projection carrying
 only render fields, of public documents only, written by the same server paths
-that recompute `members` and deleted the instant a document stops being public. The `docs/{docId}` rule
+that recompute `members` and deleted the instant a document stops being public or goes to the Trash (SPEC §4). The `docs/{docId}` rule
 is untouched. Everything else under `docs/**` still requires an account, even on
 a public document — publishing a document must not publish the people who
 reviewed it.

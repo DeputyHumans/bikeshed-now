@@ -14,6 +14,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- Deleting a folder moves it to the Trash with everything in it, other people's documents included, instead of moving its contents up a level. `delete_folder` and the CLI's `delete-folder` do the same. Nothing is deleted. ([ADR 0024](docs/architecture/adr/0024-deletion-goes-through-a-trash.md))
+
+### Added
+
+- The Trash. A document's owner moves it there, and a folder's owner moves a folder there with everything in it. In the Trash an item is its owner's alone and read-only: its link, a folder's link, its public page, open editing and every grant stop working, and it cannot be shared, renamed or moved. Restore gives every grant back and puts it where it was, or at its owner's root if that folder is gone. Each owner restores their own documents from someone else's trashed folder. `POST /organize` takes `trash` and `restore` for both kinds. Nothing is deleted yet; permanent deletion comes in a later release.
+
 ## 0.28.0 — 2026-10-29
 
 ### Changed

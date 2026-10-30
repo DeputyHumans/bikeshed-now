@@ -1,6 +1,6 @@
 # 0017 — Agents manage access with their person's permissions
 
-**Status** Accepted · **Spec** §13, §17, §19, §23
+**Status** Accepted · Amended by [0024](0024-deletion-goes-through-a-trash.md): deleting a folder moves it to the Trash with its contents, and documents can be trashed and restored · **Spec** §13, §17, §19, §23
 
 ## Context
 

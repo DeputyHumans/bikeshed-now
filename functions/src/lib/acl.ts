@@ -31,6 +31,8 @@ export interface DocAclData {
   linkToken?: unknown;
   /** The folder it is filed in, whose reach may open it to a stranger (SPEC §13). */
   folderId?: unknown;
+  /** Set while it is in the Trash (SPEC §4): `{ at, by, batch, with? }`. */
+  trashed?: unknown;
 }
 
 function includesEmail(list: unknown, emailLower: string): boolean {
@@ -81,28 +83,69 @@ export function isExpired(
 }
 
 /**
- * An expired document is READ-ONLY, and visible only to its owner.
+ * Is it in the Trash? (SPEC §4)
  *
- * One sentence, enforced at every read and write path (SPEC §17 "Expiry"),
- * because expiry is not in the Firestore rules (see `isExpired`).
- * The owner keeps reading it because they are the one who set the date and the
- * one who can move it; locking them out of their own document would make the
- * setting unrecoverable rather than reversible. Everybody else gets the same
- * 404 a document they may not read gives them, so expiry does not become a way
- * to confirm that a slug exists.
- *
- * Writing is refused for EVERYONE, the owner included. An expired document is
- * frozen; lifting the date is what unfreezes it, and that is one action rather
- * than a special case in every write path. The single exception asks this
- * question instead of `isExpired`: `saveThumbs`, because a stored cover is not
- * the document, and the owner is the one reader it has left (SPEC §17).
+ * Unlike expiry, the Trash IS in the membership: a trashed document's members
+ * are its owner alone (`computeMembership`), so the rules refuse everyone else
+ * the record itself. This predicate is for every way in that is not a
+ * membership: a link, a link grant, a folder's reach, open editing, the public
+ * mirror and the Admin SDK's own reads.
  */
-export function expiredForReader(
+export function isTrashed(doc: { trashed?: unknown } | null | undefined): boolean {
+  // A map and nothing else, as the rules test it (`is map`): Restore writes
+  // null, and the server never writes anything but those two.
+  const t = doc?.trashed;
+  return t != null && typeof t === "object" && !Array.isArray(t);
+}
+
+/**
+ * Expired or in the Trash: FROZEN, read-only and visible only to its owner.
+ *
+ * One sentence, enforced at every read and write path (SPEC §4 "Trash", §17
+ * "Expiry"), because expiry is not in the rules at all (see `isExpired`), and
+ * the Trash is in them only through membership, which a link, a link grant
+ * and a folder's reach all bypass (see `isTrashed`).
+ * The owner keeps reading it because they are the one who froze it and the
+ * one who can thaw it; locking them out of their own document would make it
+ * unrecoverable rather than reversible. Everybody else gets the same 404 a
+ * document they may not read gives them, so neither state becomes a way to
+ * confirm that a slug exists.
+ *
+ * Writing is refused for EVERYONE, the owner included. Thawing is one action
+ * rather than a special case in every write path: lifting the date for an
+ * expiry, Restore for the Trash. The single exception asks `frozenForReader`
+ * instead of `isFrozen`: `saveThumbs`, because a stored cover is not the
+ * document, and the owner is the one reader it has left (SPEC §17).
+ */
+export function isFrozen(doc: DocAclData | null | undefined, nowMs: number): boolean {
+  return isTrashed(doc) || isExpired(doc, nowMs);
+}
+
+/** Frozen (`isFrozen`), and the caller is not the owner who may still read it. */
+export function frozenForReader(
   doc: DocAclData,
   caller: { uid: string; emailLower: string } | null,
 ): boolean {
-  if (!isExpired(doc, Date.now())) return false;
+  if (!isFrozen(doc, Date.now())) return false;
   return !(caller && canManageSharing(doc, caller.emailLower));
+}
+
+/** What a write path says to a frozen document, which has to say how to undo it. */
+export const EXPIRED_WRITE = "this document has expired — change or clear its expiry to edit it";
+export const TRASHED_WRITE = "this document is in the Trash — restore it to edit it";
+
+/**
+ * The 409 body a write path answers a frozen document with, or null. The
+ * Trash is named first: restoring an expired document leaves it expired, and
+ * the message says the first thing to do.
+ */
+export function frozenWrite(
+  doc: DocAclData | null | undefined,
+  nowMs: number,
+): { trashed: true; error: string } | { expired: true; error: string } | null {
+  if (isTrashed(doc)) return { trashed: true, error: TRASHED_WRITE };
+  if (isExpired(doc, nowMs)) return { expired: true, error: EXPIRED_WRITE };
+  return null;
 }
 
 /** Absent `visibility` means private. That is what keeps the default unchanged. */
@@ -184,6 +227,8 @@ export function readBasis(
 ): ReadBasis | null {
   if (!doc) return null;
   if (caller && isMember(doc, caller.uid, caller.emailLower)) return "member";
+  // In the Trash, membership (its owner alone) is the only way in (SPEC §4).
+  if (isTrashed(doc)) return null;
   const visibility = visibilityOf(doc);
   if (visibility === "public") return "public";
   if (visibility !== "unlisted") return null;
@@ -254,6 +299,9 @@ export function isDocEditor(
   ) {
     return true;
   }
+  // The direct lists are kept on a trashed record for Restore, and count for
+  // nothing until then; the derived sets already hold its owner alone.
+  if (isTrashed(doc)) return false;
   if (includesEmail(doc.editors, emailLower)) return true;
   // An approver edits: accepting a suggestion is replayed as an edit in their
   // own session (SPEC §13). `editorMembers` already holds them; the direct list
@@ -282,6 +330,7 @@ export function isDocApprover(
   ) {
     return true;
   }
+  if (isTrashed(doc)) return false;
   if (includesEmail(doc.approvers, emailLower)) return true;
   return includesEmail(doc.approverMembers, emailLower);
 }
@@ -298,6 +347,7 @@ export function canSuggest(
   proof: LinkProof = NO_PROOF,
 ): boolean {
   if (!doc || !caller) return false;
+  if (isTrashed(doc)) return canEdit(doc, caller, proof);
   if (includesEmail(doc.suggesters, caller.emailLower)) return true;
   if (includesEmail(doc.suggesterMembers, caller.emailLower)) return true;
   return canEdit(doc, caller, proof);
@@ -335,7 +385,7 @@ export function canEdit(
 export function opensEditingToAnyAccount(
   doc: DocAclData | undefined | null,
 ): boolean {
-  return doc?.publicEdit === true && visibilityOf(doc) === "public";
+  return doc?.publicEdit === true && visibilityOf(doc) === "public" && !isTrashed(doc);
 }
 
 // --- Folders ---------------------------------------------------------------
@@ -352,6 +402,8 @@ export interface FolderAclData {
   linkToken?: unknown;
   /** Its own reach and every ancestor's, root first (`ReachEntry`). */
   reach?: unknown;
+  /** Set while it is in the Trash (SPEC §4), as on a document. */
+  trashed?: unknown;
 }
 
 export function canReadFolder(

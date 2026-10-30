@@ -749,6 +749,12 @@ tell the caller anyway. Ids minted
 before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes
 `title` and `slug`, never the docId.
 
+**The Trash** ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md)). `trashed` is set on a document or a folder while it is in the Trash: `{ at, by, batch, with? }`. `by` is a uid, never an address: only a document's owner trashes it and only a folder's owner trashes a folder, so "by you" or "with the folder, by its owner" says all there is. `batch` is shared by everything trashed together. `with: { folderId, name }` names the folder an item went with, as it was named then, because its owner may not be able to read that folder in the Trash; it is absent on the item that was trashed itself. Restore writes `null`. Only a map is the Trash (`lib/acl.ts isTrashed`, the rules' `isTrashed(d)`).
+
+While it is set, the item is its owner's alone and frozen. `computeMembership` gives every derived set the owner alone, in both twins, so no recompute (a folder cascade, a team change, an account move, an operator's grant) can hand it back, while its grants stay on the record for Restore. A link, a link grant, a folder's link, open editing and the public mirror stop working (`readBasis`, `computeReach`, `syncPublicProjection`), and the direct grant lists count for nothing in `isDocEditor`, `isDocApprover` and `canSuggest`, here and in the rules. Every read path refuses it to anyone but its owner, and every write path to everyone, by the same `isFrozen` that expiry uses (§17); a write answers `409 { trashed: true, error: "this document is in the Trash — restore it to edit it" }`, which names the Trash before an expiry. Sharing, visibility, trust, marking, rename and move are refused too (a trashed folder answers "this folder is in the Trash — restore it first"), and nothing can be filed into a trashed folder. The rules refuse feedback and personal trust on it, the owner's included.
+
+Its `folderId` or `parentId` stays as it was, which is where Restore puts it back while that folder exists and is not in the Trash itself, otherwise at its owner's root. Only the owner trashes or restores a document. A folder's owner trashes or restores a folder, which takes everything beneath it, other people's documents included, and each of those owners can restore their own, at their own root; the folder's owner cannot see or restore someone else's. Restoring a folder brings back what has its batch, not what went to the Trash separately before or came back since. Each document records `doc.trashed` and `doc.restored` in its log (§19). Nothing is deleted (`lib/trash.ts`).
+
 ---
 
 ## 5. Doc list query
@@ -761,7 +767,7 @@ query(collection(db, "docs"),
 
 One query suffices because the owner, inherited folder grants and expanded team
 grants are all already in `members`. The composite index is declared in
-`firestore.indexes.json`.
+`firestore.indexes.json`. A document in the Trash stays in its owner's results, whose `members` it still names, and leaves everyone else's; the workspace shows it under Trash, not in its folder (§4 "The Trash").
 
 The matching `list` rule must be **statically provable from the query
 constraints** — rules are not filters. That forbids a transformed expression
@@ -1257,7 +1263,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
+  lib/{auth,acl,access,management,trash,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
@@ -1277,9 +1283,16 @@ functions/src/
   tested on both sides. `tokenMatches` is the only place a link token is
   compared, and a wiring test holds it there; `keyMatchesHash` is the only
   place a folder's key is, against the hash its `reach` stores. `readAccess`
-  adds a folder's reach to `readBasis`, for read paths only (§17).
+  adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen`
+  is expired or in the Trash, the one question every read and write path asks
+  (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for
+  the 409 a write answers, which names the Trash before the expiry), and
+  `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash").
+- `lib/trash.ts` — moving a document or a folder to the Trash and back: who
+  may, the batch a folder shares with everything it takes, and where Restore
+  puts each item (§4 "The Trash").
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
-- `lib/writeAuthority.ts` — transaction-local expiry and edit permission, including
+- `lib/writeAuthority.ts` — transaction-local expiry, the Trash and edit permission, including
   a current link grant read, before uploaded content becomes the selected draft or version (§17).
 
 - `lib/accountmove.ts` — believing Google's word for an account's new address,
@@ -1610,8 +1623,7 @@ UNCHANGED.
 `expiresAt` and `reach` (§17 "A folder's reach"). Folder writes are Admin-SDK
 only.
 
-Folder delete is **owner-only** and reparents children to the folder's parent —
-never orphans. Document delete is unsupported, deliberately and explicitly.
+Deleting a folder is **owner-only** and moves it to the Trash with everything beneath it (§4 "The Trash"); nothing is orphaned, because nothing is removed. A document's owner moves it to the Trash the same way.
 
 **Filing is sharing, and it is silent.** A document filed into a folder is
 readable by everyone in the folder's `members`, and nobody is emailed:
@@ -2204,7 +2216,7 @@ separately compare the mirrored expiry to the database server's `now`: after tha
 peer presence and the shared draft, and no account can write the shared draft.
 Clearing or changing expiry refreshes these maps; no timer or cron is needed.
 
-HTTP and MCP enforce expiry using `isExpired` in `lib/acl.ts`:
+HTTP and MCP enforce expiry using `isFrozen` in `lib/acl.ts`, which is expiry or the Trash (§4 "The Trash"), so every path below refuses a trashed document the same way:
 `contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
 `saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
 and `docShell`, document rename/move in `organize`, plus the MCP tools. Content
@@ -2709,7 +2721,7 @@ reassess the request; never silently redirect a historical request to it.
 | `set_folder_visibility` | owner-only sparse patch of a folder's visibility and expiresAt, which open everything beneath it to read (§17 "A folder's reach"); recomputes the subtree; no open editing |
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
-| `delete_folder` | owner-only; reparent contents to the parent/root and recompute access; retain documents |
+| `delete_folder` | owner-only; move the folder to the Trash with everything beneath it, other people's documents included (§4 "The Trash"); deletes nothing |
 | `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs; each with its `origin` and whether it was `automated`, and for a member `publishedBy`, `channel` and `via` (§17), which a link holder is not told |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
@@ -2882,10 +2894,7 @@ does not override inheritance. Newly effective readers receive invitations;
 repeating a grant or changing only its role does not send another invitation.
 
 Folder rename/move require edit rights, and moving requires destination rights.
-Deletion is owner-only, reparents immediate contents, and returns
-`{id, deleted, parent, reparented: {folders, documents}}`. Folder moves/deletion
-send no invitations. Documents cannot be deleted; team administration and script
-trust remain outside this surface. HTTP and MCP call the same implementation.
+Deleting a folder is owner-only and moves it to the Trash with everything beneath it, returning `{id, batch, folders, documents}`: how many went. Folder moves and the Trash send no invitations. Nothing is deleted permanently through this surface, and team administration and script trust remain outside it. HTTP and MCP call the same implementation.
 
 **An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a
 reader sees it — no markup — and finds it in the current version's RENDERED

@@ -141,12 +141,7 @@ a written argument in a pull request, not a dependency.
 - **No admin console.** The CLIs are the admin surface, and they are auditable.
 - **No rate limiter.** CDN caching is the cost defence for public documents;
   App Check is the named hook if abuse appears.
-- **No document deletion.** Versions can be withdrawn through a guarded CLI with
-  seven refusals. A document itself is not deletable through any path, which is
-  a product decision about a review tool, stated explicitly rather than left as
-  a missing button. A document's optional **expiry** is therefore not a deletion
-  date either: it ends access to the content and nothing else, and clearing it
-  restores everything (SPEC §17).
+- **No deletion that cannot be undone, yet.** Deleting moves a document, or a folder with everything in it, to the owner's Trash, where it is theirs alone and frozen until they restore it; nothing is removed ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md), SPEC §4). Permanent deletion is the next release's: after 30 days, or earlier with a code emailed to the account, never by an agent. A single version can still be withdrawn through a guarded CLI. A document's optional **expiry** is not a deletion date either: it ends access to the content and nothing else, and clearing it restores everything (SPEC §17).
 - **No scheduler, no cron.** Expiry is enforced when a document is READ rather
   than by a job that runs at the appointed minute, which is what lets it exist
   at all without a queue. The visible cost is that the world-readable projection
@@ -159,9 +154,9 @@ a written argument in a pull request, not a dependency.
   records why that changed and what it cost.
 - **Agent management uses the person's role.** Owners can manage document and
   folder grants, visibility and expiry. Folder editors can rename and move;
-  owners can delete folders, retaining and reparenting their contents.
-  Documents remain permanent. Shared HTTP/MCP handlers enforce these gates
-  ([ADR 0017](adr/0017-agent-management-with-owner-permissions.md)).
+  owners can move documents and folders to the Trash and restore them, and no
+  agent can delete anything permanently. Shared HTTP/MCP handlers enforce these
+  gates ([ADR 0017](adr/0017-agent-management-with-owner-permissions.md), [ADR 0024](adr/0024-deletion-goes-through-a-trash.md)).
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are
   not.

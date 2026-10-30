@@ -2,7 +2,7 @@
 // The world-readable projection of a public document, and what a reader is told (SPEC §17).
 
 import * as admin from "firebase-admin";
-import { earlierEnd, expiryMs, folderAccess, visibilityOf, type DocAclData, type ReadAccess } from "./acl";
+import { earlierEnd, expiryMs, folderAccess, isTrashed, visibilityOf, type DocAclData, type ReadAccess } from "./acl";
 import { summaryOf } from "./latest";
 import { folderOfDoc } from "./reach";
 import { resolveMarking, type Marking } from "./marking";
@@ -268,7 +268,8 @@ export async function syncPublicProjection(db: Db, docId: string): Promise<void>
     const data = snap.data() || {};
     const reach = visibilityOf(data as DocAclData) === "public" ? null
       : reachOfAccess(folderAccess(await folderOfDoc(db, data as DocAclData, tx), null, Date.now()));
-    const projection = snap.exists && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
+    // A trashed document has no public row: its owner's alone (SPEC §4).
+    const projection = snap.exists && !isTrashed(data) && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
       ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx), reach)
       : null;
     if (projection) tx.set(publicRef, projection);

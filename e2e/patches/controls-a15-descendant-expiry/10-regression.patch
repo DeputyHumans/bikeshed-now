@@ -4,7 +4,7 @@
        if (!snap.exists) continue;
        const data = snap.data() as Stored;
        const proof = await linkProofFor(snap.ref, data, caller, null);
--      if (expiredForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
+-      if (frozenForReader(data, caller) || (await loadReadAccess(db, data, caller, proof)) === null) continue;
 +      if ((await loadReadAccess(db, data, caller, proof)) === null) continue;
        const listing: ForkListing = {
          docId: snap.id,

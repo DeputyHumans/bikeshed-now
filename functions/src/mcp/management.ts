@@ -3,6 +3,7 @@
 
 import type { ToolDefinition } from "./tools";
 import { getAccess, setAccess, setFolderVisibility, setVisibility, organizeFolder } from "../lib/management";
+import { trashFolder } from "../lib/trash";
 import { ROLES } from "../lib/access";
 
 const id = { type: "string", description: "The document or folder id." };
@@ -71,8 +72,8 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "delete_folder",
-    description: "Owner-only: delete a folder, reparenting its immediate contents to its parent (or the root). Documents are retained. Recomputes inherited access; sends no invitations. Returns the destination and counts of reparented folders and documents.",
+    description: "Owner-only: move a folder to the Trash with everything in it, other people's documents included. Nothing is deleted: it and its contents become their owners' alone and read-only until restored, and each owner can restore their own with restore_from_trash. Returns the batch and how many folders and documents went.",
     inputSchema: { type: "object", required: ["id"], properties: { id } },
-    run: (ctx, args) => organizeFolder(ctx, value(args, "id"), "delete"),
+    run: (ctx, args) => trashFolder(ctx, value(args, "id")),
   },
 ];
