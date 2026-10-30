@@ -1,10 +1,10 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -323,6 +323,5 @@
+@@ -326,6 +326,5 @@
    // A public folder's reader is told "public" and still shares nothing live:
    // the realtime `*` key is the document's own level's alone.
 -  const shareLive =
 -    signedIn && !throughFolder && (Boolean(doc.meta) || doc.publicDoc?.visibility === "public");
 +  const shareLive = signedIn;
    const remoteChanged = useRef<(() => void) | null>(null);
-   const shared = useSharedDocument({
+   // Where the frame delivers no `input` (viewer/frameWatch.ts), the shared

@@ -72,8 +72,8 @@ import { eventually } from "../../lib/assert.mjs";
 import { authorizeParams, pkce, register, startReceiver } from "../../lib/oauth.mjs";
 import { frameGeometry, framePointToPage, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
 
-// Shared option objects are opaque to the static budget scanner; cover all 22 case budgets.
-const E2E_FILE_TIMEOUT_MS = 90 * 60_000;
+// Shared option objects are opaque to the static budget scanner; cover all 24 case budgets.
+const E2E_FILE_TIMEOUT_MS = 91 * 60_000;
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
