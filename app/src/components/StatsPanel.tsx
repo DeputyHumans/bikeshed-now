@@ -166,7 +166,7 @@ export function StatsPanel({
         </div>
         <div className="stat-tile">
           <div className="stat-value">{formatDuration(stats?.totalMs)}</div>
-          <div className="stat-label">time reading</div>
+          <div className="stat-label">time spent reading</div>
         </div>
         <div className="stat-tile">
           <div className="stat-value">{stats?.commits ?? 0}</div>

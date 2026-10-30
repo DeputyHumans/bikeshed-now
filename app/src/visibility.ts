@@ -145,7 +145,10 @@ export interface SharedFolder {
     docId: string;
     title: string;
     currentVersion: string;
+    /** When its current version was published. */
     updatedAt: number | null;
+    /** Its current version's word count, for its reading time; null until counted. */
+    words?: number | null;
     cover: { versionId: string; key: string } | null;
   }[];
   /** There were more than the server lists in one answer. */

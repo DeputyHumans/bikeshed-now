@@ -28,6 +28,7 @@ vi.mock("../auth", () => ({
 }));
 vi.mock("../firestore", () => ({
   formatRelative: () => "just now",
+  formatTimestamp: () => "29 Oct 2026, 12:00",
   listMyDocs: (_email: string, onData: (docs: DocMeta[]) => void) => {
     listeners.docs = onData;
     return () => {};
@@ -424,6 +425,28 @@ describe("the open folder's own actions", () => {
     act(() => listeners.docs?.([]));
     act(() => listeners.folders?.([folderMeta()]));
     expect(screen.queryByRole("button", { name: "Folder actions" })).toBeNull();
+  });
+});
+
+describe("each card's length and last update", () => {
+  it("says how long it is, when its content last changed, and what changed it when that was not a person", () => {
+    mount();
+    act(() =>
+      listeners.docs?.([
+        docMeta({ docId: "by-cli", title: "By the CLI", latest: { version: "v3", at: null, byEmail: "ana@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 2380 } } as Partial<DocMeta>),
+        docMeta({ docId: "by-hand", title: "By hand", latest: { version: "v1", at: null, byEmail: "ana@example.com", channel: "web", origin: "edit", words: 40 } } as Partial<DocMeta>),
+        docMeta({ docId: "older", title: "Not summarized yet" }),
+      ]),
+    );
+    act(() => listeners.folders?.([]));
+    const card = (title: string) => screen.getByText(title).closest(".doc-card") as HTMLElement;
+    expect(card("By the CLI").querySelector(".doc-card-meta")?.textContent).toContain("10 min read");
+    expect(card("By the CLI").querySelector(".badge-automated")?.textContent).toBe("via CLI on mbp");
+    expect(card("By hand").querySelector(".doc-card-meta")?.textContent).toContain("1 min read");
+    expect(card("By hand").querySelector(".badge-automated")).toBeNull();
+    const older = card("Not summarized yet").querySelector(".doc-card-meta")?.textContent ?? "";
+    expect(older).toContain("Updated just now");
+    expect(older).not.toContain("min read");
   });
 });
 

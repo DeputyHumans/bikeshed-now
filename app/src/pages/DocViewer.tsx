@@ -62,6 +62,8 @@ import { SharePanel } from "../components/SharePanel";
 import { TrustDialog } from "../components/TrustDialog";
 import { MarkingDialog } from "../components/MarkingDialog";
 import { StatsPanel } from "../components/StatsPanel";
+import { DetailsPanel } from "../components/DetailsPanel";
+import { readingMinutes } from "../readingTime";
 import { ForksPanel } from "../components/ForksPanel";
 import { ImageExportDialog } from "../components/ImageExportDialog";
 import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
@@ -118,6 +120,7 @@ type Dialog =
   | "trust"
   | "marking"
   | "stats"
+  | "details"
   | "forks"
   | "image"
   | "upload-version";
@@ -284,6 +287,14 @@ export function DocViewer() {
           };
         })()
       : null;
+  // How long the version on screen is, for the chip: counted on the version
+  // itself, else in the document's summary of its current version, else in the
+  // mirror a reader without the record reads. Undefined until counted.
+  const shownWords =
+    doc.version?.words ??
+    (doc.currentVersion === doc.meta?.latest?.version ? doc.meta?.latest?.words : undefined) ??
+    doc.publicDoc?.words ??
+    undefined;
 
   // A form for a frame that has since reloaded, or gone into edit mode,
   // quotes a document that is no longer the one on screen.
@@ -879,6 +890,9 @@ export function DocViewer() {
     );
 
     entries.push({ id: "h-doc", label: "This document", heading: true });
+    // For every reader: how long it is and when it was updated is anyone's to
+    // know; who did it and every version is a member's (DetailsPanel).
+    entries.push({ id: "details", label: "Details…", onSelect: () => setDialog("details") });
     // For every reader, owner and anonymous alike — a reader who is not signed
     // in is sent to sign in and comes back to the fork (SPEC §21).
     entries.push({
@@ -1008,7 +1022,8 @@ export function DocViewer() {
           title={doc.title}
           folderId={doc.meta?.folderId ?? null}
           folders={folders}
-          versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : doc.currentVersion}
+          versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : `${doc.currentVersion}${shownWords === undefined ? "" : ` · ${readingMinutes(shownWords)} min`}`}
+          onDetails={() => setDialog("details")}
           // The member record, or the projection: a reader of a public document
           // who is not a member is told too, which is what the projection
           // carries the date for (SPEC §17).
@@ -1264,6 +1279,21 @@ export function DocViewer() {
           current={doc.meta.marking ?? MARKING_OFF}
           onClose={() => setDialog(null)}
           onChanged={() => {}}
+        />
+      ) : null}
+
+      {dialog === "details" ? (
+        <DetailsPanel
+          title={doc.title}
+          docId={docId}
+          linkKey={linkKey || undefined}
+          meta={doc.meta}
+          publicDoc={doc.publicDoc}
+          versions={doc.versions}
+          viewing={doc.currentVersion}
+          slides={deck.slides.length}
+          showDraft={isDocEditor}
+          onClose={() => setDialog(null)}
         />
       ) : null}
 

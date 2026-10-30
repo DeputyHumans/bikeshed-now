@@ -7,11 +7,14 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import {
   formatRelative,
+  formatTimestamp,
   listMyDocs,
   listMyFolders,
   listMyTeams,
   watchUser,
 } from "../firestore";
+import { viaOf } from "../provenance";
+import { readingTime } from "../readingTime";
 import { createFolder, deleteFolder, renameItem } from "../folders";
 import { forkDoc } from "../forks";
 import {
@@ -161,9 +164,34 @@ function DocCard({
             <Icon name="fork" size={12} /> {doc.stats.forks}
           </span>
         ) : null}
-        <span className="doc-card-stat">{formatRelative(doc.updatedAt)}</span>
+        <UpdatedLine doc={doc} />
       </div>
     </div>
+  );
+}
+
+/**
+ * How long it is, when its content last changed, and what changed it when
+ * that was not a person in the browser. "Updated" is the current version's
+ * publish (`latest`), which a rename, a share or a folder move does not move;
+ * a document not summarized yet falls back to the record's own time.
+ */
+function UpdatedLine({ doc }: { doc: DocMeta }) {
+  const latest = doc.latest;
+  const reading = readingTime(latest?.words);
+  const via = viaOf(latest);
+  return (
+    <>
+      {reading ? <span className="doc-card-stat">{reading}</span> : null}
+      <span className="doc-card-stat" title={latest?.at ? formatTimestamp(latest.at) : undefined}>
+        Updated {formatRelative(latest?.at ?? doc.updatedAt)}
+      </span>
+      {via ? (
+        <span className="badge-automated" title={`Published through ${via}, not by a person in the browser`}>
+          via {via}
+        </span>
+      ) : null}
+    </>
   );
 }
 

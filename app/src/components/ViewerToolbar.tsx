@@ -59,6 +59,7 @@ export function ViewerToolbar({
   folderId,
   folders,
   versionLabel,
+  onDetails,
   expiresAt,
   expiryOf = "document",
   onExpiry,
@@ -96,6 +97,8 @@ export function ViewerToolbar({
   folderId: string | null;
   folders: FolderMeta[];
   versionLabel: string;
+  /** The chip's tap: the document's details. Absent, the chip is only a label. */
+  onDetails?: () => void;
   /** When the content stops being served; null or absent for never. */
   expiresAt?: DocMeta["expiresAt"] | number | null;
   /** Whose date that is: the document's, or the folder link this reader came through. */
@@ -146,7 +149,18 @@ export function ViewerToolbar({
       <div className="viewer-title">
         <Breadcrumb folderId={folderId} folders={folders} current={title} />
       </div>
-      <span className="chip mono">{versionLabel}</span>
+      {onDetails ? (
+        <button
+          type="button"
+          className="chip mono version-chip"
+          onClick={onDetails}
+          title="Details: how long it is, when it was made and updated, and every version"
+        >
+          {versionLabel}
+        </button>
+      ) : (
+        <span className="chip mono">{versionLabel}</span>
+      )}
       {/* Beside the version rather than a banner above the document: a date
           is a fact about this document, and for most of its life not an
           urgent one. */}

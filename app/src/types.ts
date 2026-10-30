@@ -118,8 +118,14 @@ export interface DocMeta {
   forked?: boolean;
 
   createdAt: Timestamp;
-  /** Bumped on every publish. Deliberately NOT touched by a read. */
+  /**
+   * Bumped by any change to the record: a publish, and also a rename, a share,
+   * trust, a marking or a folder recompute. Deliberately NOT touched by a read.
+   * "Updated" on a card is `latest.at`, which only a publish moves.
+   */
   updatedAt: Timestamp;
+  /** The current version, summarized (SPEC §4); absent until it is. */
+  latest?: DocLatest;
 
   liveEpoch?: string;
   draft?: DraftMeta | null;
@@ -345,7 +351,25 @@ export interface PublicDoc {
    * then when THEIR access ends. Absent on older mirrors.
    */
   viaFolder?: boolean;
+  /** When the current version was published (not the last rename or re-share). */
   publishedAt?: Timestamp;
+  /** The current version's word count, for its reading time; null until counted. */
+  words?: number | null;
+}
+
+/**
+ * docs/{id}.latest: the current version, summarized by the version-write
+ * trigger (functions/src/lib/latest.ts), for a card that cannot read versions.
+ * Absent on a document not summarized yet.
+ */
+export interface DocLatest {
+  version: string;
+  at: Timestamp | null;
+  byEmail: string | null;
+  channel: string;
+  via?: string;
+  origin: "upload" | "edit" | "fork" | null;
+  words?: number;
 }
 
 /** One person's stint of editing a draft, derived from their saves (SPEC §17). */
@@ -394,6 +418,8 @@ export interface DocVersion {
   publishedVia?: "cli" | "upload" | "editor" | "mcp" | "api" | "app" | "operator" | "fork" | "duplicate";
   publishedByEmail?: string;
   publishedBy?: Actor;
+  /** Words in its entry, counted by the version trigger for its reading time; absent until counted. */
+  words?: number;
   /** Carried from the draft: who actually wrote this version (SPEC §17). */
   editSessions?: EditSession[];
   publishedAt: Timestamp;

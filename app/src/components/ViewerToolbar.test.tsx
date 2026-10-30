@@ -145,3 +145,19 @@ describe("printing from the toolbar", () => {
   });
 });
 
+describe("the version chip", () => {
+  test("opens the document's details when the viewer offers them", () => {
+    const onDetails = vi.fn();
+    renderToolbar({ versionLabel: "v7 · 6 min", onDetails });
+    const chip = screen.getByRole("button", { name: "v7 · 6 min" });
+    expect(chip.getAttribute("title")).toMatch(/Details/);
+    fireEvent.click(chip);
+    expect(onDetails).toHaveBeenCalledTimes(1);
+  });
+
+  test("is a label and nothing more when there is nothing to open", () => {
+    const { container } = renderToolbar();
+    expect(container.querySelector(".chip.mono")?.tagName).toBe("SPAN");
+  });
+});
+

@@ -147,7 +147,8 @@ export function sortDocs(docs: readonly DocMeta[], key: SortKey): DocMeta[] {
         (a, b) => millis(b.stats?.lastViewedAt) - millis(a.stats?.lastViewedAt),
       );
     default:
-      return list.sort((a, b) => millis(b.updatedAt) - millis(a.updatedAt));
+      // By the current version's publish: a rename or a share is not an update.
+      return list.sort((a, b) => millis(b.latest?.at ?? b.updatedAt) - millis(a.latest?.at ?? a.updatedAt));
   }
 }
 

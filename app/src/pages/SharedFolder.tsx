@@ -10,6 +10,7 @@ import { CardSkeletons } from "../components/Spinner";
 import { unlockFolder, type FolderUnlock } from "../visibility";
 import { thumbUrl } from "../thumbs";
 import { formatRelative } from "../firestore";
+import { readingTime } from "../readingTime";
 
 /**
  * Read-only, and it looks it: no menus, no upload, no drop zone, no tree.
@@ -156,9 +157,10 @@ export function SharedFolder() {
                     {doc.title}
                   </Link>
                 </div>
-                {doc.updatedAt !== null ? (
+                {doc.updatedAt !== null || typeof doc.words === "number" ? (
                   <div className="doc-card-meta">
-                    <span className="doc-card-stat">{formatRelative(doc.updatedAt)}</span>
+                    {readingTime(doc.words) ? <span className="doc-card-stat">{readingTime(doc.words)}</span> : null}
+                    {doc.updatedAt !== null ? <span className="doc-card-stat">Updated {formatRelative(doc.updatedAt)}</span> : null}
                   </div>
                 ) : null}
               </div>

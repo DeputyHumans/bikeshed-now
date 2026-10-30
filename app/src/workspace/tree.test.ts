@@ -190,6 +190,16 @@ describe("documents", () => {
     expect(sortDocs(DOCS, "views").map((d) => d.docId)).toEqual(["b", "a", "c"]);
   });
 
+  it("sorts recency by the current version's publish, not by a rename or a share", () => {
+    // b was renamed last (updatedAt 900), but a's content changed last.
+    const docs = [
+      document_("a", null, { updatedAt: millis(100), latest: { version: "v2", at: millis(500) } as never }),
+      document_("b", null, { updatedAt: millis(900), latest: { version: "v1", at: millis(200) } as never }),
+      document_("c", null, { updatedAt: millis(300) }),
+    ];
+    expect(sortDocs(docs, "recent").map((d) => d.docId)).toEqual(["a", "c", "b"]);
+  });
+
   it("does not mutate the input", () => {
     const order = DOCS.map((d) => d.docId);
     sortDocs(DOCS, "name");

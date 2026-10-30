@@ -167,6 +167,9 @@
    chip (SPEC §17). It is a button — its sentence has to be reachable by a tap —
    and `.chip` already resets everything a button would bring except the cursor. */
 button.expiry-chip { cursor: pointer; }
+/* The version chip opens the document's details. */
+button.version-chip { cursor: pointer; font-family: inherit; }
+button.version-chip:hover { color: var(--color-ink); border-color: var(--color-ink-muted); }
 
 /* That this document is a fork, or has been forked (SPEC §21). A button for
    the same reason as the expiry chip: the panel behind it has to be reachable

@@ -14,6 +14,20 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- A card's "Updated" and the workspace's "Recently updated" order follow the current version's publish, not any change to the record. Renaming, re-sharing, trusting or moving a document used to make it look freshly updated.
+- The Activity tile "time reading" is now "time spent reading", so it is not read as how long the document takes.
+
+### Added
+
+- Every card says how long its document takes to read and when it was last updated, and through what when that was not a person in the browser: "6 min read · Updated 2 h ago · via CLI on mbp". Reading time is the words of the current version at 238 a minute, rounded up.
+- The viewer's version chip reads "v7 · 6 min" and opens **Details**: how long the document is (reading time, words, slides), when it was created and by whom, when it was last updated, by whom and through what, any unpublished draft, and every version with how it arrived and who published it. Also under More, as "Details…". A reader without a membership sees the length and when it was updated, never by whom.
+- Each version records its word count, counted once on the server from its entry document (text a person reads, not scripts, styles or the title), and the document carries `latest`, a summary of its current version, which the version trigger keeps. The public mirror carries the count and the time, never who.
+- `scripts/summarize-documents.mjs` asks the trigger to count and summarize documents written before this release; idempotent, with `--dry-run`.
+
 ## 0.27.0 — 2026-10-29
 
 ### Changed

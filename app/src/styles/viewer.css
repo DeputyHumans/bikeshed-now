@@ -459,6 +459,16 @@
 }
 .stat-label { font-size: var(--fs-caption); color: var(--color-ink-muted); }
 
+/* A document's details: a term beside each fact, wrapping to a line each on a phone. */
+.details-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-2) var(--s-3);
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.details-list dt { color: var(--color-ink-muted); }
+.details-list dd { margin: 0; }
 .activity-feed { list-style: none; margin: 0; padding: 0; }
 .activity-row {
   display: flex;
@@ -499,6 +509,9 @@
 }
 
 @media (max-width: 400px) {
+  /* A document's details stack, a line each. */
+  .details-list { grid-template-columns: 1fr; gap: var(--s-1); }
+  .details-list dd { margin-bottom: var(--s-2); }
   .viewer-title { display: none; }
 
   /* The narrowest tier drops the keep-label exception too.
