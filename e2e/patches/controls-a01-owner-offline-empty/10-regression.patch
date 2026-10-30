@@ -1,11 +1,11 @@
 --- a/app/src/firestore.ts
 +++ b/app/src/firestore.ts
-@@ -72,7 +72,7 @@
+@@ -86,7 +86,7 @@
        // After ten seconds offline the SDK can emit an empty first cache.
        // Only a server answer can establish that nothing was shared. Metadata
        // changes matter when the server confirms the same empty result later.
 -      if (snap.metadata.fromCache && snap.docs.length === 0) return;
 +      // Regression control: publish an unconfirmed empty cache.
-       // The Trash is listed on its own page (listMyTrash), never in a folder.
-       onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter((d) => !isTrashed(d)));
+       onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter(keep(which)));
      },
+     (err) => onError?.(err),

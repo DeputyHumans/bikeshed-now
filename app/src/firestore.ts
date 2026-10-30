@@ -55,10 +55,24 @@ import type {
  * because it is statically provable from this exact filter, so the filter value
  * must be the caller's own lowercased address and nothing else (SPEC §5).
  */
+/**
+ * Which records a listing delivers: the workspace (everything not in the
+ * Trash), the Trash, or both. A trashed record's members are its owner alone
+ * (SPEC §4), so the same query brings back the caller's own Trash and no one
+ * else's; leaving it out of the workspace here means no view built on these
+ * lists can show one by accident.
+ */
+export type Listing = "workspace" | "trash" | "all";
+
+function keep(which: Listing): (item: Pick<DocMeta, "trashed">) => boolean {
+  return which === "all" ? () => true : which === "trash" ? isTrashed : (item) => !isTrashed(item);
+}
+
 export function listMyDocs(
   emailLower: string,
   onData: (docs: DocMeta[]) => void,
   onError?: (err: Error) => void,
+  which: Listing = "workspace",
 ): Unsubscribe {
   const q = query(
     collection(db, "docs"),
@@ -73,8 +87,7 @@ export function listMyDocs(
       // Only a server answer can establish that nothing was shared. Metadata
       // changes matter when the server confirms the same empty result later.
       if (snap.metadata.fromCache && snap.docs.length === 0) return;
-      // The Trash is listed on its own page (listMyTrash), never in a folder.
-      onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter((d) => !isTrashed(d)));
+      onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter(keep(which)));
     },
     (err) => onError?.(err),
   );
@@ -85,6 +98,7 @@ export function listMyFolders(
   emailLower: string,
   onData: (folders: FolderMeta[]) => void,
   onError?: (err: Error) => void,
+  which: Listing = "workspace",
 ): Unsubscribe {
   const q = query(
     collection(db, "folders"),
@@ -94,41 +108,9 @@ export function listMyFolders(
   return onSnapshot(
     q,
     (snap) =>
-      onData(snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id })).filter((f) => !isTrashed(f))),
+      onData(snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id })).filter(keep(which))),
     (err) => onError?.(err),
   );
-}
-
-/**
- * Live list of what is in this account's Trash, newest first. The same two
- * queries the workspace makes: a trashed item's members are its owner alone
- * (SPEC §4), so what comes back trashed is the caller's own.
- */
-export function listMyTrash(
-  emailLower: string,
-  onData: (trash: { docs: DocMeta[]; folders: FolderMeta[] }) => void,
-  onError?: (err: Error) => void,
-): Unsubscribe {
-  let docs: DocMeta[] | null = null;
-  let folders: FolderMeta[] | null = null;
-  const at = (x: { trashed?: DocMeta["trashed"] }) => x.trashed?.at?.toMillis?.() ?? 0;
-  const emit = () => {
-    if (docs && folders) onData({ docs: [...docs].sort((a, b) => at(b) - at(a)), folders: [...folders].sort((a, b) => at(b) - at(a)) });
-  };
-  const byMember = (name: "docs" | "folders") =>
-    query(collection(db, name), where("members", "array-contains", emailLower), orderBy("createdAt", "desc"));
-  const stopDocs = onSnapshot(byMember("docs"), (snap) => {
-    docs = snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter(isTrashed);
-    emit();
-  }, (err) => onError?.(err));
-  const stopFolders = onSnapshot(byMember("folders"), (snap) => {
-    folders = snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id })).filter(isTrashed);
-    emit();
-  }, (err) => onError?.(err));
-  return () => {
-    stopDocs();
-    stopFolders();
-  };
 }
 
 /** Live list of the teams this account belongs to. */

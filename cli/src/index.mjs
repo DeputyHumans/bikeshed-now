@@ -966,19 +966,19 @@ async function moveFolder(flags, [id, parent, ...rest]) {
   out(flags.json, result, () => console.log(`moved ${id}: ${result.path}; ${result.access.readers} can read it`));
 }
 
+/** "1 document", "2 documents". */
+const count = (n, noun) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
 /** What a folder's trip to the Trash took, in words. */
 function trashedFolder(result) {
-  const docs = `${result.documents} ${result.documents === 1 ? "document" : "documents"}`;
-  const subs = result.folders > 1 ? ` and ${result.folders - 1} ${result.folders === 2 ? "folder" : "folders"} inside it` : "";
-  return `moved folder ${result.id} to the Trash, with ${docs}${subs}; bikeshed restore folder ${result.id} brings it back`;
+  const subs = result.folders > 1 ? ` and ${count(result.folders - 1, "folder")} inside it` : "";
+  return `moved folder ${result.id} to the Trash, with ${count(result.documents, "document")}${subs}; bikeshed restore folder ${result.id} brings it back`;
 }
 
 /** The older name for `trash folder <id>`, kept because scripts call it. */
-async function deleteFolder(flags, [id, ...rest]) {
-  if (!id || rest.length) fail("usage: bikeshed delete-folder <id>");
-  const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "delete_folder", { id: folderArgs(id).id });
-  out(flags.json, result, () => console.log(trashedFolder(result)));
+async function deleteFolder(flags, args) {
+  if (args.length !== 1) fail("usage: bikeshed delete-folder <id>");
+  return trash(flags, ["folder", ...args]);
 }
 
 /**
@@ -1020,7 +1020,7 @@ async function restore(flags, args) {
   const id = folder ? folderArgs(rest[0]).id : docArgs(rest[0]).id;
   const result = await callTool(origin, token, "restore_from_trash", { id, kind: folder ? "folder" : "document" });
   const place = folder ? result.parentId : result.folderId;
-  out(flags.json, result, () => console.log(`restored ${folder ? "folder " : ""}${result.id} to ${place ? `folder ${place}` : "the root"}${folder ? `, with ${result.documents} ${result.documents === 1 ? "document" : "documents"}` : ""}`));
+  out(flags.json, result, () => console.log(`restored ${folder ? "folder " : ""}${result.id} to ${place ? `folder ${place}` : "the root"}${folder ? `, with ${count(result.documents, "document")}` : ""}`));
 }
 
 /** Exit status when `changes --wait` gives up: distinct from 1, an error. */

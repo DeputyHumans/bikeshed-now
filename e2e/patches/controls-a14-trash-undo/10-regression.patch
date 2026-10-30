@@ -1,11 +1,11 @@
---- a/app/src/pages/DocList.tsx
-+++ b/app/src/pages/DocList.tsx
-@@ -450,7 +450,7 @@
-         toast.show(`“${title}” is in the Trash.`, {
-           label: "Undo",
-           onSelect: () =>
--            void toast.during("Restoring…", restoreItem(kind, id)).catch((e) => toast.error(e.message)),
-+            void toast.during("Restoring…", restoreItem(kind, "")).catch((e) => toast.error(e.message)),
-         }),
-       )
-       .catch((e) => toast.error(e.message));
+--- a/app/src/trashActions.ts
++++ b/app/src/trashActions.ts
+@@ -9,7 +9,7 @@
+ /** Bring an item back, saying so, or why not. */
+ export function restoreFromTrash(toast: Toast, kind: OrganizeKind, id: string, title: string): Promise<void> {
+   return toast
+-    .during("Restoring…", restoreItem(kind, id))
++    .during("Restoring…", restoreItem(kind, id.slice(1)))
+     .then(() => toast.show(`“${title}” is back where it was, with its sharing.`))
+     .catch((e: Error) => toast.error(e.message));
+ }

@@ -37,14 +37,14 @@ export async function inheritedFolderAccess(folderId: string): Promise<Inheritan
 
 export type OrganizeKind = "doc" | "folder";
 
-function organize<T = { ok: true }>(payload: {
+function organize(payload: {
   kind: OrganizeKind;
   id: string;
   op: "move" | "rename" | "trash" | "restore";
   targetFolderId?: string | null;
   name?: string;
-}): Promise<T> {
-  return post<T>("/organize", payload);
+}): Promise<{ ok: true }> {
+  return post("/organize", payload);
 }
 
 /** Move an item into `targetFolderId`, or to the root when null. */
@@ -68,8 +68,8 @@ export function renameItem(
  * Move a document or a folder you own to the Trash (SPEC §4): a folder goes
  * with everything in it. Nothing is deleted; `restoreItem` brings it back.
  */
-export function trashItem(kind: OrganizeKind, id: string): Promise<{ ok: true; batch: string }> {
-  return organize<{ ok: true; batch: string }>({ kind, id, op: "trash" });
+export function trashItem(kind: OrganizeKind, id: string): Promise<{ ok: true }> {
+  return organize({ kind, id, op: "trash" });
 }
 
 /** Bring it back from the Trash, with every grant, where it was (SPEC §4). */

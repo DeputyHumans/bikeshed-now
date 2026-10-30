@@ -34,7 +34,7 @@ import { useThumbCapture } from "../viewer/useThumbCapture";
 import { captureNeeds, storedSlideImages } from "../thumbs";
 import { isExpired } from "../expiry";
 import { isTrashed } from "../trash";
-import { restoreItem, trashItem } from "../folders";
+import { moveToTrash, restoreFromTrash } from "../trashActions";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
@@ -660,18 +660,8 @@ export function DocViewer() {
 
   // The owner stays on the page: it is theirs to read in the Trash, and the
   // banner that says so carries Restore, as the toast's Undo does (SPEC §4).
-  const restoreFromTrash = useCallback(() => {
-    void toast
-      .during("Restoring…", restoreItem("doc", docId))
-      .then(() => toast.show(`“${doc.title}” is back where it was, with its sharing.`))
-      .catch((e) => toast.error((e as Error).message));
-  }, [toast, docId, doc.title]);
-  const moveToTrash = useCallback(() => {
-    void toast
-      .during("Moving to the Trash…", trashItem("doc", docId))
-      .then(() => toast.show(`“${doc.title}” is in the Trash.`, { label: "Undo", onSelect: restoreFromTrash }))
-      .catch((e) => toast.error((e as Error).message));
-  }, [toast, docId, doc.title, restoreFromTrash]);
+  const restoreTrashed = useCallback(() => void restoreFromTrash(toast, "doc", docId, doc.title), [toast, docId, doc.title]);
+  const trashThis = useCallback(() => void moveToTrash(toast, "doc", docId, doc.title), [toast, docId, doc.title]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the
@@ -934,8 +924,8 @@ export function DocViewer() {
         entries.push(
           { id: "forks", label: "Forks…", onSelect: () => setDialog("forks") },
           trashed
-            ? { id: "restore", label: "Restore from Trash", onSelect: restoreFromTrash }
-            : { id: "trash", label: "Move to Trash", danger: true, onSelect: moveToTrash },
+            ? { id: "restore", label: "Restore from Trash", onSelect: restoreTrashed }
+            : { id: "trash", label: "Move to Trash", danger: true, onSelect: trashThis },
         );
       }
     }
@@ -956,7 +946,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent, trashed, moveToTrash, restoreFromTrash]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent, trashed, trashThis, restoreTrashed]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
@@ -1103,7 +1093,7 @@ export function DocViewer() {
         </div>
       ) : null}
       <ViewerBanners
-        trashed={trashed && isOwner ? { onRestore: restoreFromTrash } : null}
+        trashed={trashed && isOwner ? { onRestore: restoreTrashed } : null}
         draft={draftOnScreen}
         historical={!isCurrent && Boolean(doc.currentVersion)}
         onEdit={() => canEdit && setWantsEdit(true)}

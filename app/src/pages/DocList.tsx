@@ -12,7 +12,8 @@ import {
   watchUser,
 } from "../firestore";
 import { viaOf } from "../provenance";
-import { createFolder, renameItem, restoreItem, trashItem, type OrganizeKind } from "../folders";
+import { createFolder, renameItem } from "../folders";
+import { moveToTrash } from "../trashActions";
 import { forkDoc } from "../forks";
 import {
   currentSummary,
@@ -441,20 +442,6 @@ export function DocList() {
 
   const revisingDoc = revising ? (docs.find((d) => d.docId === revising) ?? null) : null;
 
-  // To the Trash, with an Undo for the next few seconds: the Trash itself is
-  // the safety net, so nothing but a folder asks first (SPEC §4).
-  const moveToTrash = (kind: OrganizeKind, id: string, title: string) =>
-    void toast
-      .during("Moving to the Trash…", trashItem(kind, id))
-      .then(() =>
-        toast.show(`“${title}” is in the Trash.`, {
-          label: "Undo",
-          onSelect: () =>
-            void toast.during("Restoring…", restoreItem(kind, id)).catch((e) => toast.error(e.message)),
-        }),
-      )
-      .catch((e) => toast.error(e.message));
-
   const docMenu = (doc: DocMeta): MenuEntry[] => {
     const isOwner = doc.ownerEmail === emailLower;
     return [
@@ -512,7 +499,7 @@ export function DocList() {
         danger: true,
         disabled: !isOwner,
         reason: `Only ${doc.ownerEmail} can move this to the Trash.`,
-        onSelect: () => moveToTrash("doc", doc.docId, doc.title),
+        onSelect: () => void moveToTrash(toast, "doc", doc.docId, doc.title),
       },
     ];
   };
@@ -573,7 +560,7 @@ export function DocList() {
           if (folder.folderId === folderId) {
             navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
           }
-          moveToTrash("folder", folder.folderId, folder.name);
+          void moveToTrash(toast, "folder", folder.folderId, folder.name);
         },
       },
     ];

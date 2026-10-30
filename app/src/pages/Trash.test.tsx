@@ -7,14 +7,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocMeta, FolderMeta } from "../types";
 
 const listeners = vi.hoisted(() => ({
-  trash: null as ((t: { docs: DocMeta[]; folders: FolderMeta[] }) => void) | null,
+  docs: null as ((d: DocMeta[]) => void) | null,
   folders: null as ((f: FolderMeta[]) => void) | null,
+  asked: [] as string[],
 }));
 const { restoreItem } = vi.hoisted(() => ({ restoreItem: vi.fn(async () => ({ ok: true })) }));
 vi.mock("../auth", () => ({ useAuth: () => ({ emailLower: "me@example.com" }) }));
 vi.mock("../firestore", () => ({
-  listMyTrash: (_e: string, on: typeof listeners.trash) => { listeners.trash = on; return () => {}; },
-  listMyFolders: (_e: string, on: typeof listeners.folders) => { listeners.folders = on; return () => {}; },
+  listMyDocs: (_e: string, on: typeof listeners.docs, _err: unknown, which: string) => { listeners.docs = on; listeners.asked.push(`docs:${which}`); return () => {}; },
+  listMyFolders: (_e: string, on: typeof listeners.folders, _err: unknown, which: string) => { listeners.folders = on; listeners.asked.push(`folders:${which}`); return () => {}; },
   formatRelative: () => "2h ago",
   formatTimestamp: () => "Oct 30, 2026, 9:00 AM",
 }));
@@ -38,23 +39,28 @@ function mount() {
 
 beforeEach(() => {
   restoreItem.mockClear();
-  listeners.trash = null;
+  listeners.docs = null;
   listeners.folders = null;
+  listeners.asked = [];
 });
+
+/** The two listings the page asks for: the Trash's documents, and every folder, trashed or not. */
+function deliver({ docs = [] as DocMeta[], folders = [] as FolderMeta[] }) {
+  act(() => listeners.folders!(folders));
+  act(() => listeners.docs!(docs));
+}
 
 describe("the Trash page", () => {
   it("lists folders and documents together, newest first, each saying where it came from, and a document opens", () => {
     mount();
-    act(() => listeners.folders!([{ folderId: "plans", name: "Plans" } as FolderMeta]));
-    act(() =>
-      listeners.trash!({
-        folders: [{ folderId: "q3", name: "Q3", parentId: null, trashed: mark(2) } as unknown as FolderMeta],
-        docs: [
-          { docId: "memo", title: "Memo", folderId: "plans", trashed: mark(3) } as unknown as DocMeta,
-          { docId: "notes", title: "Notes", folderId: "q3", trashed: mark(2, { folderId: "q3", name: "Q3" }) } as unknown as DocMeta,
-        ],
-      }),
-    );
+    deliver({
+      folders: [{ folderId: "plans", name: "Plans" } as FolderMeta, { folderId: "q3", name: "Q3", parentId: null, trashed: mark(2) } as unknown as FolderMeta],
+      docs: [
+        { docId: "memo", title: "Memo", folderId: "plans", trashed: mark(3) } as unknown as DocMeta,
+        { docId: "notes", title: "Notes", folderId: "q3", trashed: mark(2, { folderId: "q3", name: "Q3" }) } as unknown as DocMeta,
+      ],
+    });
+    expect(listeners.asked).toEqual(["docs:trash", "folders:all"]);
     const rows = screen.getAllByRole("listitem").map((li) => li.textContent);
     expect(rows).toEqual([
       expect.stringContaining("MemoDocument · from “Plans”"),
@@ -67,8 +73,7 @@ describe("the Trash page", () => {
 
   it("restores the item a row names, with its kind", async () => {
     mount();
-    act(() => listeners.folders!([]));
-    act(() => listeners.trash!({ folders: [{ folderId: "q3", name: "Q3", trashed: mark(2) } as unknown as FolderMeta], docs: [] }));
+    deliver({ folders: [{ folderId: "q3", name: "Q3", trashed: mark(2) } as unknown as FolderMeta] });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Restore" })));
     expect(restoreItem).toHaveBeenCalledWith("folder", "q3");
     expect(await screen.findByText("“Q3” is back where it was, with its sharing.")).toBeTruthy();
@@ -76,8 +81,7 @@ describe("the Trash page", () => {
 
   it("says when it is empty, and never that anything in it will be deleted", () => {
     mount();
-    act(() => listeners.folders!([]));
-    act(() => listeners.trash!({ folders: [], docs: [] }));
+    deliver({});
     expect(screen.getByText("Your Trash is empty.")).toBeTruthy();
     expect(document.body.textContent).toContain("Nothing here is deleted.");
     expect(document.body.textContent).not.toMatch(/30 days|forever|permanently/);
