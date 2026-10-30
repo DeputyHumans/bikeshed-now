@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2485,7 +2485,7 @@
+     return;
+   }
+   const session = cookie.parse(req.headers.cookie || "")[SESSION_COOKIE_NAME];
+-  const caller = session ? await verifySessionCookie(session) : null;
++  const caller = session ? await verifySessionCookie(session) : await resolveCaller(req);
+   if (!caller) {
+     if (bearerFrom(req.headers.authorization)) res.status(403).json({ error: PURGE_FROM_BROWSER_ONLY });
+     else res.status(401).end();

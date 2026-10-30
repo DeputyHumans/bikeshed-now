@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2498,7 +2498,7 @@
+     badRequest(res, 'expected { op: "code" | "confirm", target: { kind, id } | { all: true } }');
+     return;
+   }
+-  if (!emailEnabled()) {
++  if (false && !emailEnabled()) {
+     res.status(409).json({ error: "Email is off here, so nothing can be deleted early: the Trash deletes each item 30 days after it arrived.", emailOff: true });
+     return;
+   }

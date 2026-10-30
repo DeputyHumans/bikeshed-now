@@ -1,0 +1,11 @@
+--- a/app/src/components/PurgeDialog.tsx
++++ b/app/src/components/PurgeDialog.tsx
+@@ -58,7 +58,7 @@
+     setBusy("confirm");
+     setError(null);
+     try {
+-      onDone(await confirmPurge(target, code));
++      onDone(await confirmPurge(target, code.slice(1)));
+     } catch (e) {
+       setError((e as Error).message);
+       setBusy(null);

@@ -1,0 +1,12 @@
+{
+  "oracle": "the change-log triggers record nothing for what a purge deletes (A27.1, SPEC §4)",
+  "what": "recordTriggered stops asking whether the document is a tombstone (functions/src/lib/events.ts), so the deleted versions write version.withdrawn back into a log that was deleted",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.1 the emailed code deletes a trashed document forever: its record becomes a tombstone, its versions, log and files go and stay gone, its link is an absent id's, and a new document of that name gets another id",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "nothing recorded into the log"
+  }
+}

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/purge.ts
++++ b/functions/src/lib/purge.ts
+@@ -105,7 +105,7 @@
+     const parentId = fork.exists ? fork.get("parentId") : null;
+     const parent = typeof parentId === "string" && parentId ? await tx.get(db.collection("docs").doc(parentId)) : null;
+     // A full overwrite, not a merge: nothing of the record survives but this.
+-    tx.set(ref, { purgedAt: FieldValue.serverTimestamp(), purgePending: true });
++    tx.set(ref, { purgedAt: FieldValue.serverTimestamp(), purgePending: true }, { merge: true });
+     if (fork.exists) tx.delete(fork.ref);
+     const forks = Number((parent?.data()?.stats as { forks?: unknown } | undefined)?.forks ?? 0);
+     if (parent?.exists && !isPurged(parent.data()) && forks > 0) {

@@ -1992,8 +1992,8 @@ throws or no dialog came within `timeout`; it leaves no listener behind.
 ```js
 const asked = await u.answerDialog(() => menu.getByRole("menuitem", { name: "Rename" }).click(), { value: "Plans 2026" });
 assert.deepEqual([asked.type, asked.defaultValue], ["prompt", "Plans"]);
-const warned = await u.answerDialog(() => menu.getByRole("menuitem", { name: "Delete folder" }).click());
-assert.equal(warned.message, "Delete “Plans 2026”? Everything inside moves up one level — nothing is deleted.");
+const warned = await u.answerDialog(() => menu.getByRole("menuitem", { name: "Move to Trash" }).click());
+assert.equal(warned.message, "Move “Plans 2026” and everything in it to the Trash? Anything in it that other people own goes too, and each of them can restore their own.");
 ```
 
 `dismissToasts({timeout = 10_000})` presses Dismiss (`TOAST_DISMISS_LABEL`,

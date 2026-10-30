@@ -1,0 +1,12 @@
+{
+  "oracle": "five wrong codes burn a purge code (A27.2, SPEC §4)",
+  "what": "an off-by-one in the attempt check (functions/src/lib/purgecode.ts) lets a sixth guess be evaluated",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.2 a token is refused POST /purge, whoever's, and five wrong codes burn the code: the sixth attempt, right, is refused and nothing is deleted",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "the sixth attempt is refused, though right"
+  }
+}

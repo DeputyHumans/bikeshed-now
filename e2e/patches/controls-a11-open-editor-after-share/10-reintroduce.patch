@@ -15,8 +15,8 @@
    teamIdOf,
    type RoleGrants,
  } from "./access";
--import { canEditFolder, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
-+import { canEditFolder, isTrashed, ownReachEntry, reachOf, type FolderAclData, type ReachEntry } from "./acl";
+-import { canEditFolder, isPurged, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
++import { canEditFolder, isPurged, isTrashed, ownReachEntry, reachOf, type FolderAclData, type ReachEntry } from "./acl";
  import { safeSegment } from "./http";
  import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
  import { syncPresenceAccess } from "./presence";

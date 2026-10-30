@@ -1,0 +1,12 @@
+{
+  "oracle": "the Trash's dialog sends the code its owner typed (A27.5, SPEC §4)",
+  "what": "the dialog sends the code it was given less its first digit (app/src/components/PurgeDialog.tsx), so the right code never deletes anything",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.5 in the browser, a Trash row says the day it is deleted forever, and Delete forever asks for the emailed code, takes it, and the row goes",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "Timeout|waiting for"
+  }
+}

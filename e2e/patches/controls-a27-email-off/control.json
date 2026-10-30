@@ -1,0 +1,15 @@
+{
+  "oracle": "where email is off a code is refused with its reason (A27.4, ADR 0025)",
+  "what": "the purge endpoint stops asking whether email is on (functions/src/index.ts), so a code is reserved that can never arrive",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.4 where email is off nothing can be deleted early: GET /purge says so, a code is refused with the reason, and nothing is sent",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "a code is refused, with the reason"
+  },
+  "stack": [
+    "--email-off"
+  ]
+}

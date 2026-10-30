@@ -1,0 +1,12 @@
+{
+  "oracle": "a deleted document's record becomes a tombstone that names nothing (A27.1, SPEC §4)",
+  "what": "the purge merges its tombstone into the record (functions/src/lib/purge.ts), so its title, owner and members survive",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.1 the emailed code deletes a trashed document forever: its record becomes a tombstone, its versions, log and files go and stay gone, its link is an absent id's, and a new document of that name gets another id",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "a tombstone, and nothing a gate or a query keys on"
+  }
+}

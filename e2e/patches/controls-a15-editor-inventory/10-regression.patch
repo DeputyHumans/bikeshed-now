@@ -2,7 +2,7 @@
 +++ b/functions/src/lib/fork.ts
 @@ -339,5 +339,5 @@
 
-   const lineage: Lineage = { forked: doc.data.forked === true, ancestors, hiddenAncestor };
+   const lineage: Lineage = { forked: doc.data.forked === true, ancestors, hiddenAncestor, deletedAncestor };
 -  if (canManageSharing(doc.data, caller.emailLower)) {
 +  if (canManageSharing(doc.data, caller.emailLower) || (Array.isArray(doc.data.editorMembers) && doc.data.editorMembers.includes(caller.emailLower))) {
      lineage.forks = await forksOf(db, input.docId, caller);

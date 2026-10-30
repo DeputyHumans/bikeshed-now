@@ -19,4 +19,4 @@
 -      typeof parentId === "string" ? await openReadable(db, parentId, caller, null) : null;
 +      typeof parentId === "string" ? await openReadable(db, parentId, caller, null, true) : null;
      if (!parent) {
-       hiddenAncestor = true;
+       // Deleted forever is no secret about the original: whoever forked it

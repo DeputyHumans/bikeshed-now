@@ -1,0 +1,11 @@
+--- a/functions/src/lib/purgecode.ts
++++ b/functions/src/lib/purgecode.ts
+@@ -115,7 +115,7 @@
+       tx.delete(ref(db, uid));
+       return { status: 409, error: "that code has expired; ask for a new one" };
+     }
+-    if (Number(challenge.attempts ?? 0) >= PURGE_MAX_ATTEMPTS) {
++    if (Number(challenge.attempts ?? 0) > PURGE_MAX_ATTEMPTS) {
+       tx.delete(ref(db, uid));
+       return { status: 429, error: "too many attempts; ask for a new code" };
+     }

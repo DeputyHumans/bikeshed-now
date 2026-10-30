@@ -1,0 +1,12 @@
+{
+  "oracle": "an early purge of a folder takes only its owner's documents (A27.3, ADR 0025)",
+  "what": "a folder's early purge takes everything in its batch (functions/src/lib/purge.ts), other people's documents too",
+  "target": {
+    "spec": "e2e/specs/functional/a27-purge.spec.mjs",
+    "case": "A27.3 deleting a folder forever takes what of its owner's went with it and leaves another owner's document in their Trash, which comes back at their root",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "it says what goes and what stays"
+  }
+}
