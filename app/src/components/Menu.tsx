@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A popover menu with keyboard navigation.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /**
  * Anchored to its trigger and positioned at open time rather than tracked, so
@@ -21,6 +21,40 @@ export interface MenuItem {
 
 export type MenuEntry = MenuItem | { id: string; separator: true } | { id: string; label: string; heading: true };
 
+/**
+ * Where the menu opens, in document coordinates, as a pure function.
+ *
+ * Below its trigger, or above it when there is no room below: the last card of
+ * a list scrolled to its end is exactly where somebody opens one, and a menu
+ * that runs off the window cannot be scrolled to, because a scroll closes it.
+ * With room on neither side it takes the roomier one and stays on screen, over
+ * its trigger if it has to. Extracted for the reason fabPosition is: jsdom
+ * measures nothing, and the placement is the part with the edge cases.
+ */
+export function menuPosition(
+  trigger: { top: number; bottom: number; left: number },
+  view: { width: number; height: number },
+  menu: { width: number; height: number },
+  scroll: { x: number; y: number },
+): { top: number; left: number } {
+  const gap = 4;
+  const edge = 8;
+  const below = trigger.bottom + gap;
+  const above = trigger.top - gap - menu.height;
+  const preferred =
+    below + menu.height <= view.height - edge
+      ? below
+      : above >= edge
+        ? above
+        : view.height - trigger.bottom >= trigger.top
+          ? below
+          : above;
+  const top = Math.max(edge, Math.min(preferred, view.height - edge - menu.height));
+  // Clamped at the right edge too, which on a narrow viewport is most of the time.
+  const left = Math.max(edge, Math.min(trigger.left, view.width - menu.width - edge));
+  return { top: top + scroll.y, left: left + scroll.x };
+}
+
 export function Menu({
   trigger,
   entries,
@@ -31,25 +65,35 @@ export function Menu({
   label: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const place = useCallback(() => {
+  // Placed straight onto the element, before paint and before the effect below
+  // focuses its first item. Through state, React would run that effect first,
+  // with the menu still where it was drawn, at the top of the document: the
+  // focus scrolled a list there, and the scroll closed the menu.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const width = 200;
-    setPosition({
-      top: rect.bottom + window.scrollY + 4,
-      // Flip when the menu would run off the right edge, which on a narrow
-      // viewport is most of the time.
-      left: Math.max(8, Math.min(rect.left + window.scrollX, window.innerWidth - width - 8)),
-    });
-  }, []);
+    if (!open || !menu || !rect) return;
+    // Measured at the document's corner, where nothing narrows it.
+    menu.style.top = "0px";
+    menu.style.left = "0px";
+    const { top, left } = menuPosition(
+      rect,
+      // The window less its scrollbars: the stylesheet reserves the vertical
+      // one's gutter, and the window's own width counts it.
+      { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
+      // jsdom measures nothing; the stylesheet's min-width makes it about 200.
+      { width: menu.offsetWidth || 200, height: menu.offsetHeight },
+      { x: window.scrollX, y: window.scrollY },
+    );
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    place();
     const onDown = (e: MouseEvent) => {
       if (
         !menuRef.current?.contains(e.target as Node) &&
@@ -71,7 +115,7 @@ export function Menu({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, place]);
+  }, [open]);
 
   useEffect(() => {
     if (open) menuRef.current?.querySelector<HTMLElement>(".menu-item")?.focus();
@@ -101,7 +145,6 @@ export function Menu({
           className="menu"
           role="menu"
           aria-label={label}
-          style={{ top: position.top, left: position.left }}
           onKeyDown={onKeyDown}
         >
           {entries.map((entry) => {

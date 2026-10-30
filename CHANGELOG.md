@@ -14,6 +14,13 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A document's or folder's ⋮ menu no longer runs off the bottom of the window.** Opened from the last row of a list scrolled to its end, it showed only its first item or two, and scrolling to the rest closed it. It now opens upward when there is no room below, and stays on screen when there is room on neither side (SPEC §13).
+- The first time a card's menu was opened in a scrolled list, the page jumped back to the top and the menu closed. It now opens where you clicked.
+
 ## 0.26.2 — 2026-10-29
 
 ### Fixed
