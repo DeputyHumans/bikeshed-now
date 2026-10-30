@@ -6,8 +6,9 @@ import { FieldPath, Timestamp } from "firebase-admin/firestore";
 import type { Principal } from "./auth";
 import { filedIn } from "./audience";
 import { canManageSharing } from "./acl";
-import type { EventActor } from "./events";
-import type { VersionOrigin } from "./versions";
+import { actedThrough, isAutomated } from "./actor";
+import { eventVisibleTo, type EventActor } from "./events";
+import { originOf } from "./versions";
 
 type Db = admin.firestore.Firestore;
 type DocRef = admin.firestore.DocumentReference;
@@ -28,7 +29,7 @@ type Read = (path: string) => Promise<admin.firestore.DocumentSnapshot>;
  */
 
 /** One read per path for the length of a request. */
-export function memo<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
+function memo<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
   const seen = new Map<string, Promise<T>>();
   return (key) => {
     if (!seen.has(key)) seen.set(key, fn(key));
@@ -41,14 +42,12 @@ export function docReader(db: Db): Read {
   return memo((path: string) => db.doc(path).get());
 }
 
-/** How a version arrived, for one written before `origin` was stored. */
-export function originOf(version: Record<string, unknown> | undefined): VersionOrigin | null {
-  if (!version) return null;
-  if (version.origin === "upload" || version.origin === "edit" || version.origin === "fork") return version.origin;
-  if (version.publishedVia === "fork") return "fork";
-  if (version.publishedVia === "editor") return "edit";
-  return typeof version.publishedVia === "string" ? "upload" : null;
-}
+/** Events whose "who" comes from the record they name, so their actor's address is not looked up. */
+const JOINED_FROM_RECORD = new Set([
+  "comment.added", "thread.opened", "suggestion.opened", "thread.resolved", "thread.reopened",
+  "suggestion.accepted", "suggestion.rejected", "suggestion.withdrawn", "suggestion.revised",
+  "version.published", "version.withdrawn", "fork.created",
+]);
 
 /** Each event in words, in the order given; a comment since deleted drops out. */
 export async function describeEvents(
@@ -64,7 +63,21 @@ export async function describeEvents(
     const d = e.data().data as { from?: unknown; to?: unknown } | undefined;
     return e.data().type === "doc.moved" ? [d?.from, d?.to].filter((x): x is string => typeof x === "string") : [];
   });
-  const paths = await filedIn(db, caller, folderIds);
+  // Every record the events name, read at once, beside the folders: the loop
+  // below then finds each in the memo rather than waiting on them one after
+  // another. A record missed here costs only time, since the loop reads
+  // whatever it still needs.
+  const joins = events.flatMap((e) => {
+    const v = e.data();
+    const at: string[] = [];
+    if (v.threadId && v.version) at.push(threadPath(v.version, v.threadId));
+    if (v.type === "comment.added") at.push(`${threadPath(v.version, v.threadId)}/comments/${v.commentId}`);
+    if (v.type === "version.published") at.push(`docs/${docRef.id}/versions/${v.version}`);
+    const uid = (v.actor as EventActor | undefined)?.uid;
+    if (uid && !JOINED_FROM_RECORD.has(v.type)) at.push(`users/${uid}`);
+    return at;
+  });
+  const [paths] = await Promise.all([filedIn(db, caller, folderIds), Promise.all(joins.map(read))]);
 
   const out: Array<Record<string, unknown>> = [];
   for (const e of events) {
@@ -77,8 +90,7 @@ export async function describeEvents(
       // A fork's time would say more than its count, and its owner is told
       // only that one was made (SPEC §21): the day, no more.
       at: v.type === "fork.created" && at ? at.slice(0, 10) : at,
-      ...(actor?.channel ? { channel: actor.channel, automated: actor.channel !== "web" } : {}),
-      ...(actor?.via ? { via: actor.via } : {}),
+      ...(actor?.channel ? { ...actedThrough(actor), automated: isAutomated(actor) } : {}),
       ...(v.version ? { version: v.version } : {}),
       ...(v.threadId ? { threadId: v.threadId } : {}),
     };
@@ -150,7 +162,7 @@ interface FeedCursor {
   v?: Position;
 }
 
-export function encodeFeedCursor(c: FeedCursor): string {
+function encodeFeedCursor(c: FeedCursor): string {
   return Buffer.from(JSON.stringify(c)).toString("base64url");
 }
 
@@ -176,15 +188,14 @@ const timeOf = (t: unknown): Timestamp | null => (t instanceof Timestamp ? t : n
 function describeRead(s: Snapshot): Record<string, unknown> {
   const v = s.data();
   const actor = v.actor as { channel?: string; via?: string } | undefined;
-  const channel = actor?.channel ?? "web";
   return {
     id: `read:${s.id}`,
     type: "read",
     at: timeOf(v.startedAt)?.toDate().toISOString() ?? null,
     by: typeof v.email === "string" ? v.email : null,
-    channel,
-    automated: v.automated === true || channel !== "web",
-    ...(actor?.via ? { via: actor.via } : {}),
+    ...actedThrough(actor),
+    // The session's own flag answers for one stored without an actor.
+    automated: v.automated === true || isAutomated(actor),
     ...(typeof v.versionId === "string" ? { version: v.versionId } : {}),
     ms: typeof v.ms === "number" ? v.ms : 0,
     ...(typeof v.reads === "number" ? { reads: v.reads } : {}),
@@ -210,7 +221,8 @@ export async function activityPage(
   if (cursor.e) events = events.startAfter(new Timestamp(cursor.e[0], cursor.e[1]), cursor.e[2]);
   let views = docRef.collection("views").orderBy("startedAt", "desc").orderBy(FieldPath.documentId(), "desc");
   if (cursor.v) views = views.startAfter(new Timestamp(cursor.v[0], cursor.v[1]), cursor.v[2]);
-  const [e, v] = await Promise.all([events.limit(ACTIVITY_PAGE).get(), views.limit(ACTIVITY_PAGE).get()]);
+  // One past a page from each, so "is there more" is known rather than guessed.
+  const [e, v] = await Promise.all([events.limit(ACTIVITY_PAGE + 1).get(), views.limit(ACTIVITY_PAGE + 1).get()]);
 
   // Both sources in one order, newest first, and walked until a page of rows
   // the caller may see is full. Whatever was not walked is read again next
@@ -225,7 +237,7 @@ export async function activityPage(
   // The caller is an editor (the gate is the caller's), so the one event they
   // may not see is the owner's alone: that a fork was made (SPEC §21).
   const owner = canManageSharing(doc as Parameters<typeof canManageSharing>[0], caller.emailLower);
-  const hidden = (x: (typeof merged)[number]) => x.kind === "e" && x.s.data().audience === "owner" && !owner;
+  const hidden = (x: (typeof merged)[number]) => x.kind === "e" && !eventVisibleTo(x.s.data(), { editor: true, owner });
   const walked: typeof merged = [];
   let shown = 0;
   for (const x of merged) {
@@ -243,7 +255,7 @@ export async function activityPage(
   }
 
   const lastOf = (kind: "e" | "v") => [...walked].reverse().find((x) => x.kind === kind);
-  const more = walked.length < merged.length || e.size === ACTIVITY_PAGE || v.size === ACTIVITY_PAGE;
+  const more = walked.length < merged.length || e.size > ACTIVITY_PAGE || v.size > ACTIVITY_PAGE;
   const le = lastOf("e");
   const lv = lastOf("v");
   const next: FeedCursor = {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Each Activity row in words, and what acted named for what it was (SPEC §17, ADR 0023).
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { describeActivity, subjectOf, type ActivityItem } from "./activity";
 import { isAutomated, viaOf } from "./provenance";
@@ -21,6 +23,13 @@ describe("what acted", () => {
     expect(viaOf({ channel: "cli" })).toBe("the command line");
     expect(viaOf({ channel: "operator" })).toBe("an operator script");
   });
+
+  it("names every record exactly as the server does (via-vectors.json)", () => {
+    const file = join(__dirname, "..", "..", "functions", "test", "fixtures", "via-vectors.json");
+    const { cases } = JSON.parse(readFileSync(file, "utf8")) as { cases: Array<{ name: string; actor: { channel?: string; via?: string } | null; via: string | null }> };
+    expect(cases.length).toBeGreaterThan(5);
+    for (const c of cases) expect(viaOf(c.actor), c.name).toBe(c.via);
+  });
 });
 
 describe("each row in words", () => {
@@ -32,7 +41,8 @@ describe("each row in words", () => {
 
   it("names nobody for a fork, and an operator for a withdrawal", () => {
     expect(subjectOf(row({ type: "fork.created", by: "someone@example.com" }))).toBe("Someone");
-    expect(subjectOf(row({ type: "version.withdrawn" }))).toBe("An operator");
+    expect(subjectOf(row({ type: "version.withdrawn", channel: "operator" }))).toBe("An operator");
+    expect(subjectOf(row({ type: "version.withdrawn" })), "a withdrawal from before its actor was stored").toBe("An operator");
   });
 
   it("shows an account that moved address as moving, not as granting itself access", () => {

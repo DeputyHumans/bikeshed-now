@@ -3,7 +3,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
-import type { Actor } from "./actor";
+import { viaLabel, type Actor } from "./actor";
 import { safeSegment } from "./http";
 
 type Db = admin.firestore.Firestore;
@@ -88,7 +88,17 @@ export function eventActor(actor: Partial<Actor> | null | undefined): EventActor
 }
 
 /** Who withdraws a version: only scripts/delete-version.mjs does, as nobody. */
-const OPERATOR: EventActor = { uid: null, channel: "operator", via: "an operator script" };
+const OPERATOR: EventActor = { uid: null, channel: "operator", via: viaLabel("operator") };
+
+/**
+ * Whether a reader may see an event: the audience it was written for, said once
+ * for get_changes and the Activity feed alike (SPEC §17, §21).
+ */
+export function eventVisibleTo(event: { audience?: unknown }, reader: { editor: boolean; owner: boolean }): boolean {
+  if (event.audience === "editors") return reader.editor;
+  if (event.audience === "owner") return reader.owner;
+  return true;
+}
 
 /** The stored shape of an event, for a writer that has to choose its id itself. */
 export function eventRecord(input: EventInput): Record<string, unknown> {

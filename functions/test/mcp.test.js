@@ -6,12 +6,12 @@ const assert = require("node:assert/strict");
 
 const {
   handleMcp,
-  mcpPrincipal,
   INSTRUCTIONS,
   missingArguments,
   PROTOCOL_VERSION,
   SERVER_INFO,
 } = require("../lib/mcp/server.js");
+const { principalOf } = require("../lib/lib/actor.js");
 const {
   TOOLS,
   TOOL_NAMES,
@@ -629,13 +629,14 @@ test("the key is an optional argument on every tool that reads one document", ()
 
 // --- The protocol ----------------------------------------------------------
 
-test("a credential acts on /mcp as what it is: the CLI as the CLI, an app as an app", () => {
+test("a credential acts as what it is on every endpoint, /mcp too: the CLI as the CLI, an app as an app", () => {
   // /mcp used to stamp "mcp" on everything it verified, so the Activity panel
   // could not tell the CLI, a personal token and a signed-in app apart (ADR 0023).
+  // REST and /mcp now share principalOf, so neither can drift from the other.
   const base = { uid: "u1", emailLower: "a@example.com", tokenId: "t1" };
-  assert.deepEqual(mcpPrincipal({ ...base, channel: "cli", name: "CLI on mbp" }), { ...base, channel: "cli", credentialName: "CLI on mbp" });
-  assert.equal(mcpPrincipal({ ...base, channel: "app", name: "Claude" }).channel, "app");
-  assert.equal(mcpPrincipal({ ...base, channel: "mcp", name: "agent" }).channel, "mcp");
+  assert.deepEqual(principalOf({ ...base, channel: "cli", name: "CLI on mbp" }), { ...base, channel: "cli", credentialName: "CLI on mbp" });
+  assert.equal(principalOf({ ...base, channel: "app", name: "Claude" }).channel, "app");
+  assert.equal(principalOf({ ...base, channel: "mcp", name: "agent" }).channel, "mcp");
 });
 
 test("a request with no credential is refused before any database access", async () => {

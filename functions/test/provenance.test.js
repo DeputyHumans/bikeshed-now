@@ -4,8 +4,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { actorFrom, isAutomated, viaLabel } = require("../lib/lib/actor.js");
-const { publishedViaOf } = require("../lib/lib/versions.js");
+const { readFileSync } = require("node:fs");
+const { join } = require("node:path");
+const { actedThrough, actorFrom, isAutomated, viaLabel } = require("../lib/lib/actor.js");
+const { originOf, publishedViaOf } = require("../lib/lib/versions.js");
 const { appendEditSession } = require("../lib/lib/draft.js");
 const { projectPublicDoc, projectReader } = require("../lib/lib/publicdoc.js");
 const { resolveMarking, markingIsVisible, MARKING_OFF } = require("../lib/lib/marking.js");
@@ -67,6 +69,23 @@ test("a version says how its content arrived apart from who sent it, and the old
   assert.equal(publishedViaOf("edit", { channel: "app" }), "app", "an agent's commit of an edit");
   assert.equal(publishedViaOf("fork", { channel: "mcp" }), "fork", "a fork stays a fork");
   assert.equal(publishedViaOf("upload", { channel: "operator" }), "operator");
+});
+
+test("a version written before origin was stored reads its origin from the old field, a duplicate as the fork it was", () => {
+  assert.equal(originOf({ origin: "edit", publishedVia: "mcp" }), "edit", "origin, where stored, is the answer");
+  assert.equal(originOf({ publishedVia: "editor" }), "edit");
+  assert.equal(originOf({ publishedVia: "fork" }), "fork");
+  assert.equal(originOf({ publishedVia: "duplicate" }), "fork", "the older name of a fork");
+  assert.equal(originOf({ publishedVia: "cli" }), "upload");
+  assert.equal(originOf({}), null);
+  assert.equal(originOf(undefined), null);
+});
+
+test("what acted reads the same words on the server as in the browser (via-vectors.json)", () => {
+  const { cases } = JSON.parse(readFileSync(join(__dirname, "fixtures", "via-vectors.json"), "utf8"));
+  for (const c of cases) assert.equal(actedThrough(c.actor).via ?? null, c.via, c.name);
+  assert.deepEqual(actedThrough({ channel: "web", via: "ignored" }), { channel: "web" }, "a person in the browser carries no words");
+  assert.deepEqual(actedThrough(undefined), { channel: "web" });
 });
 
 test("a draft's session log keeps two agents of one person apart", () => {

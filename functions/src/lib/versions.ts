@@ -24,6 +24,19 @@ export function publishedViaOf(origin: VersionOrigin, actor: Pick<Actor, "channe
   return origin === "edit" ? "editor" : "upload";
 }
 
+/**
+ * How a version arrived, read back: `origin`, or for one written before it was
+ * stored, the single field's answer. "duplicate" is the older name of a fork,
+ * on copies made before lineage was recorded.
+ */
+export function originOf(version: Record<string, unknown> | undefined): VersionOrigin | null {
+  if (!version) return null;
+  if (version.origin === "upload" || version.origin === "edit" || version.origin === "fork") return version.origin;
+  if (version.publishedVia === "fork" || version.publishedVia === "duplicate") return "fork";
+  if (version.publishedVia === "editor") return "edit";
+  return typeof version.publishedVia === "string" ? "upload" : null;
+}
+
 export type VersionConflict = { status: 409; error: string; currentVersion: string };
 
 export function versionConflict(currentVersion: string): VersionConflict {

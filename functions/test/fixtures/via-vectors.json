@@ -1,0 +1,16 @@
+{
+  "$comment": "Golden cases for what acted, in words (SPEC §17, ADR 0023). functions/test/provenance.test.js asserts actedThrough gives `via` for each actor, and app/src/activity.test.ts asserts the app's viaOf gives the same for what it reads from Firestore itself, so the server and the browser cannot come to name an older record differently. `via` null means a person in the browser, who needs no words.",
+  "cases": [
+    { "name": "a person in the browser", "actor": { "channel": "web" }, "via": null },
+    { "name": "no actor at all", "actor": null, "via": null },
+    { "name": "the words stored when it acted", "actor": { "channel": "cli", "via": "CLI on mbp" }, "via": "CLI on mbp" },
+    { "name": "an app, quoted and marked", "actor": { "channel": "app", "via": "“Claude” (connected app)" }, "via": "“Claude” (connected app)" },
+    { "name": "an older CLI record", "actor": { "channel": "cli" }, "via": "the command line" },
+    { "name": "an older /mcp record, which may be the CLI or an app", "actor": { "channel": "mcp" }, "via": "MCP" },
+    { "name": "an older API record", "actor": { "channel": "api" }, "via": "the API" },
+    { "name": "an older app record", "actor": { "channel": "app" }, "via": "a connected app" },
+    { "name": "an operator script", "actor": { "channel": "operator" }, "via": "an operator script" },
+    { "name": "empty stored words fall back", "actor": { "channel": "mcp", "via": "" }, "via": "MCP" },
+    { "name": "a channel neither side knows names itself", "actor": { "channel": "pager" }, "via": "pager" }
+  ]
+}

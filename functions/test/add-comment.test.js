@@ -144,7 +144,8 @@ test("get_comments returns the new thread with its quote and its words", async (
   assert.deepEqual(
     { author: comment.author, channel: comment.channel, via: comment.via, body: comment.body },
     // `via` is the credential in words in every tool; the channel says what kind (ADR 0023).
-    { author: VIEWER.emailLower, channel: "mcp", via: "a personal token", body: "Why last?" },
+    // This harness stores its actor without the words, so it reads as an older record does.
+    { author: VIEWER.emailLower, channel: "mcp", via: "MCP", body: "Why last?" },
   );
   // Each comment says which one it is and when it was written.
   assert.equal(typeof comment.id, "string");

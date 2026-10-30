@@ -23,8 +23,7 @@
 import * as admin from "firebase-admin";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
-import { actorFrom } from "../lib/actor";
-import type { Principal } from "../lib/auth";
+import { actorFrom, principalOf } from "../lib/actor";
 import { bearerFrom, isTokenShaped, verifyToken, type VerifiedToken } from "../lib/tokens";
 import { isAccessTokenShaped, verifyAccessToken } from "../oauth/grants";
 import { allowedResources, challenge } from "../oauth/metadata";
@@ -196,20 +195,6 @@ async function dispatch(
 }
 
 /**
- * Who a verified /mcp credential acts as: its own channel and name, never the
- * endpoint's (ADR 0023).
- */
-export function mcpPrincipal(verified: VerifiedToken): Principal {
-  return {
-    uid: verified.uid,
-    emailLower: verified.emailLower,
-    channel: verified.channel,
-    tokenId: verified.tokenId,
-    credentialName: verified.name,
-  };
-}
-
-/**
  * Handle a POST to /mcp.
  *
  * Authentication is a personal access token or a connected app's access token
@@ -267,7 +252,8 @@ export async function handleMcp(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const principal = mcpPrincipal(verified);
+  // Its own channel and name, never the endpoint's (ADR 0023).
+  const principal = principalOf(verified);
   const ctx: ToolContext = {
     db: admin.firestore(),
     caller: principal,

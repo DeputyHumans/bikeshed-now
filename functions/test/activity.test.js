@@ -118,3 +118,22 @@ test("pages meet exactly: rows of one instant are neither repeated nor skipped",
     assert.equal(seen.length, 60 + 60 + 6, "every row once");
   });
 });
+
+test("a last page that is exactly full is the last: no empty page is asked for after it", async () => {
+  // The six rows of the world, then older events enough to fill two pages to
+  // the row, so the second page's events end exactly where a page does.
+  const extra = {};
+  const older = 2 * ACTIVITY_PAGE - 6;
+  for (let i = 0; i < older; i++) {
+    extra[`docs/d/events/o${String(i).padStart(3, "0")}`] = { at: Timestamp.fromMillis(Date.UTC(2026, 9, 29, 11, 0, 0, i)), type: "doc.renamed", audience: "editors", actor: { uid: OWNER.uid, channel: "web" }, data: { from: "a", to: "b" } };
+  }
+  const { db } = world(extra);
+  await withFakeAdmin({ db, sessions: SESSIONS }, async () => {
+    const first = await get("own");
+    assert.equal(first.body.items.length, ACTIVITY_PAGE);
+    assert.ok(first.body.next, "a second page");
+    const second = await get("own", { before: first.body.next });
+    assert.equal(second.body.items.length, ACTIVITY_PAGE);
+    assert.equal(second.body.next, null, "nothing is left, and the feed says so rather than offering an empty page");
+  });
+});

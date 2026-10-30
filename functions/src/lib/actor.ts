@@ -6,7 +6,7 @@ import type { Request } from "firebase-functions/v2/https";
 import * as cookie from "cookie";
 import { SESSION_COOKIE_NAME } from "../config";
 import { verifySessionCookie, type Principal } from "./auth";
-import { CLI_LOGIN_FALLBACK, CLI_LOGIN_PREFIX, bearerFrom, isTokenShaped, verifyToken } from "./tokens";
+import { CLI_LOGIN_FALLBACK, CLI_LOGIN_PREFIX, bearerFrom, isTokenShaped, verifyToken, type VerifiedToken } from "./tokens";
 
 /**
  * The provenance stamp.
@@ -118,9 +118,50 @@ export function actorFrom(principal: Principal, req: Request): Actor {
   return actor;
 }
 
+/** Whatever an actor was stored as: a request's, an event's, a reading session's. */
+type Acted = { channel?: unknown; via?: unknown } | null | undefined;
+
 /** True when this action came from automation rather than a person at a keyboard. */
-export function isAutomated(actor: Actor): boolean {
-  return actor.channel !== "web";
+export function isAutomated(actor: Acted): boolean {
+  return typeof actor?.channel === "string" && actor.channel !== "web";
+}
+
+/**
+ * Words for a record stored before its `via` was: the channel's alone. An older
+ * `mcp` record may be the CLI or an app, since /mcp stamped everything `mcp`, so
+ * it says MCP rather than guess which. The app keeps the same words for what it
+ * reads from Firestore itself; functions/test/fixtures/via-vectors.json holds
+ * the two to one answer.
+ */
+const OLDER_RECORD_WORDS: Record<string, string> = {
+  cli: "the command line",
+  mcp: "MCP",
+  api: "the API",
+  app: "a connected app",
+  operator: "an operator script",
+};
+
+/**
+ * What acted, as every reader is told it: the channel, and for anything but a
+ * person in the browser the words, as stored when it acted or, for a record
+ * from before they were, the channel's own.
+ */
+export function actedThrough(actor: Acted): { channel: string; via?: string } {
+  const channel = typeof actor?.channel === "string" ? actor.channel : "web";
+  if (channel === "web") return { channel };
+  const stored = typeof actor?.via === "string" && actor.via ? actor.via : undefined;
+  return { channel, via: stored ?? OLDER_RECORD_WORDS[channel] ?? channel };
+}
+
+/** Who a verified token acts as, on every endpoint alike: its own channel and name (ADR 0023). */
+export function principalOf(verified: VerifiedToken): Principal {
+  return {
+    uid: verified.uid,
+    emailLower: verified.emailLower,
+    channel: verified.channel,
+    tokenId: verified.tokenId,
+    credentialName: verified.name,
+  };
 }
 
 /**
@@ -147,15 +188,7 @@ export async function resolveCaller(req: Request): Promise<Principal | null> {
   const bearer = bearerFrom(headerValue(req, "authorization"));
   if (isTokenShaped(bearer)) {
     const verified = await verifyToken(admin.firestore(), bearer as string);
-    if (verified) {
-      return {
-        uid: verified.uid,
-        emailLower: verified.emailLower,
-        channel: verified.channel,
-        tokenId: verified.tokenId,
-        credentialName: verified.name,
-      };
-    }
+    if (verified) return principalOf(verified);
   }
 
   return null;

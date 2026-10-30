@@ -2,6 +2,7 @@
 // The Activity panel's feed: one page from GET /activity, and each row in words (SPEC §17, ADR 0023).
 
 import { get } from "./api";
+import { formatDay } from "./expiry";
 
 /** One row as GET /activity answers it: a change-log event or a reading session. */
 export interface ActivityItem {
@@ -95,7 +96,7 @@ export function describeActivity(item: ActivityItem): string {
       return `made it ${LEVEL[String(item.to)] ?? String(item.to)}${item.publicEdit ? ", open for anyone to edit" : ""}`;
     case "doc.expiry":
       return typeof item.to === "number"
-        ? `set it to stop being readable on ${new Date(item.to).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`
+        ? `set it to stop being readable on ${formatDay(item.to)}`
         : "removed its end date";
     case "doc.trust":
       return item.trusted ? "let its scripts run for everyone" : "stopped its scripts running for everyone";
@@ -116,7 +117,9 @@ export function describeActivity(item: ActivityItem): string {
 /** Who the row is about, as its subject. */
 export function subjectOf(item: ActivityItem): string {
   if (item.type === "fork.created") return "Someone";
-  if (item.type === "version.withdrawn") return "An operator";
+  // Only an operator script withdraws a version, and one withdrawn before its
+  // actor was stored carries no channel to say so.
+  if (item.channel === "operator" || item.type === "version.withdrawn") return "An operator";
   if (item.type === "access.changed" && item.reason === "address-moved") return item.removed?.[0] ?? "An account";
   return item.by ?? (item.type === "read" ? "Somebody without an account" : "Somebody");
 }

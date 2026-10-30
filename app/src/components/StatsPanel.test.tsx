@@ -80,4 +80,19 @@ describe("the Activity feed", () => {
     expect(rows()[3]).toContain("via CLI on mbp");
     expect(screen.queryByRole("button", { name: "Show earlier activity" })).toBeNull();
   });
+
+  it("shows a fork as the UTC day it was sent as, even west of Greenwich, where that day's midnight is the day before", async () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      fetchActivity.mockImplementation(async () => ({ items: [{ id: "f1", type: "fork.created", at: "2026-10-29" }], next: null }));
+      await open();
+      expect(rows()).toEqual([expect.stringContaining("Someoneforked a version")]);
+      expect(rows()[0]).toContain("29, 2026");
+      expect(rows()[0]).not.toContain("28");
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
 });

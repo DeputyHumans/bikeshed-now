@@ -89,7 +89,7 @@ import {
   normalizeEmail,
   parseExpiry,
 } from "./lib/access";
-import { actorFrom, isAutomated, resolveCaller, viaLabel, type Actor } from "./lib/actor";
+import { actedThrough, actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import { activityPage, decodeFeedCursor } from "./lib/changefeed";
 import {
   CREATE_ONLY,
@@ -2055,7 +2055,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
   const basis = access.basis;
 
   const actor = caller ? actorFrom(caller, req) : null;
-  const automated = actor ? isAutomated(actor) : false;
+  const automated = isAutomated(actor);
   // A public folder's reader read a public page; a folder key's, an unlisted one.
   const via: "app" | "unlisted" | "public" =
     basis === "member" ? "app" : basis === "public" || basis === "folder-public" ? "public" : "unlisted";
@@ -2977,9 +2977,8 @@ export const onCommentCreated = onDocumentCreated(
     const body =
       suggestion && comment.generated === true ? "" : String(comment.body ?? "").slice(0, 2000);
     const title = typeof doc.title === "string" ? doc.title : docId;
-    // What it came through, in the words stored with it; a comment from
-    // before those were stored gets the plain words for its channel.
-    const via = actor && actor.channel !== "web" ? actor.via ?? viaLabel(actor.channel) : undefined;
+    // What it came through, in the words stored with it (lib/actor.ts).
+    const via = actedThrough(actor).via;
 
     const { claimCommentCooldown, sendCommentNotice, uidForEmail } = await import("./email/notify");
     for (const email of recipients) {

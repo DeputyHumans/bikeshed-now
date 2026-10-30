@@ -43,9 +43,9 @@ export type TokenChannel = "cli" | "mcp" | "api";
 export type CredentialChannel = TokenChannel | "app";
 
 /**
- * The names `bikeshed login` gives the token it mints. Defined here, beside the
- * label that reads them, so "CLI on mbp" is shown as itself rather than as a
- * token somebody named "CLI on mbp".
+ * The names `bikeshed login` gives the token it mints (oauth/token.ts), in one
+ * place so that `viaLabel` (lib/actor.ts) shows "CLI on mbp" as itself rather
+ * than as a token somebody named "CLI on mbp".
  */
 export const CLI_LOGIN_PREFIX = "CLI on ";
 export const CLI_LOGIN_FALLBACK = "Command line";

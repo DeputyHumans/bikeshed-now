@@ -22,7 +22,7 @@ The Activity panel showed none of this anyway. It listed reading sessions and ac
 
 ## Consequences
 
-- Records written before this release keep what they say: a CLI comment from last week still reads `mcp`, with no `via`. The UI gives an old channel plain words ("MCP"). Nothing is relabelled.
+- Records written before this release keep what they say: a CLI comment from last week still reads `mcp`, with no `via`. The UI and the agent tools give an old channel the same plain words ("MCP"). Nothing is relabelled.
 - An agent that filtered `get_comments` on `via === "mcp"` breaks: `via` is now the label, and `channel` is the kind. The changelog says so.
 - A token's name is shown to the document's editors, and to its readers on comments. A name is the owner's own label, and the forensic `tokenId` is still never shown. A member learns which of a person's credentials acted; a link holder is never told by `list_versions`.
 - A CLI token pasted into another MCP client reads as the CLI. The credential is still the person's own, and `tokenId` still finds everything it did.

@@ -59,11 +59,13 @@ export function expiryLabel(
   return `Expires ${formatDay(at)}`;
 }
 
-function formatDay(at: number): string {
+/** A day as the app writes one: "Oct 29, 2026". `timeZone` for a day that is already a UTC date. */
+export function formatDay(at: number, timeZone?: string): string {
   return new Date(at).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 

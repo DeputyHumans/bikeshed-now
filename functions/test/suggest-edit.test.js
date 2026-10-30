@@ -201,7 +201,8 @@ test("get_comments shows what a suggestion said before it was changed, by channe
   const [earlier] = suggestion.revisions;
   assert.equal(earlier.replacement, "will do");
   assert.equal(earlier.channel, "mcp");
-  assert.equal(earlier.via, "a personal token", "the credential in words, never its id");
+  // This harness stores its actor without the words, as a record from before them reads.
+  assert.equal(earlier.via, "MCP", "the credential in words, never its id");
   assert.match(earlier.at, /^\d{4}-\d{2}-\d{2}T/, "an ISO time an agent can read");
   assert.doesNotMatch(JSON.stringify(threads), /t1|tokenId/, "which token did it is not an agent's business");
 });

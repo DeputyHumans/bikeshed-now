@@ -8,6 +8,7 @@ import { Icon, type IconName } from "./Icon";
 import { Loading } from "./Spinner";
 import { formatDuration, formatRelative, formatTimestamp, listDocViewers } from "../firestore";
 import { describeActivity, fetchActivity, subjectOf, type ActivityItem } from "../activity";
+import { formatDay } from "../expiry";
 import { viaOf } from "../provenance";
 import type { DocMeta, ViewerStat } from "../types";
 
@@ -60,13 +61,14 @@ function ViewerRows({ viewers }: { viewers: ViewerStat[] }) {
 function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
   const via = viaOf(item);
   const ms = item.at ? Date.parse(item.at) : NaN;
-  // A fork carries its day alone (SPEC §21): its time is not its author's to know.
-  const dayOnly = item.type === "fork.created";
+  // A fork is sent as its day alone (SPEC §21), a UTC date, so it is shown as
+  // that date rather than as the hour before midnight west of Greenwich.
+  const day = item.at?.length === 10 && Number.isFinite(ms) ? formatDay(ms, "UTC") : null;
   return (
     <li className="activity-row">
       <Icon name={ICON[item.type] ?? "comment"} size={14} />
-      <span className="activity-who">{subjectOf(item)}</span>
-      <span className="activity-what">{describeActivity(item)}</span>
+      <span>{subjectOf(item)}</span>
+      <span>{describeActivity(item)}</span>
       {via ? (
         // Server-derived, so stated as fact: the credential, in the words it
         // was given when it acted (provenance.ts).
@@ -84,9 +86,9 @@ function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
         <time
           className="activity-when"
           dateTime={item.at ?? undefined}
-          title={dayOnly ? new Date(ms).toLocaleDateString() : formatTimestamp(ms)}
+          title={day ?? formatTimestamp(ms)}
         >
-          {dayOnly ? new Date(ms).toLocaleDateString() : formatRelative(ms)}
+          {day ?? formatRelative(ms)}
         </time>
       ) : null}
     </li>

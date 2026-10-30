@@ -38,10 +38,10 @@ import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib
 import { versionStoragePrefix } from "../lib/storage";
 import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { currentVersionRefusal, mutationVersion, selectedVersion } from "../lib/versions";
+import { currentVersionRefusal, mutationVersion, originOf, selectedVersion } from "../lib/versions";
 import { MANAGEMENT_TOOLS } from "./management";
 import { bucketName, publicOrigin } from "../config";
-import { viaLabel, type Actor } from "../lib/actor";
+import { actedThrough, isAutomated, type Actor } from "../lib/actor";
 import type { Principal } from "../lib/auth";
 import {
   canEdit,
@@ -71,10 +71,11 @@ import {
   readSavedCursor,
   saveCursor,
   type Cursor,
+  eventVisibleTo,
   type EventActor,
 } from "../lib/events";
 import { extractBundle } from "../lib/bundle";
-import { describeEvents, docReader, originOf } from "../lib/changefeed";
+import { describeEvents, docReader } from "../lib/changefeed";
 import { grantTokenOf, linkGrantRef, linkProofFor } from "../lib/linkgrant";
 import {
   BAD_DOC_ID,
@@ -148,17 +149,6 @@ function str(args: Record<string, unknown>, key: string): string {
 
 function asArray(v: unknown): string[] {
   return Array.isArray(v) ? (v as string[]) : [];
-}
-
-/**
- * What acted, as an agent reads it: the channel, and for anything but a person
- * in the browser the credential in words ("CLI on mbp"), never the token's id.
- * `via` means those words in every tool (ADR 0023).
- */
-function actedThrough(actor: Actor | undefined): { channel: string; via?: string } {
-  const channel = actor?.channel ?? "web";
-  if (channel === "web") return { channel };
-  return { channel, via: actor?.via ?? viaLabel(channel) };
 }
 
 /** One earlier form of a suggestion, as an agent reads it. */
@@ -656,10 +646,8 @@ export const TOOLS: ToolDefinition[] = [
             contentHash: row.contentHash ?? null,
             isCurrent: v.id === data.currentVersion,
             origin: originOf(row),
-            automated: by ? by.channel !== "web" : null,
-            ...(member
-              ? { publishedBy: row.publishedByEmail ?? null, ...(by?.channel ? { channel: by.channel } : {}), ...(by?.via ? { via: by.via } : {}) }
-              : {}),
+            automated: by ? isAutomated(by) : null,
+            ...(member ? { publishedBy: row.publishedByEmail ?? null, ...(by?.channel ? actedThrough(by) : {}) } : {}),
           }, ref.id, v.id, str(args, "k") || undefined);
         }),
         nextCursor: snap.docs.length > limit ? snap.docs[limit - 1].id : null,
@@ -1591,8 +1579,7 @@ export const TOOLS: ToolDefinition[] = [
       const includeMine = args.includeMine === true;
       const visible = page.filter((e) => {
         const v = e.data();
-        if (v.audience === "editors" && !editor) return false;
-        if (v.audience === "owner" && !owner) return false;
+        if (!eventVisibleTo(v, { editor, owner })) return false;
         return includeMine || !causedBy(v.actor as EventActor | undefined, ctx.caller);
       });
 
