@@ -1021,8 +1021,8 @@ function printChanges(flags, result) {
     for (const e of result.events) {
       const quote = e.quote ? ` “${e.quote}”` : "";
       const words = e.body ? `: ${e.body}` : e.replacement !== undefined ? ` → “${e.replacement}”` : "";
-      // What acted, in the words the server stored when it did; an event from
-      // before those were stored names its channel.
+      // What acted, in the words the server stored when it did; a deployment
+      // older than those words sends only the channel, which names it.
       const via = e.via ? ` [via ${e.via}]` : e.channel && e.channel !== "web" ? ` [via ${e.channel}]` : "";
       console.log(`${e.at}  ${e.type}  ${e.by ?? ""}${via}${e.threadId ? `  (${e.threadId})` : ""}${quote}${words}`);
     }
