@@ -134,7 +134,7 @@ export function DetailsPanel({
                     )}
                     {current ? " · current" : ""}
                   </span>
-                  <span>
+                  <span className="details-how">
                     {how ?? "published"}
                     <Who email={v.publishedByEmail} via={viaOf(v.publishedBy)} />
                   </span>

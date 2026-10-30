@@ -196,20 +196,26 @@ button.fork-chip { cursor: pointer; }
  * server-derived channel, and it sits next to self-reported client and agent
  * strings that get no badge at all. A badge implying verification it does not
  * have would be worse than no badge.
+ *
+ * Never upper-cased: the words name a token or an app as its owner named it,
+ * in quotes (SPEC §17), and a quote in other letters is a misquote. One line,
+ * cut short with an ellipsis where it does not fit; the title says it whole.
  */
 .badge-automated {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
+  display: inline-block;
+  max-width: 100%;
   padding: 0 6px;
   height: 18px;
+  line-height: 16px;
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   border: 1px solid var(--color-line);
   font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
   color: var(--color-ink-muted);
 }
 .self-reported {

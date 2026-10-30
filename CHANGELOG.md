@@ -28,6 +28,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - Each version records its word count, counted once on the server from its entry document (text a person reads, not scripts, styles or the title), and the document carries `latest`, a summary of its current version, which the version trigger keeps. The public mirror carries the count and the time, never who.
 - `scripts/summarize-documents.mjs` asks the trigger to count and summarize documents written before this release; idempotent, with `--dry-run`.
 
+### Fixed
+
+- The "via" badge beside anything automation did is no longer upper-cased. Since 0.27.0 it quotes a token's or an app's name as its owner wrote it, and capitals misquoted it ("DEPLOY-BOT" for “deploy-bot”). A long name is cut short on one line, and the badge's tooltip has it whole.
+- On a phone, Details puts who published each version on a line of its own, instead of four squeezed columns.
+
 ## 0.27.0 — 2026-10-29
 
 ### Changed
