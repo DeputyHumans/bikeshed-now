@@ -20,14 +20,15 @@ import { publicOrigin } from "../config";
 export interface ManagementContext { db: Firestore; caller: Principal; actor: Actor }
 export type ResourceKind = "document" | "folder";
 export class ManagementError extends Error {
-  constructor(public readonly status: number, message: string) { super(message); }
+  /** `detail` joins `error` in the response body, as `{ trashed: true }` does for the Trash's 409. */
+  constructor(public readonly status: number, message: string, public readonly detail: Record<string, unknown> = {}) { super(message); }
 }
 const bad = (message: string): never => { throw new ManagementError(400, message); };
 /** A trashed folder is frozen as a trashed document is (SPEC §4): Restore first. */
-export const TRASHED_FOLDER = "this folder is in the Trash — restore it first";
-/** Refuse a change to anything in the Trash, read inside the writing transaction. */
+const TRASHED_FOLDER = "this folder is in the Trash — restore it first";
+/** Refuse a change to anything in the Trash, read inside the writing transaction, with the body every write path gives it. */
 function refuseTrashed(kind: ResourceKind, data: DocumentData): void {
-  if (isTrashed(data)) throw new ManagementError(409, kind === "document" ? TRASHED_WRITE : TRASHED_FOLDER);
+  if (isTrashed(data)) throw new ManagementError(409, kind === "document" ? TRASHED_WRITE : TRASHED_FOLDER, { trashed: true });
 }
 const stamp = () => FieldValue.serverTimestamp();
 
@@ -224,7 +225,7 @@ export async function organizeFolder(ctx: ManagementContext, id: string, op: "re
     const name = typeof args.name === "string" ? args.name.trim() : "";
     if (!name || name.length > 120) bad("folder name is required (up to 120 characters)");
     await ref.set({ name, slug: slugify(name), updatedAt: stamp() }, { merge: true });
-  } else if (op === "move") {
+  } else {
     const target = await resolveFolderTarget(ctx.db, args.parent, ctx.caller);
     if (!target.ok) throw new ManagementError(target.status, target.error);
     if (target.id && await wouldCycle(ctx.db, id, target.id)) bad("cannot move a folder into itself or a descendant");

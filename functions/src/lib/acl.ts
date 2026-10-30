@@ -604,6 +604,9 @@ export function readAccess(
   if (!doc) return null;
   const own = readBasis(doc, caller, proof);
   if (own !== null) return { basis: own, until: null };
+  // A trashed document's folder may still be shared; its reach opens nothing
+  // in the Trash, as its own link does not (SPEC §4).
+  if (isTrashed(doc)) return null;
   return folderAccess(folder, proof.k, nowMs);
 }
 

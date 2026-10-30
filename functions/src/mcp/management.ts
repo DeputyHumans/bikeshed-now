@@ -2,10 +2,9 @@
 // MCP schemas for the shared permission and folder management operations (SPEC §19).
 
 import type { ToolDefinition } from "./tools";
-import { getAccess, setAccess, setFolderVisibility, setVisibility, organizeFolder } from "../lib/management";
+import { getAccess, setAccess, setFolderVisibility, setVisibility, organizeFolder, ManagementError } from "../lib/management";
 import { listTrash, restoreDocument, restoreFolder, trashDocument, trashFolder } from "../lib/trash";
 import { ROLES } from "../lib/access";
-import { ManagementError } from "../lib/management";
 
 const id = { type: "string", description: "The document or folder id." };
 const delta = {

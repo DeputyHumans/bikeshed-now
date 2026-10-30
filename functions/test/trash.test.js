@@ -320,3 +320,55 @@ test("through MCP: trash_document and restore_from_trash act for the owner, and 
     },
   );
 });
+
+test("list_documents and list_folders leave the Trash out: a trashed item is list_trash's, never something to work on or file into", async () => {
+  const w = world();
+  const run = (tool, args) => toolByName(tool).run(w.ctx(), args);
+  await trashDocument(w.ctx(), "loose");
+  await trashFolder(w.ctx(), "sub");
+  const docs = (await run("list_documents", {})).documents.map((d) => d.id).sort();
+  const folders = (await run("list_folders", {})).folders.map((f) => f.id);
+  assert.deepEqual({ docs, folders }, { docs: ["doc"], folders: ["top"] });
+});
+
+test("a trash that stopped part way is finished by asking again, with the folder's own batch", async () => {
+  const w = world();
+  // As if the walk died after the root: the folder is trashed, nothing in it is.
+  w.store.set("folders/top", { ...w.store.get("folders/top"), trashed: { batch: "b-stopped", by: "u-owner", at: null } });
+  const again = await trashFolder(w.ctx(), "top");
+  const marks = ["folders/sub", "docs/doc", "docs/nested", "docs/theirs"].map((p) => [w.store.get(p).trashed?.batch, w.store.get(p).trashed?.with?.folderId]);
+  assert.deepEqual({ batch: again.batch, documents: again.documents, marks }, { batch: "b-stopped", documents: 3, marks: Array(4).fill(["b-stopped", "top"]) });
+});
+
+test("a restore that stopped part way is finished by asking again: what is left still names the folder it went with", async () => {
+  const w = world();
+  await trashFolder(w.ctx(), "top");
+  // As if the walk died after the root: the folder is out, its contents are not.
+  w.store.set("folders/top", { ...w.store.get("folders/top"), trashed: null });
+  const again = await restoreFolder(w.ctx(), "top");
+  assert.deepEqual(
+    { again: [again.folders, again.documents], left: ["folders/sub", "docs/doc", "docs/nested", "docs/theirs"].map((p) => w.store.get(p).trashed), members: w.store.get("docs/doc").members },
+    { again: [1, 3], left: [null, null, null, null], members: [editor, owner, viewer] },
+  );
+});
+
+test("a folder's reach opens nothing in the Trash, even where the document's own basis would have fallen through to it", () => {
+  const folder = { reach: [{ folderId: "top", visibility: "public", expiresAt: null }] };
+  const doc = { ...owned(owner), members: [owner], trashed: { batch: "b" } };
+  const live = { ...owned(owner), trashed: null };
+  const stranger = { uid: "u-x", emailLower: "x@example.com" };
+  assert.deepEqual([acl.readAccess(doc, stranger, {}, folder), acl.readAccess(live, stranger, {}, folder)?.basis ?? null], [null, acl.readAccess(live, stranger, {}, folder)?.basis ?? null]);
+  assert.notEqual(acl.readAccess(live, stranger, {}, folder), null, "the negative control: the same folder opens the live document");
+});
+
+test("sharing and visibility refuse a trashed document with the same body every write path gives it", async () => {
+  const w = world();
+  await trashDocument(w.ctx(), "doc");
+  const sessions = { owner: { uid: "u-owner", email: owner, email_verified: true } };
+  const as = (handler, body) => withFakeAdmin({ db: w.db, sessions }, () => invoke(handler, { headers: { cookie: "__session=owner" }, body }));
+  const bodies = [
+    (await as(http.setAccess, { docId: "doc", add: [{ email: "new@example.com", role: "viewer" }] })).body,
+    (await as(http.setVisibility, { docId: "doc", visibility: "public" })).body,
+  ];
+  assert.deepEqual(bodies, Array(2).fill({ trashed: true, error: acl.TRASHED_WRITE }));
+});

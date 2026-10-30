@@ -25,7 +25,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Added
 
 - The Trash. A document's owner moves it there with **Move to Trash**, in its ⋮ menu or the viewer's More menu, and a folder's owner moves a folder there with everything in it; a toast offers Undo. In the Trash an item is its owner's alone and read-only: its link, a folder's link, its public page, open editing and every grant stop working, and it cannot be shared, renamed or moved. **Trash**, at the foot of the folder list, shows what is there, where each item came from, and Restore, which gives every grant back and puts it where it was, or at its owner's root if that folder is gone. An owner who opens a trashed document reads it under a banner with Restore. Each owner restores their own documents from someone else's trashed folder. `POST /organize` takes `trash` and `restore` for both kinds. Nothing is deleted yet; permanent deletion comes in a later release.
-- Agents and the CLI work the Trash too: `trash_document`, `restore_from_trash` (with `kind`) and `list_trash`, which make thirty-six MCP tools, and `bikeshed trash [folder] <id>`, `bikeshed restore [folder] <id>` and bare `bikeshed trash` to list it, in bikeshed-now 0.20.0. No tool and no command deletes anything permanently.
+- Agents and the CLI work the Trash too: `trash_document`, `restore_from_trash` (with `kind`) and `list_trash`, which make thirty-six MCP tools, and `bikeshed trash [folder] <id>`, `bikeshed restore [folder] <id>` and bare `bikeshed trash` to list it, in bikeshed-now 0.20.0. `list_documents` and `list_folders`, and so `bikeshed list`, leave what is in the Trash out. No tool and no command deletes anything permanently.
 
 ## 0.28.0 — 2026-10-29
 

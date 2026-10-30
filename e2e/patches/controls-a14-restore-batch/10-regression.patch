@@ -1,11 +1,11 @@
 --- a/functions/src/lib/trash.ts
 +++ b/functions/src/lib/trash.ts
-@@ -201,7 +201,7 @@
+@@ -214,7 +214,7 @@
      id,
-     (folderId) => async (current, tx) => {
+     (folderId) => async (current, read) => {
        if (!inBatch(current)) return {};
 -      if (folderId !== id) return { trashed: null };
 +      if (folderId !== id) return {};
-       parentId = await placeFor(ctx.db, tx, current.parentId);
+       parentId = await placeFor(ctx.db, read, current.parentId);
        return { trashed: null, parentId };
      },

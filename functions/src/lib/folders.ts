@@ -351,12 +351,13 @@ export async function createFolderRecord(
 
 /**
  * A delta to a node's current record, decided inside the transaction that
- * writes its membership. It may read through `tx` (reads come before the
- * writes), and may throw to refuse the change after all.
+ * writes its membership. It may read through `read`, the same transaction's
+ * reads, and nothing else: a change never writes, so every read still comes
+ * before the transaction's writes. It may throw to refuse the change.
  */
 export type Change = (
   data: admin.firestore.DocumentData,
-  tx: admin.firestore.Transaction,
+  read: (ref: admin.firestore.DocumentReference) => Promise<admin.firestore.DocumentSnapshot>,
 ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
 /** Read every dependency through the same transaction as its membership write. */
@@ -390,7 +391,7 @@ export async function persistFolderMembership(
     }
     if (!snap.exists) return null;
     const data = snap.data() || {};
-    const patch = (await change?.(data, tx)) ?? {};
+    const patch = (await change?.(data, (r) => tx.get(r))) ?? {};
     const next = { ...data, ...patch };
     // From the patched record: a restore may move it to the owner's root.
     const parentId = typeof next.parentId === "string" ? next.parentId : null;
@@ -492,7 +493,7 @@ export async function persistDocMembership(
     }
     if (!snap.exists) throw new Error("document no longer exists");
     const before = snap.data() || {};
-    const patch = (await change?.(before, tx)) ?? {};
+    const patch = (await change?.(before, (r) => tx.get(r))) ?? {};
     const data = { ...before, ...patch };
     const folderId = typeof data.folderId === "string" ? data.folderId : null;
     const parentSnap = folderId ? await tx.get(db.collection("folders").doc(folderId)) : null;

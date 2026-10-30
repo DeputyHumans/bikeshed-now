@@ -38,7 +38,7 @@ type Data = admin.firestore.DocumentData;
  * next release's, behind an emailed code.
  */
 
-export interface TrashMark {
+interface TrashMark {
   at: FieldValue;
   by: string;
   batch: string;
@@ -54,6 +54,12 @@ function batchOf(data: Data | undefined): string | null {
   return t && typeof t.batch === "string" ? t.batch : null;
 }
 
+/** The folder an item went to the Trash with, by id, or null. */
+function withOf(data: Data | undefined): string | null {
+  const t = data?.trashed as { with?: { folderId?: unknown } } | null | undefined;
+  return t && typeof t.with?.folderId === "string" ? t.with.folderId : null;
+}
+
 function mark(ctx: ManagementContext, batch: string, along?: { folderId: string; name: string }): TrashMark {
   return { at: FieldValue.serverTimestamp(), by: ctx.caller.uid, batch, ...(along ? { with: along } : {}) };
 }
@@ -67,9 +73,9 @@ function event(ctx: ManagementContext, type: "doc.trashed" | "doc.restored", dat
  * and is not in the Trash itself, otherwise its owner's root. Read inside the
  * restoring transaction, so a folder trashed a moment earlier is seen.
  */
-async function placeFor(db: Db, tx: admin.firestore.Transaction, folderId: unknown): Promise<string | null> {
+async function placeFor(db: Db, read: Parameters<Change>[1], folderId: unknown): Promise<string | null> {
   if (typeof folderId !== "string" || !folderId) return null;
-  const snap = await tx.get(db.collection("folders").doc(folderId));
+  const snap = await read(db.collection("folders").doc(folderId));
   return snap.exists && !isTrashed(snap.data()) ? folderId : null;
 }
 
@@ -99,12 +105,12 @@ export async function restoreDocument(ctx: ManagementContext, id: string): Promi
     throw new ManagementError(403, "only the owner can restore a document");
   }
   let folderId: string | null = typeof data.folderId === "string" ? data.folderId : null;
-  const change: Change = async (current, tx) => {
+  const change: Change = async (current, read) => {
     if (!isTrashed(current)) {
       folderId = typeof current.folderId === "string" ? current.folderId : null;
       return {};
     }
-    folderId = await placeFor(ctx.db, tx, current.folderId);
+    folderId = await placeFor(ctx.db, read, current.folderId);
     return { trashed: null, folderId };
   };
   await persistDocMembership(ctx.db, ref, change, (_m, before) =>
@@ -118,7 +124,8 @@ export async function restoreDocument(ctx: ManagementContext, id: string): Promi
  * `doc` to each node in its own membership transaction, as recomputeSubtree
  * does. `descend` decides whether a folder's contents are visited at all.
  * Counts what each change actually changed, by id, so a transaction retried
- * is not counted twice and a node left as it was is not counted at all.
+ * is not counted twice and a node left as it was is not counted at all, and
+ * decides `descend` from the record as its transaction left it, not a re-read.
  */
 async function walk(
   db: Db,
@@ -129,10 +136,12 @@ async function walk(
   descend: (data: Data | undefined) => boolean,
 ): Promise<{ folders: number; documents: number }> {
   const changed = { folders: new Set<string>(), documents: new Set<string>() };
-  const counted = (into: Set<string>, id: string, change: Change): Change => async (data, tx) => {
-    const patch = await change(data, tx);
+  const written = new Map<string, Data>();
+  const counted = (into: Set<string>, id: string, change: Change): Change => async (data, read) => {
+    const patch = await change(data, read);
     if (Object.keys(patch).length > 0) into.add(id);
     else into.delete(id);
+    written.set(id, { ...data, ...patch });
     return patch;
   };
   const queue = [rootId];
@@ -143,13 +152,14 @@ async function walk(
     seen.add(id);
     const ref = db.collection("folders").doc(id);
     const result = await persistFolderMembership(db, ref, counted(changed.folders, id, folder(id)));
-    if (!result) continue;
-    if (!descend((await ref.get()).data())) continue;
-    const docs = await db.collection("docs").where("folderId", "==", id).get();
+    if (!result || !descend(written.get(id))) continue;
+    const [docs, children] = await Promise.all([
+      db.collection("docs").where("folderId", "==", id).get(),
+      db.collection("folders").where("parentId", "==", id).get(),
+    ]);
     for (const d of docs.docs) {
       await persistDocMembership(db, d.ref, counted(changed.documents, d.id, doc), (_m, before) => docEvents(before));
     }
-    const children = await db.collection("folders").where("parentId", "==", id).get();
     for (const child of children.docs) queue.push(child.id);
   }
   return { folders: changed.folders.size, documents: changed.documents.size };
@@ -165,8 +175,9 @@ export async function trashFolder(ctx: ManagementContext, id: string): Promise<{
   if (!canManageFolder(data as FolderAclData, ctx.caller.emailLower)) {
     throw new ManagementError(403, "only the owner can move a folder to the Trash");
   }
-  if (isTrashed(data)) return { id, batch: batchOf(data) as string, folders: 0, documents: 0 };
-  const batch = newBatch();
+  // Already in the Trash: finish with its own batch. A walk that stopped part
+  // way, a timeout on a large folder, is completed by asking again.
+  const batch = batchOf(data) ?? newBatch();
   const along = { folderId: id, name: typeof data.name === "string" ? data.name : "Untitled folder" };
   const set = (withFolder: boolean): Change => (current) =>
     isTrashed(current) ? {} : { trashed: mark(ctx, batch, withFolder ? along : undefined) };
@@ -192,21 +203,23 @@ export async function restoreFolder(ctx: ManagementContext, id: string): Promise
   if (!canManageFolder(data as FolderAclData, ctx.caller.emailLower)) {
     throw new ManagementError(403, "only the owner can restore a folder");
   }
+  // Its batch while it is still in the Trash. Once it is out, whatever a
+  // restore that stopped part way left behind still names it as the folder it
+  // went with, so asking again finishes the job.
   const batch = batchOf(data);
-  if (!batch) return { id, parentId: typeof data.parentId === "string" ? data.parentId : null, folders: 0, documents: 0 };
-  let parentId: string | null = null;
-  const inBatch = (current: Data | undefined) => batchOf(current) === batch;
+  const inBatch = (current: Data | undefined) => (batch ? batchOf(current) === batch : withOf(current) === id);
+  let parentId: string | null = typeof data.parentId === "string" ? data.parentId : null;
   const counts = await walk(
     ctx.db,
     id,
-    (folderId) => async (current, tx) => {
+    (folderId) => async (current, read) => {
       if (!inBatch(current)) return {};
       if (folderId !== id) return { trashed: null };
-      parentId = await placeFor(ctx.db, tx, current.parentId);
+      parentId = await placeFor(ctx.db, read, current.parentId);
       return { trashed: null, parentId };
     },
     (current) => (inBatch(current) ? { trashed: null } : {}),
-    (before) => (inBatch(before) ? [event(ctx, "doc.restored", { batch })] : []),
+    (before) => (inBatch(before) ? [event(ctx, "doc.restored", { batch: batchOf(before) })] : []),
     // A folder that stays in the Trash keeps its contents there with it.
     (current) => !isTrashed(current),
   );

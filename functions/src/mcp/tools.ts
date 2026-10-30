@@ -55,6 +55,7 @@ import {
   isDocEditor,
   frozenWrite,
   isFrozen,
+  isTrashed,
   isFolderBasis,
   isMember,
   visibilityOf,
@@ -544,7 +545,10 @@ export const TOOLS: ToolDefinition[] = [
         if (after.exists) q = q.startAfter(after);
       }
       const snap = await q.get();
-      const page = snap.docs.slice(0, limit);
+      // The Trash is list_trash's (SPEC §4): a trashed document is its owner's
+      // and frozen, not something to work on. A page may come back short; its
+      // cursor is still the last row read, so nothing is skipped or repeated.
+      const page = snap.docs.slice(0, limit).filter((d) => !isTrashed(d.data()));
 
       /**
        * `format` lives on the VERSION, not on the document — a document's
@@ -1209,7 +1213,8 @@ export const TOOLS: ToolDefinition[] = [
         .orderBy("createdAt", "desc")
         .limit(FOLDER_LIMIT + 1)
         .get();
-      const page = snap.docs.slice(0, FOLDER_LIMIT);
+      // A trashed folder is listed by list_trash, never as a place to put anything.
+      const page = snap.docs.slice(0, FOLDER_LIMIT).filter((d) => !isTrashed(d.data()));
       const nameOf = new Map(page.map((d) => [d.id, String(d.data().name ?? d.id)]));
 
       const folders = page.map((d) => {

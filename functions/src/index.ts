@@ -726,9 +726,9 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
     return;
   }
-  // Frozen as a reader meets it: an editor cannot read an expired document,
-  // so may not store its picture; its owner still reads it, and is the only
-  // one who will ever be shown the cover.
+  // Frozen as a reader meets it: an editor cannot read an expired or trashed
+  // document, so may not store its picture; its owner still reads it, and is
+  // the only one who will ever be shown the cover.
   const frozen = frozenForReader(data, caller) ? frozenWrite(data, Date.now()) : null;
   if (frozen) {
     res.status(409).json(frozen);
@@ -886,7 +886,7 @@ function asArray(v: unknown): string[] {
 /** Errors shared by HTTP and MCP, with no resource existence disclosure. */
 function managementFailure(error: unknown, res: import("express").Response): void {
   if (error instanceof ManagementError && (error.status === 404 || error.status === 403)) { res.status(error.status).end(); return; }
-  if (error instanceof ManagementError) { res.status(error.status).json({ error: error.message }); return; }
+  if (error instanceof ManagementError) { res.status(error.status).json({ ...error.detail, error: error.message }); return; }
   throw error;
 }
 
