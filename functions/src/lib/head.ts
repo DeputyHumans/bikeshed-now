@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// What a document's own <head> and first words say about it (SPEC §17).
+// What a document's own <head> and words say about it: title, excerpt, image, and how long it is (SPEC §4, §17).
 
 import { asciiLower, collapseWhitespace, decodeEntities } from "./htmltext";
 
@@ -109,6 +109,54 @@ export function readHead(html: string): DocHead {
 
 export function titleFromHtml(html: string): string | null {
   return readHead(html).title;
+}
+
+/** Characters read for a word count: well past any document read in one sitting. */
+export const WORDS_SCAN_CHARS = 4 * 1024 * 1024;
+
+const WORDS = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/**
+ * How many words a person reads in a document, for its reading time (SPEC §4).
+ *
+ * The body's text, without what the browser never shows as text (scripts,
+ * styles, SVG, templates, comments) or the navigation around it: the same
+ * strip the excerpt uses. An inline tag inside a word does not split it; a
+ * block boundary separates words whether or not the author wrote a space.
+ * Words are the platform's word segmenter's, so a language written without
+ * spaces counts its words rather than one long one. Linear, as the rest of
+ * this scanner is.
+ */
+export function countWords(html: string): number {
+  const raw = html.length > WORDS_SCAN_CHARS ? html.slice(0, WORDS_SCAN_CHARS) : html;
+  const stripped = stripHidden(raw, asciiLower(raw));
+  const bodyAt = firstTag(stripped.lower, "body", 0);
+  const from = bodyAt === -1 ? afterHead(stripped.lower) : bodyAt;
+  const text = stripped.text.slice(from);
+  const lower = stripped.lower.slice(from);
+
+  const runs: string[] = [];
+  const tags = new TagEnds(text);
+  let i = 0;
+  let runFrom = 0;
+  for (;;) {
+    const lt = nextTagStart(lower, i);
+    if (lt === -1) {
+      runs.push(text.slice(runFrom));
+      break;
+    }
+    const gt = tags.end(lt);
+    if (gt === -1) {
+      i = lt + 1;
+      continue;
+    }
+    runs.push(text.slice(runFrom, lt));
+    if (!INLINE.has(tagName(lower, lt))) runs.push(" ");
+    i = runFrom = gt + 1;
+  }
+  let words = 0;
+  for (const segment of WORDS.segment(decodeEntities(runs.join("")))) if (segment.isWordLike) words++;
+  return words;
 }
 
 /**

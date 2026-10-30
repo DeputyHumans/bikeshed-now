@@ -80,12 +80,15 @@ export interface ReaderDoc {
    * (SPEC §21).
    */
   forked: boolean;
+  /** When the current version was published, for "Updated" (lib/latest.ts). */
+  publishedAt: admin.firestore.Timestamp | FieldValue | null;
+  /** The current version's word count, for its reading time; null until counted. */
+  words: number | null;
 }
 
-/** The mirror in `public/{docId}`: the reader shape plus when it was published. */
+/** The mirror in `public/{docId}`: the reader shape, at the public level. */
 export interface PublicDoc extends ReaderDoc {
   visibility: "public";
-  publishedAt: admin.firestore.Timestamp | FieldValue | null;
 }
 
 /** Fields a reader may be handed. Anything else is a leak. */
@@ -106,10 +109,12 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "expiresAt",
   "viaFolder",
   "forked",
+  "publishedAt",
+  "words",
 ];
 
 /** Fields that may appear in the world-readable projection. */
-const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [...READER_KEYS, "publishedAt"];
+const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = READER_KEYS;
 
 /**
  * Strip anything not on the list. The types say the object has only these keys,
@@ -174,9 +179,23 @@ export function projectReader(
       expiresAt: reach ? earlierEnd(ownExpiry, reach.until) : ownExpiry,
       viaFolder: reach !== null,
       forked: data.forked === true,
+      // When the content a reader sees was published, and how long it is: the
+      // current version's summary, never who published it (lib/latest.ts).
+      publishedAt: latestAt(data),
+      words: typeof (data.latest as { words?: unknown } | undefined)?.words === "number" ? (data.latest as { words: number }).words : null,
     },
     READER_KEYS,
   );
+}
+
+/**
+ * When the current version was published. A document summarized before
+ * `latest` existed falls back to `updatedAt`, which also moves on renames and
+ * re-shares, and then to when it was made.
+ */
+function latestAt(data: Record<string, unknown>): admin.firestore.Timestamp | null {
+  const latest = (data.latest as { at?: admin.firestore.Timestamp | null } | undefined)?.at;
+  return latest ?? (data.updatedAt as admin.firestore.Timestamp | undefined) ?? (data.createdAt as admin.firestore.Timestamp | undefined) ?? null;
 }
 
 /**
@@ -196,10 +215,6 @@ export function projectPublicDoc(
     {
       ...reader,
       visibility: "public",
-      publishedAt:
-        (data.updatedAt as admin.firestore.Timestamp | undefined) ??
-        (data.createdAt as admin.firestore.Timestamp | undefined) ??
-        null,
     },
     PROJECTED_KEYS,
   );

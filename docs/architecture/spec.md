@@ -344,8 +344,7 @@ the shell does not authenticate.
 Body `{ docId, k? }`. What a reader who is not a member may know about a
 document, and the one place an unlisted document's key is exchanged for access.
 
-`200` with the reader projection — `public/{docId}`'s fields (§17) without
-`publishedAt` — when the caller's `readBasis` is `public`, `link` or `grant`, or
+`200` with the reader projection — `public/{docId}`'s fields (§17) — when the caller's `readBasis` is `public`, `link` or `grant`, or
 `member` of a non-private document. A signed-in caller whose basis is `link`
 gets a link grant first (§4, §17). Everything else is **one identical `404`**
 with an empty body: absent, private (to its members too, who read
@@ -685,8 +684,7 @@ the editor-gated `views` and `viewers` collections; `lastViewedAt` is an
 anonymous aggregate timestamp. Read writers delete the legacy
 `stats.lastViewedByEmail` field. An existing installation must also run
 `scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again.
-`recordView` deliberately does NOT touch `updatedAt` — that field means "bumped
-on every publish", and a read must not masquerade as a publish.
+`recordView` deliberately does NOT touch `updatedAt` — that field means "the record changed", and a read must not masquerade as a change.
 
 **`thumb`** is `{ versionId, rev?, cover?, slides?: { key, count } }`: which
 version's thumbnails are stored, by which capture revision (absent is the
@@ -726,7 +724,11 @@ draft and every retained version may prove its unique candidate unreferenced;
 only that proof permits cleanup. A failed lookup or an unknown transport error
 retains the bytes, and a later head never hides a historical version's pointer.
 
-`createdAt` is set once. `updatedAt` is bumped on every publish.
+`createdAt` is set once. `updatedAt` is bumped by any change to the record: a publish, and also a rename, a share, trust, a marking or a folder recompute. So it is not "last updated" in a reader's sense.
+
+**`latest`** is that: the current version, summarized, `{ version, at, byEmail, channel, via?, origin, words? }`: when it was published, by whom, through what (§17), how it arrived, and its word count. Workspace cards read it ("6 min read · Updated 2h ago · via CLI on mbp") and sort "Recently updated" by `latest.at`, because the list is one query and cannot read versions. The version-write trigger (`recordVersionEvent`) keeps it, so every way of making a version, the operator scripts included, and every withdrawal moves it. It is written in a transaction that reads `currentVersion`, so it can lag a publish by a moment but never names a version that is not the head. A document whose current version predates it has none until `scripts/summarize-documents.mjs` asks the trigger to catch up.
+
+**`words`** on a version is its entry's word count, counted once by the same trigger from the stored bytes: the body's text outside scripts, styles, SVG, templates, comments and navigation, segmented by `Intl.Segmenter`, so a language written without spaces counts its words (`lib/head.ts countWords`). Reading time is words ÷ 238 a minute, rounded up, at least one (`app/src/readingTime.ts`). It is an estimate of a sitting; Activity's "time spent reading" is the measured one. A version may also carry `summaryRequestedAt`, the backfill's marker, which means nothing else.
 
 **A docId** is the document's address, `/d/{docId}`, and never changes. The
 publisher may ask for one (`id` on `/publish`, on `publish_document`, and
@@ -1257,7 +1259,7 @@ functions/src/
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
-  lib/{versions,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
+  lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/accountmove.ts
   lib/markdown/{render,serialize,slug,theme}.ts
@@ -1318,7 +1320,7 @@ command alive. A dry run initializes no client and its cleanup is a no-op.
 
 Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
 `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
-and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17). Shared helpers in `scripts/lib/`: `args`, `email`,
+and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17), `summarize-documents.mjs` (marks each current version not yet counted or summarized, so the version trigger catches it up; §4). Shared helpers in `scripts/lib/`: `args`, `email`,
 `firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`,
 `transaction-receipts`, `endpoints`.
 
@@ -2339,7 +2341,7 @@ Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
-`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` — written by the same paths that
+`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` (when the current version was published, from `latest`, §4) and `words` (its word count, for a reader's reading time; null until counted), never who published it — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
 are the same refusal. The source document, current version and projection

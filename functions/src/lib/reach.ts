@@ -59,7 +59,10 @@ export interface ReachedDocument {
   docId: string;
   title: string;
   currentVersion: string;
+  /** When its current version was published (lib/latest.ts), else when the record last changed. */
   updatedAt: number | null;
+  /** The current version's word count, for its reading time; null until counted. */
+  words: number | null;
   /** The stored cover, when the document has one: `/thumb/~k/{docId}/{versionId}/{key}/cover.jpg`. */
   cover: { versionId: string; key: string } | null;
 }
@@ -153,7 +156,8 @@ export async function listReach(
       docId: s.id,
       title: str(d.title, "Untitled"),
       currentVersion: str(d.currentVersion, ""),
-      updatedAt: millis(d.updatedAt) ?? millis(d.createdAt),
+      updatedAt: millis((d.latest as { at?: unknown } | undefined)?.at) ?? millis(d.updatedAt) ?? millis(d.createdAt),
+      words: typeof (d.latest as { words?: unknown } | undefined)?.words === "number" ? (d.latest as { words: number }).words : null,
       cover: thumb?.cover ? { versionId: thumb.versionId, key: thumb.cover } : null,
     });
   }

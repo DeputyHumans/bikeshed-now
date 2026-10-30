@@ -379,6 +379,15 @@ editor-only reading history remain. New human and automated reads also erase
 the field, but cannot clean documents nobody opens again. A source change alone
 does not establish that an existing deployment's records have been redacted.
 
+**Documents published before word counts need summarizing once.** After deploying the version that adds `latest` and `words` (SPEC §4), the version trigger counts and summarizes every new version, but a document whose current version is older shows no reading time, and its card falls back to `updatedAt`. Preview, then ask the trigger to catch them up:
+
+```sh
+node scripts/summarize-documents.mjs --dry-run --project <id>
+node scripts/summarize-documents.mjs --yes --account you@example.com --project <id>
+```
+
+It writes one marker field to each such current version and counts nothing itself; the trigger does the counting, within about a minute, as it does for a new version. It is idempotent, and a second run reports nothing. Each marked version costs one trigger run and one read of its entry from Storage.
+
 **A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
 are part of the content hash, so bumping `markdown-it`, `turndown` or
 `turndown-plugin-gfm` changes every Markdown document's hash and the next save

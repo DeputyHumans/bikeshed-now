@@ -3,6 +3,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const admin = require("firebase-admin");
 
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -138,6 +139,7 @@ test("automation is exactly everything that is not the web channel", () => {
 // --- Public projection -----------------------------------------------------
 
 const PRIVATE_FIELDS = [
+  "latest",
   "members",
   "viewers",
   "editors",
@@ -211,6 +213,7 @@ test("the projection carries render fields and nothing else", () => {
     "trusted",
     "viaFolder",
     "visibility",
+    "words",
   ].sort());
   for (const field of PRIVATE_FIELDS) {
     assert.ok(!(field in p), `${field} leaked into the public projection`);
@@ -234,15 +237,30 @@ test("the reader projection an unlisted document unlocks carries render fields a
     "sourceEntry",
     "marking",
     "publicEdit",
+    "publishedAt",
     "slug",
     "title",
     "trusted",
     "viaFolder",
     "visibility",
+    "words",
   ].sort());
   for (const field of PRIVATE_FIELDS) {
     assert.ok(!(field in p), `${field} leaked into the reader projection`);
   }
+});
+
+test("a reader is told when the current version was published and how long it is, never by whom", () => {
+  const at = admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 9, 29));
+  const latest = { version: "v3", at, byEmail: "author@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 1234 };
+  for (const [project, visibility] of [[projectPublicDoc, "public"], [projectReader, "unlisted"]]) {
+    const p = project("d1", storedDoc({ visibility, latest, updatedAt: admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 9, 30)) }));
+    assert.equal(p.words, 1234, visibility);
+    assert.equal(p.publishedAt.toMillis(), at.toMillis(), `${visibility}: the publish, not the last rename or re-share`);
+    assert.doesNotMatch(JSON.stringify(p), /author@example\.com|CLI on mbp|latest/, `${visibility}: nobody is named`);
+  }
+  // Before the summary exists, the projection falls back and counts nothing.
+  assert.equal(projectReader("d1", storedDoc({ visibility: "unlisted" })).words, null);
 });
 
 test("reader projections carry only the bounded document marking, including explicit off", () => {

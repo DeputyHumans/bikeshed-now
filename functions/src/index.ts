@@ -91,6 +91,7 @@ import {
 } from "./lib/access";
 import { actedThrough, actorFrom, isAutomated, resolveCaller, type Actor } from "./lib/actor";
 import { activityPage, decodeFeedCursor } from "./lib/changefeed";
+import { refreshLatest } from "./lib/latest";
 import {
   CREATE_ONLY,
   compileBundle,
@@ -3053,6 +3054,9 @@ export const recordVersionEvent = onDocumentWritten(
       event.id,
       versionEvents(versionId, event.data?.before?.data(), event.data?.after?.data()),
     );
+    // The same write moves what the document says about its current version:
+    // the card's "Updated", by whom and through what, and its reading time.
+    await refreshLatest(db(), docId, versionId, event.data?.after?.data());
   },
 );
 

@@ -515,3 +515,14 @@ test("the dev proxy sends discovery to the function and leaves mcp.json to Hosti
   assert.ok(!proxied("/.well-known/mcp.json"));
   assert.ok(!proxied("/connect"), "the consent page is the app's own route");
 });
+
+test("every version write and withdrawal moves its document's summary, through the trigger that records the event", () => {
+  // The summary of the current version (lib/latest.ts) is kept by the one
+  // place every way of making or withdrawing a version passes through. The
+  // unit suite runs no triggers, so the call is pinned here.
+  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const start = index.indexOf("export const recordVersionEvent = onDocumentWritten(");
+  assert.ok(start > 0, "recordVersionEvent not found");
+  const body = index.slice(start, index.indexOf("\nexport ", start + 1));
+  assert.match(body, /await refreshLatest\(db\(\), docId, versionId, event\.data\?\.after\?\.data\(\)\);/);
+});
