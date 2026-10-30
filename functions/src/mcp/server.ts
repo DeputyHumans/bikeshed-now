@@ -30,7 +30,7 @@ import { allowedResources, challenge } from "../oauth/metadata";
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 
 export const PROTOCOL_VERSION = "2025-06-18";
-export const SERVER_INFO = { name: "bikeshed", version: "0.26.4" };
+export const SERVER_INFO = { name: "bikeshed", version: "0.26.5" };
 
 /**
  * What a client injects into the model's context on connect.
