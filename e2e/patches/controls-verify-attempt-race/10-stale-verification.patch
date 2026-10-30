@@ -1,11 +1,11 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
 @@ -2451,2 +2451,3 @@
-   const ref = db().collection("users").doc(uid);
-+  const e2eStaleVerification = (await ref.get()).data()?.verification;
+   const ref = db().collection("verifications").doc(uid);
++  const e2eStaleVerification = (await ref.get()).data();
 
 @@ -2516,3 +2517,3 @@
    const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
--    const verification = (await tx.get(ref)).data()?.verification as
+-    const verification = (await tx.get(ref)).data() as
 +    const verification = e2eStaleVerification as
        | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number; attemptIds?: string[] }

@@ -211,9 +211,9 @@ async function verify(http, token, action, json) {
   return answered(await http.postJson(`/verify/${action}`, json, { headers: { authorization: `Bearer ${token}` } }), `POST /verify/${action}`);
 }
 
-/** The user record's `verification` field, or undefined. */
+/** The account's verification challenge, server-only (`verifications/{uid}`), or undefined. */
 async function verificationOf(uid) {
-  return (await readDoc(target, `users/${uid}`))?.verification;
+  return (await readDoc(target, `verifications/${uid}`)) ?? undefined;
 }
 
 /** On the "Almost there" screen: press Send me a code; the /verify/start outcome. */
@@ -326,6 +326,7 @@ scenario("A1.2 password sign-up at /signup: unverified, one code mail, /verify/c
   assert.equal((await adminFor(target).auth.getUser(acct.uid)).emailVerified, true, "Firebase's emailVerified is now true (SPEC §14)");
   const record = await readDoc(target, `users/${acct.uid}`);
   assert.deepEqual({ uid: record?.uid, email: record?.email, verification: record?.verification }, { uid: acct.uid, email, verification: undefined }, "users/{uid} holds {uid, email} and no pending verification");
+  assert.equal(await verificationOf(acct.uid), undefined, "the checked challenge in verifications/{uid} is retired");
   assert.equal((await box.find({ to: email })).length, 1, "still exactly one mail");
   noPageErrors([u]);
 }));
@@ -402,7 +403,7 @@ scenario("A1.3 five wrong codes are each 400; the sixth attempt, with the right 
   ctx.step("the sixth attempt is the RIGHT code: refused with 429, and the verification is deleted");
   const sixth = await verify(http, token, "complete", { code });
   assert.deepEqual({ status: sixth.status, json: sixth.json }, { status: 429, json: { error: "too many attempts; request a new code" } }, "the sixth attempt");
-  assert.equal(await verificationOf(acct.uid), undefined, "users/{uid}.verification is deleted");
+  assert.equal(await verificationOf(acct.uid), undefined, "verifications/{uid} is deleted");
 
   ctx.step("the right code again: nothing is in progress any more; the account is still unverified");
   const seventh = await verify(http, token, "complete", { code });

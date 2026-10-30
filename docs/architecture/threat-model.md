@@ -71,6 +71,8 @@ Sign-up **blocks** on verification, and verification writes Firebase's canonical
 `emailVerified` field through the Admin SDK rather than inventing a parallel
 claim. One gate, one source of truth, zero rules changes.
 
+**The code must be unreadable, not merely hashed.** A six-digit code has a million values, so its hash falls to an offline search in under a second, and the five-guess limit only counts guesses the server sees. Until 0.29.1 the challenge sat on `users/{uid}`, which its own account may read: an account could ask for a code for an address it did not hold, read the hash, find the code offline and complete on its first try, taking every share waiting for that address (one account per address means it worked wherever no account held the address yet). The challenge is now kept in `verifications/{uid}`, which the rules refuse to every client, and a rules test asserts that its own account cannot read it.
+
 **This is the single most tempting shortcut in the codebase.** Relaxing the gate
 "just for GitHub" would hand an attacker every document anyone ever shared with
 that address.

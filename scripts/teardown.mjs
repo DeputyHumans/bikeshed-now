@@ -32,7 +32,7 @@ import {
 } from "./lib/firebase.mjs";
 
 /** Every collection this application owns. */
-const COLLECTIONS = ["docs", "forks", "folders", "teams", "tokens", "public", "users"];
+const COLLECTIONS = ["docs", "forks", "folders", "teams", "tokens", "public", "users", "verifications"];
 
 /** Every RTDB path this application writes. */
 const RTDB_PATHS = ["status", "presenceAccess"];

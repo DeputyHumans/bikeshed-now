@@ -12,14 +12,14 @@ const uid='ack-user', email='ack@example.com', owner='owner@example.com';
 const hash=code=>createHash('sha256').update(`${uid}:${code}`).digest('hex');
 const challenge=(extra={})=>({hash:hash('123456'),email,expiresAt:Date.now()+900000,sentAt:Date.now(),attempts:0,...extra});
 async function verify(initial, action, body, inspect, afterCommit=async()=>{}) {
- const {db,store}=fakeFirestore(initial?{[`users/${uid}`]:{verification:initial}}:{}), sent=[];
+ const {db,store}=fakeFirestore(initial?{[`verifications/${uid}`]:initial}:{}), sent=[];
  const lost=loseFirstTransactionAcknowledgement(db,{afterCommit:()=>afterCommit(db,store)}), original=notify.sendVerificationCode;
  notify.sendVerificationCode=async(...args)=>{sent.push(args);return {sent:true};};
  try {await withFakeAdmin({db,idTokens:{token:{uid,email,email_verified:false}}},async()=>{
   const response=await invoke(verifyEmail,{path:`/verify/${action}`,headers:{authorization:'Bearer token'},body});
   assert.equal(lost().failures,1,'the native SDK lost one durable acknowledgement');
   assert.ok(lost().callbackCalls>=2,'the native SDK retried its callback');
-  await inspect({response,sent,verification:store.get(`users/${uid}`)?.verification});
+  await inspect({response,sent,verification:store.get(`verifications/${uid}`)});
  });}finally{notify.sendVerificationCode=original;}
 }
 test('verification start acknowledges and mails its own reserved challenge once',()=>verify(null,'start',{},({response,sent,verification})=>{
@@ -36,7 +36,7 @@ test('a retry never spends a wrong attempt against a replacement challenge',asyn
  await verify(challenge(),'complete',{code:'000000'},({response,verification})=>{
   assert.equal(response.status,409,'ACK replacement: the original checked challenge changed');
   assert.deepEqual(verification,replacement,'ACK replacement: a newer challenge retains its guess budget');
- },db=>db.doc(`users/${uid}`).update({verification:replacement}));
+ },db=>db.doc(`verifications/${uid}`).set(replacement));
 });
 for(const signedIn of [false,true]) test(`a ${signedIn?'member':'public'} reading beat consumes its cap only once after acknowledgement loss`,async()=>{
  const {db,store}=fakeFirestore({'docs/d':{ownerEmail:owner,members:[owner,email],visibility:'public',currentVersion:'v1'}});

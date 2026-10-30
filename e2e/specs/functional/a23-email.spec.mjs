@@ -889,8 +889,8 @@ scenario("A23.6b a refused verification send still answers 200, stores the verif
     await shim.failRecipient(U.email, { status: 500, count: 1, body: { statusCode: 500, name: "application_error", message: failure } });
     const start = answered(await http.postJson("/verify/start", {}, { headers: { authorization: `Bearer ${await idToken(target, U, { http })}` }, ...SLOW }), "POST /verify/start after provider refusal");
     assert.deepEqual({ status: start.status, json: start.json }, { status: 200, json: { sent: true, email: U.email } }, "a refused verification send does not fail the request");
-    const record = (await readDoc(target, `users/${U.uid}`))?.verification;
-    assert.ok(record?.email === U.email && /^[a-f0-9]{64}$/.test(record.hash) && record.attempts === 0 && record.expiresAt > record.sentAt, "the verification attempt remains stored without exposing the code");
+    const record = await readDoc(target, `verifications/${U.uid}`);
+    assert.ok(record?.email === U.email && /^[a-f0-9]{64}$/.test(record.hash) && record.attempts === 0 && record.expiresAt > record.sentAt, "the verification attempt remains stored, server-side, without exposing the code");
     const requests = await shim.requests({ to: U.email });
     assert.deepEqual(requests.map((r) => [r.status, r.injected, r.injectedFor]), [[500, true, U.email]], "the verification send reached the provider and consumed the injected refusal once");
     assert.equal(await shim.pending(U.email), 0, "the verification failure was consumed");

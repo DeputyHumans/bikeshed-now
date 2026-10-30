@@ -62,7 +62,7 @@ async function ownerSession() {
 scenario("A12.11a a verification reservation survives native acknowledgement loss and mails its current code exactly once", MAIL_CASE, async ctx => {
   const { account, http, options } = await unverified(ctx, "ackverify");
   const response = await lost(ctx, account.uid, "verification-start", () => http.postJson("/verify/start", {}, options), async () => {
-    const v = (await readDoc(target, `users/${account.uid}`))?.verification;
+    const v = (await readDoc(target, `verifications/${account.uid}`));
     precondition(v?.hash && v.email === account.email && v.attempts === 0, "verification reservation is durable before ACK loss");
     return { email: v.email, attempts: v.attempts, sentAt: v.sentAt };
   });
@@ -70,36 +70,36 @@ scenario("A12.11a a verification reservation survives native acknowledgement los
   const box = mailbox(target), { messages } = await oneMail(box, account.email, "ACK verification start: its reserved code is mailed exactly once");
   const mail = await box.message(messages[0].ID), code = mail.Text?.match(/\b\d{6}\b/)?.[0];
   assert.ok(code, "ACK verification start: the delivered mail contains its code");
-  const v = (await readDoc(target, `users/${account.uid}`)).verification;
+  const v = await readDoc(target, `verifications/${account.uid}`);
   assert.equal(v.hash, hash(account.uid, code), "ACK verification start: the mailed code matches the committed challenge");
   const completed = await http.postJson("/verify/complete", { code }, options);
   assert.equal(completed.status, 200, "ACK verification start: its mailed code actually verifies");
 });
 scenario("A12.11b a wrong verification request spends one guess through native acknowledgement loss including the final slot", CASE, async ctx => {
   for (const attempts of [0, 4]) {
-    const { account, http, options } = await unverified(ctx, `ackwrong${attempts}`), ref = adminFor(target).db.doc(`users/${account.uid}`);
-    await ref.set({ verification: { hash: hash(account.uid, "123456"), email: account.email, expiresAt: Date.now() + 900_000, sentAt: Date.now(), attempts } }, { merge: true });
+    const { account, http, options } = await unverified(ctx, `ackwrong${attempts}`), ref = adminFor(target).db.doc(`verifications/${account.uid}`);
+    await ref.set({ hash: hash(account.uid, "123456"), email: account.email, expiresAt: Date.now() + 900_000, sentAt: Date.now(), attempts });
     const response = await lost(ctx, account.uid, "verification-complete", () => http.postJson("/verify/complete", { code: "000000" }, options), async () => {
-      const v = (await ref.get()).data().verification;
+      const v = (await ref.get()).data();
       precondition(v.attempts === attempts + 1, "the first wrong attempt committed once before ACK loss");
       return { attempts: v.attempts };
     });
     assert.equal(response.status, 400, `ACK wrong code ${attempts}: its completed attempt retains the original refusal`);
-    assert.equal((await ref.get()).data().verification?.attempts, attempts + 1, `ACK wrong code ${attempts}: one request spends one guess`);
+    assert.equal((await ref.get()).data()?.attempts, attempts + 1, `ACK wrong code ${attempts}: one request spends one guess`);
   }
 });
 scenario("A12.11c a retried wrong code cannot spend a replacement challenge's guess budget", CASE, async ctx => {
-  const { account, http, options } = await unverified(ctx, "ackreplace"), ref = adminFor(target).db.doc(`users/${account.uid}`);
+  const { account, http, options } = await unverified(ctx, "ackreplace"), ref = adminFor(target).db.doc(`verifications/${account.uid}`);
   const initial = { hash: hash(account.uid, "123456"), email: account.email, expiresAt: Date.now() + 900_000, sentAt: Date.now(), attempts: 0 };
   const replacement = { ...initial, hash: hash(account.uid, "654321"), sentAt: initial.sentAt + 1 };
-  await ref.set({ verification: initial }, { merge: true });
+  await ref.set(initial);
   const response = await lost(ctx, account.uid, "verification-complete", () => http.postJson("/verify/complete", { code: "000000" }, options), async () => {
-    precondition((await ref.get()).data().verification.attempts === 1, "the old challenge spent one guess before replacement");
-    await ref.update({ verification: replacement });
+    precondition((await ref.get()).data().attempts === 1, "the old challenge spent one guess before replacement");
+    await ref.set(replacement);
     return { replaced: true, attempts: 0 };
   });
   assert.equal(response.status, 409, "ACK replacement: the original checked challenge changed");
-  assert.deepEqual((await ref.get()).data().verification, replacement, "ACK replacement: the newer challenge retains its guess budget");
+  assert.deepEqual((await ref.get()).data(), replacement, "ACK replacement: the newer challenge retains its guess budget");
 });
 scenario("A12.11d member and public reading beats consume their five-minute cap once after native acknowledgement loss", CASE, async ctx => {
   for (const member of [false, true]) {

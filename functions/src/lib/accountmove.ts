@@ -450,8 +450,11 @@ export async function runMove(db: Db, jobId: string, job: MoveJob): Promise<Move
       if (holder.emailVerified || !passwordOnly) return finish("blocked", "address-taken");
       await auth.deleteUser(holder.uid);
       await db.collection("users").doc(holder.uid).delete();
+      await db.collection("verifications").doc(holder.uid).delete();
     }
-    // A code requested before the move would otherwise put the old address back.
+    // A code requested before the move would otherwise put the old address
+    // back. `verification` on the record is where one was kept before 0.29.1.
+    await db.collection("verifications").doc(job.uid).delete();
     await db.collection("users").doc(job.uid).set({ verification: FieldValue.delete() }, { merge: true });
 
     await pass(db, job.from, job.to, "add", audit);

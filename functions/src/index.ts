@@ -2300,6 +2300,13 @@ function sixDigitCode(): string {
  * Completing it calls `updateUser({ emailVerified: true })`, writing FIREBASE's
  * canonical field. That is the whole trick — one gate, one source of truth, and
  * not a single change to firestore.rules to support a second provider.
+ *
+ * The challenge lives in `verifications/{uid}`, which no client can read, and
+ * never on the account's own record, which its account can. A six-digit
+ * code's hash is no secret to whoever holds it: a million guesses take under
+ * a second, and the five-guess budget only counts guesses made here. Kept on
+ * `users/{uid}` until 0.29.1, it let anyone verify an address they did not
+ * own by reading the hash and trying every code offline.
  */
 export const verifyEmail = onRequest(MAILING, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
@@ -2319,7 +2326,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 
   const uid = decoded.uid;
   const action = req.path.endsWith("/complete") ? "complete" : "start";
-  const ref = db().collection("users").doc(uid);
+  const ref = db().collection("verifications").doc(uid);
 
   if (action === "start") {
     const body = jsonBody(req) as { email?: unknown } | null;
@@ -2341,27 +2348,20 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     const code = sixDigitCode();
     const reservationId = randomBytes(16).toString("hex");
     const reserved = await db().runTransaction(async (tx) => {
-      const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+      const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
       if (existing?.reservationId === reservationId) return true;
       const at = Date.now();
       if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return false;
       // Reserve once before sending: retrying this transaction never mails an
       // obsolete candidate code or resets a newer challenge's attempt budget.
-      tx.set(
-        ref,
-        {
-          verification: {
-            // Only a hash is stored: a leaked record is not a working code.
-            hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
-            email,
-            expiresAt: at + VERIFY_TTL_MS,
-            attempts: 0,
-            sentAt: at,
-            reservationId,
-          },
-        },
-        { merge: true },
-      );
+      tx.set(ref, {
+        hash: createHash("sha256").update(`${uid}:${code}`).digest("hex"),
+        email,
+        expiresAt: at + VERIFY_TTL_MS,
+        attempts: 0,
+        sentAt: at,
+        reservationId,
+      });
       return true;
     });
     if (!reserved) {
@@ -2386,7 +2386,7 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
   const attemptId = randomBytes(16).toString("hex");
   let checkedIdentity: string | undefined;
   const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
-    const verification = (await tx.get(ref)).data()?.verification as
+    const verification = (await tx.get(ref)).data() as
       | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number; attemptIds?: string[] }
       | undefined;
     if (!verification?.hash || !verification.email) {
@@ -2402,19 +2402,15 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
     const attemptIds = Array.isArray(verification.attemptIds) ? verification.attemptIds : [];
     if (attemptIds.includes(attemptId)) return { status: 400, error: "that code is not right" };
     if (Number(verification.expiresAt ?? 0) < Date.now()) {
-      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      tx.delete(ref);
       return { status: 409, error: "that code has expired" };
     }
     if (Number(verification.attempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
-      tx.set(ref, { verification: FieldValue.delete() }, { merge: true });
+      tx.delete(ref);
       return { status: 429, error: "too many attempts; request a new code" };
     }
     if (expected !== verification.hash) {
-      tx.set(
-        ref,
-        { verification: { attempts: Number(verification.attempts ?? 0) + 1, attemptIds: [...attemptIds, attemptId] } },
-        { merge: true },
-      );
+      tx.update(ref, { attempts: Number(verification.attempts ?? 0) + 1, attemptIds: [...attemptIds, attemptId] });
       return { status: 400, error: "that code is not right" };
     }
     return { status: 200, email: verification.email, identity: identity(verification) };
@@ -2428,11 +2424,14 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 
   await admin.auth().updateUser(uid, { email: checked.email, emailVerified: true });
   await db().runTransaction(async (tx) => {
-    const current = (await tx.get(ref)).data()?.verification;
+    const current = (await tx.get(ref)).data();
     // Auth is outside Firestore: a resend can reserve another challenge while
     // this call is in flight. Completion retires only the challenge it checked.
     if (!current || identity(current) !== checked.identity) return;
-    tx.set(ref, { uid, email: checked.email, verification: FieldValue.delete() }, { merge: true });
+    tx.delete(ref);
+    // `verification` is where a challenge was kept before 0.29.1; one left
+    // there is dead, since nothing reads it, and is cleared with the rest.
+    tx.set(db().collection("users").doc(uid), { uid, email: checked.email, verification: FieldValue.delete() }, { merge: true });
   });
   res.status(200).json({ verified: true, email: checked.email });
 });

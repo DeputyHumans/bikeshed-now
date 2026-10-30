@@ -1192,7 +1192,7 @@ async function judgeC19a(ctx, s, burst, label, { defect = null } = {}) {
   const others = oracleSet();
   const own = oracleSet();
   const { v } = s;
-  const storedAfterBurst = (await readDoc(target, `users/${v.uid}`))?.verification?.attempts ?? null;
+  const storedAfterBurst = (await readDoc(target, `verifications/${v.uid}`))?.attempts ?? null;
   const follow = await followUp(ctx, v, s.code, s.wrong, label);
   const all = [...burst, ...follow];
   const evaluatedInBurst = burst.filter(isNotRight).length;
@@ -1204,8 +1204,8 @@ async function judgeC19a(ctx, s, burst, label, { defect = null } = {}) {
     assert.ok(bad.length === 0, `${label}: every wrong guess is refused as wrong (400), too many (429) or none in progress (409) — ${bad.map((r) => `${r.name}: ${r.status} ${brief(r.json, 100)}`).join("; ")}`);
   });
   await others.check(() => assert.ok(all.some((r) => r.status === 429 && r.json?.error === VERIFY_MSG.tooMany), `${label}: the guesses end in the lockout (429 "${VERIFY_MSG.tooMany}")`));
-  const rec = await readDoc(target, `users/${v.uid}`);
-  await others.check(() => assert.ok(!rec?.verification?.hash, `${label}: after the lockout no code is in progress (users/{uid}.verification ${brief(rec?.verification)})`));
+  const rec = await readDoc(target, `verifications/${v.uid}`);
+  await others.check(() => assert.ok(!rec?.hash, `${label}: after the lockout no code is in progress (verifications/{uid} ${brief(rec)})`));
   const right = await verifyCall(v, "complete", { code: s.code });
   await others.check(() => assert.ok((right.status === 409 && right.json?.error === VERIFY_MSG.none) || (right.status === 429 && right.json?.error === VERIFY_MSG.tooMany), `${label}: the right code after the lockout is refused (${right.status} ${brief(right.json)})`));
   const user = await adminFor(target).auth.getUser(v.uid);
@@ -1299,8 +1299,8 @@ async function judgeC19b(ctx, s, rows, label, { defect = null } = {}) {
   await others.check(() => assert.ok(sent.length >= 1, `${label}: at least one code request is answered 200`));
   const mails = await settledMail(ctx, v.email);
   const codes = mails.map((m) => codeOf(m.Subject));
-  const rec = await readDoc(target, `users/${v.uid}`);
-  const stored = codes.filter((c) => sha256(`${v.uid}:${c}`) === rec?.verification?.hash);
+  const rec = await readDoc(target, `verifications/${v.uid}`);
+  const stored = codes.filter((c) => sha256(`${v.uid}:${c}`) === rec?.hash);
   await others.check(() => assert.equal(stored.length, 1, `${label}: the code stored is one of the ${codes.length} mailed (${stored.length} match)`));
   if (stored.length === 1) {
     const done = await verifyCall(v, "complete", { code: stored[0] });

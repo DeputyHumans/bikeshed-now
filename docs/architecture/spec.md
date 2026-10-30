@@ -593,6 +593,7 @@ users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
 accountMoves/{jobId}                           AccountMove      (server-written; its own account may read, §14)
+verifications/{uid}                            Verification     (server-only, §14)
 ```
 
 **An `Annotation` with a `suggestion` field is a suggested edit** (§22):
@@ -647,6 +648,8 @@ finishedAt? }`. It is one account's move to the address Google renamed it to
 tab finds the first one's job. `POST /session` creates it, and the
 `moveAccount` trigger finishes it. Its own account may `get` it, to know when
 to sign in again. No client lists or writes one.
+
+**`verifications/{uid}`** is `{ hash, email, expiresAt, attempts, sentAt, reservationId, attemptIds? }`: the one code an account has asked for to prove an address (§14). It is server-only, its own account included, because `hash` is `sha256(uid:code)` and a six-digit code's hash is the code to whoever reads it. It was kept on `users/{uid}` as `verification` until 0.29.1, where its account could read it; that field is no longer read, stays unwritable by clients, and is cleared when a verification completes or an account moves.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
 unlisted document's key, and `token` is the one it presented. It counts only
@@ -1709,6 +1712,8 @@ address that matches a pending share would hand an attacker someone else's
 documents. This is the most tempting shortcut in the whole feature and is
 recorded as such in `docs/architecture/threat-model.md`.
 
+A challenge is kept in `verifications/{uid}` (§4), which no client can read. The five-guess budget only counts guesses made here, and a hash of a six-digit code falls to a million offline guesses in under a second, so a challenge an account could read would let it prove an address it does not hold.
+
 Verification challenges expire after fifteen minutes. Each challenge permits
 at most five wrong code comparisons; the next attempt, including the right
 code, is refused with 429 and retires the challenge. Concurrent attempts share
@@ -1766,7 +1771,7 @@ address, so a redelivery resumes wherever an attempt died. The steps, in order:
    so it owns nothing; it is deleted, as Firebase itself drops such an account
    when a trusted provider vouches for the address. Any other holder ends the
    job `blocked` with `address-taken`, and nothing changes. A pending
-   `verification` is cleared, so an old code cannot undo the move.
+   verification challenge is cleared, so an old code cannot undo the move.
 2. **Add.** The new address is added beside the old one everywhere the old is
    named: team members and admins, and each grant list, taking the higher role
    when both are present. On records the person owns, it is added as an

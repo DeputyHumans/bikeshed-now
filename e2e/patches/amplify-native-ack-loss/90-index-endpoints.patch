@@ -9,12 +9,12 @@
      const reservationId = randomBytes(16).toString("hex");
 -    const reserved = await db().runTransaction(async (tx) => {
 +    const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx) => {
-       const existing = (await tx.get(ref)).data()?.verification as { sentAt?: number; reservationId?: string } | undefined;
+       const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
 @@ -2515,3 +2515,3 @@
    let checkedIdentity: string | undefined;
 -  const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
 +  const checked = await e2eAckTransaction(db(), uid, "verification-complete", async (tx): Promise<VerificationCheck> => {
-     const verification = (await tx.get(ref)).data()?.verification as
+     const verification = (await tx.get(ref)).data() as
 @@ -2783,3 +2783,3 @@
    type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
 -  const result = await db().runTransaction(async (tx) => {

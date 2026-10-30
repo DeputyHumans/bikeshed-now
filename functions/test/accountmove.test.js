@@ -160,6 +160,7 @@ function world(over = {}) {
     "users/u-ana/tokens/p-old": { tokenId: "p-old", revokedAt: null },
     "tokens/p-new": { tokenId: "p-new", uid: "u-ana", email: NEW, revokedAt: null, hash: "h" },
     "users/u-ana": { uid: "u-ana", email: OLD, verification: { hash: "x", email: OLD } },
+    "verifications/u-ana": { hash: "x", email: OLD },
     ...over,
   };
   const { db, store } = fakeFirestore(seed);
@@ -201,7 +202,8 @@ test("everything that named the old address names the new one, and nothing names
   assert.ok(w.users["u-ana"].tokensValidAfterTime, "signed out everywhere");
   assert.equal(w.store.get(`accountMoves/${jobId}`).state, "done");
   assert.equal(w.store.get("users/u-ana").email, NEW);
-  assert.equal(w.store.get("users/u-ana").verification, undefined, "a pending code cannot undo the move");
+  assert.equal(w.store.has("verifications/u-ana"), false, "a pending code cannot undo the move");
+  assert.equal(w.store.get("users/u-ana").verification, undefined, "nor one kept where codes were before 0.29.1");
 
   const own = w.store.get("docs/own");
   assert.equal(own.ownerEmail, NEW);
@@ -348,11 +350,12 @@ test("a team rewritten but never re-expanded is still found", async () => {
 });
 
 test("an account that never proved the new address does not stand in the way", async () => {
-  const w = world({ "users/u-squat": { uid: "u-squat", verification: { hash: "y", email: NEW } } });
+  const w = world({ "users/u-squat": { uid: "u-squat" }, "verifications/u-squat": { hash: "y", email: NEW } });
   w.users["u-squat"] = { uid: "u-squat", email: NEW, emailVerified: false, providerData: [{ providerId: "password" }] };
   assert.equal(await move(w), "done");
   assert.equal(w.users["u-squat"], undefined);
   assert.equal(w.store.has("users/u-squat"), false);
+  assert.equal(w.store.has("verifications/u-squat"), false, "nor its code for the address");
   assert.equal(w.users["u-ana"].email, NEW);
 });
 

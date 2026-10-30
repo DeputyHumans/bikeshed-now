@@ -341,9 +341,10 @@ service cloud.firestore {
 
     // --- Accounts (SPEC §14) ----------------------------------------------
     // Self-only. The client may set its own profile and preferences; anything
-    // that gates access — verification state, email cooldowns, personal access
-    // tokens — is server-written and unwritable here, so a user cannot mark
-    // their own address verified or clear their own rate limit.
+    // that gates access — email cooldowns, personal access tokens — is
+    // server-written and unwritable here, so a user cannot clear their own rate
+    // limit. `verification` stays unwritable: it is where a code was kept
+    // before 0.29.1, and nothing may put one back.
     match /users/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;
       allow create: if isVerifiedUser()
@@ -369,6 +370,16 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow write: if false; // minted and revoked through POST /tokens
       }
+    }
+
+    // --- Verification challenges (SPEC §14) ------------------------------
+    // Server-only, its own account included. A six-digit code's hash is the
+    // code to whoever can read it — a million guesses take under a second —
+    // so it lives here, never on `users/{uid}`, which its account may read.
+    // Kept there until 0.29.1, it let an account verify an address it did not
+    // own. The catch-all below refuses this too; the block says why.
+    match /verifications/{uid} {
+      allow read, write: if false; // POST /verify/start, POST /verify/complete
     }
 
     // --- Account moves (SPEC §14, ADR 0020) ------------------------------

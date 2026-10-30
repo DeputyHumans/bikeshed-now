@@ -339,6 +339,7 @@ describe("firestore rules", () => {
         verification: { hash: "secret", email: OWNER.email },
         emailCooldowns: { "private-doc": 1 },
       });
+      await setDoc(doc(db, "verifications/u-owner"), { hash: "secret", email: "invited@example.com", attempts: 0 });
       await setDoc(doc(db, "users/u-owner/tokens/tok1"), { tokenId: "tok1", name: "cli" });
       await setDoc(doc(db, "tokens/tok1"), { tokenId: "tok1", uid: OWNER.uid, hash: "h" });
       // A connected app's grant and its pending code (SPEC §23).
@@ -1204,6 +1205,13 @@ describe("firestore rules", () => {
   it("a user record is self-only", async () => {
     await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "users/u-owner")));
     await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner")));
+  });
+
+  it("a verification challenge is server-only, even to the account it belongs to", async () => {
+    // Its hash is the code to whoever reads it: a million guesses offline.
+    await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner")));
+    await assertFails(getDoc(doc(env.authenticatedContext(OWNER.uid, { email: OWNER.email, email_verified: false }).firestore(), "verifications/u-owner")));
+    await assertFails(setDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner"), { hash: "mine", email: OWNER.email }));
   });
 
   it("a user cannot mark their own address verified or clear their own cooldown", async () => {

@@ -14,6 +14,12 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Security
+
+- **An account could prove an address it did not own.** `POST /verify/start` kept the code's hash on the account's own record, `users/{uid}`, which that account may read. A six-digit code's hash falls to a million offline guesses in under a second, and the five-guess limit only counts guesses the server sees. So an account could ask for a code for someone else's address, read the hash, find the code and complete on its first try, taking every share waiting for that address wherever no account held it yet. The challenge now lives in `verifications/{uid}`, which no client can read. A code asked for before this release can no longer be completed; ask for a new one. The old field is cleared when a verification completes or an account moves (SPEC §4, §14; threat model).
+
 ## 0.29.0 — 2026-10-30
 
 ### Changed
