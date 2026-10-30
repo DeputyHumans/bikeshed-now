@@ -65,9 +65,9 @@ async function audience(kind, corrupt = () => {}) {
   const data = [];
   const events = [
     { type: "version.published", at },
-    ...(kind === "local" ? accounts.slice(1).map((a) => ({ type: "access.changed", channel: "web", added: [a.email], removed: [], by: accounts[0].email, at })) : []),
+    ...(kind === "local" ? accounts.slice(1).map((a) => ({ type: "access.changed", channel: "web", automated: false, added: [a.email], removed: [], by: accounts[0].email, at })) : []),
     { type: "doc.visibility", at }, { type: "doc.visibility", at }, { type: "doc.moved", at },
-    { type: "thread.opened", at }, { type: "comment.added", at }, { type: "fork.created", at: "2026-10-15" },
+    { type: "thread.opened", at }, { type: "comment.added", at }, { type: "fork.created", id: "e-fork", version: "v1", at: "2026-10-15" },
   ];
   corrupt(events);
   const counts = (types) => Object.fromEntries(Object.entries(types.reduce((m, t) => ({ ...m, [t]: (m[t] ?? 0) + 1 }), {})).sort());
