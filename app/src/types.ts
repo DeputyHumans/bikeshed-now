@@ -174,7 +174,7 @@ export interface ViewStats {
    * machine fetch (SPEC §17).
    */
   apiReads?: number;
-  /** Forks made from this document. Exact, because documents are never deleted (SPEC §21). */
+  /** Forks made from this document, those in the Trash included; one deleted forever takes itself off (SPEC §21). */
   forks?: number;
 }
 

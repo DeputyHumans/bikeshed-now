@@ -19,7 +19,7 @@ import { readConsent, writeConsent } from "../consent";
  * most likely way for them to go stale is somebody adding a third party.
  */
 
-const UPDATED = "17 September 2026";
+const UPDATED = "30 October 2026";
 
 function Contact() {
   if (!LEGAL_CONTACT) {
@@ -127,8 +127,11 @@ export function Terms() {
       <p>
         You may stop using the service at any time. Its operator may suspend
         access that breaks these terms. Deleting a document moves it to your
-        Trash, where it stays, yours alone, until you restore it; a version can
-        be withdrawn by an operator, and you can ask for your content to be
+        Trash, where it stays, yours alone, for 30 days unless you restore it,
+        and is then deleted for good; you can delete it sooner from the Trash,
+        with a code we email you. Copies other people saved, and what a cache
+        already holds for a few minutes, cannot be recalled. A version can be
+        withdrawn by an operator, and you can ask for your content to be
         removed using the contact below.
       </p>
 

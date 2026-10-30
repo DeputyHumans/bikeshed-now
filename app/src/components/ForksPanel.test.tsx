@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The forks panel tells each reader only what they could open (SPEC §21).
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { ForksPanel, forkCountSentence } from "./ForksPanel";
@@ -68,6 +68,15 @@ describe("the forks panel", () => {
     mount({ lineage: { forked: true, ancestors: [], hiddenAncestor: true } });
     expect(screen.getByText("A document you can't open.")).toBeDefined();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says an original was deleted forever, rather than that it cannot be opened", () => {
+    mount({ lineage: { forked: true, ancestors: [], hiddenAncestor: false, deletedAncestor: true } });
+    expect(screen.getByText("A document that has since been deleted.")).toBeDefined();
+    expect(screen.queryByText(/can't open/)).toBeNull();
+    cleanup();
+    mount({ lineage: { forked: true, ancestors: [{ docId: "beta", title: "Beta", versionId: "v1" }], hiddenAncestor: false, deletedAncestor: true } });
+    expect(screen.getByText("…which was forked from a document that has since been deleted.")).toBeDefined();
   });
 
   it("gives the owner the count and the forks they can open, and nobody else", () => {

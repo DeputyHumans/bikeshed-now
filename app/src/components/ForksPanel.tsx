@@ -73,7 +73,7 @@ function ForkedFrom({ lineage }: { lineage: Lineage }) {
     <section>
       <h3>Forked from</h3>
       {lineage.ancestors.length === 0 ? (
-        <p className="field-hint">A document you can't open.</p>
+        <p className="field-hint">{lineage.deletedAncestor ? "A document that has since been deleted." : "A document you can't open."}</p>
       ) : (
         <ol className="activity-feed">
           {lineage.ancestors.map((a) => (
@@ -81,6 +81,9 @@ function ForkedFrom({ lineage }: { lineage: Lineage }) {
           ))}
           {lineage.hiddenAncestor ? (
             <li className="activity-row field-hint">…which was forked from a document you can't open.</li>
+          ) : null}
+          {lineage.deletedAncestor ? (
+            <li className="activity-row field-hint">…which was forked from a document that has since been deleted.</li>
           ) : null}
         </ol>
       )}

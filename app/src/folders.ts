@@ -66,7 +66,8 @@ export function renameItem(
 
 /**
  * Move a document or a folder you own to the Trash (SPEC §4): a folder goes
- * with everything in it. Nothing is deleted; `restoreItem` brings it back.
+ * with everything in it. Nothing is deleted yet: `restoreItem` brings it
+ * back, and what is not brought back is deleted forever 30 days later.
  */
 export function trashItem(kind: OrganizeKind, id: string): Promise<{ ok: true }> {
   return organize({ kind, id, op: "trash" });

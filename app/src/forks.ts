@@ -44,6 +44,8 @@ export interface Lineage {
   /** Nearest first. Stops at the first one the caller cannot open. */
   ancestors: Ancestor[];
   hiddenAncestor: boolean;
+  /** The walk stopped at a document deleted forever. */
+  deletedAncestor?: boolean;
   /** Present for the document's owner only. */
   forks?: { total: number; hidden: number; visible: ForkListing[] };
 }
