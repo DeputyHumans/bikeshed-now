@@ -57,7 +57,7 @@ test("clients: MCP initialize reports the tree's version and tools/list has exac
   assert.equal(init.protocolVersion, "2025-06-18");
   assert.equal(mcp.serverVersion, target.expectVersion);
   const tools = await mcp.listTools();
-  assert.equal(tools.length, 33, tools.map((t) => t.name).join(", "));
+  assert.equal(tools.length, 36, tools.map((t) => t.name).join(", "));
   for (const t of tools) assert.doesNotMatch(t.name, /^(delete_document|.*_team|.*_trust)$/);
   ctx.mcp = mcp;
 });
@@ -144,7 +144,7 @@ test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair th
     assert.match(pair.json.refresh_token, /^bsr_[0-9a-f]{32}\./);
     const mcp = mcpClient(target, { token: pair.json.access_token, actor: "oauth-mcp" });
     await mcp.initialize();
-    assert.equal((await mcp.listTools()).length, 33);
+    assert.equal((await mcp.listTools()).length, 36);
     const rotated = await refresh(anon, { refreshToken: pair.json.refresh_token, clientId: reg.clientId });
     assert.equal(rotated.status, 200, JSON.stringify(rotated.json));
     assert.notEqual(rotated.json.refresh_token, pair.json.refresh_token, "refresh rotates");

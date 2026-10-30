@@ -1,14 +1,15 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -1913,11 +1913,6 @@
+@@ -1854,12 +1854,6 @@
        return;
      }
-
--    if (isExpired(data, Date.now())) {
--      res.status(409).json({ error: EXPIRED_WRITE });
+ 
+-    const frozen = frozenWrite(data, Date.now());
+-    if (frozen) {
+-      res.status(409).json(frozen);
 -      return;
 -    }
 -
      if (op === "delete") {
-       badRequest(res, "deleting documents is not supported");
+       badRequest(res, "a document is not deleted: move it to the Trash with op \"trash\"");
        return;

@@ -1,9 +1,11 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -877,5 +877,5 @@
+@@ -972,7 +972,7 @@
+     },
      async run(ctx, args) {
        // Whoever may edit, as for the app's own commit, which takes no link key either.
 -      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
 +      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
        if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot publish that document's draft");
-       refuseIfExpired(data);
+       refuseIfFrozen(data);
+       const baseVersion = mutationVersion(args.baseVersion, data);

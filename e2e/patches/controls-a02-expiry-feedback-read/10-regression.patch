@@ -1,24 +1,30 @@
 --- a/config/templates/firestore.rules.tmpl
 +++ b/config/templates/firestore.rules.tmpl
-@@ -85,7 +85,7 @@
+@@ -84,10 +84,10 @@
+     // contentProxy, and nothing else. Mirrors functions/src/lib/acl.ts
      // readBasis(), for a caller with an account (SPEC §17).
      function canRead(docId, d) {
 -      return isMember(d)
 +      return feedbackWritable(d) && (isMember(d)
          || (isVerifiedUser()
+             && !isTrashed(d)
 -            && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d)));
 +            && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d))));
      }
  
+     // In the Trash (SPEC §4). Its derived sets hold its owner alone, so
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -88,7 +88,7 @@
+@@ -87,10 +87,10 @@
+     // contentProxy, and nothing else. Mirrors functions/src/lib/acl.ts
      // readBasis(), for a caller with an account (SPEC §17).
      function canRead(docId, d) {
 -      return isMember(d)
 +      return feedbackWritable(d) && (isMember(d)
          || (isVerifiedUser()
+             && !isTrashed(d)
 -            && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d)));
 +            && (d.get('visibility', '') == 'public' || hasLinkGrant(docId, d))));
      }
  
+     // In the Trash (SPEC §4). Its derived sets hold its owner alone, so

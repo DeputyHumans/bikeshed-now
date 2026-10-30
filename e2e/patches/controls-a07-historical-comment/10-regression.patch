@@ -1,11 +1,11 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -181,7 +181,7 @@
-   // nothing else: the rules hold no grant for them, so no thread, no presence
-   // and no edit is theirs, signed in or not (SPEC §17 "A folder's reach").
-   const throughFolder = !doc.meta && doc.publicDoc?.viaFolder === true;
--  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt) && !throughFolder;
-+  const canWrite = !isExpired(doc.meta?.expiresAt) && !throughFolder;
+@@ -194,7 +194,7 @@
+   // restored: expiry's rule, which the server applies to both (SPEC §4).
+   const trashed = isTrashed(doc.meta);
+   const frozen = trashed || isExpired(doc.meta?.expiresAt);
+-  const canWrite = isCurrent && !frozen && !throughFolder;
++  const canWrite = !frozen && !throughFolder;
    const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
    // The real editor set, as the server asks of an upload (SPEC §2).
    const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);

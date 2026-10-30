@@ -1,0 +1,12 @@
+{
+  "oracle": "a trashed document's members are its owner alone (A26.1, SPEC §4)",
+  "what": "computeMembership ignores the Trash (functions/src/lib/folders.ts), so its grantees stay members and read it",
+  "target": {
+    "spec": "e2e/specs/functional/a26-trash.spec.mjs",
+    "case": "A26.1 a document in the Trash is its owner's alone: a viewer, its key, a link grant, a folder's link, MCP and a direct Firestore read are each refused as for an absent id, and Restore opens every one again",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "in the Trash: its owner's alone"
+  }
+}

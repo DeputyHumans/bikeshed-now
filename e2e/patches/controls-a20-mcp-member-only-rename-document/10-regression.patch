@@ -1,9 +1,11 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -1272,5 +1272,5 @@
+@@ -1394,7 +1394,7 @@
+     async run(ctx, args) {
        // Whoever may edit may rename, as in the workspace list, which takes no
        // link key either (POST /organize).
 -      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"));
 +      const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
        if (!canEdit(data, ctx.caller, proof)) throw new Error("you cannot rename that document");
-       refuseIfExpired(data);
+       refuseIfFrozen(data);
+       const renamed = await renameDocument(ctx.db, ref, args.title, ctx.actor);

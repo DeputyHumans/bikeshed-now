@@ -1,0 +1,11 @@
+--- a/functions/src/lib/trash.ts
++++ b/functions/src/lib/trash.ts
+@@ -70,7 +70,7 @@
+ async function placeFor(db: Db, tx: admin.firestore.Transaction, folderId: unknown): Promise<string | null> {
+   if (typeof folderId !== "string" || !folderId) return null;
+   const snap = await tx.get(db.collection("folders").doc(folderId));
+-  return snap.exists && !isTrashed(snap.data()) ? folderId : null;
++  return snap.exists ? folderId : null;
+ }
+ 
+ /** The document's owner moves it to the Trash. Idempotent: already there, it says so. */

@@ -1,0 +1,12 @@
+{
+  "oracle": "a folder's link lists no trashed document (A26.1, SPEC §17)",
+  "what": "listReach lists a trashed document to a folder's link (functions/src/lib/reach.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a26-trash.spec.mjs",
+    "case": "A26.1 a document in the Trash is its owner's alone: a viewer, its key, a link grant, a folder's link, MCP and a direct Firestore read are each refused as for an absent id, and Restore opens every one again",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "in the Trash: its owner's alone"
+  }
+}

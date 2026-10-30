@@ -1,6 +1,10 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -1665,3 +1665,2 @@
-         refuseIfExpired(currentData);
+@@ -1715,7 +1715,6 @@
+           throw new Error(`no document with id "${ref.id}"`);
+         }
+         refuseIfFrozen(currentData);
 -        if (currentData.currentVersion !== versionId) throw new Error("This document has a newer version. Reload, then comment on it.");
          recordReceipt(tx, ref, current, receipt, true);
+         tx.create(annRef, {
+           annId: annRef.id,

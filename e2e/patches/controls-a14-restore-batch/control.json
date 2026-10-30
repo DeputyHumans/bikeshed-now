@@ -1,0 +1,12 @@
+{
+  "oracle": "restoring a folder brings back everything that went with it (A14.5, SPEC §4)",
+  "what": "restoreFolder restores the folder and leaves its subfolders in the Trash (functions/src/lib/trash.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5 actions menus: Rename keeps the docId; Move to Trash is the owner's, with an Undo that brings it back, and /organize's trash is 403 to an editor and the absent id's 404 to a stranger; a folder asks first, goes to the Trash with everything beneath it, and Trash restores it whole",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "the Trash is empty again|all five are back"
+  }
+}

@@ -244,7 +244,7 @@ scenario("smoke: MCP with a minted token: initialize, exactly 36 tools, get_docu
   const tools = await mcp.listTools();
   const names = tools.map((t) => t.name);
   assert.equal(names.length, 36, names.join(", "));
-  assert.equal(new Set(names).size, 33, "tool names are unique");
+  assert.equal(new Set(names).size, 36, "tool names are unique");
   for (const n of names) assert.doesNotMatch(n, /delete_document|manage_team|trust/, "document deletion, team administration and trust tools stay absent");
 
   ctx.step("get_document on the published document");

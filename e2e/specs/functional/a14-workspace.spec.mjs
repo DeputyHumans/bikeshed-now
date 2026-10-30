@@ -91,12 +91,11 @@ const BAD_DOC_ID = "id may use lowercase letters, digits and hyphens between the
  */
 const BAD_DOC_ID_TOAST = "Id may use lowercase letters, digits and hyphens between them, up to 60 characters.";
 /** functions/src/index.ts organize. */
-const DOC_DELETE_ERROR = "deleting documents is not supported";
+const DOC_DELETE_ERROR = 'a document is not deleted: move it to the Trash with op "trash"';
 /** app/src/pages/DocList.tsx docMenu's delete entry. */
-const DELETE_LABEL = "Deleting documents is not supported";
-const DELETE_REASON = "A document is permanent by design. A single version can be withdrawn by a deployment operator.";
+const TRASH_LABEL = "Move to Trash";
 /** app/src/pages/DocList.tsx folderMenu's confirmation. */
-const folderDeleteConfirm = (name) => `Delete “${name}”? Everything inside moves up one level — nothing is deleted.`;
+const folderTrashConfirm = (name) => `Move “${name}” and everything in it to the Trash? Anything in it that other people own goes too, and each of them can restore their own.`;
 /** The input's accept list (app/src/components/UploadDialog.tsx). */
 const ACCEPT = ".html,.htm,.md,.markdown,.zip";
 /** The backfill's own clock (app/src/hooks/useCoverBackfill.ts): start after 1.5 s, look again every 2 s. */
@@ -937,7 +936,7 @@ scenario("A14.4b a dropped file is titled, and so addressed, as the dialog title
 
 // --- A14.5 and A14.5b -------------------------------------------------------------
 
-scenario("A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level", { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+scenario("A14.5 actions menus: Rename keeps the docId; Move to Trash is the owner's, with an Undo that brings it back, and /organize's trash is 403 to an editor and the absent id's 404 to a stranger; a folder asks first, goes to the Trash with everything beneath it, and Trash restores it whole", { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
   const { owner: O, editor: E, stranger: S } = await sessions(["owner", "editor", "stranger"]);
   const email = O.account.email;
   const tag = tagFor();
@@ -967,27 +966,39 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
   assert.equal(await readDoc(target, `docs/${slugify(renamed)}`), null, "no document appears at the new title's slug");
   assert.equal((await O.http.get(`/content/${docId}/v1/index.html`)).status, 200, "the content is still at the old address");
 
-  ctx.step("the delete entry is there, disabled, with the reason as its tooltip");
+  ctx.step("Move to Trash is the owner's: one click, no question; the card goes, and the toast's Undo brings it back");
   menu = await openActions(u.page, docCard(u.page, docId), renamed);
-  const del = menu.getByRole("menuitem", { name: DELETE_LABEL });
-  assert.deepEqual({ count: await del.count(), disabled: await del.isDisabled(), reason: await del.getAttribute("title") }, { count: 1, disabled: true, reason: DELETE_REASON });
-  await u.page.keyboard.press("Escape");
+  const trashEntry = menu.getByRole("menuitem", { name: TRASH_LABEL });
+  assert.deepEqual({ count: await trashEntry.count(), disabled: await trashEntry.isDisabled() }, { count: 1, disabled: false });
+  const tMark = u.responseMark();
+  await trashEntry.click();
+  assert.equal((await pageAnswer(u, tMark, "POST", "/organize")).status, 200, "POST /organize trash");
+  await eventually(async () => (await docCard(u.page, docId).count()) === 0, { timeout: 90_000, message: "the card leaves the workspace" });
+  const inTrash = await readDoc(target, `docs/${docId}`);
+  assert.deepEqual({ batch: typeof inTrash?.trashed?.batch, members: inTrash?.members }, { batch: "string", members: [email] }, "in the Trash: its owner's alone");
+  assert.equal((await E.http.get(`/content/${docId}/v1/index.html`)).status, 404, "its editor reads the absent id's 404 while it is in the Trash");
+  const uMark = u.responseMark();
+  await u.page.getByRole("button", { name: "Undo" }).click();
+  assert.equal((await pageAnswer(u, uMark, "POST", "/organize")).status, 200, "POST /organize restore");
+  await waitDocCards(u.page, [docId], { what: "the card back after Undo" });
+  const restored = await readDoc(target, `docs/${docId}`);
+  assert.deepEqual({ trashed: restored?.trashed, members: [...restored.members].sort() }, { trashed: null, members: [email, E.account.email.toLowerCase()].sort() }, "Undo gives every grant back");
 
-  ctx.step("POST /organize delete: 400 for the owner and an editor, the absent id's 404 for a stranger, 401 anonymously; the document survives");
-  const body = { kind: "doc", id: docId, op: "delete" };
-  const [rO, rE, rS, rAbsent, rAnon] = await Promise.all([
-    O.http.postJson("/organize", body),
-    E.http.postJson("/organize", body),
-    S.http.postJson("/organize", body),
-    S.http.postJson("/organize", { ...body, id: absentDocId(target, "a14-5-absent") }),
-    ctx.http({ actor: "anon", timeoutMs: REQUEST_MS, cutoffError: true }).postJson("/organize", body),
+  ctx.step("POST /organize: trash is 403 for an editor, the absent id's 404 for a stranger, 401 anonymously; delete is 400 and says to trash; the document is untouched");
+  const trash = { kind: "doc", id: docId, op: "trash" };
+  const [rE, rS, rAbsent, rAnon, rDelete] = await Promise.all([
+    E.http.postJson("/organize", trash),
+    S.http.postJson("/organize", trash),
+    S.http.postJson("/organize", { ...trash, id: absentDocId(target, "a14-5-absent") }),
+    ctx.http({ actor: "anon", timeoutMs: REQUEST_MS, cutoffError: true }).postJson("/organize", trash),
+    O.http.postJson("/organize", { kind: "doc", id: docId, op: "delete" }),
   ]);
   assert.deepEqual(
-    { owner: [rO.status, rO.json?.error], editor: [rE.status, rE.json?.error], stranger: rS.status, absent: rAbsent.status, anonymous: rAnon.status },
-    { owner: [400, DOC_DELETE_ERROR], editor: [400, DOC_DELETE_ERROR], stranger: 404, absent: 404, anonymous: 401 },
+    { editor: rE.status, stranger: rS.status, absent: rAbsent.status, anonymous: rAnon.status, deleteByOwner: [rDelete.status, rDelete.json?.error] },
+    { editor: 403, stranger: 404, absent: 404, anonymous: 401, deleteByOwner: [400, DOC_DELETE_ERROR] },
   );
-  assert.ok(await readDoc(target, `docs/${docId}`), "the document is still there");
-  assert.deepEqual(await listObjects(target, `docs/${docId}/v1/`), [`docs/${docId}/v1/index.html`], "and so are its bytes");
+  assert.equal((await readDoc(target, `docs/${docId}`))?.trashed ?? null, null, "the document is not in the Trash");
+  assert.deepEqual(await listObjects(target, `docs/${docId}/v1/`), [`docs/${docId}/v1/index.html`], "and its bytes are where they were");
 
   ctx.step("a folder renamed from its menu keeps its id");
   const pName = `Parent ${tag}`;
@@ -999,7 +1010,7 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
   assert.equal((await pageAnswer(u, fMark, "POST", "/organize")).status, 200);
   assert.deepEqual(await readDoc(target, `folders/${P}`).then((f) => ({ folderId: f?.folderId, name: f?.name })), { folderId: P, name: pName });
 
-  ctx.step("P holds F, F holds G and a document; deleting F from its menu (confirmed) lifts G and the document into P");
+  ctx.step("P holds F, F holds G and a document, G holds H and another; F goes to the Trash with all of it");
   const F = await createFolderAs(O, `Middle ${tag}`, P);
   const [G, inF] = await Promise.all([
     createFolderAs(O, `Leaf ${tag}`, F),
@@ -1010,45 +1021,45 @@ scenario("A14.5 actions menus: Rename keeps the docId, the document's delete ent
   await gotoWorkspace(u, P);
   await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
 
-  ctx.step("dismissing the confirmation deletes nothing");
+  ctx.step("dismissing the question sends nothing");
   const watch = watchRequests(u.page);
   menu = await openActions(u.page, folderCard(u.page, F), `Middle ${tag}`);
-  const dismissed = await answerDialog(u.page, () => menu.getByRole("menuitem", { name: "Delete folder" }).click(), { accept: false });
-  assert.deepEqual({ type: dismissed.type, message: dismissed.message }, { type: "confirm", message: folderDeleteConfirm(`Middle ${tag}`) });
+  const dismissed = await answerDialog(u.page, () => menu.getByRole("menuitem", { name: TRASH_LABEL }).click(), { accept: false });
+  assert.deepEqual({ type: dismissed.type, message: dismissed.message }, { type: "confirm", message: folderTrashConfirm(`Middle ${tag}`) });
   await sleep(ABSENCE_SETTLE_MS);
-  assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/organize").map(describe), [], "a dismissed delete sends nothing");
-  assert.ok(await readDoc(target, `folders/${F}`), "F is still there");
+  assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/organize").map(describe), [], "a dismissed trash sends nothing");
+  assert.equal((await readDoc(target, `folders/${F}`))?.trashed ?? null, null, "F is not in the Trash");
 
   menu = await openActions(u.page, folderCard(u.page, F), `Middle ${tag}`);
   const dMark = u.responseMark();
-  await answerDialog(u.page, () => menu.getByRole("menuitem", { name: "Delete folder" }).click(), { accept: true });
-  assert.equal((await pageAnswer(u, dMark, "POST", "/organize")).status, 200, "POST /organize delete folder");
+  await answerDialog(u.page, () => menu.getByRole("menuitem", { name: TRASH_LABEL }).click(), { accept: true });
+  assert.equal((await pageAnswer(u, dMark, "POST", "/organize")).status, 200, "POST /organize trash folder");
   watch.stop();
-  assert.equal(await readDoc(target, `folders/${F}`), null, "F is gone");
-  const g1 = await readDoc(target, `folders/${G}`);
-  assert.deepEqual({ parentId: g1?.parentId, ancestors: g1?.ancestors, depth: g1?.depth }, { parentId: P, ancestors: [P], depth: 1 }, "G is lifted into P");
-  assert.equal((await readDoc(target, `docs/${inF.docId}`))?.folderId, P, "the document is lifted into P");
-  const h1 = await readDoc(target, `folders/${H}`);
-  assert.deepEqual({ parentId: h1?.parentId, ancestors: h1?.ancestors, depth: h1?.depth }, { parentId: G, ancestors: [P, G], depth: 2 }, "the deeper descendant is recomputed after F is removed");
-  assert.equal((await readDoc(target, `docs/${inH.docId}`))?.folderId, H, "the deeper document stays in its own folder");
-  await waitDocCards(u.page, [inF.docId], { what: "P after F is deleted" });
-  await eventually(async () => JSON.stringify(await folderOrder(u.page)) === JSON.stringify([G]), { timeout: 90_000, message: "P now shows G" });
+  const marks = await Promise.all([`folders/${F}`, `folders/${G}`, `folders/${H}`, `docs/${inF.docId}`, `docs/${inH.docId}`].map((path) => readDoc(target, path)));
+  const batch = marks[0]?.trashed?.batch;
+  assert.deepEqual(
+    marks.map((m) => [m?.trashed?.batch === batch, m?.trashed?.with?.name ?? null]),
+    [[true, null], [true, `Middle ${tag}`], [true, `Middle ${tag}`], [true, `Middle ${tag}`], [true, `Middle ${tag}`]],
+    "F, everything beneath it and both documents share one batch, each but F naming F as what it went with",
+  );
+  assert.deepEqual([marks[1]?.parentId, marks[3]?.folderId, marks[4]?.folderId], [F, F, H], "nothing moves: where each was is where Restore puts it");
+  await eventually(async () => (await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).count()) === 0, { timeout: 90_000, message: "F leaves P" });
 
-  ctx.step("deleting P, at the root, lifts G and the document to the root");
-  await gotoWorkspace(u);
-  await u.page.locator(`a.doc-card-title[href="/folder/${P}"]`).waitFor({ timeout: 90_000 });
-  menu = await openActions(u.page, folderCard(u.page, P), pName);
-  const pMark = u.responseMark();
-  await answerDialog(u.page, () => menu.getByRole("menuitem", { name: "Delete folder" }).click(), { accept: true });
-  assert.equal((await pageAnswer(u, pMark, "POST", "/organize")).status, 200);
-  const g2 = await readDoc(target, `folders/${G}`);
-  assert.deepEqual({ parentId: g2?.parentId, ancestors: g2?.ancestors, depth: g2?.depth }, { parentId: null, ancestors: [], depth: 0 }, "G is at the root");
-  const h2 = await readDoc(target, `folders/${H}`);
-  assert.deepEqual({ parentId: h2?.parentId, ancestors: h2?.ancestors, depth: h2?.depth }, { parentId: G, ancestors: [G], depth: 1 }, "the deeper descendant is recomputed after P is removed");
-  const deepDoc = await readDoc(target, `docs/${inH.docId}`);
-  assert.deepEqual({ folderId: deepDoc?.folderId, members: deepDoc?.members }, { folderId: H, members: [email] }, "the deeper document survives both folder deletions");
-  const lifted = await readDoc(target, `docs/${inF.docId}`);
-  assert.deepEqual({ folderId: lifted?.folderId, members: lifted?.members }, { folderId: null, members: [email] }, "the document is at the root");
+  ctx.step("Trash, at the foot of the folder rail, lists all five; Restore on F brings every one back where it was");
+  await u.page.getByRole("navigation", { name: "Folders" }).getByRole("button", { name: "Trash" }).click();
+  await u.page.waitForURL(/\/trash$/, { timeout: 30_000 });
+  await eventually(async () => (await u.page.locator(".trash-row").count()) === 5, { timeout: 90_000, message: "the Trash lists F, G, H and both documents" });
+  // By its own name: G, H and both documents name F too, as the folder they went with.
+  const fRow = u.page.locator(".trash-row").filter({ has: u.page.locator(".trash-name > strong", { hasText: new RegExp(`^Middle ${tag}$`) }) });
+  const rMark = u.responseMark();
+  await fRow.getByRole("button", { name: "Restore" }).click();
+  assert.equal((await pageAnswer(u, rMark, "POST", "/organize")).status, 200, "POST /organize restore folder");
+  await eventually(async () => (await u.page.locator(".trash-row").count()) === 0, { timeout: 90_000, message: "the Trash is empty again" });
+  const back = await Promise.all([`folders/${F}`, `folders/${G}`, `folders/${H}`, `docs/${inF.docId}`, `docs/${inH.docId}`].map((path) => readDoc(target, path)));
+  assert.deepEqual(back.map((m) => m?.trashed ?? null), [null, null, null, null, null], "all five are back");
+  assert.deepEqual({ parent: back[0]?.parentId, ancestors: back[2]?.ancestors, inF: back[3]?.folderId, inH: back[4]?.folderId }, { parent: P, ancestors: [P, F, G], inF: F, inH: H }, "each where it was");
+  await gotoWorkspace(u, P);
+  await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   noPageErrors([u]);
 });
 
@@ -1066,7 +1077,7 @@ async function moveUi(u, card, title, to) {
   return res.status;
 }
 
-scenario("A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot delete it, and deleting the folder lifts the document out of their reach", {
+scenario("A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot move it to the Trash, and trashing the folder takes the document out of their reach", {
   tiers: BOTH,
   effects: ["email:POST /folder-access"],
   needs: ["email", "mailpit", "mail-fail-recipient"],
@@ -1115,17 +1126,19 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   assert.equal((await V.http.get(content)).status, 404, "the reader is back to the absent id's 404");
   assert.deepEqual(await sends(), [[invitation, 200]], "moving out of a shared folder sends no invitation");
 
-  ctx.step("the reader's workspace shows the folder, whose Delete entry is disabled with its reason; their POST /organize delete is 403");
+  ctx.step("the reader's workspace shows the folder, whose Move to Trash is disabled with its reason; their POST /organize trash, and the older delete, are 403");
   const v = await ctx.users.user({ name: "viewer" });
   await v.signInUi(vEmail, V.account.password);
   await v.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   const vMenu = await openActions(v.page, folderCard(v.page, F), fName);
-  const vDelete = vMenu.getByRole("menuitem", { name: "Delete folder" });
-  assert.deepEqual({ disabled: await vDelete.isDisabled(), reason: await vDelete.getAttribute("title") }, { disabled: true, reason: `Only ${email} can delete this folder.` });
+  const vTrash = vMenu.getByRole("menuitem", { name: TRASH_LABEL });
+  assert.deepEqual({ disabled: await vTrash.isDisabled(), reason: await vTrash.getAttribute("title") }, { disabled: true, reason: `Only ${email} can move this folder to the Trash.` });
   await v.page.keyboard.press("Escape");
-  assert.equal((await V.http.postJson("/organize", { kind: "folder", id: F, op: "delete" })).status, 403, "a reader may not delete the folder");
+  const vRefused = await Promise.all(["trash", "delete"].map((op) => V.http.postJson("/organize", { kind: "folder", id: F, op })));
+  assert.deepEqual(vRefused.map((r) => r.status), [403, 403], "a reader may not move the folder to the Trash");
+  assert.equal((await readDoc(target, `folders/${F}`))?.trashed ?? null, null, "the folder is not in the Trash");
 
-  ctx.step("filed again, then the folder deleted from the owner's menu: the document is lifted to the root and its reader loses it");
+  ctx.step("filed again, then the folder moved to the Trash from the owner's menu: the document goes with it, its owner's alone, and its reader loses it");
   await O.http.postJson("/organize", { kind: "doc", id: docId, op: "move", targetFolderId: F }, { expect: 200 });
   precondition((await members()).includes(vEmail), "filed again");
   assert.deepEqual(await sends(), [[invitation, 200]], "API filing sends no new invitation");
@@ -1133,12 +1146,12 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   await u.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   const menu = await openActions(u.page, folderCard(u.page, F), fName);
   const mark = u.responseMark();
-  await answerDialog(u.page, () => menu.getByRole("menuitem", { name: "Delete folder" }).click(), { accept: true });
+  await answerDialog(u.page, () => menu.getByRole("menuitem", { name: TRASH_LABEL }).click(), { accept: true });
   assert.equal((await pageAnswer(u, mark, "POST", "/organize")).status, 200);
-  const lifted = await readDoc(target, `docs/${docId}`);
-  assert.deepEqual({ folderId: lifted?.folderId, members: lifted?.members }, { folderId: null, members: [email] });
+  const gone = await readDoc(target, `docs/${docId}`);
+  assert.deepEqual({ folderId: gone?.folderId, members: gone?.members, with: gone?.trashed?.with?.folderId }, { folderId: F, members: [email], with: F });
   assert.equal((await V.http.get(content)).status, 404);
-  assert.deepEqual(await sends(), [[invitation, 200]], "deleting a shared folder sends no new invitation");
+  assert.deepEqual(await sends(), [[invitation, 200]], "trashing a shared folder sends no invitation");
   await box.expectMailboxes({ [vEmail]: [invitation] }, { timeout: REQUEST_MS });
   noPageErrors([u, v]);
 });

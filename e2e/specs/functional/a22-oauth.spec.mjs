@@ -430,7 +430,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const viaGrant = await toolNames(ctx, x.json.access_token, "oauth-mcp");
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
-    assert.equal(viaGrant.length, 33, viaGrant.join(", "));
+    assert.equal(viaGrant.length, 36, viaGrant.join(", "));
     assert.deepEqual(viaGrant, viaPersonal, "the same 36 tools as a personal token");
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);

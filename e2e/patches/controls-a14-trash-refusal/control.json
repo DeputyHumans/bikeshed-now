@@ -1,0 +1,12 @@
+{
+  "oracle": "only a document's owner moves it to the Trash (A14.5, SPEC §4)",
+  "what": "trashDocument forgets its owner check (functions/src/lib/trash.ts), so an editor moves the owner's document to the Trash",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5 actions menus: Rename keeps the docId; Move to Trash is the owner's, with an Undo that brings it back, and /organize's trash is 403 to an editor and the absent id's 404 to a stranger; a folder asks first, goes to the Trash with everything beneath it, and Trash restores it whole",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "Expected values to be strictly deep-equal"
+  }
+}

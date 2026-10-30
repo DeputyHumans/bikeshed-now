@@ -1,0 +1,11 @@
+--- a/functions/src/lib/folders.ts
++++ b/functions/src/lib/folders.ts
+@@ -102,7 +102,7 @@
+   trashed = false,
+ ): Membership {
+   const owner = normalizeEmail(ownerEmail);
+-  if (trashed) {
++  if (trashed && false) {
+     const alone = owner ? [owner] : [];
+     return { members: alone, suggesterMembers: [...alone], editorMembers: [...alone], approverMembers: [...alone] };
+   }

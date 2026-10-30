@@ -1,10 +1,10 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -1914,6 +1914,7 @@
-     }
-
-     if (isExpired(data, Date.now())) {
+@@ -1856,6 +1856,7 @@
+ 
+     const frozen = frozenWrite(data, Date.now());
+     if (frozen) {
 +      await ref.update({ title: "changed despite expiry" });
-       res.status(409).json({ error: EXPIRED_WRITE });
+       res.status(409).json(frozen);
        return;
      }

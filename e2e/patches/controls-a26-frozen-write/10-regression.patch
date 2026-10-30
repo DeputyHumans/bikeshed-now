@@ -1,0 +1,10 @@
+--- a/functions/src/lib/acl.ts
++++ b/functions/src/lib/acl.ts
+@@ -143,7 +143,6 @@
+   doc: DocAclData | null | undefined,
+   nowMs: number,
+ ): { trashed: true; error: string } | { expired: true; error: string } | null {
+-  if (isTrashed(doc)) return { trashed: true, error: TRASHED_WRITE };
+   if (isExpired(doc, nowMs)) return { expired: true, error: EXPIRED_WRITE };
+   return null;
+ }

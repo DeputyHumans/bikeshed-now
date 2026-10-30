@@ -1,9 +1,9 @@
 --- a/functions/src/lib/folders.ts
 +++ b/functions/src/lib/folders.ts
-@@ -473,6 +473,7 @@
+@@ -506,6 +506,7 @@
      const beforeTeams = await transactionTeams(db, tx, grantsOf(before));
-     const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams);
-     const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams);
+     const previous = computeMembership(String(before.ownerEmail || ""), grantsOf(before), beforeParent, beforeTeams, isTrashed(before));
+     const next = computeMembership(String(data.ownerEmail || ""), grants, parent, teams, isTrashed(data));
 +    if (folderId) next.members = Array.from(new Set([...(before.members ?? []), ...next.members])).sort();
      tx.set(docRef, { ...patch, ...next, ...stampOf(opts) }, { merge: true });
      for (const event of events(next, before, previous)) addEvent(tx, docRef, event);

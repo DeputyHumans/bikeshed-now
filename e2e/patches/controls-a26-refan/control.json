@@ -1,0 +1,12 @@
+{
+  "oracle": "no recompute hands a trashed document back (A26.3, SPEC §4)",
+  "what": "persistDocMembership honours the Trash only when it applies a change (functions/src/lib/folders.ts), so a team's re-fan gives a trashed document to the team",
+  "target": {
+    "spec": "e2e/specs/functional/a26-trash.spec.mjs",
+    "case": "A26.3 a team change while a document is in the Trash hands it to nobody, and Restore gives the team its access",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "the team's re-fan gave the trashed document to nobody"
+  }
+}

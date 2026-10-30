@@ -86,10 +86,12 @@ export const COMMENT_ROUTES = Object.freeze([
 /** MCP tools, every one classified. An unclassified name is refused on production. */
 export const READ_TOOLS = Object.freeze(new Set([
   "list_documents", "list_versions", "get_document", "get_lineage", "list_folders", "get_folder", "get_comments", "get_changes", "get_document_access", "get_folder_access",
+  "list_trash",
 ]));
-/** Management mutations run only on isolated stacks: grants send invitations. */
+/** Management mutations run only on isolated stacks: grants send invitations, and the Trash takes access away. */
 export const MANAGEMENT_TOOLS = Object.freeze(new Set([
   "set_document_access", "set_folder_access", "set_document_visibility", "set_folder_visibility", "rename_folder", "move_folder", "delete_folder",
+  "trash_document", "restore_from_trash",
 ]));
 export const CREATE_TOOLS = Object.freeze(new Set(["publish_document", "create_folder"]));
 export const ACT_TOOLS = Object.freeze(new Set([

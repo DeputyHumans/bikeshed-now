@@ -1,0 +1,12 @@
+--- a/functions/src/lib/trash.ts
++++ b/functions/src/lib/trash.ts
+@@ -162,9 +162,6 @@
+  */
+ export async function trashFolder(ctx: ManagementContext, id: string): Promise<{ id: string; batch: string; folders: number; documents: number }> {
+   const { data } = await load(ctx, "folder", id, false);
+-  if (!canManageFolder(data as FolderAclData, ctx.caller.emailLower)) {
+-    throw new ManagementError(403, "only the owner can move a folder to the Trash");
+-  }
+   if (isTrashed(data)) return { id, batch: batchOf(data) as string, folders: 0, documents: 0 };
+   const batch = newBatch();
+   const along = { folderId: id, name: typeof data.name === "string" ? data.name : "Untitled folder" };

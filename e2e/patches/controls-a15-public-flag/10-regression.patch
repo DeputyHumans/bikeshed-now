@@ -1,7 +1,7 @@
 --- a/functions/src/lib/publicdoc.ts
 +++ b/functions/src/lib/publicdoc.ts
-@@ -258,7 +258,7 @@
-     const projection = snap.exists && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
+@@ -272,7 +272,7 @@
+     const projection = snap.exists && !isTrashed(data) && (visibilityOf(data as DocAclData) === "public" || reach?.visibility === "public")
        ? projectPublicDoc(docId, await withVersionFields(docRef, data, tx), reach)
        : null;
 -    if (projection) tx.set(publicRef, projection);

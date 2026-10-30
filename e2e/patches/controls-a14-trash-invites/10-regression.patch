@@ -1,0 +1,12 @@
+--- a/functions/src/lib/trash.ts
++++ b/functions/src/lib/trash.ts
+@@ -179,6 +179,9 @@
+     // A subfolder already in the Trash took its contents with it then.
+     (current) => batchOf(current) === batch,
+   );
++  const { sendInvitations } = await import("../email/notify");
++  const readers = (Array.isArray(data.members) ? (data.members as string[]) : []).filter((email) => email !== ctx.caller.emailLower);
++  await sendInvitations(ctx.caller.emailLower, readers.map((email) => ({ email, role: "viewer" as const })), { title: "Trashed folder", kind: "folder", url: `https://example.invalid/folder/${id}` });
+   return { id, batch, ...counts };
+ }
+ 

@@ -1,0 +1,12 @@
+{
+  "oracle": "a trashed document is written by nobody, its owner included (A26.2, SPEC §4)",
+  "what": "frozenWrite forgets the Trash (functions/src/lib/acl.ts), so a draft and an agent's update land on a trashed document",
+  "target": {
+    "spec": "e2e/specs/functional/a26-trash.spec.mjs",
+    "case": "A26.2 in the Trash nobody writes, its owner included: a draft, a share, visibility, trust and an MCP update are each refused with the Trash's 409, and nothing changes",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "Expected values to be strictly deep-equal"
+  }
+}

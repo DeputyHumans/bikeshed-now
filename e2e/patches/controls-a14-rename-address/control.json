@@ -1,9 +1,9 @@
 {
-  "oracle": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level",
+  "oracle": "A14.5 actions menus: Rename keeps the docId; Move to Trash is the owner's, with an Undo that brings it back, and /organize's trash is 403 to an editor and the absent id's 404 to a stranger; a folder asks first, goes to the Trash with everything beneath it, and Trash restores it whole",
   "what": "rename address",
   "target": {
     "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
-    "case": "A14.5 actions menus: Rename keeps the docId, the document's delete entry is disabled with its reason and /organize answers 400 (404 to a stranger), and deleting a folder lifts its children one level"
+    "case": "A14.5 actions menus: Rename keeps the docId; Move to Trash is the owner's, with an Undo that brings it back, and /organize's trash is 403 to an editor and the absent id's 404 to a stranger; a folder asks first, goes to the Trash with everything beneath it, and Trash restores it whole"
   },
   "expect": {
     "message": "the card shows the new title|the record keeps its id"

@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -555,7 +555,7 @@
+         id: "trash",
+         label: "Move to Trash",
+         danger: true,
+-        disabled: !isOwner,
++        disabled: false,
+         reason: `Only ${folder.ownerEmail} can move this folder to the Trash.`,
+         onSelect: () => {
+           // The one that asks: a folder takes everything in it, other

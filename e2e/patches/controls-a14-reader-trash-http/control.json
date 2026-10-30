@@ -1,0 +1,12 @@
+{
+  "oracle": "only a folder's owner moves it to the Trash (A14.5b, SPEC §4)",
+  "what": "trashFolder forgets its owner check (functions/src/lib/trash.ts), so a reader moves the owner's folder to the Trash",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot move it to the Trash, and trashing the folder takes the document out of their reach",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "a reader may not move the folder to the Trash"
+  }
+}

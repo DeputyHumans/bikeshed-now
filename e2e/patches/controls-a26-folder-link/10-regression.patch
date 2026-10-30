@@ -1,0 +1,11 @@
+--- a/functions/src/lib/reach.ts
++++ b/functions/src/lib/reach.ts
+@@ -156,7 +156,7 @@
+   const documents: ReachedDocument[] = [];
+   for (const s of docSnaps.docs.slice(0, REACH_LIST_CAP)) {
+     const d = s.data() || {};
+-    if (isFrozen(d as DocAclData, nowMs)) continue;
++    if (isFrozen(d as DocAclData, nowMs) && !isTrashed(d)) continue;
+     const thumb = readThumb(d.thumb);
+     const summary = summaryOf(d);
+     documents.push({

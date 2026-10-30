@@ -1,0 +1,11 @@
+--- a/app/src/components/ViewerBanners.tsx
++++ b/app/src/components/ViewerBanners.tsx
+@@ -48,7 +48,7 @@
+   // First: it is the one fact that changes what everything else here means.
+   if (props.trashed) {
+     rows.push(
+-      <div key="trashed" className="banner banner-warn" role="status">
++      <div key="trashed" hidden className="banner banner-warn" role="status">
+         <span>This document is in your Trash. Only you can open it, its links and sharing are off, and nobody can edit it until you restore it.</span>
+         <button type="button" className="btn btn-sm" onClick={props.trashed.onRestore}>Restore</button>
+       </div>,

@@ -1,0 +1,12 @@
+{
+  "oracle": "the Trash sends nobody an invitation (A14.5b, SPEC §13)",
+  "what": "trashFolder emails an invitation to every reader of the folder (functions/src/lib/trash.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a14-workspace.spec.mjs",
+    "case": "A14.5b Move… into a shared folder makes its readers the document's members, Move… out takes them away, a reader's folder menu cannot move it to the Trash, and trashing the folder takes the document out of their reach",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "trashing a shared folder sends no invitation"
+  }
+}

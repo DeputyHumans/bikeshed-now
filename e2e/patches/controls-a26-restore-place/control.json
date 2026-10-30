@@ -1,0 +1,12 @@
+{
+  "oracle": "a document restored from a folder still in the Trash comes back at its owner's root (A26.5, SPEC §4)",
+  "what": "Restore puts a document back into its folder even while that folder is in the Trash (functions/src/lib/trash.ts)",
+  "target": {
+    "spec": "e2e/specs/functional/a26-trash.spec.mjs",
+    "case": "A26.5 someone else's document that went with a folder is in their Trash, not the folder owner's, and comes back at their root while the folder stays in the Trash",
+    "suite": "functional"
+  },
+  "expect": {
+    "message": "Expected values to be strictly deep-equal"
+  }
+}

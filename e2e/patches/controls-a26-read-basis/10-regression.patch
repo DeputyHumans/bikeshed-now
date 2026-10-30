@@ -1,0 +1,11 @@
+--- a/functions/src/lib/acl.ts
++++ b/functions/src/lib/acl.ts
+@@ -227,8 +227,6 @@
+ ): ReadBasis | null {
+   if (!doc) return null;
+   if (caller && isMember(doc, caller.uid, caller.emailLower)) return "member";
+-  // In the Trash, membership (its owner alone) is the only way in (SPEC §4).
+-  if (isTrashed(doc)) return null;
+   const visibility = visibilityOf(doc);
+   if (visibility === "public") return "public";
+   if (visibility !== "unlisted") return null;

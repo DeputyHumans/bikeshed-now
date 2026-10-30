@@ -1,0 +1,11 @@
+--- a/functions/src/lib/trash.ts
++++ b/functions/src/lib/trash.ts
+@@ -177,7 +177,7 @@
+     set(true),
+     (before) => (isTrashed(before) ? [] : [event(ctx, "doc.trashed", { batch, with: along })]),
+     // A subfolder already in the Trash took its contents with it then.
+-    (current) => batchOf(current) === batch,
++    () => false,
+   );
+   return { id, batch, ...counts };
+ }

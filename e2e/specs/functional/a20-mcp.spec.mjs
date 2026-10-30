@@ -387,7 +387,7 @@ scenario("A20.1 tools/list names exactly SPEC §19's thirty-six tools, each desc
   const names = tools.map((t) => t.name);
   ctx.step(`tools/list: ${names.join(", ")}`);
   assert.equal(names.length, 36, `exactly 36 tools: ${names.join(", ")}`);
-  assert.equal(new Set(names).size, 33, "the names are unique");
+  assert.equal(new Set(names).size, 36, "the names are unique");
   assert.deepEqual([...names].sort(), [...SPEC_TOOLS].sort(), "the tool set is SPEC §19's table");
   const bad = [];
   for (const t of tools) {

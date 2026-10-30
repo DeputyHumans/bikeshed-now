@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -450,7 +450,7 @@
+         toast.show(`“${title}” is in the Trash.`, {
+           label: "Undo",
+           onSelect: () =>
+-            void toast.during("Restoring…", restoreItem(kind, id)).catch((e) => toast.error(e.message)),
++            void toast.during("Restoring…", restoreItem(kind, "")).catch((e) => toast.error(e.message)),
+         }),
+       )
+       .catch((e) => toast.error(e.message));
