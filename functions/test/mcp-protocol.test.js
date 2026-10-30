@@ -20,7 +20,7 @@ const REQUIRED = {
   get_document_access: ["id"], set_document_access: ["id"],
   get_folder_access: ["id"], set_folder_access: ["id"],
   set_document_visibility: ["id"], set_folder_visibility: ["id"], rename_folder: ["id", "name"],
-  move_folder: ["id"], delete_folder: ["id"], list_versions: ["id"],
+  move_folder: ["id"], delete_folder: ["id"], trash_document: ["id"], restore_from_trash: ["id", "kind"], list_trash: [], list_versions: ["id"],
   "list_documents": [],
   "get_document": [
     "id"

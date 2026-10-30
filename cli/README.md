@@ -161,9 +161,10 @@ document explicitly, for one whose id is `folder`.
 
 `bikeshed rename-folder <id> <name>` and
 `bikeshed move-folder <id> <folder|root>` require edit rights.
-`bikeshed delete-folder <id>` is owner-only: contents move to its parent or the
-root, and access is recomputed. No documents are deleted. All commands support
-`--json`. Existing sign-ins work without reconnecting.
+
+`bikeshed trash <id>` moves a document you own to your Trash, and `bikeshed trash folder <id>` moves a folder you own there with everything in it, other people's documents included (`bikeshed delete-folder <id>` is the older name, and now does the same). In the Trash it is yours alone and read-only: links, folder links, its public page and every grant stop working. `bikeshed restore [folder] <id>` brings it back with its sharing, into the folder it was in while that is still there, otherwise to the root. Bare `bikeshed trash` lists what is in your Trash. Nothing the CLI does deletes anything permanently.
+
+All commands support `--json`. Existing sign-ins work without reconnecting.
 
 ## For agents
 

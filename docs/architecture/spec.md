@@ -2707,7 +2707,7 @@ update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
 If the head changes, the server refuses the write. Read the new head and
 reassess the request; never silently redirect a historical request to it.
 
-### MCP — thirty-three tools
+### MCP — thirty-six tools
 
 `POST /mcp`, streamable HTTP, one Cloud Function, one rewrite.
 
@@ -2722,6 +2722,9 @@ reassess the request; never silently redirect a historical request to it.
 | `rename_folder` | rename a folder the caller can edit |
 | `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; move the folder to the Trash with everything beneath it, other people's documents included (§4 "The Trash"); deletes nothing |
+| `trash_document` | owner-only; move a document to the Trash, its owner's alone and read-only until restored; deletes nothing |
+| `restore_from_trash` | owner-only; bring a document or folder (`kind`) back with every grant, into its folder while that is there and not in the Trash, else the root; a folder brings back its batch |
+| `list_trash` | the caller's own documents and folders in the Trash, newest first, with when, its `batch`, the folder it went `with` and the one it `was` in |
 | `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs; each with its `origin` and whether it was `automated`, and for a member `publishedBy`, `channel` and `via` (§17), which a link holder is not told |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
@@ -2884,7 +2887,7 @@ document, as every write tool does. A document's own `<title>` is content and
 is not rewritten, so a link preview still shows it (§17).
 
 Management is available under the same identity and role checks as the web app
-(ADR 0017). Eight additional tools take `id`; access writes take
+(ADR 0017). The management tools take `id`; access writes take
 `add: [{principal, role}]` and/or `remove: [principal]`. Emails and existing
 `team:<id>` principals use the four existing roles. Access reads/writes return
 `{id, kind, owner, direct, inherited, effective}` plus document visibility,
@@ -3047,7 +3050,7 @@ maps to `get_folder_access` and `set_folder_visibility`, and refuses
 `bikeshed folder <link>` passes a folder link's key to `get_folder`.
 `bikeshed rename-folder <id> <name>`,
 `bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
-the three folder tools. All support human-readable and `--json` output.
+the three folder tools. `bikeshed trash <id|link>` maps to `trash_document`, `bikeshed trash folder <id|link>` to `delete_folder` (as `delete-folder` does), bare `bikeshed trash` to `list_trash`, and `bikeshed restore [folder] <id|link>` to `restore_from_trash` with its `kind`. All support human-readable and `--json` output.
 
 ### Skills
 

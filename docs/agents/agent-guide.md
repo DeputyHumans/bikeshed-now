@@ -121,7 +121,7 @@ request carries its own credential, so one authenticated POST is a complete
 call, and `initialize` is optional rather than a handshake you must complete
 first. The one thing kept between calls is a bookmark: the last `get_changes`
 cursor each credential was given for each document, so a client that forgets
-can ask for `"last"`. If all you have is an HTTP client, you have all thirty-three tools.
+can ask for `"last"`. If all you have is an HTTP client, you have all thirty-six tools.
 
 ```bash
 curl -s https://<deployment>/mcp \
@@ -796,19 +796,28 @@ Return the server's usable URL and settings. Public/unlisted visibility is
 separate from direct and inherited membership; making a document private does
 not revoke its explicit or inherited members.
 
-Folder rename, move and deletion are covered by `bikeshed-folders`.
+Folder rename, move and the Trash are covered by `bikeshed-folders`.
 
 ### Manage folders
 
 `rename_folder` and `bikeshed rename-folder <id> <name>` rename a folder.
 `move_folder` and `bikeshed move-folder <id> <folder|root>` move one (MCP omits `parent` for root).
 Both require edit rights; moving also requires edit rights on the destination.
-`delete_folder` and `bikeshed delete-folder <id>` are owner-only: contents are
-reparented, documents retained, access recomputed, and no invitation sent.
+
+### The Trash
+
+Deleting moves something to its owner's Trash, and nothing you can do deletes anything permanently.
+
+- `trash_document` and `bikeshed trash <id>` move a document there. Owner-only.
+- `delete_folder` and `bikeshed trash folder <id>` (or the older `bikeshed delete-folder <id>`) move a folder there with everything beneath it, other people's documents included. Owner-only. They return the `batch` and how many folders and documents went.
+- `restore_from_trash` (with `kind`: `document` or `folder`) and `bikeshed restore [folder] <id>` bring one back with every grant it had: into the folder it was in while that folder exists and is not in the Trash, otherwise to the root. A folder brings back what went with it.
+- `list_trash` and `bikeshed trash` list what is in your own Trash: when each item went, the folder it went `with`, the folder it `was` in, its `batch`.
+
+While something is in the Trash it is its owner's alone and read-only. Its link, a folder's link, its public page and every grant stop working, and anyone else gets the same answer as for an id that does not exist. Every write is refused for its owner too, with `this document is in the Trash — restore it to edit it`; sharing, visibility, renaming and moving are refused until it is restored, and nothing can be filed into a trashed folder. Someone else's document that went with your folder is in their Trash, not yours: tell them, and they can restore it. Trash only when the person asked for it, and say what went.
 
 ## What you cannot do, and why
 
-- **Delete a document.** Documents are permanent. Folder deletion keeps their contents.
+- **Delete anything permanently.** You can move a document or a folder to the Trash and restore it; nothing you can do removes it for good.
 - **Manage teams or trust document scripts.** Those controls remain in the app.
 - **Act as somebody else.** A token or a connected app is its owner. There are no
   service accounts and no scopes.

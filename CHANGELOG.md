@@ -19,10 +19,12 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Changed
 
 - Deleting a folder moves it to the Trash with everything in it, other people's documents included, instead of moving its contents up a level. `delete_folder` and the CLI's `delete-folder` do the same. Nothing is deleted. ([ADR 0024](docs/architecture/adr/0024-deletion-goes-through-a-trash.md))
+- An app's consent screen says it can move documents and folders you own to the Trash and restore them, and that it cannot delete anything permanently, in place of deleting folders while keeping their contents.
 
 ### Added
 
 - The Trash. A document's owner moves it there, and a folder's owner moves a folder there with everything in it. In the Trash an item is its owner's alone and read-only: its link, a folder's link, its public page, open editing and every grant stop working, and it cannot be shared, renamed or moved. Restore gives every grant back and puts it where it was, or at its owner's root if that folder is gone. Each owner restores their own documents from someone else's trashed folder. `POST /organize` takes `trash` and `restore` for both kinds. Nothing is deleted yet; permanent deletion comes in a later release.
+- Agents and the CLI work the Trash too: `trash_document`, `restore_from_trash` (with `kind`) and `list_trash`, which make thirty-six MCP tools, and `bikeshed trash [folder] <id>`, `bikeshed restore [folder] <id>` and bare `bikeshed trash` to list it, in bikeshed-now 0.20.0. No tool and no command deletes anything permanently.
 
 ## 0.28.0 — 2026-10-29
 

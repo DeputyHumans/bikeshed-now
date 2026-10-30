@@ -51,7 +51,7 @@ test("clients: the owner mints a cli token, sees it listed, and it authenticates
   assert.ok(listed.json.tokens.some((t) => t.tokenId === ctx.token.tokenId && t.channel === "cli"));
 });
 
-test("clients: MCP initialize reports the tree's version and tools/list has exactly 33 tools", async () => {
+test("clients: MCP initialize reports the tree's version and tools/list has exactly 36 tools", async () => {
   const mcp = mcpClient(target, { token: ctx.token.token, actor: "owner-mcp" });
   const init = await mcp.initialize();
   assert.equal(init.protocolVersion, "2025-06-18");
@@ -121,7 +121,7 @@ test("clients: the operator script publishes a sample into this stack", async ()
   assert.equal(c.status, 200);
 });
 
-test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair that lists 33 tools", async () => {
+test("clients: OAuth discovery, DCR and a PKCE exchange give a bsa_/bsr_ pair that lists 36 tools", async () => {
   const anon = createHttp(target, { actor: "oauth-app" });
   const d = await discover(anon);
   assert.equal(d.responses.prm.status, 200);

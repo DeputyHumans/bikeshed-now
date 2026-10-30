@@ -3,7 +3,7 @@
   "what": "catalog",
   "target": {
     "spec": "e2e/specs/functional/a20-mcp.spec.mjs",
-    "case": "A20.1 tools/list names exactly SPEC §19's thirty-three tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version",
+    "case": "A20.1 tools/list names exactly SPEC §19's thirty-six tools, each described with an object schema that declares its required arguments; initialize answers protocol 2025-06-18, tools.listChanged false and the tree's version",
     "suite": "functional"
   },
   "stack": [],

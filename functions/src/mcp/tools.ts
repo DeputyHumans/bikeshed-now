@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The thirty-three MCP tools (SPEC §19).
+// The thirty-six MCP tools (SPEC §19).
 
 /**
  * Chosen to close a loop, not to expose a surface.
@@ -1842,7 +1842,7 @@ export function toolByName(name: string): ToolDefinition | undefined {
   return TOOLS.find((t) => t.name === name);
 }
 
-/** Exported for the wiring test: the surface is thirty-three tools, not "some tools". */
+/** Exported for the wiring test: the surface is thirty-six tools, not "some tools". */
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
 
 void isDocEditor;

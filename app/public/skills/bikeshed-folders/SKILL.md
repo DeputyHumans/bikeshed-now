@@ -108,29 +108,39 @@ So:
 
 You need edit rights on the document, not merely the ability to read it.
 
-## Rename, move, or delete a folder
+## Rename or move a folder
 
 ```bash
 bikeshed rename-folder folder-id "Reviews"
 bikeshed move-folder folder-id parent-id
 bikeshed move-folder folder-id root
-bikeshed delete-folder folder-id
 ```
 
 Over MCP: `rename_folder` takes `id` and `name`; `move_folder` takes `id`
-and an optional `parent` (omit for root); `delete_folder` takes `id`.
+and an optional `parent` (omit for root).
 Rename and move require edit rights, and moving also requires edit rights on
 the destination. Cycles are refused. Moves recompute inherited access throughout
 the subtree and send no invitations.
 
-Deletion is owner-only. It deletes the folder, reparents its immediate contents
-to its parent or the root, and recomputes access. Documents remain intact.
-Report the returned destination and reparented counts. Use these operations
-when authorized; do not ask again for authorization already given.
+## The Trash
+
+```bash
+bikeshed trash doc-id
+bikeshed trash folder folder-id
+bikeshed restore doc-id
+bikeshed restore folder folder-id
+bikeshed trash
+```
+
+Over MCP: `trash_document` takes `id`; `delete_folder` takes `id` and trashes the folder with everything in it; `restore_from_trash` takes `id` and `kind` (`document` or `folder`); `list_trash` takes nothing.
+
+Deleting moves to the owner's Trash, and only the owner can do it. A folder takes everything beneath it, other people's documents included. Nothing is deleted: in the Trash an item is its owner's alone and read-only, its links and grants stop working, and it cannot be shared, renamed or moved, nor can anything be filed into a trashed folder. Restore brings it back with every grant, into the folder it was in while that folder is still there, otherwise to the root; a folder brings back what went with it. Someone else's document that went with your folder is in their Trash, not yours: say so, and they can restore it.
+
+Trash only what the person asked you to, and report what went: the counts a folder returns, and whose documents were in it if you know. Use these operations when authorized; do not ask again for authorization already given. No tool deletes anything permanently.
 
 For sharing and role changes use `get_folder_access`, `set_folder_access`,
 `set_folder_visibility`, `get_document_access` and `set_document_access`,
-described in the `bikeshed-permissions` skill. Documents cannot be deleted.
+described in the `bikeshed-permissions` skill.
 
 If a listing is `truncated`, the workspace has more folders than one call
 returns. Say so rather than treating what you got as the whole tree.

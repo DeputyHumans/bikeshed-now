@@ -222,13 +222,14 @@ function Ready({
             <li>Create folders and file documents in them</li>
             <li>Manage sharing on documents and folders you own, sending invitations to new readers</li>
             <li>Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own</li>
-            <li>Rename and move folders you can edit; delete folders you own while keeping their contents</li>
+            <li>Rename and move folders you can edit</li>
+            <li>Move documents and folders you own to the Trash, and restore them</li>
           </ul>
         </div>
         <div>
           <h2 className="connect-subhead">It won't be able to</h2>
           <ul className="connect-list connect-list-not">
-            <li>Delete documents or manage teams</li>
+            <li>Delete anything permanently, or manage teams</li>
             <li>Trust document scripts or act with permissions you do not have</li>
           </ul>
         </div>

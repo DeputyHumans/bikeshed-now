@@ -38,7 +38,7 @@ async function call(who, name, args) {
   return result.json;
 }
 
-scenario("A20 management: MCP shares, revokes, preserves sparse settings, and reparents folders", {
+scenario("A20 management: MCP shares, revokes, preserves sparse settings, and trashes and restores a folder with its documents", {
   tiers: ["local"], effects: ["email:POST /mcp"], needs: ["email", "mailpit"], timeoutMs: 300_000,
 }, async ctx => {
   const owner = await person(ctx, "owner"), reader = await person(ctx, "reader");
@@ -59,10 +59,22 @@ scenario("A20 management: MCP shares, revokes, preserves sparse settings, and re
   await call(owner, "move_folder", { id: child });
   const detached = await call(owner, "get_document_access", { id });
   await call(owner, "move_folder", { id: child, parent });
-  const deleted = await call(owner, "delete_folder", { id: child });
-  const stored = await readDoc(target, `docs/${id}`);
-  assert.deepEqual({ readable: readable.isError, denied: denied.isError, editor: access.direct.editors.includes(reader.account.email), stillInherited: removed.effective.members.includes(reader.account.email), expiry: sparse.expiresAt, sameLink: settings.url === sparse.url, cycle: cycle.isError, detached: detached.effective.members.includes(reader.account.email), deleted: deleted.reparented, parent: stored.folderId, version: stored.currentVersion }, {
-    readable: false, denied: true, editor: true, stillInherited: true, expiry: expiresAt, sameLink: true, cycle: true, detached: false, deleted: { folders: 0, documents: 1 }, parent, version: "v1",
+  // Deleting a folder moves it to the Trash with its document: the reader its
+  // parent shares with loses the document until the owner restores it.
+  const trashed = await call(owner, "delete_folder", { id: child });
+  const inTrash = await readDoc(target, `docs/${id}`);
+  const hidden = await reader.mcp.call("get_document", { id });
+  const listed = await call(owner, "list_trash", {});
+  const restored = await call(owner, "restore_from_trash", { id: child, kind: "folder" });
+  const back = await readDoc(target, `docs/${id}`);
+  assert.deepEqual({
+    readable: readable.isError, denied: denied.isError, editor: access.direct.editors.includes(reader.account.email), stillInherited: removed.effective.members.includes(reader.account.email), expiry: sparse.expiresAt, sameLink: settings.url === sparse.url, cycle: cycle.isError, detached: detached.effective.members.includes(reader.account.email),
+    trashed: [trashed.folders, trashed.documents], inTrash: [inTrash.members, inTrash.folderId, typeof inTrash.trashed?.batch], hidden: hidden.isError, listed: [listed.folders.map((f) => f.id), listed.documents.map((d) => [d.id, d.with?.folderId])],
+    restored: [restored.parentId, restored.documents], back: [back.trashed, back.folderId, back.members.includes(reader.account.email)], version: back.currentVersion,
+  }, {
+    readable: false, denied: true, editor: true, stillInherited: true, expiry: expiresAt, sameLink: true, cycle: true, detached: false,
+    trashed: [1, 1], inTrash: [[owner.account.email.toLowerCase()], child, "string"], hidden: true, listed: [[child], [[id, child]]],
+    restored: [parent, 1], back: [null, child, true], version: "v1",
   });
   await mailbox(target, { http: ctx.http({ actor: "mailpit" }) }).expectMail({ to: reader.account.email, count: 1 });
 });
@@ -86,10 +98,15 @@ scenario("A20 management: CLI permissions, visibility and folder commands reach 
   const settings = await cli(["visibility", id, "--expires", "none"]);
   const renamed = await cli(["rename-folder", child, "CLI renamed"]);
   const moved = await cli(["move-folder", child, "root"]);
+  // The older name and the new one reach the same tool; restore brings it back.
   const deleted = await cli(["delete-folder", child]);
+  const listed = await cli(["trash"]);
+  const restored = await cli(["restore", "folder", child]);
+  const trashedDoc = await cli(["trash", id]);
+  const restoredDoc = await cli(["restore", id]);
   const stored = await readDoc(target, `docs/${id}`);
-  assert.deepEqual({ role: access.direct.approvers, public: settings.visibility, editing: settings.publicEdit, expiry: settings.expiresAt, name: renamed.name, parent: moved.parent, reparented: deleted.reparented, docParent: stored.folderId, member: stored.members.includes(reader.account.email) }, {
-    role: [reader.account.email], public: "public", editing: true, expiry: null, name: "CLI renamed", parent: null, reparented: { folders: 0, documents: 1 }, docParent: null, member: false,
+  assert.deepEqual({ role: access.direct.approvers, public: settings.visibility, editing: settings.publicEdit, expiry: settings.expiresAt, name: renamed.name, parent: moved.parent, deleted: [deleted.folders, deleted.documents], listed: listed.documents.map((d) => d.id), restored: [restored.parentId, restored.documents], trashedDoc: typeof trashedDoc.batch, restoredDoc: restoredDoc.folderId, docParent: stored.folderId, trashed: stored.trashed, member: stored.members.includes(reader.account.email) }, {
+    role: [reader.account.email], public: "public", editing: true, expiry: null, name: "CLI renamed", parent: null, deleted: [1, 1], listed: [id], restored: [null, 1], trashedDoc: "string", restoredDoc: child, docParent: child, trashed: null, member: false,
   });
   await mailbox(target, { http: ctx.http({ actor: "mailpit" }) }).expectMail({ to: reader.account.email, count: 1 });
 });

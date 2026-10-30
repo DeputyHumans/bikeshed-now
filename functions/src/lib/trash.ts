@@ -212,3 +212,47 @@ export async function restoreFolder(ctx: ManagementContext, id: string): Promise
   );
   return { id, parentId, ...counts };
 }
+
+export interface TrashedItem {
+  kind: "document" | "folder";
+  id: string;
+  title: string;
+  /** When it went, in epoch milliseconds. */
+  trashedAt: number | null;
+  batch: string | null;
+  /** The folder it went with, as it was named then; null when it went on its own. */
+  with: { folderId: string; name: string } | null;
+  /** The folder it was in, which Restore puts it back into while that is still there. */
+  was: string | null;
+}
+
+/**
+ * What is in the caller's Trash: what they own and is in it, newest first. By
+ * owner uid, so it is right across an account's change of address, and with
+ * no index beyond the one every equality query has.
+ */
+export async function listTrash(ctx: ManagementContext): Promise<{ documents: TrashedItem[]; folders: TrashedItem[] }> {
+  const [docs, folders] = await Promise.all([
+    ctx.db.collection("docs").where("ownerUid", "==", ctx.caller.uid).get(),
+    ctx.db.collection("folders").where("ownerUid", "==", ctx.caller.uid).get(),
+  ]);
+  const item = (kind: TrashedItem["kind"], id: string, d: Data): TrashedItem => {
+    const t = d.trashed as { at?: { toMillis?: () => number }; with?: { folderId?: unknown; name?: unknown } };
+    const along = t.with && typeof t.with.folderId === "string" ? { folderId: t.with.folderId, name: String(t.with.name ?? "") } : null;
+    const was = kind === "document" ? d.folderId : d.parentId;
+    return {
+      kind,
+      id,
+      title: String((kind === "document" ? d.title : d.name) ?? id),
+      trashedAt: typeof t.at?.toMillis === "function" ? t.at.toMillis() : null,
+      batch: batchOf(d),
+      with: along,
+      was: typeof was === "string" && was ? was : null,
+    };
+  };
+  const newest = (a: TrashedItem, b: TrashedItem) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0);
+  return {
+    documents: docs.docs.filter((s) => isTrashed(s.data())).map((s) => item("document", s.id, s.data())).sort(newest),
+    folders: folders.docs.filter((s) => isTrashed(s.data())).map((s) => item("folder", s.id, s.data())).sort(newest),
+  };
+}

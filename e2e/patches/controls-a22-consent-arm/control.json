@@ -3,7 +3,7 @@
   "what": "useArmed in app/src/pages/Connect.tsx starts out touched and settles on a 0 ms timer, so Approve arms the moment the card renders, with no input and before the second has passed",
   "target": {
     "spec": "e2e/specs/functional/a22-oauth.spec.mjs",
-    "case": "A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 33 tools at /mcp and nothing else; Cancel sends access_denied with state and iss",
+    "case": "A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 36 tools at /mcp and nothing else; Cancel sends access_denied with state and iss",
     "suite": "functional"
   },
   "stack": [],

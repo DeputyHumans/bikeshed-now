@@ -128,7 +128,7 @@ test("an unconfigured deployment omits the address rather than guessing one", ()
   }
 });
 
-test("there are exactly thirty-three tools, and they are the thirty-three in the spec", () => {
+test("there are exactly thirty-six tools, and they are the thirty-six in the spec", () => {
   assert.deepEqual(TOOL_NAMES, [
     "get_document_access",
     "set_document_access",
@@ -139,6 +139,9 @@ test("there are exactly thirty-three tools, and they are the thirty-three in the
     "rename_folder",
     "move_folder",
     "delete_folder",
+    "trash_document",
+    "restore_from_trash",
+    "list_trash",
 
     "list_documents",
     "list_versions",
@@ -165,7 +168,7 @@ test("there are exactly thirty-three tools, and they are the thirty-three in the
     "resolve_thread",
     "reopen_thread",
   ]);
-  assert.equal(TOOLS.length, 33);
+  assert.equal(TOOLS.length, 36);
 });
 
 test("documents remain permanent and team administration stays outside the surface", () => {

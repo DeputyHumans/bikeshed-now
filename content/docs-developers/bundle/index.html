@@ -850,7 +850,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="tools">
   <p class="eyebrow">04</p>
   <h2>Agent tools</h2>
-  <p class="answer">Thirty-three tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
+  <p class="answer">Thirty-six tools at <code>/mcp</code>, over streamable HTTP and JSON-RPC 2.0. No session: every request carries its own credential.</p>
 
   <div class="table-wrap">
     <table>
@@ -864,7 +864,10 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>set_folder_visibility</code></td><td>Owner-only sparse visibility and expiry for a folder, which open everything beneath it to read</td></tr>
         <tr><td><code>rename_folder</code></td><td>Rename a folder you can edit</td></tr>
         <tr><td><code>move_folder</code></td><td>Move a folder and recompute inherited access</td></tr>
-        <tr><td><code>delete_folder</code></td><td>Owner-only; reparent contents and retain all documents</td></tr>
+        <tr><td><code>delete_folder</code></td><td>Owner-only; move a folder to the Trash with everything in it. Nothing is deleted</td></tr>
+        <tr><td><code>trash_document</code></td><td>Owner-only; move a document to the Trash, yours alone and read-only until restored</td></tr>
+        <tr><td><code>restore_from_trash</code></td><td>Owner-only; bring a document or folder back with every grant, where it was</td></tr>
+        <tr><td><code>list_trash</code></td><td>What is in your Trash, newest first</td></tr>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>list_versions</code></td><td>Published history, newest first, with pagination and version-pinned links</td></tr>
         <tr><td><code>get_document</code></td><td>A document's metadata, address and selected source (current by default); over 200,000 characters it is cut, and says so</td></tr>
@@ -928,7 +931,7 @@ bikeshed update storage-migration proposal.md</code></pre>
   <ul class="ticks">
     <li>Manage teams or trust document scripts.</li>
     <li>Act with permissions its person does not have.</li>
-    <li>Delete a document. Nobody can: a single version can be withdrawn only by whoever runs the deployment.</li>
+    <li>Delete anything permanently. An agent can move a document or a folder to the Trash and restore it; nothing it does removes one for good.</li>
   </ul>
   <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
 </div>
@@ -968,7 +971,10 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed visibility folder &lt;id&gt; [private|unlisted|public]</code></td><td>A folder's level and --expires; its link opens everything beneath it, to read</td></tr>
         <tr><td><code>bikeshed rename-folder &lt;id&gt; &lt;name&gt;</code></td><td>Rename a folder</td></tr>
         <tr><td><code>bikeshed move-folder &lt;id&gt; &lt;folder|root&gt;</code></td><td>Move a folder; changes inherited access</td></tr>
-        <tr><td><code>bikeshed delete-folder &lt;id&gt;</code></td><td>Owner-only; reparent contents</td></tr>
+        <tr><td><code>bikeshed trash [folder] &lt;id&gt;</code></td><td>Owner-only; move a document, or a folder with everything in it, to the Trash</td></tr>
+        <tr><td><code>bikeshed delete-folder &lt;id&gt;</code></td><td>The older name for <code>trash folder</code>; it no longer moves the contents up</td></tr>
+        <tr><td><code>bikeshed restore [folder] &lt;id&gt;</code></td><td>Bring it back from the Trash, with every grant</td></tr>
+        <tr><td><code>bikeshed trash</code></td><td>What is in your Trash</td></tr>
         <tr><td><code>bikeshed folders</code></td><td>The folder tree, with ids and how many can read each</td></tr>
         <tr><td><code>bikeshed folder &lt;id|link&gt;</code></td><td>Who can read a folder, and so anything filed in it; with a folder's link, what it opens</td></tr>
         <tr><td><code>bikeshed mkdir &lt;name&gt;</code></td><td>Create a folder</td></tr>

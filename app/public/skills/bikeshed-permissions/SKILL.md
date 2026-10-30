@@ -85,7 +85,7 @@ returned `url`. `get_folder_access` reports the folder's settings, and
 `get_document_access` reports `inheritedReach`: every folder above a document
 whose link or public level lets more people read it.
 
-Folder rename, move and deletion are covered by `bikeshed-folders`.
+Folder rename, move and the Trash are covered by `bikeshed-folders`.
 
 Version history is document-wide for access and filing: current permissions and
 expiry govern every version. Older content and feedback are a read-only archive.

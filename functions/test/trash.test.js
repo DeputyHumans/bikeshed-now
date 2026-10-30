@@ -294,3 +294,29 @@ test("every membership writer passes the record's Trash state, or makes a record
   });
   assert.deepEqual({ unnamed, seen: hits.length >= 7 }, { unnamed: [], seen: true });
 });
+
+test("through MCP: trash_document and restore_from_trash act for the owner, and list_trash shows each owner their own, newest first", async () => {
+  const w = world();
+  const run = (tool, args, email = owner) => toolByName(tool).run(w.ctx(email), args);
+  await run("trash_document", { id: "loose" });
+  await run("delete_folder", { id: "sub" });
+  const mine = await run("list_trash", {});
+  const theirs = await run("list_trash", {}, other);
+  const badKind = await refused(run("restore_from_trash", { id: "loose", kind: "doc" }));
+  const byEditor = await refused(run("trash_document", { id: "doc" }, editor));
+  const restored = await run("restore_from_trash", { id: "sub", kind: "folder" });
+  assert.deepEqual(
+    {
+      mine: { documents: mine.documents.map((d) => [d.id, d.with?.name ?? null, d.was]), folders: mine.folders.map((f) => [f.id, f.was]), dated: mine.documents.every((d) => typeof d.trashedAt === "number") },
+      theirs: theirs.documents.map((d) => [d.id, d.with?.name ?? null, d.was]),
+      badKind, byEditor, restored: [restored.id, restored.parentId, restored.documents],
+      after: (await run("list_trash", {})).documents.map((d) => d.id),
+    },
+    {
+      mine: { documents: [["nested", "Sub", "sub"], ["loose", null, null]], folders: [["sub", "top"]], dated: true },
+      theirs: [["theirs", "Sub", "sub"]],
+      badKind: 400, byEditor: 403, restored: ["sub", "top", 2],
+      after: ["loose"],
+    },
+  );
+});

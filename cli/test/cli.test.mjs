@@ -1407,6 +1407,13 @@ test("management commands preserve sparse patches and map explicit folder destin
     [["move-folder", "f", "root"], "move_folder", { id: "f" }],
     [["move-folder", "f", "parent"], "move_folder", { id: "f", parent: "parent" }],
     [["delete-folder", "f"], "delete_folder", { id: "f" }],
+    // The Trash: a document by id or by its link, a folder by id or link, and bare `trash` lists it.
+    [["trash", "doc"], "trash_document", { id: "doc" }],
+    [["trash", "https://example.test/d/doc?k=key"], "trash_document", { id: "doc" }],
+    [["trash", "folder", "https://example.test/folder/f1?k=fkey"], "delete_folder", { id: "f1" }],
+    [["trash"], "list_trash", {}],
+    [["restore", "doc"], "restore_from_trash", { id: "doc", kind: "document" }],
+    [["restore", "folder", "f1"], "restore_from_trash", { id: "f1", kind: "folder" }],
   ];
   await withServer(rpcOk({ ok: true }), async (origin, seen) => {
     for (const [args] of cases) await runAsync([...args, "--json", "--origin", origin, "--token", "test"]);
@@ -1425,6 +1432,7 @@ test("invalid management commands fail before reaching the server", async () => 
       ["visibility", "folder", "f1", "--public-edit", "true"],
       ["folder", "https://example.test/d/doc?k=x"],
       ["move-folder", "f"], ["delete-folder", "f", "extra"],
+      ["trash", "doc", "extra"], ["trash", "folder"], ["restore"], ["restore", "folder"], ["restore", "a", "b"],
     ];
     const failed = [];
     for (const args of cases) {

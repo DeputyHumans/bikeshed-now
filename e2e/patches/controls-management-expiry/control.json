@@ -3,7 +3,7 @@
   "what": "management-expiry resets an omitted setting",
   "target": {
     "spec": "e2e/specs/functional/a20-management.spec.mjs",
-    "case": "A20 management: MCP shares, revokes, preserves sparse settings, and reparents folders",
+    "case": "A20 management: MCP shares, revokes, preserves sparse settings, and trashes and restores a folder with its documents",
     "suite": "functional"
   },
   "expect": {

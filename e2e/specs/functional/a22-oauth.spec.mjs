@@ -15,7 +15,7 @@
  *          card says where it sends you and that the name is the app's own
  *          claim → Approve arms only after a second of focus AND a pointer or
  *          key event → the redirect carries code, state and iss → a one-hour
- *          bsa_ and a bsr_; bsa_ sees the 33 tools at /mcp and nothing else.
+ *          bsa_ and a bsr_; bsa_ sees the 36 tools at /mcp and nothing else.
  *          Cancel sends access_denied with state and iss
  *   A22.2b real tab focus loss disarms the consent card; returning focus
  *          requires a fresh second before approval can arm again
@@ -288,7 +288,7 @@ async function signInAtConnect(u, acct) {
   precondition(s.status === 200, `POST /session from /connect answered ${s.status}`);
 }
 
-scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 33 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
+scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strips its query, keeps it ten minutes and survives the sign-in; the card says where you go back to and that the name is chosen by the app, not checked; Approve arms only after a second of focus and a pointer or key event; the redirect carries code, state and iss; the exchange gives a one-hour bsa_ and a bsr_, and bsa_ sees the 36 tools at /mcp and nothing else; Cancel sends access_denied with state and iss", {
   tiers: BOTH,
   inconclusiveOnCaseTimeout: true,
   timeoutMs: 360_000,
@@ -359,10 +359,10 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
       "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
       "Manage sharing on documents and folders you own, sending invitations to new readers",
       "Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own",
-      "Rename and move folders you can edit; delete folders you own while keeping their contents",
+      "Rename and move folders you can edit", "Move documents and folders you own to the Trash, and restore them",
     ], "consent discloses every allowed capability");
     assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
-      "Delete documents or manage teams", "Trust document scripts or act with permissions you do not have",
+      "Delete anything permanently, or manage teams", "Trust document scripts or act with permissions you do not have",
     ], "consent discloses the forbidden capabilities");
 
     ctx.step("arming, phase 1: with no input at all for 2.5 s Approve stays disabled (the product's one-second delay, waited out with margin)");
@@ -431,7 +431,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
     const personal = await mintToken(session, { name: `e2e a22 compare ${t}`, channel: "mcp" });
     const viaPersonal = await toolNames(ctx, personal.token, "personal-mcp");
     assert.equal(viaGrant.length, 33, viaGrant.join(", "));
-    assert.deepEqual(viaGrant, viaPersonal, "the same 33 tools as a personal token");
+    assert.deepEqual(viaGrant, viaPersonal, "the same 36 tools as a personal token");
     const pub = await bearerHttp(target, x.json.access_token, { actor: "oauth-bsa", cutoffError: true }).request("POST", "/publish", { body: "<!doctype html><p>e2e a22", headers: { "content-type": "text/html" } });
     assert.equal(pub.status, 401, `POST /publish with a bsa_: ${pub.status} (SPEC §23: /mcp only)`);
 

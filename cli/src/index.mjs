@@ -89,6 +89,11 @@ Organising
   bikeshed mkdir <name> [--parent <id>]  create a folder
   bikeshed mv <id> <folder|root>       move a document
   bikeshed rename <id> <title>         change a document's title; its address stays
+  bikeshed trash [folder] <id>         move a document, or a folder with everything
+                                       in it, to your Trash: yours alone and
+                                       read-only until restored; nothing is deleted
+  bikeshed restore [folder] <id>       bring it back, with its sharing, where it was
+  bikeshed trash                       what is in your Trash
 
 Management
   bikeshed access <document|folder> <id>  inspect direct and inherited permissions
@@ -102,7 +107,7 @@ Management
                                        beneath it to read; its expiry ends only that
   bikeshed rename-folder <id> <name>    rename a folder you can edit
   bikeshed move-folder <id> <folder|root> move a folder and recompute inherited access
-  bikeshed delete-folder <id>           owner-only; reparent contents, retain documents
+  bikeshed delete-folder <id>           the older name for trash folder <id>
 
 Skills
   bikeshed skills                      skills this deployment publishes
@@ -961,11 +966,61 @@ async function moveFolder(flags, [id, parent, ...rest]) {
   out(flags.json, result, () => console.log(`moved ${id}: ${result.path}; ${result.access.readers} can read it`));
 }
 
+/** What a folder's trip to the Trash took, in words. */
+function trashedFolder(result) {
+  const docs = `${result.documents} ${result.documents === 1 ? "document" : "documents"}`;
+  const subs = result.folders > 1 ? ` and ${result.folders - 1} ${result.folders === 2 ? "folder" : "folders"} inside it` : "";
+  return `moved folder ${result.id} to the Trash, with ${docs}${subs}; bikeshed restore folder ${result.id} brings it back`;
+}
+
+/** The older name for `trash folder <id>`, kept because scripts call it. */
 async function deleteFolder(flags, [id, ...rest]) {
   if (!id || rest.length) fail("usage: bikeshed delete-folder <id>");
   const { origin, token } = resolveAuth(flags);
-  const result = await callTool(origin, token, "delete_folder", { id });
-  out(flags.json, result, () => console.log(`deleted ${id}; moved ${result.reparented.folders} folders and ${result.reparented.documents} documents to ${result.parent ?? "root"}`));
+  const result = await callTool(origin, token, "delete_folder", { id: folderArgs(id).id });
+  out(flags.json, result, () => console.log(trashedFolder(result)));
+}
+
+/**
+ * The Trash (SPEC §4): `trash <id>` and `trash folder <id>` move one there,
+ * bare `trash` lists what is in it. Nothing here deletes anything.
+ */
+async function trash(flags, args) {
+  const { origin, token } = resolveAuth(flags);
+  if (args.length === 0) {
+    const result = await callTool(origin, token, "list_trash", {});
+    out(flags.json, result, () => {
+      const items = [...result.folders, ...result.documents].sort((a, b) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0));
+      if (items.length === 0) return console.log("your Trash is empty");
+      for (const item of items) {
+        const when = item.trashedAt ? new Date(item.trashedAt).toISOString().slice(0, 16).replace("T", " ") : "";
+        const along = item.with ? `  (with folder “${item.with.name}”)` : "";
+        console.log(`${item.kind === "folder" ? "folder  " : "document"}  ${item.id}  ${when}  ${item.title}${along}`);
+      }
+    });
+    return;
+  }
+  const [first, ...rest] = args;
+  if (first === "folder") {
+    if (rest.length !== 1) fail("usage: bikeshed trash folder <id>");
+    const result = await callTool(origin, token, "delete_folder", { id: folderArgs(rest[0]).id });
+    out(flags.json, result, () => console.log(trashedFolder(result)));
+    return;
+  }
+  if (rest.length) fail("usage: bikeshed trash [folder] <id>");
+  const result = await callTool(origin, token, "trash_document", { id: docArgs(first).id });
+  out(flags.json, result, () => console.log(`moved ${result.id} to the Trash; bikeshed restore ${result.id} brings it back`));
+}
+
+async function restore(flags, args) {
+  const folder = args[0] === "folder";
+  const rest = folder ? args.slice(1) : args;
+  if (rest.length !== 1) fail("usage: bikeshed restore [folder] <id>");
+  const { origin, token } = resolveAuth(flags);
+  const id = folder ? folderArgs(rest[0]).id : docArgs(rest[0]).id;
+  const result = await callTool(origin, token, "restore_from_trash", { id, kind: folder ? "folder" : "document" });
+  const place = folder ? result.parentId : result.folderId;
+  out(flags.json, result, () => console.log(`restored ${folder ? "folder " : ""}${result.id} to ${place ? `folder ${place}` : "the root"}${folder ? `, with ${result.documents} ${result.documents === 1 ? "document" : "documents"}` : ""}`));
 }
 
 /** Exit status when `changes --wait` gives up: distinct from 1, an error. */
@@ -1274,6 +1329,8 @@ const COMMANDS = {
   "rename-folder": renameFolder,
   "move-folder": moveFolder,
   "delete-folder": deleteFolder,
+  trash,
+  restore,
   folders,
   folder,
   mkdir,

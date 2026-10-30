@@ -3,8 +3,9 @@
 
 import type { ToolDefinition } from "./tools";
 import { getAccess, setAccess, setFolderVisibility, setVisibility, organizeFolder } from "../lib/management";
-import { trashFolder } from "../lib/trash";
+import { listTrash, restoreDocument, restoreFolder, trashDocument, trashFolder } from "../lib/trash";
 import { ROLES } from "../lib/access";
+import { ManagementError } from "../lib/management";
 
 const id = { type: "string", description: "The document or folder id." };
 const delta = {
@@ -75,5 +76,27 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
     description: "Owner-only: move a folder to the Trash with everything in it, other people's documents included. Nothing is deleted: it and its contents become their owners' alone and read-only until restored, and each owner can restore their own with restore_from_trash. Returns the batch and how many folders and documents went.",
     inputSchema: { type: "object", required: ["id"], properties: { id } },
     run: (ctx, args) => trashFolder(ctx, value(args, "id")),
+  },
+  {
+    name: "trash_document",
+    description: "Owner-only: move a document to the Trash. Nothing is deleted: until it is restored it is yours alone and read-only, and its link, any folder's link, its public page and every grant stop working for everyone else. Returns the batch. Bring it back with restore_from_trash. No tool deletes anything permanently.",
+    inputSchema: { type: "object", required: ["id"], properties: { id } },
+    run: (ctx, args) => trashDocument(ctx, value(args, "id")),
+  },
+  {
+    name: "restore_from_trash",
+    description: "Owner-only: bring a document or folder of yours back from the Trash, with every grant it had. It returns to the folder it was in while that folder exists and is not in the Trash itself, otherwise to your root. A folder brings back what went to the Trash with it. Returns where it went (folderId or parentId; null is the root).",
+    inputSchema: { type: "object", required: ["id", "kind"], properties: { id, kind: { type: "string", enum: ["document", "folder"], description: "What `id` names; list_trash says, for each item." } } },
+    run: async (ctx, args) => {
+      const kind = value(args, "kind");
+      if (kind !== "document" && kind !== "folder") throw new ManagementError(400, 'kind must be "document" or "folder"');
+      return kind === "folder" ? restoreFolder(ctx, value(args, "id")) : restoreDocument(ctx, value(args, "id"));
+    },
+  },
+  {
+    name: "list_trash",
+    description: "What is in your Trash: the documents and folders you own that are in it, newest first, each with when it went (trashedAt, epoch ms), the folder it went with if it went with one (with), the folder it was in (was), and its batch. Someone else's document that went with your folder is in their Trash, not yours.",
+    inputSchema: { type: "object", properties: {} },
+    run: (ctx) => listTrash(ctx),
   },
 ];

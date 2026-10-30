@@ -64,8 +64,10 @@ export const INSTRUCTIONS =
   "filed in, until a person shares it. Nobody is emailed when it is filed, so " +
   "say where it went and who can read it there: get_folder and the result's " +
   "access name them. Owners can manage grants, visibility and expiry; folder " +
-  "editors can rename and move folders, and owners can delete them, retaining " +
-  "their contents. New grants email new readers. Document scripts stay sandboxed. " +
+  "editors can rename and move folders. Owners can trash_document, or " +
+  "delete_folder to trash a folder with its contents; restore_from_trash and " +
+  "list_trash undo and list. Nothing is deleted permanently. New grants email " +
+  "new readers. Document scripts stay sandboxed. " +
   "Where you may suggest but not edit, propose a change with suggest_edit; " +
   "until it is decided, revise_suggestion and withdraw_suggestion change or " +
   "take back your own. For an owner or approver, accept_suggestion makes " +
