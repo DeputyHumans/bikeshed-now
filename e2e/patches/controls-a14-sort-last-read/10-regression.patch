@@ -1,6 +1,6 @@
 --- a/app/src/workspace/tree.ts
 +++ b/app/src/workspace/tree.ts
-@@ -144,7 +144,7 @@
+@@ -161,7 +161,7 @@
        return list.sort((a, b) => (b.stats?.views ?? 0) - (a.stats?.views ?? 0));
      case "lastViewed":
        return list.sort(
@@ -8,4 +8,4 @@
 +        (a, b) => millis(a.stats?.lastViewedAt) - millis(b.stats?.lastViewedAt),
        );
      default:
-       return list.sort((a, b) => millis(b.updatedAt) - millis(a.updatedAt));
+       // By the current version's publish: a rename or a share is not an update.

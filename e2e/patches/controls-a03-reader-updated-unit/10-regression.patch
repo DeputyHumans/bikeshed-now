@@ -1,0 +1,11 @@
+--- a/functions/src/lib/publicdoc.ts
++++ b/functions/src/lib/publicdoc.ts
+@@ -187,7 +187,7 @@
+       forked: data.forked === true,
+       // When the content a reader sees was published, and how long it is: the
+       // current version's summary, never who published it (lib/latest.ts).
+-      updatedAt: typeof summary.at?.toMillis === "function" ? summary.at.toMillis() : null,
++      updatedAt: typeof summary.at?.toMillis === "function" ? Math.floor(summary.at.toMillis() / 1000) : null,
+       words: summary.words,
+     },
+     READER_KEYS,

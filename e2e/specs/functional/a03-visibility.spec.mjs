@@ -80,7 +80,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const PUBLIC_MAX_AGE = 300;
 const THUMB_MAX_AGE = 86_400;
 /** The exact projection keys of public/{docId} (SPEC §17, lib/publicdoc.ts PROJECTED_KEYS). */
-const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "fileCount", "forked", "format", "liveEpoch", "marking", "publicEdit", "publishedAt", "slug", "sourceEntry", "title", "trusted", "viaFolder", "visibility"];
+const PUBLIC_KEYS = ["currentVersion", "docId", "entry", "expiresAt", "fileCount", "forked", "format", "liveEpoch", "marking", "publicEdit", "publishedAt", "slug", "sourceEntry", "title", "trusted", "updatedAt", "viaFolder", "visibility", "words"];
 /** POST /unlock's reader projection: the same minus publishedAt (SPEC §2 /unlock). */
 const READER_KEYS = PUBLIC_KEYS.filter((k) => k !== "publishedAt");
 
@@ -439,9 +439,11 @@ scenario("A3.4 public/{d} has exactly the allowed projected keys; anonymous get 
   assert.ok(row, "public/{B} exists");
   assert.deepEqual(Object.keys(row).sort(), PUBLIC_KEYS, "public/{B}'s keys");
   assert.deepEqual(
-    { docId: row.docId, title: row.title, currentVersion: row.currentVersion, entry: row.entry, format: row.format, visibility: row.visibility, publicEdit: row.publicEdit, expiresAt: row.expiresAt, forked: row.forked, trusted: typeof row.trusted, publishedAt: typeof row.publishedAt?.toMillis },
-    { docId: B.docId, title: `Workspace ${B.title}`, currentVersion: "v1", entry: "index.html", format: "html", visibility: "public", publicEdit: false, expiresAt: null, forked: false, trusted: "boolean", publishedAt: "function" },
+    { docId: row.docId, title: row.title, currentVersion: row.currentVersion, entry: row.entry, format: row.format, visibility: row.visibility, publicEdit: row.publicEdit, expiresAt: row.expiresAt, forked: row.forked, trusted: typeof row.trusted, publishedAt: typeof row.publishedAt?.toMillis, updatedAt: typeof row.updatedAt },
+    { docId: B.docId, title: `Workspace ${B.title}`, currentVersion: "v1", entry: "index.html", format: "html", visibility: "public", publicEdit: false, expiresAt: null, forked: false, trusted: "boolean", publishedAt: "function", updatedAt: "number" },
   );
+  // One instant twice: a number a JSON reader can use, and a timestamp the sitemap orders by (SPEC §17).
+  assert.equal(row.updatedAt, row.publishedAt.toMillis(), "updatedAt is publishedAt in epoch milliseconds");
   assert.equal(await readDoc(target, `public/${U.docId}`), null, "an unlisted document is not mirrored");
 
   ctx.step("the same row as an anonymous client reads it, under the rules");

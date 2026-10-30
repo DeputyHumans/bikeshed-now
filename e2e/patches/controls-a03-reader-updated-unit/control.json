@@ -1,0 +1,13 @@
+{
+  "oracle": "a reader's time is the mirror's instant in epoch milliseconds (A3.4, SPEC §17): public/{d}'s updatedAt is its publishedAt as a JSON reader reads it",
+  "what": "projectReader writes updatedAt in seconds, not milliseconds (functions/src/lib/publicdoc.ts), so every card and Details sheet a non-member reads says the document was updated in January 1970",
+  "target": {
+    "spec": "e2e/specs/functional/a03-visibility.spec.mjs",
+    "case": "A3.4 public/{d} has exactly the allowed projected keys; anonymous get of an unlisted or absent row and anonymous list are denied by the rules",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "updatedAt is publishedAt in epoch milliseconds"
+  }
+}
