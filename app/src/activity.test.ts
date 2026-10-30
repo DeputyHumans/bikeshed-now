@@ -52,6 +52,12 @@ describe("each row in words", () => {
     expect(describeActivity(granted)).toBe("gave a@example.com access and removed b@example.com");
   });
 
+  it("says a document went to the Trash, and with which folder, and came back", () => {
+    expect(describeActivity(row({ type: "doc.trashed" }))).toBe("moved it to the Trash");
+    expect(describeActivity(row({ type: "doc.trashed", with: { folderId: "f", name: "Q3 plans" } }))).toBe("moved it to the Trash with the folder “Q3 plans”");
+    expect(describeActivity(row({ type: "doc.restored" }))).toBe("restored it from the Trash");
+  });
+
   it("counts an agent's repeated reads, and says who read without an account", () => {
     expect(describeActivity(row({ type: "read", automated: true, reads: 3 }))).toBe("read it 3 times");
     expect(subjectOf(row({ type: "read", by: null }))).toBe("Somebody without an account");

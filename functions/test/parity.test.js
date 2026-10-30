@@ -147,13 +147,14 @@ test("in the Trash, both give the owner alone in every set, whatever the grants 
   assert.deepEqual(esm.computeMembership(c.owner, grantsFor(c), c.parent, teams, true), want);
 });
 
-test("both decide what is in the Trash identically: a map, and nothing else", async () => {
+test("both decide what is in the Trash identically: a map, and nothing else (trash-vectors.json)", async () => {
   const esm = await import("../../scripts/lib/membership.mjs");
   const acl = require("../lib/lib/acl.js");
-  const records = [{}, { trashed: null }, { trashed: { batch: "b" } }, { trashed: {} }, { trashed: "yes" }, { trashed: true }, { trashed: [] }, null, undefined];
-  const want = [false, false, true, true, false, false, false, false, false];
-  assert.deepEqual(records.map((r) => acl.isTrashed(r)), want);
-  assert.deepEqual(records.map((r) => esm.isTrashed(r)), want);
+  const { cases } = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "trash-vectors.json"), "utf8"));
+  assert.ok(cases.some((c) => c.trashed) && cases.some((c) => !c.trashed), "the table holds both answers");
+  assert.deepEqual(cases.map((c) => acl.isTrashed(c.record)), cases.map((c) => c.trashed));
+  assert.deepEqual(cases.map((c) => esm.isTrashed(c.record)), cases.map((c) => c.trashed));
+  assert.equal(acl.isTrashed(undefined), false);
 });
 
 test("both implementations name the same roles and grant lists", async () => {

@@ -33,6 +33,8 @@ import { useFrameFit } from "../viewer/useFrameFit";
 import { useThumbCapture } from "../viewer/useThumbCapture";
 import { captureNeeds, storedSlideImages } from "../thumbs";
 import { isExpired } from "../expiry";
+import { isTrashed } from "../trash";
+import { restoreItem, trashItem } from "../folders";
 import { useReadingSession } from "../viewer/useReadingSession";
 import { usePeerPresence } from "../viewer/usePeerPresence";
 import { useLiveSync } from "../viewer/useLiveSync";
@@ -188,7 +190,11 @@ export function DocViewer() {
   // nothing else: the rules hold no grant for them, so no thread, no presence
   // and no edit is theirs, signed in or not (SPEC §17 "A folder's reach").
   const throughFolder = !doc.meta && doc.publicDoc?.viaFolder === true;
-  const canWrite = isCurrent && !isExpired(doc.meta?.expiresAt) && !throughFolder;
+  // In the Trash only its owner reads it, and nobody writes it, until it is
+  // restored: expiry's rule, which the server applies to both (SPEC §4).
+  const trashed = isTrashed(doc.meta);
+  const frozen = trashed || isExpired(doc.meta?.expiresAt);
+  const canWrite = isCurrent && !frozen && !throughFolder;
   const canEdit = canWrite && (isDocEditor || (signedIn && doc.publicEdit));
   // The real editor set, as the server asks of an upload (SPEC §2).
   const offersUpload = canWrite && offersVersionUpload(doc.meta, emailLower);
@@ -267,7 +273,7 @@ export function DocViewer() {
     mode,
     shownVersion: doc.currentVersion,
     headVersion,
-    expired: isExpired(doc.meta?.expiresAt),
+    expired: frozen,
   });
 
   // The draft is on screen, and nothing inside the frame can say so: an
@@ -436,7 +442,7 @@ export function DocViewer() {
     headVersion: doc.meta?.currentVersion ?? "",
     isDocEditor,
     isOwner,
-    expired: isExpired(doc.meta?.expiresAt),
+    expired: frozen,
     sandboxed: mode.kind !== "reading" || mode.sandboxed,
     globallyTrusted: doc.meta?.trusted === true,
     thumbVersion: thumb?.versionId ?? null,
@@ -651,6 +657,21 @@ export function DocViewer() {
     }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Could not open a print view."));
     logEvent({ name: "export", params: { kind: "pdf" } });
   }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower, toast]);
+
+  // The owner stays on the page: it is theirs to read in the Trash, and the
+  // banner that says so carries Restore, as the toast's Undo does (SPEC §4).
+  const restoreFromTrash = useCallback(() => {
+    void toast
+      .during("Restoring…", restoreItem("doc", docId))
+      .then(() => toast.show(`“${doc.title}” is back where it was, with its sharing.`))
+      .catch((e) => toast.error((e as Error).message));
+  }, [toast, docId, doc.title]);
+  const moveToTrash = useCallback(() => {
+    void toast
+      .during("Moving to the Trash…", trashItem("doc", docId))
+      .then(() => toast.show(`“${doc.title}” is in the Trash.`, { label: "Undo", onSelect: restoreFromTrash }))
+      .catch((e) => toast.error((e as Error).message));
+  }, [toast, docId, doc.title, restoreFromTrash]);
 
   // The browser's print, both ways it is reached. Cmd+P is the export above;
   // File → Print, which no event can redirect, prints this page with the
@@ -901,13 +922,20 @@ export function DocViewer() {
         // Not reachable while editing: the editor's toolbar replaces this menu.
         entries.push({ id: "upload-version", label: "Upload a new version…", onSelect: () => openUpload(null) });
       }
-      if (isOwner) {
+      if (isOwner && !trashed) {
         entries.push(
           // One entry for who has access AND who can see it: they were two,
           // and the second was found only by reading this menu.
           { id: "share", label: "Share…", onSelect: () => setDialog("share") },
           { id: "marking", label: "Marking on exports…", onSelect: () => setDialog("marking") },
+        );
+      }
+      if (isOwner) {
+        entries.push(
           { id: "forks", label: "Forks…", onSelect: () => setDialog("forks") },
+          trashed
+            ? { id: "restore", label: "Restore from Trash", onSelect: restoreFromTrash }
+            : { id: "trash", label: "Move to Trash", danger: true, onSelect: moveToTrash },
         );
       }
     }
@@ -928,7 +956,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent, trashed, moveToTrash, restoreFromTrash]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
@@ -1030,7 +1058,7 @@ export function DocViewer() {
           commentsOpen={commentsOpen}
           onToggleComments={throughFolder ? undefined : () => setCommentsOpen((v) => !v)}
           canEdit={canEdit}
-          canShare={isOwner}
+          canShare={isOwner && !trashed}
           onShare={() => setDialog("share")}
           onFork={fork}
           forking={forking}
@@ -1075,6 +1103,7 @@ export function DocViewer() {
         </div>
       ) : null}
       <ViewerBanners
+        trashed={trashed && isOwner ? { onRestore: restoreFromTrash } : null}
         draft={draftOnScreen}
         historical={!isCurrent && Boolean(doc.currentVersion)}
         onEdit={() => canEdit && setWantsEdit(true)}

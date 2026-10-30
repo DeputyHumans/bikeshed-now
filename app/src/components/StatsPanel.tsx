@@ -38,6 +38,8 @@ const ICON: Record<string, IconName> = {
   "doc.visibility": "globe",
   "doc.expiry": "clock",
   "doc.trust": "shield",
+  "doc.trashed": "trash",
+  "doc.restored": "trash",
   "access.changed": "share",
   "fork.created": "fork",
 };

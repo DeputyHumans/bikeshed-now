@@ -10,6 +10,8 @@ import { Icon } from "./Icon";
  */
 
 export function ViewerBanners(props: {
+  /** Its owner reading it in the Trash (SPEC §4), and the Restore that thaws it. */
+  trashed?: { onRestore: () => void } | null;
   historical?: boolean;
   /**
    * What is on screen is the draft, not the published version its label
@@ -42,6 +44,16 @@ export function ViewerBanners(props: {
   onOpenTrust?: () => void;
 }) {
   const rows: React.ReactNode[] = [];
+
+  // First: it is the one fact that changes what everything else here means.
+  if (props.trashed) {
+    rows.push(
+      <div key="trashed" className="banner banner-warn" role="status">
+        <span>This document is in your Trash. Only you can open it, its links and sharing are off, and nobody can edit it until you restore it.</span>
+        <button type="button" className="btn btn-sm" onClick={props.trashed.onRestore}>Restore</button>
+      </div>,
+    );
+  }
 
   if (props.historical) {
     rows.push(

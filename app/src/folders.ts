@@ -37,14 +37,14 @@ export async function inheritedFolderAccess(folderId: string): Promise<Inheritan
 
 export type OrganizeKind = "doc" | "folder";
 
-function organize(payload: {
+function organize<T = { ok: true }>(payload: {
   kind: OrganizeKind;
   id: string;
-  op: "move" | "rename" | "delete";
+  op: "move" | "rename" | "trash" | "restore";
   targetFolderId?: string | null;
   name?: string;
-}): Promise<{ ok: true }> {
-  return post("/organize", payload);
+}): Promise<T> {
+  return post<T>("/organize", payload);
 }
 
 /** Move an item into `targetFolderId`, or to the root when null. */
@@ -65,9 +65,14 @@ export function renameItem(
 }
 
 /**
- * Delete a folder you own. Its children are reparented to its parent, never
- * orphaned. Deleting a DOCUMENT is deliberately unsupported (SPEC §13).
+ * Move a document or a folder you own to the Trash (SPEC §4): a folder goes
+ * with everything in it. Nothing is deleted; `restoreItem` brings it back.
  */
-export function deleteFolder(id: string): Promise<{ ok: true }> {
-  return organize({ kind: "folder", id, op: "delete" });
+export function trashItem(kind: OrganizeKind, id: string): Promise<{ ok: true; batch: string }> {
+  return organize<{ ok: true; batch: string }>({ kind, id, op: "trash" });
+}
+
+/** Bring it back from the Trash, with every grant, where it was (SPEC §4). */
+export function restoreItem(kind: OrganizeKind, id: string): Promise<{ ok: true }> {
+  return organize({ kind, id, op: "restore" });
 }

@@ -13,6 +13,7 @@ import { Privacy, Terms } from "./pages/Legal";
 import { Header } from "./components/Header";
 import { Loading } from "./components/Spinner";
 import { DocList } from "./pages/DocList";
+import { Trash } from "./pages/Trash";
 import { SharedFolder } from "./pages/SharedFolder";
 import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
@@ -143,6 +144,14 @@ export function App() {
               // never shared with this account to the same page.
               <RequireAccount signedOut={<SharedFolder />}>
                 <DocList />
+              </RequireAccount>
+            }
+          />
+          <Route
+            path="/trash"
+            element={
+              <RequireAccount>
+                <Trash />
               </RequireAccount>
             }
           />

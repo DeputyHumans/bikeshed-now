@@ -59,3 +59,20 @@ test("an archive explains its read-only state and opens latest", () => {
   fireEvent.click(screen.getByRole("button", { name: "Open latest" }));
   expect(latest).toHaveBeenCalledOnce();
 });
+
+describe("a document in its owner's Trash", () => {
+  test("says so first, above an archived version's notice, and Restore is one press", () => {
+    const onRestore = vi.fn();
+    const { container } = render(<ViewerBanners trashed={{ onRestore }} historical onOpenNewVersion={() => {}} />);
+    const rows = Array.from(container.querySelectorAll(".banner")).map((b) => b.textContent ?? "");
+    expect(rows[0]).toContain("This document is in your Trash.");
+    expect(rows[1]).toContain("archived version");
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    expect(onRestore).toHaveBeenCalledTimes(1);
+  });
+
+  test("says nothing when it is not in the Trash", () => {
+    render(<ViewerBanners trashed={null} />);
+    expect(screen.queryByText(/in your Trash/)).toBeNull();
+  });
+});

@@ -54,6 +54,34 @@
   transition: transform var(--t-fast) var(--ease-out);
 }
 .folder-twisty[data-open="true"] { transform: rotate(90deg); }
+/* The Trash sits apart at the rail's foot: where things go, not one of them. */
+.folder-tree-foot {
+  margin-top: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--color-line);
+}
+
+/* The Trash page: one row per item, its name and where it came from, when it
+   went, and Restore, wrapping to two lines on a phone. */
+.trash-title { margin: 0; font-size: var(--fs-h3); }
+.trash-hint { margin: 0 0 var(--s-3); max-width: 70ch; }
+.trash-list { list-style: none; margin: 0; padding: 0; }
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.trash-row:last-child { border-bottom: 0; }
+.trash-row > svg { flex: none; color: var(--color-ink-muted); }
+.trash-name { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.trash-name > a, .trash-name > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trash-when { white-space: nowrap; }
+@media (max-width: 600px) {
+  .trash-row { flex-wrap: wrap; }
+  .trash-when { order: 1; flex-basis: 100%; padding-left: calc(16px + var(--s-3)); }
+}
 
 .breadcrumb {
   display: flex;

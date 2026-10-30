@@ -126,9 +126,10 @@ export function Terms() {
       <h2>Ending it</h2>
       <p>
         You may stop using the service at any time. Its operator may suspend
-        access that breaks these terms. Documents are not deletable through the
-        product by design — a version can be withdrawn by an operator, and you
-        can ask for your content to be removed using the contact below.
+        access that breaks these terms. Deleting a document moves it to your
+        Trash, where it stays, yours alone, until you restore it; a version can
+        be withdrawn by an operator, and you can ask for your content to be
+        removed using the contact below.
       </p>
 
       <h2>Changes</h2>

@@ -40,13 +40,15 @@ vi.mock("../firestore", () => ({
   listMyTeams: () => () => {},
   watchUser: () => () => {},
 }));
-const { deleteFolder, inheritedFolderAccess } = vi.hoisted(() => ({
-  deleteFolder: vi.fn(async () => {}),
+const { trashItem, restoreItem, inheritedFolderAccess } = vi.hoisted(() => ({
+  trashItem: vi.fn(async () => ({ ok: true, batch: "b1" })),
+  restoreItem: vi.fn(async () => ({ ok: true })),
   inheritedFolderAccess: vi.fn(async () => ({ grants: [], reach: [] })),
 }));
 vi.mock("../folders", () => ({
   createFolder,
-  deleteFolder,
+  trashItem,
+  restoreItem,
   inheritedFolderAccess,
   renameItem: vi.fn(),
   moveItem: vi.fn(),
@@ -102,7 +104,8 @@ beforeEach(() => {
   createFolder.mockReset();
   forkDoc.mockReset();
   uploadDoc.mockClear();
-  deleteFolder.mockClear();
+  trashItem.mockClear();
+  restoreItem.mockClear();
 });
 
 afterEach(() => {
@@ -180,6 +183,29 @@ function docMeta(overrides: Partial<DocMeta> = {}): DocMeta {
     ...overrides,
   };
 }
+
+describe("a document's way to the Trash", () => {
+  it("is its owner's, one click with no question, and Undo brings it back", async () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta({ ownerEmail: "me@example.com", ownerUid: "u-me" })]));
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "Move to Trash" })));
+    expect(trashItem).toHaveBeenCalledWith("doc", "q3-plan");
+    expect(await screen.findByText("“Q3 plan” is in the Trash.")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
+    expect(restoreItem).toHaveBeenCalledWith("doc", "q3-plan");
+  });
+
+  it("is offered to nobody else, disabled with the owner's name", () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    const item = screen.getByRole("menuitem", { name: "Move to Trash" }) as HTMLButtonElement;
+    expect([item.disabled, item.title]).toEqual([true, "Only ana@example.com can move this to the Trash."]);
+  });
+});
 
 describe("forking from the workspace", () => {
   it("is one click, into the folder being looked at", async () => {
@@ -399,7 +425,7 @@ describe("the open folder's own actions", () => {
     openFolder([folderMeta()]);
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     const items = screen.getAllByRole("menuitem").map((b) => b.textContent);
-    expect(items).toEqual(["Rename…", "Move…", "Delete folder"]);
+    expect(items).toEqual(["Rename…", "Move…", "Move to Trash"]);
   });
 
   it("gives somebody else's folder no Share button, and says in the menu who can", () => {
@@ -411,13 +437,28 @@ describe("the open folder's own actions", () => {
     expect(share.title).toBe("Only dana@example.com can change sharing.");
   });
 
-  it("goes up a level when the folder being looked at is deleted, rather than stay on one that is gone", () => {
+  it("goes up a level when the folder being looked at goes to the Trash, rather than stay on one only its owner can see", () => {
     vi.stubGlobal("confirm", () => true);
     openFolder([folderMeta()]);
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }));
-    expect(deleteFolder).toHaveBeenCalledWith("plans");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
+    expect(trashItem).toHaveBeenCalledWith("folder", "plans");
     expect(screen.getByText("EVERYTHING")).toBeTruthy();
+  });
+
+  it("asks before a folder goes, because it takes other people's documents, and does nothing when told no", () => {
+    let asked = "";
+    vi.stubGlobal("confirm", (message: string) => {
+      asked = message;
+      return false;
+    });
+    openFolder([folderMeta()]);
+    fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
+    expect({ asked, called: trashItem.mock.calls.length }).toEqual({
+      asked: "Move “Plans” and everything in it to the Trash? Anything in it that other people own goes too, and each of them can restore their own.",
+      called: 0,
+    });
   });
 
   it("is not shown on the workspace's top level, which is no folder at all", () => {

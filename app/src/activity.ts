@@ -29,6 +29,8 @@ export interface ActivityItem {
   reason?: string;
   trusted?: boolean;
   publicEdit?: boolean;
+  /** A document that went to the Trash with a folder: that folder, as it was named then. */
+  with?: { folderId?: string; name?: string } | null;
 }
 
 export interface ActivityPage {
@@ -100,6 +102,10 @@ export function describeActivity(item: ActivityItem): string {
         : "removed its end date";
     case "doc.trust":
       return item.trusted ? "let its scripts run for everyone" : "stopped its scripts running for everyone";
+    case "doc.trashed":
+      return item.with?.name ? `moved it to the Trash with the folder ${quoted(item.with.name)}` : "moved it to the Trash";
+    case "doc.restored":
+      return "restored it from the Trash";
     case "access.changed": {
       if (item.reason === "address-moved") return `moved to ${item.added?.[0] ?? "a new address"}`;
       const parts: string[] = [];

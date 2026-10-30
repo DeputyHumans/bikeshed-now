@@ -1,0 +1,13 @@
+{
+  "about": "What counts as in the Trash (SPEC §4): a map, and nothing else. functions/src/lib/acl.ts isTrashed, scripts/lib/membership.mjs isTrashed and app/src/trash.ts isTrashed each read this table; the rules' `is map` is held to it by rules-tests.",
+  "cases": [
+    { "record": {}, "trashed": false },
+    { "record": { "trashed": null }, "trashed": false },
+    { "record": { "trashed": { "batch": "b" } }, "trashed": true },
+    { "record": { "trashed": {} }, "trashed": true },
+    { "record": { "trashed": "yes" }, "trashed": false },
+    { "record": { "trashed": true }, "trashed": false },
+    { "record": { "trashed": [] }, "trashed": false },
+    { "record": null, "trashed": false }
+  ]
+}

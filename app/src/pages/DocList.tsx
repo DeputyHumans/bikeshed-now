@@ -12,7 +12,7 @@ import {
   watchUser,
 } from "../firestore";
 import { viaOf } from "../provenance";
-import { createFolder, deleteFolder, renameItem } from "../folders";
+import { createFolder, renameItem, restoreItem, trashItem, type OrganizeKind } from "../folders";
 import { forkDoc } from "../forks";
 import {
   currentSummary,
@@ -441,6 +441,20 @@ export function DocList() {
 
   const revisingDoc = revising ? (docs.find((d) => d.docId === revising) ?? null) : null;
 
+  // To the Trash, with an Undo for the next few seconds: the Trash itself is
+  // the safety net, so nothing but a folder asks first (SPEC §4).
+  const moveToTrash = (kind: OrganizeKind, id: string, title: string) =>
+    void toast
+      .during("Moving to the Trash…", trashItem(kind, id))
+      .then(() =>
+        toast.show(`“${title}” is in the Trash.`, {
+          label: "Undo",
+          onSelect: () =>
+            void toast.during("Restoring…", restoreItem(kind, id)).catch((e) => toast.error(e.message)),
+        }),
+      )
+      .catch((e) => toast.error(e.message));
+
   const docMenu = (doc: DocMeta): MenuEntry[] => {
     const isOwner = doc.ownerEmail === emailLower;
     return [
@@ -493,15 +507,12 @@ export function DocList() {
       },
       { id: "sep", separator: true },
       {
-        id: "delete",
-        label: "Deleting documents is not supported",
-        disabled: true,
-        // Stated rather than omitted. A missing option reads as an oversight;
-        // a disabled one with a reason reads as a decision, which it is: this
-        // is a review tool, and a version can be withdrawn through the admin
-        // CLI with seven guards rather than by one misclick.
-        reason:
-          "A document is permanent by design. A single version can be withdrawn by a deployment operator.",
+        id: "trash",
+        label: "Move to Trash",
+        danger: true,
+        disabled: !isOwner,
+        reason: `Only ${doc.ownerEmail} can move this to the Trash.`,
+        onSelect: () => moveToTrash("doc", doc.docId, doc.title),
       },
     ];
   };
@@ -541,34 +552,28 @@ export function DocList() {
       },
       { id: "sep", separator: true },
       {
-        id: "delete",
-        label: "Delete folder",
+        id: "trash",
+        label: "Move to Trash",
         danger: true,
         disabled: !isOwner,
-        reason: `Only ${folder.ownerEmail} can delete this folder.`,
+        reason: `Only ${folder.ownerEmail} can move this folder to the Trash.`,
         onSelect: () => {
-          // Worth confirming, and worth saying what actually happens: nothing
-          // inside is lost, it moves up a level.
+          // The one that asks: a folder takes everything in it, other
+          // people's documents too, and they are told only by finding them
+          // in their own Trash.
           if (
             !window.confirm(
-              `Delete “${folder.name}”? Everything inside moves up one level — nothing is deleted.`,
+              `Move “${folder.name}” and everything in it to the Trash? Anything in it that other people own goes too, and each of them can restore their own.`,
             )
           ) {
             return;
           }
-          // Deleted from inside itself, from this tab, the page would be left
-          // on a folder that no longer exists, which reads as a link to
-          // somebody else's folder. Go up first, to where its contents are
-          // about to land.
+          // Trashed from inside itself, the page would be left on a folder
+          // only its owner can still see, in the Trash. Go up first.
           if (folder.folderId === folderId) {
             navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
           }
-          // The server moves the contents up before it removes the folder, so
-          // for a moment both are on screen; saying so keeps that from looking
-          // like a glitch.
-          void toast
-            .during("Deleting the folder…", deleteFolder(folder.folderId))
-            .catch((e) => toast.error(e.message));
+          moveToTrash("folder", folder.folderId, folder.name);
         },
       },
     ];

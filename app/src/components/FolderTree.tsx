@@ -11,10 +11,13 @@ export function FolderTree({
   folders,
   currentFolderId,
   drawerOpen,
+  inTrash = false,
 }: {
   folders: FolderMeta[];
   currentFolderId: string | null;
   drawerOpen?: boolean;
+  /** The Trash page is open, so neither Everything nor a folder is the current one. */
+  inTrash?: boolean;
 }) {
   const navigate = useNavigate();
   const tree = useMemo(() => buildTree(folders), [folders]);
@@ -50,7 +53,7 @@ export function FolderTree({
           <button
             type="button"
             className="folder-link"
-            aria-current={currentFolderId === null ? "page" : undefined}
+            aria-current={currentFolderId === null && !inTrash ? "page" : undefined}
             onClick={() => navigate("/")}
           >
             <span className="folder-twisty" />
@@ -97,6 +100,21 @@ export function FolderTree({
             </li>
           );
         })}
+      </ul>
+      {/* At the foot, apart from the folders: it is where things go, not one of them (SPEC §4). */}
+      <ul className="folder-tree folder-tree-foot">
+        <li className="folder-item">
+          <button
+            type="button"
+            className="folder-link"
+            aria-current={inTrash ? "page" : undefined}
+            onClick={() => navigate("/trash")}
+          >
+            <span className="folder-twisty" />
+            <Icon name="trash" size={15} />
+            <span className="folder-name">Trash</span>
+          </button>
+        </li>
       </ul>
     </nav>
   );

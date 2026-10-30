@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "./firebase";
+import { isTrashed } from "./trash";
 import { TOKENS } from "./brand/tokens";
 import type {
   Actor,
@@ -72,7 +73,8 @@ export function listMyDocs(
       // Only a server answer can establish that nothing was shared. Metadata
       // changes matter when the server confirms the same empty result later.
       if (snap.metadata.fromCache && snap.docs.length === 0) return;
-      onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })));
+      // The Trash is listed on its own page (listMyTrash), never in a folder.
+      onData(snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter((d) => !isTrashed(d)));
     },
     (err) => onError?.(err),
   );
@@ -92,9 +94,41 @@ export function listMyFolders(
   return onSnapshot(
     q,
     (snap) =>
-      onData(snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id }))),
+      onData(snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id })).filter((f) => !isTrashed(f))),
     (err) => onError?.(err),
   );
+}
+
+/**
+ * Live list of what is in this account's Trash, newest first. The same two
+ * queries the workspace makes: a trashed item's members are its owner alone
+ * (SPEC §4), so what comes back trashed is the caller's own.
+ */
+export function listMyTrash(
+  emailLower: string,
+  onData: (trash: { docs: DocMeta[]; folders: FolderMeta[] }) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  let docs: DocMeta[] | null = null;
+  let folders: FolderMeta[] | null = null;
+  const at = (x: { trashed?: DocMeta["trashed"] }) => x.trashed?.at?.toMillis?.() ?? 0;
+  const emit = () => {
+    if (docs && folders) onData({ docs: [...docs].sort((a, b) => at(b) - at(a)), folders: [...folders].sort((a, b) => at(b) - at(a)) });
+  };
+  const byMember = (name: "docs" | "folders") =>
+    query(collection(db, name), where("members", "array-contains", emailLower), orderBy("createdAt", "desc"));
+  const stopDocs = onSnapshot(byMember("docs"), (snap) => {
+    docs = snap.docs.map((d) => ({ ...(d.data() as DocMeta), docId: d.id })).filter(isTrashed);
+    emit();
+  }, (err) => onError?.(err));
+  const stopFolders = onSnapshot(byMember("folders"), (snap) => {
+    folders = snap.docs.map((d) => ({ ...(d.data() as FolderMeta), folderId: d.id })).filter(isTrashed);
+    emit();
+  }, (err) => onError?.(err));
+  return () => {
+    stopDocs();
+    stopFolders();
+  };
 }
 
 /** Live list of the teams this account belongs to. */

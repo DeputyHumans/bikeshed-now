@@ -126,6 +126,8 @@ export interface DocMeta {
   updatedAt: Timestamp;
   /** The current version, summarized (SPEC §4); absent until it is. */
   latest?: DocLatest;
+  /** Set while it is in the Trash (SPEC §4); null once restored. */
+  trashed?: TrashMark | null;
 
   liveEpoch?: string;
   draft?: DraftMeta | null;
@@ -199,6 +201,18 @@ export interface PersonalTrust {
   trustedAt: Timestamp;
 }
 
+/**
+ * In the Trash (SPEC §4): when, by whose uid (the owner's, or the owner of the
+ * folder it went with), the batch shared by everything trashed together, and
+ * the folder it went with, as it was named then.
+ */
+export interface TrashMark {
+  at: Timestamp | null;
+  by: string;
+  batch: string;
+  with?: { folderId: string; name: string };
+}
+
 /** Firestore: folders/{folderId} — a sharing container that nests (SPEC §13). */
 export interface FolderMeta {
   folderId: string;
@@ -225,6 +239,8 @@ export interface FolderMeta {
   expiresAt?: Timestamp;
   /** This folder's reach and every ancestor's, root first; server-written. */
   reach?: ReachEntry[];
+  /** Set while it is in the Trash, as on a document (SPEC §4). */
+  trashed?: TrashMark | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
