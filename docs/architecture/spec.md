@@ -365,7 +365,7 @@ Body `{ folderId, k? }` instead answers one level of a folder its reach opens:
 `200 { folderId, name, visibility, expiresAt, path, folders, documents,
 truncated }`, where `path` runs from the outermost folder the request opens
 down to this one, `documents` carries `{ docId, title, currentVersion,
-updatedAt, cover }` and leaves out documents whose own expiry has passed, and
+updatedAt, words, cover }`, where `updatedAt` is when its current version was published, in epoch milliseconds, and `words` its count (§4), and leaves out documents whose own expiry has passed, and
 each list stops at 500 with `truncated` saying so. A key that matched, or a
 public level, whose date has passed is `200 { folderId, name, expiresAt,
 expired: true }` with nothing listed. Absent, private, a wrong key and a
@@ -726,9 +726,9 @@ retains the bytes, and a later head never hides a historical version's pointer.
 
 `createdAt` is set once. `updatedAt` is bumped by any change to the record: a publish, and also a rename, a share, trust, a marking or a folder recompute. So it is not "last updated" in a reader's sense.
 
-**`latest`** is that: the current version, summarized, `{ version, at, byEmail, channel, via?, origin, words? }`: when it was published, by whom, through what (§17), how it arrived, and its word count. Workspace cards read it ("6 min read · Updated 2h ago · via CLI on mbp") and sort "Recently updated" by `latest.at`, because the list is one query and cannot read versions. The version-write trigger (`recordVersionEvent`) keeps it, so every way of making a version, the operator scripts included, and every withdrawal moves it. It is written in a transaction that reads `currentVersion`, so it can lag a publish by a moment but never names a version that is not the head. A document whose current version predates it has none until `scripts/summarize-documents.mjs` asks the trigger to catch up.
+**`latest`** is that: the current version, summarized, `{ version, at, byEmail, channel, via?, origin, words? }`: when it was published, by whom, through what (§17), how it arrived, and its word count. Workspace cards read it ("6 min read · Updated 2h ago · via CLI on mbp") and sort "Recently updated" by `latest.at`, because the list is one query and cannot read versions. The version-write trigger (`recordVersionEvent`) keeps it, so every way of making a version, the operator scripts included, and every withdrawal moves it. It is written in a transaction that reads `currentVersion`, so it can lag a publish by a moment but never names a version that is not the head. Every reader, the card, the sort and the projection alike, takes it only while `latest.version` is `currentVersion`, and otherwise the record's own `updatedAt` and no count (`lib/latest.ts summaryOf`, `app/src/workspace/tree.ts currentSummary`), so the moment between a publish and its summary reads as the publish. A document whose current version predates it has none until `scripts/summarize-documents.mjs` asks the trigger to catch up.
 
-**`words`** on a version is its entry's word count, counted once by the same trigger from the stored bytes: the body's text outside scripts, styles, SVG, templates, comments and navigation, segmented by `Intl.Segmenter`, so a language written without spaces counts its words (`lib/head.ts countWords`). Reading time is words ÷ 238 a minute, rounded up, at least one (`app/src/readingTime.ts`). It is an estimate of a sitting; Activity's "time spent reading" is the measured one. A version may also carry `summaryRequestedAt`, the backfill's marker, which means nothing else.
+**`words`** on a version is its entry's word count, counted once by the same trigger from the first 4 MB of the stored entry, a ranged read, and copied onto a fork's first version, whose bytes are the same: the body's text outside scripts, styles, SVG, templates, comments and navigation, segmented by `Intl.Segmenter`, so a language written without spaces counts its words (`lib/head.ts countWords`). Reading time is words ÷ 238 a minute, rounded up, at least one (`app/src/readingTime.ts`). It is an estimate of a sitting; Activity's "time spent reading" is the measured one. A version may also carry `summaryRequestedAt`, the backfill's marker, which means nothing else.
 
 **A docId** is the document's address, `/d/{docId}`, and never changes. The
 publisher may ask for one (`id` on `/publish`, on `publish_document`, and
@@ -2341,7 +2341,7 @@ Firestore rules cannot project fields, so letting an anonymous client `get` a
 public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
 and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
 only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
-`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `publishedAt` (when the current version was published, from `latest`, §4) and `words` (its word count, for a reader's reading time; null until counted), never who published it — written by the same paths that
+`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `updatedAt` (when the current version was published, from `latest`, §4, in epoch milliseconds, as the folder listing's) and `words` (its word count, for a reader's reading time; null until counted), never who published it, and `publishedAt`, the same instant as a timestamp, which the sitemap orders by and `POST /unlock` answers without — written by the same paths that
 recompute `members`, and **deleted the instant it stops being public**. The rule
 allows `get` of a public row only, and no `list`: an absent id and any other row
 are the same refusal. The source document, current version and projection

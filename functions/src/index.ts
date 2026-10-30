@@ -3048,15 +3048,19 @@ export const recordVersionEvent = onDocumentWritten(
   { document: "docs/{docId}/versions/{versionId}", region: REGION, retry: true },
   async (event) => {
     const { docId, versionId } = event.params;
-    await recordTriggered(
-      db(),
-      docId,
-      event.id,
-      versionEvents(versionId, event.data?.before?.data(), event.data?.after?.data()),
-    );
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    // The count refreshLatest writes back onto the version moves nothing more.
+    if (before && after && typeof before.words !== "number" && typeof after.words === "number") return;
+    await recordTriggered(db(), docId, event.id, versionEvents(versionId, before, after));
     // The same write moves what the document says about its current version:
     // the card's "Updated", by whom and through what, and its reading time.
-    await refreshLatest(db(), docId, versionId, event.data?.after?.data());
+    const moved = await refreshLatest(db(), docId, versionId, after);
+    // And what its public mirror says of when and how long. A document neither
+    // public nor in a folder, whose reach might be public, has no mirror.
+    if (moved && (moved.visibility === "public" || (typeof moved.folderId === "string" && moved.folderId))) {
+      await syncPublicProjection(db(), docId);
+    }
   },
 );
 

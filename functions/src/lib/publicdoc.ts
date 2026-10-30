@@ -2,8 +2,8 @@
 // The world-readable projection of a public document, and what a reader is told (SPEC §17).
 
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
 import { earlierEnd, expiryMs, folderAccess, visibilityOf, type DocAclData, type ReadAccess } from "./acl";
+import { summaryOf } from "./latest";
 import { folderOfDoc } from "./reach";
 import { resolveMarking, type Marking } from "./marking";
 
@@ -80,8 +80,11 @@ export interface ReaderDoc {
    * (SPEC §21).
    */
   forked: boolean;
-  /** When the current version was published, for "Updated" (lib/latest.ts). */
-  publishedAt: admin.firestore.Timestamp | FieldValue | null;
+  /**
+   * When the current version was published, in epoch milliseconds, for
+   * "Updated": the folder listing's `updatedAt` too (lib/latest.ts summaryOf).
+   */
+  updatedAt: number | null;
   /** The current version's word count, for its reading time; null until counted. */
   words: number | null;
 }
@@ -89,6 +92,8 @@ export interface ReaderDoc {
 /** The mirror in `public/{docId}`: the reader shape, at the public level. */
 export interface PublicDoc extends ReaderDoc {
   visibility: "public";
+  /** The same instant as a timestamp, which the sitemap orders by; `/unlock` answers without it. */
+  publishedAt: admin.firestore.Timestamp | null;
 }
 
 /** Fields a reader may be handed. Anything else is a leak. */
@@ -109,12 +114,12 @@ const READER_KEYS: readonly (keyof ReaderDoc)[] = [
   "expiresAt",
   "viaFolder",
   "forked",
-  "publishedAt",
+  "updatedAt",
   "words",
 ];
 
 /** Fields that may appear in the world-readable projection. */
-const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = READER_KEYS;
+const PROJECTED_KEYS: readonly (keyof PublicDoc)[] = [...READER_KEYS, "publishedAt"];
 
 /**
  * Strip anything not on the list. The types say the object has only these keys,
@@ -157,6 +162,7 @@ export function projectReader(
   const visibility = reach ? reach.visibility : visibilityOf(data as DocAclData);
   if (visibility === "private") return null;
   const ownExpiry = expiryMs(data as DocAclData);
+  const summary = summaryOf(data);
   return only<ReaderDoc>(
     {
       docId,
@@ -181,21 +187,11 @@ export function projectReader(
       forked: data.forked === true,
       // When the content a reader sees was published, and how long it is: the
       // current version's summary, never who published it (lib/latest.ts).
-      publishedAt: latestAt(data),
-      words: typeof (data.latest as { words?: unknown } | undefined)?.words === "number" ? (data.latest as { words: number }).words : null,
+      updatedAt: typeof summary.at?.toMillis === "function" ? summary.at.toMillis() : null,
+      words: summary.words,
     },
     READER_KEYS,
   );
-}
-
-/**
- * When the current version was published. A document summarized before
- * `latest` existed falls back to `updatedAt`, which also moves on renames and
- * re-shares, and then to when it was made.
- */
-function latestAt(data: Record<string, unknown>): admin.firestore.Timestamp | null {
-  const latest = (data.latest as { at?: admin.firestore.Timestamp | null } | undefined)?.at;
-  return latest ?? (data.updatedAt as admin.firestore.Timestamp | undefined) ?? (data.createdAt as admin.firestore.Timestamp | undefined) ?? null;
 }
 
 /**
@@ -215,6 +211,7 @@ export function projectPublicDoc(
     {
       ...reader,
       visibility: "public",
+      publishedAt: summaryOf(data).at,
     },
     PROJECTED_KEYS,
   );

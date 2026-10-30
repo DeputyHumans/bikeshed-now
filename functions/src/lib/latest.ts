@@ -4,10 +4,9 @@
 import * as admin from "firebase-admin";
 import type { Timestamp } from "firebase-admin/firestore";
 import { bucketName } from "../config";
-import { countWords } from "./head";
+import { WORDS_SCAN_CHARS, countWords } from "./head";
 import { safeRelPath } from "./http";
 import { originOf } from "./versions";
-import { syncPublicProjection } from "./publicdoc";
 import { versionStoragePrefix } from "./storage";
 
 type Db = admin.firestore.Firestore;
@@ -33,7 +32,7 @@ type Data = Record<string, unknown>;
  * counted once, here, and kept on the version too, for the Details sheet of a
  * version that is no longer current.
  */
-export interface Latest {
+interface Latest {
   version: string;
   at: Timestamp | null;
   byEmail: string | null;
@@ -44,7 +43,7 @@ export interface Latest {
 }
 
 /** The summary of one version, as its record says. */
-export function latestOf(versionId: string, v: Data): Latest {
+function latestOf(versionId: string, v: Data): Latest {
   const by = v.publishedBy as { channel?: unknown; via?: unknown } | undefined;
   return {
     version: versionId,
@@ -72,16 +71,38 @@ function sameLatest(a: unknown, b: Latest): boolean {
   );
 }
 
-/** The version's entry, read from Storage and counted; null when it cannot be read. */
+/**
+ * When the current version was published and how long it is, as every reader
+ * is told it: from `latest` while it names the head, else the record's own
+ * time, which a rename also moves, for a document not summarized yet or in
+ * the moment between a publish and its summary.
+ */
+export function summaryOf(data: Data): { at: Timestamp | null; words: number | null } {
+  const latest = data.latest as { version?: unknown; at?: Timestamp | null; words?: unknown } | undefined;
+  const current = latest && latest.version === data.currentVersion ? latest : undefined;
+  return {
+    at: current?.at ?? (data.updatedAt as Timestamp | undefined) ?? (data.createdAt as Timestamp | undefined) ?? null,
+    words: typeof current?.words === "number" ? current.words : null,
+  };
+}
+
+/**
+ * The version's entry, read from Storage as far as a count reads and counted;
+ * null when it cannot be read. A ranged read, since an entry may be as large
+ * as a bundle and only its first WORDS_SCAN_CHARS are counted.
+ */
 async function countEntryWords(docId: string, versionId: string, v: Data): Promise<number | null> {
-  const entry = typeof v.entry === "string" ? safeRelPath(v.entry) : null;
+  const entry = safeRelPath(typeof v.entry === "string" ? v.entry : "index.html");
   if (!entry) return null;
   const file = admin.storage().bucket(bucketName()).file(`${versionStoragePrefix(docId, versionId, v)}/${entry}`);
   try {
-    const [bytes] = await file.download();
+    const [bytes] = await file.download({ start: 0, end: WORDS_SCAN_CHARS - 1, validation: false });
     return countWords(bytes.toString("utf8"));
   } catch (err) {
-    if ((err as { code?: unknown }).code === 404) return null;
+    const code = (err as { code?: unknown }).code;
+    if (code === 404) return null;
+    // A range on an empty object is unsatisfiable: it has no words.
+    if (code === 416) return 0;
     throw err;
   }
 }
@@ -90,8 +111,10 @@ async function countEntryWords(docId: string, versionId: string, v: Data): Promi
  * Count a version written without its words, and bring its document's summary
  * to the version that is current now. Idempotent: a redelivered or repeated
  * call finds the words and the summary already in place and writes nothing.
+ * Returns the document as it was read when the summary moved, so the caller
+ * can bring its public mirror in line, and null when nothing moved.
  */
-export async function refreshLatest(db: Db, docId: string, versionId: string, after: Data | undefined): Promise<void> {
+export async function refreshLatest(db: Db, docId: string, versionId: string, after: Data | undefined): Promise<Data | null> {
   const docRef = db.collection("docs").doc(docId);
   let version = after;
   if (version && typeof version.words !== "number") {
@@ -102,24 +125,22 @@ export async function refreshLatest(db: Db, docId: string, versionId: string, af
         version = { ...version, words };
       } catch (err) {
         // Withdrawn while it was being counted: nothing to summarize.
-        if ((err as { code?: unknown }).code === 5) return;
+        if ((err as { code?: unknown }).code === 5) return null;
         throw err;
       }
     }
   }
 
-  const changed = await db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx) => {
     const doc = await tx.get(docRef);
     const data = doc.data();
     const current = data?.currentVersion;
-    if (!data || typeof current !== "string" || !current) return false;
+    if (!data || typeof current !== "string" || !current) return null;
     const record = current === versionId && version ? version : (await tx.get(docRef.collection("versions").doc(current))).data();
-    if (!record) return false;
+    if (!record) return null;
     const next = latestOf(current, record);
-    if (sameLatest(data.latest, next)) return false;
+    if (sameLatest(data.latest, next)) return null;
     tx.update(docRef, { latest: next });
-    return true;
+    return data;
   });
-  // The public mirror says when it was last updated and how long it is.
-  if (changed) await syncPublicProjection(db, docId);
 }

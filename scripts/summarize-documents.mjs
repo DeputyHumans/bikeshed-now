@@ -80,12 +80,16 @@ async function main() {
   const db = getDb(values.project);
   console.log(`project: ${projectId}${dry ? "   (dry run: nothing is written)" : ""}`);
 
-  const docs = await db.collection("docs").get();
+  // Only the two fields that decide it, not every grant and stat of every document.
+  const docs = await db.collection("docs").select("currentVersion", "latest").get();
   let asked = 0;
   for (const snap of docs.docs) {
     const doc = snap.data();
     const current = typeof doc.currentVersion === "string" ? doc.currentVersion : "";
     if (!current) continue;
+    // A summary of the head that has its count copied it from the version, so
+    // a second run reads no versions at all.
+    if (doc.latest?.version === current && typeof doc.latest.words === "number") continue;
     const versionRef = snap.ref.collection("versions").doc(current);
     const reason = summaryWanted(doc, (await versionRef.get()).data());
     if (!reason) continue;

@@ -247,6 +247,15 @@ test("the original's fork count moves in the same batch as the fork", async () =
   assert.ok(!("actor" in event.data), "who forked it never is (SPEC §21)");
 });
 
+test("a fork's first version keeps its source's word count, since its bytes are the same, and has none when the source was not counted", async () => {
+  const counted = world({ extra: { [`docs/${SRC}/versions/v2`]: version("v2", "h2", { words: 812 }) } });
+  assert.equal((await fork(counted, READER, { versionId: "v2" })).ok, true);
+  assert.equal(writeTo(counted.commits[0], "docs/notes/versions/v1").data.words, 812, "not counted again from the same bytes");
+  const uncounted = world();
+  assert.equal((await fork(uncounted, READER, { versionId: "v2" })).ok, true);
+  assert.ok(!("words" in writeTo(uncounted.commits[0], "docs/notes/versions/v1").data), "the trigger counts it, as any new version");
+});
+
 test("a fork defaults to the current version", async () => {
   const w = world();
   const out = await fork(w, READER);

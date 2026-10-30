@@ -234,6 +234,7 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
     ...(typeof v.sourceEntry === "string" ? { sourceEntry: v.sourceEntry } : {}),
     ...(typeof v.rendererVersion === "string" ? { rendererVersion: v.rendererVersion } : {}),
     storagePrefix,
+    ...(typeof v.words === "number" ? { words: v.words } : {}), // the same bytes, so the same count
     fileCount: typeof v.fileCount === "number" ? v.fileCount : objects.length,
     bytes: typeof v.bytes === "number" ? v.bytes : 0,
     contentHash: str(v.contentHash, ""),

@@ -524,5 +524,10 @@ test("every version write and withdrawal moves its document's summary, through t
   const start = index.indexOf("export const recordVersionEvent = onDocumentWritten(");
   assert.ok(start > 0, "recordVersionEvent not found");
   const body = index.slice(start, index.indexOf("\nexport ", start + 1));
-  assert.match(body, /await refreshLatest\(db\(\), docId, versionId, event\.data\?\.after\?\.data\(\)\);/);
+  assert.match(body, /const after = event\.data\?\.after\?\.data\(\);/);
+  assert.match(body, /const moved = await refreshLatest\(db\(\), docId, versionId, after\);/);
+  assert.match(body, /if \(moved && \(moved\.visibility === "public" \|\| \(typeof moved\.folderId === "string" && moved\.folderId\)\)\) \{\n\s+await syncPublicProjection\(db\(\), docId\);/, "the mirror follows the summary");
+  // Only the trigger's own write of the count is skipped: a version created,
+  // withdrawn or marked by the backfill still reaches refreshLatest.
+  assert.match(body, /if \(before && after && typeof before\.words !== "number" && typeof after\.words === "number"\) return;/);
 });

@@ -72,6 +72,11 @@ test("a version says how its content arrived apart from who sent it, and the old
   assert.equal(publishedViaOf("upload", { channel: "operator" }), "operator");
 });
 
+test("how a version arrived reads the same on the server as in the browser (origin-vectors.json)", () => {
+  const { cases } = JSON.parse(readFileSync(join(__dirname, "fixtures", "origin-vectors.json"), "utf8"));
+  for (const c of cases) assert.equal(originOf(c.version), c.origin, c.name);
+});
+
 test("a version written before origin was stored reads its origin from the old field, a duplicate as the fork it was", () => {
   assert.equal(originOf({ origin: "edit", publishedVia: "mcp" }), "edit", "origin, where stored, is the answer");
   assert.equal(originOf({ publishedVia: "editor" }), "edit");
@@ -211,6 +216,7 @@ test("the projection carries render fields and nothing else", () => {
     "slug",
     "title",
     "trusted",
+    "updatedAt",
     "viaFolder",
     "visibility",
     "words",
@@ -237,14 +243,15 @@ test("the reader projection an unlisted document unlocks carries render fields a
     "sourceEntry",
     "marking",
     "publicEdit",
-    "publishedAt",
     "slug",
     "title",
     "trusted",
+    "updatedAt",
     "viaFolder",
     "visibility",
     "words",
   ].sort());
+  // publishedAt is the mirror's, which the sitemap orders by (SPEC §2 /unlock).
   for (const field of PRIVATE_FIELDS) {
     assert.ok(!(field in p), `${field} leaked into the reader projection`);
   }
@@ -253,14 +260,20 @@ test("the reader projection an unlisted document unlocks carries render fields a
 test("a reader is told when the current version was published and how long it is, never by whom", () => {
   const at = admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 9, 29));
   const latest = { version: "v3", at, byEmail: "author@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 1234 };
+  const renamed = admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 9, 30));
   for (const [project, visibility] of [[projectPublicDoc, "public"], [projectReader, "unlisted"]]) {
-    const p = project("d1", storedDoc({ visibility, latest, updatedAt: admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 9, 30)) }));
+    const p = project("d1", storedDoc({ visibility, currentVersion: "v3", latest, updatedAt: renamed }));
     assert.equal(p.words, 1234, visibility);
-    assert.equal(p.publishedAt.toMillis(), at.toMillis(), `${visibility}: the publish, not the last rename or re-share`);
+    // Epoch milliseconds, which JSON carries as a number: POST /unlock is JSON.
+    assert.equal(p.updatedAt, at.toMillis(), `${visibility}: the publish, not the last rename or re-share`);
     assert.doesNotMatch(JSON.stringify(p), /author@example\.com|CLI on mbp|latest/, `${visibility}: nobody is named`);
   }
+  assert.equal(projectPublicDoc("d1", storedDoc({ visibility: "public", currentVersion: "v3", latest })).publishedAt.toMillis(), at.toMillis(), "the mirror's own timestamp, for the sitemap");
   // Before the summary exists, the projection falls back and counts nothing.
   assert.equal(projectReader("d1", storedDoc({ visibility: "unlisted" })).words, null);
+  // And a summary of an older version is no summary: v4 is published, its count not yet in.
+  const behind = projectReader("d1", storedDoc({ visibility: "unlisted", currentVersion: "v4", latest, updatedAt: renamed }));
+  assert.deepEqual([behind.updatedAt, behind.words], [renamed.toMillis(), null], "the record's time, and no count of another version");
 });
 
 test("reader projections carry only the bounded document marking, including explicit off", () => {

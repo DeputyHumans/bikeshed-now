@@ -6,7 +6,8 @@ const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
 const { Timestamp } = require("firebase-admin/firestore");
 const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
-const { refreshLatest } = require("../lib/lib/latest.js");
+const { refreshLatest, summaryOf } = require("../lib/lib/latest.js");
+const { WORDS_SCAN_CHARS } = require("../lib/lib/head.js");
 
 const AT1 = Timestamp.fromMillis(Date.UTC(2026, 9, 28));
 const AT2 = Timestamp.fromMillis(Date.UTC(2026, 9, 29));
@@ -31,8 +32,9 @@ async function withStorage(objects, fn) {
     value: () => ({
       bucket: () => ({
         file: (path) => ({
-          download: async () => {
+          download: async (options) => {
             reads.push(path);
+            reads.options = [...(reads.options ?? []), options];
             if (!(path in objects)) throw Object.assign(new Error("not found"), { code: 404 });
             return [Buffer.from(objects[path])];
           },
@@ -55,8 +57,11 @@ const OBJECTS = { "docs/d/bundles/b1/index.html": page("one two three"), "docs/d
 test("a new version is counted once and summarized on its document: when, by whom, through what, how it arrived", async () => {
   const { db, store } = world();
   await withFakeAdmin({ db }, () => withStorage(OBJECTS, async (reads) => {
-    await refreshLatest(db, "d", "v2", store.get("docs/d/versions/v2"));
+    const moved = await refreshLatest(db, "d", "v2", store.get("docs/d/versions/v2"));
     assert.equal(store.get("docs/d/versions/v2").words, 5);
+    assert.equal(moved?.title, "Plan", "the document as read, so the trigger can bring its mirror in line");
+    // An entry may be as large as a bundle; only what a count reads is fetched.
+    assert.deepEqual(reads.options, [{ start: 0, end: WORDS_SCAN_CHARS - 1, validation: false }]);
     const latest = store.get("docs/d").latest;
     assert.deepEqual({ ...latest, at: latest.at.toMillis() }, { version: "v2", at: AT2.toMillis(), byEmail: "own@example.com", channel: "cli", via: "CLI on mbp", origin: "upload", words: 5 });
 
@@ -68,9 +73,10 @@ test("a new version is counted once and summarized on its document: when, by who
       tx.update = (...args) => (updates++, update(...args));
       return fn(tx);
     });
-    await refreshLatest(db, "d", "v2", store.get("docs/d/versions/v2"));
+    const again = await refreshLatest(db, "d", "v2", store.get("docs/d/versions/v2"));
     assert.equal(reads.length, 1, "counted once");
     assert.equal(updates, 0, "and summarized once: an unchanged summary is not written again");
+    assert.equal(again, null, "and nothing moved, so no mirror to bring in line");
   }));
 });
 
@@ -102,4 +108,23 @@ test("an entry that cannot be read is left uncounted, and the summary still move
     assert.equal(store.get("docs/d").latest.version, "v2");
     assert.ok(!("words" in store.get("docs/d").latest));
   }));
+});
+
+test("a version stored without an entry name is counted from index.html, as every reader of it opens", async () => {
+  const { db, store } = world({ v2: { entry: undefined } });
+  await withFakeAdmin({ db }, () => withStorage(OBJECTS, async (reads) => {
+    await refreshLatest(db, "d", "v2", store.get("docs/d/versions/v2"));
+    assert.deepEqual([...reads], ["docs/d/bundles/b2/index.html"]);
+    assert.equal(store.get("docs/d/versions/v2").words, 5);
+  }));
+});
+
+test("what a reader is told is the summary only while it names the head", () => {
+  const at = AT2;
+  const renamed = Timestamp.fromMillis(Date.UTC(2026, 9, 30));
+  const latest = { version: "v2", at, words: 5 };
+  assert.deepEqual(summaryOf({ currentVersion: "v2", latest, updatedAt: renamed }), { at, words: 5 });
+  assert.deepEqual(summaryOf({ currentVersion: "v3", latest, updatedAt: renamed }), { at: renamed, words: null }, "v3 just published, not yet summarized");
+  assert.deepEqual(summaryOf({ currentVersion: "v2", updatedAt: renamed }), { at: renamed, words: null }, "a document from before the summary");
+  assert.deepEqual(summaryOf({ currentVersion: "v2", createdAt: AT1 }), { at: AT1, words: null });
 });

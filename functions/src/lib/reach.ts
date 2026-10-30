@@ -23,6 +23,7 @@ import {
 } from "./acl";
 import { safeSegment } from "./http";
 import { readThumb } from "./thumbs";
+import { summaryOf } from "./latest";
 
 type Db = admin.firestore.Firestore;
 type Caller = { uid: string; emailLower: string } | null;
@@ -152,12 +153,13 @@ export async function listReach(
     const d = s.data() || {};
     if (isExpired(d as DocAclData, nowMs)) continue;
     const thumb = readThumb(d.thumb);
+    const summary = summaryOf(d);
     documents.push({
       docId: s.id,
       title: str(d.title, "Untitled"),
       currentVersion: str(d.currentVersion, ""),
-      updatedAt: millis((d.latest as { at?: unknown } | undefined)?.at) ?? millis(d.updatedAt) ?? millis(d.createdAt),
-      words: typeof (d.latest as { words?: unknown } | undefined)?.words === "number" ? (d.latest as { words: number }).words : null,
+      updatedAt: millis(summary.at),
+      words: summary.words,
       cover: thumb?.cover ? { versionId: thumb.versionId, key: thumb.cover } : null,
     });
   }

@@ -1,0 +1,16 @@
+{
+  "$comment": "Golden cases for how a version arrived, read back (SPEC §4, §17). functions/test/provenance.test.js asserts originOf (functions/src/lib/versions.ts) gives `origin` for each version record, and app/src/components/DetailsPanel.test.tsx asserts the app's originOfVersion (app/src/provenance.ts), which reads versions from Firestore itself, gives the same, so a version written before `origin` was stored reads the same on both sides.",
+  "cases": [
+    { "name": "origin, where stored, is the answer", "version": { "origin": "edit", "publishedVia": "mcp" }, "origin": "edit" },
+    { "name": "an upload", "version": { "origin": "upload" }, "origin": "upload" },
+    { "name": "a fork", "version": { "origin": "fork", "publishedVia": "fork" }, "origin": "fork" },
+    { "name": "an older edit", "version": { "publishedVia": "editor" }, "origin": "edit" },
+    { "name": "an older fork", "version": { "publishedVia": "fork" }, "origin": "fork" },
+    { "name": "a copy from before lineage, under the older name of a fork", "version": { "publishedVia": "duplicate" }, "origin": "fork" },
+    { "name": "an older upload through the CLI", "version": { "publishedVia": "cli" }, "origin": "upload" },
+    { "name": "an older upload through MCP", "version": { "publishedVia": "mcp" }, "origin": "upload" },
+    { "name": "an older upload in the browser", "version": { "publishedVia": "upload" }, "origin": "upload" },
+    { "name": "nothing recorded", "version": {}, "origin": null },
+    { "name": "an origin neither side knows is no origin", "version": { "origin": "teleport" }, "origin": null }
+  ]
+}
