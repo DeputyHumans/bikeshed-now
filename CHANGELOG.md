@@ -14,11 +14,11 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.30.0 — 2026-10-30
 
 ### Added
 
-- **The Trash empties itself.** Whatever has been in it for 30 days is deleted forever, with its versions, comments and files, by one job that runs once a day (`purgeExpiredTrash`, the only scheduled one; ADR 0025). Each row in the Trash says the day it goes, and `list_trash` and `bikeshed trash` give `deletesAt`.
+- **The Trash empties itself.** Whatever has been in it for 30 days is deleted forever, with its versions, comments and files, by one job that runs once a day (`purgeExpiredTrash`, the only scheduled one; ADR 0025). Each row in the Trash says the day it goes, and `list_trash` and `bikeshed trash` (bikeshed-now 0.21.0) give `deletesAt`.
 - **Delete forever, and Empty trash.** From the Trash in the browser, an owner can delete one item or everything sooner with a six-digit code emailed to their address: for exactly that, valid ten minutes, used once, burned by five wrong guesses. Deleting a folder this way takes only what is yours in it; other people's documents stay in their Trash for their own 30 days. Where the deployment's email is off there is no early deletion and the Trash says it empties itself. `GET /purge` says which; `POST /purge` refuses every token, so no agent can do it (SPEC §4 "Deleted forever").
 - A deleted document leaves a tombstone that keeps its id, so a link, a fork or a saved cursor that named it finds nothing rather than the next document with that title. A fork whose original was deleted says so, in the panel and as `get_lineage`'s `moreWasDeleted`, and a deleted fork takes itself off its original's count.
 
