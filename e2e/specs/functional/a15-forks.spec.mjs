@@ -546,21 +546,21 @@ scenario("A15.3 lineage over two hops: nearest first, ownerEmail only to a membe
     assert.deepEqual(await lineageOf(Oc, C), {
       forked: true,
       ancestors: [bEntry(false), aEntry],
-      hiddenAncestor: false,
+      hiddenAncestor: false, deletedAncestor: false,
       forks: { total: 0, hidden: 0, visible: [] },
     }, "lineage of C as its owner (a member of B, a public reader of A)");
-    assert.deepEqual(await lineageOf(D, C), { forked: true, ancestors: [], hiddenAncestor: true }, "lineage of C as its viewer, who cannot open B");
-    for (const member of [E, P]) assert.deepEqual(await lineageOf(member, C), { forked: true, ancestors: [], hiddenAncestor: true }, `lineage omits the owner's fork inventory for ${member.account.role}`);
+    assert.deepEqual(await lineageOf(D, C), { forked: true, ancestors: [], hiddenAncestor: true, deletedAncestor: false }, "lineage of C as its viewer, who cannot open B");
+    for (const member of [E, P]) assert.deepEqual(await lineageOf(member, C), { forked: true, ancestors: [], hiddenAncestor: true, deletedAncestor: false }, `lineage omits the owner's fork inventory for ${member.account.role}`);
     assert.deepEqual(await lineageOf(Ob, B), {
       forked: true,
       ancestors: [{ ...aEntry, changed: false }],
-      hiddenAncestor: false,
+      hiddenAncestor: false, deletedAncestor: false,
       forks: { total: 1, hidden: 0, visible: [cListing] },
     }, "lineage of B as its owner (a public reader of A, a member of C)");
     assert.deepEqual(await lineageOf(Oa, A.docId), {
       forked: false,
       ancestors: [],
-      hiddenAncestor: false,
+      hiddenAncestor: false, deletedAncestor: false,
       forks: { total: 1, hidden: 1, visible: [] },
     }, "lineage of A as its owner, who cannot open B");
     const stranger = await lineageAs(X.http, C);
@@ -582,13 +582,13 @@ scenario("A15.3 lineage over two hops: nearest first, ownerEmail only to a membe
     assert.deepEqual(await lineageOf(Oc, C), {
       forked: true,
       ancestors: [bEntry(true)],
-      hiddenAncestor: true,
+      hiddenAncestor: true, deletedAncestor: false,
       forks: { total: 0, hidden: 0, visible: [] },
     }, "lineage of C as its owner once A is private");
     assert.deepEqual(await lineageOf(Ob, B), {
       forked: true,
       ancestors: [],
-      hiddenAncestor: true,
+      hiddenAncestor: true, deletedAncestor: false,
       forks: { total: 1, hidden: 0, visible: [cListing] },
     }, "lineage of B as its owner once A is private");
   });
@@ -609,7 +609,7 @@ scenario("A15.3b a key opens only the document it was presented for: a parent re
     const Bt = `A15.3b fork ${tag}`;
     const B = (await mustFork(Ob, A.docId, { title: Bt, k })).docId;
     precondition(!(await readDoc(target, grantPath)), "forking with the key recorded no link grant");
-    const hidden = { forked: true, ancestors: [], hiddenAncestor: true, forks: { total: 0, hidden: 0, visible: [] } };
+    const hidden = { forked: true, ancestors: [], hiddenAncestor: true, deletedAncestor: false, forks: { total: 0, hidden: 0, visible: [] } };
 
     ctx.step("without a grant the origin is hidden, and presenting the origin's key with the fork's lineage does not open it");
     assert.deepEqual(await lineageOf(Ob, B), hidden, "lineage of the fork, no grant on the origin");
@@ -621,10 +621,10 @@ scenario("A15.3b a key opens only the document it was presented for: a parent re
     assert.deepEqual(await lineageOf(Ob, B), {
       forked: true,
       ancestors: [{ docId: A.docId, title: A.title, versionId: "v1", changed: false }],
-      hiddenAncestor: false,
+      hiddenAncestor: false, deletedAncestor: false,
       forks: { total: 0, hidden: 0, visible: [] },
     }, "lineage of the fork once the forker holds the origin's grant");
-    assert.deepEqual(await lineageOf(Oa, A.docId), { forked: false, ancestors: [], hiddenAncestor: false, forks: { total: 1, hidden: 1, visible: [] } }, "the origin's owner counts the fork it cannot open");
+    assert.deepEqual(await lineageOf(Oa, A.docId), { forked: false, ancestors: [], hiddenAncestor: false, deletedAncestor: false, forks: { total: 1, hidden: 1, visible: [] } }, "the origin's owner counts the fork it cannot open");
     const openedFork = await setVisibility(target, { owner: Ob, doc: B, visibility: "unlisted", expiresAt: null, patient: { ctx } });
     assert.deepEqual((await lineageOf(Oa, A.docId)).forks, { total: 1, hidden: 1, visible: [] }, "an unlisted descendant stays hidden without its own grant");
     assert.equal((await Oa.http.postJson("/unlock", { docId: B, k: openedFork.linkToken })).status, 200);
@@ -762,7 +762,7 @@ scenario("A15.4c an expired source is the absent id's bare 404 to its viewer for
   assert.deepEqual((await forksNaming(S.docId)).map((f) => f.id), [live.docId], "no fork was made from the expired source");
   assert.equal((await record(S.docId)).stats?.forks, 1, "the source's stats.forks is unchanged");
 
-  assert.deepEqual(await lineageOf(V, live.docId), { forked: true, ancestors: [], hiddenAncestor: true, forks: { total: 0, hidden: 0, visible: [] } }, "an expired source stops a live fork's ancestor walk");
+  assert.deepEqual(await lineageOf(V, live.docId), { forked: true, ancestors: [], hiddenAncestor: true, deletedAncestor: false, forks: { total: 0, hidden: 0, visible: [] } }, "an expired source stops a live fork's ancestor walk");
   ctx.step("the owner, for whom it has not expired, still forks it");
   const ownFork = await mustFork(O, S.docId);
   assert.deepEqual((await lineageOf(O, ownFork.docId)).ancestors, [{ docId: S.docId, title: S.title, versionId: "v1", ownerEmail: O.account.email, changed: false }], "the source owner can still follow the expired ancestor");

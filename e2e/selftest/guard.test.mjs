@@ -229,7 +229,9 @@ test("evaluate: production refusals, and the local target allows everything", ()
   assert.equal(v("POST", "/mcp", batch).rule, "ledger", "a batch is judged message by message");
   const local = { kind: "local", runId: "x", origin: "http://127.0.0.1:39999", runDir: PROD.runDir };
   assert.equal(evaluate({ method: "POST", url: `${local.origin}/access`, body: "{}" }, { target: local, ...LEDGER }).allow, true);
-  assert.deepEqual(EMAIL_ROUTES.map((r) => r.id), ["access", "folder-access", "team", "team-members", "verify"]);
+  assert.deepEqual(EMAIL_ROUTES.map((r) => r.id), ["access", "folder-access", "team", "team-members", "verify", "purge"]);
+  assert.equal(v("POST", "/purge", { op: "code", target: { all: true } }).rule, "purge", "a code to delete forever is refused on production");
+  assert.equal(v("GET", "/purge").allow, true, "GET /purge sends nothing");
 });
 
 test("check(): a comment-capable action waits for assertQuietDoc, and a loud document is refused", async () => {

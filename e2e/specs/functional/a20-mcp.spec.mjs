@@ -627,7 +627,7 @@ scenario("A20.2.get_lineage names the original nearest first with changedSince, 
   const l1 = await ok(v, "get_lineage", { id: fork });
   assert.deepEqual(
     l1,
-    { id: fork, forked: true, forkedFrom: [{ id: d.id, title: d.title, version: "v1", owner: o.email, changedSince: false, url: url(d.id) }], moreYouCannotOpen: false, forks: { total: 0, youCannotOpen: 0, listed: [] } },
+    { id: fork, forked: true, forkedFrom: [{ id: d.id, title: d.title, version: "v1", owner: o.email, changedSince: false, url: url(d.id) }], moreYouCannotOpen: false, moreWasDeleted: false, forks: { total: 0, youCannotOpen: 0, listed: [] } },
     "the fork's lineage, for its owner",
   );
 
@@ -638,7 +638,7 @@ scenario("A20.2.get_lineage names the original nearest first with changedSince, 
 
   ctx.step("the original's owner: one fork, which they cannot open, counted and not named");
   const lo = await ok(o, "get_lineage", { id: d.id });
-  assert.deepEqual(lo, { id: d.id, forked: false, forkedFrom: [], moreYouCannotOpen: false, forks: { total: 1, youCannotOpen: 1, listed: [] } }, "the original's lineage");
+  assert.deepEqual(lo, { id: d.id, forked: false, forkedFrom: [], moreYouCannotOpen: false, moreWasDeleted: false, forks: { total: 1, youCannotOpen: 1, listed: [] } }, "the original's lineage");
 
   ctx.step("refused: a stranger, and an absent id");
   await refused(x, "get_lineage", { id: d.id }, ABSENT(d.id), "stranger get_lineage");

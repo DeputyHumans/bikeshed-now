@@ -12,8 +12,8 @@
  * local tier is where the email paths are tested.
  *
  * On PRODUCTION it refuses, fail-closed:
- *   - POST /access, /folder-access, /team, /team-members, and /verify/* — the
- *     endpoints that send invitations or codes;
+ *   - POST /access, /folder-access, /team, /team-members, /purge and /verify/*
+ *     — the endpoints that send invitations or codes;
  *   - Identity Toolkit accounts:sendOobCode and accounts:signUp;
  *   - Google Analytics hosts;
  *   - any write (non-GET) naming a document or folder this run did not create
@@ -62,6 +62,7 @@ export const EMAIL_ROUTES = Object.freeze([
   { id: "team", methods: "unsafe", path: /^\/team\/*$/, reason: "refused on production: POST /team (team changes precede invitations)" },
   { id: "team-members", methods: "unsafe", path: /^\/team-members\/*$/, reason: "sends email: POST /team-members (invitations)" },
   { id: "verify", methods: "*", path: /^\/verify(\/.*)?$/, reason: "sends email: /verify/* (verification codes)" },
+  { id: "purge", methods: "unsafe", path: /^\/purge\/*$/, reason: "sends email and deletes forever: POST /purge (a code to delete from the Trash)" },
 ]);
 
 /** Identity Toolkit methods that send mail or create unverified accounts, on any host. */

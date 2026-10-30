@@ -157,7 +157,8 @@ export function grepLog(pattern, opts = {}) {
 /**
  * The product's Firestore triggers (functions/src/index.ts, each built with
  * onDocumentCreated or onDocumentWritten): functionRuns' default `triggers`.
- * selftest/function-runs.test.mjs pins it to the source.
+ * selftest/function-runs.test.mjs pins it to the source. The scheduled
+ * purgeExpiredTrash is not one: the emulator never runs it.
  */
 export const FIRESTORE_TRIGGERS = Object.freeze(["moveAccount", "onCommentCreated", "recordCommentEvent", "recordThreadEvent", "recordVersionEvent"]);
 

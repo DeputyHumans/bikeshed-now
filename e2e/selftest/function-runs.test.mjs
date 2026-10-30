@@ -289,13 +289,16 @@ test("caseFunctionRuns is exact on a window that began with nothing in flight, t
   assert.deepEqual([empty.runs, empty.peakAny, empty.exact], [{}, 0, true]);
 });
 
-test("FIRESTORE_TRIGGERS is every Firestore trigger of functions/src/index.ts, and every other function there answers HTTP", () => {
+test("FIRESTORE_TRIGGERS is every Firestore trigger of functions/src/index.ts, and every other function there answers HTTP or runs on a schedule", () => {
   const src = readFileSync(join(REPO_ROOT, "functions", "src", "index.ts"), "utf8");
   const kinds = [...src.matchAll(/^export const (\w+) = (\w+)\(/gm)].map(([, name, kind]) => ({ name, kind }));
   assert.ok(kinds.length >= 30, `the exports were read (${kinds.length})`);
   const triggers = kinds.filter((k) => /^onDocument(Created|Written|Updated|Deleted)$/.test(k.kind)).map((k) => k.name).sort();
   assert.deepEqual([...FIRESTORE_TRIGGERS].sort(), triggers);
-  assert.deepEqual(kinds.filter((k) => !triggers.includes(k.name) && k.kind !== "onRequest"), [], "a function of another kind (a schedule, a database or auth trigger) needs FIRESTORE_TRIGGERS revisited");
+  // A schedule is not a trigger functionRuns counts: the Functions emulator
+  // loads it and never runs it (lib/purge.ts is tested as a library instead).
+  assert.deepEqual(kinds.filter((k) => k.kind === "onSchedule").map((k) => k.name), ["purgeExpiredTrash"], "the one scheduled function (ADR 0025)");
+  assert.deepEqual(kinds.filter((k) => !triggers.includes(k.name) && k.kind !== "onRequest" && k.kind !== "onSchedule"), [], "a function of another kind (a database or auth trigger) needs FIRESTORE_TRIGGERS revisited");
   assert.ok(Object.isFrozen(FIRESTORE_TRIGGERS));
 });
 
