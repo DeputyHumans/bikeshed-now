@@ -86,9 +86,20 @@ describe("toast.during", () => {
     const toast = mount();
     const work = deferred<void>();
 
-    act(() => void toast.during("Deleting the folder…", work.promise));
+    act(() => void toast.during("Moving to the Trash…", work.promise));
     act(() => vi.advanceTimersByTime(10_000));
 
     expect(busyToast()).not.toBeNull();
+  });
+
+  it("keeps one with an action, Undo above all, long enough to reach, and a plain one only four seconds", () => {
+    vi.useFakeTimers();
+    const toast = mount();
+    act(() => toast.show("“Q3 plan” is in the Trash.", { label: "Undo", onSelect: () => {} }));
+    act(() => toast.show("Saved."));
+    act(() => vi.advanceTimersByTime(5_000));
+    const after5 = [screen.queryByRole("button", { name: "Undo" }) !== null, screen.queryByText("Saved.") !== null];
+    act(() => vi.advanceTimersByTime(5_500));
+    expect({ after5, after10: screen.queryByRole("button", { name: "Undo" }) !== null }).toEqual({ after5: [true, false], after10: false });
   });
 });

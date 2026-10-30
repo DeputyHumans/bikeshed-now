@@ -20,6 +20,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - Deleting a folder moves it to the Trash with everything in it, other people's documents included, instead of moving its contents up a level. `delete_folder` and the CLI's `delete-folder` do the same. Nothing is deleted. ([ADR 0024](docs/architecture/adr/0024-deletion-goes-through-a-trash.md))
 - An app's consent screen says it can move documents and folders you own to the Trash and restore them, and that it cannot delete anything permanently, in place of deleting folders while keeping their contents.
+- A toast with an action, Undo above all, stays ten seconds instead of four, long enough to reach from the keyboard or a screen reader; one without an action still fades after four.
 
 ### Added
 

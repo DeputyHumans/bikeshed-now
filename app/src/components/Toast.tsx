@@ -54,7 +54,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (toast: Omit<Toast, "id">) => {
       const id = nextId++;
       setToasts((list) => [...list, { ...toast, id }]);
-      if (toast.kind === "info") setTimeout(() => remove(id), 4000);
+      // One with an action, Undo above all, stays long enough to be reached
+      // from the keyboard or a screen reader, not just glimpsed.
+      if (toast.kind === "info") setTimeout(() => remove(id), toast.action ? 10_000 : 4000);
       return id;
     },
     [remove],
