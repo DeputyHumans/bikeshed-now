@@ -1,6 +1,6 @@
 --- a/app/src/components/PurgeDialog.tsx
 +++ b/app/src/components/PurgeDialog.tsx
-@@ -58,7 +58,7 @@
+@@ -61,7 +61,7 @@
      setBusy("confirm");
      setError(null);
      try {

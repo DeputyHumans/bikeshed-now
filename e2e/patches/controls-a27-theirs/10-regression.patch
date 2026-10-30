@@ -1,10 +1,10 @@
 --- a/functions/src/lib/purge.ts
 +++ b/functions/src/lib/purge.ts
-@@ -182,7 +182,7 @@
-   if (!snap.exists || !data || !inScope(data, scope)) return null;
+@@ -170,7 +170,7 @@
+   if (!data || !inScope(data, scope)) return null;
    // Everything in the batch went at the same moment, give or take the
    // seconds the walk took, so only the folder itself is held to the date.
--  const contents: PurgeScope = { batch: batchOf(data) as string, ...(scope.ownerUid !== undefined ? { ownerUid: scope.ownerUid } : {}) };
+-  const contents: PurgeScope = { batch: batchOf(data) as string, ownerUid: scope.ownerUid };
 +  const contents: PurgeScope = { batch: batchOf(data) as string };
    return { root, data, contents };
  }
