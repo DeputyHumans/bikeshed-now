@@ -1,6 +1,6 @@
 {
   "oracle": "the owner of a trashed document is told so, with Restore (A26.4, SPEC §4)",
-  "what": "the Trash banner is rendered hidden (app/src/components/ViewerBanners.tsx), so its owner is not told and cannot press Restore",
+  "what": "the viewer never passes the Trash banner (app/src/pages/DocViewer.tsx), so its owner is not told and cannot press Restore there",
   "target": {
     "spec": "e2e/specs/functional/a26-trash.spec.mjs",
     "case": "A26.4 its owner reads a trashed document under a banner with Restore and no Edit, and Restore from the banner brings it back",

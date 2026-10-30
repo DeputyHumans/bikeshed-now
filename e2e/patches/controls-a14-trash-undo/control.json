@@ -7,6 +7,6 @@
     "suite": "functional"
   },
   "expect": {
-    "message": "the card back after Undo"
+    "message": "POST /organize restore|the card back after Undo"
   }
 }

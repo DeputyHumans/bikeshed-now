@@ -77,6 +77,8 @@ scenario("A26.1 a document in the Trash is its owner's alone: a viewer, its key,
     viewer: (await viewer.http.get(content)).status,
     key: (await anon.postJson("/unlock", { docId: doc.docId, k })).status,
     grant: (await holder.http.get(content)).status,
+    // Asking who it is shared with: a reader who is not its owner is told no (403); in the Trash it is the absent id's 404.
+    grantSharing: (await holder.http.get("/access", { query: { docId: doc.docId } })).status,
     folderLink: ((await anon.postJson("/unlock", { folderId: sub.folderId, k: fk })).json?.documents ?? []).some((d) => d.docId === doc.docId),
     mcp: (await mcp.call("get_document", { id: doc.docId })).isError,
     firestore: (await fs.get(`docs/${doc.docId}`)).verdict,
@@ -84,13 +86,13 @@ scenario("A26.1 a document in the Trash is its owner's alone: a viewer, its key,
 
   const before = await ways();
   precondition(
-    JSON.stringify(before) === JSON.stringify({ owner: 200, viewer: 200, key: 200, grant: 200, folderLink: true, mcp: false, firestore: "ALLOW" }),
+    JSON.stringify(before) === JSON.stringify({ owner: 200, viewer: 200, key: 200, grant: 200, grantSharing: 403, folderLink: true, mcp: false, firestore: "ALLOW" }),
     `every way in works before it is trashed: ${JSON.stringify(before)}`,
   );
 
   ctx.step("the owner moves it to the Trash");
   await organize(owner, { kind: "doc", id: doc.docId, op: "trash" }, "trash");
-  assert.deepEqual(await ways(), { owner: 200, viewer: 404, key: 404, grant: 404, folderLink: false, mcp: true, firestore: "DENY" }, "in the Trash: its owner's alone, every other way in refused");
+  assert.deepEqual(await ways(), { owner: 200, viewer: 404, key: 404, grant: 404, grantSharing: 404, folderLink: false, mcp: true, firestore: "DENY" }, "in the Trash: its owner's alone, every other way in refused");
   const absent = await mcp.call("get_document", { id: doc.docId });
   assert.equal(absent.text, `no document with id "${doc.docId}"`, "MCP answers as for an absent id");
 
