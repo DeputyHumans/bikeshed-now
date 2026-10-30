@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { RTDB_COVERAGE_PIN } from "../e2e/lib/rtdb-coverage.mjs";
-import { inspectRtdbDerivation, assertRtdbLaunchReceipt } from "../e2e/lib/rtdb-runtime.mjs";
+import { inspectRtdbDerivation, assertRtdbLaunchReceipt, RTDB_STOCK_PIN } from "../e2e/lib/rtdb-runtime.mjs";
 import { tierLockMode } from "../e2e/lib/locks.mjs";
 
 export const APPROVED_RTDB_DERIVATION = Object.freeze({
@@ -22,7 +22,7 @@ const equal = (a,b,message) => assert.deepEqual(a,b,`RTDB attestation: ${message
 const identity = engine => Object.fromEntries(["kind","label","firebaseVersion","databaseVersion","originalSha256","actualSha256","profileSha256"].map(k=>[k,engine?.[k]??null]));
 const DEFAULT_HEAPS = Object.freeze({ firestore: 2048, database: 1024, other: 512 });
 const JAVA_TUNING = Object.freeze({ JAVA_TOOL_OPTIONS: null, JDK_JAVA_OPTIONS: null, _JAVA_OPTIONS: null });
-// Tokens are private to one caller-created check/import operation. No disk or process-wide verdict cache.
+// Artifact identities and proof verdicts stay private to one check/import operation.
 const caches = new WeakMap();
 export function createRtdbAttestationCache() {
   const token = Object.freeze({});
@@ -100,10 +100,17 @@ function archive(root,sha256,cache) {
   need(entry.sha256===sha256,"retained JAR digest differs");
   return {artifact,sha256,value:entry.value};
 }
+// Only pure analysis of the exact pinned bytes is shared. archive() has already
+// hashed each file in this operation; finalization rehashes it, and every proof
+// still validates its own identities, receipts and outcome. No file or verdict
+// survives across operations. One immutable result bounds the retained memory.
+let pinnedInspection;
 function inspectionOf(original,actual,cache) {
   const key=JSON.stringify([original.artifact,original.sha256,actual.artifact,actual.sha256]);
   if(cache?.inspections.has(key))return cache.inspections.get(key);
-  const inspection=deepFreeze(inspectRtdbDerivation(original.value,actual.value));
+  const pinned=original.sha256===RTDB_STOCK_PIN.sha256 && actual.sha256===APPROVED_RTDB_DERIVATION.actualSha256;
+  const inspection=pinned && pinnedInspection || deepFreeze(inspectRtdbDerivation(original.value,actual.value));
+  if(pinned)pinnedInspection=inspection;
   cache?.inspections.set(key,inspection);
   return inspection;
 }

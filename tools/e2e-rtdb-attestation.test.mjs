@@ -85,3 +85,27 @@ test("closed operation tokens cannot be reused",()=>{
   const local=createRtdbAttestationCache();assertRtdbAttestationCacheUnchanged(local);
   const f=createRtdbFixture(root,{suffix:"closed"});assert.throws(()=>verifyRtdbRunAttestation(f.campaign,{report:f.report,stack:f.stack,rel:f.rel},{root,cache:local}),/open operation-scoped token/);
 });
+
+test("pinned byte analysis cannot grandfather another root's changed archive or proof",(t)=>{
+  const otherRoot=realpathSync(mkdtempSync(join(tmpdir(),"rtdb-fresh-operation-")));
+  t.after(()=>rmSync(otherRoot,{recursive:true,force:true}));
+  const verifyFresh=f=>{
+    const operation=createRtdbAttestationCache();
+    const result=verifyRtdbRunAttestation(f.campaign,{report:f.report,stack:f.stack,rel:f.rel},{root:f.root,cache:operation});
+    assertRtdbAttestationCacheUnchanged(operation);
+    return result;
+  };
+  assert.equal(verifyFresh(createRtdbFixture(root,{suffix:"warm-pinned-analysis"})).unofficial,true);
+  const other=createRtdbFixture(otherRoot,{suffix:"fresh-root"});
+  assert.equal(verifyFresh(other).unofficial,true);
+  const runId=other.report.runId;
+  other.report.runId="another-run";
+  assert.throws(()=>verifyFresh(other),/report\/stack run/);
+  other.report.runId=runId;
+  const path=join(otherRoot,other.attestation.archives.derived.artifact);
+  const bytes=readFileSync(path),changed=Buffer.from(bytes);changed[0]^=1;
+  writeFileSync(path,changed);
+  assert.throws(()=>verifyFresh(other),/retained JAR digest differs/);
+  writeFileSync(path,bytes);
+  assert.equal(verifyFresh(other).unofficial,true,"restored bytes still require a fresh valid proof");
+});
