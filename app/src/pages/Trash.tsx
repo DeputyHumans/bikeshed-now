@@ -135,14 +135,16 @@ export function Trash() {
                 <span className="caption trash-when" title={formatTimestamp(row.at)}>
                   {formatRelative(row.at)}
                 </span>
-                <button type="button" className="btn btn-sm" disabled={restoring === row.id} onClick={() => restore(row)}>
-                  Restore
-                </button>
-                {purge.available ? (
-                  <button type="button" className="btn btn-sm btn-quiet trash-delete" onClick={() => deleteRow(row)}>
-                    Delete forever
+                <span className="trash-actions">
+                  <button type="button" className="btn btn-sm" disabled={restoring === row.id} onClick={() => restore(row)}>
+                    Restore
                   </button>
-                ) : null}
+                  {purge.available ? (
+                    <button type="button" className="btn btn-sm btn-quiet trash-delete" onClick={() => deleteRow(row)}>
+                      Delete forever
+                    </button>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
