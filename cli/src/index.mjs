@@ -91,9 +91,11 @@ Organising
   bikeshed rename <id> <title>         change a document's title; its address stays
   bikeshed trash [folder] <id>         move a document, or a folder with everything
                                        in it, to your Trash: yours alone and
-                                       read-only until restored; nothing is deleted
+                                       read-only until restored, and deleted
+                                       forever 30 days later unless it is
   bikeshed restore [folder] <id>       bring it back, with its sharing, where it was
-  bikeshed trash                       what is in your Trash
+  bikeshed trash                       what is in your Trash, and the day each
+                                       is deleted forever
 
 Management
   bikeshed access <document|folder> <id>  inspect direct and inherited permissions
@@ -983,7 +985,9 @@ async function deleteFolder(flags, args) {
 
 /**
  * The Trash (SPEC §4): `trash <id>` and `trash folder <id>` move one there,
- * bare `trash` lists what is in it. Nothing here deletes anything.
+ * bare `trash` lists what is in it. Nothing here deletes anything forever:
+ * the Trash does that 30 days on, and only a person can sooner, in the
+ * browser, with a code emailed to them.
  */
 async function trash(flags, args) {
   const { origin, token } = resolveAuth(flags);
@@ -995,7 +999,8 @@ async function trash(flags, args) {
       for (const item of items) {
         const when = item.trashedAt ? new Date(item.trashedAt).toISOString().slice(0, 16).replace("T", " ") : "";
         const along = item.with ? `  (with folder “${item.with.name}”)` : "";
-        console.log(`${item.kind === "folder" ? "folder  " : "document"}  ${item.id}  ${when}  ${item.title}${along}`);
+        const goes = item.deletesAt ? `  deleted forever ${new Date(item.deletesAt).toISOString().slice(0, 10)}` : "";
+        console.log(`${item.kind === "folder" ? "folder  " : "document"}  ${item.id}  ${when}  ${item.title}${along}${goes}`);
       }
     });
     return;

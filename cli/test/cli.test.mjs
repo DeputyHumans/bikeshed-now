@@ -1451,6 +1451,15 @@ test("management human output explains inherited grants and returns the actual s
   });
 });
 
+test("the Trash lists each item with the day it is deleted forever", async () => {
+  const at = Date.UTC(2026, 9, 30, 9, 15);
+  const result = { documents: [{ kind: "document", id: "memo", title: "Memo", trashedAt: at, deletesAt: at + 30 * 86_400_000, batch: "b", with: { folderId: "q3", name: "Q3" }, was: "q3" }], folders: [] };
+  await withServer(rpcOk(result), async origin => {
+    const { stdout } = await runAsync(["trash", "--origin", origin, "--token", "test"]);
+    assert.equal(stdout, "document  memo  2026-10-30 09:15  Memo  (with folder “Q3”)  deleted forever 2026-11-29\n");
+  });
+});
+
 test("versions follows every history page and preserves its current-version metadata", async () => {
   let page = 0;
   await withServer((req, res) => {
