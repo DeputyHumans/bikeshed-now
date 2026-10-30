@@ -90,7 +90,7 @@ the `cursor` the publish returned: it is where watching starts. The
 | copying someone else's document to revise | `bikeshed fork`, or `fork_document`; `get_lineage` says what it came from and whether that changed. Its author sees that it was forked |
 
 There is no runtime here: no shared state, no viewer identity, no stored assets,
-no pinning, and nothing is ever deleted. Ship a document that stands still, and
+no pinning, and a document stays until its owner deletes it. Ship a document that stands still, and
 say what it cannot do.
 
 ## What you can publish

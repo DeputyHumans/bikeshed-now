@@ -94,6 +94,10 @@ then a six-hour absence alert each fired on normal delivery. If reliably hourly
 metadata inspection becomes necessary, move the trigger to a scheduler with a delivery
 guarantee instead of alerting on GitHub scheduling delays.
 
+### The Trash's daily job
+
+`purgeExpiredTrash` runs once a day at 03:17 UTC and logs one entry to its own function log, `trash_purge`, with what it did: `documents` and `folders` deleted forever, `finished` (purges an earlier run left part way), `more` (it stopped at its deadline with more to do, which the next run carries on) and `ms`. Read it with `gcloud logging read 'resource.labels.service_name="purgeexpiredtrash" AND jsonPayload.event="trash_purge"' --project <id> --limit 7`. A `more: true` several days running means the Trash fills faster than a run empties it. No entry for a day means the job did not run: Cloud Scheduler's job for the function shows its last attempt (docs/operations/overview.md, "When something is wrong"). It writes to its own log rather than `bikeshed-ops` because that log is written from GitHub's runners, and giving the runtime identity a logging role for one line a day is a grant nobody needs. The fleet audit already checks the function itself, as it checks every one in the endpoint table.
+
 ## Incident response
 
 1. Check the three probes and dashboard. A healthy landing with failing health

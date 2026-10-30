@@ -72,13 +72,13 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "delete_folder",
-    description: "Owner-only: move a folder to the Trash with everything in it, other people's documents included. Nothing is deleted: it and its contents become their owners' alone and read-only until restored, and each owner can restore their own with restore_from_trash. Returns the batch and how many folders and documents went.",
+    description: "Owner-only: move a folder to the Trash with everything in it, other people's documents included. Nothing is deleted yet: it and its contents become their owners' alone and read-only until restored, and each owner can restore their own with restore_from_trash. Whatever is not restored is deleted forever 30 days later. Returns the batch and how many folders and documents went.",
     inputSchema: { type: "object", required: ["id"], properties: { id } },
     run: (ctx, args) => trashFolder(ctx, value(args, "id")),
   },
   {
     name: "trash_document",
-    description: "Owner-only: move a document to the Trash. Nothing is deleted: until it is restored it is yours alone and read-only, and its link, any folder's link, its public page and every grant stop working for everyone else. Returns the batch. Bring it back with restore_from_trash. No tool deletes anything permanently.",
+    description: "Owner-only: move a document to the Trash. Nothing is deleted yet: until it is restored it is yours alone and read-only, and its link, any folder's link, its public page and every grant stop working for everyone else. Unless it is restored it is deleted forever 30 days later, with its versions and feedback. Returns the batch. Bring it back with restore_from_trash. No tool deletes anything forever: a person can, sooner, only in the browser with a code emailed to them.",
     inputSchema: { type: "object", required: ["id"], properties: { id } },
     run: (ctx, args) => trashDocument(ctx, value(args, "id")),
   },
@@ -94,7 +94,7 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "list_trash",
-    description: "What is in your Trash: the documents and folders you own that are in it, newest first, each with when it went (trashedAt, epoch ms), the folder it went with if it went with one (with), the folder it was in (was), and its batch. Someone else's document that went with your folder is in their Trash, not yours.",
+    description: "What is in your Trash: the documents and folders you own that are in it, newest first, each with when it went (trashedAt, epoch ms), when it will be deleted forever unless restored (deletesAt, epoch ms), the folder it went with if it went with one (with), the folder it was in (was), and its batch. Someone else's document that went with your folder is in their Trash, not yours.",
     inputSchema: { type: "object", properties: {} },
     run: (ctx) => listTrash(ctx),
   },

@@ -66,7 +66,8 @@ export const INSTRUCTIONS =
   "access name them. Owners can manage grants, visibility and expiry; folder " +
   "editors can rename and move folders. Owners can trash_document, or " +
   "delete_folder to trash a folder with its contents; restore_from_trash and " +
-  "list_trash undo and list. Nothing is deleted permanently. New grants email " +
+  "list_trash undo and list. The Trash deletes what stays 30 days; no tool " +
+  "deletes anything sooner. New grants email " +
   "new readers. Document scripts stay sandboxed. " +
   "Where you may suggest but not edit, propose a change with suggest_edit; " +
   "until it is decided, revise_suggestion and withdraw_suggestion change or " +

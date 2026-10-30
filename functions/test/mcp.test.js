@@ -221,6 +221,7 @@ test("lineage reaches an agent renamed and dated, with nothing added", () => {
         { docId: "alpha", title: "Alpha", versionId: "v2" },
       ],
       hiddenAncestor: true,
+      deletedAncestor: false,
       forks: {
         total: 2,
         hidden: 1,
@@ -235,6 +236,7 @@ test("lineage reaches an agent renamed and dated, with nothing added", () => {
         { id: "alpha", title: "Alpha", version: "v2", url: "https://example.test/d/alpha" },
       ],
       moreYouCannotOpen: true,
+      moreWasDeleted: false,
       forks: {
         total: 2,
         youCannotOpen: 1,

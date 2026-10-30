@@ -28,6 +28,12 @@ export const MAX_SESSION_MS = 8 * 60 * 60 * 1000;
 /** How long a verification code is valid. Short, because it is re-issuable. */
 export const VERIFY_TTL_MS = 15 * 60 * 1000;
 
+/** How long something stays in the Trash before the daily job deletes it forever (SPEC §4, ADR 0025). */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** How long a code to delete from the Trash is valid: one sitting, not one day. */
+export const PURGE_CODE_TTL_MS = 10 * 60 * 1000;
+
 /** Minimum gap between two comment notifications to the same person about the same doc. */
 export const COMMENT_EMAIL_COOLDOWN_MS = 30 * 60 * 1000;
 

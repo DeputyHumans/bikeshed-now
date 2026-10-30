@@ -19,7 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { parse, fail } from "./lib/args.mjs";
 import { REPO_ROOT, getBucketName, getProjectId } from "./lib/firebase.mjs";
-import { TRIGGERS, functionNames } from "./lib/endpoints.mjs";
+import { SCHEDULED, TRIGGERS, functionNames } from "./lib/endpoints.mjs";
 import { ensureMediaBucket, resolveMediaBucket, resolveMediaOrigin } from "./lib/media.mjs";
 
 const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempotently
@@ -159,6 +159,9 @@ function main() {
     "artifactregistry.googleapis.com",
     "eventarc.googleapis.com",
     "secretmanager.googleapis.com",
+    // The Trash's daily job (ADR 0025): a scheduled function is a Cloud
+    // Scheduler job, and deploying one fails without this.
+    "cloudscheduler.googleapis.com",
     `--project=${projectId}`,
     ...gcloudAcct,
   ]);
@@ -377,15 +380,16 @@ function main() {
    *
    * "Publicly invokable" is not "public": each function authenticates its own
    * caller — session cookie, bearer token, or the deliberate anonymous branch
-   * for a public document. The Firestore TRIGGER is excluded, because a trigger
-   * reachable from the internet is a different thing entirely.
+   * for a public document. The Firestore triggers and the scheduled job are
+   * excluded, because a trigger reachable from the internet is a different
+   * thing entirely, and anyone could run the Trash's daily purge at will.
    *
    * If this step fails with FAILED_PRECONDITION, the organization has Domain
    * Restricted Sharing on. docs/operations/overview.md says what to do about it.
    */
   console.log("\n[8/10] Allow unauthenticated invocation of the HTTP endpoints");
-  const httpFunctions = functionNames().filter((n) => !TRIGGERS.includes(n));
-  console.log(`  ${httpFunctions.length} HTTP endpoints; the trigger stays private`);
+  const httpFunctions = functionNames().filter((n) => !TRIGGERS.includes(n) && !SCHEDULED.includes(n));
+  console.log(`  ${httpFunctions.length} HTTP endpoints; the triggers and the scheduled job stay private`);
   for (const name of httpFunctions) {
     grant(`allUsers invoker on ${name}`, [
       "run",

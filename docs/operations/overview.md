@@ -117,13 +117,14 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 29 HTTP
+the content bucket only, never project-wide — and step 8 makes the 31 HTTP
 functions publicly invokable. "Publicly invokable" is not "public": each
-function authenticates its own caller. The four Firestore triggers
-(`onCommentCreated` and the three `record…Event` triggers that write the change
-log) are deliberately left private. Eventarc invokes them, and a fresh project
-grants that path nothing of its own. If comment emails already arrive, the
-triggers' wiring works: all four use the same one. The three log triggers retry
+function authenticates its own caller. The five Firestore triggers
+(`onCommentCreated`, the three `record…Event` triggers that write the change
+log, and `moveAccount`) and the Trash's daily job, `purgeExpiredTrash`, are
+deliberately left private. Eventarc invokes the triggers and Cloud Scheduler
+the job, and a fresh project grants those paths nothing of their own. If comment
+emails already arrive, the triggers' wiring works: all five use the same one. The three log triggers retry
 on failure. A permission they lack therefore shows as the same function failing
 again and again in the logs, and as a `get_changes` that never reports a new
 comment.
@@ -526,9 +527,10 @@ gcloud iam service-accounts create deployer --project $P --display-name "CI depl
 gcloud iam service-accounts add-iam-policy-binding $DEPLOYER --project $P \
   --role roles/iam.workloadIdentityUser \
   --member "principal://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github/subject/${SUB}:ref:refs/heads/main"
+gcloud services enable cloudscheduler.googleapis.com --project $P
 for role in cloudfunctions.admin run.admin firebasehosting.admin firebaserules.admin \
     datastore.indexAdmin firebasedatabase.admin firebasestorage.viewer secretmanager.viewer \
-    serviceusage.serviceUsageConsumer; do
+    serviceusage.serviceUsageConsumer cloudscheduler.admin; do
   gcloud projects add-iam-policy-binding $P --member serviceAccount:$DEPLOYER --role roles/${role} --condition None
 done
 for sa in ${N}-compute@developer.gserviceaccount.com ${P}@appspot.gserviceaccount.com; do
@@ -551,6 +553,7 @@ gcloud storage buckets add-iam-policy-binding gs://${DEFAULT_BUCKET} \
 | `firebasestorage.viewer` | project | Finding the default bucket the Storage rules belong to |
 | `secretmanager.viewer` | project | `defineSecret`: a deploy checks that the secret has a version |
 | `serviceusage.serviceUsageConsumer` | project | Calling those APIs on the project's quota |
+| `cloudscheduler.admin` | project | Creating and updating the job that runs `purgeExpiredTrash` once a day: a scheduled function is a Cloud Scheduler job, which needs the Cloud Scheduler API enabled on the project too (ADR 0025) |
 | `iam.serviceAccountUser` | the runtime account | Deploying functions that run as it |
 | `iam.serviceAccountUser` | the App Engine default account | firebase-tools refuses every functions deploy without `actAs` on it, even though no function runs as it |
 | `storage.bucketViewer` | the default bucket only | The Storage API reads the bucket as the caller. Without this it answers 404, and firebase-tools reports "Firebase Storage has not been set up" |
@@ -710,6 +713,9 @@ written when there were two, and reported success.
 | A folder's link opens the folder page but a document under it says "Not here" | the document's own expiry passed (it wins over any folder), or it was moved out of the folder | check the document's date and folder; a folder's link never reaches a document filed elsewhere |
 | A pasted folder link unfurls as the product, not the folder | Hosting predates the `/folder/**` rewrite, or the folder is private or its date passed | deploy Hosting; `curl -sI 'https://<deployment>/folder/<id>?k=<key>'` must show `public, max-age` |
 | `npm run emulators` fails to bind | another process on 8088/5050 | change the port in `firebase.json`; everything reads it from there |
+| The deploy fails at `purgeExpiredTrash` with Cloud Scheduler disabled or `cloudscheduler.jobs.*` denied | the project lacks the Cloud Scheduler API, or the deployer its role | enable `cloudscheduler.googleapis.com` and grant the deployer `roles/cloudscheduler.admin` (Continuous deployment), then rerun the failed job |
+| The Trash never empties: items stay past their "deleted forever on" day | the daily job is not running, or each run fails | Cloud Scheduler's job for `purgeexpiredtrash` shows its last run and result. A 401 or 403 there means the job's identity cannot invoke the function: grant that service account `roles/run.invoker` on the `purgeexpiredtrash` service. A run that ran logs `trash_purge` with its counts (monitoring.md) |
+| Delete forever and Empty trash are missing from the Trash | email is off here: the code has to arrive | set `RESEND_API_KEY`; until then the Trash still empties itself after 30 days |
 
 **Logs.** `firebase functions:log --project <id> --account you@example.com`.
 Presence, email and stats failures are logged and swallowed by design — they

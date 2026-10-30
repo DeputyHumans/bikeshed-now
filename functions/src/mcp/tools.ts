@@ -496,6 +496,7 @@ export function lineageForAgent(docId: string, lineage: Lineage) {
       ),
     ),
     moreYouCannotOpen: lineage.hiddenAncestor,
+    moreWasDeleted: lineage.deletedAncestor,
     ...(lineage.forks
       ? {
           forks: {

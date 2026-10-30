@@ -136,7 +136,7 @@ considerably more than a name.
 document at a suffixed one, so the publisher learns the id exists, even when it
 belongs to a private document they cannot read. This is accepted, not missed.
 Refusing instead would make the check free and silent. As it is, every check
-creates a document in the checker's own workspace, attributed to them; it can go to their Trash, and a trashed document keeps its id, so a check cannot be made and quietly taken back. The suffix is random, so it does not say how many documents
+creates a document in the checker's own workspace, attributed to them; it can go to their Trash and be deleted forever, but a deleted document leaves a tombstone that keeps its id (SPEC §4 "Deleted forever"), so a check cannot be made and quietly taken back. The suffix is random, so it does not say how many documents
 share the name (SPEC §4). `publish_document`'s `idTaken` says the same thing in
 so many words; it tells the caller nothing that comparing ids did not.
 
@@ -364,7 +364,9 @@ actively switched off, which makes it a real trap rather than a theoretical one.
 `lastUsedAt` surfaced so an unused token is visible. Scope equals the owner's
 ACL, so there is no escalation path to widen. `tokenId` is stamped on everything
 the token touches, so "what did this token do" is one query and revocation does
-not disturb the owner's other clients.
+not disturb the owner's other clients. A token can move its owner's things to
+the Trash, where they wait 30 days, but never delete anything forever:
+`POST /purge` refuses every token.
 
 ### An app is connected that the person did not mean to connect
 
@@ -437,6 +439,14 @@ fetches it. That is SSRF by design.
 - Theft is detected only one rotation deep.
 - A disabled account keeps up to an hour of access, until the next refresh
   fails the gate.
+
+### Something is deleted forever that should not have been
+
+Deleting forever cannot be undone, so the attacks that matter are a stranger's browser left signed in, an agent following a misread instruction, and a stale reference that ends up pointing somewhere else.
+
+**Mitigation.** Nothing is deleted at once: deleting moves to the Trash, and only the daily job, 30 days later, or the item's owner sooner, deletes for good (ADR 0024, ADR 0025). Sooner needs a code emailed to the account's own address, for exactly that item or for the whole Trash, valid ten minutes, used once and burned by five wrong guesses; it is kept in `purgeCodes/{uid}`, which no client can read, because a six-digit code's hash is the code to whoever reads it. The endpoint takes the browser's session and refuses every token, so no agent can do it, and where email is off nobody can. An early purge takes only its owner's things: a folder's owner cannot destroy the documents other people had in it before their 30 days. A deleted document leaves a tombstone that keeps its id, so a link, a fork's lineage or an agent's saved cursor that names it finds nothing, never the next document of that name.
+
+**What cannot be recalled, stated.** A page a CDN cached is served for up to five minutes after it is deleted, a thumbnail a browser cached for up to a day, and email already sent stays sent. Anything a reader downloaded, printed or copied is theirs. A purge stopped between its tombstone and its last deletion leaves bytes in Storage until the next daily run, readable by nobody, since every path to them goes through the record.
 
 ## Out of scope, stated so it is a decision
 

@@ -17,6 +17,7 @@
       { "source": "/folder", "function": "createFolder" },
       { "source": "/folder-access", "function": "setFolderAccess" },
       { "source": "/organize", "function": "organize" },
+      { "source": "/purge", "function": "purgeTrash" },
       { "source": "/fork", "function": "forkDoc" },
       { "source": "/trust", "function": "trustDoc" },
       { "source": "/marking", "function": "setMarking" },

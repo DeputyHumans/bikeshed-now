@@ -1,6 +1,6 @@
 # 0024 — Deletion goes through a Trash
 
-**Status** Accepted · **Spec** §4, §5, §13, §17, §19 · **Amends** [0017](0017-agent-management-with-owner-permissions.md)
+**Status** Accepted, amended by [0025](0025-the-trash-empties-on-one-daily-job.md), which ships decision 5 · **Spec** §4, §5, §13, §17, §19 · **Amends** [0017](0017-agent-management-with-owner-permissions.md)
 
 ## Context
 

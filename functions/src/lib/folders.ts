@@ -36,7 +36,7 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
+import { canEditFolder, isPurged, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -491,7 +491,9 @@ export async function persistDocMembership(
       // before/after invitation delta in their request-local closure.
       if (committed.found) return committed.result;
     }
-    if (!snap.exists) throw new Error("document no longer exists");
+    // A tombstone is a document that no longer exists, kept only so its id is
+    // never reused: a membership written onto it would be a record again.
+    if (!snap.exists || isPurged(snap.data())) throw new Error("document no longer exists");
     const before = snap.data() || {};
     const patch = (await change?.(before, (r) => tx.get(r))) ?? {};
     const data = { ...before, ...patch };

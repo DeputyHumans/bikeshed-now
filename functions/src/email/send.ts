@@ -52,6 +52,14 @@ function apiKey(): string {
   }
 }
 
+/**
+ * Is email on? A purge needs its code to arrive, so where email is off the
+ * browser is told so, and the Trash only empties itself (SPEC §4).
+ */
+export function emailEnabled(): boolean {
+  return apiKey() !== "";
+}
+
 export interface Message {
   to: string;
   subject: string;

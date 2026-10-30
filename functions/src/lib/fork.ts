@@ -27,6 +27,7 @@ import {
   canManageSharing,
   frozenForReader,
   isMember,
+  isPurged,
   visibilityOf,
   type DocAclData,
   type Visibility,
@@ -294,6 +295,8 @@ export interface Lineage {
   ancestors: Ancestor[];
   /** The walk stopped at a parent the caller cannot open. */
   hiddenAncestor: boolean;
+  /** The walk stopped at a parent that has been deleted forever (lib/purge.ts). */
+  deletedAncestor: boolean;
   /** The owner's inventory. Absent for everyone else. */
   forks?: { total: number; hidden: number; visible: ForkListing[] };
 }
@@ -322,6 +325,7 @@ export async function lineageFor(input: {
 
   const ancestors: Ancestor[] = [];
   let hiddenAncestor = false;
+  let deletedAncestor = false;
   let childId = input.docId;
   for (let hop = 0; hop < MAX_LINEAGE_HOPS; hop++) {
     const rec = await db.collection(FORKS).doc(childId).get();
@@ -330,7 +334,10 @@ export async function lineageFor(input: {
     const parent =
       typeof parentId === "string" ? await openReadable(db, parentId, caller, null) : null;
     if (!parent) {
-      hiddenAncestor = true;
+      // Deleted forever is no secret about the original: whoever forked it
+      // knew it existed, and a tombstone holds nothing else to tell.
+      if (typeof parentId === "string" && isPurged((await db.collection("docs").doc(parentId).get()).data())) deletedAncestor = true;
+      else hiddenAncestor = true;
       break;
     }
     const entry: Ancestor = {
@@ -349,7 +356,7 @@ export async function lineageFor(input: {
     childId = parent.ref.id;
   }
 
-  const lineage: Lineage = { forked: doc.data.forked === true, ancestors, hiddenAncestor };
+  const lineage: Lineage = { forked: doc.data.forked === true, ancestors, hiddenAncestor, deletedAncestor };
   if (canManageSharing(doc.data, caller.emailLower)) {
     lineage.forks = await forksOf(db, input.docId, caller);
   }

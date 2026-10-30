@@ -58,11 +58,13 @@ export interface ReaderDoc {
    * Epoch milliseconds, or null. Carried so an anonymous reader is TOLD the
    * document expired rather than shown an empty frame.
    *
-   * Nothing deletes this projection when the moment arrives — there is no
-   * scheduler here, by decision — so the projection describes an expiry rather
-   * than disappearing at one, and `contentProxy` is what actually stops serving
-   * the bytes. A title outliving its content is the honest cost of having no
-   * cron, and it is stated in SPEC §17 rather than discovered.
+   * Nothing deletes this projection when the moment arrives — expiry is
+   * decided when something is read, by decision, and the one scheduled job
+   * here, the Trash's, does not touch it — so the projection describes an
+   * expiry rather than disappearing at one, and `contentProxy` is what actually
+   * stops serving the bytes. A title outliving its content is the honest cost
+   * of expiry having no job, and it is stated in SPEC §17 rather than
+   * discovered.
    */
   expiresAt: number | null;
   /**

@@ -32,10 +32,10 @@ import {
 } from "./lib/firebase.mjs";
 
 /** Every collection this application owns. */
-const COLLECTIONS = ["docs", "forks", "folders", "teams", "tokens", "public", "users", "verifications"];
+const COLLECTIONS = ["docs", "forks", "folders", "teams", "tokens", "public", "users", "verifications", "purgeCodes", "accountMoves", "oauthCodes"];
 
 /** Every RTDB path this application writes. */
-const RTDB_PATHS = ["status", "presenceAccess"];
+const RTDB_PATHS = ["status", "presenceAccess", "editAccess"];
 
 async function main() {
 const USAGE = `teardown.mjs — delete this deployment's DATA, guarded
@@ -51,7 +51,8 @@ const USAGE = `teardown.mjs — delete this deployment's DATA, guarded
                        credentials
   --help
 
-Deletes documents, folders, teams, tokens, stored bundles and both RTDB paths.
+Deletes documents, folders, teams, tokens, codes, account moves, stored bundles
+and every RTDB path.
 NEVER deletes the project itself.
 
 This is an OPERATOR tool with Admin credentials. It is not the \`bikeshed\` CLI,

@@ -141,12 +141,8 @@ a written argument in a pull request, not a dependency.
 - **No admin console.** The CLIs are the admin surface, and they are auditable.
 - **No rate limiter.** CDN caching is the cost defence for public documents;
   App Check is the named hook if abuse appears.
-- **No deletion that cannot be undone, yet.** Deleting moves a document, or a folder with everything in it, to the owner's Trash, where it is theirs alone and frozen until they restore it; nothing is removed ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md), SPEC §4). Permanent deletion is the next release's: after 30 days, or earlier with a code emailed to the account, never by an agent. A single version can still be withdrawn through a guarded CLI. A document's optional **expiry** is not a deletion date either: it ends access to the content and nothing else, and clearing it restores everything (SPEC §17).
-- **No scheduler, no cron.** Expiry is enforced when a document is READ rather
-  than by a job that runs at the appointed minute, which is what lets it exist
-  at all without a queue. The visible cost is that the world-readable projection
-  of a public document keeps its title after the content stops being served, and
-  SPEC §17 says so rather than leaving it to be found.
+- **No deletion without a way back first.** Deleting moves a document, or a folder with everything in it, to the owner's Trash, where it is theirs alone and frozen until they restore it ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md), SPEC §4). It is deleted forever 30 days later, or sooner by its owner in the browser with a code emailed to them, never by an agent; a deleted document leaves a tombstone so its id is never reused ([ADR 0025](adr/0025-the-trash-empties-on-one-daily-job.md)). A single version can still be withdrawn through a guarded CLI. A document's optional **expiry** is not a deletion date: it ends access to the content and nothing else, and clearing it restores everything (SPEC §17).
+- **One scheduled job, and no other.** Once a day `purgeExpiredTrash` deletes forever what has been in the Trash for 30 days, because nothing reads a Trash nobody opens ([ADR 0025](adr/0025-the-trash-empties-on-one-daily-job.md)). Everything else that happens "at" a time is decided when something is read: expiry is enforced when a document is READ rather than by a job that runs at the appointed minute, which is what lets it exist without a queue. The visible cost is that the world-readable projection of a public document keeps its title after the content stops being served, and SPEC §17 says so rather than leaving it to be found.
 - **No scopes on the agent surface.** An app connects by signing in, and a
   person can still mint a personal access token for a script. Either way the
   credential is exactly its owner, and it is revoked from one list by someone
@@ -155,7 +151,8 @@ a written argument in a pull request, not a dependency.
 - **Agent management uses the person's role.** Owners can manage document and
   folder grants, visibility and expiry. Folder editors can rename and move;
   owners can move documents and folders to the Trash and restore them, and no
-  agent can delete anything permanently. Shared HTTP/MCP handlers enforce these
+  agent can delete anything forever: only a person can, in the browser, with
+  a code emailed to them. Shared HTTP/MCP handlers enforce these
   gates ([ADR 0017](adr/0017-agent-management-with-owner-permissions.md), [ADR 0024](adr/0024-deletion-goes-through-a-trash.md)).
 - **No service accounts.** A token is exactly its owner, with exactly their ACL.
 - **No unique-visitor estimation.** Anonymous sessions are counted; people are

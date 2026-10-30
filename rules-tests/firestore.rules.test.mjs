@@ -340,6 +340,9 @@ describe("firestore rules", () => {
         emailCooldowns: { "private-doc": 1 },
       });
       await setDoc(doc(db, "verifications/u-owner"), { hash: "secret", email: "invited@example.com", attempts: 0 });
+      await setDoc(doc(db, "purgeCodes/u-owner"), { hash: "secret", key: "all", attempts: 0 });
+      // A document deleted forever: its tombstone (lib/purge.ts).
+      await setDoc(doc(db, "docs/purged-doc"), { purgedAt: new Date() });
       await setDoc(doc(db, "users/u-owner/tokens/tok1"), { tokenId: "tok1", name: "cli" });
       await setDoc(doc(db, "tokens/tok1"), { tokenId: "tok1", uid: OWNER.uid, hash: "h" });
       // A connected app's grant and its pending code (SPEC §23).
@@ -1212,6 +1215,21 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner")));
     await assertFails(getDoc(doc(env.authenticatedContext(OWNER.uid, { email: OWNER.email, email_verified: false }).firestore(), "verifications/u-owner")));
     await assertFails(setDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner"), { hash: "mine", email: OWNER.email }));
+  });
+
+  it("a code to delete from the Trash is server-only, even to the account it belongs to", async () => {
+    await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "purgeCodes/u-owner")));
+    await assertFails(setDoc(doc(verified(env, OWNER).firestore(), "purgeCodes/u-owner"), { hash: "mine", key: "all" }));
+  });
+
+  it("a tombstone is no document to anyone: unreadable, unwritable and never listed", async () => {
+    for (const p of [OWNER, VIEWER]) {
+      const db = verified(env, p).firestore();
+      await assertFails(getDoc(doc(db, "docs/purged-doc")));
+      await assertFails(setDoc(doc(db, "docs/purged-doc"), { title: "Back", ownerEmail: p.email }));
+      await assertFails(setDoc(doc(db, "docs/purged-doc/versions/v1/annotations/a1"), { body: "hello" }));
+    }
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "docs/purged-doc")));
   });
 
   it("a user cannot mark their own address verified or clear their own cooldown", async () => {

@@ -11,6 +11,7 @@ import { grantTokenOf, linkGrantRef } from "../lib/linkgrant";
 import { documentUrl, sendEmail } from "./send";
 import { Invite, inviteText, type InviteProps } from "./templates/Invite";
 import { Verify, verifyText } from "./templates/Verify";
+import { PurgeCode, purgeCodeText } from "./templates/PurgeCode";
 import {
   CommentNotice,
   commentNoticeText,
@@ -160,6 +161,23 @@ export async function sendVerificationCode(
     body: React.createElement(Verify, { origin, code, minutes }),
     text: verifyText({ origin, code, minutes }),
   });
+}
+
+/** The code that confirms deleting `what` forever, to the account's own address. */
+export async function sendPurgeCode(
+  email: string,
+  code: string,
+  minutes: number,
+  what: string,
+): Promise<boolean> {
+  const origin = publicOrigin();
+  const result = await sendEmail({
+    to: email,
+    subject: `${code} is your code to delete from your Trash`,
+    body: React.createElement(PurgeCode, { origin, code, minutes, what }),
+    text: purgeCodeText({ origin, code, minutes, what }),
+  });
+  return result.sent;
 }
 
 export async function sendCommentNotice(

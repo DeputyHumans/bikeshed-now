@@ -43,6 +43,7 @@ export const ENDPOINTS = [
   { path: "/folder", fn: "createFolder", match: "exact" },
   { path: "/folder-access", fn: "setFolderAccess", match: "exact" },
   { path: "/organize", fn: "organize", match: "exact" },
+  { path: "/purge", fn: "purgeTrash", match: "exact" },
   { path: "/fork", fn: "forkDoc", match: "exact" },
   { path: "/trust", fn: "trustDoc", match: "exact" },
   { path: "/marking", fn: "setMarking", match: "exact" },
@@ -96,9 +97,17 @@ export const ENDPOINTS = [
  */
 export const TRIGGERS = ["onCommentCreated", "recordVersionEvent", "recordThreadEvent", "recordCommentEvent", "moveAccount"];
 
+/**
+ * Functions Cloud Scheduler calls, with no Hosting rewrite and no public
+ * invoker: `purgeExpiredTrash` deletes forever what has been in the Trash for
+ * 30 days (SPEC §4, ADR 0025). Deploying one needs the Cloud Scheduler API
+ * and the deployer's scheduler role (docs/operations/overview.md).
+ */
+export const SCHEDULED = ["purgeExpiredTrash"];
+
 /** Every deployed function name, in `firebase functions:delete` order. */
 export function functionNames() {
-  return [...new Set([...ENDPOINTS.map((e) => e.fn), ...TRIGGERS])];
+  return [...new Set([...ENDPOINTS.map((e) => e.fn), ...TRIGGERS, ...SCHEDULED])];
 }
 
 /** The `source` string this row must have in firebase.json's rewrites. */

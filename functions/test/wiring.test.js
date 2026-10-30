@@ -28,15 +28,16 @@ test("firebase.json rewrites match the endpoint table exactly", async () => {
 test("SPEC §2's table lists every rewrite and trigger, in order", async () => {
   // The table said it was asserted to match, and nothing read it: it went
   // without /suggestion and the OAuth rewrites for two releases.
-  const { rewrites, TRIGGERS } = await import("../../scripts/lib/endpoints.mjs");
+  const { rewrites, TRIGGERS, SCHEDULED } = await import("../../scripts/lib/endpoints.mjs");
   const spec = readFileSync(join(ROOT, "docs", "architecture", "spec.md"), "utf8");
   const section = spec.slice(spec.indexOf("\n## 2. "), spec.indexOf("\n## 3. "));
-  const rows = [...section.matchAll(/^\| (`[^`]+`|— \(Firestore trigger\)) \| `([A-Za-z]+)` \|$/gm)].map(
+  const rows = [...section.matchAll(/^\| (`[^`]+`|— \((?:Firestore trigger|daily schedule)\)) \| `([A-Za-z]+)` \|$/gm)].map(
     (m) => `${m[1].replace(/`/g, "")} -> ${m[2]}`,
   );
   const expected = [
     ...rewrites().map((r) => `${r.source} -> ${r.function}`),
     ...TRIGGERS.map((fn) => `— (Firestore trigger) -> ${fn}`),
+    ...SCHEDULED.map((fn) => `— (daily schedule) -> ${fn}`),
   ];
   assert.deepEqual(rows, expected);
 });

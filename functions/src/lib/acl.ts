@@ -99,6 +99,17 @@ export function isTrashed(doc: { trashed?: unknown } | null | undefined): boolea
 }
 
 /**
+ * Deleted forever: the record is a tombstone, `{ purgedAt }` and nothing else
+ * (lib/purge.ts, ADR 0025). It names no owner and no member, so every gate
+ * refuses it as it refuses a document nobody may read, and it stays so its id
+ * is never given to another document. Ask this where a path would otherwise
+ * write to a record merely because it exists.
+ */
+export function isPurged(doc: { purgedAt?: unknown } | null | undefined): boolean {
+  return doc?.purgedAt != null;
+}
+
+/**
  * Expired or in the Trash: FROZEN, read-only and visible only to its owner.
  *
  * One sentence, enforced at every read and write path (SPEC §4 "Trash", §17

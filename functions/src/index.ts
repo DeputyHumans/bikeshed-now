@@ -22,6 +22,8 @@ import { versionStoragePrefix } from "./lib/storage";
 
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { logger } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { parseCausalStamp, readStoredCausalStamp } from "./lib/causal";
 /**
@@ -52,6 +54,8 @@ import {
   RESEND_API_KEY,
   SESSION_COOKIE_NAME,
   SESSION_EXPIRES_MS,
+  PURGE_CODE_TTL_MS,
+  TRASH_RETENTION_MS,
   VERIFY_TTL_MS,
   bucketName,
   isEmulated,
@@ -63,6 +67,9 @@ import { verifyIdToken, verifySessionCookie } from "./lib/auth";
 import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/accountmove";
 import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "./lib/trash";
+import { describePurge, purgeExpired, purgeOwn, type PurgeSummary } from "./lib/purge";
+import { checkPurgeCode, maskAddress, parseTarget, reservePurgeCode, retirePurgeCode, targetKey } from "./lib/purgecode";
+import { emailEnabled } from "./email/send";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
 import {
   canEdit,
@@ -1792,9 +1799,10 @@ export const setFolderAccess = onRequest(MAILING, async (req, res) => {
  *
  * `trash` and `restore` are the owner's alone (SPEC §4): a folder goes with
  * everything in it, other people's documents too, and each owner restores
- * their own. Nothing is deleted. `delete` on a folder is `trash`, the word
- * the CLI before 0.20 sends; on a document it is refused and says to trash
- * it, until permanent deletion exists.
+ * their own. Nothing here deletes anything forever: that is POST /purge,
+ * from the browser only, and the daily job. `delete` on a folder is `trash`,
+ * the word the CLI before 0.20 sends; on a document it is refused and says
+ * to trash it.
  */
 export const organize = onRequest(PLAIN, async (req, res) => {
   noStore(res);
@@ -2437,6 +2445,99 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Deleting forever (SPEC §4, ADR 0025)
+// ---------------------------------------------------------------------------
+
+const PURGE_FROM_BROWSER_ONLY =
+  "Deleting forever is done in the browser, with a code sent to the account's email. An agent can move things to the Trash and back, never delete them.";
+
+/** What a code deletes, as the object of a sentence in its email. */
+function purgeObject(s: PurgeSummary): string {
+  const n = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
+  if (s.kind === "document") return s.versions > 1 ? `“${s.title}” and its ${s.versions} versions` : `“${s.title}”`;
+  if (s.kind === "folder") {
+    return s.documents > 0 ? `the folder “${s.title}” and ${n(s.documents, "document", "documents")} of yours in it` : `the folder “${s.title}”`;
+  }
+  return `everything in your Trash (${n(s.documents, "document", "documents")} and ${n(s.folders, "folder", "folders")})`;
+}
+
+/**
+ * GET /purge and POST /purge — deleting from the Trash forever, early.
+ *
+ * GET answers whether it is possible here, `{ available, retentionDays }`:
+ * only where email is on, because the code has to arrive. POST
+ * `{ op: "code", target }` emails a code for exactly that target, one item
+ * (`{ kind, id }`) or everything (`{ all: true }`), and answers what it will
+ * delete and where the code went; `{ op: "confirm", target, code }` spends the
+ * code and deletes, answering how many folders and documents went.
+ *
+ * The browser's session only. A token, whoever's, is refused: deleting
+ * forever is the one thing an agent may not do for its person, and a token is
+ * a credential that may be on a server nobody watches. Only the caller's own
+ * items go; what went with their folder but is someone else's stays in that
+ * person's Trash (lib/purge.ts).
+ */
+export const purgeTrash = onRequest(MAILING, async (req, res) => {
+  noStore(res);
+  if (rejectMethod(req, res, ["GET", "POST"])) return;
+  if (req.method === "GET") {
+    res.status(200).json({ available: emailEnabled(), retentionDays: Math.round(TRASH_RETENTION_MS / 86_400_000) });
+    return;
+  }
+  const session = cookie.parse(req.headers.cookie || "")[SESSION_COOKIE_NAME];
+  const caller = session ? await verifySessionCookie(session) : null;
+  if (!caller) {
+    if (bearerFrom(req.headers.authorization)) res.status(403).json({ error: PURGE_FROM_BROWSER_ONLY });
+    else res.status(401).end();
+    return;
+  }
+  const body = jsonBody(req) as { op?: unknown; target?: unknown; code?: unknown } | null;
+  const op = body?.op === "code" || body?.op === "confirm" ? body.op : null;
+  const target = parseTarget(body?.target);
+  if (!op || !target) {
+    badRequest(res, 'expected { op: "code" | "confirm", target: { kind, id } | { all: true } }');
+    return;
+  }
+  if (!emailEnabled()) {
+    res.status(409).json({ error: "Email is off here, so nothing can be deleted early: the Trash deletes each item 30 days after it arrived.", emailOff: true });
+    return;
+  }
+  const summary = await describePurge(db(), caller.uid, target);
+  if (!summary) {
+    res.status(404).json({ error: "that is not in your Trash" });
+    return;
+  }
+  const key = targetKey(target);
+
+  if (op === "code") {
+    const code = sixDigitCode();
+    if ((await reservePurgeCode(db(), caller.uid, key, code)) === "cooldown") {
+      res.status(429).json({ error: "a code was just sent; wait a minute before asking for another" });
+      return;
+    }
+    const minutes = Math.round(PURGE_CODE_TTL_MS / 60000);
+    const { sendPurgeCode } = await import("./email/notify");
+    const sent = await sendPurgeCode(caller.emailLower, code, minutes, purgeObject(summary));
+    if (!sent) {
+      res.status(502).json({ error: "the code could not be sent; try again in a minute" });
+      return;
+    }
+    res.status(200).json({ sentTo: maskAddress(caller.emailLower), expiresInMinutes: minutes, summary });
+    return;
+  }
+
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  const checked = await checkPurgeCode(db(), caller.uid, key, code);
+  if (checked.status !== 200) {
+    res.status(checked.status).json({ error: checked.error });
+    return;
+  }
+  const out = await purgeOwn(db(), caller.uid, target);
+  await retirePurgeCode(db(), caller.uid);
+  res.status(200).json(out);
+});
+
+// ---------------------------------------------------------------------------
 // Personal access tokens
 // ---------------------------------------------------------------------------
 
@@ -3071,6 +3172,30 @@ export const moveAccount = onDocumentWritten(
     const after = event.data?.after?.data() as MoveJob | undefined;
     if (!after || after.state !== "pending" || before?.state === "pending") return;
     await runMove(db(), event.params.jobId, after);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// The Trash's daily job (SPEC §4, ADR 0025)
+// ---------------------------------------------------------------------------
+
+/**
+ * Once a day, delete forever whatever has been in the Trash for 30 days, and
+ * finish any purge a run left part way. The one scheduled job here: expiry and
+ * every notice are still decided when something is read or written, and this
+ * exists only because nothing reads a Trash nobody opens. A run stops short of
+ * its timeout and says `more`, and the next carries on.
+ *
+ * Its counts go to its own log as `trash_purge`, the event
+ * docs/operations/monitoring.md names. Private: Cloud Scheduler calls it
+ * with its own identity, and setup grants no one else the invoker role.
+ */
+export const purgeExpiredTrash = onSchedule(
+  { schedule: "every day 03:17", timeZone: "Etc/UTC", region: REGION, timeoutSeconds: 540, retryCount: 0 },
+  async () => {
+    const started = Date.now();
+    const report = await purgeExpired(db(), started, started + 8 * 60_000);
+    logger.info("trash_purge", { event: "trash_purge", ...report, ms: Date.now() - started });
   },
 );
 

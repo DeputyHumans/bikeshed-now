@@ -67,13 +67,17 @@ const USAGE = `delete-version.mjs — withdraw ONE version of a document, guarde
   --dry-run              preview; performs no writes
   --help
 
-  Refusal overrides, each corresponding to one of the seven refusals. Every one
-  of them removes a guard, so pass them one at a time and read what it says:
+  Overrides. The first three each lift one refusal and the last two leave
+  something in place. Every one removes a guard, so pass them one at a time
+  and read what it says:
   --allow-non-current    withdraw a version that is not currentVersion
   --allow-annotations    withdraw a version that carries annotations
   --drop-draft           discard a draft based on this version
   --keep-stats           leave aggregate stats untouched
   --keep-views           leave view sessions untouched
+
+  The only version is never withdrawn: that is deleting the document, which
+  its owner does by moving it to the Trash (SPEC §4).
 
 ORDER IS LOAD-BEARING: currentVersion is repointed first, in a transaction that
 aborts if anything published mid-run, then the Storage bytes, then the record.
@@ -174,7 +178,12 @@ async function main() {
 
   // Every refusal, evaluated before any write.
   if (!target) fail(`version not found: ${doomed}`);
-  if (versions.length < 2) fail(`refusing: ${doomed} is the only version of ${docId}`);
+  if (versions.length < 2) {
+    fail(
+      `refusing: ${doomed} is the only version of ${docId}. Withdrawing it would be deleting the document, ` +
+        "which its owner does by moving it to the Trash: deleted forever after 30 days, or sooner with an emailed code.",
+    );
+  }
 
   const isCurrent = meta.currentVersion === doomed;
   if (!isCurrent && !values["allow-non-current"]) {

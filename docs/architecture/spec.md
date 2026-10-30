@@ -137,6 +137,7 @@ which also holds this table to them.
 | `/folder` | `createFolder` |
 | `/folder-access` | `setFolderAccess` |
 | `/organize` | `organize` |
+| `/purge` | `purgeTrash` |
 | `/fork` | `forkDoc` |
 | `/trust` | `trustDoc` |
 | `/marking` | `setMarking` |
@@ -172,6 +173,7 @@ which also holds this table to them.
 | — (Firestore trigger) | `recordThreadEvent` |
 | — (Firestore trigger) | `recordCommentEvent` |
 | — (Firestore trigger) | `moveAccount` |
+| — (daily schedule) | `purgeExpiredTrash` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA
 catch-all. `/folder` is an exact rewrite to `createFolder`, which the
@@ -592,6 +594,7 @@ users/{uid}                                    UserRecord
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
+purgeCodes/{uid}                               PurgeCode        (server-only, §4 "Deleted forever")
 accountMoves/{jobId}                           AccountMove      (server-written; its own account may read, §14)
 verifications/{uid}                            Verification     (server-only, §14)
 ```
@@ -756,7 +759,15 @@ before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes
 
 While it is set, the item is its owner's alone and frozen. `computeMembership` gives every derived set the owner alone, in both twins, so no recompute (a folder cascade, a team change, an account move, an operator's grant) can hand it back, while its grants stay on the record for Restore. A link, a link grant, a folder's link, open editing and the public mirror stop working (`readBasis`, `computeReach`, `syncPublicProjection`), and the direct grant lists count for nothing in `isDocEditor`, `isDocApprover` and `canSuggest`, here and in the rules. Every read path refuses it to anyone but its owner, and every write path to everyone, by the same `isFrozen` that expiry uses (§17); a write answers `409 { trashed: true, error: "this document is in the Trash — restore it to edit it" }`, which names the Trash before an expiry. Sharing, visibility, trust, marking, rename and move are refused too (a trashed folder answers "this folder is in the Trash — restore it first"), and nothing can be filed into a trashed folder. The rules refuse feedback and personal trust on it, the owner's included.
 
-Its `folderId` or `parentId` stays as it was, which is where Restore puts it back while that folder exists and is not in the Trash itself, otherwise at its owner's root. Only the owner trashes or restores a document. A folder's owner trashes or restores a folder, which takes everything beneath it, other people's documents included, and each of those owners can restore their own, at their own root; the folder's owner cannot see or restore someone else's. Restoring a folder brings back what has its batch, not what went to the Trash separately before or came back since. Each document records `doc.trashed` and `doc.restored` in its log (§19). Nothing is deleted (`lib/trash.ts`).
+Its `folderId` or `parentId` stays as it was, which is where Restore puts it back while that folder exists and is not in the Trash itself, otherwise at its owner's root. Only the owner trashes or restores a document. A folder's owner trashes or restores a folder, which takes everything beneath it, other people's documents included, and each of those owners can restore their own, at their own root; the folder's owner cannot see or restore someone else's. Restoring a folder brings back what has its batch, not what went to the Trash separately before or came back since. Each document records `doc.trashed` and `doc.restored` in its log (§19). Moving to the Trash and back deletes nothing (`lib/trash.ts`).
+
+**Deleted forever** ([ADR 0025](adr/0025-the-trash-empties-on-one-daily-job.md), `lib/purge.ts`). Only what is in the Trash is ever deleted, two ways. Once a day `purgeExpiredTrash` deletes whatever has been there for 30 days (`TRASH_RETENTION_MS`), anyone's, and a folder with everything in its batch; it finishes any purge an earlier run left part way first, and stops short of its timeout with `more` for the next day. Earlier, an item's owner deletes it from the browser with an emailed code (`POST /purge`, below); that takes only what is theirs, and another owner's document that went with their folder stays in that person's Trash. `list_trash` and the Trash page give each item its `deletesAt`.
+
+A document leaves a **tombstone**: its record is overwritten with `{ purgedAt, purgePending }` in a transaction that confirms it is still in the Trash and in scope, and its fork record and its original's `stats.forks` go in the same transaction. Then every subcollection, `public/{docId}`, every Storage object under `docs/{docId}/` (with the slash) and its RTDB state are deleted, and `purgePending` is removed last. The tombstone names no owner and no member, so every read path and every rule refuses it as a document nobody may read, `persistDocMembership` refuses to write membership onto it, and the change-log triggers record nothing for the versions and threads it loses (`isPurged`). It stays for good, so `uniqueDocId` never gives its id to another document. A folder's record and its `acl` are deleted outright, its id being random. A live document or subfolder found inside a folder being deleted, which only a race with the Trash can leave, is moved to its owner's root.
+
+**`purgeCodes/{uid}`** is `{ hash, key, expiresAt, attempts, sentAt, reservationId, attemptIds?, usedBy? }`: the one code an account has asked for to delete something forever. `key` names what it is for, `document:{id}`, `folder:{id}` or `all`, and `hash` is `sha256(uid:key:code)`, so a code confirms that and nothing else. It is server-only, its own account included, like `verifications/{uid}`. A code is valid ten minutes and used once; five wrong guesses burn it, so the sixth attempt is refused even when right; another can be asked for a minute after the last. `usedBy` names the request that spent it, so a retried commit finds its own success, and the code is removed once the purge is done.
+
+`GET /purge` answers `{ available, retentionDays }`, uncached: `available` only where the deployment's email is on, since the code has to arrive. `POST /purge` takes the web session and nothing else; any token, personal, the CLI's or an app's, is `403`, and no credential `401`. `{ op: "code", target }`, where `target` is `{ kind: "document" | "folder", id }` or `{ all: true }`, answers `{ sentTo, expiresInMinutes, summary }`, `sentTo` masked as `p•••@example.com` and `summary` what will go as the purge will count it, or `404` when the target is not in the caller's Trash, `409 { emailOff: true }` where email is off, and `429` within a minute of the last code. `{ op: "confirm", target, code }` answers `{ folders, documents }`, how many went, or `400` for a wrong code, `409` for none, an expired one or one sent for something else, and `429` once it is burned.
 
 ---
 
@@ -1266,7 +1277,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,trash,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
+  lib/{auth,acl,access,management,trash,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
@@ -1291,9 +1302,15 @@ functions/src/
   (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for
   the 409 a write answers, which names the Trash before the expiry), and
   `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash").
+  `isPurged` is a tombstone, which no path may write to merely because it
+  exists (§4 "Deleted forever").
 - `lib/trash.ts` — moving a document or a folder to the Trash and back: who
   may, the batch a folder shares with everything it takes, and where Restore
   puts each item (§4 "The Trash").
+- `lib/purge.ts` — deleting forever: the tombstone, what an early purge and
+  the daily job each take, and what goes to an owner's root instead (§4
+  "Deleted forever"). `lib/purgecode.ts` is the emailed code that confirms an
+  early one: for one thing, once, kept where no client can read it.
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
 - `lib/writeAuthority.ts` — transaction-local expiry, the Trash and edit permission, including
   a current link grant read, before uploaded content becomes the selected draft or version (§17).
@@ -1827,8 +1844,10 @@ retries retain that operation's committed before/after delta, even if another
 operation changes membership before the acknowledgement arrives; they neither
 repeat the mutation nor replace the original invitation delta.
 
-Exactly three messages: **invitation** (a new grant, never a re-grant),
-**verification**, **new comment**. Deliberately not built: digests, weekly
+Exactly four messages: **invitation** (a new grant, never a re-grant),
+**verification**, **new comment**, and **a code to delete from the Trash**,
+sent only when an account asks for one, to its own address (§4 "Deleted
+forever"). Deliberately not built: digests, weekly
 summaries, a notification centre, unread badges, mention parsing, reminders,
 marketing. The change log an agent reads (§19, ADR 0016) is none of these. Nobody
 is told anything by it. It is written as a side effect of changes that happen
@@ -2219,7 +2238,7 @@ rewrite or delete someone else's feedback. This is the same freeze as the HTTP
 and MCP write paths, not an exception for browser feedback. Realtime rules
 separately compare the mirrored expiry to the database server's `now`: after that moment only the owner reads
 peer presence and the shared draft, and no account can write the shared draft.
-Clearing or changing expiry refreshes these maps; no timer or cron is needed.
+Clearing or changing expiry refreshes these maps; no timer or job is needed.
 
 HTTP and MCP enforce expiry using `isFrozen` in `lib/acl.ts`, which is expiry or the Trash (§4 "The Trash"), so every path below refuses a trashed document the same way:
 `contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
@@ -2241,10 +2260,10 @@ Two details that are decisions rather than implementation:
   advance, so serving past it would be a choice. `max-age` never outlives the
   date.
 - **Nothing deletes the `public/{docId}` projection when the moment arrives.**
-  There is no scheduler here, by decision, so the projection *carries* the date
-  (`expiresAt`, epoch milliseconds) and the reader is told rather than shown an
-  empty frame. A title outliving its content is the honest cost of having no
-  cron.
+  Expiry has no job, by decision (the one scheduled job, the Trash's, does
+  not touch it), so the projection *carries* the date (`expiresAt`, epoch
+  milliseconds) and the reader is told rather than shown an empty frame. A
+  title outliving its content is the honest cost of expiry having no job.
 
 How the viewer says it: a chip beside the version badge — the same one the
 workspace card shows — for every future date, escalating in wording and colour
@@ -2729,7 +2748,7 @@ reassess the request; never silently redirect a historical request to it.
 | `delete_folder` | owner-only; move the folder to the Trash with everything beneath it, other people's documents included (§4 "The Trash"); deletes nothing |
 | `trash_document` | owner-only; move a document to the Trash, its owner's alone and read-only until restored; deletes nothing |
 | `restore_from_trash` | owner-only; bring a document or folder (`kind`) back with every grant, into its folder while that is there and not in the Trash, else the root; a folder brings back its batch |
-| `list_trash` | the caller's own documents and folders in the Trash, newest first, with when, its `batch`, the folder it went `with` and the one it `was` in |
+| `list_trash` | the caller's own documents and folders in the Trash, newest first, with when it went and when it will be deleted forever (`deletesAt`), its `batch`, the folder it went `with` and the one it `was` in. No tool deletes anything forever, and `POST /purge` refuses every token (§4 "Deleted forever") |
 | `list_versions` | published versions ordered by publishedAt and id descending, limit 20/max 50, cursor/nextCursor, pinned URLs; each with its `origin` and whether it was `automated`, and for a member `publishedBy`, `channel` and `via` (§17), which a link holder is not told |
 | `list_documents` | the caller's documents, with visibility, current version and where each is filed (`filedIn`) |
 | `get_document` | metadata, its address and where it is filed, + current **source** (Markdown where available) |
@@ -3211,12 +3230,18 @@ answers:
 { forked: boolean;
   ancestors: { docId; title; versionId; ownerEmail?; changed? }[];  // nearest first
   hiddenAncestor: boolean;
+  deletedAncestor: boolean;
   forks?: { total; hidden; visible: { docId; title; visibility; forkedAt; ownerEmail? }[] } }
 ```
 
 - **The walk stops at the first parent the caller cannot open**, and says so in
   `hiddenAncestor`. It does not skip past it: that would tell the reader where a
-  document they were never shown came from. Capped at twenty hops.
+  document they were never shown came from. Capped at twenty hops. A parent
+  deleted forever stops it too, and says so in `deletedAncestor` instead (§4
+  "Deleted forever"): a tombstone tells nothing but that, which whoever forked
+  it knew existed. `get_lineage` names the two `moreYouCannotOpen` and
+  `moreWasDeleted`. A fork deleted forever takes itself off its original's
+  count.
 - **A key opens only the document it was presented for.** Parents are readable
   by membership, public visibility, or a link grant the caller already holds.
 - **`ownerEmail`** appears only where the caller is a member of that document,

@@ -376,6 +376,7 @@ test("every way to change a document records an event, or says why it need not",
     unlockDoc: "a reader's own grant", saveDraft: "state.draft", commitVersion: "a new version: recordVersionEvent",
     manageSuggestion: "the thread: recordThreadEvent", saveThumbs: "thumbnails", mcp: "per tool, below",
     oauth: "credentials", oauthConsent: "credentials", sitemap: "reads", verifyEmail: "an account",
+    purgeTrash: "deletes the document forever, its log with it: nothing is left to record into, and a watcher's next read finds no document",
     downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads",
     // Tools
     get_document_access: "reads", get_folder_access: "reads",

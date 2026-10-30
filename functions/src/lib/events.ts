@@ -3,6 +3,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { isPurged } from "./acl";
 import { viaLabel, type Actor } from "./actor";
 import { safeSegment } from "./http";
 
@@ -138,6 +139,11 @@ export async function recordTriggered(
   eventId: string,
   events: readonly EventInput[],
 ): Promise<void> {
+  if (events.length === 0) return;
+  // Deleting a document forever deletes its versions and threads, which fires
+  // these triggers: what they would record is the deletion itself, into a log
+  // that has just been deleted with the rest (lib/purge.ts).
+  if (isPurged((await db.collection("docs").doc(docId).get()).data())) return;
   const log = db.collection("docs").doc(docId).collection("events");
   for (const [i, e] of events.entries()) {
     try {

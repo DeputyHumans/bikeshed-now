@@ -385,6 +385,13 @@ service cloud.firestore {
       allow read, write: if false; // POST /verify/start, POST /verify/complete
     }
 
+    // --- Codes to delete from the Trash forever (SPEC §4, ADR 0025) -------
+    // Server-only for the same reason: the code confirms a deletion that
+    // cannot be undone, and its hash is the code to whoever reads it.
+    match /purgeCodes/{uid} {
+      allow read, write: if false; // POST /purge
+    }
+
     // --- Account moves (SPEC §14, ADR 0020) ------------------------------
     // The job that moves an account to the address Google renamed it to. Its
     // own account watches it to know when to sign in again, and may not list

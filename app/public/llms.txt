@@ -806,18 +806,20 @@ Both require edit rights; moving also requires edit rights on the destination.
 
 ### The Trash
 
-Deleting moves something to its owner's Trash, and nothing you can do deletes anything permanently.
+Deleting moves something to its owner's Trash. The Trash deletes it forever 30 days later unless it is restored, and nothing you can do deletes anything forever sooner.
 
 - `trash_document` and `bikeshed trash <id>` move a document there. Owner-only.
 - `delete_folder` and `bikeshed trash folder <id>` (or the older `bikeshed delete-folder <id>`) move a folder there with everything beneath it, other people's documents included. Owner-only. They return the `batch` and how many folders and documents went.
 - `restore_from_trash` (with `kind`: `document` or `folder`) and `bikeshed restore [folder] <id>` bring one back with every grant it had: into the folder it was in while that folder exists and is not in the Trash, otherwise to the root. A folder brings back what went with it.
-- `list_trash` and `bikeshed trash` list what is in your own Trash: when each item went, the folder it went `with`, the folder it `was` in, its `batch`.
+- `list_trash` and `bikeshed trash` list what is in your own Trash: when each item went, when it will be deleted forever (`deletesAt`), the folder it went `with`, the folder it `was` in, its `batch`.
 
-While something is in the Trash it is its owner's alone and read-only. Its link, a folder's link, its public page and every grant stop working, and anyone else gets the same answer as for an id that does not exist. Every write is refused for its owner too, with `this document is in the Trash — restore it to edit it`; sharing, visibility, renaming and moving are refused until it is restored, and nothing can be filed into a trashed folder. Someone else's document that went with your folder is in their Trash, not yours: tell them, and they can restore it. Trash only when the person asked for it, and say what went.
+While something is in the Trash it is its owner's alone and read-only. Its link, a folder's link, its public page and every grant stop working, and anyone else gets the same answer as for an id that does not exist. Every write is refused for its owner too, with `this document is in the Trash — restore it to edit it`; sharing, visibility, renaming and moving are refused until it is restored, and nothing can be filed into a trashed folder. Someone else's document that went with your folder is in their Trash, not yours: tell them, and they can restore it. Trash only when the person asked for it, say what went, and say that it is deleted forever in 30 days unless restored.
+
+If the person wants something gone sooner, they do it themselves in the browser's Trash: Delete forever, or Empty trash, with a code emailed to their address. Where the deployment's email is off, nothing can be deleted sooner. A fork whose original was deleted forever says so: `get_lineage` gives `moreWasDeleted`.
 
 ## What you cannot do, and why
 
-- **Delete anything permanently.** You can move a document or a folder to the Trash and restore it; nothing you can do removes it for good.
+- **Delete anything forever.** You can move a document or a folder to the Trash and restore it; the Trash deletes what stays there after 30 days, and only the person can delete it sooner, in the browser, with a code emailed to them. `POST /purge` refuses every token, yours included.
 - **Manage teams or trust document scripts.** Those controls remain in the app.
 - **Act as somebody else.** A token or a connected app is its owner. There are no
   service accounts and no scopes.

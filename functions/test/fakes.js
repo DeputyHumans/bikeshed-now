@@ -8,8 +8,8 @@ const { FieldValue: DefaultFieldValue } = require("firebase-admin/firestore");
 /**
  * Enough of Firestore to run an endpoint end to end: document refs, dotted
  * updates, field sentinels (delete, server timestamp, increment), chained
- * equality `where` with `limit` and `count`, batches, and transactions that
- * read before they write.
+ * equality and range `where` with `limit` and `count`, batches, transactions
+ * that read before they write, and `listCollections` with `recursiveDelete`.
  *
  * It is deliberately strict where Firestore is: a `create` over an existing
  * document fails, an `update` of a missing one fails, and a transaction that
@@ -149,6 +149,15 @@ function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
       create: async (data) => apply({ op: "create", path, data }),
       delete: async () => apply({ op: "delete", path }),
       collection: (name) => collection(`${path}/${name}`),
+      /** Its subcollections that hold anything, as Firestore lists them: by name, once each. */
+      listCollections: async () => {
+        const names = new Set();
+        for (const p of store.keys()) {
+          if (!p.startsWith(`${path}/`)) continue;
+          names.add(p.slice(path.length + 1).split("/")[0]);
+        }
+        return [...names].map((name) => collection(`${path}/${name}`));
+      },
       /** The collection holding it, whose own `parent` is the document above, as Firestore's is. */
       get parent() {
         const parts = path.split("/");
@@ -179,7 +188,14 @@ function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
         .filter((p) =>
           filters.every(([f, op, v]) => {
             const got = snap(p).get(f);
-            return op === "array-contains" ? Array.isArray(got) && got.includes(v) : got === v;
+            if (op === "array-contains") return Array.isArray(got) && got.includes(v);
+            if (op === "==") return got === v;
+            // A range matches only a value of the same type, as Firestore's does:
+            // a missing field, or a number against a timestamp, is no match.
+            const sameType = v instanceof admin.firestore.Timestamp ? got instanceof admin.firestore.Timestamp : typeof got === typeof v;
+            if (got === undefined || got === null || !sameType) return false;
+            const [x, y] = [key(got), key(v)];
+            return op === "<" ? x < y : op === "<=" ? x <= y : op === ">" ? x > y : x >= y;
           }),
         );
       if (orders.length) paths.sort(compare);
@@ -199,8 +215,8 @@ function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
     };
     const q = {
       where: (field, op, value) => {
-        if (op !== "==" && op !== "array-contains") {
-          throw new Error(`fake: only == and array-contains are supported, not ${op}`);
+        if (!["==", "array-contains", "<", "<=", ">", ">="].includes(op)) {
+          throw new Error(`fake: only ==, array-contains and ranges are supported, not ${op}`);
         }
         return query(path, [...filters, [field, op, value]], max, orders, after);
       },
@@ -220,6 +236,8 @@ function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
   function collection(path) {
     return {
       ...query(path),
+      id: path.split("/").pop(),
+      path,
       doc: (id) => ref(`${path}/${id ?? `auto${++autoId}`}`),
       async add(data) {
         const document = ref(`${path}/auto${++autoId}`);
@@ -244,6 +262,12 @@ function fakeFirestore(initial = {}, { FieldValue = DefaultFieldValue } = {}) {
   const db = {
     collection,
     doc: (path) => ref(path),
+    /** A document or a collection, and everything beneath it. */
+    async recursiveDelete(target) {
+      for (const p of [...store.keys()]) {
+        if (p === target.path || p.startsWith(`${target.path}/`)) apply({ op: "delete", path: p });
+      }
+    },
     getAll: async (...refs) => refs.map((r) => snap(r.path)),
     batch() {
       const batch = {};

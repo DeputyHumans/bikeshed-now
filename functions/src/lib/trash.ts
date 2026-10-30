@@ -8,6 +8,7 @@ import { canManageSharing, canManageFolder, isTrashed, type DocAclData, type Fol
 import { eventActor, type EventInput } from "./events";
 import { persistDocMembership, persistFolderMembership, type Change } from "./folders";
 import { load, ManagementError, type ManagementContext } from "./management";
+import { deletesAtMs, trashedAtMs } from "./purge";
 
 type Db = admin.firestore.Firestore;
 type Data = admin.firestore.DocumentData;
@@ -34,8 +35,9 @@ type Data = admin.firestore.DocumentData;
  *
  * A folder takes everything in it, other people's documents included, and
  * each owner can bring back their own: it comes back at their root while the
- * folder stays in the Trash. Nothing here is permanent deletion; that is the
- * next release's, behind an emailed code.
+ * folder stays in the Trash. Nothing here deletes anything: an item leaves
+ * the Trash for good only through lib/purge.ts, 30 days after it arrived or
+ * earlier from the browser with an emailed code.
  */
 
 interface TrashMark {
@@ -232,6 +234,8 @@ export interface TrashedItem {
   title: string;
   /** When it went, in epoch milliseconds. */
   trashedAt: number | null;
+  /** When the daily job deletes it forever, in epoch milliseconds. */
+  deletesAt: number | null;
   batch: string | null;
   /** The folder it went with, as it was named then; null when it went on its own. */
   with: { folderId: string; name: string } | null;
@@ -250,14 +254,15 @@ export async function listTrash(ctx: ManagementContext): Promise<{ documents: Tr
     ctx.db.collection("folders").where("ownerUid", "==", ctx.caller.uid).get(),
   ]);
   const item = (kind: TrashedItem["kind"], id: string, d: Data): TrashedItem => {
-    const t = d.trashed as { at?: { toMillis?: () => number }; with?: { folderId?: unknown; name?: unknown } };
+    const t = d.trashed as { with?: { folderId?: unknown; name?: unknown } };
     const along = t.with && typeof t.with.folderId === "string" ? { folderId: t.with.folderId, name: String(t.with.name ?? "") } : null;
     const was = kind === "document" ? d.folderId : d.parentId;
     return {
       kind,
       id,
       title: String((kind === "document" ? d.title : d.name) ?? id),
-      trashedAt: typeof t.at?.toMillis === "function" ? t.at.toMillis() : null,
+      trashedAt: trashedAtMs(d),
+      deletesAt: deletesAtMs(d),
       batch: batchOf(d),
       with: along,
       was: typeof was === "string" && was ? was : null,

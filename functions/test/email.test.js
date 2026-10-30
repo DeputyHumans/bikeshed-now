@@ -7,6 +7,7 @@ const assert = require("node:assert/strict");
 const { sendEmail, documentUrl } = require("../lib/email/send.js");
 const { inviteText } = require("../lib/email/templates/Invite.js");
 const { verifyText } = require("../lib/email/templates/Verify.js");
+const { purgeCodeText } = require("../lib/email/templates/PurgeCode.js");
 const { commentNoticeText } = require("../lib/email/templates/CommentNotice.js");
 
 /**
@@ -169,6 +170,14 @@ test("the verification text carries the code and its lifetime", () => {
   assert.match(text, /123456/);
   assert.match(text, /15 minutes/);
   assert.match(text, /used once/);
+});
+
+test("a code to delete from the Trash says what it deletes, for how long, and that ignoring it keeps everything", () => {
+  const text = purgeCodeText({ origin: "https://example.test", code: "654321", minutes: 10, what: "“Plan” and its 7 versions" });
+  assert.match(text, /654321/);
+  assert.match(text, /delete “Plan” and its 7 versions from your Trash for good/);
+  assert.match(text, /10 minutes and can be used once/);
+  assert.match(text, /nothing is deleted without the code/);
 });
 
 test("a comment notice quotes the anchored passage", () => {

@@ -864,10 +864,10 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>set_folder_visibility</code></td><td>Owner-only sparse visibility and expiry for a folder, which open everything beneath it to read</td></tr>
         <tr><td><code>rename_folder</code></td><td>Rename a folder you can edit</td></tr>
         <tr><td><code>move_folder</code></td><td>Move a folder and recompute inherited access</td></tr>
-        <tr><td><code>delete_folder</code></td><td>Owner-only; move a folder to the Trash with everything in it. Nothing is deleted</td></tr>
+        <tr><td><code>delete_folder</code></td><td>Owner-only; move a folder to the Trash with everything in it, deleted forever 30 days later unless restored</td></tr>
         <tr><td><code>trash_document</code></td><td>Owner-only; move a document to the Trash, yours alone and read-only until restored</td></tr>
         <tr><td><code>restore_from_trash</code></td><td>Owner-only; bring a document or folder back with every grant, where it was</td></tr>
-        <tr><td><code>list_trash</code></td><td>What is in your Trash, newest first</td></tr>
+        <tr><td><code>list_trash</code></td><td>What is in your Trash, newest first, with when each is deleted forever (<code>deletesAt</code>)</td></tr>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>list_versions</code></td><td>Published history, newest first, with pagination and version-pinned links</td></tr>
         <tr><td><code>get_document</code></td><td>A document's metadata, address and selected source (current by default); over 200,000 characters it is cut, and says so</td></tr>
@@ -931,7 +931,7 @@ bikeshed update storage-migration proposal.md</code></pre>
   <ul class="ticks">
     <li>Manage teams or trust document scripts.</li>
     <li>Act with permissions its person does not have.</li>
-    <li>Delete anything permanently. An agent can move a document or a folder to the Trash and restore it; nothing it does removes one for good.</li>
+    <li>Delete anything forever. An agent can move a document or a folder to the Trash and restore it. The Trash deletes what stays there 30 days; only the person can delete sooner, in the browser, with a code emailed to them, and <code>POST /purge</code> refuses every token.</li>
   </ul>
   <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
 </div>
