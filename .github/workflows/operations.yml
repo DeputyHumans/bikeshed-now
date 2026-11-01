@@ -33,7 +33,7 @@ jobs:
           ORIGIN: ${{ secrets.PRODUCTION_PUBLIC_ORIGIN }}
           INCIDENT_EMAIL: ${{ secrets.PRODUCTION_INCIDENT_EMAIL }}
         run: node scripts/ops.mjs audit --project "$PROJECT" --origin "$ORIGIN" --email "$INCIDENT_EMAIL" --monitoring --output /tmp/bikeshed-ops/audit.json
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: operations-audit

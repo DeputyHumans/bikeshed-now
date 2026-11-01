@@ -180,7 +180,7 @@ jobs:
         if: always()
         run: node scripts/ops.mjs snapshot --project "$PROJECT" --output /tmp/bikeshed-ops/final.json
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: deployment-evidence
