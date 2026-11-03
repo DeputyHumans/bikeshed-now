@@ -26,7 +26,13 @@
  *           long press, toolbar placement and Comment work on both devices
  *   A24.5   forced-colour shapes remain painted, suggestions have spoken words,
  *           and Chrome measures contrast, names and reserved focus paint on
- *           all 11 screens and 2 dialogs, without an extra dependency
+ *           all 11 screens and 2 dialogs, without an extra dependency;
+ *           A24.5d: with three others in a document, on a phone and on a
+ *           desktop, the presence bar is no scroll container, every name it
+ *           shows is whole on one line, and everyone else is counted by a
+ *           reachable "+N" whose list names them (negative controls:
+ *           e2e/patches/controls-a24-presence-scroll, the scrolling row
+ *           back; controls-a24-presence-names, the 12ch cap back)
  *
  * EMAIL. Every account is cast with notifications off, so no comment,
  * suggestion or invitation notice is sent, and every case that comments
@@ -72,8 +78,8 @@ import { eventually } from "../../lib/assert.mjs";
 import { authorizeParams, pkce, register, startReceiver } from "../../lib/oauth.mjs";
 import { frameGeometry, framePointToPage, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
 
-// Shared option objects are opaque to the static budget scanner; cover all 24 case budgets.
-const E2E_FILE_TIMEOUT_MS = 91 * 60_000;
+// Shared option objects are opaque to the static budget scanner; cover all 25 case budgets.
+const E2E_FILE_TIMEOUT_MS = 95 * 60_000;
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -1458,6 +1464,78 @@ scenario("A24.5a mode is shown by shape: in forced colours, where colour carries
   assert.notEqual(editing.transform, "none", "an editor's dot is turned (a diamond)");
   assert.deepEqual({ reading: reading.icon, editing: editing.icon }, { reading: null, editing: "Editing" }, "the Editing icon, with its name, only in edit mode");
   assert.deepEqual({ readNamed, editNamed }, { readNamed: 0, editNamed: 1 }, "the chip's accessible name says Editing in edit mode only");
+});
+
+/** The presence bar as a sighted user meets it: what it shows, whether each shown name is whole, and its "+N". */
+async function presenceBar(u) {
+  return u.page.evaluate(() => {
+    const bar = document.querySelector(".presence-bar");
+    if (!bar) return null;
+    const cs = getComputedStyle(bar);
+    const box = bar.getBoundingClientRect();
+    const chips = [...bar.querySelectorAll(":scope > .presence-chip")];
+    const nameOf = (c) => (c.querySelector(".presence-name")?.textContent ?? "").trim();
+    const seen = (el) => el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+    const shown = chips.filter(seen).map((c) => {
+      const n = c.querySelector(".presence-name");
+      const r = c.getBoundingClientRect();
+      return {
+        name: nameOf(c),
+        // Whole: nothing cut sideways, and one line, which is less than twice the font size tall.
+        whole: n.scrollWidth <= n.clientWidth + 0.5 && n.getBoundingClientRect().height < 2 * parseFloat(getComputedStyle(n).fontSize),
+        inBar: r.left >= box.left - 0.5 && r.right <= box.right + 0.5 && r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5,
+      };
+    });
+    const folded = chips.filter((c) => !seen(c)).map(nameOf);
+    const more = bar.querySelector(":scope > .presence-more");
+    let plus = null;
+    if (more && seen(more)) {
+      const r = more.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      plus = { text: more.textContent.trim(), label: more.getAttribute("aria-label"), reachable: Boolean(hit && (hit === more || more.contains(hit))) };
+    }
+    return { overflow: [cs.overflowX, cs.overflowY], total: chips.length, shown, folded, plus };
+  });
+}
+
+scenario("A24.5d with three others in a document, on a phone and on a desktop, the presence bar never scrolls, every name it shows is whole on one line, and everyone not shown is counted by a reachable +N whose list names them", {
+  tiers: BOTH,
+  timeoutMs: 240_000,
+  inconclusiveOnCaseTimeout: true,
+}, async (ctx) => {
+  const { u: desk, owner, accounts } = await ownerOnPage(ctx, { roles: ["viewer", "viewer", "viewer"], name: "owner-desktop" });
+  const { docId } = await publishPlain(owner, "presence");
+  const others = accounts.slice(1);
+  for (const account of others) await share(target, { owner, doc: docId, account, role: "viewer" });
+  const phone = await signInAs(ctx, accounts[0], "owner-phone", PHONE);
+  const readers = [];
+  for (const [i, account] of others.entries()) readers.push(await signInAs(ctx, account, `viewer-${i + 1}`));
+  await Promise.all([desk, phone, ...readers].map((u) => openDoc(ctx, u, docId)));
+  const names = others.map((a) => a.email.toLowerCase()).sort();
+
+  for (const [label, u] of [["phone", phone], ["desktop", desk]]) {
+    ctx.step(`the ${label} shows a chip for each of the three, shown or folded`);
+    const m = await eventually(async () => {
+      const b = await presenceBar(u);
+      return b && b.total === 3 ? b : false;
+    }, { timeout: LISTEN_MS, message: `the ${label}'s presence bar holds a chip for each of the three others` });
+    ctx.ev.json(`bar-${label}`, m);
+    assert.ok(!m.overflow.some((o) => o === "auto" || o === "scroll"), `${label}: the presence bar is no scroll container (overflow ${m.overflow.join("/")}), so it can never show a scrollbar`);
+    assert.ok(m.shown.length >= 1, `${label}: at least one person is named in the bar: ${JSON.stringify(m)}`);
+    for (const c of m.shown) {
+      assert.ok(c.whole, `${label}: "${c.name}" is whole, on one line: ${JSON.stringify(m)}`);
+      assert.ok(c.inBar, `${label}: "${c.name}" lies inside the bar, not cut by its edge: ${JSON.stringify(m)}`);
+    }
+    assert.deepEqual([...m.shown.map((c) => c.name), ...m.folded].sort(), names, `${label}: every other person is in the bar, shown or folded`);
+    if (m.folded.length === 0) continue;
+    assert.ok(m.plus?.reachable, `${label}: +N is on screen and uncovered: ${JSON.stringify(m.plus)}`);
+    assert.equal(m.plus.text, `+${m.folded.length}`, `${label}: +N counts the folded`);
+    await u.page.locator(".presence-bar .presence-more").click();
+    const listed = await u.page.locator('[role="menu"] [role="menuitem"]').allTextContents();
+    ctx.ev.json(`list-${label}`, listed);
+    await u.page.keyboard.press("Escape");
+    for (const name of m.folded) assert.ok(listed.some((t) => t.includes(name)), `${label}: +N's list names ${name}: ${JSON.stringify(listed)}`);
+  }
 });
 
 /** The text a sighted reader sees in a node: text inside a clipped or 1-px box (.visually-hidden) left out. */

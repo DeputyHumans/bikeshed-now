@@ -13006,14 +13006,16 @@
       "implementation": {
         "covered": [
           "at 400 px all primary actions remain visible with 1, 4, 9 and 19 peers",
-          "all presence chips remain rendered and reachable through their own scroll row"
+          "the presence bar is one line that never scrolls (0.30.1): as many chips as fit show their whole names, the rest stay in the page folded and are counted and listed by a reachable +N, which C18's judge accepts as covering them"
         ],
         "controls": [
-          "controls-c18-toolbar-overflow"
+          "controls-c18-toolbar-overflow",
+          "controls-a24-presence-scroll",
+          "controls-a24-presence-names"
         ],
-        "evidence": "e2e/.out/harness-review-controls/reader-state/negative-controls.json",
+        "evidence": "e2e/.out/2611022236-n6c1/invocations/20261103T064623Z-p83118-svgf/summary.md (0.30.1: C18 toolbar, page, presence and serial at N=2 and 5 all pass; controls-c18-toolbar-overflow, controls-a24-presence-scroll and controls-a24-presence-names red with the patch, green without)",
         "remaining": [
-          "fresh E2E and red/restored control evidence across required N values"
+          "fresh E2E at N=10 and 20, not run for 0.30.1"
         ]
       }
     },

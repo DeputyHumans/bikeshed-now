@@ -1,0 +1,13 @@
+{
+  "oracle": "A name is capped at 12ch again and free to wrap, so a long one breaks onto a second line inside its one-line chip.",
+  "what": "A name is capped at 12ch again and free to wrap, so a long one breaks onto a second line inside its one-line chip.",
+  "target": {
+    "spec": "e2e/specs/functional/a24-responsive-a11y.spec.mjs",
+    "case": "A24.5d with three others in a document, on a phone and on a desktop, the presence bar never scrolls, every name it shows is whole on one line, and everyone not shown is counted by a reachable +N whose list names them",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "is whole, on one line"
+  }
+}

@@ -1,12 +1,12 @@
 --- a/app/src/components/PresenceBar.tsx
 +++ b/app/src/components/PresenceBar.tsx
-@@ -30,7 +30,8 @@ export function PresenceBar({
+@@ -83,7 +83,8 @@ export function PresenceBar({
  
    return (
-     <div className="presence-bar" role="group" aria-label="People here now">
--      {peers.map((peer) => (
+     <div ref={barRef} className="presence-bar" role="group" aria-label="People here now">
+-      {peers.map((peer, index) => (
 +      {/* e2e negative control (controls-c18-presence-chips): the first peer gets no chip. */}
-+      {peers.slice(1).map((peer) => (
++      {peers.slice(1).map((peer, index) => (
          <button
            key={peer.uid}
            type="button"

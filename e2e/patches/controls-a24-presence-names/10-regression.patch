@@ -1,0 +1,11 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -269,7 +269,7 @@
+ /* A whole name on one line: a chip is one line tall, and a name cut short or
+    wrapped out of it is not a name. Too many to fit is the bar's problem, which
+    it solves by folding chips, never by shortening them. */
+-.presence-name { white-space: nowrap; }
++.presence-name { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; }
+ /* Folded: kept in the page at its full width (see PresenceBar), but invisible,
+    out of the tab order, and moved after the "+N" button that lists it. */
+ .presence-chip[data-folded] {

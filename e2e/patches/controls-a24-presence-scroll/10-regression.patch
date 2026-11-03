@@ -1,0 +1,11 @@
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -225,7 +225,7 @@
+   gap: var(--s-1);
+   min-width: calc(2.75rem + 2 * var(--s-1));
+   max-width: 100%;
+-  overflow: clip;
++  overflow-x: auto;
+   padding: var(--s-1);
+   margin: calc(-1 * var(--s-1));
+ }

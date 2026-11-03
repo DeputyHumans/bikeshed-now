@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { BrowserPool } from '../lib/browser.mjs';
 import { observeFrameFocus } from '../../app/src/viewer/frameFocus.ts';
+import { chipsThatFit } from '../../app/src/components/presenceFit.ts';
 import { inspectUi, spokenText } from '../lib/accessibility.mjs';
 
 const target = { kind: 'local', runId: 'selftest-accessibility', origin: 'http://127.0.0.1:1', stack: { ports: { hosting: 1 } }, capabilities: new Set(['local']) };
@@ -115,30 +116,78 @@ test('the phone slide drawer stays below the viewer toolbar; the previous viewpo
   assert.equal(await reachable(), false, 'negative: the old drawer overlaps the toolbar');
 });
 
-test('the phone toolbar keeps its actions visible and every presence chip reachable at 2, 5, 10 and 20 people', async () => {
+test('the phone toolbar keeps its actions on screen at 2, 5, 10 and 20 people; each shown name is whole on one line, the rest are counted by a reachable +N, and nothing in the bar scrolls; the old scrolling row with 12ch names fails', async () => {
   const css = await productCss();
-  for (const peers of [1, 4, 9, 19]) {
-    const chips = Array.from({ length: peers }, (_, i) => `<button class="presence-chip"><span class="presence-dot" data-mode="view"></span><span class="presence-name">person-${i}@example.test</span></button>`).join('');
-    await u.page.setContent(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div class="viewer-toolbar"><span class="chip mono">v1</span><div class="presence-bar" role="group" aria-label="People here now">${chips}</div><div class="viewer-toolbar-actions"><div class="pane-toggle"><button>Document</button><button>Comments</button></div><button class="btn" aria-label="Edit">Edit</button></div></div>`);
-    const layout = await u.page.evaluate(() => {
-      const bar = document.querySelector('.viewer-toolbar');
-      const presence = document.querySelector('.presence-bar');
-      const width = document.documentElement.clientWidth;
-      const reachable = (el) => {
-        const r = el.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return r.width > 0 && r.left >= 0 && r.right <= width && r.top >= 0 && r.bottom <= innerHeight && !!hit && (hit === el || el.contains(hit));
+  const page = (peers, extraCss = '') => {
+    const chips = Array.from({ length: peers }, (_, i) => `<button class="presence-chip"><span class="presence-dot" data-mode="view"></span><span class="presence-name">Victoria Aleinikova ${i}</span></button>`).join('');
+    return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}${extraCss}</style><div class="viewer-toolbar"><span class="chip mono">v1</span><div class="presence-bar" role="group" aria-label="People here now">${chips}<button class="presence-more">+0</button></div><div class="viewer-toolbar-actions"><div class="pane-toggle"><button>Document</button><button>Comments</button></div><button class="btn" aria-label="Edit">Edit</button></div></div>`;
+  };
+  // PresenceBar's fold, done here with the same measurements and the same function, since this page has no React.
+  const fold = async () => {
+    const m = await u.page.evaluate(() => {
+      const bar = document.querySelector('.presence-bar');
+      const s = getComputedStyle(bar);
+      return {
+        widths: [...bar.querySelectorAll(':scope > .presence-chip')].map((c) => c.offsetWidth),
+        gap: parseFloat(s.columnGap) || 0,
+        inner: bar.clientWidth - (parseFloat(s.paddingLeft) || 0) - (parseFloat(s.paddingRight) || 0),
+        more: bar.querySelector('.presence-more').offsetWidth,
       };
-      const actions = [...bar.querySelectorAll('.viewer-toolbar-actions button')].map(reachable);
-      const chips = [...presence.querySelectorAll('.presence-chip')].map((el) => {
-        el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
-        return reachable(el);
-      });
-      presence.scrollLeft = 0;
-      return { page: document.documentElement.scrollWidth, width, bar: bar.scrollWidth, barWidth: bar.clientWidth, actions, chips };
     });
-    assert.ok(layout.page <= layout.width && layout.bar <= layout.barWidth, `${peers} peers: toolbar and page fit the phone: ${JSON.stringify(layout)}`);
-    assert.deepEqual(layout.actions, [true, true, true], `${peers} peers: primary actions remain on screen at rest`);
-    assert.deepEqual(layout.chips, Array(peers).fill(true), `${peers} peers: every named person is reachable, not hidden`);
+    const shown = chipsThatFit(m.widths, m.gap, m.inner, m.more);
+    await u.page.evaluate((shown) => {
+      const chips = [...document.querySelectorAll('.presence-chip')];
+      chips.forEach((c, i) => { if (i >= shown) c.setAttribute('data-folded', ''); });
+      const more = document.querySelector('.presence-more');
+      more.textContent = `+${chips.length - shown}`;
+      if (chips.length === shown) more.setAttribute('data-idle', '');
+    }, shown);
+  };
+  const measure = () => u.page.evaluate(() => {
+    const bar = document.querySelector('.viewer-toolbar');
+    const presence = document.querySelector('.presence-bar');
+    const width = document.documentElement.clientWidth;
+    const reachable = (el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return r.width > 0 && r.left >= 0 && r.right <= width && r.top >= 0 && r.bottom <= innerHeight && !!hit && (hit === el || el.contains(hit));
+    };
+    const chips = [...presence.querySelectorAll('.presence-chip')];
+    const shown = chips.filter((c) => !c.hasAttribute('data-folded'));
+    const folded = chips.filter((c) => c.hasAttribute('data-folded'));
+    const more = presence.querySelector('.presence-more');
+    const ps = getComputedStyle(presence);
+    return {
+      page: document.documentElement.scrollWidth, width, bar: bar.scrollWidth, barWidth: bar.clientWidth,
+      actions: [...bar.querySelectorAll('.viewer-toolbar-actions button')].map(reachable),
+      overflow: `${ps.overflowX}/${ps.overflowY}`,
+      shown: shown.map(reachable),
+      // Whole: nothing cut sideways, and one line, which is less than twice the font size tall.
+      whole: shown.map((c) => { const n = c.querySelector('.presence-name'); return n.scrollWidth <= n.clientWidth + 0.5 && n.getBoundingClientRect().height < 2 * parseFloat(getComputedStyle(n).fontSize); }),
+      foldedVisible: folded.filter((c) => c.checkVisibility({ checkVisibilityCSS: true })).length,
+      folded: folded.length,
+      more: { reachable: folded.length ? reachable(more) : true, count: Number(more.textContent.slice(1)) },
+    };
+  });
+  for (const peers of [1, 4, 9, 19]) {
+    await u.page.setContent(page(peers));
+    await fold();
+    const m = await measure();
+    const at = `${peers} peers: ${JSON.stringify(m)}`;
+    assert.ok(m.page <= m.width && m.bar <= m.barWidth, `${at}: toolbar and page fit the phone`);
+    assert.deepEqual(m.actions, [true, true, true], `${at}: primary actions remain on screen at rest`);
+    assert.equal(m.overflow, 'clip/clip', `${at}: the presence bar clips and is no scroll container`);
+    assert.ok(m.shown.length >= 1, `${at}: the first person is named`);
+    assert.ok(m.shown.every(Boolean), `${at}: every shown chip is reachable`);
+    assert.ok(m.whole.every(Boolean), `${at}: every shown name is whole, on one line`);
+    assert.equal(m.foldedVisible, 0, `${at}: a folded chip is invisible`);
+    assert.ok(m.more.reachable && m.more.count === m.folded && m.shown.length + m.folded === peers, `${at}: +N is reachable and counts everyone not shown`);
   }
+  // Negative: the old row, sideways-scrolling with names capped at 12ch and free to wrap, fails both halves:
+  // a scroll container, and "Victoria Aleinikova 0" on two lines, as in the bug report.
+  await u.page.setContent(page(1, '.presence-bar{overflow-x:auto!important;overflow-y:auto!important}.presence-name{max-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:normal!important}'));
+  await fold();
+  const bad = await measure();
+  assert.notEqual(bad.overflow, 'clip/clip', 'negative: the old bar is a scroll container');
+  assert.ok(bad.whole.includes(false), `negative: the old 12ch name is cut: ${JSON.stringify(bad)}`);
 });
