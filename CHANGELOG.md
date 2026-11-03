@@ -14,6 +14,12 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The people in a document show their whole names, and the bar beside the title no longer scrolls.** A name longer than 12 characters wrapped inside its one-line chip and was cut off top and bottom, and the bar grew a scrollbar for it. Now every chip shows the full name on one line, as many chips as fit are shown, and the rest fold into a "+N" button that lists them and follows whoever you pick. On a phone, a document with several people no longer pushes Edit and Comments off the screen (S29) (SPEC §16).
+
 ## 0.30.0 — 2026-10-30
 
 ### Added

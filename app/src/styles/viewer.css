@@ -208,13 +208,35 @@
 
 /* --- Presence ------------------------------------------------------------ */
 
+/*
+ * One line that never scrolls. It was `overflow-x: auto`, which makes the other
+ * axis `auto` too, so a name wrapping inside its chip put a vertical scrollbar
+ * on the bar. Chips that do not fit are folded into the "+N" button by
+ * PresenceBar, and `clip` (not a scroll container, so nothing can scroll it
+ * either) cuts off the folded ones, which are invisible anyway.
+ *
+ * The padding is the focus ring's room inside the clip (2px ring, 2px offset),
+ * and the negative margin hands it back, so the toolbar is no taller for it.
+ *
+ * It shares the row with the title, but gives way three times as fast
+ * (`flex: 1 3 auto`). Measured with five people at 880-1440 px: sharing
+ * evenly cut the title to about half, while taking only the room left (a
+ * basis of 0) folded everyone away below 1160 px; this keeps the title at
+ * 80-90% and at least one whole name. Its basis is its full width, folded chips
+ * and the "+N" slot included, which folding does not change, so it cannot
+ * oscillate. The minimum keeps room for the "+N" button whatever else the row
+ * needs.
+ */
 .presence-bar {
   display: flex;
+  flex: 1 3 auto;
   align-items: center;
   gap: var(--s-1);
-  min-width: 0;
+  min-width: calc(2.75rem + 2 * var(--s-1));
   max-width: 100%;
-  overflow-x: auto;
+  overflow: clip;
+  padding: var(--s-1);
+  margin: calc(-1 * var(--s-1));
 }
 .presence-chip {
   display: inline-flex;
@@ -228,6 +250,10 @@
   background: var(--color-bg);
   font-size: var(--fs-caption);
   cursor: pointer;
+  /* A chip folds and unfolds at once. Under reduced motion, base.css gives
+     every element a 0.01ms transition on every property, which would animate
+     the fold's `visibility` and `order` and leave it half-done when measured. */
+  transition: none;
 }
 .presence-chip[aria-pressed="true"] {
   border-color: currentColor;
@@ -249,7 +275,41 @@
   border-radius: 2px;
   transform: rotate(45deg);
 }
-.presence-name { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; }
+/* A whole name on one line: a chip is one line tall, and a name cut short or
+   wrapped out of it is not a name. Too many to fit is the bar's problem, which
+   it solves by folding chips, never by shortening them. */
+.presence-name { white-space: nowrap; }
+/* Folded: kept in the page at its full width (see PresenceBar), but invisible,
+   out of the tab order, and moved after the "+N" button that lists it. */
+.presence-chip[data-folded] {
+  visibility: hidden;
+  order: 1;
+}
+.presence-more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  height: 26px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: none;
+}
+/* Its slot is kept when nobody is folded, so the bar's width never depends on
+   whether it is folding. */
+.presence-more[data-idle] { visibility: hidden; }
+/* The person being followed is folded: the button says so, in their colour. */
+.presence-more[data-following] {
+  border-color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 
 /* --- The peer overlay ----------------------------------------------------
  * Injected INTO the document iframe, which is why it is described here and

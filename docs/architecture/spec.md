@@ -1976,6 +1976,8 @@ persisted highlight. It is derived from the email, so it is stable between
 sessions. **Colour is never the only signal**: carets carry name labels, rail
 markers label on hover, presence chips encode mode by dot shape.
 
+The presence bar is one line that never scrolls. Each chip shows the person's whole name on one line. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
+
 ### Ephemeral presence is an overlay, never inline DOM
 
 The most important constraint in this section. Persisted annotations wrap text
