@@ -662,7 +662,7 @@ const ROW_NAMES = Object.freeze({
   O: "A2.O the owner of a private document: everything but /unlock answers 200",
   V: "A2.V a viewer: reads and forks 200, /unlock 404, every edit and owner-only operation 403",
   S: "A2.S a suggester: as a viewer on c1–c5 and c9–c16",
-  E: "A2.E an editor: reads, edits, upload, rename, move and /thumb 200; owner-only operations 403",
+  E: "A2.E an editor: reads, edits, upload, rename and /thumb 200; moving and owner-only operations 403",
   A: "A2.A an approver: as an editor on c1–c5 and c9–c16",
   X: "A2.X a signed-in stranger: every operation 404, byte-equal to an absent id's",
   AN: "A2.AN anonymous on a private document: reads 404, mutations 401, each equal to an absent id's",
