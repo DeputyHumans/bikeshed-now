@@ -1524,6 +1524,10 @@ async function revisionRefusals(ctx, entrance) {
     const title = `${entrance} ${reason} ${tagFor()}`;
     const body = pageHtml({ title, heading: "Original refusal text" }).replace("<h1 ", '<h1 id="revision-text" ');
     const doc = await publish(O.http, { body, filename: "index.html", title, name: `a14-${entrance}-${reason}` });
+    // The version trigger stamps `words` on v1 after the publish answers
+    // (SPEC §4). Until it has, a snapshot taken now can differ from one taken
+    // after the refusal by that field alone, which the refusal never wrote.
+    await eventually(async () => typeof (await readDoc(target, `docs/${doc.docId}/versions/v1`))?.words === "number", { timeout: PAGE_LOAD_MS, message: "the version trigger has counted v1's words" });
     if (["revoked", "editing"].includes(reason)) await share(target, { owner: O, doc: doc.docId, account: E.account, role: "editor" });
     if (["pending", "accepted"].includes(reason)) await stageRevisionSuggestion(O, doc.docId, body, reason === "accepted");
     const actor = reason === "revoked" ? e : u;
